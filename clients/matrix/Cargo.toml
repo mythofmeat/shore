@@ -11,7 +11,7 @@ shore-protocol = "0.1"
 shore-config = "0.1"
 shore-swp-client = "0.1"
 shore-diagnostics = "0.1"
-matrix-sdk = { version = "0.16", default-features = false, features = ["e2e-encryption", "markdown", "native-tls", "sqlite"] }
+matrix-sdk = { version = "0.17", default-features = false, features = ["e2e-encryption", "markdown", "sqlite"] }
 tokio = { version = "1", features = ["full"] }
 clap = { version = "4", features = ["derive", "env"] }
 serde = { version = "1", features = ["derive"] }
@@ -27,12 +27,3 @@ urlencoding = "2"
 
 [dev-dependencies]
 tempfile = "3"
-
-# Pinned to a fork of matrix-rust-sdk that adds
-# `#![recursion_limit = "512"]` to crates/matrix-sdk/src/lib.rs.
-# rustc 1.94+ hits "queries overflow the depth limit" computing
-# the layout of matrix-sdk::Client::sync()'s async fn body on the
-# published 0.16.0. Upstream tracking: matrix-org/matrix-rust-sdk#6254.
-# Drop this patch once upstream ships a fix (expected post-0.16).
-[patch.crates-io]
-matrix-sdk = { git = "https://github.com/mythofmeat/matrix-rust-sdk.git", rev = "8285d1ca5da1f18227ba4eddaeef9bf579a55de6" }
