@@ -1,6 +1,6 @@
 # shore-matrix
 
-Matrix bridge for the [Silvershore](https://github.com/mythofmeat/silvershore)
+Matrix bridge for the [Shore](https://github.com/mythofmeat/shore-core)
 chat daemon. Talks to `shore-daemon` over the Shore Wire Protocol (SWP) and
 exposes characters as Matrix users on an embedded homeserver.
 
@@ -24,7 +24,7 @@ The resulting binary is `target/release/shore-matrix`.
 
 Reads connection settings from `~/.config/shore/client.toml` and Matrix-specific
 configuration from environment variables / CLI flags. See
-[Silvershore](https://github.com/mythofmeat/silvershore) for daemon-side
+[Shore](https://github.com/mythofmeat/shore-core) for daemon-side
 configuration.
 
 ## License
