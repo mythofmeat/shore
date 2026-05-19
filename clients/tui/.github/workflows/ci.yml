@@ -1,0 +1,11 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  ci:
+    uses: mythofmeat/repo-arch/.github/workflows/ci-rust.yml@main

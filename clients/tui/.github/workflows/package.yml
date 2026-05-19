@@ -1,0 +1,14 @@
+name: Build and publish Arch package
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  publish:
+    permissions:
+      contents: write
+    uses: mythofmeat/repo-arch/.github/workflows/publish-arch-rust.yml@main
+    with:
+      pkgbuild_dir: contrib
+    secrets: inherit
