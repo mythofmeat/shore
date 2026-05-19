@@ -7,6 +7,9 @@ on:
 
 jobs:
   release-plz:
+    permissions:
+      contents: write
+      pull-requests: write
     uses: mythofmeat/repo-arch/.github/workflows/release-plz-rust.yml@main
     with:
       system_deps: "libasound2-dev"
