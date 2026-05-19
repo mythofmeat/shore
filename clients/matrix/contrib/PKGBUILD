@@ -1,0 +1,36 @@
+# Maintainer: eshen
+pkgname=shore-matrix
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Matrix bridge for the Silvershore chat daemon'
+arch=('x86_64')
+url='https://github.com/mythofmeat/shore-matrix'
+license=('MIT OR Apache-2.0')
+depends=('gcc-libs' 'openssl')
+optdepends=('continuwuity: embedded Matrix homeserver'
+            'conduwuit: embedded Matrix homeserver (alternative)'
+            'tuwunel: embedded Matrix homeserver (alternative)')
+makedepends=('cargo' 'git')
+provides=('shore-matrix')
+conflicts=('shore-matrix' 'shore-git')
+source=("${pkgname}::git+ssh://git@github.com/mythofmeat/shore-matrix.git")
+options=('!lto')
+sha256sums=('SKIP')
+
+prepare() {
+    cd "${pkgname}"
+    export RUSTUP_TOOLCHAIN=stable
+    cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+    cd "${pkgname}"
+    export RUSTUP_TOOLCHAIN=stable
+    export CARGO_TARGET_DIR=target
+    cargo build --release --frozen
+}
+
+package() {
+    cd "${pkgname}"
+    install -Dm755 target/release/shore-matrix "$pkgdir/usr/bin/shore-matrix"
+}
