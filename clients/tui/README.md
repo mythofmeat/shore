@@ -1,6 +1,6 @@
 # shore-tui
 
-Terminal UI client for the [Silvershore](https://github.com/mythofmeat/silvershore)
+Terminal UI client for the [Shore](https://github.com/mythofmeat/shore-core)
 chat daemon. Talks to `shore-daemon` over the Shore Wire Protocol (SWP) using
 the published [`shore-swp-client`](https://crates.io/crates/shore-swp-client)
 and [`shore-protocol`](https://crates.io/crates/shore-protocol) crates.
@@ -29,7 +29,7 @@ shore-tui
 
 Reads connection settings from `~/.config/shore/client.toml` like the rest of
 the Shore client family. See the
-[Silvershore README](https://github.com/mythofmeat/silvershore#readme) for
+[Shore README](https://github.com/mythofmeat/shore-core#readme) for
 config details.
 
 ## Development
