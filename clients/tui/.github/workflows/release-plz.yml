@@ -8,5 +8,7 @@ on:
 jobs:
   release-plz:
     uses: mythofmeat/repo-arch/.github/workflows/release-plz-rust.yml@main
+    with:
+      system_deps: "libasound2-dev"
     secrets:
       CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
