@@ -7,8 +7,8 @@ repository = "https://github.com/mythofmeat/shore-tui"
 description = "Terminal UI client for the Silvershore chat daemon."
 
 [dependencies]
-shore-protocol = "0.1"
-shore-swp-client = "0.1"
+shore-protocol = "0.2"
+shore-swp-client = "0.2"
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "signal"] }
 tracing = "0.1"

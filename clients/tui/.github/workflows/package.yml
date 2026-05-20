@@ -11,5 +11,4 @@ jobs:
     uses: mythofmeat/repo-arch/.github/workflows/publish-arch-rust.yml@main
     with:
       pkgbuild_dir: contrib
-      extra_pacman_packages: "alsa-lib"
     secrets: inherit
