@@ -14,7 +14,7 @@ makedepends=('cargo' 'git')
 provides=('shore-matrix')
 conflicts=('shore-matrix' 'shore-git')
 source=("${pkgname}::git+ssh://git@github.com/mythofmeat/shore-matrix.git")
-options=('!lto')
+options=('!lto' '!debug' 'strip')
 sha256sums=('SKIP')
 
 prepare() {
