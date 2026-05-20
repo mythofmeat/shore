@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/mythofmeat/shore-tui/compare/v0.1.1...v0.1.2) - 2026-05-20
+
+### Other
+
+- *(arch)* disable debug split package
+- Merge pull request #2 from mythofmeat/dev
+- Bump shore-protocol and shore-swp-client to 0.2
+- Remove TTS (text-to-speech) integration
+
 ## [0.1.1](https://github.com/mythofmeat/shore-tui/compare/v0.1.0...v0.1.1) - 2026-05-19
 
 ### Other
