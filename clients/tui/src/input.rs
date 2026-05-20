@@ -1,7 +1,5 @@
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use shore_protocol::client_msg::{
-    Cancel, ClientMessage, ClientMessageBody, Command, Regen, SetLiveSpeak, Speak as SpeakMsg,
-};
+use shore_protocol::client_msg::{Cancel, ClientMessage, ClientMessageBody, Command, Regen};
 use tracing::debug;
 
 use crate::app::{App, InputMode, PaletteMode};
@@ -1055,47 +1053,6 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                 }
             }
         }
-
-        "speak" => match arg {
-            "on" => {
-                app.live_speak = true;
-                app.set_status("Live TTS enabled");
-                Action::Send(ConnCommand::Send(ClientMessage::SetLiveSpeak(
-                    SetLiveSpeak {
-                        rid: None,
-                        enabled: true,
-                    },
-                )))
-            }
-            "off" => {
-                app.live_speak = false;
-                if let Some(ref mut player) = app.audio_player {
-                    player.stop();
-                }
-                app.set_status("Live TTS disabled");
-                Action::Send(ConnCommand::Send(ClientMessage::SetLiveSpeak(
-                    SetLiveSpeak {
-                        rid: None,
-                        enabled: false,
-                    },
-                )))
-            }
-            "stop" => {
-                if let Some(ref mut player) = app.audio_player {
-                    player.stop();
-                }
-                app.set_status("Audio stopped");
-                Action::Redraw
-            }
-            "" => Action::Send(ConnCommand::Send(ClientMessage::Speak(SpeakMsg {
-                rid: None,
-                msg_id: None,
-            }))),
-            _ => {
-                app.set_status("usage: :speak [on|off|stop]  (bare :speak plays the last message)");
-                Action::Redraw
-            }
-        },
 
         "sys" | "system" => {
             if arg.is_empty() {

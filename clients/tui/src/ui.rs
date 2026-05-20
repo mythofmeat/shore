@@ -987,9 +987,6 @@ fn draw_input(frame: &mut Frame, app: &App, area: Rect) {
             Color::Magenta,
         ));
     }
-    if app.live_speak {
-        indicators.push(("TTS".to_string(), Color::Cyan));
-    }
     if !indicators.is_empty() {
         let mut spans = vec![Span::raw(" ")];
         for (i, (label, color)) in indicators.into_iter().enumerate() {

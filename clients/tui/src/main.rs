@@ -66,10 +66,6 @@ impl UiEffect {
             redraw,
         }
     }
-
-    fn none() -> Self {
-        Self::redraw(RedrawEffect::None)
-    }
 }
 
 #[derive(Parser)]
@@ -1240,18 +1236,6 @@ fn active_model_candidate_name(active: &str, model: &serde_json::Value) -> Optio
 }
 
 pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffect {
-    match &msg {
-        ServerMessage::AudioStart(_) | ServerMessage::AudioError(_) => {
-            app.handle_audio_message(&msg);
-            return UiEffect::redraw(RedrawEffect::Immediate);
-        }
-        ServerMessage::AudioChunk(_) | ServerMessage::AudioEnd(_) => {
-            app.handle_audio_message(&msg);
-            return UiEffect::none();
-        }
-        _ => {}
-    }
-
     let redraw = match msg {
         ServerMessage::StreamStart(start) => {
             app.spinner_frame = 0;
