@@ -1166,9 +1166,10 @@ impl App {
     }
 
     pub fn sampler_settings_rid_matches(&self, rid: Option<&str>) -> bool {
-        self.pending_sampler_settings_rid
-            .as_deref()
-            .is_none_or(|pending| rid == Some(pending))
+        match (self.pending_sampler_settings_rid.as_deref(), rid) {
+            (Some(pending), Some(rid)) => pending == rid,
+            _ => false,
+        }
     }
 
     pub fn finish_sampler_settings_refresh(&mut self) {

@@ -606,11 +606,15 @@ async fn send_conn_commands(
     }
 }
 
-fn model_settings_conn_command(rid: Option<String>) -> ConnCommand {
+fn model_settings_conn_command(app: &App, rid: Option<String>) -> ConnCommand {
+    let mut args = serde_json::json!({});
+    if !app.model.is_empty() {
+        args["name"] = serde_json::Value::String(app.model.clone());
+    }
     ConnCommand::Send(ClientMessage::Command(Command {
         rid,
         name: "model_settings".into(),
-        args: serde_json::json!({}),
+        args,
     }))
 }
 
@@ -1651,7 +1655,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         app.set_status(format!("setting {key} updated"));
                     }
                     return UiEffect {
-                        cmds: vec![model_settings_conn_command(Some(refresh_rid))],
+                        cmds: vec![model_settings_conn_command(app, Some(refresh_rid))],
                         redraw: RedrawEffect::Immediate,
                     };
                 }
@@ -2071,6 +2075,7 @@ mod redraw_tests {
         let mut app = App::default();
         app.input.enter_command_mode();
         app.enter_submenu("setting");
+        let rid = app.begin_sampler_settings_refresh();
         assert_eq!(
             app.completion.candidates,
             vec!["loading sampler settings..."]
@@ -2079,7 +2084,7 @@ mod redraw_tests {
         let effect = handle_server_message(
             &mut app,
             ServerMessage::Error(CommandError {
-                rid: None,
+                rid: Some(rid),
                 code: ErrorCode::InvalidRequest,
                 message: "No model specified and no active model set".into(),
             }),
@@ -2179,12 +2184,12 @@ mod redraw_tests {
     fn model_settings_for_inactive_model_is_ignored() {
         let mut app = App::default();
         app.set_active_model(Some("chat.test.current"));
-        app.sampler_settings_loading = true;
+        let rid = app.begin_sampler_settings_refresh();
 
         let effect = handle_server_message(
             &mut app,
             ServerMessage::CommandOutput(CommandOutput {
-                rid: None,
+                rid: Some(rid),
                 name: "model_settings".into(),
                 data: serde_json::json!({
                     "model": "chat.test.previous",
@@ -2201,6 +2206,46 @@ mod redraw_tests {
         assert_eq!(effect.redraw, RedrawEffect::Immediate);
         assert!(!app.sampler_settings_loading);
         assert!(app.effective_sampler.is_none());
+    }
+
+    #[test]
+    fn orphaned_model_settings_response_does_not_wipe_effective_sampler() {
+        // Reproduces the intermittent "sampler settings unavailable" bug:
+        // a model_settings response orphaned by a model switch in flight
+        // arrives with a stale rid. It must not be treated as our own
+        // response and clear an otherwise-valid `effective_sampler`.
+        let mut app = App::default();
+        app.set_active_model(Some("chat.test.current"));
+        app.effective_sampler = Some(EffectiveSamplerSnapshot {
+            model: Some("chat.test.current".into()),
+            temperature: crate::app::EffectiveSamplerField {
+                value: Some("0.5".into()),
+                scope: Some("character_model".into()),
+            },
+            ..EffectiveSamplerSnapshot::default()
+        });
+
+        let effect = handle_server_message(
+            &mut app,
+            ServerMessage::CommandOutput(CommandOutput {
+                rid: Some("tui_sampler_settings_999".into()),
+                name: "model_settings".into(),
+                data: serde_json::json!({
+                    "model": "chat.test.previous",
+                    "effective_sampler": { "temperature": 0.9 },
+                    "scopes": { "temperature": "character_model" }
+                }),
+            }),
+        );
+
+        assert_eq!(effect.redraw, RedrawEffect::Immediate);
+        assert_eq!(
+            app.effective_sampler
+                .as_ref()
+                .and_then(|snapshot| snapshot.display_value("temperature")),
+            Some("0.5"),
+            "orphaned response must not overwrite or wipe the snapshot"
+        );
     }
 
     #[test]
