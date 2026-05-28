@@ -696,32 +696,17 @@ fn handle_alt_picker_mode(app: &mut App, key: KeyEvent) -> Action {
 /// Fetch the candidate list for a submenu so the picker isn't empty
 /// the first time the user opens it (and to refresh stale entries).
 fn submenu_fetch_action(app: &mut App, parent: &str) -> Action {
-    let (name, rid, args) = match parent {
-        "model" => ("list_models", None, serde_json::json!({})),
-        "character" => ("list_characters", None, serde_json::json!({})),
-        "setting" => {
-            // Pin the request to the TUI's current active model. The daemon's
-            // session active_model can briefly diverge from ours after a
-            // reconnect or model switch, and an unqualified request resolved
-            // against the daemon's view would come back for a model we'd then
-            // reject, wiping `effective_sampler` to "unavailable".
-            let mut args = serde_json::json!({});
-            if !app.model.is_empty() {
-                args["name"] = serde_json::Value::String(app.model.clone());
-            }
-            (
-                "model_settings",
-                Some(app.begin_sampler_settings_refresh()),
-                args,
-            )
-        }
+    let (name, rid) = match parent {
+        "model" => ("list_models", None),
+        "character" => ("list_characters", None),
+        "setting" => ("model_settings", Some(app.begin_sampler_settings_refresh())),
         "view" => return Action::Redraw,
         _ => return Action::Redraw,
     };
     Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
         rid,
         name: name.into(),
-        args,
+        args: serde_json::json!({}),
     })))
 }
 

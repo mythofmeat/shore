@@ -1106,18 +1106,32 @@ impl App {
     pub fn set_active_model(&mut self, model: Option<&str>) {
         let next = model.filter(|m| !m.is_empty());
         let current = (!self.model.is_empty()).then_some(self.model.as_str());
-        let changed = match (current, next) {
-            (Some(current), Some(next)) => !Self::model_identifier_matches(current, next),
-            (None, None) => false,
-            _ => true,
+        let equivalent = match (current, next) {
+            (Some(current), Some(next)) => Self::model_identifier_matches(current, next),
+            (None, None) => true,
+            _ => false,
         };
-        if changed {
-            self.effective_sampler = None;
-            self.sampler_settings_loading = false;
-            self.pending_sampler_settings_rid = None;
+
+        if equivalent {
+            // Same model in a different surface form (e.g. bare upstream id from
+            // stream metadata vs. provider-qualified name or alias). Keep the
+            // existing `self.model` — the daemon's `model_settings` resolver
+            // expects the form it originally handed us, and a bare upstream id
+            // often isn't resolvable on its own. Track the new form too so
+            // snapshot-matching still works against it.
+            if let Some(next) = next {
+                if !self.active_model_names.iter().any(|n| n == next) {
+                    self.active_model_names.push(next.to_string());
+                }
+            }
+            return;
         }
 
-        match model.filter(|m| !m.is_empty()) {
+        self.effective_sampler = None;
+        self.sampler_settings_loading = false;
+        self.pending_sampler_settings_rid = None;
+
+        match next {
             Some(model) => {
                 self.model = model.to_string();
                 self.active_model_names = vec![model.to_string()];
@@ -2066,6 +2080,45 @@ mod tests {
         app.scroll_down(10);
         assert_eq!(app.scroll_offset, 0);
         assert!(app.auto_scroll);
+    }
+
+    #[test]
+    fn set_active_model_does_not_downgrade_to_less_qualified_form() {
+        // The daemon's `model_settings` resolver expects the alias or
+        // provider-qualified name handed to us by switch_model / History.
+        // A subsequent `set_active_model` carrying the bare upstream id
+        // (e.g. from StreamEnd metadata) must not overwrite the qualified
+        // form, or the next `:setting` request will 404.
+        let mut app = App::default();
+        app.set_active_model(Some("openrouter:anthropic/claude-4.6-opus-20260205"));
+        app.effective_sampler = Some(EffectiveSamplerSnapshot {
+            model: Some("openrouter:anthropic/claude-4.6-opus-20260205".into()),
+            ..EffectiveSamplerSnapshot::default()
+        });
+
+        app.set_active_model(Some("anthropic/claude-4.6-opus-20260205"));
+
+        assert_eq!(app.model, "openrouter:anthropic/claude-4.6-opus-20260205");
+        assert!(app.effective_sampler.is_some());
+        assert!(
+            app.active_model_names
+                .iter()
+                .any(|n| n == "anthropic/claude-4.6-opus-20260205"),
+            "the bare form should still be tracked as a match key"
+        );
+    }
+
+    #[test]
+    fn set_active_model_to_genuinely_different_model_resets_sampler() {
+        let mut app = App::default();
+        app.set_active_model(Some("openrouter:anthropic/claude-4.6-opus-20260205"));
+        app.effective_sampler = Some(EffectiveSamplerSnapshot::default());
+
+        app.set_active_model(Some("anthropic/claude-sonnet-4.5"));
+
+        assert_eq!(app.model, "anthropic/claude-sonnet-4.5");
+        assert!(app.effective_sampler.is_none());
+        assert_eq!(app.active_model_names, vec!["anthropic/claude-sonnet-4.5"]);
     }
 
     #[test]

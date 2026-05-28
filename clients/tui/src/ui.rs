@@ -2503,6 +2503,27 @@ mod scenario_tests {
     }
 
     #[test]
+    fn setting_submenu_request_does_not_pin_model_name() {
+        // Regression: pinning `name = app.model` made `model_settings` fail
+        // with NotFound when the active model identifier we tracked (e.g. the
+        // bare upstream id from stream metadata or History config) was not a
+        // name the daemon's catalog/discovered-model resolver recognized.
+        // The request must let the daemon resolve to its session active.
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.mode = InputMode::Normal;
+        h.app
+            .set_active_model(Some("anthropic/claude-4.6-opus-20260205"));
+
+        h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
+        h.type_str("setting");
+        let cmd = sent_command(h.press_action(KeyCode::Enter));
+
+        assert_eq!(cmd.name, "model_settings");
+        assert_eq!(cmd.args, serde_json::json!({}));
+    }
+
+    #[test]
     fn setting_reasoning_effort_opens_value_submenu_preselected() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;

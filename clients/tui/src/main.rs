@@ -606,15 +606,11 @@ async fn send_conn_commands(
     }
 }
 
-fn model_settings_conn_command(app: &App, rid: Option<String>) -> ConnCommand {
-    let mut args = serde_json::json!({});
-    if !app.model.is_empty() {
-        args["name"] = serde_json::Value::String(app.model.clone());
-    }
+fn model_settings_conn_command(_app: &App, rid: Option<String>) -> ConnCommand {
     ConnCommand::Send(ClientMessage::Command(Command {
         rid,
         name: "model_settings".into(),
-        args,
+        args: serde_json::json!({}),
     }))
 }
 
@@ -1607,8 +1603,11 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         app.finish_sampler_settings_refresh();
                         app.effective_sampler = Some(snapshot);
                     } else if pending_response {
+                        // Our request, but the response is for a different
+                        // model (daemon's active drifted, or response is
+                        // otherwise unrelated). Stop the spinner but don't
+                        // wipe a previously-good snapshot.
                         app.finish_sampler_settings_refresh();
-                        app.effective_sampler = None;
                     }
                     if app.is_setting_palette_open() {
                         app.update_completions();
@@ -2206,6 +2205,48 @@ mod redraw_tests {
         assert_eq!(effect.redraw, RedrawEffect::Immediate);
         assert!(!app.sampler_settings_loading);
         assert!(app.effective_sampler.is_none());
+    }
+
+    #[test]
+    fn model_settings_for_different_model_with_matching_rid_does_not_wipe() {
+        // Drift scenario: our pending request comes back with matching rid
+        // but the daemon resolved to a different model than we track. We
+        // should stop the spinner but keep the previously-good snapshot
+        // rather than flashing "sampler settings unavailable".
+        let mut app = App::default();
+        app.set_active_model(Some("chat.test.current"));
+        app.effective_sampler = Some(EffectiveSamplerSnapshot {
+            model: Some("chat.test.current".into()),
+            temperature: crate::app::EffectiveSamplerField {
+                value: Some("0.5".into()),
+                scope: Some("character_model".into()),
+            },
+            ..EffectiveSamplerSnapshot::default()
+        });
+        let rid = app.begin_sampler_settings_refresh();
+
+        let effect = handle_server_message(
+            &mut app,
+            ServerMessage::CommandOutput(CommandOutput {
+                rid: Some(rid),
+                name: "model_settings".into(),
+                data: serde_json::json!({
+                    "model": "chat.test.other",
+                    "effective_sampler": { "temperature": 0.9 },
+                    "scopes": { "temperature": "character_model" }
+                }),
+            }),
+        );
+
+        assert_eq!(effect.redraw, RedrawEffect::Immediate);
+        assert!(!app.sampler_settings_loading);
+        assert_eq!(
+            app.effective_sampler
+                .as_ref()
+                .and_then(|snapshot| snapshot.display_value("temperature")),
+            Some("0.5"),
+            "an unrelated response must not overwrite a still-valid snapshot"
+        );
     }
 
     #[test]
