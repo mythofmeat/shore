@@ -6,6 +6,13 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/mythofmeat/shore-tui"
 description = "Terminal UI client for the Silvershore chat daemon."
 
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
 [dependencies]
 shore-protocol = "0.2"
 shore-swp-client = "0.2"
