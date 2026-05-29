@@ -357,11 +357,11 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
             // previous turn before we show the new User entry.
             app.clear_system_entries();
             // Optimistic: show user's message in conversation immediately
-            app.entries.push(crate::app::ConversationEntry::User {
-                content: text.clone(),
-                images: image_refs,
-                timestamp: String::new(),
-            });
+            app.entries.push(crate::app::ConversationEntry::user(
+                text.clone(),
+                image_refs,
+                String::new(),
+            ));
             app.scroll_to_bottom();
             // Show typing indicator immediately (don't wait for StreamStart)
             app.stream.active = true;
@@ -1491,9 +1491,9 @@ mod tests {
             .entries
             .iter()
             .any(|e| matches!(e, crate::app::ConversationEntry::System { .. })));
-        assert!(app
-            .entries
-            .iter()
-            .any(|e| matches!(e, crate::app::ConversationEntry::User { .. })));
+        assert!(app.entries.iter().any(|e| matches!(
+            e.as_turn(),
+            Some(t) if t.role == shore_protocol::types::Role::User
+        )));
     }
 }

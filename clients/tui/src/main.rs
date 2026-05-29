@@ -24,12 +24,13 @@ use ratatui::buffer::Buffer;
 use ratatui::Terminal;
 use shore_protocol::client_msg::{ClientMessage, Command};
 use shore_protocol::server_msg::ServerMessage;
-use shore_protocol::types::{ContentBlock, Message, Role};
+use shore_protocol::types::{ContentBlock, Message, Role, StreamMetadata};
 use tracing::{info, instrument};
 use tracing_subscriber::EnvFilter;
 
 use app::{
-    AltChoice, App, ConnectionStatus, ConversationEntry, EffectiveSamplerSnapshot, InputState,
+    AltChoice, App, Block, ConnectionStatus, ConversationEntry, EffectiveSamplerSnapshot,
+    InputState, Turn, TurnState,
 };
 use connection::{ConnCommand, ConnEvent};
 use input::Action;
@@ -228,18 +229,17 @@ impl TuiFixtureConfig {
         for idx in 0..self.repeat {
             let timestamp = format!("fixture-{idx}");
             match self.role {
-                FixtureRole::Assistant => app.entries.push(ConversationEntry::Assistant {
-                    msg_id: None,
-                    content: content.clone(),
-                    images: vec![],
+                FixtureRole::Assistant => app.entries.push(ConversationEntry::assistant(
+                    None,
+                    content.clone(),
+                    vec![],
                     timestamp,
-                    metadata: None,
-                }),
-                FixtureRole::User => app.entries.push(ConversationEntry::User {
-                    content: content.clone(),
-                    images: vec![],
-                    timestamp,
-                }),
+                    None,
+                )),
+                FixtureRole::User => {
+                    app.entries
+                        .push(ConversationEntry::user(content.clone(), vec![], timestamp))
+                }
                 FixtureRole::System => app.entries.push(ConversationEntry::System {
                     content: content.clone(),
                     count: 1,
@@ -983,15 +983,10 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
     }
 }
 
-/// Rebuild the display log from a history snapshot, inserting the archive
+/// Build display entries from a history snapshot, inserting the archive
 /// boundary before the first active-context message.
-fn rebuild_entries_from_history(
-    messages: Vec<Message>,
-    active_start: usize,
-    entries: &mut Vec<ConversationEntry>,
-) {
-    entries.clear();
-
+fn build_history_entries(messages: Vec<Message>, active_start: usize) -> Vec<ConversationEntry> {
+    let mut entries = Vec::new();
     let boundary_at = active_start.min(messages.len());
     let archived_turns = count_user_turns(&messages[..boundary_at]);
     let mut inserted_boundary = false;
@@ -1002,13 +997,97 @@ fn rebuild_entries_from_history(
             });
             inserted_boundary = true;
         }
-        expand_msg(msg, entries);
+        expand_msg(msg, &mut entries);
     }
 
     if boundary_at > 0 && !inserted_boundary {
         entries.push(ConversationEntry::ArchiveBoundary {
             archived_count: archived_turns,
         });
+    }
+    entries
+}
+
+/// Replace the display log wholesale from a history snapshot. Used when no
+/// stream is in flight (handshake, `:log`).
+fn rebuild_entries_from_history(
+    messages: Vec<Message>,
+    active_start: usize,
+    entries: &mut Vec<ConversationEntry>,
+) {
+    *entries = build_history_entries(messages, active_start);
+}
+
+/// Apply a History snapshot while reconciling the in-flight turn by `msg_id`.
+///
+/// The completed turns come straight from the authoritative snapshot. If a
+/// stream is in flight, the snapshot's trailing assistant turn *is* the
+/// in-flight turn's authoritative form, so it is re-marked `Streaming` (the
+/// header/spinner stay attached) and the metadata summed across earlier
+/// phases is carried forward — snapshot turns arrive metadata-less.
+///
+/// We only ever re-mark the *trailing* entry (or a prior in-flight `msg_id`
+/// match), never an earlier assistant turn: a snapshot that lands before the
+/// new reply is persisted still ends on the user's message, and reopening the
+/// previous completed reply would attach this stream's spinner/metadata to the
+/// wrong turn. When the snapshot has no in-flight turn yet, the renderer's
+/// synthetic streaming header/spinner covers the gap until the next delta.
+fn reconcile_streaming_turn(app: &mut App, messages: Vec<Message>, active_start: usize) {
+    let in_flight = app
+        .entries
+        .last()
+        .and_then(ConversationEntry::as_turn)
+        .filter(|turn| turn.is_streaming());
+    let prev_metadata = in_flight.and_then(|turn| turn.metadata.clone());
+    let prev_msg_id = in_flight.and_then(|turn| turn.msg_id.clone());
+
+    app.entries = build_history_entries(messages, active_start);
+
+    if !app.stream.active {
+        return;
+    }
+
+    // Prefer the prior in-flight turn by `msg_id`; otherwise re-mark the
+    // trailing entry, but only when it is itself an assistant turn.
+    let target_pos = prev_msg_id
+        .as_deref()
+        .and_then(|id| {
+            app.entries.iter().rposition(|e| {
+                matches!(
+                    e.as_turn(),
+                    Some(Turn { role: Role::Assistant, msg_id: Some(m), .. }) if m == id
+                )
+            })
+        })
+        .or_else(|| match app.entries.last() {
+            Some(entry) if matches!(entry.as_turn(), Some(t) if matches!(t.role, Role::Assistant)) => {
+                Some(app.entries.len() - 1)
+            }
+            _ => None,
+        });
+
+    if let Some(turn) = target_pos.and_then(|pos| app.entries[pos].as_turn_mut()) {
+        turn.state = TurnState::Streaming;
+        if turn.metadata.is_none() {
+            turn.metadata = prev_metadata;
+        }
+    }
+}
+
+/// Sum a stream phase's metadata onto an accumulating slot. Tokens and total
+/// time add across phases; the model label tracks the latest phase and
+/// `ttft_ms` is preserved from the first.
+fn accumulate_metadata(slot: &mut Option<StreamMetadata>, incoming: &StreamMetadata) {
+    match slot {
+        Some(acc) => {
+            acc.model = incoming.model.clone();
+            acc.tokens.input += incoming.tokens.input;
+            acc.tokens.output += incoming.tokens.output;
+            acc.tokens.cache_read += incoming.tokens.cache_read;
+            acc.tokens.cache_write += incoming.tokens.cache_write;
+            acc.timing.total_ms += incoming.timing.total_ms;
+        }
+        None => *slot = Some(incoming.clone()),
     }
 }
 
@@ -1078,34 +1157,34 @@ fn prepend_history_page(app: &mut App, data: &serde_json::Value) {
     app.history_version = app.history_version.wrapping_add(1);
 }
 
-/// Expand a protocol Message into one or more ConversationEntry items.
+/// Expand a protocol Message into one `ConversationEntry`.
 ///
-/// Assistant messages with content_blocks are expanded so that thinking,
-/// tool_use, and tool_result blocks become distinct entries (matching the
-/// visual style used during streaming), with the text becoming the final
-/// Assistant entry.
+/// Assistant messages with content_blocks become a single `Turn` whose
+/// `blocks` mirror the wire `content_blocks` in order — so interleaved
+/// `text → tool_use → text` renders faithfully under one header. Text blocks
+/// are kept distinct (not joined) so multi-segment turns interleave correctly.
 fn expand_msg(msg: Message, entries: &mut Vec<ConversationEntry>) {
-    // Non-assistant or no content_blocks: simple conversion.
-    if msg.role != Role::Assistant || msg.content_blocks.is_empty() {
-        entries.push(match msg.role {
-            Role::User => ConversationEntry::User {
-                content: msg.content,
-                images: msg.images,
-                timestamp: msg.timestamp,
-            },
-            Role::Assistant => ConversationEntry::Assistant {
-                msg_id: Some(msg.msg_id),
-                content: msg.content,
-                images: msg.images,
-                timestamp: msg.timestamp,
-                metadata: None,
-            },
-            Role::System => ConversationEntry::System {
-                content: msg.content,
-                count: 1,
-                timestamp: msg.timestamp,
-            },
+    // System messages are display-only markers, not turns.
+    if msg.role == Role::System {
+        entries.push(ConversationEntry::System {
+            content: msg.content,
+            count: 1,
+            timestamp: msg.timestamp,
         });
+        return;
+    }
+
+    // No content_blocks: a plain text turn (legacy / user messages).
+    if msg.content_blocks.is_empty() {
+        let msg_id = (msg.role == Role::Assistant).then_some(msg.msg_id);
+        entries.push(ConversationEntry::Turn(Turn::text(
+            msg.role,
+            msg_id,
+            msg.content,
+            msg.images,
+            msg.timestamp,
+            None,
+        )));
         return;
     }
 
@@ -1119,15 +1198,12 @@ fn expand_msg(msg: Message, entries: &mut Vec<ConversationEntry>) {
         })
         .collect();
 
-    let mut text_parts: Vec<String> = Vec::new();
-
+    let mut blocks: Vec<Block> = Vec::new();
     for block in &msg.content_blocks {
         match block {
             ContentBlock::Thinking { thinking, .. } => {
                 if !thinking.is_empty() {
-                    entries.push(ConversationEntry::Thinking {
-                        content: thinking.clone(),
-                    });
+                    blocks.push(Block::Thinking(thinking.clone()));
                 }
             }
             ContentBlock::RedactedThinking { .. } => {
@@ -1135,7 +1211,7 @@ fn expand_msg(msg: Message, entries: &mut Vec<ConversationEntry>) {
                 // useless "[redacted thinking]" placeholder.
             }
             ContentBlock::ToolUse { id, name, input } => {
-                entries.push(ConversationEntry::ToolCall {
+                blocks.push(Block::ToolUse {
                     tool_id: id.clone(),
                     tool_name: name.clone(),
                     input: input.clone(),
@@ -1147,7 +1223,7 @@ fn expand_msg(msg: Message, entries: &mut Vec<ConversationEntry>) {
                 is_error,
             } => {
                 let name = tool_names.get(tool_use_id.as_str()).unwrap_or(&"tool");
-                entries.push(ConversationEntry::ToolResult {
+                blocks.push(Block::ToolResult {
                     tool_id: tool_use_id.clone(),
                     tool_name: name.to_string(),
                     output: content.clone(),
@@ -1155,22 +1231,22 @@ fn expand_msg(msg: Message, entries: &mut Vec<ConversationEntry>) {
                 });
             }
             ContentBlock::Text { text } => {
-                text_parts.push(text.clone());
+                if !text.trim().is_empty() {
+                    blocks.push(Block::Text(text.clone()));
+                }
             }
         }
     }
 
-    // Emit the text content as the final Assistant entry.
-    let content = text_parts.join("\n");
-    if !content.trim().is_empty() {
-        entries.push(ConversationEntry::Assistant {
-            msg_id: Some(msg.msg_id),
-            content,
-            images: msg.images,
-            timestamp: msg.timestamp,
-            metadata: None,
-        });
-    }
+    entries.push(ConversationEntry::Turn(Turn {
+        role: msg.role,
+        msg_id: Some(msg.msg_id),
+        blocks,
+        images: msg.images,
+        timestamp: msg.timestamp,
+        state: TurnState::Complete,
+        metadata: None,
+    }));
 }
 
 /// Max display cells for images: 80% terminal width (minus indent), 50% terminal height.
@@ -1186,12 +1262,10 @@ fn image_max_cells() -> (u16, u16) {
 fn transmit_entry_images(app: &mut App) {
     let (max_cols, max_rows) = image_max_cells();
     for entry in &app.entries {
-        let imgs = match entry {
-            ConversationEntry::User { images, .. }
-            | ConversationEntry::Assistant { images, .. } => images,
-            _ => continue,
+        let Some(turn) = entry.as_turn() else {
+            continue;
         };
-        for img in imgs {
+        for img in &turn.images {
             transmit_image_ref(&mut app.image_cache, img, max_cols, max_rows);
         }
     }
@@ -1243,9 +1317,9 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 app.stream.reset();
                 app.stream.active = true;
             } else {
-                // Continuation within a multi-phase (tool-use) turn — preserve
-                // accumulators (and the committed thinking/tool entries) so the
-                // final Assistant entry reflects the whole turn.
+                // Continuation within a multi-phase (tool-use) turn — the
+                // in-flight `Streaming` turn (with its committed thinking/tool
+                // blocks) stays in place and keeps accumulating.
                 app.stream.phase = "responding".into();
                 app.stream.tool_name = None;
             }
@@ -1280,88 +1354,90 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             app.set_active_model(Some(&end.metadata.model));
             app.tokens = end.metadata.tokens.clone();
 
-            if !end.content.is_empty() {
-                if !app.stream.accumulated_text.is_empty() {
-                    app.stream.accumulated_text.push_str("\n\n");
-                }
-                app.stream.accumulated_text.push_str(&end.content);
-            }
+            let final_phase = end.finish_reason != "tool_use";
 
-            match app.stream.accumulated_metadata.as_mut() {
-                Some(acc) => {
-                    acc.model = end.metadata.model.clone();
-                    acc.tokens.input += end.metadata.tokens.input;
-                    acc.tokens.output += end.metadata.tokens.output;
-                    acc.tokens.cache_read += end.metadata.tokens.cache_read;
-                    acc.tokens.cache_write += end.metadata.tokens.cache_write;
-                    acc.timing.total_ms += end.metadata.timing.total_ms;
-                    // Preserve ttft_ms from the first phase.
-                }
-                None => {
-                    app.stream.accumulated_metadata = Some(end.metadata.clone());
-                }
-            }
-
-            if end.finish_reason == "tool_use" {
-                // This phase's thinking is already committed as Thinking
-                // entries (appended live), so it stays interleaved above the
-                // tool call. Only drop any partial pre-tool text — the
-                // authoritative final text arrives in the closing phase.
-                app.drop_trailing_streaming_text();
-                app.stream.phase = "tool_use".into();
-                app.stream.tool_name = None;
-                RedrawEffect::Immediate
-            } else {
-                // Drop the live partial text: either the History rebuild below
-                // already replaced it with the authoritative turn, or the
-                // fallback re-pushes it from `accumulated_text`.
-                app.drop_trailing_streaming_text();
-
-                // The daemon broadcasts a History snapshot during
-                // `engine.append_message` (in persist_and_notify) and only
-                // then emits StreamEnd, so the assistant entry is already
-                // present in `app.entries`. Attach streaming metadata to
-                // that entry — pushing a new one would duplicate it.
-                let metadata = app.stream.accumulated_metadata.take();
-                let slot_pos = if let Some(target) = end.msg_id.as_deref() {
+            // Locate the turn to finalize: prefer an authoritative `msg_id`
+            // match (criterion #3), else the trailing in-flight `Streaming`
+            // turn — opened by the deltas or re-marked Streaming on the
+            // authoritative turn by `reconcile_streaming_turn`.
+            let target_pos = end
+                .msg_id
+                .as_deref()
+                .and_then(|target| {
                     app.entries.iter().rposition(|e| {
                         matches!(
-                            e,
-                            ConversationEntry::Assistant {
-                                msg_id: Some(entry_msg_id),
-                                ..
-                            } if entry_msg_id == target
+                            e.as_turn(),
+                            Some(Turn { msg_id: Some(id), .. }) if id == target
                         )
                     })
-                } else {
+                })
+                .or_else(|| {
                     app.entries
                         .iter()
-                        .rposition(|e| matches!(e, ConversationEntry::Assistant { .. }))
-                };
-                if let Some(pos) = slot_pos {
-                    if let ConversationEntry::Assistant { metadata: slot, .. } =
-                        &mut app.entries[pos]
-                    {
-                        *slot = metadata;
+                        .rposition(|e| matches!(e.as_turn(), Some(t) if t.is_streaming()))
+                });
+
+            match target_pos.and_then(|pos| app.entries[pos].as_turn_mut()) {
+                Some(turn) => {
+                    // Sum this phase's metadata onto the turn (multi-phase
+                    // tool-use turns accumulate across phases; carried across
+                    // History reconciles by `reconcile_streaming_turn`).
+                    accumulate_metadata(&mut turn.metadata, &end.metadata);
+                    if turn.msg_id.is_none() {
+                        turn.msg_id = end.msg_id.clone();
                     }
-                } else {
-                    // Fallback: History hasn't been applied yet (shouldn't
-                    // happen given daemon ordering). Push so the user isn't
-                    // left with a blank turn.
-                    let content = std::mem::take(&mut app.stream.accumulated_text);
-                    app.entries.push(ConversationEntry::Assistant {
-                        msg_id: end.msg_id.clone(),
-                        content,
-                        images: vec![],
-                        timestamp: String::new(),
-                        metadata,
-                    });
+                    if final_phase {
+                        // Fallback when no authoritative History snapshot
+                        // supplied text: adopt the closing phase's content so
+                        // the turn isn't left textless. A no-op on the normal
+                        // path (History already populated the text blocks).
+                        if !end.content.is_empty()
+                            && !turn.blocks.iter().any(|b| matches!(b, Block::Text(_)))
+                        {
+                            turn.blocks.push(Block::Text(end.content.clone()));
+                        }
+                        turn.state = TurnState::Complete;
+                    }
                 }
+                None if final_phase => {
+                    // No matching or in-flight turn (e.g. a msg_id absent from
+                    // the local log). Push a turn so the user isn't left with a
+                    // blank reply rather than annotating the wrong turn.
+                    let mut metadata = None;
+                    accumulate_metadata(&mut metadata, &end.metadata);
+                    app.entries.push(ConversationEntry::Turn(Turn::text(
+                        Role::Assistant,
+                        end.msg_id.clone(),
+                        end.content.clone(),
+                        vec![],
+                        String::new(),
+                        metadata,
+                    )));
+                }
+                None => {
+                    // Tool-use phase boundary before any content streamed: open
+                    // the in-flight turn so its metadata has a home.
+                    let turn = app.ensure_streaming_turn();
+                    accumulate_metadata(&mut turn.metadata, &end.metadata);
+                    if turn.msg_id.is_none() {
+                        turn.msg_id = end.msg_id.clone();
+                    }
+                }
+            }
+
+            if final_phase {
                 app.stream.reset();
                 if keep_bottom {
                     app.scroll_to_bottom();
                 }
                 RedrawEffect::ImmediateFull
+            } else {
+                // Tool-use phase boundary: keep the turn Streaming. Its thinking
+                // and pre-tool text are already blocks, interleaved in order —
+                // no drop, no single-header workaround.
+                app.stream.phase = "tool_use".into();
+                app.stream.tool_name = None;
+                RedrawEffect::Immediate
             }
         }
 
@@ -1379,11 +1455,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             app.stream.active = true;
             app.stream.phase = "tool_use".into();
             app.stream.tool_name = Some(tc.tool_name.clone());
-            app.entries.push(ConversationEntry::ToolCall {
-                tool_id: tc.tool_id,
-                tool_name: tc.tool_name,
-                input: tc.input,
-            });
+            app.stream_push_tool_call(tc.tool_id, tc.tool_name, tc.input);
             if app.auto_scroll {
                 app.scroll_to_bottom();
             }
@@ -1392,12 +1464,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
 
         ServerMessage::ToolResult(tr) => {
             app.stream.tool_name = None;
-            app.entries.push(ConversationEntry::ToolResult {
-                tool_id: tr.tool_id,
-                tool_name: tr.tool_name,
-                output: tr.output,
-                is_error: tr.is_error,
-            });
+            app.stream_push_tool_result(tr.tool_id, tr.tool_name, tr.output, tr.is_error);
             if app.auto_scroll {
                 app.scroll_to_bottom();
             }
@@ -1823,9 +1890,9 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             if let Some(selected) = hist.selected_character {
                 app.character_name = selected;
             }
-            // Re-sync history
+            // Re-sync history, preserving any in-flight streaming turn.
             app.image_cache.clear();
-            rebuild_entries_from_history(hist.messages, hist.active_start, &mut app.entries);
+            reconcile_streaming_turn(app, hist.messages, hist.active_start);
             reset_history_paging(app);
             // Bump so the conv-cache fingerprint changes even when the
             // entry count and last-two summaries collide with the prior
@@ -1932,8 +1999,8 @@ mod redraw_tests {
         assert_eq!(app.scroll_offset, 4);
         assert!(!app.auto_scroll);
         assert!(matches!(
-            &app.entries[0],
-            ConversationEntry::Assistant { content, .. } if content.contains("# Fixture")
+            app.entries[0].as_turn(),
+            Some(t) if t.role == Role::Assistant && t.joined_text().contains("# Fixture")
         ));
 
         let _ = std::fs::remove_file(path);
@@ -1971,13 +2038,13 @@ mod redraw_tests {
             character_name: "Debug".into(),
             ..App::default()
         };
-        app.entries.push(ConversationEntry::Assistant {
-            msg_id: None,
-            content: "hello from dump".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-            metadata: None,
-        });
+        app.entries.push(ConversationEntry::assistant(
+            None,
+            "hello from dump".into(),
+            vec![],
+            "t1".into(),
+            None,
+        ));
 
         dump.dump(&mut app, 32, 12).unwrap();
         let contents = std::fs::read_to_string(&path).unwrap();
@@ -2498,20 +2565,20 @@ mod redraw_tests {
     fn final_stream_end_attaches_metadata_by_msg_id_when_available() {
         let target_meta = metadata();
         let mut app = App::default();
-        app.entries.push(ConversationEntry::Assistant {
-            msg_id: Some("m_target".into()),
-            content: "target".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-            metadata: None,
-        });
-        app.entries.push(ConversationEntry::Assistant {
-            msg_id: Some("m_later".into()),
-            content: "later".into(),
-            images: vec![],
-            timestamp: "t2".into(),
-            metadata: None,
-        });
+        app.entries.push(ConversationEntry::assistant(
+            Some("m_target".into()),
+            "target".into(),
+            vec![],
+            "t1".into(),
+            None,
+        ));
+        app.entries.push(ConversationEntry::assistant(
+            Some("m_later".into()),
+            "later".into(),
+            vec![],
+            "t2".into(),
+            None,
+        ));
 
         handle_server_message(
             &mut app,
@@ -2529,39 +2596,31 @@ mod redraw_tests {
         let target = app
             .entries
             .iter()
-            .find_map(|entry| match entry {
-                ConversationEntry::Assistant {
-                    msg_id: Some(msg_id),
-                    metadata,
-                    ..
-                } if msg_id == "m_target" => metadata.as_ref(),
-                _ => None,
-            })
+            .filter_map(ConversationEntry::as_turn)
+            .find(|t| t.msg_id.as_deref() == Some("m_target"))
+            .and_then(|t| t.metadata.as_ref())
             .expect("target assistant metadata");
         assert_eq!(target.model, target_meta.model);
 
-        let later_metadata = app.entries.iter().find_map(|entry| match entry {
-            ConversationEntry::Assistant {
-                msg_id: Some(msg_id),
-                metadata,
-                ..
-            } if msg_id == "m_later" => Some(metadata),
-            _ => None,
-        });
+        let later_metadata = app
+            .entries
+            .iter()
+            .filter_map(ConversationEntry::as_turn)
+            .find(|t| t.msg_id.as_deref() == Some("m_later"))
+            .map(|t| &t.metadata);
         assert!(matches!(later_metadata, Some(None)));
     }
 
     #[test]
     fn final_stream_end_with_unmatched_msg_id_does_not_annotate_latest_assistant() {
         let mut app = App::default();
-        app.stream.accumulated_text = "new response".into();
-        app.entries.push(ConversationEntry::Assistant {
-            msg_id: Some("m_existing".into()),
-            content: "existing".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-            metadata: None,
-        });
+        app.entries.push(ConversationEntry::assistant(
+            Some("m_existing".into()),
+            "existing".into(),
+            vec![],
+            "t1".into(),
+            None,
+        ));
 
         handle_server_message(
             &mut app,
@@ -2569,29 +2628,26 @@ mod redraw_tests {
                 rid: None,
                 msg_id: Some("m_missing_from_history".into()),
                 revision: Some(8),
-                content: String::new(),
+                content: "new response".into(),
                 metadata: metadata(),
                 finish_reason: "end_turn".into(),
                 is_final: true,
             }),
         );
 
-        let existing_metadata = app.entries.iter().find_map(|entry| match entry {
-            ConversationEntry::Assistant {
-                msg_id: Some(msg_id),
-                metadata,
-                ..
-            } if msg_id == "m_existing" => Some(metadata),
-            _ => None,
-        });
+        let existing_metadata = app
+            .entries
+            .iter()
+            .filter_map(ConversationEntry::as_turn)
+            .find(|t| t.msg_id.as_deref() == Some("m_existing"))
+            .map(|t| &t.metadata);
         assert!(matches!(existing_metadata, Some(None)));
-        assert!(app.entries.iter().any(|entry| matches!(
-            entry,
-            ConversationEntry::Assistant {
-                msg_id: Some(msg_id),
-                metadata: Some(_),
-                ..
-            } if msg_id == "m_missing_from_history"
-        )));
+        assert!(app
+            .entries
+            .iter()
+            .filter_map(ConversationEntry::as_turn)
+            .any(|t| {
+                t.msg_id.as_deref() == Some("m_missing_from_history") && t.metadata.is_some()
+            }));
     }
 }

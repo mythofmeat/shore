@@ -5,8 +5,12 @@ use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 use shore_protocol::tool_display::{format_tool_input, format_tool_output};
+use shore_protocol::types::Role;
 
-use crate::app::{AltChoice, App, ConversationEntry, InputMode, PaletteMode, ValueEditorKind};
+use crate::app::{
+    AltChoice, App, Block as TurnBlock, ConversationEntry, InputMode, PaletteMode, Turn,
+    ValueEditorKind,
+};
 use crate::images;
 use crate::markdown;
 
@@ -120,12 +124,12 @@ fn render_thinking_group(lines: &mut Vec<Line<'static>>, thoughts: &[String], wr
     lines.push(Line::from(""));
 }
 
-/// Render a single tool call or tool result entry.
-fn render_tool_entry(lines: &mut Vec<Line<'static>>, entry: &ConversationEntry, wrap_width: u16) {
+/// Render a single tool-call or tool-result block.
+fn render_tool_block(lines: &mut Vec<Line<'static>>, block: &TurnBlock, wrap_width: u16) {
     let bar_style = Style::default().fg(Color::DarkGray);
     let text_width = wrap_width.saturating_sub(4) as usize; // "  │ " = 4 cols
-    match entry {
-        ConversationEntry::ToolCall {
+    match block {
+        TurnBlock::ToolUse {
             tool_name, input, ..
         } => {
             lines.push(Line::from(vec![
@@ -148,7 +152,7 @@ fn render_tool_entry(lines: &mut Vec<Line<'static>>, entry: &ConversationEntry, 
             }
             lines.push(Line::from(""));
         }
-        ConversationEntry::ToolResult {
+        TurnBlock::ToolResult {
             tool_name,
             output,
             is_error,
@@ -178,43 +182,38 @@ fn render_tool_entry(lines: &mut Vec<Line<'static>>, entry: &ConversationEntry, 
     }
 }
 
-/// Flush deferred thinking + tool entries, preserving their original
-/// interleaved order (think → call → result → think → …). Consecutive thinking
-/// entries collapse under one header. Hidden categories are skipped but still
-/// drained so they never leak into a later flush.
-fn flush_pending(
+/// Render a turn's blocks in their authoritative order (think → call →
+/// result → text → …). Consecutive thinking blocks collapse under one header;
+/// text blocks render as markdown. Hidden categories are skipped. Because the
+/// blocks carry the true order, interleaved `text → tool_use → text` renders
+/// faithfully under the single turn header — no deferral, no reconcile.
+fn render_blocks(
     lines: &mut Vec<Line<'static>>,
-    pending: &mut Vec<&ConversationEntry>,
+    blocks: &[TurnBlock],
     show_thinking: bool,
     show_tools: bool,
     wrap_width: u16,
 ) {
-    if pending.is_empty() {
-        return;
-    }
-    let items = std::mem::take(pending);
     let mut i = 0;
-    while i < items.len() {
-        match items[i] {
-            ConversationEntry::Thinking { .. } => {
+    while i < blocks.len() {
+        match &blocks[i] {
+            TurnBlock::Thinking(_) => {
                 let start = i;
-                while i < items.len() && matches!(items[i], ConversationEntry::Thinking { .. }) {
+                while i < blocks.len() && matches!(blocks[i], TurnBlock::Thinking(_)) {
                     i += 1;
                 }
                 if show_thinking {
-                    let thoughts: Vec<String> = items[start..i]
+                    let thoughts: Vec<String> = blocks[start..i]
                         .iter()
-                        .filter_map(|e| match e {
-                            ConversationEntry::Thinking { content } => Some(content.clone()),
+                        .filter_map(|b| match b {
+                            TurnBlock::Thinking(content) => Some(content.clone()),
                             _ => None,
                         })
                         .collect();
                     render_thinking_group(lines, &thoughts, wrap_width);
                 }
             }
-            ConversationEntry::StreamingText { content } => {
-                // The live response text — always shown, rendered like the
-                // finalized assistant text it will become.
+            TurnBlock::Text(content) => {
                 if !content.is_empty() {
                     let wrap_w = wrap_width.saturating_sub(2) as usize;
                     lines.extend(indent_lines(markdown::render_markdown_wrapped(
@@ -224,9 +223,9 @@ fn flush_pending(
                 }
                 i += 1;
             }
-            _ => {
+            TurnBlock::ToolUse { .. } | TurnBlock::ToolResult { .. } => {
                 if show_tools {
-                    render_tool_entry(lines, items[i], wrap_width);
+                    render_tool_block(lines, &blocks[i], wrap_width);
                 }
                 i += 1;
             }
@@ -483,122 +482,80 @@ fn draw_conversation(frame: &mut Frame, app: &mut App, area: Rect) {
     }
 }
 
-/// Build the full Vec<Line> for the conversation pane from `app.entries`,
-/// the live stream state, and the active image cache. Returns the lines,
-/// the rebuilt image index, and the visual line count.
-fn build_conversation_lines(
+/// Render one turn: a role header followed by its blocks in order, then any
+/// images and (for a finalized assistant turn) the metadata footer. A turn in
+/// `Streaming` state uses the live header and a spinner footer instead.
+fn render_turn(
+    lines: &mut Vec<Line<'static>>,
     app: &App,
+    turn: &Turn,
     content_width: u16,
-) -> (Vec<Line<'static>>, Vec<crate::app::ImageEntry>, u16) {
-    let mut lines: Vec<Line<'static>> = Vec::new();
-    let mut image_index: Vec<crate::app::ImageEntry> = Vec::new();
-
-    // Thinking, streaming text, and tool entries are deferred so they render
-    // under the assistant name, not floating above it as if they're part of the
-    // user's message. A single ordered list preserves their true interleaving
-    // (think → call → result → think → text) — no parallel stream buffer to
-    // dedup against, so there's nothing to skip.
-    let mut pending: Vec<&ConversationEntry> = Vec::new();
-
-    for entry in app.entries.iter() {
-        match entry {
-            ConversationEntry::Thinking { .. }
-            | ConversationEntry::StreamingText { .. }
-            | ConversationEntry::ToolCall { .. }
-            | ConversationEntry::ToolResult { .. } => {
-                pending.push(entry);
-                continue;
-            }
-            ConversationEntry::ArchiveBoundary { archived_count } => {
-                flush_pending(
-                    &mut lines,
-                    &mut pending,
-                    app.show_thinking,
-                    app.show_tools,
-                    content_width,
-                );
-                push_archive_boundary(&mut lines, content_width, *archived_count);
-                continue;
-            }
-            _ => {}
+    image_index: &mut Vec<crate::app::ImageEntry>,
+) {
+    match turn.role {
+        Role::User => {
+            push_entry_header(
+                lines,
+                "You".to_string(),
+                Color::Blue,
+                &turn.timestamp,
+                app.show_timestamps,
+            );
+            lines.push(Line::from(""));
+            render_blocks(
+                lines,
+                &turn.blocks,
+                app.show_thinking,
+                app.show_tools,
+                content_width,
+            );
+            render_images(
+                lines,
+                &turn.images,
+                &app.image_cache,
+                app.show_images,
+                image_index,
+            );
+            lines.push(Line::from(""));
         }
-
-        match entry {
-            ConversationEntry::User {
-                content,
-                images,
-                timestamp,
-            } => {
-                flush_pending(
-                    &mut lines,
-                    &mut pending,
-                    app.show_thinking,
-                    app.show_tools,
-                    content_width,
-                );
-                push_entry_header(
-                    &mut lines,
-                    "You".to_string(),
-                    Color::Blue,
-                    timestamp,
-                    app.show_timestamps,
-                );
-                lines.push(Line::from(""));
-                let wrap_w = content_width.saturating_sub(2) as usize;
-                lines.extend(indent_lines(markdown::render_markdown_wrapped(
-                    content, wrap_w,
-                )));
-                render_images(
-                    &mut lines,
-                    images,
-                    &app.image_cache,
-                    app.show_images,
-                    &mut image_index,
-                );
-                lines.push(Line::from(""));
-            }
-            ConversationEntry::Assistant {
-                content,
-                metadata,
-                images,
-                timestamp,
-                ..
-            } => {
+        Role::Assistant => {
+            if turn.is_streaming() {
+                render_streaming_header(lines, app);
+            } else {
                 let name = if app.character_name.is_empty() {
                     "Assistant".to_string()
                 } else {
                     app.character_name.clone()
                 };
                 push_entry_header(
-                    &mut lines,
+                    lines,
                     name,
                     Color::Green,
-                    timestamp,
+                    &turn.timestamp,
                     app.show_timestamps,
                 );
                 lines.push(Line::from(""));
-                // Render thinking and tool calls under the character name, in
-                // their true interleaved order, before the final text.
-                flush_pending(
-                    &mut lines,
-                    &mut pending,
-                    app.show_thinking,
-                    app.show_tools,
-                    content_width,
-                );
-                let wrap_w = content_width.saturating_sub(2) as usize;
-                lines.extend(indent_lines(markdown::render_markdown_wrapped(
-                    content, wrap_w,
-                )));
-                render_images(
-                    &mut lines,
-                    images,
-                    &app.image_cache,
-                    app.show_images,
-                    &mut image_index,
-                );
+            }
+            render_blocks(
+                lines,
+                &turn.blocks,
+                app.show_thinking,
+                app.show_tools,
+                content_width,
+            );
+            render_images(
+                lines,
+                &turn.images,
+                &app.image_cache,
+                app.show_images,
+                image_index,
+            );
+            if turn.is_streaming() {
+                // Live spinner / activity footer (includes its own trailing blank).
+                render_streaming_content(lines, app, content_width);
+            } else {
                 if app.show_metadata {
-                    if let Some(meta) = metadata {
+                    if let Some(meta) = &turn.metadata {
                         lines.push(Line::from(Span::styled(
                             format!(
                                 "  [{} | in:{} out:{} cache:{} | {}ms]",
@@ -614,18 +571,44 @@ fn build_conversation_lines(
                 }
                 lines.push(Line::from(""));
             }
+        }
+        // System turns don't arise here (System is a separate entry variant),
+        // but render their text defensively rather than panicking.
+        Role::System => {
+            render_blocks(
+                lines,
+                &turn.blocks,
+                app.show_thinking,
+                app.show_tools,
+                content_width,
+            );
+        }
+    }
+}
+
+/// Build the full Vec<Line> for the conversation pane from `app.entries`,
+/// the live stream state, and the active image cache. Returns the lines,
+/// the rebuilt image index, and the visual line count.
+fn build_conversation_lines(
+    app: &App,
+    content_width: u16,
+) -> (Vec<Line<'static>>, Vec<crate::app::ImageEntry>, u16) {
+    let mut lines: Vec<Line<'static>> = Vec::new();
+    let mut image_index: Vec<crate::app::ImageEntry> = Vec::new();
+
+    // Each turn renders its own header followed by its blocks in order, so
+    // thinking/tools/text interleave faithfully under one header. System and
+    // archive markers render inline.
+    for entry in app.entries.iter() {
+        match entry {
+            ConversationEntry::Turn(turn) => {
+                render_turn(&mut lines, app, turn, content_width, &mut image_index);
+            }
             ConversationEntry::System {
                 content,
                 count,
                 timestamp,
             } => {
-                flush_pending(
-                    &mut lines,
-                    &mut pending,
-                    app.show_thinking,
-                    app.show_tools,
-                    content_width,
-                );
                 let header = if *count > 1 {
                     format!("System (×{count})")
                 } else {
@@ -651,35 +634,22 @@ fn build_conversation_lines(
                 }
                 lines.push(Line::from(""));
             }
-            ConversationEntry::Thinking { .. }
-            | ConversationEntry::StreamingText { .. }
-            | ConversationEntry::ArchiveBoundary { .. }
-            | ConversationEntry::ToolCall { .. }
-            | ConversationEntry::ToolResult { .. } => unreachable!(),
+            ConversationEntry::ArchiveBoundary { archived_count } => {
+                push_archive_boundary(&mut lines, content_width, *archived_count);
+            }
         }
     }
 
-    // When streaming, emit a single assistant header and flush any pending
-    // thinking/tool entries underneath it before rendering live content.
-    // Otherwise, flush orphans without a header (shouldn't normally occur).
-    if app.stream.active {
+    // A stream that has started but produced no turn yet (pre-first-chunk, or
+    // regen before StreamStart) still shows the header + spinner. Once deltas
+    // arrive the trailing `Streaming` turn renders this itself.
+    let trailing_streaming = matches!(
+        app.entries.last().and_then(ConversationEntry::as_turn),
+        Some(turn) if turn.is_streaming()
+    );
+    if app.stream.active && !trailing_streaming {
         render_streaming_header(&mut lines, app);
-        flush_pending(
-            &mut lines,
-            &mut pending,
-            app.show_thinking,
-            app.show_tools,
-            content_width,
-        );
         render_streaming_content(&mut lines, app, content_width);
-    } else {
-        flush_pending(
-            &mut lines,
-            &mut pending,
-            app.show_thinking,
-            app.show_tools,
-            content_width,
-        );
     }
 
     // Empty state: show a welcome hint
@@ -1451,7 +1421,7 @@ fn draw_alt_picker_inline(frame: &mut Frame, app: &App, area: Rect) {
 #[cfg(test)]
 mod scenario_tests {
     use super::*;
-    use crate::app::{App, ConnectionStatus, ConversationEntry, InputMode};
+    use crate::app::{App, Block, ConnectionStatus, ConversationEntry, InputMode, Turn, TurnState};
     use crate::connection::ConnCommand;
     use crate::input;
     use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
@@ -1459,10 +1429,40 @@ mod scenario_tests {
     use ratatui::Terminal;
     use shore_protocol::client_msg::ClientMessage;
     use shore_protocol::server_msg::{CommandOutput, ServerMessage};
-    use shore_protocol::types::{CharacterInfo, StreamMetadata, TimingInfo, TokenCounts};
+    use shore_protocol::types::{CharacterInfo, Role, StreamMetadata, TimingInfo, TokenCounts};
 
     const W: u16 = 80;
     const H: u16 = 30;
+
+    /// Build a completed assistant turn from an ordered list of blocks.
+    fn assistant_turn(blocks: Vec<Block>) -> ConversationEntry {
+        ConversationEntry::Turn(Turn {
+            role: Role::Assistant,
+            msg_id: None,
+            blocks,
+            images: vec![],
+            timestamp: "t".into(),
+            state: TurnState::Complete,
+            metadata: None,
+        })
+    }
+
+    fn tool_use(id: &str, name: &str, input: serde_json::Value) -> Block {
+        Block::ToolUse {
+            tool_id: id.into(),
+            tool_name: name.into(),
+            input,
+        }
+    }
+
+    fn tool_result(id: &str, name: &str, output: &str, is_error: bool) -> Block {
+        Block::ToolResult {
+            tool_id: id.into(),
+            tool_name: name.into(),
+            output: output.into(),
+            is_error,
+        }
+    }
 
     // ── Harness ─────────────────────────────────────────────────────────────
 
@@ -1590,17 +1590,33 @@ mod scenario_tests {
             self.app.stream.phase = "thinking".into();
         }
 
-        /// Simulate StreamEnd (finalise response into entries): drop the live
-        /// partial text and push the authoritative assistant turn.
+        /// Simulate StreamEnd (finalise response into entries): mark the
+        /// in-flight turn Complete, replacing streamed text with the
+        /// authoritative content while keeping any thinking/tool blocks.
         fn stream_end(&mut self, content: &str) {
-            self.app.drop_trailing_streaming_text();
-            self.app.entries.push(ConversationEntry::Assistant {
-                msg_id: None,
-                content: content.to_string(),
-                images: vec![],
-                timestamp: String::new(),
-                metadata: None,
-            });
+            let finalized = self
+                .app
+                .entries
+                .last_mut()
+                .and_then(ConversationEntry::as_turn_mut)
+                .filter(|t| t.is_streaming())
+                .map(|turn| {
+                    turn.blocks.retain(|b| !matches!(b, TurnBlock::Text(_)));
+                    if !content.is_empty() {
+                        turn.blocks.push(TurnBlock::Text(content.to_string()));
+                    }
+                    turn.state = crate::app::TurnState::Complete;
+                })
+                .is_some();
+            if !finalized {
+                self.app.entries.push(ConversationEntry::assistant(
+                    None,
+                    content.to_string(),
+                    vec![],
+                    String::new(),
+                    None,
+                ));
+            }
             self.app.stream.reset();
         }
 
@@ -1740,11 +1756,11 @@ mod scenario_tests {
         // 3. Send (Enter)
         h.press(KeyCode::Enter);
         // Manually add the user entry (normally the daemon echoes it back)
-        h.app.entries.push(ConversationEntry::User {
-            content: "Hello, world!".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-        });
+        h.app.entries.push(ConversationEntry::user(
+            "Hello, world!".into(),
+            vec![],
+            "t1".into(),
+        ));
         let f = h.render("after send");
         // Input should be cleared
         assert!(
@@ -1860,11 +1876,11 @@ mod scenario_tests {
         h.app.connection_status = ConnectionStatus::Connected;
 
         // Start a stream with thinking then text
-        h.app.entries.push(ConversationEntry::User {
-            content: "Think about this".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-        });
+        h.app.entries.push(ConversationEntry::user(
+            "Think about this".into(),
+            vec![],
+            "t1".into(),
+        ));
         h.stream_start();
         h.thinking_chunk("Let me consider...\nFirst, I need to...\nThen...");
         h.stream_chunk("Here's my answer");
@@ -1899,23 +1915,28 @@ mod scenario_tests {
     fn scenario_timestamp_toggle() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
-        h.app.entries.push(ConversationEntry::User {
-            content: "time check".into(),
-            images: vec![],
-            timestamp: "2026-01-15T10:30:00Z".into(),
-        });
+        h.app.entries.push(ConversationEntry::user(
+            "time check".into(),
+            vec![],
+            "2026-01-15T10:30:00Z".into(),
+        ));
+
+        // Derive the expected display in the host's local timezone — asserting
+        // on the literal UTC date would flake where it maps to another day.
+        let expected =
+            format_timestamp("2026-01-15T10:30:00Z").expect("test timestamp should format");
 
         let hidden = h.render("timestamps hidden by default");
         assert!(
-            !hidden.contains("2026-01-15"),
+            !hidden.contains(&expected),
             "timestamps should start hidden; frame:\n{hidden}"
         );
 
         h.app.show_timestamps = true;
         let visible = h.render("timestamps visible");
         assert!(
-            visible.contains("2026-01-15"),
-            "timestamp date should render when enabled; frame:\n{visible}"
+            visible.contains(&expected),
+            "formatted timestamp should render when enabled; expected {expected:?}; frame:\n{visible}"
         );
     }
 
@@ -1923,13 +1944,13 @@ mod scenario_tests {
     fn scenario_metadata_toggle() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
-        h.app.entries.push(ConversationEntry::Assistant {
-            msg_id: Some("m1".into()),
-            content: "hello".into(),
-            images: vec![],
-            timestamp: "2026-01-15T10:30:00Z".into(),
-            metadata: Some(metadata("test-model")),
-        });
+        h.app.entries.push(ConversationEntry::assistant(
+            Some("m1".into()),
+            "hello".into(),
+            vec![],
+            "2026-01-15T10:30:00Z".into(),
+            Some(metadata("test-model")),
+        ));
 
         let visible = h.render("metadata visible by default");
         assert!(
@@ -2019,11 +2040,11 @@ mod scenario_tests {
         // Fill conversation so blank rows aren't trimmed by the harness —
         // we need stable row indices to compare layout positions.
         for i in 0..20 {
-            h.app.entries.push(ConversationEntry::User {
-                content: format!("hello {i}"),
-                images: vec![],
-                timestamp: format!("t{i}"),
-            });
+            h.app.entries.push(ConversationEntry::user(
+                format!("hello {i}"),
+                vec![],
+                format!("t{i}"),
+            ));
         }
 
         // Read the underlying backend buffer directly so empty rows
@@ -2700,18 +2721,18 @@ mod scenario_tests {
 
         // Fill with enough messages to require scrolling
         for i in 0..20 {
-            h.app.entries.push(ConversationEntry::User {
-                content: format!("Message {i}"),
-                images: vec![],
-                timestamp: format!("t{i}"),
-            });
-            h.app.entries.push(ConversationEntry::Assistant {
-                msg_id: None,
-                content: format!("Reply {i}"),
-                images: vec![],
-                timestamp: format!("r{i}"),
-                metadata: None,
-            });
+            h.app.entries.push(ConversationEntry::user(
+                format!("Message {i}"),
+                vec![],
+                format!("t{i}"),
+            ));
+            h.app.entries.push(ConversationEntry::assistant(
+                None,
+                format!("Reply {i}"),
+                vec![],
+                format!("r{i}"),
+                None,
+            ));
         }
 
         h.render("many messages - auto scroll");
@@ -2806,11 +2827,11 @@ mod scenario_tests {
 
         // Add a message longer than terminal width
         let long_msg = "This is a very long message that should wrap properly across multiple lines in the conversation area without clipping or causing layout issues.";
-        h.app.entries.push(ConversationEntry::User {
-            content: long_msg.into(),
-            images: vec![],
-            timestamp: "t1".into(),
-        });
+        h.app.entries.push(ConversationEntry::user(
+            long_msg.into(),
+            vec![],
+            "t1".into(),
+        ));
 
         let f = h.render("long message");
         // The message should be present (may be split across lines)
@@ -2836,24 +2857,25 @@ mod scenario_tests {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
 
-        h.app.entries.push(ConversationEntry::User {
-            content: "Search for foo".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-        });
+        h.app.entries.push(ConversationEntry::user(
+            "Search for foo".into(),
+            vec![],
+            "t1".into(),
+        ));
 
-        h.app.entries.push(ConversationEntry::ToolCall {
-            tool_id: "tc1".into(),
-            tool_name: "web_search".into(),
-            input: serde_json::json!({"query": "foo bar baz"}),
-        });
-
-        h.app.entries.push(ConversationEntry::ToolResult {
-            tool_id: "tc1".into(),
-            tool_name: "web_search".into(),
-            output: "Found 3 results for foo bar baz".into(),
-            is_error: false,
-        });
+        h.app.entries.push(assistant_turn(vec![
+            tool_use(
+                "tc1",
+                "web_search",
+                serde_json::json!({"query": "foo bar baz"}),
+            ),
+            tool_result(
+                "tc1",
+                "web_search",
+                "Found 3 results for foo bar baz",
+                false,
+            ),
+        ]));
 
         let f = h.render("tool call + result");
         assert!(f.contains("▶"), "tool call arrow present");
@@ -2869,30 +2891,17 @@ mod scenario_tests {
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.character_name = "Alice".into();
 
-        h.app.entries.push(ConversationEntry::User {
-            content: "Search for foo".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-        });
-        // Tool entries come before the Assistant entry (as expand_msg produces them)
-        h.app.entries.push(ConversationEntry::ToolCall {
-            tool_id: "tc1".into(),
-            tool_name: "web_search".into(),
-            input: serde_json::json!({"query": "foo"}),
-        });
-        h.app.entries.push(ConversationEntry::ToolResult {
-            tool_id: "tc1".into(),
-            tool_name: "web_search".into(),
-            output: "Result: foo page".into(),
-            is_error: false,
-        });
-        h.app.entries.push(ConversationEntry::Assistant {
-            msg_id: None,
-            content: "I found foo.".into(),
-            images: vec![],
-            timestamp: "t2".into(),
-            metadata: None,
-        });
+        h.app.entries.push(ConversationEntry::user(
+            "Search for foo".into(),
+            vec![],
+            "t1".into(),
+        ));
+        // One assistant turn whose blocks interleave tools then text, in order.
+        h.app.entries.push(assistant_turn(vec![
+            tool_use("tc1", "web_search", serde_json::json!({"query": "foo"})),
+            tool_result("tc1", "web_search", "Result: foo page", false),
+            Block::Text("I found foo.".into()),
+        ]));
 
         let f = h.render("tools under assistant name");
 
@@ -2942,47 +2951,22 @@ mod scenario_tests {
         h.app.show_thinking = true;
         h.app.show_tools = true;
 
-        h.app.entries.push(ConversationEntry::User {
-            content: "do the thing".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-        });
-        // Interleaved as expand_msg produces from content_blocks.
-        h.app.entries.push(ConversationEntry::Thinking {
-            content: "FIRST_THOUGHT".into(),
-        });
-        h.app.entries.push(ConversationEntry::ToolCall {
-            tool_id: "tc1".into(),
-            tool_name: "ALPHA_TOOL".into(),
-            input: serde_json::json!({"q": "x"}),
-        });
-        h.app.entries.push(ConversationEntry::ToolResult {
-            tool_id: "tc1".into(),
-            tool_name: "ALPHA_TOOL".into(),
-            output: "alpha done".into(),
-            is_error: false,
-        });
-        h.app.entries.push(ConversationEntry::Thinking {
-            content: "SECOND_THOUGHT".into(),
-        });
-        h.app.entries.push(ConversationEntry::ToolCall {
-            tool_id: "tc2".into(),
-            tool_name: "BETA_TOOL".into(),
-            input: serde_json::json!({"q": "y"}),
-        });
-        h.app.entries.push(ConversationEntry::ToolResult {
-            tool_id: "tc2".into(),
-            tool_name: "BETA_TOOL".into(),
-            output: "beta done".into(),
-            is_error: false,
-        });
-        h.app.entries.push(ConversationEntry::Assistant {
-            msg_id: None,
-            content: "FINAL_ANSWER".into(),
-            images: vec![],
-            timestamp: "t2".into(),
-            metadata: None,
-        });
+        h.app.entries.push(ConversationEntry::user(
+            "do the thing".into(),
+            vec![],
+            "t1".into(),
+        ));
+        // One assistant turn whose blocks interleave think → call → result in
+        // true source order, as expand_msg produces from content_blocks.
+        h.app.entries.push(assistant_turn(vec![
+            Block::Thinking("FIRST_THOUGHT".into()),
+            tool_use("tc1", "ALPHA_TOOL", serde_json::json!({"q": "x"})),
+            tool_result("tc1", "ALPHA_TOOL", "alpha done", false),
+            Block::Thinking("SECOND_THOUGHT".into()),
+            tool_use("tc2", "BETA_TOOL", serde_json::json!({"q": "y"})),
+            tool_result("tc2", "BETA_TOOL", "beta done", false),
+            Block::Text("FINAL_ANSWER".into()),
+        ]));
 
         let f = h.render("interleaved thinking and tools");
         let lines: Vec<&str> = f.lines().collect();
@@ -3040,11 +3024,9 @@ mod scenario_tests {
         h.app.character_name = "qifei".into();
         h.app.show_thinking = true;
         h.app.show_tools = true;
-        h.app.entries.push(ConversationEntry::User {
-            content: "hi".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-        });
+        h.app
+            .entries
+            .push(ConversationEntry::user("hi".into(), vec![], "t1".into()));
 
         // Phase 1: model thinks, then decides to call a tool.
         crate::handle_server_message(
@@ -3077,10 +3059,14 @@ mod scenario_tests {
 
         // The thinking must have been committed, not dropped.
         assert!(
-            h.app.entries.iter().any(|e| matches!(
-                e,
-                ConversationEntry::Thinking { content } if content == "PHASE1_THOUGHT"
-            )),
+            h.app
+                .entries
+                .iter()
+                .filter_map(ConversationEntry::as_turn)
+                .any(|t| t
+                    .blocks
+                    .iter()
+                    .any(|b| matches!(b, Block::Thinking(c) if c == "PHASE1_THOUGHT"))),
             "phase-1 thinking must be committed on tool_use phase end"
         );
 
@@ -3167,11 +3153,11 @@ mod scenario_tests {
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.character_name = "qifei".into();
 
-        h.app.entries.push(ConversationEntry::User {
-            content: "hi qifei.".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-        });
+        h.app.entries.push(ConversationEntry::user(
+            "hi qifei.".into(),
+            vec![],
+            "t1".into(),
+        ));
 
         // Phase 1: the model decides to call a tool; no text chunks.
         crate::handle_server_message(
@@ -3292,13 +3278,161 @@ mod scenario_tests {
             !h.app.stream.active,
             "stream must be inactive after end_turn"
         );
+        // The finalized turn carries the summed metadata.
+        let last_turn = h
+            .app
+            .entries
+            .iter()
+            .rev()
+            .find_map(ConversationEntry::as_turn)
+            .expect("an assistant turn must exist");
         assert!(
-            h.app.stream.accumulated_text.is_empty(),
-            "accumulator must be cleared on finalise"
+            !last_turn.is_streaming(),
+            "turn must be Complete after end_turn"
         );
+        assert_eq!(
+            last_turn.metadata.as_ref().map(|m| m.tokens.input),
+            Some(expected_input),
+            "finalized turn must carry summed input tokens"
+        );
+    }
+
+    // ── Scenario: interleaved text → tool → text under one header ────────────
+    //
+    // Acceptance: a turn with `text → tool_use → text` renders in true order
+    // under a single header (the Turn/Block model's headline capability).
+    #[test]
+    fn scenario_interleaved_text_tool_text_single_header() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.character_name = "Alice".into();
+
+        h.app
+            .entries
+            .push(ConversationEntry::user("do it".into(), vec![], "t1".into()));
+        h.app.entries.push(assistant_turn(vec![
+            Block::Text("PRETOOL_TEXT".into()),
+            tool_use("tc1", "do_tool", serde_json::json!({"x": 1})),
+            tool_result("tc1", "do_tool", "ok", false),
+            Block::Text("POSTTOOL_TEXT".into()),
+        ]));
+
+        let f = h.render("text → tool → text");
+        let lines: Vec<&str> = f.lines().collect();
+        let pos = |n: &str| {
+            lines
+                .iter()
+                .position(|l| l.contains(n))
+                .unwrap_or_else(|| panic!("{n:?} must appear\n{f}"))
+        };
+        assert_eq!(
+            lines.iter().filter(|l| l.trim_end() == "Alice").count(),
+            1,
+            "exactly one header for the whole turn\n{f}"
+        );
+        let order = [
+            pos("Alice"),
+            pos("PRETOOL_TEXT"),
+            pos("do_tool"),
+            pos("POSTTOOL_TEXT"),
+        ];
         assert!(
-            h.app.stream.accumulated_metadata.is_none(),
-            "metadata accumulator must be cleared on finalise"
+            order.windows(2).all(|w| w[0] < w[1]),
+            "text→tool→text must render in source order under one header, got {order:?}\n{f}"
+        );
+    }
+
+    // ── Scenario: pre-tool text streams live and survives the phase boundary ──
+    //
+    // Acceptance: partial assistant text emitted before a tool call streams
+    // live and is *not* dropped when the tool-use phase ends.
+    #[test]
+    fn scenario_pre_tool_text_streams_live_and_persists() {
+        use shore_protocol::server_msg::{
+            ServerMessage, StreamChunk, StreamEnd, StreamStart, ToolCall,
+        };
+        use shore_protocol::types::{StreamMetadata, TimingInfo, TokenCounts};
+
+        let meta = StreamMetadata {
+            model: "m".into(),
+            tokens: TokenCounts {
+                input: 1,
+                output: 1,
+                cache_read: 0,
+                cache_write: 0,
+            },
+            timing: TimingInfo {
+                total_ms: 1,
+                ttft_ms: 1,
+            },
+        };
+
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.character_name = "Alice".into();
+        h.app
+            .entries
+            .push(ConversationEntry::user("hi".into(), vec![], "t1".into()));
+
+        crate::handle_server_message(
+            &mut h.app,
+            ServerMessage::StreamStart(StreamStart {
+                rid: None,
+                regen: false,
+            }),
+        );
+        crate::handle_server_message(
+            &mut h.app,
+            ServerMessage::StreamChunk(StreamChunk {
+                rid: None,
+                text: "PRETOOL_LIVE".into(),
+                content_type: "text".into(),
+            }),
+        );
+        // Pre-tool text is visible live, before any tool call.
+        let f1 = h.render("pre-tool streaming text");
+        assert!(
+            f1.contains("PRETOOL_LIVE"),
+            "pre-tool text must stream live\n{f1}"
+        );
+
+        // The tool-use phase ends, then the tool call arrives.
+        crate::handle_server_message(
+            &mut h.app,
+            ServerMessage::StreamEnd(StreamEnd {
+                rid: None,
+                msg_id: None,
+                revision: None,
+                content: String::new(),
+                metadata: meta.clone(),
+                finish_reason: "tool_use".into(),
+                is_final: false,
+            }),
+        );
+        crate::handle_server_message(
+            &mut h.app,
+            ServerMessage::ToolCall(ToolCall {
+                rid: None,
+                tool_id: "tc1".into(),
+                tool_name: "do_tool".into(),
+                input: serde_json::json!({}),
+            }),
+        );
+
+        // Pre-tool text must persist across the boundary, above the tool call.
+        let f2 = h.render("after tool call");
+        let lines: Vec<&str> = f2.lines().collect();
+        let text_line = lines
+            .iter()
+            .position(|l| l.contains("PRETOOL_LIVE"))
+            .unwrap_or_else(|| panic!("pre-tool text must persist past the phase boundary\n{f2}"));
+        let tool_line = lines
+            .iter()
+            .position(|l| l.contains("do_tool"))
+            .expect("tool call must appear");
+        assert!(
+            text_line < tool_line,
+            "pre-tool text must stay above the tool call\n{f2}"
         );
     }
 
@@ -3311,11 +3445,11 @@ mod scenario_tests {
         h.app.character_name = "Alice".into();
         h.app.model = "claude-3-opus".into();
 
-        h.app.entries.push(ConversationEntry::User {
-            content: "Hi there!".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-        });
+        h.app.entries.push(ConversationEntry::user(
+            "Hi there!".into(),
+            vec![],
+            "t1".into(),
+        ));
 
         let f = h.render("narrow terminal");
         // Everything should still be visible, just tighter
@@ -3331,11 +3465,11 @@ mod scenario_tests {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
 
-        h.app.entries.push(ConversationEntry::User {
-            content: "Tell me a story".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-        });
+        h.app.entries.push(ConversationEntry::user(
+            "Tell me a story".into(),
+            vec![],
+            "t1".into(),
+        ));
 
         h.stream_start();
         h.stream_chunk("Once upon a time, there was a brave knight.");
@@ -3391,11 +3525,11 @@ mod scenario_tests {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.character_name = "qifei".into();
-        h.app.entries.push(ConversationEntry::User {
-            content: "describe the sea".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-        });
+        h.app.entries.push(ConversationEntry::user(
+            "describe the sea".into(),
+            vec![],
+            "t1".into(),
+        ));
 
         crate::handle_server_message(
             &mut h.app,
@@ -3484,7 +3618,7 @@ mod scenario_tests {
             .app
             .entries
             .iter()
-            .filter(|e| matches!(e, ConversationEntry::Assistant { .. }))
+            .filter(|e| matches!(e.as_turn(), Some(t) if t.role == Role::Assistant))
             .count();
         assert_eq!(
             assistant_count, 1,
@@ -3498,11 +3632,9 @@ mod scenario_tests {
             .entries
             .iter()
             .rev()
-            .find_map(|e| match e {
-                ConversationEntry::Assistant { metadata, .. } => Some(metadata.clone()),
-                _ => None,
-            })
-            .flatten();
+            .find_map(ConversationEntry::as_turn)
+            .filter(|t| t.role == Role::Assistant)
+            .and_then(|t| t.metadata.clone());
         assert!(
             attached_meta.is_some(),
             "StreamEnd metadata must be attached to the assistant entry"
@@ -3518,6 +3650,84 @@ mod scenario_tests {
             1,
             "reply text must appear exactly once on screen\n{f}"
         );
+    }
+
+    // ── Scenario: History during stream, before the new reply persists ──────
+    //
+    // A History snapshot can land while the stream is active but before the new
+    // assistant reply is materialized — so it still ends on the user's message.
+    // Reconciliation must NOT reopen the *previous* completed assistant reply
+    // and pin this stream's spinner/metadata onto it.
+    #[test]
+    fn scenario_history_during_stream_does_not_reopen_prior_reply() {
+        use shore_protocol::server_msg::{History, ServerMessage, StreamStart};
+        use shore_protocol::types::{ContentBlock, Message, Role};
+
+        let msg = |id: &str, role: Role, text: &str| Message {
+            msg_id: id.into(),
+            role,
+            content: text.into(),
+            images: vec![],
+            content_blocks: vec![ContentBlock::Text { text: text.into() }],
+            alt_index: None,
+            alt_count: None,
+            alternatives: vec![],
+            timestamp: "t".into(),
+        };
+
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.character_name = "qifei".into();
+
+        // A completed prior exchange, then the user sends a new message and the
+        // stream starts before the daemon has persisted any new reply.
+        crate::handle_server_message(
+            &mut h.app,
+            ServerMessage::StreamStart(StreamStart {
+                rid: None,
+                regen: false,
+            }),
+        );
+
+        // The snapshot the daemon broadcasts ends on the user's new message.
+        crate::handle_server_message(
+            &mut h.app,
+            ServerMessage::History(History {
+                rid: None,
+                messages: vec![
+                    msg("m_0", Role::User, "first question"),
+                    msg("m_1", Role::Assistant, "PRIOR_REPLY"),
+                    msg("m_2", Role::User, "second question"),
+                ],
+                active_start: 0,
+                config: serde_json::json!({}),
+                selected_character: None,
+                revision: 1,
+            }),
+        );
+
+        // The prior assistant reply must stay Complete; nothing should be
+        // re-marked Streaming when the snapshot ends on a user turn.
+        let prior = h
+            .app
+            .entries
+            .iter()
+            .filter_map(ConversationEntry::as_turn)
+            .find(|t| t.msg_id.as_deref() == Some("m_1"))
+            .expect("prior assistant turn present");
+        assert!(
+            !prior.is_streaming(),
+            "the previous completed reply must not be reopened as the in-flight turn"
+        );
+        assert!(
+            h.app
+                .entries
+                .iter()
+                .filter_map(ConversationEntry::as_turn)
+                .all(|t| !t.is_streaming()),
+            "no committed turn should be marked Streaming"
+        );
+        assert!(h.app.stream.active, "the stream is still in flight");
     }
 
     #[test]
@@ -3539,11 +3749,11 @@ mod scenario_tests {
         let mut h = Harness::with_size(64, 16);
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.character_name = "qifei".into();
-        h.app.entries.push(ConversationEntry::User {
-            content: "write a long answer".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-        });
+        h.app.entries.push(ConversationEntry::user(
+            "write a long answer".into(),
+            vec![],
+            "t1".into(),
+        ));
 
         crate::handle_server_message(
             &mut h.app,
@@ -3657,31 +3867,35 @@ mod scenario_tests {
         let mut h = Harness::with_size(64, 16);
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.character_name = "qifei".into();
-        h.app.entries.push(ConversationEntry::User {
-            content: "run a tool and summarize".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-        });
-        h.app.entries.push(ConversationEntry::ToolCall {
-            tool_id: "toolu_1".into(),
-            tool_name: "long_tool".into(),
-            input: serde_json::json!({
-                "path": "/tmp/0123456789abcdef0123456789abcdef0123456789abcdef"
-            }),
-        });
-        h.app.entries.push(ConversationEntry::ToolResult {
-            tool_id: "toolu_1".into(),
-            tool_name: "long_tool".into(),
-            output: long_tool_output,
-            is_error: false,
-        });
-        h.app.entries.push(ConversationEntry::Assistant {
+        h.app.entries.push(ConversationEntry::user(
+            "run a tool and summarize".into(),
+            vec![],
+            "t1".into(),
+        ));
+        h.app.entries.push(ConversationEntry::Turn(Turn {
+            role: Role::Assistant,
             msg_id: None,
-            content: format!("summary line\n{tail}"),
+            blocks: vec![
+                Block::ToolUse {
+                    tool_id: "toolu_1".into(),
+                    tool_name: "long_tool".into(),
+                    input: serde_json::json!({
+                        "path": "/tmp/0123456789abcdef0123456789abcdef0123456789abcdef"
+                    }),
+                },
+                Block::ToolResult {
+                    tool_id: "toolu_1".into(),
+                    tool_name: "long_tool".into(),
+                    output: long_tool_output,
+                    is_error: false,
+                },
+                Block::Text(format!("summary line\n{tail}")),
+            ],
             images: vec![],
             timestamp: "t2".into(),
+            state: TurnState::Complete,
             metadata: None,
-        });
+        }));
 
         let f_tools_on = h.render("tools visible");
         assert!(h.app.auto_scroll, "auto_scroll starts enabled");
@@ -3715,11 +3929,11 @@ mod scenario_tests {
         // Type and send
         h.type_str("Quick question");
         h.press(KeyCode::Enter);
-        h.app.entries.push(ConversationEntry::User {
-            content: "Quick question".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-        });
+        h.app.entries.push(ConversationEntry::user(
+            "Quick question".into(),
+            vec![],
+            "t1".into(),
+        ));
         let f_sent = h.render("just sent");
 
         // The typing indicator (···) should appear immediately after send,
@@ -3807,11 +4021,9 @@ mod scenario_tests {
         assert!(f.contains("for commands"), "command hint should appear");
 
         // Hint should disappear once we have messages
-        h.app.entries.push(ConversationEntry::User {
-            content: "Hello".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-        });
+        h.app
+            .entries
+            .push(ConversationEntry::user("Hello".into(), vec![], "t1".into()));
         let f = h.render("with message");
         assert!(
             !f.contains("Press i to start typing"),
@@ -3829,11 +4041,11 @@ mod scenario_tests {
 
         // Fill conversation
         for i in 0..20 {
-            h.app.entries.push(ConversationEntry::User {
-                content: format!("Msg {i}"),
-                images: vec![],
-                timestamp: format!("t{i}"),
-            });
+            h.app.entries.push(ConversationEntry::user(
+                format!("Msg {i}"),
+                vec![],
+                format!("t{i}"),
+            ));
         }
 
         // At bottom — latest messages visible
@@ -3863,11 +4075,11 @@ mod scenario_tests {
         h.app.connection_status = ConnectionStatus::Connected;
 
         for i in 0..45 {
-            h.app.entries.push(ConversationEntry::User {
-                content: format!("unique row {i:02}"),
-                images: vec![],
-                timestamp: format!("t{i}"),
-            });
+            h.app.entries.push(ConversationEntry::user(
+                format!("unique row {i:02}"),
+                vec![],
+                format!("t{i}"),
+            ));
         }
 
         fn visible_unique_rows(frame: &str) -> Vec<String> {
@@ -3965,18 +4177,16 @@ mod scenario_tests {
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.character_name = "Bob".into();
 
-        h.app.entries.push(ConversationEntry::User {
-            content: "Hello".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-        });
-        h.app.entries.push(ConversationEntry::Assistant {
-            msg_id: None,
-            content: "Hi there!".into(),
-            images: vec![],
-            timestamp: "t2".into(),
-            metadata: None,
-        });
+        h.app
+            .entries
+            .push(ConversationEntry::user("Hello".into(), vec![], "t1".into()));
+        h.app.entries.push(ConversationEntry::assistant(
+            None,
+            "Hi there!".into(),
+            vec![],
+            "t2".into(),
+            None,
+        ));
 
         let f = h.render("short terminal with messages");
         // Should not panic and should show something useful
@@ -4000,50 +4210,43 @@ mod scenario_tests {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
 
-        h.app.entries.push(ConversationEntry::User {
-            content: "Search and summarize".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-        });
+        h.app.entries.push(ConversationEntry::user(
+            "Search and summarize".into(),
+            vec![],
+            "t1".into(),
+        ));
 
-        // First tool call + result
-        h.app.entries.push(ConversationEntry::ToolCall {
-            tool_id: "tc1".into(),
-            tool_name: "web_search".into(),
-            input: serde_json::json!({"query": "rust tui frameworks"}),
-        });
-        h.app.entries.push(ConversationEntry::ToolResult {
-            tool_id: "tc1".into(),
-            tool_name: "web_search".into(),
-            output: "Found: ratatui, cursive, tui-rs".into(),
-            is_error: false,
-        });
-
-        // Second tool call + result
-        h.app.entries.push(ConversationEntry::ToolCall {
-            tool_id: "tc2".into(),
-            tool_name: "read_page".into(),
-            input: serde_json::json!({"url": "https://ratatui.rs"}),
-        });
-        h.app.entries.push(ConversationEntry::ToolResult {
-            tool_id: "tc2".into(),
-            tool_name: "read_page".into(),
-            output: "Ratatui is a Rust library for building terminal UIs".into(),
-            is_error: false,
-        });
-
-        // Error result
-        h.app.entries.push(ConversationEntry::ToolCall {
-            tool_id: "tc3".into(),
-            tool_name: "read_page".into(),
-            input: serde_json::json!({"url": "https://404.example.com"}),
-        });
-        h.app.entries.push(ConversationEntry::ToolResult {
-            tool_id: "tc3".into(),
-            tool_name: "read_page".into(),
-            output: "404 Not Found".into(),
-            is_error: true,
-        });
+        // One assistant turn carrying three tool call/result pairs in order.
+        h.app.entries.push(assistant_turn(vec![
+            tool_use(
+                "tc1",
+                "web_search",
+                serde_json::json!({"query": "rust tui frameworks"}),
+            ),
+            tool_result(
+                "tc1",
+                "web_search",
+                "Found: ratatui, cursive, tui-rs",
+                false,
+            ),
+            tool_use(
+                "tc2",
+                "read_page",
+                serde_json::json!({"url": "https://ratatui.rs"}),
+            ),
+            tool_result(
+                "tc2",
+                "read_page",
+                "Ratatui is a Rust library for building terminal UIs",
+                false,
+            ),
+            tool_use(
+                "tc3",
+                "read_page",
+                serde_json::json!({"url": "https://404.example.com"}),
+            ),
+            tool_result("tc3", "read_page", "404 Not Found", true),
+        ]));
 
         let f = h.render("multiple tool calls");
         // All tool calls should be visible
@@ -4146,11 +4349,9 @@ mod scenario_tests {
         h.app.character_name = "Alice".into();
         h.app.show_thinking = true;
 
-        h.app.entries.push(ConversationEntry::User {
-            content: "hi".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-        });
+        h.app
+            .entries
+            .push(ConversationEntry::user("hi".into(), vec![], "t1".into()));
 
         // Stream one thought as two deltas — they must merge, not stack.
         h.stream_start();
@@ -4158,15 +4359,17 @@ mod scenario_tests {
         h.thinking_chunk("response");
 
         // Exactly one Thinking entry holds the merged text.
-        let thinking_entries = h
+        let thinking_blocks = h
             .app
             .entries
             .iter()
-            .filter(|e| matches!(e, ConversationEntry::Thinking { .. }))
+            .filter_map(ConversationEntry::as_turn)
+            .flat_map(|t| t.blocks.iter())
+            .filter(|b| matches!(b, Block::Thinking(_)))
             .count();
         assert_eq!(
-            thinking_entries, 1,
-            "thinking deltas must merge into one entry"
+            thinking_blocks, 1,
+            "thinking deltas must merge into one block"
         );
 
         let f = h.render("streaming thinking");
@@ -4185,18 +4388,18 @@ mod scenario_tests {
         h.app.connection_status = ConnectionStatus::Connected;
 
         // Set up a conversation
-        h.app.entries.push(ConversationEntry::User {
-            content: "Tell me a joke".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-        });
-        h.app.entries.push(ConversationEntry::Assistant {
-            msg_id: None,
-            content: "Why did the chicken cross the road?".into(),
-            images: vec![],
-            timestamp: "t2".into(),
-            metadata: None,
-        });
+        h.app.entries.push(ConversationEntry::user(
+            "Tell me a joke".into(),
+            vec![],
+            "t1".into(),
+        ));
+        h.app.entries.push(ConversationEntry::assistant(
+            None,
+            "Why did the chicken cross the road?".into(),
+            vec![],
+            "t2".into(),
+            None,
+        ));
 
         let f = h.render("before regen");
         assert!(f.contains("chicken"), "original response visible");
@@ -4210,7 +4413,7 @@ mod scenario_tests {
             .app
             .entries
             .iter()
-            .rposition(|e| matches!(e, ConversationEntry::Assistant { .. }))
+            .rposition(|e| matches!(e.as_turn(), Some(t) if t.role == Role::Assistant))
         {
             h.app.entries.truncate(pos);
         }
@@ -4244,13 +4447,7 @@ mod scenario_tests {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
 
-        h.app.entries.push(ConversationEntry::Assistant {
-            msg_id: None,
-                content: "Here's some code:\n\n```rust\nfn main() {\n    println!(\"hello\");\n}\n```\n\nThat should work.".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-            metadata: None,
-        });
+        h.app.entries.push(ConversationEntry::assistant(None, "Here's some code:\n\n```rust\nfn main() {\n    println!(\"hello\");\n}\n```\n\nThat should work.".into(), vec![], "t1".into(), None));
 
         let f = h.render("code block");
         assert!(f.contains("fn main()"), "code content visible");
@@ -4266,13 +4463,13 @@ mod scenario_tests {
         let mut h = Harness::with_size(60, 18);
         h.app.connection_status = ConnectionStatus::Connected;
 
-        h.app.entries.push(ConversationEntry::Assistant {
-            msg_id: None,
-            content: "First paragraph.\n\nSecond paragraph.".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-            metadata: None,
-        });
+        h.app.entries.push(ConversationEntry::assistant(
+            None,
+            "First paragraph.\n\nSecond paragraph.".into(),
+            vec![],
+            "t1".into(),
+            None,
+        ));
 
         let f = h.render_with_blank_rows("markdown paragraph spacing");
         let rows: Vec<&str> = f.lines().collect();
@@ -4301,9 +4498,9 @@ mod scenario_tests {
         let mut h = Harness::with_size(44, 24);
         h.app.connection_status = ConnectionStatus::Connected;
 
-        h.app.entries.push(ConversationEntry::Assistant {
-            msg_id: None,
-            content: concat!(
+        h.app.entries.push(ConversationEntry::assistant(
+            None,
+            concat!(
                 "review:\n\n",
                 "`inline code wraps across the pane`\n\n",
                 "```rust\n",
@@ -4317,10 +4514,10 @@ mod scenario_tests {
                 "- [x] task item"
             )
             .into(),
-            images: vec![],
-            timestamp: "t1".into(),
-            metadata: None,
-        });
+            vec![],
+            "t1".into(),
+            None,
+        ));
 
         let f = h.render("reported markdown elements");
         assert!(
@@ -4379,13 +4576,13 @@ mod scenario_tests {
 
         // With character name set, assistant entries use it
         h.app.character_name = "Luna".into();
-        h.app.entries.push(ConversationEntry::Assistant {
-            msg_id: None,
-            content: "Hello!".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-            metadata: None,
-        });
+        h.app.entries.push(ConversationEntry::assistant(
+            None,
+            "Hello!".into(),
+            vec![],
+            "t1".into(),
+            None,
+        ));
         let f = h.render("with character");
         assert!(
             f.contains("Luna"),
@@ -4405,11 +4602,11 @@ mod scenario_tests {
             count: 1,
             timestamp: "t1".into(),
         });
-        h.app.entries.push(ConversationEntry::User {
-            content: "Thanks".into(),
-            images: vec![],
-            timestamp: "t2".into(),
-        });
+        h.app.entries.push(ConversationEntry::user(
+            "Thanks".into(),
+            vec![],
+            "t2".into(),
+        ));
 
         let f = h.render("system message");
         assert!(f.contains("System"), "system label visible");
@@ -4445,11 +4642,11 @@ mod scenario_tests {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
 
-        h.app.entries.push(ConversationEntry::User {
-            content: "Do something".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-        });
+        h.app.entries.push(ConversationEntry::user(
+            "Do something".into(),
+            vec![],
+            "t1".into(),
+        ));
 
         // Stream starts
         h.stream_start();
@@ -4480,11 +4677,11 @@ mod scenario_tests {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
 
-        h.app.entries.push(ConversationEntry::User {
-            content: "Long question".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-        });
+        h.app.entries.push(ConversationEntry::user(
+            "Long question".into(),
+            vec![],
+            "t1".into(),
+        ));
 
         h.stream_start();
         h.stream_chunk("Partial response that gets cut off because");
@@ -4522,18 +4719,18 @@ mod scenario_tests {
 
         // Simulate rapid back-and-forth
         for i in 0..5 {
-            h.app.entries.push(ConversationEntry::User {
-                content: format!("Q{i}: What about this?"),
-                images: vec![],
-                timestamp: format!("u{i}"),
-            });
-            h.app.entries.push(ConversationEntry::Assistant {
-                msg_id: None,
-                content: format!("A{i}: Here's my answer to that particular question."),
-                images: vec![],
-                timestamp: format!("a{i}"),
-                metadata: None,
-            });
+            h.app.entries.push(ConversationEntry::user(
+                format!("Q{i}: What about this?"),
+                vec![],
+                format!("u{i}"),
+            ));
+            h.app.entries.push(ConversationEntry::assistant(
+                None,
+                format!("A{i}: Here's my answer to that particular question."),
+                vec![],
+                format!("a{i}"),
+                None,
+            ));
         }
 
         let f = h.render("rapid exchange");

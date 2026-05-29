@@ -1,5 +1,5 @@
 use ratatui::text::Line;
-use shore_protocol::types::{CharacterInfo, ImageRef, StreamMetadata, TokenCounts};
+use shore_protocol::types::{CharacterInfo, ImageRef, Role, StreamMetadata, TokenCounts};
 
 use crate::images::ImageCache;
 
@@ -50,44 +50,18 @@ pub struct ConvFingerprint {
     pub image_cache_version: u64,
 }
 
-/// A single entry in the conversation log.
+/// A content block within a turn, mirroring the wire `ContentBlock`
+/// (text / thinking / tool_use / tool_result). Blocks are ordered and
+/// authoritative: rendering walks them in sequence, so interleaved
+/// `text → tool_use → text` renders in true order under a single header.
+///
+/// Images are *not* a block — they live as a turn-level field, matching the
+/// wire `Message.images` (which is separate from `content_blocks`).
 #[derive(Clone, Debug)]
-pub enum ConversationEntry {
-    User {
-        content: String,
-        images: Vec<ImageRef>,
-        timestamp: String,
-    },
-    Assistant {
-        #[allow(dead_code)] // captured from daemon; TUI currently only uses it for metadata attach
-        msg_id: Option<String>,
-        content: String,
-        images: Vec<ImageRef>,
-        timestamp: String,
-        metadata: Option<StreamMetadata>,
-    },
-    System {
-        content: String,
-        /// Count of consecutive identical entries collapsed into this one.
-        /// Starts at 1; incremented by `set_status` when the same message
-        /// arrives repeatedly (e.g. a reconnect storm).
-        count: u32,
-        timestamp: String,
-    },
-    ArchiveBoundary {
-        archived_count: usize,
-    },
-    Thinking {
-        content: String,
-    },
-    /// In-progress assistant text streamed live. Headerless — it renders under
-    /// the single streaming header. Transient: finalized into an `Assistant`
-    /// entry (or replaced by an end-of-turn History rebuild) when the stream
-    /// ends, so it never appears in a completed conversation.
-    StreamingText {
-        content: String,
-    },
-    ToolCall {
+pub enum Block {
+    Text(String),
+    Thinking(String),
+    ToolUse {
         #[allow(dead_code)] // stored for protocol fidelity; TUI renders by tool_name
         tool_id: String,
         tool_name: String,
@@ -100,6 +74,145 @@ pub enum ConversationEntry {
         output: String,
         is_error: bool,
     },
+}
+
+/// Whether a turn is finalized or still receiving streamed deltas.
+///
+/// The in-flight turn is simply the last `Turn` with `state: Streaming`;
+/// streaming deltas mutate its blocks in place. `StreamEnd` flips it to
+/// `Complete`. No separate streaming-text entry, no phase-boundary drop.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TurnState {
+    Complete,
+    Streaming,
+}
+
+/// One conversational turn: a role header plus an ordered list of blocks,
+/// mirroring the wire `Message { role, content_blocks }`. One header is
+/// rendered per turn, then `blocks` in order.
+#[derive(Clone, Debug)]
+pub struct Turn {
+    pub role: Role,
+    #[allow(dead_code)] // used for msg_id-matched reconciliation and metadata attach
+    pub msg_id: Option<String>,
+    pub blocks: Vec<Block>,
+    pub images: Vec<ImageRef>,
+    pub timestamp: String,
+    pub state: TurnState,
+    pub metadata: Option<StreamMetadata>,
+}
+
+impl Turn {
+    /// A completed turn carrying a single text block (the common case for
+    /// user messages and plain assistant replies).
+    pub fn text(
+        role: Role,
+        msg_id: Option<String>,
+        content: String,
+        images: Vec<ImageRef>,
+        timestamp: String,
+        metadata: Option<StreamMetadata>,
+    ) -> Self {
+        let blocks = if content.is_empty() {
+            Vec::new()
+        } else {
+            vec![Block::Text(content)]
+        };
+        Self {
+            role,
+            msg_id,
+            blocks,
+            images,
+            timestamp,
+            state: TurnState::Complete,
+            metadata,
+        }
+    }
+
+    /// The turn's textual content — every `Text` block joined with newlines.
+    /// Used for ref resolution (`:edit`) and tests, not rendering.
+    pub fn joined_text(&self) -> String {
+        let parts: Vec<&str> = self
+            .blocks
+            .iter()
+            .filter_map(|b| match b {
+                Block::Text(t) => Some(t.as_str()),
+                _ => None,
+            })
+            .collect();
+        parts.join("\n")
+    }
+
+    pub fn is_streaming(&self) -> bool {
+        self.state == TurnState::Streaming
+    }
+}
+
+/// A single entry in the conversation log. Real conversational turns are
+/// `Turn`; `System` (TUI status / injected system messages) and
+/// `ArchiveBoundary` are display-only markers that aren't wire turns.
+#[derive(Clone, Debug)]
+pub enum ConversationEntry {
+    Turn(Turn),
+    System {
+        content: String,
+        /// Count of consecutive identical entries collapsed into this one.
+        /// Starts at 1; incremented by `set_status` when the same message
+        /// arrives repeatedly (e.g. a reconnect storm).
+        count: u32,
+        timestamp: String,
+    },
+    ArchiveBoundary {
+        archived_count: usize,
+    },
+}
+
+impl ConversationEntry {
+    /// Construct a completed user turn carrying a single text block.
+    pub fn user(content: String, images: Vec<ImageRef>, timestamp: String) -> Self {
+        ConversationEntry::Turn(Turn::text(
+            Role::User,
+            None,
+            content,
+            images,
+            timestamp,
+            None,
+        ))
+    }
+
+    /// Construct a completed assistant turn carrying a single text block.
+    pub fn assistant(
+        msg_id: Option<String>,
+        content: String,
+        images: Vec<ImageRef>,
+        timestamp: String,
+        metadata: Option<StreamMetadata>,
+    ) -> Self {
+        ConversationEntry::Turn(Turn::text(
+            Role::Assistant,
+            msg_id,
+            content,
+            images,
+            timestamp,
+            metadata,
+        ))
+    }
+
+    /// Borrow the inner `Turn`, if this entry is one.
+    pub fn as_turn(&self) -> Option<&Turn> {
+        match self {
+            ConversationEntry::Turn(turn) => Some(turn),
+            _ => None,
+        }
+    }
+
+    /// Mutably borrow the inner `Turn`, if this entry is one.
+    pub fn as_turn_mut(&mut self) -> Option<&mut Turn> {
+        match self {
+            ConversationEntry::Turn(turn) => Some(turn),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -122,12 +235,14 @@ pub struct AltPickerState {
     pub loading: bool,
 }
 
-/// Turn-level state for an in-progress response.
+/// Cross-phase scalars for an in-progress response.
 ///
-/// Streaming *content* is no longer buffered here — it is appended directly
-/// into `App.entries` as `Thinking` / `StreamingText` / `ToolCall` /
-/// `ToolResult` entries, so the rendered view is a pure function of a single
-/// ordered list. This struct only holds the cross-phase scalars.
+/// Streaming *content* lives directly in `App.entries` as the trailing
+/// `Turn` with `state: Streaming` — its blocks are mutated in place by the
+/// stream handlers. This struct only holds the scalars that drive the
+/// streaming header/footer (spinner, phase label, regen marker) and don't
+/// belong to any one block. Accumulated text and metadata are no longer
+/// tracked here: text is the turn's blocks, metadata accumulates on the turn.
 #[derive(Default)]
 pub struct StreamState {
     pub active: bool,
@@ -135,11 +250,6 @@ pub struct StreamState {
     pub phase: String,
     /// Name of the tool currently being called/executed.
     pub tool_name: Option<String>,
-    // Accumulated across a multi-phase (tool-use) turn so the finalized
-    // Assistant entry carries the full text and summed metadata rather than
-    // just the first LLM call's partial slice. Cleared by reset().
-    pub accumulated_text: String,
-    pub accumulated_metadata: Option<StreamMetadata>,
 }
 
 impl StreamState {
@@ -148,8 +258,6 @@ impl StreamState {
         self.regen = false;
         self.phase.clear();
         self.tool_name = None;
-        self.accumulated_text.clear();
-        self.accumulated_metadata = None;
     }
 }
 
@@ -746,48 +854,38 @@ impl App {
             // Pack a kind tag plus a content-size signature into a u64.
             // Different variants distinguish themselves via the high tag
             // byte; mutations within a variant change the lower bits.
+            //
+            // For a `Turn`, only the *last* block mutates during streaming
+            // (text/thinking appends), and new blocks change the block count —
+            // so block-count + last-block length capture every in-place edit.
+            // Wholesale replacements (reconcile, :edit) bump `history_version`,
+            // which covers collisions among earlier-than-last-two entries.
             match e {
-                ConversationEntry::User {
-                    content, images, ..
-                } => (1u64 << 56) | ((content.len() as u64) << 16) | (images.len() as u64),
-                ConversationEntry::Assistant {
-                    content,
-                    images,
-                    metadata,
-                    ..
-                } => {
-                    (2u64 << 56)
-                        | ((content.len() as u64) << 16)
-                        | ((images.len() as u64) << 4)
-                        | (metadata.is_some() as u64)
+                ConversationEntry::Turn(turn) => {
+                    let block_len = |b: &Block| -> u64 {
+                        match b {
+                            Block::Text(s) | Block::Thinking(s) => s.len() as u64,
+                            Block::ToolUse { tool_name, .. } => tool_name.len() as u64,
+                            Block::ToolResult {
+                                tool_name, output, ..
+                            } => (tool_name.len() + output.len()) as u64,
+                        }
+                    };
+                    let role_bit = matches!(turn.role, Role::Assistant) as u64;
+                    let last_len = turn.blocks.last().map(block_len).unwrap_or(0);
+                    (1u64 << 56)
+                        | (role_bit << 55)
+                        | ((turn.is_streaming() as u64) << 54)
+                        | ((turn.metadata.is_some() as u64) << 53)
+                        | (((turn.images.len() as u64) & 0x1FF) << 44)
+                        | (((turn.blocks.len() as u64) & 0xFFF) << 32)
+                        | (last_len & 0xFFFF_FFFF)
                 }
                 ConversationEntry::System { content, count, .. } => {
                     (3u64 << 56) | ((content.len() as u64) << 24) | (*count as u64)
                 }
                 ConversationEntry::ArchiveBoundary { archived_count } => {
                     (7u64 << 56) | (*archived_count as u64)
-                }
-                ConversationEntry::Thinking { content } => (4u64 << 56) | (content.len() as u64),
-                ConversationEntry::StreamingText { content } => {
-                    (8u64 << 56) | (content.len() as u64)
-                }
-                ConversationEntry::ToolCall {
-                    tool_name, input, ..
-                } => {
-                    (5u64 << 56)
-                        | ((tool_name.len() as u64) << 24)
-                        | (input.to_string().len() as u64)
-                }
-                ConversationEntry::ToolResult {
-                    tool_name,
-                    output,
-                    is_error,
-                    ..
-                } => {
-                    (6u64 << 56)
-                        | ((tool_name.len() as u64) << 24)
-                        | ((output.len() as u64) << 1)
-                        | (*is_error as u64)
                 }
             }
         };
@@ -842,50 +940,94 @@ impl App {
         self.auto_scroll = true;
     }
 
+    /// Borrow the in-flight streaming turn, opening one if the tail isn't
+    /// already a `Streaming` turn. The in-flight turn is always a trailing
+    /// assistant `Turn` whose blocks the stream handlers mutate in place.
+    /// Public so `StreamEnd` can attach metadata to (or open) the turn even
+    /// when a tool-use phase ends before any content has streamed.
+    pub fn ensure_streaming_turn(&mut self) -> &mut Turn {
+        let needs_new = !matches!(
+            self.entries.last(),
+            Some(ConversationEntry::Turn(turn)) if turn.is_streaming()
+        );
+        if needs_new {
+            self.entries.push(ConversationEntry::Turn(Turn {
+                role: Role::Assistant,
+                msg_id: None,
+                blocks: Vec::new(),
+                images: Vec::new(),
+                timestamp: String::new(),
+                state: TurnState::Streaming,
+                metadata: None,
+            }));
+        }
+        self.entries
+            .last_mut()
+            .and_then(ConversationEntry::as_turn_mut)
+            .expect("just ensured a trailing streaming turn")
+    }
+
     /// Append a live thinking delta to the in-flight turn. Merges into the
-    /// trailing `Thinking` entry when the previous chunk was also thinking,
+    /// trailing `Thinking` block when the previous block was also thinking,
     /// otherwise opens a new one — preserving interleaving with tool calls.
     pub fn stream_append_thinking(&mut self, text: &str) {
-        match self.entries.last_mut() {
-            Some(ConversationEntry::Thinking { content }) => content.push_str(text),
-            _ => self.entries.push(ConversationEntry::Thinking {
-                content: text.to_string(),
-            }),
+        let turn = self.ensure_streaming_turn();
+        match turn.blocks.last_mut() {
+            Some(Block::Thinking(content)) => content.push_str(text),
+            _ => turn.blocks.push(Block::Thinking(text.to_string())),
         }
     }
 
     /// Append a live response-text delta to the in-flight turn. Merges into the
-    /// trailing `StreamingText` entry, otherwise opens a new one.
+    /// trailing `Text` block, otherwise opens a new one. Because text is just
+    /// another block, pre-tool text streams live and stays interleaved — no
+    /// phase-boundary drop, no single-header constraint.
     pub fn stream_append_text(&mut self, text: &str) {
-        match self.entries.last_mut() {
-            Some(ConversationEntry::StreamingText { content }) => content.push_str(text),
-            _ => self.entries.push(ConversationEntry::StreamingText {
-                content: text.to_string(),
-            }),
+        let turn = self.ensure_streaming_turn();
+        match turn.blocks.last_mut() {
+            Some(Block::Text(content)) => content.push_str(text),
+            _ => turn.blocks.push(Block::Text(text.to_string())),
         }
     }
 
-    /// Drop a trailing in-flight `StreamingText` entry, if any. Used at phase
-    /// boundaries (the partial pre-tool text is superseded by the authoritative
-    /// final text) and on cancel/finalize so no headerless text is orphaned.
-    pub fn drop_trailing_streaming_text(&mut self) {
-        if matches!(
-            self.entries.last(),
-            Some(ConversationEntry::StreamingText { .. })
-        ) {
-            self.entries.pop();
-        }
+    /// Append a tool-call block to the in-flight turn.
+    pub fn stream_push_tool_call(
+        &mut self,
+        tool_id: String,
+        tool_name: String,
+        input: serde_json::Value,
+    ) {
+        self.ensure_streaming_turn().blocks.push(Block::ToolUse {
+            tool_id,
+            tool_name,
+            input,
+        });
+    }
+
+    /// Append a tool-result block to the in-flight turn.
+    pub fn stream_push_tool_result(
+        &mut self,
+        tool_id: String,
+        tool_name: String,
+        output: String,
+        is_error: bool,
+    ) {
+        self.ensure_streaming_turn().blocks.push(Block::ToolResult {
+            tool_id,
+            tool_name,
+            output,
+            is_error,
+        });
     }
 
     /// Abort an in-flight stream (disconnect / error / cancel): discard the
-    /// optimistic, unconfirmed partial content — trailing streaming text and
-    /// thinking — and clear the stream scalars. Committed tool calls/results
-    /// are left in place; a reconnect's History rebuild reconciles the
-    /// authoritative turn.
+    /// optimistic, unconfirmed turn entirely and clear the stream scalars. A
+    /// reconnect's History rebuild reconciles the authoritative turn, so
+    /// dropping the whole in-flight turn (tool blocks included) is safe.
     pub fn abort_stream(&mut self) {
-        while matches!(
+        if matches!(
             self.entries.last(),
-            Some(ConversationEntry::StreamingText { .. } | ConversationEntry::Thinking { .. })
+            Some(ConversationEntry::Turn(turn)) if turn.is_streaming()
         ) {
             self.entries.pop();
         }
@@ -912,19 +1054,20 @@ impl App {
     /// Resolve a ref (e.g. "last", "-1", "-2") to the content of a
     /// User or Assistant entry for local editing preview.
     pub fn resolve_ref_content(&self, raw_ref: &str) -> Option<String> {
-        // Filter to only User/Assistant entries (what the daemon considers messages).
-        let messages: Vec<&ConversationEntry> = self
+        // Filter to finalized User/Assistant turns (what the daemon considers
+        // messages). The in-flight streaming turn is an optimistic partial, not
+        // a ref target — exclude it so `:edit last` targets the last committed
+        // turn, not the reply currently being generated.
+        let messages: Vec<&Turn> = self
             .entries
             .iter()
-            .filter(|e| {
-                matches!(
-                    e,
-                    ConversationEntry::User { .. } | ConversationEntry::Assistant { .. }
-                )
+            .filter_map(ConversationEntry::as_turn)
+            .filter(|turn| {
+                matches!(turn.role, Role::User | Role::Assistant) && !turn.is_streaming()
             })
             .collect();
 
-        let entry = match raw_ref {
+        let turn = match raw_ref {
             "last" => messages.last().copied(),
             s if s.starts_with('-') => {
                 let n: usize = s[1..].parse().ok()?;
@@ -936,11 +1079,7 @@ impl App {
             _ => None,
         };
 
-        entry.and_then(|e| match e {
-            ConversationEntry::User { content, .. }
-            | ConversationEntry::Assistant { content, .. } => Some(content.clone()),
-            _ => None,
-        })
+        turn.map(Turn::joined_text)
     }
 
     pub fn set_status(&mut self, msg: impl Into<String>) {
@@ -1084,40 +1223,30 @@ impl App {
         let original_entries = picker.original_entries.clone();
 
         self.entries = original_entries;
+        let is_assistant = |entry: &ConversationEntry| matches!(entry.as_turn(), Some(t) if matches!(t.role, Role::Assistant) && !t.is_streaming());
         let target_idx = msg_id
             .as_deref()
             .and_then(|target| {
                 self.entries.iter().position(|entry| {
                     matches!(
-                        entry,
-                        ConversationEntry::Assistant {
-                            msg_id: Some(id),
-                            ..
-                        } if id == target
+                        entry.as_turn(),
+                        Some(Turn { role: Role::Assistant, msg_id: Some(id), .. }) if id == target
                     )
                 })
             })
-            .or_else(|| {
-                self.entries
-                    .iter()
-                    .rposition(|entry| matches!(entry, ConversationEntry::Assistant { .. }))
-            });
+            .or_else(|| self.entries.iter().rposition(is_assistant));
 
-        if let Some(idx) = target_idx {
-            if let ConversationEntry::Assistant {
-                content,
-                images,
-                timestamp,
-                metadata,
-                ..
-            } = &mut self.entries[idx]
-            {
-                *content = choice.content;
-                *images = choice.images;
-                *timestamp = choice.timestamp;
-                *metadata = None;
-                self.history_version = self.history_version.wrapping_add(1);
-            }
+        if let Some(turn) = target_idx.and_then(|idx| self.entries[idx].as_turn_mut()) {
+            turn.blocks = if choice.content.is_empty() {
+                Vec::new()
+            } else {
+                vec![Block::Text(choice.content)]
+            };
+            turn.images = choice.images;
+            turn.timestamp = choice.timestamp;
+            turn.metadata = None;
+            turn.state = TurnState::Complete;
+            self.history_version = self.history_version.wrapping_add(1);
         }
     }
 
@@ -2210,11 +2339,8 @@ mod tests {
     fn set_status_does_not_dedupe_when_interrupted() {
         let mut app = App::default();
         app.set_status("x");
-        app.entries.push(ConversationEntry::User {
-            content: "hi".into(),
-            images: vec![],
-            timestamp: String::new(),
-        });
+        app.entries
+            .push(ConversationEntry::user("hi".into(), vec![], String::new()));
         app.set_status("x");
         let system_entries: Vec<_> = app
             .entries
@@ -2240,39 +2366,36 @@ mod tests {
     #[test]
     fn clear_system_entries_preserves_other_entries() {
         let mut app = App::default();
-        app.entries.push(ConversationEntry::User {
-            content: "hello".into(),
-            images: vec![],
-            timestamp: String::new(),
-        });
+        app.entries.push(ConversationEntry::user(
+            "hello".into(),
+            vec![],
+            String::new(),
+        ));
         app.set_status("reconnecting");
-        app.entries.push(ConversationEntry::Assistant {
-            msg_id: None,
-            content: "hi".into(),
-            images: vec![],
-            timestamp: String::new(),
-            metadata: None,
-        });
+        app.entries.push(ConversationEntry::assistant(
+            None,
+            "hi".into(),
+            vec![],
+            String::new(),
+            None,
+        ));
         app.set_status("cache warning");
         app.clear_system_entries();
         assert_eq!(app.entries.len(), 2);
-        assert!(matches!(app.entries[0], ConversationEntry::User { .. }));
-        assert!(matches!(
-            app.entries[1],
-            ConversationEntry::Assistant { .. }
-        ));
+        assert!(matches!(app.entries[0].as_turn(), Some(t) if t.role == Role::User));
+        assert!(matches!(app.entries[1].as_turn(), Some(t) if t.role == Role::Assistant));
     }
 
     #[test]
     fn alt_picker_previews_and_cancels() {
         let mut app = App::default();
-        app.entries.push(ConversationEntry::Assistant {
-            msg_id: Some("a1".into()),
-            content: "first".into(),
-            images: vec![],
-            timestamp: "t1".into(),
-            metadata: None,
-        });
+        app.entries.push(ConversationEntry::assistant(
+            Some("a1".into()),
+            "first".into(),
+            vec![],
+            "t1".into(),
+            None,
+        ));
 
         app.start_alt_picker(None);
         app.populate_alt_picker(
@@ -2298,14 +2421,14 @@ mod tests {
         );
         app.next_alt();
         assert!(matches!(
-            &app.entries[0],
-            ConversationEntry::Assistant { content, .. } if content == "second"
+            app.entries[0].as_turn(),
+            Some(t) if t.joined_text() == "second"
         ));
 
         app.cancel_alt_picker();
         assert!(matches!(
-            &app.entries[0],
-            ConversationEntry::Assistant { content, .. } if content == "first"
+            app.entries[0].as_turn(),
+            Some(t) if t.joined_text() == "first"
         ));
     }
 
