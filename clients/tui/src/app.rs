@@ -1171,6 +1171,30 @@ impl App {
                 })
     }
 
+    /// Register the identifiers from an authoritative `model_settings`
+    /// snapshot as active-model match keys, without disturbing `self.model`
+    /// (which must keep the resolver-friendly form the daemon originally
+    /// handed us). Lets later unsolicited pushes and the model-list marker
+    /// recognise the active model even when the daemon labels it differently
+    /// than the surface form we currently track.
+    pub fn note_active_model_from_snapshot(&mut self, snapshot: &EffectiveSamplerSnapshot) {
+        let mut keys = Vec::new();
+        if let Some(model) = snapshot.model.as_deref() {
+            keys.push(model.to_string());
+        }
+        if let Some(model_id) = snapshot.model_id.as_deref() {
+            if let Some(provider) = snapshot.provider.as_deref() {
+                keys.push(format!("{provider}:{model_id}"));
+            }
+            keys.push(model_id.to_string());
+        }
+        for key in keys {
+            if !key.is_empty() && !self.active_model_names.iter().any(|n| n == &key) {
+                self.active_model_names.push(key);
+            }
+        }
+    }
+
     pub fn begin_sampler_settings_refresh(&mut self) -> String {
         self.sampler_settings_request_seq = self.sampler_settings_request_seq.wrapping_add(1);
         let rid = format!("tui_sampler_settings_{}", self.sampler_settings_request_seq);

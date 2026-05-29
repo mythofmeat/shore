@@ -1596,19 +1596,48 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 }
                 "model_settings" => {
                     let pending_response = app.sampler_settings_rid_matches(co.rid.as_deref());
-                    let usable_response = pending_response || co.rid.is_none();
-                    let snapshot = EffectiveSamplerSnapshot::from_model_settings(&co.data)
-                        .filter(|snapshot| app.sampler_snapshot_matches_active_model(snapshot));
-                    if let Some(snapshot) = snapshot.filter(|_| usable_response) {
+                    let snapshot = EffectiveSamplerSnapshot::from_model_settings(&co.data);
+                    if pending_response {
+                        // Response to our own `:setting` request. We send it
+                        // with empty args, so the daemon resolves against its
+                        // own session active — that response is authoritative
+                        // for the model our next message will use. A matching
+                        // rid also guarantees no model switch intervened (a
+                        // switch clears the pending rid, orphaning the stale
+                        // response handled below). So trust the snapshot rather
+                        // than re-checking it against `app.model`, which is
+                        // often a surface form (e.g. the bare upstream id from
+                        // StreamEnd metadata) the match heuristic can't line up
+                        // with the daemon's label — the source of the
+                        // intermittent "sampler settings unavailable" flashes.
                         app.finish_sampler_settings_refresh();
-                        app.effective_sampler = Some(snapshot);
-                    } else if pending_response {
-                        // Our request, but the response is for a different
-                        // model (daemon's active drifted, or response is
-                        // otherwise unrelated). Stop the spinner but don't
-                        // wipe a previously-good snapshot.
-                        app.finish_sampler_settings_refresh();
+                        if let Some(snapshot) = snapshot {
+                            // Remember the daemon's identifiers so later
+                            // unsolicited pushes / the model-list marker still
+                            // recognise this model without disturbing the
+                            // resolver-friendly `app.model`.
+                            app.note_active_model_from_snapshot(&snapshot);
+                            app.effective_sampler = Some(snapshot);
+                        }
+                        // A response that carried no `effective_sampler` leaves
+                        // the previous snapshot in place rather than wiping it.
+                    } else if co.rid.is_none() {
+                        // Rid-less response (the daemon doesn't always echo our
+                        // rid, and may also push proactively). We can't pin it
+                        // to a request, so only adopt it if it matches the model
+                        // we believe is active — a push for some other model
+                        // must not clobber our view.
+                        if let Some(snapshot) = snapshot
+                            .filter(|snapshot| app.sampler_snapshot_matches_active_model(snapshot))
+                        {
+                            app.finish_sampler_settings_refresh();
+                            app.note_active_model_from_snapshot(&snapshot);
+                            app.effective_sampler = Some(snapshot);
+                        }
                     }
+                    // A stale response (non-matching rid) is orphaned by a model
+                    // switch that was in flight — ignore it entirely so it can't
+                    // wipe a still-valid snapshot.
                     if app.is_setting_palette_open() {
                         app.update_completions();
                     }
@@ -2180,7 +2209,12 @@ mod redraw_tests {
     }
 
     #[test]
-    fn model_settings_for_inactive_model_is_ignored() {
+    fn pending_model_settings_response_is_trusted_even_for_drifted_model_label() {
+        // We request `:setting` with empty args, so the daemon resolves
+        // against its own session active. A matching rid means no model
+        // switch intervened, so even if the label differs from the surface
+        // form we track (`chat.test.current`), the response is authoritative.
+        // It must be adopted rather than discarded into "unavailable".
         let mut app = App::default();
         app.set_active_model(Some("chat.test.current"));
         let rid = app.begin_sampler_settings_refresh();
@@ -2204,15 +2238,23 @@ mod redraw_tests {
 
         assert_eq!(effect.redraw, RedrawEffect::Immediate);
         assert!(!app.sampler_settings_loading);
-        assert!(app.effective_sampler.is_none());
+        assert_eq!(
+            app.effective_sampler
+                .as_ref()
+                .and_then(|snapshot| snapshot.display_value("temperature")),
+            Some("0.7")
+        );
+        // The daemon's label is registered as a match key for later pushes.
+        assert!(app.is_active_model_candidate("chat.test.previous"));
     }
 
     #[test]
-    fn model_settings_for_different_model_with_matching_rid_does_not_wipe() {
-        // Drift scenario: our pending request comes back with matching rid
-        // but the daemon resolved to a different model than we track. We
-        // should stop the spinner but keep the previously-good snapshot
-        // rather than flashing "sampler settings unavailable".
+    fn pending_model_settings_response_adopts_daemons_current_model() {
+        // Our pending request (matching rid) comes back labelled for a
+        // different model than the surface form we track. Because the request
+        // carried empty args, the daemon resolved against its own session
+        // active — that is now the model our next message will use, so we
+        // adopt its fresh values instead of clinging to the stale snapshot.
         let mut app = App::default();
         app.set_active_model(Some("chat.test.current"));
         app.effective_sampler = Some(EffectiveSamplerSnapshot {
@@ -2244,8 +2286,8 @@ mod redraw_tests {
             app.effective_sampler
                 .as_ref()
                 .and_then(|snapshot| snapshot.display_value("temperature")),
-            Some("0.5"),
-            "an unrelated response must not overwrite a still-valid snapshot"
+            Some("0.9"),
+            "a matching-rid response is authoritative for the daemon's active model"
         );
     }
 
