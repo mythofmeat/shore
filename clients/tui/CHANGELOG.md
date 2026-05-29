@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5](https://github.com/mythofmeat/shore-tui/compare/v0.1.4...v0.1.5) - 2026-05-29
+
+### Fixed
+
+- *(tui)* trust matching-rid model_settings responses instead of dropping them ([#9](https://github.com/mythofmeat/shore-tui/pull/9))
+
 ## [0.1.4](https://github.com/mythofmeat/shore-tui/compare/v0.1.3...v0.1.4) - 2026-05-28
 
 ### Fixed
