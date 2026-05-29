@@ -6,9 +6,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 use shore_protocol::tool_display::{format_tool_input, format_tool_output};
 
-use crate::app::{
-    AltChoice, App, ConversationEntry, InputMode, PaletteMode, StreamBlock, ValueEditorKind,
-};
+use crate::app::{AltChoice, App, ConversationEntry, InputMode, PaletteMode, ValueEditorKind};
 use crate::images;
 use crate::markdown;
 
@@ -101,18 +99,10 @@ fn push_bar_wrapped(
     }
 }
 
-/// Render accumulated thinking blocks as dimmed text under the character name.
-fn flush_thinking(
-    lines: &mut Vec<Line<'static>>,
-    pending: &mut Vec<String>,
-    show: bool,
-    wrap_width: u16,
-) {
-    if pending.is_empty() {
-        return;
-    }
-    if !show {
-        pending.clear();
+/// Render a run of consecutive thinking blocks as dimmed text under a single
+/// "◆ thinking" header.
+fn render_thinking_group(lines: &mut Vec<Line<'static>>, thoughts: &[String], wrap_width: u16) {
+    if thoughts.is_empty() {
         return;
     }
     let header_style = Style::default()
@@ -124,76 +114,122 @@ fn flush_thinking(
     let bar_style = Style::default().fg(Color::DarkGray);
     lines.push(Line::from(Span::styled("  ◆ thinking", header_style)));
     let text_width = wrap_width.saturating_sub(4) as usize; // "  │ " = 4 cols
-    for thought in pending.drain(..) {
-        push_bar_wrapped(lines, &thought, bar_style, content_style, text_width);
+    for thought in thoughts {
+        push_bar_wrapped(lines, thought, bar_style, content_style, text_width);
     }
     lines.push(Line::from(""));
 }
 
-fn flush_tools(
-    lines: &mut Vec<Line<'static>>,
-    pending: &mut Vec<&ConversationEntry>,
-    show: bool,
-    wrap_width: u16,
-) {
-    if !show {
-        pending.clear();
-        return;
-    }
+/// Render a single tool call or tool result entry.
+fn render_tool_entry(lines: &mut Vec<Line<'static>>, entry: &ConversationEntry, wrap_width: u16) {
     let bar_style = Style::default().fg(Color::DarkGray);
     let text_width = wrap_width.saturating_sub(4) as usize; // "  │ " = 4 cols
-    for entry in pending.drain(..) {
-        match entry {
-            ConversationEntry::ToolCall {
-                tool_name, input, ..
-            } => {
-                lines.push(Line::from(vec![
-                    Span::styled("  ▶ ", Style::default().fg(Color::Magenta)),
-                    Span::styled(
-                        tool_name.clone(),
-                        Style::default()
-                            .fg(Color::Magenta)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                ]));
-                if let Some(input) = format_tool_input(input) {
-                    push_bar_wrapped(
-                        lines,
-                        &input,
-                        bar_style,
-                        Style::default().fg(Color::DarkGray),
-                        text_width,
-                    );
-                }
-                lines.push(Line::from(""));
-            }
-            ConversationEntry::ToolResult {
-                tool_name,
-                output,
-                is_error,
-                ..
-            } => {
-                let header_color = if *is_error { Color::Red } else { Color::Cyan };
-                lines.push(Line::from(vec![
-                    Span::styled("  ◀ ", Style::default().fg(header_color)),
-                    Span::styled(
-                        tool_name.clone(),
-                        Style::default()
-                            .fg(header_color)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                ]));
-                let output = format_tool_output(output);
+    match entry {
+        ConversationEntry::ToolCall {
+            tool_name, input, ..
+        } => {
+            lines.push(Line::from(vec![
+                Span::styled("  ▶ ", Style::default().fg(Color::Magenta)),
+                Span::styled(
+                    tool_name.clone(),
+                    Style::default()
+                        .fg(Color::Magenta)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]));
+            if let Some(input) = format_tool_input(input) {
                 push_bar_wrapped(
                     lines,
-                    &output,
+                    &input,
                     bar_style,
                     Style::default().fg(Color::DarkGray),
                     text_width,
                 );
-                lines.push(Line::from(""));
             }
-            _ => {}
+            lines.push(Line::from(""));
+        }
+        ConversationEntry::ToolResult {
+            tool_name,
+            output,
+            is_error,
+            ..
+        } => {
+            let header_color = if *is_error { Color::Red } else { Color::Cyan };
+            lines.push(Line::from(vec![
+                Span::styled("  ◀ ", Style::default().fg(header_color)),
+                Span::styled(
+                    tool_name.clone(),
+                    Style::default()
+                        .fg(header_color)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]));
+            let output = format_tool_output(output);
+            push_bar_wrapped(
+                lines,
+                &output,
+                bar_style,
+                Style::default().fg(Color::DarkGray),
+                text_width,
+            );
+            lines.push(Line::from(""));
+        }
+        _ => {}
+    }
+}
+
+/// Flush deferred thinking + tool entries, preserving their original
+/// interleaved order (think → call → result → think → …). Consecutive thinking
+/// entries collapse under one header. Hidden categories are skipped but still
+/// drained so they never leak into a later flush.
+fn flush_pending(
+    lines: &mut Vec<Line<'static>>,
+    pending: &mut Vec<&ConversationEntry>,
+    show_thinking: bool,
+    show_tools: bool,
+    wrap_width: u16,
+) {
+    if pending.is_empty() {
+        return;
+    }
+    let items = std::mem::take(pending);
+    let mut i = 0;
+    while i < items.len() {
+        match items[i] {
+            ConversationEntry::Thinking { .. } => {
+                let start = i;
+                while i < items.len() && matches!(items[i], ConversationEntry::Thinking { .. }) {
+                    i += 1;
+                }
+                if show_thinking {
+                    let thoughts: Vec<String> = items[start..i]
+                        .iter()
+                        .filter_map(|e| match e {
+                            ConversationEntry::Thinking { content } => Some(content.clone()),
+                            _ => None,
+                        })
+                        .collect();
+                    render_thinking_group(lines, &thoughts, wrap_width);
+                }
+            }
+            ConversationEntry::StreamingText { content } => {
+                // The live response text — always shown, rendered like the
+                // finalized assistant text it will become.
+                if !content.is_empty() {
+                    let wrap_w = wrap_width.saturating_sub(2) as usize;
+                    lines.extend(indent_lines(markdown::render_markdown_wrapped(
+                        content, wrap_w,
+                    )));
+                    lines.push(Line::from(""));
+                }
+                i += 1;
+            }
+            _ => {
+                if show_tools {
+                    render_tool_entry(lines, items[i], wrap_width);
+                }
+                i += 1;
+            }
         }
     }
 }
@@ -300,38 +336,10 @@ fn render_streaming_header(lines: &mut Vec<Line<'static>>, app: &App) {
     lines.push(Line::from(""));
 }
 
-/// Render the body of an in-progress stream: interleaved thinking/text
-/// blocks followed by a compact spinner. Caller emits the header.
-fn render_streaming_content(lines: &mut Vec<Line<'static>>, app: &App, content_width: u16) {
-    // Render interleaved blocks inline
-    let wrap_w = content_width.saturating_sub(2) as usize;
-    let thinking_style = Style::default()
-        .fg(Color::DarkGray)
-        .add_modifier(Modifier::ITALIC);
-    let bar_style = Style::default().fg(Color::DarkGray);
-    let header_style = Style::default()
-        .fg(Color::Magenta)
-        .add_modifier(Modifier::BOLD);
-    let text_width = content_width.saturating_sub(4) as usize;
-
-    for block in &app.stream.blocks {
-        match block {
-            StreamBlock::Thinking(s) => {
-                if app.show_thinking && !s.is_empty() {
-                    lines.push(Line::from(Span::styled("  ◆ thinking", header_style)));
-                    push_bar_wrapped(lines, s, bar_style, thinking_style, text_width);
-                    lines.push(Line::from(""));
-                }
-            }
-            StreamBlock::Text(s) => {
-                if !s.is_empty() {
-                    lines.extend(indent_lines(markdown::render_markdown_wrapped(s, wrap_w)));
-                    lines.push(Line::from(""));
-                }
-            }
-        }
-    }
-
+/// Render the live-stream footer: just the compact spinner / activity
+/// indicator. The streamed content itself now lives in `app.entries` and is
+/// rendered by `flush_pending` before this is called.
+fn render_streaming_content(lines: &mut Vec<Line<'static>>, app: &App, _content_width: u16) {
     // Compact spinner — always visible during streaming
     let indicator_style = Style::default()
         .fg(Color::DarkGray)
@@ -485,45 +493,27 @@ fn build_conversation_lines(
     let mut lines: Vec<Line<'static>> = Vec::new();
     let mut image_index: Vec<crate::app::ImageEntry> = Vec::new();
 
-    // During streaming, skip trailing Thinking entries — they duplicate
-    // what's already being shown from the live stream blocks.
-    let entry_count = if app.stream.active {
-        let trailing_thinking = app
-            .entries
-            .iter()
-            .rev()
-            .take_while(|e| matches!(e, ConversationEntry::Thinking { .. }))
-            .count();
-        app.entries.len() - trailing_thinking
-    } else {
-        app.entries.len()
-    };
+    // Thinking, streaming text, and tool entries are deferred so they render
+    // under the assistant name, not floating above it as if they're part of the
+    // user's message. A single ordered list preserves their true interleaving
+    // (think → call → result → think → text) — no parallel stream buffer to
+    // dedup against, so there's nothing to skip.
+    let mut pending: Vec<&ConversationEntry> = Vec::new();
 
-    // Thinking and tool entries are deferred so they render under the assistant
-    // name, not floating above it as if they're part of the user's message.
-    let mut pending_thinking: Vec<String> = Vec::new();
-    let mut pending_tools: Vec<&ConversationEntry> = Vec::new();
-
-    for entry in app.entries[..entry_count].iter() {
+    for entry in app.entries.iter() {
         match entry {
-            ConversationEntry::Thinking { content } => {
-                pending_thinking.push(content.clone());
-                continue;
-            }
-            ConversationEntry::ToolCall { .. } | ConversationEntry::ToolResult { .. } => {
-                pending_tools.push(entry);
+            ConversationEntry::Thinking { .. }
+            | ConversationEntry::StreamingText { .. }
+            | ConversationEntry::ToolCall { .. }
+            | ConversationEntry::ToolResult { .. } => {
+                pending.push(entry);
                 continue;
             }
             ConversationEntry::ArchiveBoundary { archived_count } => {
-                flush_thinking(
+                flush_pending(
                     &mut lines,
-                    &mut pending_thinking,
+                    &mut pending,
                     app.show_thinking,
-                    content_width,
-                );
-                flush_tools(
-                    &mut lines,
-                    &mut pending_tools,
                     app.show_tools,
                     content_width,
                 );
@@ -539,15 +529,10 @@ fn build_conversation_lines(
                 images,
                 timestamp,
             } => {
-                flush_thinking(
+                flush_pending(
                     &mut lines,
-                    &mut pending_thinking,
+                    &mut pending,
                     app.show_thinking,
-                    content_width,
-                );
-                flush_tools(
-                    &mut lines,
-                    &mut pending_tools,
                     app.show_tools,
                     content_width,
                 );
@@ -592,16 +577,12 @@ fn build_conversation_lines(
                     app.show_timestamps,
                 );
                 lines.push(Line::from(""));
-                // Render thinking and tool calls under the character name
-                flush_thinking(
+                // Render thinking and tool calls under the character name, in
+                // their true interleaved order, before the final text.
+                flush_pending(
                     &mut lines,
-                    &mut pending_thinking,
+                    &mut pending,
                     app.show_thinking,
-                    content_width,
-                );
-                flush_tools(
-                    &mut lines,
-                    &mut pending_tools,
                     app.show_tools,
                     content_width,
                 );
@@ -638,15 +619,10 @@ fn build_conversation_lines(
                 count,
                 timestamp,
             } => {
-                flush_thinking(
+                flush_pending(
                     &mut lines,
-                    &mut pending_thinking,
+                    &mut pending,
                     app.show_thinking,
-                    content_width,
-                );
-                flush_tools(
-                    &mut lines,
-                    &mut pending_tools,
                     app.show_tools,
                     content_width,
                 );
@@ -676,6 +652,7 @@ fn build_conversation_lines(
                 lines.push(Line::from(""));
             }
             ConversationEntry::Thinking { .. }
+            | ConversationEntry::StreamingText { .. }
             | ConversationEntry::ArchiveBoundary { .. }
             | ConversationEntry::ToolCall { .. }
             | ConversationEntry::ToolResult { .. } => unreachable!(),
@@ -687,29 +664,19 @@ fn build_conversation_lines(
     // Otherwise, flush orphans without a header (shouldn't normally occur).
     if app.stream.active {
         render_streaming_header(&mut lines, app);
-        flush_thinking(
+        flush_pending(
             &mut lines,
-            &mut pending_thinking,
+            &mut pending,
             app.show_thinking,
-            content_width,
-        );
-        flush_tools(
-            &mut lines,
-            &mut pending_tools,
             app.show_tools,
             content_width,
         );
         render_streaming_content(&mut lines, app, content_width);
     } else {
-        flush_thinking(
+        flush_pending(
             &mut lines,
-            &mut pending_thinking,
+            &mut pending,
             app.show_thinking,
-            content_width,
-        );
-        flush_tools(
-            &mut lines,
-            &mut pending_tools,
             app.show_tools,
             content_width,
         );
@@ -1607,16 +1574,10 @@ mod scenario_tests {
             self.app.stream.active = true;
         }
 
-        /// Simulate a text StreamChunk.
+        /// Simulate a text StreamChunk — appends straight into entries, like
+        /// the real handler.
         fn stream_chunk(&mut self, text: &str) {
-            match self.app.stream.blocks.last_mut() {
-                Some(StreamBlock::Text(ref mut s)) => s.push_str(text),
-                _ => self
-                    .app
-                    .stream
-                    .blocks
-                    .push(StreamBlock::Text(text.to_string())),
-            }
+            self.app.stream_append_text(text);
             self.app.stream.phase = "responding".into();
             if self.app.auto_scroll {
                 self.app.scroll_to_bottom();
@@ -1625,19 +1586,14 @@ mod scenario_tests {
 
         /// Simulate a thinking StreamChunk.
         fn thinking_chunk(&mut self, text: &str) {
-            match self.app.stream.blocks.last_mut() {
-                Some(StreamBlock::Thinking(ref mut s)) => s.push_str(text),
-                _ => self
-                    .app
-                    .stream
-                    .blocks
-                    .push(StreamBlock::Thinking(text.to_string())),
-            }
+            self.app.stream_append_thinking(text);
             self.app.stream.phase = "thinking".into();
         }
 
-        /// Simulate StreamEnd (finalise response into entries).
+        /// Simulate StreamEnd (finalise response into entries): drop the live
+        /// partial text and push the authoritative assistant turn.
         fn stream_end(&mut self, content: &str) {
+            self.app.drop_trailing_streaming_text();
             self.app.entries.push(ConversationEntry::Assistant {
                 msg_id: None,
                 content: content.to_string(),
@@ -2973,6 +2929,196 @@ mod scenario_tests {
         );
     }
 
+    // ── Scenario: thinking and tools render interleaved, not grouped ─────────
+    //
+    // Regression for the bug where the renderer bucketed all thinking before
+    // all tools, collapsing a real `think → call → result → think → call`
+    // sequence into `[all thinking][all tools]`. Entry order must be preserved.
+    #[test]
+    fn scenario_thinking_tools_interleaved_order() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.character_name = "Alice".into();
+        h.app.show_thinking = true;
+        h.app.show_tools = true;
+
+        h.app.entries.push(ConversationEntry::User {
+            content: "do the thing".into(),
+            images: vec![],
+            timestamp: "t1".into(),
+        });
+        // Interleaved as expand_msg produces from content_blocks.
+        h.app.entries.push(ConversationEntry::Thinking {
+            content: "FIRST_THOUGHT".into(),
+        });
+        h.app.entries.push(ConversationEntry::ToolCall {
+            tool_id: "tc1".into(),
+            tool_name: "ALPHA_TOOL".into(),
+            input: serde_json::json!({"q": "x"}),
+        });
+        h.app.entries.push(ConversationEntry::ToolResult {
+            tool_id: "tc1".into(),
+            tool_name: "ALPHA_TOOL".into(),
+            output: "alpha done".into(),
+            is_error: false,
+        });
+        h.app.entries.push(ConversationEntry::Thinking {
+            content: "SECOND_THOUGHT".into(),
+        });
+        h.app.entries.push(ConversationEntry::ToolCall {
+            tool_id: "tc2".into(),
+            tool_name: "BETA_TOOL".into(),
+            input: serde_json::json!({"q": "y"}),
+        });
+        h.app.entries.push(ConversationEntry::ToolResult {
+            tool_id: "tc2".into(),
+            tool_name: "BETA_TOOL".into(),
+            output: "beta done".into(),
+            is_error: false,
+        });
+        h.app.entries.push(ConversationEntry::Assistant {
+            msg_id: None,
+            content: "FINAL_ANSWER".into(),
+            images: vec![],
+            timestamp: "t2".into(),
+            metadata: None,
+        });
+
+        let f = h.render("interleaved thinking and tools");
+        let lines: Vec<&str> = f.lines().collect();
+        let pos = |needle: &str| {
+            lines
+                .iter()
+                .position(|l| l.contains(needle))
+                .unwrap_or_else(|| panic!("{needle:?} must appear\n{f}"))
+        };
+
+        // The true source order must be preserved end to end — not grouped as
+        // [FIRST_THOUGHT, SECOND_THOUGHT][ALPHA_TOOL, BETA_TOOL].
+        let order = [
+            pos("FIRST_THOUGHT"),
+            pos("ALPHA_TOOL"),
+            pos("SECOND_THOUGHT"),
+            pos("BETA_TOOL"),
+            pos("FINAL_ANSWER"),
+        ];
+        assert!(
+            order.windows(2).all(|w| w[0] < w[1]),
+            "thinking/tool/text must render in interleaved source order, got positions {order:?}\n{f}"
+        );
+    }
+
+    // ── Scenario: streaming thinking survives a tool-use phase boundary ──────
+    //
+    // Regression for the bug where StreamEnd(finish_reason="tool_use") cleared
+    // the live blocks outright, so a phase's thinking vanished the instant the
+    // tool call arrived. It must instead be committed to the log, interleaved
+    // above the tool call.
+    #[test]
+    fn scenario_streaming_thinking_committed_before_tool_call() {
+        use shore_protocol::server_msg::{
+            ServerMessage, StreamChunk, StreamEnd, StreamStart, ToolCall,
+        };
+        use shore_protocol::types::{StreamMetadata, TimingInfo, TokenCounts};
+
+        let meta = StreamMetadata {
+            model: "anthropic/claude-haiku-4-5".into(),
+            tokens: TokenCounts {
+                input: 100,
+                output: 20,
+                cache_read: 10,
+                cache_write: 0,
+            },
+            timing: TimingInfo {
+                total_ms: 500,
+                ttft_ms: 100,
+            },
+        };
+
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.character_name = "qifei".into();
+        h.app.show_thinking = true;
+        h.app.show_tools = true;
+        h.app.entries.push(ConversationEntry::User {
+            content: "hi".into(),
+            images: vec![],
+            timestamp: "t1".into(),
+        });
+
+        // Phase 1: model thinks, then decides to call a tool.
+        crate::handle_server_message(
+            &mut h.app,
+            ServerMessage::StreamStart(StreamStart {
+                rid: None,
+                regen: false,
+            }),
+        );
+        crate::handle_server_message(
+            &mut h.app,
+            ServerMessage::StreamChunk(StreamChunk {
+                rid: None,
+                text: "PHASE1_THOUGHT".into(),
+                content_type: "thinking".into(),
+            }),
+        );
+        crate::handle_server_message(
+            &mut h.app,
+            ServerMessage::StreamEnd(StreamEnd {
+                rid: None,
+                msg_id: None,
+                revision: None,
+                content: String::new(),
+                metadata: meta.clone(),
+                finish_reason: "tool_use".into(),
+                is_final: false,
+            }),
+        );
+
+        // The thinking must have been committed, not dropped.
+        assert!(
+            h.app.entries.iter().any(|e| matches!(
+                e,
+                ConversationEntry::Thinking { content } if content == "PHASE1_THOUGHT"
+            )),
+            "phase-1 thinking must be committed on tool_use phase end"
+        );
+
+        crate::handle_server_message(
+            &mut h.app,
+            ServerMessage::ToolCall(ToolCall {
+                rid: None,
+                tool_id: "tc1".into(),
+                tool_name: "memory_search".into(),
+                input: serde_json::json!({"query": "x"}),
+            }),
+        );
+
+        // Mid-turn: thinking still visible and above the tool call, exactly once.
+        let f = h.render("mid tool-use turn");
+        let lines: Vec<&str> = f.lines().collect();
+        assert_eq!(
+            lines
+                .iter()
+                .filter(|l| l.contains("PHASE1_THOUGHT"))
+                .count(),
+            1,
+            "thinking must render exactly once (no duplication)\n{f}"
+        );
+        let think_line = lines
+            .iter()
+            .position(|l| l.contains("PHASE1_THOUGHT"))
+            .expect("thinking must appear");
+        let tool_line = lines
+            .iter()
+            .position(|l| l.contains("memory_search"))
+            .expect("tool call must appear");
+        assert!(
+            think_line < tool_line,
+            "phase-1 thinking must render above the tool call\n{f}"
+        );
+    }
+
     // ── Scenario: multi-phase tool-use stream ───────────────────────────────
     //
     // Regression for the bug where an intermediate StreamEnd(finish_reason="tool_use")
@@ -3988,38 +4134,46 @@ mod scenario_tests {
         );
     }
 
-    // ── Scenario: thinking deduplication during streaming ───────────────────
-
+    // ── Scenario: thinking is a single source of truth while streaming ──────
+    //
+    // With streaming deltas appended straight into `entries` (no parallel live
+    // buffer), there's nothing to dedup against: multiple deltas of one thought
+    // merge into one entry and render exactly once.
     #[test]
     fn scenario_thinking_not_duplicated() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.character_name = "Alice".into();
+        h.app.show_thinking = true;
 
-        // Add a user message
         h.app.entries.push(ConversationEntry::User {
             content: "hi".into(),
             images: vec![],
             timestamp: "t1".into(),
         });
 
-        // Add thinking entry (as if from History rebuild during streaming)
-        h.app.entries.push(ConversationEntry::Thinking {
-            content: "thinking about response".into(),
-        });
-
-        // Start streaming with same thinking text
+        // Stream one thought as two deltas — they must merge, not stack.
         h.stream_start();
-        h.thinking_chunk("thinking about response");
+        h.thinking_chunk("thinking about ");
+        h.thinking_chunk("response");
 
-        let f = h.render("streaming with thinking entries");
-
-        // Thinking text should appear ONLY in the thinking panel, not in conversation
-        let thinking_occurrences = f.matches("thinking about response").count();
+        // Exactly one Thinking entry holds the merged text.
+        let thinking_entries = h
+            .app
+            .entries
+            .iter()
+            .filter(|e| matches!(e, ConversationEntry::Thinking { .. }))
+            .count();
         assert_eq!(
-            thinking_occurrences, 1,
-            "thinking text should appear exactly once (in thinking panel), not duplicated in conversation. Found {} occurrences",
-            thinking_occurrences
+            thinking_entries, 1,
+            "thinking deltas must merge into one entry"
+        );
+
+        let f = h.render("streaming thinking");
+        let occurrences = f.matches("thinking about response").count();
+        assert_eq!(
+            occurrences, 1,
+            "streamed thinking must render exactly once, found {occurrences}\n{f}"
         );
     }
 
@@ -4302,8 +4456,8 @@ mod scenario_tests {
         h.stream_chunk("Starting to respond...");
         h.render("streaming");
 
-        // Error arrives — stream resets, error in status
-        h.app.stream.reset();
+        // Error arrives — stream aborts, error in status
+        h.app.abort_stream();
         h.app.set_status("error: rate_limit - Too many requests");
 
         let f = h.render("after error");
@@ -4338,7 +4492,7 @@ mod scenario_tests {
 
         // Connection drops — stream state is cleared by disconnect handler
         h.app.connection_status = ConnectionStatus::Connecting;
-        h.app.stream.reset();
+        h.app.abort_stream();
         h.app.set_status("reconnecting: connection lost");
 
         let f = h.render("disconnected while streaming");

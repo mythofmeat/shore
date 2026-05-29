@@ -38,8 +38,6 @@ pub struct ConvFingerprint {
     pub history_version: u64,
     pub stream_active: bool,
     pub stream_regen: bool,
-    pub stream_blocks_len: u32,
-    pub stream_last_block_len: u32,
     pub stream_phase_len: u32,
     pub stream_tool_name_len: i32,
     pub show_thinking: bool,
@@ -82,6 +80,13 @@ pub enum ConversationEntry {
     Thinking {
         content: String,
     },
+    /// In-progress assistant text streamed live. Headerless — it renders under
+    /// the single streaming header. Transient: finalized into an `Assistant`
+    /// entry (or replaced by an end-of-turn History rebuild) when the stream
+    /// ends, so it never appears in a completed conversation.
+    StreamingText {
+        content: String,
+    },
     ToolCall {
         #[allow(dead_code)] // stored for protocol fidelity; TUI renders by tool_name
         tool_id: String,
@@ -117,19 +122,16 @@ pub struct AltPickerState {
     pub loading: bool,
 }
 
-/// A segment of streaming content, preserving interleaving order.
-#[derive(Clone, Debug)]
-pub enum StreamBlock {
-    Thinking(String),
-    Text(String),
-}
-
-/// Streaming state for in-progress responses.
+/// Turn-level state for an in-progress response.
+///
+/// Streaming *content* is no longer buffered here — it is appended directly
+/// into `App.entries` as `Thinking` / `StreamingText` / `ToolCall` /
+/// `ToolResult` entries, so the rendered view is a pure function of a single
+/// ordered list. This struct only holds the cross-phase scalars.
 #[derive(Default)]
 pub struct StreamState {
     pub active: bool,
     pub regen: bool,
-    pub blocks: Vec<StreamBlock>,
     pub phase: String,
     /// Name of the tool currently being called/executed.
     pub tool_name: Option<String>,
@@ -144,7 +146,6 @@ impl StreamState {
     pub fn reset(&mut self) {
         self.active = false;
         self.regen = false;
-        self.blocks.clear();
         self.phase.clear();
         self.tool_name = None;
         self.accumulated_text.clear();
@@ -767,6 +768,9 @@ impl App {
                     (7u64 << 56) | (*archived_count as u64)
                 }
                 ConversationEntry::Thinking { content } => (4u64 << 56) | (content.len() as u64),
+                ConversationEntry::StreamingText { content } => {
+                    (8u64 << 56) | (content.len() as u64)
+                }
                 ConversationEntry::ToolCall {
                     tool_name, input, ..
                 } => {
@@ -795,13 +799,6 @@ impl App {
             0
         };
 
-        let (stream_blocks_len, stream_last_block_len) = match self.stream.blocks.last() {
-            Some(StreamBlock::Thinking(s)) | Some(StreamBlock::Text(s)) => {
-                (self.stream.blocks.len() as u32, s.len() as u32)
-            }
-            None => (0, 0),
-        };
-
         ConvFingerprint {
             width,
             entries_len: self.entries.len() as u32,
@@ -810,8 +807,6 @@ impl App {
             history_version: self.history_version,
             stream_active: self.stream.active,
             stream_regen: self.stream.regen,
-            stream_blocks_len,
-            stream_last_block_len,
             stream_phase_len: self.stream.phase.len() as u32,
             stream_tool_name_len: self
                 .stream
@@ -845,6 +840,56 @@ impl App {
     pub fn scroll_to_bottom(&mut self) {
         self.scroll_offset = 0;
         self.auto_scroll = true;
+    }
+
+    /// Append a live thinking delta to the in-flight turn. Merges into the
+    /// trailing `Thinking` entry when the previous chunk was also thinking,
+    /// otherwise opens a new one — preserving interleaving with tool calls.
+    pub fn stream_append_thinking(&mut self, text: &str) {
+        match self.entries.last_mut() {
+            Some(ConversationEntry::Thinking { content }) => content.push_str(text),
+            _ => self.entries.push(ConversationEntry::Thinking {
+                content: text.to_string(),
+            }),
+        }
+    }
+
+    /// Append a live response-text delta to the in-flight turn. Merges into the
+    /// trailing `StreamingText` entry, otherwise opens a new one.
+    pub fn stream_append_text(&mut self, text: &str) {
+        match self.entries.last_mut() {
+            Some(ConversationEntry::StreamingText { content }) => content.push_str(text),
+            _ => self.entries.push(ConversationEntry::StreamingText {
+                content: text.to_string(),
+            }),
+        }
+    }
+
+    /// Drop a trailing in-flight `StreamingText` entry, if any. Used at phase
+    /// boundaries (the partial pre-tool text is superseded by the authoritative
+    /// final text) and on cancel/finalize so no headerless text is orphaned.
+    pub fn drop_trailing_streaming_text(&mut self) {
+        if matches!(
+            self.entries.last(),
+            Some(ConversationEntry::StreamingText { .. })
+        ) {
+            self.entries.pop();
+        }
+    }
+
+    /// Abort an in-flight stream (disconnect / error / cancel): discard the
+    /// optimistic, unconfirmed partial content — trailing streaming text and
+    /// thinking — and clear the stream scalars. Committed tool calls/results
+    /// are left in place; a reconnect's History rebuild reconciles the
+    /// authoritative turn.
+    pub fn abort_stream(&mut self) {
+        while matches!(
+            self.entries.last(),
+            Some(ConversationEntry::StreamingText { .. } | ConversationEntry::Thinking { .. })
+        ) {
+            self.entries.pop();
+        }
+        self.stream.reset();
     }
 
     /// Optimistically transition into the "regenerating" UI state before the

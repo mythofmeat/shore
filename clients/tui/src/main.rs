@@ -30,7 +30,6 @@ use tracing_subscriber::EnvFilter;
 
 use app::{
     AltChoice, App, ConnectionStatus, ConversationEntry, EffectiveSamplerSnapshot, InputState,
-    StreamBlock,
 };
 use connection::{ConnCommand, ConnEvent};
 use input::Action;
@@ -971,7 +970,7 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
 
         ConnEvent::Disconnected(reason) => {
             app.connection_status = ConnectionStatus::Connecting;
-            app.stream.reset(); // clear stale streaming state
+            app.abort_stream(); // discard unconfirmed partial stream content
             app.effective_sampler = None;
             app.sampler_settings_loading = false;
             app.pending_sampler_settings_rid = None;
@@ -1132,9 +1131,8 @@ fn expand_msg(msg: Message, entries: &mut Vec<ConversationEntry>) {
                 }
             }
             ContentBlock::RedactedThinking { .. } => {
-                entries.push(ConversationEntry::Thinking {
-                    content: "[redacted thinking]".into(),
-                });
+                // Carries no readable content; skip rather than render a
+                // useless "[redacted thinking]" placeholder.
             }
             ContentBlock::ToolUse { id, name, input } => {
                 entries.push(ConversationEntry::ToolCall {
@@ -1246,8 +1244,8 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 app.stream.active = true;
             } else {
                 // Continuation within a multi-phase (tool-use) turn — preserve
-                // accumulators so the final Assistant entry reflects the whole turn.
-                app.stream.blocks.clear();
+                // accumulators (and the committed thinking/tool entries) so the
+                // final Assistant entry reflects the whole turn.
                 app.stream.phase = "responding".into();
                 app.stream.tool_name = None;
             }
@@ -1255,19 +1253,16 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         }
 
         ServerMessage::StreamChunk(chunk) => {
-            let is_thinking = chunk.content_type == "thinking";
-            match (is_thinking, app.stream.blocks.last_mut()) {
-                (true, Some(StreamBlock::Thinking(ref mut s))) => s.push_str(&chunk.text),
-                (false, Some(StreamBlock::Text(ref mut s))) => s.push_str(&chunk.text),
-                (true, _) => app.stream.blocks.push(StreamBlock::Thinking(chunk.text)),
-                (false, _) => app.stream.blocks.push(StreamBlock::Text(chunk.text)),
-            }
-            app.stream.phase = if is_thinking {
-                "thinking"
+            // Deltas are appended straight into `app.entries`, so the live view
+            // is the same ordered list the finalized turn renders from — no
+            // parallel buffer to reconcile.
+            if chunk.content_type == "thinking" {
+                app.stream_append_thinking(&chunk.text);
+                app.stream.phase = "thinking".into();
             } else {
-                "responding"
+                app.stream_append_text(&chunk.text);
+                app.stream.phase = "responding".into();
             }
-            .into();
             if app.auto_scroll {
                 app.scroll_to_bottom();
             }
@@ -1276,7 +1271,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
 
         ServerMessage::StreamEnd(end) => {
             if end.finish_reason == "cancelled" {
-                app.stream.reset();
+                app.abort_stream();
                 app.set_status("generation cancelled");
                 return UiEffect::redraw(RedrawEffect::ImmediateFull);
             }
@@ -1308,11 +1303,20 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             }
 
             if end.finish_reason == "tool_use" {
-                app.stream.blocks.clear();
+                // This phase's thinking is already committed as Thinking
+                // entries (appended live), so it stays interleaved above the
+                // tool call. Only drop any partial pre-tool text — the
+                // authoritative final text arrives in the closing phase.
+                app.drop_trailing_streaming_text();
                 app.stream.phase = "tool_use".into();
                 app.stream.tool_name = None;
                 RedrawEffect::Immediate
             } else {
+                // Drop the live partial text: either the History rebuild below
+                // already replaced it with the authoritative turn, or the
+                // fallback re-pushes it from `accumulated_text`.
+                app.drop_trailing_streaming_text();
+
                 // The daemon broadcasts a History snapshot during
                 // `engine.append_message` (in persist_and_notify) and only
                 // then emits StreamEnd, so the assistant entry is already
