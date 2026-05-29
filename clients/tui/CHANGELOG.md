@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6](https://github.com/mythofmeat/shore-tui/compare/v0.1.5...v0.1.6) - 2026-05-29
+
+### Fixed
+
+- *(tui)* render thinking/tools/text interleaved and stream from one source ([#12](https://github.com/mythofmeat/shore-tui/pull/12))
+
+### Other
+
+- *(tui)* adopt a Turn/Block conversation model ([#14](https://github.com/mythofmeat/shore-tui/pull/14))
+- gitignore
+
 ## [0.1.5](https://github.com/mythofmeat/shore-tui/compare/v0.1.4...v0.1.5) - 2026-05-29
 
 ### Fixed
