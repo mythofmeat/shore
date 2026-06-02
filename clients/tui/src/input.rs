@@ -1132,7 +1132,7 @@ fn parse_setting_value_str(key: &str, raw: &str) -> serde_json::Value {
             .and_then(serde_json::Number::from_f64)
             .map(Value::Number)
             .unwrap_or_else(|| Value::String(trimmed.to_string())),
-        "budget_tokens" | "max_tokens" => trimmed
+        "budget_tokens" | "max_output_tokens" => trimmed
             .parse::<u64>()
             .map(|n| Value::Number(n.into()))
             .unwrap_or_else(|_| Value::String(trimmed.to_string())),

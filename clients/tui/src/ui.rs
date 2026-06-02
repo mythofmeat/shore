@@ -1662,7 +1662,7 @@ mod scenario_tests {
                     "reasoning_effort": "medium",
                     "thinking_enabled": true,
                     "budget_tokens": 2048,
-                    "max_tokens": 4096,
+                    "max_output_tokens": 4096,
                     "cache_ttl": "1h"
                 },
                 "scopes": {
@@ -1671,7 +1671,7 @@ mod scenario_tests {
                     "reasoning_effort": "static_default",
                     "thinking_enabled": "static_default",
                     "budget_tokens": "static_default",
-                    "max_tokens": "static_default",
+                    "max_output_tokens": "static_default",
                     "cache_ttl": "static_default"
                 }
             }),
@@ -2691,6 +2691,25 @@ mod scenario_tests {
                 .any(|candidate| candidate == "Custom: off"),
             "cache_ttl picker should not offer off as a custom TTL"
         );
+    }
+
+    #[test]
+    fn setting_sdk_picker_dispatches_command() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.mode = InputMode::Normal;
+
+        open_setting_menu_with_snapshot(&mut h);
+        h.type_str("sdk");
+        h.press(KeyCode::Enter);
+        match &h.app.completion.mode {
+            crate::app::PaletteMode::Submenu(s) => assert_eq!(s.parent, "setting:sdk"),
+            _ => panic!("expected setting sdk submenu"),
+        }
+        h.type_str("anthropic");
+        let action = h.press_action(KeyCode::Enter);
+
+        assert_set_model_setting(action, "sdk", serde_json::json!("anthropic"));
     }
 
     #[test]

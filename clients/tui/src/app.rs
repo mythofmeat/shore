@@ -606,8 +606,9 @@ pub struct EffectiveSamplerSnapshot {
     pub reasoning_effort: EffectiveSamplerField,
     pub thinking_enabled: EffectiveSamplerField,
     pub budget_tokens: EffectiveSamplerField,
-    pub max_tokens: EffectiveSamplerField,
+    pub max_output_tokens: EffectiveSamplerField,
     pub cache_ttl: EffectiveSamplerField,
+    pub sdk: EffectiveSamplerField,
 }
 
 impl EffectiveSamplerSnapshot {
@@ -632,8 +633,9 @@ impl EffectiveSamplerSnapshot {
             reasoning_effort: Self::field(sampler, scopes, "reasoning_effort"),
             thinking_enabled: Self::field(sampler, scopes, "thinking_enabled"),
             budget_tokens: Self::field(sampler, scopes, "budget_tokens"),
-            max_tokens: Self::field(sampler, scopes, "max_tokens"),
+            max_output_tokens: Self::field(sampler, scopes, "max_output_tokens"),
             cache_ttl: Self::field(sampler, scopes, "cache_ttl"),
+            sdk: Self::field(sampler, scopes, "sdk"),
         })
     }
 
@@ -671,8 +673,9 @@ impl EffectiveSamplerSnapshot {
             "reasoning_effort" => Some(&self.reasoning_effort),
             "thinking_enabled" => Some(&self.thinking_enabled),
             "budget_tokens" => Some(&self.budget_tokens),
-            "max_tokens" => Some(&self.max_tokens),
+            "max_output_tokens" => Some(&self.max_output_tokens),
             "cache_ttl" => Some(&self.cache_ttl),
+            "sdk" => Some(&self.sdk),
             _ => None,
         }
     }
@@ -1444,8 +1447,9 @@ impl App {
         "reasoning_effort",
         "thinking_enabled",
         "budget_tokens",
-        "max_tokens",
+        "max_output_tokens",
         "cache_ttl",
+        "sdk",
     ];
 
     fn is_setting_key(key: &str) -> bool {
@@ -1821,8 +1825,9 @@ impl App {
                 | "setting:reasoning_effort"
                 | "setting:thinking_enabled"
                 | "setting:cache_ttl"
-                | "setting:max_tokens"
+                | "setting:max_output_tokens"
                 | "setting:budget_tokens"
+                | "setting:sdk"
                 | "setting:reset"
         ) {
             if let Some(row) = self.setting_editor_blocked_row() {
@@ -1881,7 +1886,7 @@ impl App {
                 }
                 self.completion.candidates = candidates;
             }
-            "setting:max_tokens" | "setting:budget_tokens" => {
+            "setting:max_output_tokens" | "setting:budget_tokens" => {
                 let mut candidates = Self::filtered_presets(
                     &["1024", "2048", "4096", "8192", "16384", "32768", "reset"],
                     &filter,
@@ -1890,6 +1895,12 @@ impl App {
                     candidates.push(format!("Custom: {raw_filter}"));
                 }
                 self.completion.candidates = candidates;
+            }
+            "setting:sdk" => {
+                self.completion.candidates = Self::filtered_presets(
+                    &["anthropic", "openai", "gemini", "zai", "reset"],
+                    &filter,
+                );
             }
             "setting:reset" => {
                 self.completion.candidates = Self::SETTING_KEYS
@@ -1926,8 +1937,9 @@ impl App {
             "setting:reasoning_effort"
             | "setting:thinking_enabled"
             | "setting:cache_ttl"
-            | "setting:max_tokens"
-            | "setting:budget_tokens" => {
+            | "setting:max_output_tokens"
+            | "setting:budget_tokens"
+            | "setting:sdk" => {
                 let key = parent.strip_prefix("setting:").unwrap_or_default();
                 self.completion
                     .candidates

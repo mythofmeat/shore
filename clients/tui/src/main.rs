@@ -2145,7 +2145,7 @@ mod redraw_tests {
                         "reasoning_effort": "medium",
                         "thinking_enabled": true,
                         "budget_tokens": 2048,
-                        "max_tokens": 4096,
+                        "max_output_tokens": 4096,
                         "cache_ttl": "1h"
                     },
                     "scopes": {
@@ -2154,7 +2154,7 @@ mod redraw_tests {
                         "reasoning_effort": "static_default",
                         "thinking_enabled": "static_default",
                         "budget_tokens": "static_default",
-                        "max_tokens": "static_default",
+                        "max_output_tokens": "static_default",
                         "cache_ttl": "static_default"
                     }
                 }),
