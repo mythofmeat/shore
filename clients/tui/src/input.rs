@@ -110,6 +110,17 @@ fn redraw_or_load_older_history(app: &mut App) -> Action {
 
 fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
     match (key.modifiers, key.code) {
+        // Esc dismisses the newest toast, so an intrusive notification can be
+        // cleared without typing. Only consumes the key when a toast was
+        // present; otherwise it's a no-op in Normal mode.
+        (KeyModifiers::NONE, KeyCode::Esc) => {
+            if app.dismiss_latest_notification() {
+                Action::Redraw
+            } else {
+                Action::None
+            }
+        }
+
         // Enter insert mode
         (KeyModifiers::NONE, KeyCode::Char('i')) => {
             debug!("Input: Normal → Insert");
@@ -348,14 +359,14 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
                         });
                     }
                     Err(e) => {
-                        app.set_status(format!("failed to read image: {e}"));
+                        app.set_error(format!("failed to read image: {e}"));
                     }
                 }
             }
-            // Fresh conversational turn — drop stale system notifications
+            // Fresh conversational turn — drop stale notification toasts
             // (reconnect chatter, command acknowledgments, etc.) from the
             // previous turn before we show the new User entry.
-            app.clear_system_entries();
+            app.dismiss_notifications();
             // Optimistic: show user's message in conversation immediately
             app.entries.push(crate::app::ConversationEntry::user(
                 text.clone(),
@@ -739,6 +750,9 @@ fn parse_command(app: &mut App, input: &str) -> Action {
         }
 
         "clear" => {
+            // Clear both lingering toasts and any requested command output
+            // (model/character lists, memory dumps) from the log.
+            app.dismiss_notifications();
             app.clear_system_entries();
             Action::Redraw
         }
@@ -983,7 +997,7 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                         Action::Redraw
                     }
                     None => {
-                        app.set_status(format!("message not found: {arg}"));
+                        app.set_error(format!("message not found: {arg}"));
                         Action::Redraw
                     }
                 }
@@ -1058,7 +1072,7 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                         .unwrap_or(expanded)
                 };
                 if !std::path::Path::new(&path).exists() {
-                    app.set_status(format!("file not found: {path}"));
+                    app.set_error(format!("file not found: {path}"));
                     Action::Redraw
                 } else {
                     app.pending_images.push(path.clone());
@@ -1419,13 +1433,10 @@ mod tests {
 
         let action = parse_command(&mut app, "provider refresh openai");
         assert!(matches!(action, Action::Redraw));
-        assert!(app.entries.iter().any(|entry| {
-            matches!(
-                entry,
-                crate::app::ConversationEntry::System { content, .. }
-                    if content == "unknown command: provider"
-            )
-        }));
+        assert!(app
+            .notifications
+            .iter()
+            .any(|n| n.content == "unknown command: provider"));
     }
 
     #[test]
@@ -1499,16 +1510,18 @@ mod tests {
     }
 
     #[test]
-    fn clear_command_removes_system_entries() {
+    fn clear_command_clears_toasts_and_system_entries() {
         let mut app = App::default();
+        // A lingering toast plus a piece of requested command output.
         app.set_status("reconnecting");
-        app.set_status("cache warning");
-        assert!(app
-            .entries
-            .iter()
-            .any(|e| matches!(e, crate::app::ConversationEntry::System { .. })));
+        app.entries.push(crate::app::ConversationEntry::System {
+            content: "Models:\n  opus".into(),
+            count: 1,
+            timestamp: String::new(),
+        });
         let action = parse_command(&mut app, "clear");
         assert!(matches!(action, Action::Redraw));
+        assert!(app.notifications.is_empty());
         assert!(!app
             .entries
             .iter()
@@ -1516,27 +1529,19 @@ mod tests {
     }
 
     #[test]
-    fn user_send_clears_system_entries() {
+    fn user_send_clears_toasts() {
         let mut app = App::default();
         app.input.mode = InputMode::Insert;
         app.set_status("reconnecting: connection lost");
         app.set_status("connected");
-        assert_eq!(
-            app.entries
-                .iter()
-                .filter(|e| matches!(e, crate::app::ConversationEntry::System { .. }))
-                .count(),
-            2
-        );
+        assert_eq!(app.notifications.len(), 2);
         for c in "hi".chars() {
             app.input.insert_char(c);
         }
         let action = handle_key(&mut app, make_key(KeyModifiers::NONE, KeyCode::Enter));
         assert!(matches!(action, Action::Send(_)));
-        assert!(!app
-            .entries
-            .iter()
-            .any(|e| matches!(e, crate::app::ConversationEntry::System { .. })));
+        // Sending a message dismisses stale toasts but keeps the new user turn.
+        assert!(app.notifications.is_empty());
         assert!(app.entries.iter().any(|e| matches!(
             e.as_turn(),
             Some(t) if t.role == shore_protocol::types::Role::User

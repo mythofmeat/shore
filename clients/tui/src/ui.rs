@@ -2,7 +2,7 @@ use chrono::{DateTime, Local};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
+use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 use shore_protocol::tool_display::{format_tool_input, format_tool_output};
 use shore_protocol::types::Role;
@@ -66,6 +66,10 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 
     draw_conversation(frame, &mut *app, chunks[0]);
 
+    // Transient toasts float over the conversation's top-right corner so
+    // they never reflow or interleave with the message log.
+    draw_notifications(frame, app, chunks[0]);
+
     draw_input(frame, app, chunks[1]);
 
     if show_value_editor {
@@ -82,6 +86,97 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 
     if app.fullscreen.is_some() {
         draw_fullscreen_image(frame, app, size);
+    }
+}
+
+/// Render active toasts as floating, rounded boxes stacked down from the
+/// top-right of the conversation area. Newest sits at the top; older ones
+/// stack below it. The overlay never reflows the conversation — it
+/// paints on top via `Clear`. Toasts auto-expire (see `App::expire_notifications`).
+fn draw_notifications(frame: &mut Frame, app: &App, area: Rect) {
+    if app.notifications.is_empty() || area.width < 16 || area.height < 3 {
+        return;
+    }
+
+    // Box geometry: right-aligned with a 1-col margin, capped to roughly half
+    // the conversation width so long messages wrap rather than dominate.
+    let margin = 1u16;
+    let box_w = (area.width / 2)
+        .clamp(24, 56)
+        .min(area.width.saturating_sub(margin));
+    // Inner text width: borders (2) + one space of left padding.
+    let inner_w = box_w.saturating_sub(3) as usize;
+    let box_x = area.x + area.width - box_w - margin;
+
+    // Place from the top down, newest first.
+    let mut next_top = area.y;
+    for notif in app.notifications.iter().rev() {
+        let (icon, color) = match notif.level {
+            crate::app::NotificationLevel::Info => ("•", Color::Cyan),
+            crate::app::NotificationLevel::Warning => ("⚠", Color::Yellow),
+            crate::app::NotificationLevel::Error => ("✖", Color::Red),
+        };
+
+        // First text line carries the icon; wrapped continuations align under it.
+        let suffix = if notif.count > 1 {
+            format!(" (×{})", notif.count)
+        } else {
+            String::new()
+        };
+        let body = format!("{}{}", notif.content, suffix);
+        let wrap_w = inner_w.saturating_sub(2); // leave room for "icon "
+        let mut wrapped: Vec<String> = body
+            .lines()
+            .flat_map(|l| word_wrap(l, wrap_w.max(1)))
+            .collect();
+        if wrapped.is_empty() {
+            wrapped.push(String::new());
+        }
+        // Cap each toast to 3 visible lines; mark truncation with an ellipsis.
+        const MAX_LINES: usize = 3;
+        if wrapped.len() > MAX_LINES {
+            wrapped.truncate(MAX_LINES);
+            if let Some(last) = wrapped.last_mut() {
+                // Reserve one display cell for the ellipsis so it isn't clipped
+                // when the last line already fills the wrap width.
+                truncate_to_width(last, wrap_w.saturating_sub(1));
+                last.push('…');
+            }
+        }
+
+        let style = Style::default().fg(color);
+        let lines: Vec<Line<'static>> = wrapped
+            .into_iter()
+            .enumerate()
+            .map(|(i, text)| {
+                if i == 0 {
+                    Line::from(vec![
+                        Span::styled(format!(" {icon} "), style.add_modifier(Modifier::BOLD)),
+                        Span::styled(text, style),
+                    ])
+                } else {
+                    // Align continuation text under the first line's text.
+                    Line::from(vec![Span::raw("   "), Span::styled(text, style)])
+                }
+            })
+            .collect();
+
+        let box_h = lines.len() as u16 + 2; // borders
+                                            // Stop stacking once we'd overflow the bottom of the conversation area.
+        if next_top + box_h > area.y + area.height {
+            break;
+        }
+        let box_y = next_top;
+        let rect = Rect::new(box_x, box_y, box_w, box_h);
+
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(style);
+        frame.render_widget(Clear, rect);
+        frame.render_widget(Paragraph::new(lines).block(block), rect);
+
+        next_top = box_y + box_h;
     }
 }
 
@@ -255,6 +350,27 @@ fn squeeze_blank_lines(lines: &mut Vec<Line<'static>>) {
 
 fn visual_line_count(lines: &[Line<'static>], _width: u16) -> u16 {
     lines.len().min(u16::MAX as usize) as u16
+}
+
+/// Truncate `s` in place so its display width is at most `max_width` columns,
+/// dropping whole characters from the end (keeps multi-cell graphemes intact).
+fn truncate_to_width(s: &mut String, max_width: usize) {
+    use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+
+    if UnicodeWidthStr::width(s.as_str()) <= max_width {
+        return;
+    }
+    let mut width = 0usize;
+    let mut end = 0usize;
+    for (idx, ch) in s.char_indices() {
+        let w = UnicodeWidthChar::width(ch).unwrap_or(0);
+        if width + w > max_width {
+            break;
+        }
+        width += w;
+        end = idx + ch.len_utf8();
+    }
+    s.truncate(end);
 }
 
 /// Word-wrap a single line of text to fit within `max_width` columns.
@@ -1450,6 +1566,22 @@ fn draw_alt_picker_inline(frame: &mut Frame, app: &App, area: Rect) {
 mod scenario_tests {
     use super::*;
     use crate::app::{App, Block, ConnectionStatus, ConversationEntry, InputMode, Turn, TurnState};
+
+    #[test]
+    fn truncate_to_width_leaves_room_and_keeps_graphemes() {
+        // ASCII: trimmed to the requested width so an appended marker fits.
+        let mut s = "abcdef".to_string();
+        truncate_to_width(&mut s, 3);
+        assert_eq!(s, "abc");
+        // Wide (2-cell) chars are dropped whole rather than split.
+        let mut w = "古池や".to_string(); // each char is 2 display cells
+        truncate_to_width(&mut w, 3);
+        assert_eq!(w, "古"); // second char would overflow 3 cells
+                             // Already short enough: untouched.
+        let mut short = "hi".to_string();
+        truncate_to_width(&mut short, 10);
+        assert_eq!(short, "hi");
+    }
     use crate::connection::ConnCommand;
     use crate::input;
     use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
@@ -4752,6 +4884,87 @@ mod scenario_tests {
         assert!(
             f.contains("(×7)"),
             "header should show count suffix for deduped messages"
+        );
+    }
+
+    // ── Scenario: notification toasts float over the conversation ───────────
+
+    #[test]
+    fn scenario_notification_toast_overlay() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.entries.push(ConversationEntry::assistant(
+            None,
+            "Here is a long answer that fills the conversation area.".into(),
+            vec![],
+            "t1".into(),
+            None,
+        ));
+
+        h.app.set_error("error: rate_limit - too many requests");
+        let f = h.render("error toast");
+        // Toast content + its severity icon paint over the conversation.
+        assert!(f.contains("rate_limit"), "toast content visible");
+        assert!(f.contains('✖'), "error icon visible");
+        // The conversation underneath is not reflowed away.
+        assert!(f.contains("long answer"), "conversation still visible");
+    }
+
+    #[test]
+    fn scenario_notification_toast_shows_dedupe_count() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.set_status("reconnecting: connection lost");
+        h.app.set_status("reconnecting: connection lost");
+        h.app.set_status("reconnecting: connection lost");
+
+        let f = h.render("deduped toast");
+        assert!(f.contains("reconnecting"), "toast content visible");
+        assert!(f.contains("(×3)"), "repeated toast shows a ×N count");
+    }
+
+    #[test]
+    fn scenario_escape_dismisses_one_toast_at_a_time_in_normal_mode() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.mode = crate::app::InputMode::Normal;
+        h.app.set_status("first notice");
+        h.app.set_error("error: second notice");
+        assert_eq!(h.app.notifications.len(), 2);
+
+        // First Esc clears the newest toast (drawn at the top of the stack)
+        // and consumes the keypress.
+        let action = h.press_action(KeyCode::Esc);
+        assert!(matches!(action, input::Action::Redraw));
+        assert_eq!(h.app.notifications.len(), 1);
+        let f = h.render("after first esc");
+        assert!(f.contains("first notice"), "older toast still visible");
+        assert!(!f.contains("second notice"), "newest toast dismissed");
+
+        // Second Esc clears the remaining toast.
+        h.press(KeyCode::Esc);
+        assert!(h.app.notifications.is_empty(), "all toasts dismissed");
+
+        // With no toasts left, Esc is a no-op in Normal mode.
+        let action = h.press_action(KeyCode::Esc);
+        assert!(matches!(action, input::Action::None));
+    }
+
+    #[test]
+    fn scenario_escape_in_insert_mode_leaves_toasts_alone() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        assert_eq!(h.app.input.mode, crate::app::InputMode::Insert);
+        h.app.set_error("error: second notice");
+        assert_eq!(h.app.notifications.len(), 1);
+
+        // Esc in Insert mode exits to Normal and does NOT touch the toast.
+        h.press(KeyCode::Esc);
+        assert_eq!(h.app.input.mode, crate::app::InputMode::Normal);
+        assert_eq!(
+            h.app.notifications.len(),
+            1,
+            "toast untouched by insert-mode Esc"
         );
     }
 

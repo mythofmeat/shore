@@ -687,13 +687,27 @@ async fn process_conn_event(
     );
 }
 
+/// Flatten line breaks and replace control/escape characters so untrusted text
+/// can be safely replayed to the real terminal (e.g. session errors reprinted
+/// to stderr on exit). Without this, embedded ANSI/escape sequences could
+/// rewrite scrollback or spoof terminal output.
+fn sanitize_terminal_text(text: &str) -> String {
+    text.chars()
+        .map(|ch| match ch {
+            '\n' | '\r' | '\t' => ' ',
+            c if c.is_control() => '\u{fffd}',
+            c => c,
+        })
+        .collect()
+}
+
 fn mark_connection_task_exited(app: &mut App, conn_events_open: &mut bool) {
     if !*conn_events_open {
         return;
     }
     *conn_events_open = false;
     app.connection_status = ConnectionStatus::Disconnected;
-    app.set_status("connection task exited");
+    app.set_warning("connection task exited");
 }
 
 async fn handle_action(
@@ -747,7 +761,7 @@ async fn handle_action(
                     ));
                 }
                 Err(e) => {
-                    app.set_status(format!("image picker: {e}"));
+                    app.set_error(format!("image picker: {e}"));
                 }
             }
             Ok(true)
@@ -768,9 +782,9 @@ async fn handle_action(
                         app.pending_images.len()
                     ));
                 }
-                Ok(Ok(Err(e))) => app.set_status(e.to_string()),
-                Ok(Err(_join)) => app.set_status("paste task panicked"),
-                Err(_elapsed) => app.set_status("clipboard read timed out"),
+                Ok(Ok(Err(e))) => app.set_error(e.to_string()),
+                Ok(Err(_join)) => app.set_error("paste task panicked"),
+                Err(_elapsed) => app.set_error("clipboard read timed out"),
             }
             Ok(true)
         }
@@ -821,6 +835,10 @@ async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
     let mut terminal_events = EventStream::new();
     let mut stream_frame = tokio::time::interval(STREAM_FRAME_INTERVAL);
     stream_frame.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    // Drives auto-dismissal of notification toasts. Only polled while toasts
+    // are visible (see the guard on its select arm), so it costs nothing idle.
+    let mut notif_tick = tokio::time::interval(Duration::from_millis(250));
+    notif_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut needs_redraw = true;
     let mut deferred_stream_dirty = false;
     let mut needs_full_redraw = false;
@@ -922,6 +940,12 @@ async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
                     deferred_stream_dirty = false;
                 }
             }
+            // Expire stale notification toasts so they fade on their own.
+            _ = notif_tick.tick(), if !app.notifications.is_empty() => {
+                if app.expire_notifications(std::time::Instant::now()) {
+                    needs_redraw = true;
+                }
+            }
         }
 
         if app.should_quit {
@@ -946,6 +970,19 @@ async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
     io::stdout().execute(EnableLineWrap)?;
     disable_raw_mode()?;
     io::stdout().execute(LeaveAlternateScreen)?;
+
+    // Reprint any errors raised this session to the now-restored normal screen
+    // so they survive in terminal scrollback for copy/paste debugging. They're
+    // also in the log file ($XDG_RUNTIME_DIR/shore/tui.log).
+    if !app.error_log.is_empty() {
+        eprintln!("\n{} error(s) during this session:", app.error_log.len());
+        for line in &app.error_log {
+            // error_log holds untrusted daemon/local error text; flatten line
+            // breaks and strip control/escape sequences so embedded codes can't
+            // rewrite scrollback or spoof output on the restored terminal.
+            eprintln!("  • {}", sanitize_terminal_text(line));
+        }
+    }
 
     // If the user interrupted us (Ctrl+C or external SIGINT), exit with the
     // conventional 128+SIGINT=130 code so supervisors see it as a real signal.
@@ -1905,17 +1942,17 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             if sampler_settings_error && app.is_setting_palette_open() {
                 app.update_completions();
             }
-            app.set_status(format!("error: {:?} - {}", err.code, err.message));
+            app.set_error(format!("error: {:?} - {}", err.code, err.message));
             RedrawEffect::Immediate
         }
 
         ServerMessage::CacheWarning(cw) => {
-            app.set_status(format!("cache warning: {}", cw.message));
+            app.set_warning(format!("cache warning: {}", cw.message));
             RedrawEffect::Immediate
         }
 
         ServerMessage::ProviderFallbackWarning(w) => {
-            app.set_status(w.message.clone());
+            app.set_warning(w.message.clone());
             RedrawEffect::Immediate
         }
 
@@ -1933,7 +1970,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             } else {
                 // Monitor hidden: fall back to the notification so the user is
                 // never left without a signal.
-                app.set_status(w.message.clone());
+                app.set_warning(w.message.clone());
             }
             RedrawEffect::Immediate
         }
@@ -1973,6 +2010,19 @@ mod redraw_tests {
         CommandOutput, Error as CommandError, StreamChunk, StreamEnd,
     };
     use shore_protocol::types::{StreamMetadata, TimingInfo, TokenCounts};
+
+    #[test]
+    fn sanitize_terminal_text_strips_escapes_and_flattens_lines() {
+        // Embedded escape sequence and newline payload that would otherwise
+        // rewrite scrollback when replayed to the real terminal.
+        let dirty = "error\x1b[2Jspoofed\nsecond line\twith tab";
+        let clean = sanitize_terminal_text(dirty);
+        assert!(!clean.contains('\x1b'), "escape byte stripped");
+        assert!(!clean.contains('\n'), "newline flattened");
+        assert!(!clean.contains('\t'), "tab flattened");
+        assert!(clean.contains("error"));
+        assert!(clean.contains("second line with tab"));
+    }
 
     fn metadata() -> StreamMetadata {
         StreamMetadata {
@@ -2141,9 +2191,9 @@ mod redraw_tests {
         handle_server_message(&mut app, usage_warning(0.82));
 
         assert_eq!(
-            system_entry_count(&app),
+            app.notifications.len(),
             1,
-            "hidden monitor should fall back to a notification"
+            "hidden monitor should fall back to a notification toast"
         );
         assert!(
             app.usage_budgets.is_empty(),
@@ -2630,9 +2680,10 @@ mod redraw_tests {
             _ => panic!("expected model_settings command"),
         }
         assert!(app.sampler_settings_loading);
-        assert!(app.entries.iter().any(|entry| {
-            matches!(entry, ConversationEntry::System { content, .. } if content == "setting temperature updated")
-        }));
+        assert!(app
+            .notifications
+            .iter()
+            .any(|n| n.content == "setting temperature updated"));
     }
 
     #[test]

@@ -281,6 +281,38 @@ impl ConversationEntry {
     }
 }
 
+/// Severity of a transient notification toast. Drives the toast's color and
+/// whether the message is recorded to the session error log that is flushed
+/// to stderr on exit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NotificationLevel {
+    Info,
+    Warning,
+    Error,
+}
+
+/// A transient, auto-dismissing notification rendered as a floating toast over
+/// the conversation. Unlike `ConversationEntry::System`, toasts are never part
+/// of the conversation log — they don't reflow it, persist, or get saved. They
+/// carry ephemeral chatter (command acks, connection state, errors); genuine
+/// requested output (model lists, memory dumps) stays a `System` entry.
+#[derive(Clone, Debug)]
+pub struct Notification {
+    pub content: String,
+    pub level: NotificationLevel,
+    /// Count of consecutive identical toasts collapsed into this one.
+    pub count: u32,
+    /// When the toast was (re)raised; drives auto-expiry.
+    pub created: std::time::Instant,
+}
+
+/// How long a toast stays on screen before auto-dismissing.
+pub const NOTIFICATION_TTL: std::time::Duration = std::time::Duration::from_secs(5);
+/// Maximum simultaneously-stacked toasts; older ones are dropped.
+const MAX_NOTIFICATIONS: usize = 4;
+/// Cap on retained error-log lines flushed to stderr on exit.
+const MAX_ERROR_LOG: usize = 200;
+
 #[derive(Clone, Debug)]
 pub struct AltChoice {
     pub index: u32,
@@ -860,6 +892,13 @@ pub struct App {
     /// fingerprint changes even when entry counts and last-two summaries
     /// happen to match.
     pub history_version: u64,
+    /// Active transient notification toasts, newest last. Rendered as a
+    /// floating overlay over the conversation; expired entries are pruned by
+    /// the event loop via `expire_notifications`.
+    pub notifications: Vec<Notification>,
+    /// Error/warning messages recorded this session, flushed to stderr on exit
+    /// so they survive in terminal scrollback for copy/paste debugging.
+    pub error_log: Vec<String>,
 }
 
 impl Default for App {
@@ -913,6 +952,8 @@ impl Default for App {
             spinner_frame: 0,
             conv_cache: ConvCache::default(),
             history_version: 0,
+            notifications: Vec::new(),
+            error_log: Vec::new(),
         }
     }
 }
@@ -1158,34 +1199,77 @@ impl App {
         turn.map(Turn::joined_text)
     }
 
+    /// Raise an informational toast. The bulk of status chatter (command
+    /// acks, connection state) flows through here.
     pub fn set_status(&mut self, msg: impl Into<String>) {
+        self.notify(NotificationLevel::Info, msg);
+    }
+
+    /// Raise a warning-level toast (yellow).
+    pub fn set_warning(&mut self, msg: impl Into<String>) {
+        self.notify(NotificationLevel::Warning, msg);
+    }
+
+    /// Raise an error-level toast (red) and record it to the session error log
+    /// so it is reprinted to stderr on exit for copy/paste debugging.
+    pub fn set_error(&mut self, msg: impl Into<String>) {
         let msg = msg.into();
-        // Dedupe consecutive identical system messages (e.g. a reconnect
-        // storm emitting the same reason over and over). If the tail entry
-        // is already a matching System, bump its count in place instead of
-        // appending a new entry.
-        if let Some(ConversationEntry::System { content, count, .. }) = self.entries.last_mut() {
-            if *content == msg {
-                *count = count.saturating_add(1);
-                if self.auto_scroll {
-                    self.scroll_to_bottom();
-                }
+        tracing::error!("{msg}");
+        if self.error_log.len() >= MAX_ERROR_LOG {
+            self.error_log.remove(0);
+        }
+        self.error_log.push(msg.clone());
+        self.notify(NotificationLevel::Error, msg);
+    }
+
+    /// Core toast raise: dedupes against the newest toast (a reconnect storm
+    /// bumps a `×N` count instead of stacking), caps the stack, and refreshes
+    /// the dismissal timer.
+    pub fn notify(&mut self, level: NotificationLevel, msg: impl Into<String>) {
+        let msg = msg.into();
+        if let Some(last) = self.notifications.last_mut() {
+            if last.content == msg && last.level == level {
+                last.count = last.count.saturating_add(1);
+                last.created = std::time::Instant::now();
                 return;
             }
         }
-        self.entries.push(ConversationEntry::System {
+        self.notifications.push(Notification {
             content: msg,
+            level,
             count: 1,
-            timestamp: String::new(),
+            created: std::time::Instant::now(),
         });
-        if self.auto_scroll {
-            self.scroll_to_bottom();
+        if self.notifications.len() > MAX_NOTIFICATIONS {
+            let overflow = self.notifications.len() - MAX_NOTIFICATIONS;
+            self.notifications.drain(0..overflow);
         }
     }
 
-    /// Remove every System entry from the conversation log. Invoked by
-    /// `:clear` and automatically at the moment the user sends a new
-    /// message (fresh turn = clean slate).
+    /// Drop toasts whose lifetime has elapsed. Returns true if any were
+    /// removed, so the event loop can trigger a redraw.
+    pub fn expire_notifications(&mut self, now: std::time::Instant) -> bool {
+        let before = self.notifications.len();
+        self.notifications
+            .retain(|n| now.duration_since(n.created) < NOTIFICATION_TTL);
+        self.notifications.len() != before
+    }
+
+    /// Immediately clear all toasts (e.g. on `:clear` or a fresh user turn).
+    pub fn dismiss_notifications(&mut self) {
+        self.notifications.clear();
+    }
+
+    /// Dismiss the newest toast — the one drawn at the top of the stack.
+    /// Returns whether a toast was removed, so the caller can decide whether
+    /// the keypress was consumed.
+    pub fn dismiss_latest_notification(&mut self) -> bool {
+        self.notifications.pop().is_some()
+    }
+
+    /// Remove every System entry from the conversation log. These are
+    /// requested command output (model/character lists, memory dumps) and
+    /// wire system messages — not toasts. Invoked by `:clear`.
     pub fn clear_system_entries(&mut self) {
         self.entries
             .retain(|e| !matches!(e, ConversationEntry::System { .. }));
@@ -1488,7 +1572,7 @@ impl App {
     const COMMANDS: &'static [(&'static str, &'static str)] = &[
         ("cancel", "Stop the current generation"),
         ("character", "Switch active character"),
-        ("clear", "Clear system messages from view"),
+        ("clear", "Dismiss notifications and clear command output"),
         ("compact", "Summarize and shrink the conversation"),
         ("delete", "Delete a message by reference"),
         ("edit", "Edit a previous message"),
@@ -2508,34 +2592,12 @@ mod tests {
         app.set_status("reconnecting: connection lost");
         app.set_status("reconnecting: connection lost");
         app.set_status("reconnecting: connection lost");
-        assert_eq!(app.entries.len(), 1);
-        match &app.entries[0] {
-            ConversationEntry::System { content, count, .. } => {
-                assert_eq!(content, "reconnecting: connection lost");
-                assert_eq!(*count, 3);
-            }
-            _ => panic!("expected a single System entry"),
-        }
-    }
-
-    #[test]
-    fn set_status_does_not_dedupe_when_interrupted() {
-        let mut app = App::default();
-        app.set_status("x");
-        app.entries
-            .push(ConversationEntry::user("hi".into(), vec![], String::new()));
-        app.set_status("x");
-        let system_entries: Vec<_> = app
-            .entries
-            .iter()
-            .filter(|e| matches!(e, ConversationEntry::System { .. }))
-            .collect();
-        assert_eq!(system_entries.len(), 2);
-        for e in system_entries {
-            if let ConversationEntry::System { count, .. } = e {
-                assert_eq!(*count, 1);
-            }
-        }
+        assert_eq!(app.notifications.len(), 1);
+        assert_eq!(
+            app.notifications[0].content,
+            "reconnecting: connection lost"
+        );
+        assert_eq!(app.notifications[0].count, 3);
     }
 
     #[test]
@@ -2543,7 +2605,54 @@ mod tests {
         let mut app = App::default();
         app.set_status("x");
         app.set_status("y");
-        assert_eq!(app.entries.len(), 2);
+        assert_eq!(app.notifications.len(), 2);
+    }
+
+    #[test]
+    fn set_status_does_not_touch_conversation_entries() {
+        let mut app = App::default();
+        app.entries
+            .push(ConversationEntry::user("hi".into(), vec![], String::new()));
+        app.set_status("connected");
+        // Toasts live outside the conversation log entirely.
+        assert_eq!(app.entries.len(), 1);
+        assert_eq!(app.notifications.len(), 1);
+    }
+
+    #[test]
+    fn notification_stack_is_capped() {
+        let mut app = App::default();
+        for i in 0..10 {
+            app.set_status(format!("msg {i}"));
+        }
+        assert_eq!(app.notifications.len(), MAX_NOTIFICATIONS);
+        // Oldest dropped; newest retained.
+        assert_eq!(app.notifications.last().unwrap().content, "msg 9");
+    }
+
+    #[test]
+    fn expired_notifications_are_pruned() {
+        let mut app = App::default();
+        app.set_status("hi");
+        let now = app.notifications[0].created;
+        // Just before TTL: still present.
+        assert!(
+            !app.expire_notifications(now + NOTIFICATION_TTL - std::time::Duration::from_millis(1))
+        );
+        assert_eq!(app.notifications.len(), 1);
+        // After TTL: pruned, returns true.
+        assert!(app.expire_notifications(now + NOTIFICATION_TTL));
+        assert!(app.notifications.is_empty());
+    }
+
+    #[test]
+    fn set_error_records_to_error_log() {
+        let mut app = App::default();
+        app.set_error("error: rate_limit - too many requests");
+        assert_eq!(app.notifications.len(), 1);
+        assert_eq!(app.notifications[0].level, NotificationLevel::Error);
+        assert_eq!(app.error_log.len(), 1);
+        assert!(app.error_log[0].contains("rate_limit"));
     }
 
     #[test]
@@ -2554,7 +2663,11 @@ mod tests {
             vec![],
             String::new(),
         ));
-        app.set_status("reconnecting");
+        app.entries.push(ConversationEntry::System {
+            content: "Models:\n  opus".into(),
+            count: 1,
+            timestamp: String::new(),
+        });
         app.entries.push(ConversationEntry::assistant(
             None,
             "hi".into(),
@@ -2562,7 +2675,6 @@ mod tests {
             String::new(),
             None,
         ));
-        app.set_status("cache warning");
         app.clear_system_entries();
         assert_eq!(app.entries.len(), 2);
         assert!(matches!(app.entries[0].as_turn(), Some(t) if t.role == Role::User));
