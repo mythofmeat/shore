@@ -818,6 +818,24 @@ fn render_images(
 }
 
 /// Render the input area.
+/// Build the usage-budget chip shown on the input border: a 10-cell progress
+/// bar plus the percentage, colored by proximity to the limit (grey normal,
+/// yellow once a warning threshold is crossed, red over limit).
+fn usage_chip(budget: &crate::app::UsageBudget) -> (String, Color) {
+    const CELLS: usize = 10;
+    let filled = ((budget.percent_used.clamp(0.0, 1.0)) * CELLS as f64).round() as usize;
+    let bar: String = "█".repeat(filled) + &"░".repeat(CELLS - filled);
+    let pct = (budget.percent_used * 100.0).round() as i64;
+    let color = if budget.over_limit {
+        Color::Red
+    } else if budget.in_warning() {
+        Color::Yellow
+    } else {
+        Color::DarkGray
+    };
+    (format!("[{bar}] {pct}%"), color)
+}
+
 fn draw_input(frame: &mut Frame, app: &App, area: Rect) {
     if app.input.mode == InputMode::Command {
         // Top vs. submenu: title and prefix differ.
@@ -923,6 +941,16 @@ fn draw_input(frame: &mut Frame, app: &App, area: Rect) {
             },
             Color::Magenta,
         ));
+    }
+    if let Some(budget) = app.most_urgent_budget() {
+        let show = match app.usage_display {
+            crate::app::UsageDisplay::Off => false,
+            crate::app::UsageDisplay::Always => true,
+            crate::app::UsageDisplay::Warn => budget.in_warning(),
+        };
+        if show {
+            indicators.push(usage_chip(budget));
+        }
     }
     if !indicators.is_empty() {
         let mut spans = vec![Span::raw(" ")];
@@ -1833,6 +1861,7 @@ mod scenario_tests {
                 alt_count: None,
                 alternatives: vec![],
                 timestamp: "t1".into(),
+                provider_key: None,
             },
             Message {
                 msg_id: "m_new".into(),
@@ -1846,6 +1875,7 @@ mod scenario_tests {
                 alt_count: None,
                 alternatives: vec![],
                 timestamp: "t2".into(),
+                provider_key: None,
             },
         ];
 
@@ -2255,6 +2285,72 @@ mod scenario_tests {
                 .iter()
                 .any(|c| c == "timestamps = on"),
             "view submenu should refresh in place"
+        );
+    }
+
+    #[test]
+    fn usage_chip_shows_on_input_border_when_enabled() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.mode = InputMode::Insert;
+        h.app.usage_budgets = vec![crate::app::UsageBudget {
+            name: "monthly".into(),
+            percent_used: 0.82,
+            crossed_warn_at: vec![0.8],
+            over_limit: false,
+        }];
+
+        // Off (default): no chip.
+        let hidden = h.render("usage off");
+        assert!(
+            !hidden.contains("82%"),
+            "chip should be hidden while usage_display is Off; frame:\n{hidden}"
+        );
+
+        // Always: surfaces the bar + percent on the input border.
+        h.app.usage_display = crate::app::UsageDisplay::Always;
+        let shown = h.render("usage always");
+        assert!(
+            shown.contains("82%"),
+            "chip percent should be visible; frame:\n{shown}"
+        );
+        assert!(
+            shown.contains('█') && shown.contains('░'),
+            "chip should render a partial progress bar; frame:\n{shown}"
+        );
+    }
+
+    #[test]
+    fn usage_chip_warn_mode_only_shows_past_a_threshold() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.mode = InputMode::Insert;
+        h.app.usage_display = crate::app::UsageDisplay::Warn;
+
+        // Below any warning threshold: hidden even though data is known.
+        h.app.usage_budgets = vec![crate::app::UsageBudget {
+            name: "monthly".into(),
+            percent_used: 0.23,
+            crossed_warn_at: vec![],
+            over_limit: false,
+        }];
+        let calm = h.render("warn mode, calm");
+        assert!(
+            !calm.contains("23%"),
+            "warn mode hides the chip before a threshold; frame:\n{calm}"
+        );
+
+        // Once a threshold is crossed, the chip appears.
+        h.app.usage_budgets = vec![crate::app::UsageBudget {
+            name: "monthly".into(),
+            percent_used: 0.82,
+            crossed_warn_at: vec![0.8],
+            over_limit: false,
+        }];
+        let warned = h.render("warn mode, crossed");
+        assert!(
+            warned.contains("82%"),
+            "warn mode reveals the chip past a threshold; frame:\n{warned}"
         );
     }
 
@@ -3578,6 +3674,7 @@ mod scenario_tests {
             alt_count: None,
             alternatives: vec![],
             timestamp: "t2".into(),
+            provider_key: None,
         };
         let history_msgs = vec![
             Message {
@@ -3592,6 +3689,7 @@ mod scenario_tests {
                 alt_count: None,
                 alternatives: vec![],
                 timestamp: "t1".into(),
+                provider_key: None,
             },
             persisted_assistant,
         ];
@@ -3692,6 +3790,7 @@ mod scenario_tests {
             alt_count: None,
             alternatives: vec![],
             timestamp: "t".into(),
+            provider_key: None,
         };
 
         let mut h = Harness::new();
@@ -3805,6 +3904,7 @@ mod scenario_tests {
                 alt_count: None,
                 alternatives: vec![],
                 timestamp: "t1".into(),
+                provider_key: None,
             },
             Message {
                 msg_id: "m_1".into(),
@@ -3818,6 +3918,7 @@ mod scenario_tests {
                 alt_count: None,
                 alternatives: vec![],
                 timestamp: "t2".into(),
+                provider_key: None,
             },
         ];
         crate::handle_server_message(

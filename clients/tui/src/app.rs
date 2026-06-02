@@ -50,6 +50,72 @@ pub struct ConvFingerprint {
     pub image_cache_version: u64,
 }
 
+/// A configured usage budget's current status, distilled from the daemon's
+/// `usage {budget:true}` reply (and refreshed in-place by `UsageWarning`
+/// pushes). Carries just the fields the on-screen usage chip needs.
+#[derive(Clone, Debug, Default)]
+pub struct UsageBudget {
+    pub name: String,
+    /// Fraction used, e.g. 0.8 for 80%.
+    pub percent_used: f64,
+    /// Warning thresholds already crossed this period, as fractions.
+    pub crossed_warn_at: Vec<f64>,
+    /// Whether spend has reached or exceeded the limit.
+    pub over_limit: bool,
+}
+
+impl UsageBudget {
+    /// True once any warning threshold has been crossed (or the budget is
+    /// over limit) — the signal that gates warning styling and the
+    /// "only past a warning level" visibility mode.
+    pub fn in_warning(&self) -> bool {
+        self.over_limit || !self.crossed_warn_at.is_empty()
+    }
+}
+
+/// When the usage chip is shown on the input border.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum UsageDisplay {
+    /// Never show the chip; usage warnings fall back to a notification.
+    #[default]
+    Off,
+    /// Always show the chip once budget data is known.
+    Always,
+    /// Only show the chip once a warning threshold has been crossed.
+    Warn,
+}
+
+impl UsageDisplay {
+    /// Canonical token used in the `:view usage <mode>` command and prefs.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            UsageDisplay::Off => "off",
+            UsageDisplay::Always => "always",
+            UsageDisplay::Warn => "warn",
+        }
+    }
+
+    /// Parse a command/pref token. `on` is accepted as an alias for `always`
+    /// so the boolean `:view` muscle-memory (and older prefs) keep working.
+    pub fn from_token(token: &str) -> Option<Self> {
+        match token {
+            "off" => Some(UsageDisplay::Off),
+            "always" | "on" => Some(UsageDisplay::Always),
+            "warn" => Some(UsageDisplay::Warn),
+            _ => None,
+        }
+    }
+
+    /// Next mode in the off → always → warn → off cycle (submenu Enter / toggle).
+    pub fn cycled(self) -> Self {
+        match self {
+            UsageDisplay::Off => UsageDisplay::Always,
+            UsageDisplay::Always => UsageDisplay::Warn,
+            UsageDisplay::Warn => UsageDisplay::Off,
+        }
+    }
+}
+
 /// A content block within a turn, mirroring the wire `ContentBlock`
 /// (text / thinking / tool_use / tool_result). Blocks are ordered and
 /// authoritative: rendering walks them in sequence, so interleaved
@@ -768,7 +834,12 @@ pub struct App {
     pub show_images: bool,
     pub show_timestamps: bool,
     pub show_metadata: bool,
+    /// When the usage-budget chip is shown on the input border.
+    pub usage_display: UsageDisplay,
     pub show_help: bool,
+    /// Latest known usage-budget statuses, refreshed by the `usage` query and
+    /// `UsageWarning` pushes. Empty until the first reply arrives.
+    pub usage_budgets: Vec<UsageBudget>,
     /// Images queued for attachment to the next outgoing message.
     pub pending_images: Vec<String>,
     /// Temp-file paths for paste-origin images, removed on TUI shutdown.
@@ -831,7 +902,9 @@ impl Default for App {
             show_images: true,
             show_timestamps: false,
             show_metadata: true,
+            usage_display: UsageDisplay::Off,
             show_help: false,
+            usage_budgets: Vec::new(),
             pending_images: Vec::new(),
             paste_temp_paths: Vec::new(),
             editing_ref: None,
@@ -1456,8 +1529,14 @@ impl App {
         Self::SETTING_KEYS.contains(&key)
     }
 
-    const VIEW_KEYS: &'static [&'static str] =
-        &["timestamps", "thinking", "tools", "images", "metadata"];
+    const VIEW_KEYS: &'static [&'static str] = &[
+        "timestamps",
+        "thinking",
+        "tools",
+        "images",
+        "metadata",
+        "usage",
+    ];
 
     pub fn is_view_key(key: &str) -> bool {
         Self::VIEW_KEYS.contains(&key)
@@ -1470,7 +1549,77 @@ impl App {
             "tools" => Some(self.show_tools),
             "images" => Some(self.show_images),
             "metadata" => Some(self.show_metadata),
+            // Value-typed: "active" means anything other than Off (drives the
+            // submenu's on/off marker). The exact mode is shown by the row label.
+            "usage" => Some(self.usage_display != UsageDisplay::Off),
             _ => None,
+        }
+    }
+
+    /// Set the usage chip's visibility mode (`:view usage <mode>` / prefs).
+    pub fn set_usage_display(&mut self, mode: UsageDisplay) {
+        self.usage_display = mode;
+    }
+
+    /// Advance the usage chip mode through off → always → warn (submenu Enter
+    /// and `:view usage toggle`), returning the new mode.
+    pub fn cycle_usage_display(&mut self) -> UsageDisplay {
+        self.usage_display = self.usage_display.cycled();
+        self.usage_display
+    }
+
+    /// The budget to surface in the usage chip: the one nearest (or past) its
+    /// limit, so the most pressing constraint is always what's shown.
+    pub fn most_urgent_budget(&self) -> Option<&UsageBudget> {
+        self.usage_budgets
+            .iter()
+            .max_by(|a, b| a.percent_used.total_cmp(&b.percent_used))
+    }
+
+    /// Replace cached budget statuses from a `usage {budget:true}` reply's
+    /// `budgets` array. Missing fields default sensibly so a partial reply
+    /// never panics.
+    pub fn apply_usage_budgets(&mut self, data: &serde_json::Value) {
+        let Some(arr) = data.get("budgets").and_then(|v| v.as_array()) else {
+            return;
+        };
+        self.usage_budgets = arr
+            .iter()
+            .map(|b| UsageBudget {
+                name: b
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                percent_used: b
+                    .get("percent_used")
+                    .and_then(serde_json::Value::as_f64)
+                    .unwrap_or(0.0),
+                crossed_warn_at: b
+                    .get("crossed_warn_at")
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.iter().filter_map(serde_json::Value::as_f64).collect())
+                    .unwrap_or_default(),
+                over_limit: b
+                    .get("over_limit")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false),
+            })
+            .collect();
+    }
+
+    /// Fold a `UsageWarning` push into the cached budget set for instant chip
+    /// feedback (the next `usage` poll supersedes it with authoritative data).
+    /// `over_limit` is inferred from `percent_used` since the push omits it.
+    pub fn apply_usage_warning(&mut self, budget: UsageBudget) {
+        if let Some(existing) = self
+            .usage_budgets
+            .iter_mut()
+            .find(|b| b.name == budget.name)
+        {
+            *existing = budget;
+        } else {
+            self.usage_budgets.push(budget);
         }
     }
 
@@ -1481,18 +1630,35 @@ impl App {
             "tools" => self.show_tools = enabled,
             "images" => self.show_images = enabled,
             "metadata" => self.show_metadata = enabled,
+            // Boolean on/off maps onto the always/off ends of the tri-state so
+            // `:view usage on|off` keeps working; `warn` needs the explicit word.
+            "usage" => {
+                self.usage_display = if enabled {
+                    UsageDisplay::Always
+                } else {
+                    UsageDisplay::Off
+                };
+            }
             _ => return false,
         }
         true
     }
 
     pub fn toggle_view_option(&mut self, key: &str) -> Option<bool> {
+        // Usage is value-typed: cycle through its three modes rather than
+        // flipping a boolean (which would skip `warn`).
+        if key == "usage" {
+            return Some(self.cycle_usage_display() != UsageDisplay::Off);
+        }
         let next = !self.view_enabled(key)?;
         self.set_view_option(key, next);
         Some(next)
     }
 
     fn view_row_label(&self, key: &str) -> String {
+        if key == "usage" {
+            return format!("usage = {}", self.usage_display.as_str());
+        }
         let state = if self.view_enabled(key).unwrap_or(false) {
             "on"
         } else {
@@ -2169,11 +2335,16 @@ impl App {
             if !Self::is_view_key(&key) {
                 return None;
             }
-            let enabled = self.toggle_view_option(&key)?;
-            self.set_status(format!(
-                "view {key}: {}",
-                if enabled { "on" } else { "off" }
-            ));
+            if key == "usage" {
+                let mode = self.cycle_usage_display();
+                self.set_status(format!("view usage: {}", mode.as_str()));
+            } else {
+                let enabled = self.toggle_view_option(&key)?;
+                self.set_status(format!(
+                    "view {key}: {}",
+                    if enabled { "on" } else { "off" }
+                ));
+            }
             self.update_completions();
             if idx < self.completion.candidates.len() {
                 self.completion.selected = Some(idx);

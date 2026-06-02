@@ -761,8 +761,25 @@ fn parse_command(app: &mut App, input: &str) -> Action {
             let value = parts.next().unwrap_or("toggle");
             if parts.next().is_some() {
                 app.set_status(
-                    "usage: :view [timestamps|thinking|tools|images|metadata] [on|off|toggle]",
+                    "usage: :view [timestamps|thinking|tools|images|metadata|usage] [on|off|toggle]",
                 );
+                return Action::Redraw;
+            }
+            // Usage is value-typed (off|always|warn), so it takes its own path
+            // rather than the boolean on/off handling below.
+            if key == "usage" {
+                let lowered = value.to_ascii_lowercase();
+                let mode = if lowered == "toggle" {
+                    app.cycle_usage_display()
+                } else if let Some(mode) = crate::app::UsageDisplay::from_token(&lowered) {
+                    app.set_usage_display(mode);
+                    mode
+                } else {
+                    app.set_status("usage: :view usage [off|always|warn|toggle]");
+                    return Action::Redraw;
+                };
+                app.update_completions();
+                app.set_status(format!("view usage: {}", mode.as_str()));
                 return Action::Redraw;
             }
             let enabled = match value.to_ascii_lowercase().as_str() {
@@ -777,7 +794,7 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                 "toggle" => app.toggle_view_option(key).unwrap_or(false),
                 _ => {
                     app.set_status(
-                        "usage: :view [timestamps|thinking|tools|images|metadata] [on|off|toggle]",
+                        "usage: :view [timestamps|thinking|tools|images|metadata|usage] [on|off|toggle]",
                     );
                     return Action::Redraw;
                 }
@@ -1160,6 +1177,35 @@ mod tests {
             kind: KeyEventKind::Press,
             state: KeyEventState::NONE,
         }
+    }
+
+    #[test]
+    fn view_usage_command_sets_and_cycles_mode() {
+        use crate::app::UsageDisplay;
+        let mut app = App::default();
+        assert_eq!(app.usage_display, UsageDisplay::Off);
+
+        // Explicit modes, including the warn-only mode that the boolean
+        // on/off path can't express. (parse_command receives the command with
+        // its leading colon already stripped.)
+        parse_command(&mut app, "view usage warn");
+        assert_eq!(app.usage_display, UsageDisplay::Warn);
+        parse_command(&mut app, "view usage always");
+        assert_eq!(app.usage_display, UsageDisplay::Always);
+        parse_command(&mut app, "view usage off");
+        assert_eq!(app.usage_display, UsageDisplay::Off);
+
+        // `on` is an alias for `always`; `toggle` cycles off → always → warn.
+        parse_command(&mut app, "view usage on");
+        assert_eq!(app.usage_display, UsageDisplay::Always);
+        parse_command(&mut app, "view usage toggle");
+        assert_eq!(app.usage_display, UsageDisplay::Warn);
+        parse_command(&mut app, "view usage toggle");
+        assert_eq!(app.usage_display, UsageDisplay::Off);
+
+        // A bogus mode is rejected without changing state.
+        parse_command(&mut app, "view usage sometimes");
+        assert_eq!(app.usage_display, UsageDisplay::Off);
     }
 
     #[test]

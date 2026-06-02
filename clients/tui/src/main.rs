@@ -30,7 +30,7 @@ use tracing_subscriber::EnvFilter;
 
 use app::{
     AltChoice, App, Block, ConnectionStatus, ConversationEntry, EffectiveSamplerSnapshot,
-    InputState, Turn, TurnState,
+    InputState, Turn, TurnState, UsageBudget, UsageDisplay,
 };
 use connection::{ConnCommand, ConnEvent};
 use input::Action;
@@ -438,6 +438,20 @@ fn load_prefs(app: &mut App) {
             if let Some(b) = v.get("show_metadata").and_then(|v| v.as_bool()) {
                 app.show_metadata = b;
             }
+            if let Some(mode) = v
+                .get("usage_display")
+                .and_then(|v| v.as_str())
+                .and_then(app::UsageDisplay::from_token)
+            {
+                app.usage_display = mode;
+            } else if let Some(b) = v.get("show_usage").and_then(|v| v.as_bool()) {
+                // Migrate the previous boolean pref.
+                app.usage_display = if b {
+                    app::UsageDisplay::Always
+                } else {
+                    app::UsageDisplay::Off
+                };
+            }
         }
     }
 }
@@ -449,6 +463,7 @@ fn save_prefs(app: &App) {
         "show_images": app.show_images,
         "show_timestamps": app.show_timestamps,
         "show_metadata": app.show_metadata,
+        "usage_display": app.usage_display.as_str(),
     });
     let _ = std::fs::write(prefs_path(), v.to_string());
 }
@@ -610,6 +625,17 @@ fn model_settings_conn_command(_app: &App, rid: Option<String>) -> ConnCommand {
         rid,
         name: "model_settings".into(),
         args: serde_json::json!({}),
+    }))
+}
+
+/// Query the daemon for current usage-budget statuses. Cheap to fire on each
+/// connect and after every completed generation, keeping the on-screen usage
+/// chip fresh without waiting for a `UsageWarning` push.
+fn usage_budget_conn_command() -> ConnCommand {
+    ConnCommand::Send(ClientMessage::Command(Command {
+        rid: None,
+        name: "usage".into(),
+        args: serde_json::json!({ "budget": true }),
     }))
 }
 
@@ -945,6 +971,9 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
             app.effective_sampler = None;
             app.sampler_settings_loading = false;
             app.pending_sampler_settings_rid = None;
+            // Drop any prior session's budgets; the refresh queued below
+            // repopulates them so the chip never shows another session's state.
+            app.usage_budgets.clear();
             app.characters = characters.clone();
 
             if let Some(selected) = selected_character {
@@ -965,7 +994,10 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
             transmit_entry_images(app);
 
             app.set_status("connected");
-            UiEffect::redraw(RedrawEffect::Immediate)
+            UiEffect {
+                cmds: vec![usage_budget_conn_command()],
+                redraw: RedrawEffect::Immediate,
+            }
         }
 
         ConnEvent::Disconnected(reason) => {
@@ -975,6 +1007,8 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
             app.sampler_settings_loading = false;
             app.pending_sampler_settings_rid = None;
             app.history_page_loading = false;
+            // Don't render stale budgets while disconnected/reconnecting.
+            app.usage_budgets.clear();
             app.set_status(format!("reconnecting: {reason}"));
             UiEffect::redraw(RedrawEffect::Immediate)
         }
@@ -1430,7 +1464,11 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 if keep_bottom {
                     app.scroll_to_bottom();
                 }
-                RedrawEffect::ImmediateFull
+                // Spend just changed — refresh the usage chip from the daemon.
+                return UiEffect {
+                    cmds: vec![usage_budget_conn_command()],
+                    redraw: RedrawEffect::ImmediateFull,
+                };
             } else {
                 // Tool-use phase boundary: keep the turn Streaming. Its thinking
                 // and pre-tool text are already blocks, interleaved in order —
@@ -1842,6 +1880,11 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         .unwrap_or("done");
                     app.set_status(format!("{}: {status}", co.name));
                 }
+                "usage" => {
+                    // Background budget poll — refresh the chip silently, no
+                    // conversation entry.
+                    app.apply_usage_budgets(&co.data);
+                }
                 _ => {
                     app.set_status(format!("cmd:{} completed", co.name));
                 }
@@ -1877,7 +1920,21 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         }
 
         ServerMessage::UsageWarning(w) => {
-            app.set_status(w.message.clone());
+            if app.usage_display != UsageDisplay::Off {
+                // Monitor is active: fold the warning into the chip (which
+                // escalates its color, and in warn-only mode reveals it)
+                // instead of pushing a notification.
+                app.apply_usage_warning(UsageBudget {
+                    name: w.budget.clone(),
+                    percent_used: w.percent_used,
+                    crossed_warn_at: w.crossed_warn_at.clone(),
+                    over_limit: w.percent_used >= 1.0,
+                });
+            } else {
+                // Monitor hidden: fall back to the notification so the user is
+                // never left without a signal.
+                app.set_status(w.message.clone());
+            }
             RedrawEffect::Immediate
         }
 
@@ -2052,6 +2109,112 @@ mod redraw_tests {
         assert!(contents.contains("hello from dump"));
 
         let _ = std::fs::remove_file(path);
+    }
+
+    fn usage_warning(percent: f64) -> ServerMessage {
+        ServerMessage::UsageWarning(shore_protocol::server_msg::UsageWarning {
+            rid: None,
+            budget: "monthly".into(),
+            message: "usage budget at 80%".into(),
+            current_cost: 4.1,
+            cost_limit: 5.0,
+            percent_used: percent,
+            crossed_warn_at: vec![0.8],
+            period: "month".into(),
+            period_start: "2026-06-01T00:00:00Z".into(),
+            reset_at: "2026-07-01T00:00:00Z".into(),
+            reset_at_display: String::new(),
+        })
+    }
+
+    fn system_entry_count(app: &App) -> usize {
+        app.entries
+            .iter()
+            .filter(|e| matches!(e, ConversationEntry::System { .. }))
+            .count()
+    }
+
+    #[test]
+    fn usage_warning_notifies_when_monitor_hidden() {
+        let mut app = App::default(); // usage_display defaults to Off
+
+        handle_server_message(&mut app, usage_warning(0.82));
+
+        assert_eq!(
+            system_entry_count(&app),
+            1,
+            "hidden monitor should fall back to a notification"
+        );
+        assert!(
+            app.usage_budgets.is_empty(),
+            "no chip state needed while hidden"
+        );
+    }
+
+    #[test]
+    fn usage_warning_suppressed_and_folded_into_chip_when_visible() {
+        let mut app = App {
+            usage_display: UsageDisplay::Always,
+            ..Default::default()
+        };
+
+        handle_server_message(&mut app, usage_warning(0.82));
+
+        assert_eq!(
+            system_entry_count(&app),
+            0,
+            "visible monitor should suppress the notification"
+        );
+        let budget = app.most_urgent_budget().expect("warning seeds chip state");
+        assert_eq!(budget.name, "monthly");
+        assert!((budget.percent_used - 0.82).abs() < f64::EPSILON);
+        assert!(budget.in_warning(), "crossed threshold flags warning state");
+    }
+
+    #[test]
+    fn disconnect_clears_cached_budgets() {
+        let mut app = App {
+            usage_display: UsageDisplay::Always,
+            ..Default::default()
+        };
+        app.usage_budgets = vec![UsageBudget {
+            name: "monthly".into(),
+            percent_used: 0.82,
+            crossed_warn_at: vec![0.8],
+            over_limit: false,
+        }];
+
+        handle_conn_event(&mut app, ConnEvent::Disconnected("server gone".into()));
+
+        assert!(
+            app.usage_budgets.is_empty(),
+            "reconnecting must not keep rendering the previous session's budget"
+        );
+    }
+
+    #[test]
+    fn usage_command_output_populates_budgets_silently() {
+        let mut app = App::default();
+
+        handle_server_message(
+            &mut app,
+            ServerMessage::CommandOutput(CommandOutput {
+                rid: None,
+                name: "usage".into(),
+                data: serde_json::json!({
+                    "mode": "budget",
+                    "budgets": [
+                        { "name": "daily", "percent_used": 0.2, "crossed_warn_at": [], "over_limit": false },
+                        { "name": "monthly", "percent_used": 0.95, "crossed_warn_at": [0.8, 0.9], "over_limit": false }
+                    ]
+                }),
+            }),
+        );
+
+        assert_eq!(system_entry_count(&app), 0, "background poll is silent");
+        assert_eq!(app.usage_budgets.len(), 2);
+        // The most-urgent (highest percent) budget is what the chip surfaces.
+        assert_eq!(app.most_urgent_budget().unwrap().name, "monthly");
     }
 
     #[test]

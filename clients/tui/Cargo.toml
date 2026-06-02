@@ -14,7 +14,7 @@ panic = "abort"
 strip = true
 
 [dependencies]
-shore-protocol = "0.2"
+shore-protocol = "0.6"
 shore-swp-client = "0.2"
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "signal"] }
