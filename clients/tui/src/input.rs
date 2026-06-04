@@ -1152,9 +1152,16 @@ fn parse_setting_value_str(key: &str, raw: &str) -> serde_json::Value {
     use serde_json::Value;
     let trimmed = raw.trim();
     match key {
-        "thinking_enabled" => match trimmed.to_ascii_lowercase().as_str() {
-            "true" | "yes" | "on" | "1" => Value::Bool(true),
-            "false" | "no" | "off" | "0" => Value::Bool(false),
+        // Tri-state `replay_prior_thinking` (`all`/`last_turn`/`none`) and the
+        // boolean vendor knobs share a coercion: the bool words collapse to a
+        // JSON bool (the daemon maps the legacy form), anything else passes
+        // through as a string so the daemon validates it.
+        "replay_prior_thinking"
+        | "gemini_web_search"
+        | "zai_clear_thinking"
+        | "zai_subscription" => match trimmed.to_ascii_lowercase().as_str() {
+            "true" | "yes" | "on" => Value::Bool(true),
+            "false" | "no" | "off" => Value::Bool(false),
             _ => Value::String(trimmed.to_string()),
         },
         "temperature" | "top_p" => trimmed
@@ -1163,7 +1170,7 @@ fn parse_setting_value_str(key: &str, raw: &str) -> serde_json::Value {
             .and_then(serde_json::Number::from_f64)
             .map(Value::Number)
             .unwrap_or_else(|| Value::String(trimmed.to_string())),
-        "budget_tokens" | "max_output_tokens" => trimmed
+        "budget_tokens" | "max_output_tokens" | "gemini_generation" => trimmed
             .parse::<u64>()
             .map(|n| Value::Number(n.into()))
             .unwrap_or_else(|_| Value::String(trimmed.to_string())),
@@ -1175,6 +1182,12 @@ fn parse_setting_value_str(key: &str, raw: &str) -> serde_json::Value {
             "off" | "none" | "disable" | "disabled" | "unset" | "" => Value::String("off".into()),
             _ => Value::String(trimmed.to_string()),
         },
+        // `openrouter_provider` is a routing object — accept a JSON object
+        // string (e.g. `{"order":["Anthropic"]}`) and fall through to a string
+        // otherwise, so the daemon reports a clear type error.
+        "openrouter_provider" => serde_json::from_str::<Value>(trimmed)
+            .unwrap_or_else(|_| Value::String(trimmed.to_string())),
+        // `vertex_project` / `vertex_location` and any unknown key: raw string.
         _ => Value::String(trimmed.to_string()),
     }
 }
@@ -1183,6 +1196,64 @@ fn parse_setting_value_str(key: &str, raw: &str) -> serde_json::Value {
 mod tests {
     use super::*;
     use crossterm::event::{KeyEventKind, KeyEventState};
+    use serde_json::json;
+
+    #[test]
+    fn parse_setting_value_coerces_daemon_sampler_keys() {
+        // Tri-state replay_prior_thinking: the string variants pass through,
+        // the legacy bool words coerce to a JSON bool.
+        assert_eq!(
+            parse_setting_value_str("replay_prior_thinking", "last_turn"),
+            json!("last_turn")
+        );
+        assert_eq!(
+            parse_setting_value_str("replay_prior_thinking", "off"),
+            json!(false)
+        );
+
+        // Boolean vendor knobs.
+        assert_eq!(
+            parse_setting_value_str("zai_clear_thinking", "false"),
+            json!(false)
+        );
+        assert_eq!(
+            parse_setting_value_str("gemini_web_search", "on"),
+            json!(true)
+        );
+        assert_eq!(
+            parse_setting_value_str("zai_subscription", "yes"),
+            json!(true)
+        );
+
+        // Integer vendor knob.
+        assert_eq!(parse_setting_value_str("gemini_generation", "3"), json!(3));
+
+        // Free-form string knobs stay strings.
+        assert_eq!(
+            parse_setting_value_str("vertex_project", "my-proj"),
+            json!("my-proj")
+        );
+
+        // openrouter_provider accepts a JSON routing object, else a string.
+        assert_eq!(
+            parse_setting_value_str("openrouter_provider", r#"{"order":["Anthropic"]}"#),
+            json!({"order": ["Anthropic"]})
+        );
+        assert_eq!(
+            parse_setting_value_str("openrouter_provider", "Anthropic"),
+            json!("Anthropic")
+        );
+
+        // reasoning_effort disable synonyms collapse to the "off" sentinel.
+        assert_eq!(
+            parse_setting_value_str("reasoning_effort", "none"),
+            json!("off")
+        );
+        assert_eq!(
+            parse_setting_value_str("reasoning_effort", "high"),
+            json!("high")
+        );
+    }
 
     fn make_key(modifiers: KeyModifiers, code: KeyCode) -> KeyEvent {
         KeyEvent {

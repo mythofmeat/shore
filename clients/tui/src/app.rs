@@ -702,11 +702,25 @@ pub struct EffectiveSamplerSnapshot {
     pub temperature: EffectiveSamplerField,
     pub top_p: EffectiveSamplerField,
     pub reasoning_effort: EffectiveSamplerField,
-    pub thinking_enabled: EffectiveSamplerField,
     pub budget_tokens: EffectiveSamplerField,
     pub max_output_tokens: EffectiveSamplerField,
     pub cache_ttl: EffectiveSamplerField,
     pub sdk: EffectiveSamplerField,
+    pub replay_prior_thinking: EffectiveSamplerField,
+    pub openrouter_provider: EffectiveSamplerField,
+    pub vertex_project: EffectiveSamplerField,
+    pub vertex_location: EffectiveSamplerField,
+    pub gemini_generation: EffectiveSamplerField,
+    pub gemini_web_search: EffectiveSamplerField,
+    pub zai_clear_thinking: EffectiveSamplerField,
+    pub zai_subscription: EffectiveSamplerField,
+    /// Per-key capability label from the daemon's matrix
+    /// (`honored`/`ignored`/`rejected`/`always`). Empty when the daemon
+    /// didn't send `applicability` (older daemon) — callers then show all keys.
+    pub applicability: std::collections::BTreeMap<String, String>,
+    /// Accepted `reasoning_effort` values for the active model's sdk, as
+    /// reported by the daemon. Empty falls back to the built-in preset list.
+    pub reasoning_effort_domain: Vec<String>,
 }
 
 impl EffectiveSamplerSnapshot {
@@ -729,12 +743,48 @@ impl EffectiveSamplerSnapshot {
             temperature: Self::field(sampler, scopes, "temperature"),
             top_p: Self::field(sampler, scopes, "top_p"),
             reasoning_effort: Self::field(sampler, scopes, "reasoning_effort"),
-            thinking_enabled: Self::field(sampler, scopes, "thinking_enabled"),
             budget_tokens: Self::field(sampler, scopes, "budget_tokens"),
             max_output_tokens: Self::field(sampler, scopes, "max_output_tokens"),
             cache_ttl: Self::field(sampler, scopes, "cache_ttl"),
             sdk: Self::field(sampler, scopes, "sdk"),
+            replay_prior_thinking: Self::field(sampler, scopes, "replay_prior_thinking"),
+            openrouter_provider: Self::field(sampler, scopes, "openrouter_provider"),
+            vertex_project: Self::field(sampler, scopes, "vertex_project"),
+            vertex_location: Self::field(sampler, scopes, "vertex_location"),
+            gemini_generation: Self::field(sampler, scopes, "gemini_generation"),
+            gemini_web_search: Self::field(sampler, scopes, "gemini_web_search"),
+            zai_clear_thinking: Self::field(sampler, scopes, "zai_clear_thinking"),
+            zai_subscription: Self::field(sampler, scopes, "zai_subscription"),
+            applicability: data
+                .get("applicability")
+                .and_then(|v| v.as_object())
+                .map(|obj| {
+                    obj.iter()
+                        .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string())))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            reasoning_effort_domain: data
+                .get("reasoning_effort_domain")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(ToString::to_string))
+                        .collect()
+                })
+                .unwrap_or_default(),
         })
+    }
+
+    /// Whether the active model's resolved sdk honors `key` — mirrors the
+    /// daemon's capability matrix and the CLI's `visible_setting_keys`. A key
+    /// absent from `applicability` (no opinion, or an older daemon that didn't
+    /// send the map) is treated as visible.
+    pub fn key_honored(&self, key: &str) -> bool {
+        match self.applicability.get(key).map(String::as_str) {
+            Some(label) => label == "honored" || label == "always",
+            None => true,
+        }
     }
 
     fn field(
@@ -769,11 +819,18 @@ impl EffectiveSamplerSnapshot {
             "temperature" => Some(&self.temperature),
             "top_p" => Some(&self.top_p),
             "reasoning_effort" => Some(&self.reasoning_effort),
-            "thinking_enabled" => Some(&self.thinking_enabled),
             "budget_tokens" => Some(&self.budget_tokens),
             "max_output_tokens" => Some(&self.max_output_tokens),
             "cache_ttl" => Some(&self.cache_ttl),
             "sdk" => Some(&self.sdk),
+            "replay_prior_thinking" => Some(&self.replay_prior_thinking),
+            "openrouter_provider" => Some(&self.openrouter_provider),
+            "vertex_project" => Some(&self.vertex_project),
+            "vertex_location" => Some(&self.vertex_location),
+            "gemini_generation" => Some(&self.gemini_generation),
+            "gemini_web_search" => Some(&self.gemini_web_search),
+            "zai_clear_thinking" => Some(&self.zai_clear_thinking),
+            "zai_subscription" => Some(&self.zai_subscription),
             _ => None,
         }
     }
@@ -1597,20 +1654,43 @@ impl App {
     }
 
     /// Sampler keys accepted by `:setting <key> <value>`. Mirrors the
-    /// daemon's `SAMPLER_KEYS` constant.
+    /// daemon's `SAMPLER_KEYS` constant. The trailing vendor knobs are gated
+    /// per-model by the daemon's capability matrix — see [`Self::visible_setting_keys`].
     const SETTING_KEYS: &'static [&'static str] = &[
         "temperature",
         "top_p",
         "reasoning_effort",
-        "thinking_enabled",
         "budget_tokens",
         "max_output_tokens",
         "cache_ttl",
         "sdk",
+        "replay_prior_thinking",
+        "openrouter_provider",
+        "vertex_project",
+        "vertex_location",
+        "gemini_generation",
+        "gemini_web_search",
+        "zai_clear_thinking",
+        "zai_subscription",
     ];
 
     fn is_setting_key(key: &str) -> bool {
         Self::SETTING_KEYS.contains(&key)
+    }
+
+    /// `SETTING_KEYS` filtered to those the active model's sdk honors, per the
+    /// daemon's `applicability` matrix (mirrors the CLI's `visible_setting_keys`).
+    /// Before a snapshot arrives, every key is shown.
+    fn visible_setting_keys(&self) -> Vec<&'static str> {
+        Self::SETTING_KEYS
+            .iter()
+            .copied()
+            .filter(|key| {
+                self.effective_sampler
+                    .as_ref()
+                    .is_none_or(|snapshot| snapshot.key_honored(key))
+            })
+            .collect()
     }
 
     const VIEW_KEYS: &'static [&'static str] = &[
@@ -1987,7 +2067,8 @@ impl App {
                         }
                     } else {
                         self.completion.header = Some("setting key".into());
-                        let mut candidates: Vec<String> = Self::SETTING_KEYS
+                        let visible = self.visible_setting_keys();
+                        let mut candidates: Vec<String> = visible
                             .iter()
                             .filter(|k| {
                                 head.is_empty()
@@ -2069,17 +2150,7 @@ impl App {
             _ => None,
         };
 
-        if matches!(
-            parent.as_str(),
-            "setting"
-                | "setting:reasoning_effort"
-                | "setting:thinking_enabled"
-                | "setting:cache_ttl"
-                | "setting:max_output_tokens"
-                | "setting:budget_tokens"
-                | "setting:sdk"
-                | "setting:reset"
-        ) {
+        if parent == "setting" || parent.starts_with("setting:") {
             if let Some(row) = self.setting_editor_blocked_row() {
                 self.completion.candidates = vec![row.to_string()];
                 self.completion.selected = None;
@@ -2109,7 +2180,8 @@ impl App {
                     .collect();
             }
             "setting" => {
-                let mut candidates: Vec<String> = Self::SETTING_KEYS
+                let visible = self.visible_setting_keys();
+                let mut candidates: Vec<String> = visible
                     .iter()
                     .filter(|key| filter.is_empty() || key.starts_with(&filter))
                     .map(|key| self.setting_row_label(key))
@@ -2120,14 +2192,52 @@ impl App {
                 self.completion.candidates = candidates;
             }
             "setting:reasoning_effort" => {
-                self.completion.candidates = Self::filtered_presets(
-                    &["low", "medium", "high", "xhigh", "max", "off", "reset"],
-                    &filter,
-                );
+                // Prefer the per-sdk domain the daemon reported (e.g. OpenAI
+                // accepts `minimal` and rejects `max`); fall back to the full
+                // Anthropic set before any snapshot has arrived.
+                let domain: Vec<&str> = self
+                    .effective_sampler
+                    .as_ref()
+                    .filter(|s| !s.reasoning_effort_domain.is_empty())
+                    .map(|s| {
+                        s.reasoning_effort_domain
+                            .iter()
+                            .map(String::as_str)
+                            .collect()
+                    })
+                    .unwrap_or_else(|| vec!["low", "medium", "high", "xhigh", "max"]);
+                let mut presets = domain;
+                presets.push("off");
+                presets.push("reset");
+                self.completion.candidates = Self::filtered_presets(&presets, &filter);
             }
-            "setting:thinking_enabled" => {
+            "setting:replay_prior_thinking" => {
+                self.completion.candidates =
+                    Self::filtered_presets(&["all", "last_turn", "none", "reset"], &filter);
+            }
+            "setting:gemini_web_search"
+            | "setting:zai_clear_thinking"
+            | "setting:zai_subscription" => {
                 self.completion.candidates =
                     Self::filtered_presets(&["true", "false", "reset"], &filter);
+            }
+            "setting:gemini_generation" => {
+                let mut candidates = Self::filtered_presets(&["1", "2", "3", "reset"], &filter);
+                if raw_filter.parse::<u32>().is_ok() {
+                    candidates.push(format!("Custom: {raw_filter}"));
+                }
+                self.completion.candidates = candidates;
+            }
+            "setting:openrouter_provider"
+            | "setting:vertex_project"
+            | "setting:vertex_location" => {
+                // Free-form values — offer only `reset` plus whatever the user
+                // is typing as a custom entry.
+                let mut candidates = Self::filtered_presets(&["reset"], &filter);
+                if !raw_filter.is_empty() && !raw_filter.eq_ignore_ascii_case("reset") {
+                    candidates.push(format!("Custom: {raw_filter}"));
+                }
+                self.completion.candidates = candidates;
             }
             "setting:cache_ttl" => {
                 let mut candidates = Self::filtered_presets(&["5m", "1h", "reset"], &filter);
@@ -2184,12 +2294,7 @@ impl App {
                 let key = Self::setting_key_from_row(c);
                 self.setting_scope_is_override(key)
             }),
-            "setting:reasoning_effort"
-            | "setting:thinking_enabled"
-            | "setting:cache_ttl"
-            | "setting:max_output_tokens"
-            | "setting:budget_tokens"
-            | "setting:sdk" => {
+            p if p.starts_with("setting:") && p != "setting:reset" => {
                 let key = parent.strip_prefix("setting:").unwrap_or_default();
                 self.completion
                     .candidates
@@ -2470,6 +2575,49 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn visible_setting_keys_honors_daemon_applicability() {
+        let snapshot = EffectiveSamplerSnapshot::from_model_settings(&serde_json::json!({
+            "effective_sampler": { "temperature": 0.7 },
+            "reasoning_effort_domain": ["minimal", "low", "medium", "high", "xhigh"],
+            "applicability": {
+                "temperature": "honored",
+                "reasoning_effort": "honored",
+                "sdk": "always",
+                "replay_prior_thinking": "always",
+                "budget_tokens": "ignored",
+                "zai_clear_thinking": "rejected",
+                // `vertex_project` deliberately omitted — "no opinion" must
+                // still be shown.
+            },
+        }))
+        .expect("snapshot");
+
+        // Domain parsed through.
+        assert_eq!(
+            snapshot.reasoning_effort_domain,
+            vec!["minimal", "low", "medium", "high", "xhigh"]
+        );
+
+        let app = App {
+            effective_sampler: Some(snapshot),
+            ..App::default()
+        };
+        let visible = app.visible_setting_keys();
+
+        assert!(visible.contains(&"temperature"));
+        assert!(visible.contains(&"sdk")); // "always"
+        assert!(visible.contains(&"vertex_project")); // no opinion → shown
+        assert!(!visible.contains(&"budget_tokens")); // ignored → hidden
+        assert!(!visible.contains(&"zai_clear_thinking")); // rejected → hidden
+    }
+
+    #[test]
+    fn visible_setting_keys_shows_all_without_snapshot() {
+        let app = App::default();
+        assert_eq!(app.visible_setting_keys(), App::SETTING_KEYS.to_vec());
+    }
 
     #[test]
     fn input_insert_and_backspace() {
