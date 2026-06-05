@@ -13,7 +13,7 @@ pub enum Action {
     Send(ConnCommand),
     /// Send multiple commands at once.
     SendMulti(Vec<ConnCommand>),
-    /// Graceful quit (Ctrl+Q, :q).
+    /// Graceful quit (Ctrl+Q).
     Quit,
     /// SIGINT-equivalent quit (Ctrl+C). Same graceful shutdown, but exits 130.
     Interrupt,
@@ -734,11 +734,6 @@ fn parse_command(app: &mut App, input: &str) -> Action {
 
     debug!(cmd, has_arg = !arg.is_empty(), "TUI command dispatched");
     match cmd {
-        "q" | "quit" => {
-            app.should_quit = true;
-            Action::Quit
-        }
-
         "cancel" => {
             if app.stream.active {
                 app.stream.reset();
@@ -747,14 +742,6 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                 app.set_status("nothing to cancel");
                 Action::Redraw
             }
-        }
-
-        "clear" => {
-            // Clear both lingering toasts and any requested command output
-            // (model/character lists, memory dumps) from the log.
-            app.dismiss_notifications();
-            app.clear_system_entries();
-            Action::Redraw
         }
 
         "help" => {
@@ -920,20 +907,6 @@ fn parse_command(app: &mut App, input: &str) -> Action {
             } else {
                 app.set_status("usage: :setting [<key> <value>] | :setting reset <key>");
                 Action::Redraw
-            }
-        }
-
-        "memory" => {
-            if arg.is_empty() {
-                app.set_status("usage: :memory <query>");
-                Action::Redraw
-            } else {
-                Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
-                    rid: None,
-
-                    name: "memory".into(),
-                    args: serde_json::json!({ "query": arg }),
-                })))
             }
         }
 
@@ -1578,25 +1551,6 @@ mod tests {
             make_key(KeyModifiers::CONTROL, KeyCode::Char('v')),
         );
         assert!(matches!(action, Action::PasteImage));
-    }
-
-    #[test]
-    fn clear_command_clears_toasts_and_system_entries() {
-        let mut app = App::default();
-        // A lingering toast plus a piece of requested command output.
-        app.set_status("reconnecting");
-        app.entries.push(crate::app::ConversationEntry::System {
-            content: "Models:\n  opus".into(),
-            count: 1,
-            timestamp: String::new(),
-        });
-        let action = parse_command(&mut app, "clear");
-        assert!(matches!(action, Action::Redraw));
-        assert!(app.notifications.is_empty());
-        assert!(!app
-            .entries
-            .iter()
-            .any(|e| matches!(e, crate::app::ConversationEntry::System { .. })));
     }
 
     #[test]

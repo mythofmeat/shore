@@ -1833,18 +1833,6 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         redraw: RedrawEffect::Immediate,
                     };
                 }
-                "memory" => {
-                    let summary = serde_json::to_string_pretty(&co.data)
-                        .unwrap_or_else(|_| co.data.to_string());
-                    app.entries.push(ConversationEntry::System {
-                        content: summary,
-                        count: 1,
-                        timestamp: String::new(),
-                    });
-                    if app.auto_scroll {
-                        app.scroll_to_bottom();
-                    }
-                }
                 "delete" => {
                     if let Some(deleted) = co.data.get("deleted").and_then(|v| v.as_array()) {
                         let count = deleted.len();

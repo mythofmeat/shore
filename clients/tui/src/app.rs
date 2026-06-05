@@ -1312,7 +1312,7 @@ impl App {
         self.notifications.len() != before
     }
 
-    /// Immediately clear all toasts (e.g. on `:clear` or a fresh user turn).
+    /// Immediately clear all toasts (e.g. on a fresh user turn).
     pub fn dismiss_notifications(&mut self) {
         self.notifications.clear();
     }
@@ -1322,14 +1322,6 @@ impl App {
     /// the keypress was consumed.
     pub fn dismiss_latest_notification(&mut self) -> bool {
         self.notifications.pop().is_some()
-    }
-
-    /// Remove every System entry from the conversation log. These are
-    /// requested command output (model/character lists, memory dumps) and
-    /// wire system messages — not toasts. Invoked by `:clear`.
-    pub fn clear_system_entries(&mut self) {
-        self.entries
-            .retain(|e| !matches!(e, ConversationEntry::System { .. }));
     }
 
     pub fn start_alt_picker(&mut self, target_ref: Option<String>) {
@@ -1629,15 +1621,12 @@ impl App {
     const COMMANDS: &'static [(&'static str, &'static str)] = &[
         ("cancel", "Stop the current generation"),
         ("character", "Switch active character"),
-        ("clear", "Dismiss notifications and clear command output"),
         ("compact", "Summarize and shrink the conversation"),
         ("delete", "Delete a message by reference"),
         ("edit", "Edit a previous message"),
         ("help", "Show keyboard shortcuts"),
         ("image", "Attach an image to the next message"),
-        ("memory", "Search saved memory entries"),
         ("model", "Switch the active model"),
-        ("quit", "Exit the TUI"),
         ("regen", "Regenerate the last assistant reply"),
         ("setting", "View or change sampler settings"),
         ("alt", "Choose an alternate response"),
@@ -2801,32 +2790,6 @@ mod tests {
         assert_eq!(app.notifications[0].level, NotificationLevel::Error);
         assert_eq!(app.error_log.len(), 1);
         assert!(app.error_log[0].contains("rate_limit"));
-    }
-
-    #[test]
-    fn clear_system_entries_preserves_other_entries() {
-        let mut app = App::default();
-        app.entries.push(ConversationEntry::user(
-            "hello".into(),
-            vec![],
-            String::new(),
-        ));
-        app.entries.push(ConversationEntry::System {
-            content: "Models:\n  opus".into(),
-            count: 1,
-            timestamp: String::new(),
-        });
-        app.entries.push(ConversationEntry::assistant(
-            None,
-            "hi".into(),
-            vec![],
-            String::new(),
-            None,
-        ));
-        app.clear_system_entries();
-        assert_eq!(app.entries.len(), 2);
-        assert!(matches!(app.entries[0].as_turn(), Some(t) if t.role == Role::User));
-        assert!(matches!(app.entries[1].as_turn(), Some(t) if t.role == Role::Assistant));
     }
 
     #[test]

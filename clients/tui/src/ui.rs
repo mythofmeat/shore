@@ -1206,11 +1206,7 @@ fn draw_help(frame: &mut Frame, area: Rect) {
             Style::default().fg(Color::White),
         )),
         Line::from(Span::styled(
-            "    :quit           exit",
-            Style::default().fg(Color::White),
-        )),
-        Line::from(Span::styled(
-            "    :memory  :compact  :regen",
+            "    :compact  :regen",
             Style::default().fg(Color::DarkGray),
         )),
         Line::from(""),
@@ -2305,7 +2301,7 @@ mod scenario_tests {
         for (cmd, desc) in [
             ("compact", "Summarize and shrink the conversation"),
             ("regen", "Regenerate the last assistant reply"),
-            ("quit", "Exit the TUI"),
+            ("setting", "View or change sampler settings"),
             ("help", "Show keyboard shortcuts"),
         ] {
             let row = f
