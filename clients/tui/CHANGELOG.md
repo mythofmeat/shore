@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.10](https://github.com/mythofmeat/shore-tui/compare/v0.1.9...v0.1.10) - 2026-06-05
+
+### Other
+
+- *(tui)* drop redundant clear/memory/quit commands ([#23](https://github.com/mythofmeat/shore-tui/pull/23))
+
 ## [0.1.9](https://github.com/mythofmeat/shore-tui/compare/v0.1.8...v0.1.9) - 2026-06-04
 
 ### Added
