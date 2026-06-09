@@ -219,21 +219,35 @@ fn render_thinking_group(lines: &mut Vec<Line<'static>>, thoughts: &[String], wr
     lines.push(Line::from(""));
 }
 
-/// Render a single tool-call or tool-result block.
-fn render_tool_block(lines: &mut Vec<Line<'static>>, block: &TurnBlock, wrap_width: u16) {
+/// Color of the `◆`/`»` sub-agent section markers and the nested tool blocks
+/// inside it. Mirrors the CLI's `COLOR_SUBAGENT`.
+const SUBAGENT_COLOR: Color = Color::Cyan;
+
+/// Render a single tool-call or tool-result block. When `subagent` is set the
+/// header is tinted in [`SUBAGENT_COLOR`] so a nested `ask_<name>` tool reads
+/// differently from the primary model's Magenta/Cyan tool blocks.
+fn render_tool_block(
+    lines: &mut Vec<Line<'static>>,
+    block: &TurnBlock,
+    subagent: bool,
+    wrap_width: u16,
+) {
     let bar_style = Style::default().fg(Color::DarkGray);
     let text_width = wrap_width.saturating_sub(4) as usize; // "  │ " = 4 cols
     match block {
         TurnBlock::ToolUse {
             tool_name, input, ..
         } => {
+            let call_color = if subagent {
+                SUBAGENT_COLOR
+            } else {
+                Color::Magenta
+            };
             lines.push(Line::from(vec![
-                Span::styled("  ▶ ", Style::default().fg(Color::Magenta)),
+                Span::styled("  ▶ ", Style::default().fg(call_color)),
                 Span::styled(
                     tool_name.clone(),
-                    Style::default()
-                        .fg(Color::Magenta)
-                        .add_modifier(Modifier::BOLD),
+                    Style::default().fg(call_color).add_modifier(Modifier::BOLD),
                 ),
             ]));
             if let Some(input) = format_tool_input(input) {
@@ -253,7 +267,13 @@ fn render_tool_block(lines: &mut Vec<Line<'static>>, block: &TurnBlock, wrap_wid
             is_error,
             ..
         } => {
-            let header_color = if *is_error { Color::Red } else { Color::Cyan };
+            let header_color = if *is_error {
+                Color::Red
+            } else if subagent {
+                SUBAGENT_COLOR
+            } else {
+                Color::Cyan
+            };
             lines.push(Line::from(vec![
                 Span::styled("  ◀ ", Style::default().fg(header_color)),
                 Span::styled(
@@ -287,17 +307,54 @@ fn render_blocks(
     blocks: &[TurnBlock],
     show_thinking: bool,
     show_tools: bool,
+    show_subagent: bool,
     wrap_width: u16,
 ) {
+    // Whether the cursor is inside a `SubagentBegin`…`SubagentEnd` section.
+    // While inside, content visibility is gated by `show_subagent` rather than
+    // the per-category thinking/tools toggles, and tool blocks render tinted.
+    let mut in_subagent = false;
     let mut i = 0;
     while i < blocks.len() {
         match &blocks[i] {
+            TurnBlock::SubagentBegin(name) => {
+                in_subagent = true;
+                if show_subagent {
+                    lines.push(Line::from(Span::styled(
+                        format!("  » {name} (sub-agent)"),
+                        Style::default()
+                            .fg(SUBAGENT_COLOR)
+                            .add_modifier(Modifier::BOLD),
+                    )));
+                }
+                i += 1;
+            }
+            TurnBlock::SubagentEnd(name) => {
+                if show_subagent && in_subagent {
+                    lines.push(Line::from(Span::styled(
+                        format!("  » {name} done"),
+                        Style::default()
+                            .fg(SUBAGENT_COLOR)
+                            .add_modifier(Modifier::ITALIC),
+                    )));
+                    lines.push(Line::from(""));
+                }
+                in_subagent = false;
+                i += 1;
+            }
             TurnBlock::Thinking(_) => {
                 let start = i;
                 while i < blocks.len() && matches!(blocks[i], TurnBlock::Thinking(_)) {
                     i += 1;
                 }
-                if show_thinking {
+                // Inside a sub-agent section the whole nested loop hides/shows as
+                // one unit under `show_subagent`; outside, the thinking toggle.
+                let visible = if in_subagent {
+                    show_subagent
+                } else {
+                    show_thinking
+                };
+                if visible {
                     let thoughts: Vec<String> = blocks[start..i]
                         .iter()
                         .filter_map(|b| match b {
@@ -309,7 +366,8 @@ fn render_blocks(
                 }
             }
             TurnBlock::Text(content) => {
-                if !content.is_empty() {
+                let visible = if in_subagent { show_subagent } else { true };
+                if visible && !content.is_empty() {
                     let wrap_w = wrap_width.saturating_sub(2) as usize;
                     lines.extend(indent_lines(markdown::render_markdown_wrapped(
                         content, wrap_w,
@@ -319,8 +377,13 @@ fn render_blocks(
                 i += 1;
             }
             TurnBlock::ToolUse { .. } | TurnBlock::ToolResult { .. } => {
-                if show_tools {
-                    render_tool_block(lines, &blocks[i], wrap_width);
+                let visible = if in_subagent {
+                    show_subagent
+                } else {
+                    show_tools
+                };
+                if visible {
+                    render_tool_block(lines, &blocks[i], in_subagent, wrap_width);
                 }
                 i += 1;
             }
@@ -623,6 +686,7 @@ fn render_turn(
                 &turn.blocks,
                 app.show_thinking,
                 app.show_tools,
+                app.show_subagent,
                 content_width,
             );
             render_images(
@@ -657,6 +721,7 @@ fn render_turn(
                 &turn.blocks,
                 app.show_thinking,
                 app.show_tools,
+                app.show_subagent,
                 content_width,
             );
             render_images(
@@ -696,6 +761,7 @@ fn render_turn(
                 &turn.blocks,
                 app.show_thinking,
                 app.show_tools,
+                app.show_subagent,
                 content_width,
             );
         }
@@ -1153,6 +1219,10 @@ fn draw_help(frame: &mut Frame, area: Rect) {
         )),
         Line::from(Span::styled(
             "    T               toggle tool-use blocks",
+            Style::default().fg(Color::White),
+        )),
+        Line::from(Span::styled(
+            "    s               toggle sub-agent sections",
             Style::default().fg(Color::White),
         )),
         Line::from(Span::styled(
@@ -3179,6 +3249,114 @@ mod scenario_tests {
         );
     }
 
+    // ── Scenario: a nested sub-agent section renders bracketed and gated ─────
+    //
+    // The `» <name> (sub-agent)` … `» <name> done` headers frame the nested
+    // loop, and its content is gated by `show_subagent` alone — independent of
+    // the primary `show_tools`/`show_thinking` toggles.
+    #[test]
+    fn scenario_subagent_section_visible() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.character_name = "Alice".into();
+        h.app.show_subagent = true;
+        // Off, to prove the nested tool is gated by show_subagent, not show_tools.
+        h.app.show_tools = false;
+
+        h.app.entries.push(ConversationEntry::user(
+            "delegate".into(),
+            vec![],
+            "t1".into(),
+        ));
+        h.app.entries.push(assistant_turn(vec![
+            Block::SubagentBegin("research".into()),
+            Block::Thinking("nested thought".into()),
+            tool_use("s1", "web_search", serde_json::json!({"q": "x"})),
+            tool_result("s1", "web_search", "nested result", false),
+            Block::SubagentEnd("research".into()),
+            Block::Text("primary answer".into()),
+        ]));
+
+        let f = h.render("subagent visible");
+        assert!(
+            f.contains("research (sub-agent)"),
+            "open header missing:\n{f}"
+        );
+        assert!(f.contains("research done"), "close header missing:\n{f}");
+        assert!(
+            f.contains("web_search"),
+            "nested tool must show under show_subagent even with show_tools off:\n{f}"
+        );
+        assert!(f.contains("primary answer"), "primary text missing:\n{f}");
+    }
+
+    // ── Scenario: hiding the sub-agent collapses the whole nested section ────
+    //
+    // With `show_subagent` off, the headers and every nested frame disappear —
+    // even though `show_thinking`/`show_tools` are on — while the primary
+    // model's own text is untouched.
+    #[test]
+    fn scenario_subagent_section_hidden() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.character_name = "Alice".into();
+        h.app.show_subagent = false;
+        h.app.show_tools = true;
+        h.app.show_thinking = true;
+
+        h.app.entries.push(assistant_turn(vec![
+            Block::SubagentBegin("research".into()),
+            Block::Thinking("nested thought".into()),
+            tool_use("s1", "web_search", serde_json::json!({"q": "x"})),
+            tool_result("s1", "web_search", "nested result", false),
+            Block::SubagentEnd("research".into()),
+            Block::Text("primary answer".into()),
+        ]));
+
+        let f = h.render("subagent hidden");
+        assert!(!f.contains("sub-agent"), "header must be hidden:\n{f}");
+        assert!(
+            !f.contains("nested thought"),
+            "nested thinking must hide despite show_thinking:\n{f}"
+        );
+        assert!(
+            !f.contains("web_search"),
+            "nested tool must hide despite show_tools:\n{f}"
+        );
+        assert!(
+            f.contains("primary answer"),
+            "primary text must remain:\n{f}"
+        );
+    }
+
+    // ── Unit: tag transitions bracket exactly once, and close on return ──────
+    #[test]
+    fn subagent_tag_transitions_bracket_blocks() {
+        let mut app = App::default();
+        app.stream.active = true;
+
+        app.sync_subagent_section(Some("research")); // open
+        app.stream_append_thinking("hmm");
+        app.sync_subagent_section(Some("research")); // unchanged — no new marker
+        app.stream_append_text("nested out");
+        app.sync_subagent_section(None); // back to primary — close
+        app.stream_append_text("primary");
+
+        let turn = app.entries.last().and_then(|e| e.as_turn()).unwrap();
+        let kinds: Vec<&str> = turn
+            .blocks
+            .iter()
+            .map(|b| match b {
+                Block::SubagentBegin(_) => "begin",
+                Block::SubagentEnd(_) => "end",
+                Block::Thinking(_) => "think",
+                Block::Text(_) => "text",
+                _ => "other",
+            })
+            .collect();
+        assert_eq!(kinds, ["begin", "think", "text", "end", "text"]);
+    }
+
     // ── Scenario: thinking and tools render interleaved, not grouped ─────────
     //
     // Regression for the bug where the renderer bucketed all thinking before
@@ -3273,6 +3451,7 @@ mod scenario_tests {
         crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
+                subagent: None,
                 rid: None,
                 regen: false,
             }),
@@ -3280,6 +3459,7 @@ mod scenario_tests {
         crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamChunk(StreamChunk {
+                subagent: None,
                 rid: None,
                 text: "PHASE1_THOUGHT".into(),
                 content_type: "thinking".into(),
@@ -3288,6 +3468,7 @@ mod scenario_tests {
         crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
+                subagent: None,
                 rid: None,
                 msg_id: None,
                 revision: None,
@@ -3314,6 +3495,7 @@ mod scenario_tests {
         crate::handle_server_message(
             &mut h.app,
             ServerMessage::ToolCall(ToolCall {
+                subagent: None,
                 rid: None,
                 tool_id: "tc1".into(),
                 tool_name: "memory_search".into(),
@@ -3404,6 +3586,7 @@ mod scenario_tests {
         crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
+                subagent: None,
                 rid: None,
                 regen: false,
             }),
@@ -3411,6 +3594,7 @@ mod scenario_tests {
         crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
+                subagent: None,
                 rid: None,
                 msg_id: None,
                 revision: None,
@@ -3423,6 +3607,7 @@ mod scenario_tests {
         crate::handle_server_message(
             &mut h.app,
             ServerMessage::ToolCall(ToolCall {
+                subagent: None,
                 rid: None,
                 tool_id: "tc1".into(),
                 tool_name: "memory_search".into(),
@@ -3446,6 +3631,7 @@ mod scenario_tests {
         crate::handle_server_message(
             &mut h.app,
             ServerMessage::ToolResult(ToolResult {
+                subagent: None,
                 rid: None,
                 tool_id: "tc1".into(),
                 tool_name: "memory_search".into(),
@@ -3458,6 +3644,7 @@ mod scenario_tests {
         crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
+                subagent: None,
                 rid: None,
                 regen: false,
             }),
@@ -3465,6 +3652,7 @@ mod scenario_tests {
         crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamChunk(StreamChunk {
+                subagent: None,
                 rid: None,
                 text: "hey! what's up?".into(),
                 content_type: "text".into(),
@@ -3473,6 +3661,7 @@ mod scenario_tests {
         crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
+                subagent: None,
                 rid: None,
                 msg_id: None,
                 revision: None,
@@ -3618,6 +3807,7 @@ mod scenario_tests {
         crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
+                subagent: None,
                 rid: None,
                 regen: false,
             }),
@@ -3625,6 +3815,7 @@ mod scenario_tests {
         crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamChunk(StreamChunk {
+                subagent: None,
                 rid: None,
                 text: "PRETOOL_LIVE".into(),
                 content_type: "text".into(),
@@ -3641,6 +3832,7 @@ mod scenario_tests {
         crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
+                subagent: None,
                 rid: None,
                 msg_id: None,
                 revision: None,
@@ -3653,6 +3845,7 @@ mod scenario_tests {
         crate::handle_server_message(
             &mut h.app,
             ServerMessage::ToolCall(ToolCall {
+                subagent: None,
                 rid: None,
                 tool_id: "tc1".into(),
                 tool_name: "do_tool".into(),
@@ -3775,6 +3968,7 @@ mod scenario_tests {
         crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
+                subagent: None,
                 rid: None,
                 regen: false,
             }),
@@ -3782,6 +3976,7 @@ mod scenario_tests {
         crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamChunk(StreamChunk {
+                subagent: None,
                 rid: None,
                 text: reply.into(),
                 content_type: "text".into(),
@@ -3847,6 +4042,7 @@ mod scenario_tests {
         crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
+                subagent: None,
                 rid: None,
                 msg_id: Some("m_1".into()),
                 revision: Some(1),
@@ -3928,6 +4124,7 @@ mod scenario_tests {
         crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
+                subagent: None,
                 rid: None,
                 regen: false,
             }),
@@ -4002,6 +4199,7 @@ mod scenario_tests {
         crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
+                subagent: None,
                 rid: None,
                 regen: false,
             }),
@@ -4010,6 +4208,7 @@ mod scenario_tests {
             crate::handle_server_message(
                 &mut h.app,
                 ServerMessage::StreamChunk(StreamChunk {
+                    subagent: None,
                     rid: None,
                     text: std::str::from_utf8(chunk).unwrap().into(),
                     content_type: "text".into(),
@@ -4062,6 +4261,7 @@ mod scenario_tests {
         crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
+                subagent: None,
                 rid: None,
                 msg_id: Some("m_1".into()),
                 revision: Some(1),

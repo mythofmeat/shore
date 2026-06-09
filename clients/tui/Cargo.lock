@@ -321,7 +321,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -349,7 +349,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -678,7 +678,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -956,9 +956,9 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "shore-config"
-version = "0.11.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b66749b34aefb066a57d21a5d0fdaa388e0c6e5dd686a0873b92bfe44dfa625"
+checksum = "7c7cb21500f34ad14bdda54cafbe2008cf8025d1759082952073d738f2061964"
 dependencies = [
  "chrono",
  "dirs",
@@ -972,9 +972,9 @@ dependencies = [
 
 [[package]]
 name = "shore-protocol"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64b0d373bae1773bc4f8c1a843285b5f2d75b63c3f1c230f5213bf012b209495"
+checksum = "02653f947a8d1662e333f24f0a40e5b0d615fbfa4606fb3677f4c96e4505ffef"
 dependencies = [
  "serde",
  "serde_json",
@@ -983,9 +983,9 @@ dependencies = [
 
 [[package]]
 name = "shore-swp-client"
-version = "0.3.0"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "782c42c0661d05106760a4f8f3e6bef761ec96e7beef65638b93f787f405dc83"
+checksum = "6f5bb2e8d9778461cf82b337dd7b7907c20734548c2fd69b5c86a60de51f9a09"
 dependencies = [
  "base64",
  "libc",

@@ -42,6 +42,7 @@ pub struct ConvFingerprint {
     pub stream_tool_name_len: i32,
     pub show_thinking: bool,
     pub show_tools: bool,
+    pub show_subagent: bool,
     pub show_images: bool,
     pub show_timestamps: bool,
     pub show_metadata: bool,
@@ -140,6 +141,15 @@ pub enum Block {
         output: String,
         is_error: bool,
     },
+    /// Opens a nested sub-agent section: the daemon delegated to an
+    /// `ask_<name>` loop and the blocks that follow (until the matching
+    /// [`Block::SubagentEnd`]) are that sub-agent's thinking/text/tool frames.
+    /// Streamed live for transparency and gated by `show_subagent`; not part of
+    /// the persisted transcript, so a History rebuild collapses the section back
+    /// to the primary `ask_<name>` tool call/result.
+    SubagentBegin(String),
+    /// Closes the section opened by [`Block::SubagentBegin`].
+    SubagentEnd(String),
 }
 
 /// Whether a turn is finalized or still receiving streamed deltas.
@@ -348,6 +358,10 @@ pub struct StreamState {
     pub phase: String,
     /// Name of the tool currently being called/executed.
     pub tool_name: Option<String>,
+    /// Name of the sub-agent whose nested `ask_<name>` loop is currently
+    /// streaming, if any. Drives sub-agent section bracketing — a tag
+    /// transition pushes [`Block::SubagentBegin`]/[`Block::SubagentEnd`].
+    pub subagent: Option<String>,
 }
 
 impl StreamState {
@@ -356,6 +370,7 @@ impl StreamState {
         self.regen = false;
         self.phase.clear();
         self.tool_name = None;
+        self.subagent = None;
     }
 }
 
@@ -920,6 +935,7 @@ pub struct App {
     pub image_cache: ImageCache,
     pub show_thinking: bool,
     pub show_tools: bool,
+    pub show_subagent: bool,
     pub show_images: bool,
     pub show_timestamps: bool,
     pub show_metadata: bool,
@@ -995,6 +1011,7 @@ impl Default for App {
             image_cache: ImageCache::new(),
             show_thinking: true,
             show_tools: true,
+            show_subagent: true,
             show_images: true,
             show_timestamps: false,
             show_metadata: true,
@@ -1043,6 +1060,9 @@ impl App {
                             Block::ToolResult {
                                 tool_name, output, ..
                             } => (tool_name.len() + output.len()) as u64,
+                            Block::SubagentBegin(name) | Block::SubagentEnd(name) => {
+                                name.len() as u64
+                            }
                         }
                     };
                     let role_bit = matches!(turn.role, Role::Assistant) as u64;
@@ -1088,6 +1108,7 @@ impl App {
                 .unwrap_or(-1),
             show_thinking: self.show_thinking,
             show_tools: self.show_tools,
+            show_subagent: self.show_subagent,
             show_images: self.show_images,
             show_timestamps: self.show_timestamps,
             show_metadata: self.show_metadata,
@@ -1139,6 +1160,30 @@ impl App {
             .last_mut()
             .and_then(ConversationEntry::as_turn_mut)
             .expect("just ensured a trailing streaming turn")
+    }
+
+    /// Bracket nested sub-agent activity by comparing the incoming frame's
+    /// sub-agent tag to the section currently open. On a transition, close the
+    /// old section and/or open the new one by pushing the marker blocks into the
+    /// in-flight turn — exactly mirroring the CLI's tag-transition bracketing.
+    ///
+    /// A no-op (and no turn is forced into existence) when the tag is unchanged,
+    /// which is every frame of an ordinary, sub-agent-free generation.
+    pub fn sync_subagent_section(&mut self, tag: Option<&str>) {
+        if self.stream.subagent.as_deref() == tag {
+            return;
+        }
+        if let Some(prev) = self.stream.subagent.take() {
+            self.ensure_streaming_turn()
+                .blocks
+                .push(Block::SubagentEnd(prev));
+        }
+        if let Some(name) = tag {
+            self.ensure_streaming_turn()
+                .blocks
+                .push(Block::SubagentBegin(name.to_string()));
+            self.stream.subagent = Some(name.to_string());
+        }
     }
 
     /// Append a live thinking delta to the in-flight turn. Merges into the
@@ -1686,6 +1731,7 @@ impl App {
         "timestamps",
         "thinking",
         "tools",
+        "subagent",
         "images",
         "metadata",
         "usage",
@@ -1700,6 +1746,7 @@ impl App {
             "timestamps" => Some(self.show_timestamps),
             "thinking" => Some(self.show_thinking),
             "tools" => Some(self.show_tools),
+            "subagent" => Some(self.show_subagent),
             "images" => Some(self.show_images),
             "metadata" => Some(self.show_metadata),
             // Value-typed: "active" means anything other than Off (drives the
@@ -1781,6 +1828,7 @@ impl App {
             "timestamps" => self.show_timestamps = enabled,
             "thinking" => self.show_thinking = enabled,
             "tools" => self.show_tools = enabled,
+            "subagent" => self.show_subagent = enabled,
             "images" => self.show_images = enabled,
             "metadata" => self.show_metadata = enabled,
             // Boolean on/off maps onto the always/off ends of the tri-state so

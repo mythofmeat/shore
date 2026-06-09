@@ -198,6 +198,12 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::Redraw
         }
 
+        // Toggle nested sub-agent sections
+        (KeyModifiers::NONE, KeyCode::Char('s')) => {
+            app.show_subagent = !app.show_subagent;
+            Action::Redraw
+        }
+
         // Toggle inline images in history
         (KeyModifiers::NONE, KeyCode::Char('p')) => {
             app.show_images = !app.show_images;
@@ -762,7 +768,7 @@ fn parse_command(app: &mut App, input: &str) -> Action {
             let value = parts.next().unwrap_or("toggle");
             if parts.next().is_some() {
                 app.set_status(
-                    "usage: :view [timestamps|thinking|tools|images|metadata|usage] [on|off|toggle]",
+                    "usage: :view [timestamps|thinking|tools|subagent|images|metadata|usage] [on|off|toggle]",
                 );
                 return Action::Redraw;
             }
@@ -795,7 +801,7 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                 "toggle" => app.toggle_view_option(key).unwrap_or(false),
                 _ => {
                     app.set_status(
-                        "usage: :view [timestamps|thinking|tools|images|metadata|usage] [on|off|toggle]",
+                        "usage: :view [timestamps|thinking|tools|subagent|images|metadata|usage] [on|off|toggle]",
                     );
                     return Action::Redraw;
                 }

@@ -429,6 +429,9 @@ fn load_prefs(app: &mut App) {
             if let Some(b) = v.get("show_tools").and_then(|v| v.as_bool()) {
                 app.show_tools = b;
             }
+            if let Some(b) = v.get("show_subagent").and_then(|v| v.as_bool()) {
+                app.show_subagent = b;
+            }
             if let Some(b) = v.get("show_images").and_then(|v| v.as_bool()) {
                 app.show_images = b;
             }
@@ -460,6 +463,7 @@ fn save_prefs(app: &App) {
     let v = serde_json::json!({
         "show_thinking": app.show_thinking,
         "show_tools": app.show_tools,
+        "show_subagent": app.show_subagent,
         "show_images": app.show_images,
         "show_timestamps": app.show_timestamps,
         "show_metadata": app.show_metadata,
@@ -1379,8 +1383,32 @@ fn active_model_candidate_name(active: &str, model: &serde_json::Value) -> Optio
 }
 
 pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffect {
+    // Open/close the nested sub-agent section before the content is handled, so
+    // the marker brackets land in the right spot among the streamed blocks
+    // (mirrors the CLI's pre-dispatch bracketing). Only the frame types that can
+    // carry the tag drive the section — an interleaved `Phase`/`Error`/etc.
+    // reads `subagent() == None` because it simply lacks the field, and must not
+    // be mistaken for a return to the primary model and close the section.
+    if matches!(
+        msg,
+        ServerMessage::StreamStart(_)
+            | ServerMessage::StreamChunk(_)
+            | ServerMessage::StreamEnd(_)
+            | ServerMessage::ToolCall(_)
+            | ServerMessage::ToolResult(_)
+            | ServerMessage::SendImage(_)
+    ) {
+        app.sync_subagent_section(msg.subagent());
+    }
+
     let redraw = match msg {
         ServerMessage::StreamStart(start) => {
+            // A sub-agent's own stream boundary must not reset or regen the
+            // primary turn — it's nested activity inside an in-flight tool loop.
+            if start.subagent.is_some() {
+                app.spinner_frame = 0;
+                return UiEffect::redraw(RedrawEffect::Immediate);
+            }
             app.spinner_frame = 0;
             if start.regen {
                 app.begin_regen_optimistic();
@@ -1415,6 +1443,12 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         }
 
         ServerMessage::StreamEnd(end) => {
+            // A sub-agent's stream boundary never ends the primary generation;
+            // its section stays open (the next untagged frame closes it via
+            // `sync_subagent_section`). Skip all turn-finalization here.
+            if end.subagent.is_some() {
+                return UiEffect::redraw(RedrawEffect::Immediate);
+            }
             if end.finish_reason == "cancelled" {
                 app.abort_stream();
                 app.set_status("generation cancelled");
@@ -2678,6 +2712,7 @@ mod redraw_tests {
         let effect = handle_server_message(
             &mut app,
             ServerMessage::StreamEnd(StreamEnd {
+                subagent: None,
                 rid: None,
                 msg_id: None,
                 revision: None,
@@ -2697,6 +2732,7 @@ mod redraw_tests {
         let effect = handle_server_message(
             &mut app,
             ServerMessage::StreamEnd(StreamEnd {
+                subagent: None,
                 rid: None,
                 msg_id: None,
                 revision: None,
@@ -2752,6 +2788,7 @@ mod redraw_tests {
         let effect = handle_server_message(
             &mut app,
             ServerMessage::StreamChunk(StreamChunk {
+                subagent: None,
                 rid: None,
                 text: "partial".into(),
                 content_type: "text".into(),
@@ -2783,6 +2820,7 @@ mod redraw_tests {
         handle_server_message(
             &mut app,
             ServerMessage::StreamEnd(StreamEnd {
+                subagent: None,
                 rid: None,
                 msg_id: Some("m_target".into()),
                 revision: Some(7),
@@ -2825,6 +2863,7 @@ mod redraw_tests {
         handle_server_message(
             &mut app,
             ServerMessage::StreamEnd(StreamEnd {
+                subagent: None,
                 rid: None,
                 msg_id: Some("m_missing_from_history".into()),
                 revision: Some(8),
