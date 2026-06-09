@@ -1,5 +1,6 @@
 use shore_protocol::client_msg::{Cancel, ClientMessage, ClientMessageBody, Command, Regen};
-use shore_protocol::server_msg::ServerMessage;
+use shore_protocol::server_msg::{MessageOrigin, ServerMessage};
+use shore_protocol::types::ImageRef;
 
 /// Routing decision for a Matrix message.
 #[derive(Debug)]
@@ -344,6 +345,7 @@ pub fn input_to_swp(input: &MatrixInput) -> Option<ClientMessage> {
 }
 
 /// An image buffered during streaming, to be sent as a Matrix attachment.
+#[derive(Debug, Clone, PartialEq)]
 pub struct PendingImage {
     pub path: String,
     pub caption: Option<String>,
@@ -429,6 +431,137 @@ impl ResponseCollector {
             _ => CollectorAction::None,
         }
     }
+}
+
+// ── Full-conversation mirroring (mirror_all) ──────────────────────────────
+//
+// When `mirror_all` is on (the default), each character's bound room shows that
+// character's *entire* conversation regardless of which client drove it. The
+// daemon already broadcasts every conversation message as `NewMessage` (tagged
+// with `character` and `MessageOrigin`); the bridge just routes each one to the
+// right room. Streaming frames stay private to the originating session, so they
+// only drive the typing indicator here — the reply content arrives via
+// `NewMessage(AssistantReply)`, which is the single source of truth (this also
+// avoids double-posting a Matrix-originated reply).
+
+/// Which room a routed daemon message targets, before room resolution.
+#[derive(Debug, PartialEq, Eq)]
+pub enum RoomTarget {
+    /// The room bound to this character; the caller falls back to the active
+    /// room when the character is unknown or unbound.
+    Character(Option<String>),
+    /// The active conversation room (stream lifecycle, command/error replies).
+    Active,
+}
+
+/// What to do with a routed message once its room is resolved.
+#[derive(Debug, PartialEq)]
+pub enum MirrorAction {
+    /// Start the typing indicator.
+    StartTyping,
+    /// Stop the typing indicator (no content; the reply arrives via NewMessage).
+    StopTyping,
+    /// Post assistant/autonomous content as the character bot.
+    Post {
+        text: String,
+        images: Vec<PendingImage>,
+    },
+    /// Mirror a user prompt that arrived for this character. The caller drops it
+    /// first if it is this bridge's own echo (see self-echo suppression).
+    UserPrompt(String),
+    /// Post a command response.
+    CommandOutput { name: String, data: String },
+    /// Post an error.
+    Error(String),
+    /// Nothing to do for this frame.
+    None,
+}
+
+/// A routed daemon message in `mirror_all` mode.
+#[derive(Debug, PartialEq)]
+pub struct MirrorRoute {
+    pub target: RoomTarget,
+    pub action: MirrorAction,
+}
+
+/// Route a daemon message in `mirror_all` mode.
+///
+/// Pure: room resolution, typing/send IO, and self-echo suppression are handled
+/// by the caller. `NewMessage` routes by `character`; everything else that needs
+/// a room rides the active conversation room.
+pub fn route_mirror(msg: &ServerMessage) -> MirrorRoute {
+    match msg {
+        ServerMessage::NewMessage(nm) => {
+            let character = nm.character.clone();
+            let action = match nm.origin {
+                Some(MessageOrigin::UserInput) => {
+                    MirrorAction::UserPrompt(nm.message.content.clone())
+                }
+                // AssistantReply, Autonomous, or unset → post as the bot.
+                _ => MirrorAction::Post {
+                    text: nm.message.content.clone(),
+                    images: pending_images(&nm.message.images),
+                },
+            };
+            MirrorRoute {
+                target: RoomTarget::Character(character),
+                action,
+            }
+        }
+        ServerMessage::StreamStart(_) => MirrorRoute {
+            target: RoomTarget::Active,
+            action: MirrorAction::StartTyping,
+        },
+        ServerMessage::StreamEnd(_) => MirrorRoute {
+            target: RoomTarget::Active,
+            action: MirrorAction::StopTyping,
+        },
+        ServerMessage::CommandOutput(out) => MirrorRoute {
+            target: RoomTarget::Active,
+            action: MirrorAction::CommandOutput {
+                name: out.name.clone(),
+                data: serde_json::to_string_pretty(&out.data)
+                    .unwrap_or_else(|_| format!("{:?}", out.data)),
+            },
+        },
+        ServerMessage::Error(err) => MirrorRoute {
+            target: RoomTarget::Active,
+            action: MirrorAction::Error(format!("{:?}: {}", err.code, err.message)),
+        },
+        // StreamChunk accumulates server-side; SendImage is covered by the
+        // NewMessage images in mirror mode; Ping/Hello/History/Shutdown and any
+        // unknown frame need no per-room action here.
+        _ => MirrorRoute {
+            target: RoomTarget::Active,
+            action: MirrorAction::None,
+        },
+    }
+}
+
+fn pending_images(images: &[ImageRef]) -> Vec<PendingImage> {
+    images
+        .iter()
+        .map(|img| PendingImage {
+            path: img.path.clone(),
+            caption: img.caption.clone(),
+        })
+        .collect()
+}
+
+/// Render a user prompt that arrived from another client (CLI/TUI) for mirroring
+/// into the Matrix room. Blockquoted and prefixed so it reads as someone else's
+/// input rather than the character bot speaking.
+pub fn format_user_mirror(content: &str) -> String {
+    let mut out = String::new();
+    let mut lines = content.lines();
+    match lines.next() {
+        Some(first) => out.push_str(&format!("> \u{1f464} {first}")),
+        None => return "> \u{1f464}".to_string(),
+    }
+    for line in lines {
+        out.push_str(&format!("\n> {line}"));
+    }
+    out
 }
 
 #[cfg(test)]
@@ -1062,5 +1195,118 @@ mod tests {
         } else {
             panic!("expected SendMessage");
         }
+    }
+
+    // ── mirror_all routing ────────────────────────────────────────────────
+
+    fn new_message(
+        character: Option<&str>,
+        origin: Option<MessageOrigin>,
+        content: &str,
+    ) -> ServerMessage {
+        ServerMessage::NewMessage(NewMessage {
+            revision: 1,
+            character: character.map(str::to_string),
+            origin,
+            message: Message {
+                msg_id: "m1".into(),
+                role: Role::Assistant,
+                content: content.into(),
+                images: vec![],
+                content_blocks: vec![],
+                alt_index: None,
+                alt_count: None,
+                alternatives: vec![],
+                timestamp: "2026-01-01T00:00:00Z".into(),
+                provider_key: None,
+            },
+        })
+    }
+
+    #[test]
+    fn mirror_assistant_reply_routes_to_character_room() {
+        let route = route_mirror(&new_message(
+            Some("Alice"),
+            Some(MessageOrigin::AssistantReply),
+            "hi there",
+        ));
+        assert_eq!(route.target, RoomTarget::Character(Some("Alice".into())));
+        assert_eq!(
+            route.action,
+            MirrorAction::Post {
+                text: "hi there".into(),
+                images: vec![],
+            }
+        );
+    }
+
+    #[test]
+    fn mirror_autonomous_routes_to_character_room() {
+        let route = route_mirror(&new_message(
+            Some("Bob"),
+            Some(MessageOrigin::Autonomous),
+            "thinking of you",
+        ));
+        assert_eq!(route.target, RoomTarget::Character(Some("Bob".into())));
+        assert!(matches!(route.action, MirrorAction::Post { .. }));
+    }
+
+    #[test]
+    fn mirror_user_input_becomes_user_prompt() {
+        let route = route_mirror(&new_message(
+            Some("Alice"),
+            Some(MessageOrigin::UserInput),
+            "ping from the cli",
+        ));
+        assert_eq!(route.target, RoomTarget::Character(Some("Alice".into())));
+        assert_eq!(
+            route.action,
+            MirrorAction::UserPrompt("ping from the cli".into())
+        );
+    }
+
+    #[test]
+    fn mirror_stream_lifecycle_rides_active_room() {
+        let start = route_mirror(&ServerMessage::StreamStart(StreamStart {
+            regen: false,
+            rid: None,
+        }));
+        assert_eq!(start.target, RoomTarget::Active);
+        assert_eq!(start.action, MirrorAction::StartTyping);
+
+        // StreamEnd stops typing only — the reply content arrives via NewMessage,
+        // so it must NOT post here (otherwise a Matrix-originated reply doubles).
+        let end = route_mirror(&ServerMessage::StreamEnd(StreamEnd {
+            content: "the reply".into(),
+            metadata: StreamMetadata {
+                tokens: TokenCounts {
+                    input: 0,
+                    output: 0,
+                    cache_read: 0,
+                    cache_write: 0,
+                },
+                timing: TimingInfo {
+                    total_ms: 0,
+                    ttft_ms: 0,
+                },
+                model: "test".into(),
+            },
+            finish_reason: "end_turn".into(),
+            rid: None,
+            is_final: true,
+            msg_id: None,
+            revision: None,
+        }));
+        assert_eq!(end.target, RoomTarget::Active);
+        assert_eq!(end.action, MirrorAction::StopTyping);
+    }
+
+    #[test]
+    fn format_user_mirror_quotes_and_prefixes() {
+        assert_eq!(format_user_mirror("hello"), "> \u{1f464} hello");
+        assert_eq!(
+            format_user_mirror("line one\nline two"),
+            "> \u{1f464} line one\n> line two"
+        );
     }
 }

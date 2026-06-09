@@ -1,6 +1,6 @@
 #![recursion_limit = "256"]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -15,7 +15,8 @@ use tracing::{error, info, warn};
 use shore_config::app::{EmbeddedConfig, MatrixConfig};
 use shore_matrix::bot::{BotConfig, MatrixBot, MatrixEvent};
 use shore_matrix::bridge::{
-    input_to_swp, parse_matrix_input, CollectorAction, MatrixInput, ResponseCollector,
+    format_user_mirror, input_to_swp, parse_matrix_input, route_mirror, CollectorAction,
+    MatrixInput, MirrorAction, ResponseCollector, RoomTarget,
 };
 use shore_matrix::connection::{spawn_connection, ConnCommand, ConnEvent};
 use shore_matrix::crypto;
@@ -28,6 +29,8 @@ use shore_matrix::provision::{
     HomeserverPaths, ProvisionState, RoomStatus, TokenStatus,
 };
 use shore_matrix::rooms::RoomManager;
+use shore_protocol::client_msg::ClientMessage;
+use shore_protocol::server_msg::ServerMessage;
 
 #[derive(Parser)]
 #[command(name = "shore-matrix", about = "Matrix bridge for Shore")]
@@ -90,6 +93,11 @@ const DEFAULT_LOG_FILTER: &str = "warn,shore_matrix=info,matrix_sdk_crypto::back
 #[derive(Debug)]
 struct MatrixFileConfig {
     matrix: Option<MatrixConfig>,
+    /// Whether each character's bound room mirrors its full conversation.
+    /// Defaults ON. Read here (and stripped before the typed parse) rather than
+    /// off `MatrixConfig` so the bridge stays decoupled from the shore-config
+    /// release that adds the typed field — see `matrix_from_table`.
+    mirror_all: bool,
     config_dir: PathBuf,
 }
 
@@ -134,6 +142,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // unrelated daemon config sections like [usage] or provider catalogs.
     let matrix_config = load_matrix_config(&args.config)?;
     let file_config = matrix_config.matrix;
+    let mirror_all = matrix_config.mirror_all;
     let config_dir = matrix_config.config_dir;
     let daemon_config = daemon_config_selector(&args.config, &config_dir);
 
@@ -150,37 +159,54 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .into(),
                 );
             }
-            return run_embedded(embedded, fc, &args, &config_dir, daemon_config).await;
+            return run_embedded(embedded, fc, &args, &config_dir, daemon_config, mirror_all).await;
         }
     }
 
     // External mode: use CLI args, falling back to config file values
-    run_external(&file_config, &args, &config_dir, daemon_config).await
+    run_external(&file_config, &args, &config_dir, daemon_config, mirror_all).await
 }
 
 /// Load only the Matrix-owned portion of Shore config.
 fn load_matrix_config(config_flag: &Option<String>) -> Result<MatrixFileConfig, MatrixConfigError> {
     let config_path = config_flag.as_deref().map(config_file_from_arg);
     let raw = shore_config::load_raw_config_table(config_path.as_deref())?;
-    let matrix = matrix_from_table(&raw.table)?;
+    let (matrix, mirror_all) = matrix_from_table(&raw.table)?;
     Ok(MatrixFileConfig {
         matrix,
+        mirror_all,
         config_dir: raw.dirs.config,
     })
 }
 
-fn matrix_from_table(table: &toml::Table) -> Result<Option<MatrixConfig>, MatrixConfigError> {
+/// Parse `[connections.matrix]`, returning the typed config plus the
+/// `mirror_all` flag (default `true`).
+///
+/// We extract `mirror_all` ourselves and strip it before the typed parse: the
+/// `MatrixConfig` from crates.io is `#[serde(deny_unknown_fields)]`, so leaving
+/// the key in would fail deserialization on a shore-config version that predates
+/// the field. Stripping keeps the bridge buildable on the current published
+/// crate while still honoring the key (the daemon parses the same config with
+/// its own, field-aware shore-config).
+fn matrix_from_table(
+    table: &toml::Table,
+) -> Result<(Option<MatrixConfig>, bool), MatrixConfigError> {
     let Some(connections) = table.get("connections").and_then(toml::Value::as_table) else {
-        return Ok(None);
+        return Ok((None, true));
     };
     let Some(matrix) = connections.get("matrix") else {
-        return Ok(None);
+        return Ok((None, true));
     };
+    let mut matrix = matrix.clone();
+    let mirror_all = matrix
+        .as_table_mut()
+        .and_then(|t| t.remove("mirror_all"))
+        .and_then(|value| value.as_bool())
+        .unwrap_or(true);
     let parsed: MatrixConfig = matrix
-        .clone()
         .try_into()
         .map_err(|e| MatrixConfigError::Matrix(Box::new(e)))?;
-    Ok(Some(parsed))
+    Ok((Some(parsed), mirror_all))
 }
 
 fn config_file_from_arg(raw: &str) -> PathBuf {
@@ -215,6 +241,7 @@ async fn run_external(
     args: &Args,
     config_dir: &Path,
     daemon_config: Option<String>,
+    mirror_all: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Resolve fields: CLI args take precedence over config file
     let homeserver = args
@@ -256,7 +283,15 @@ async fn run_external(
     let room_manager = RoomManager::new();
 
     info!("shore-matrix bridge running (external mode)");
-    run_bridge_loop(bot, matrix_rx, daemon_tx, daemon_rx, room_manager).await;
+    run_bridge_loop(
+        bot,
+        matrix_rx,
+        daemon_tx,
+        daemon_rx,
+        room_manager,
+        mirror_all,
+    )
+    .await;
     Ok(())
 }
 
@@ -268,6 +303,7 @@ async fn run_embedded(
     args: &Args,
     config_dir: &Path,
     daemon_config: Option<String>,
+    mirror_all: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // 1. Resolve paths
     let hs_paths = match &embedded.data_dir {
@@ -564,7 +600,7 @@ async fn run_embedded(
     );
     info!("shore-matrix bridge running (embedded mode)");
     tokio::select! {
-        _ = run_bridge_loop(bot, matrix_rx, daemon_tx, daemon_rx, room_manager) => {}
+        _ = run_bridge_loop(bot, matrix_rx, daemon_tx, daemon_rx, room_manager, mirror_all) => {}
         _ = shutdown_signal() => {
             info!("received shutdown signal, stopping homeserver");
         }
@@ -652,10 +688,15 @@ async fn run_bridge_loop(
     daemon_tx: mpsc::Sender<ConnCommand>,
     mut daemon_rx: mpsc::Receiver<ConnEvent>,
     mut room_manager: RoomManager,
+    mirror_all: bool,
 ) {
     let mut collectors: HashMap<OwnedRoomId, ResponseCollector> = HashMap::new();
     let mut active_room: Option<OwnedRoomId> = None;
     let mut known_characters: Vec<String> = Vec::new();
+    // Prompts this bridge forwarded, keyed by character, used to suppress the
+    // daemon's echo of our own `UserInput` (the Matrix user already sees their
+    // message). Prompts from other clients won't match and get mirrored.
+    let mut pending_self_inputs: HashMap<String, VecDeque<String>> = HashMap::new();
 
     loop {
         tokio::select! {
@@ -685,26 +726,38 @@ async fn run_bridge_loop(
                                 }
                             }
                             input @ (MatrixInput::Text(_) | MatrixInput::Image { .. }) => {
-                                active_room = Some(room_id);
                                 if let Some(swp_msg) = input_to_swp(&input) {
+                                    if mirror_all {
+                                        record_self_input(
+                                            &mut pending_self_inputs, &room_manager,
+                                            &room_id, &swp_msg,
+                                        );
+                                    }
                                     if daemon_tx.send(ConnCommand::Send(swp_msg)).await.is_err() {
                                         error!("daemon connection dropped");
                                     }
                                 }
+                                active_room = Some(room_id);
                             }
                         }
                     }
                     MatrixEvent::Image { room_id, path, body, .. } => {
-                        active_room = Some(room_id);
                         let input = MatrixInput::Image {
                             path,
                             caption: Some(body),
                         };
                         if let Some(swp_msg) = input_to_swp(&input) {
+                            if mirror_all {
+                                record_self_input(
+                                    &mut pending_self_inputs, &room_manager,
+                                    &room_id, &swp_msg,
+                                );
+                            }
                             if daemon_tx.send(ConnCommand::Send(swp_msg)).await.is_err() {
                                 error!("daemon connection dropped");
                             }
                         }
+                        active_room = Some(room_id);
                     }
                 }
             }
@@ -724,19 +777,16 @@ async fn run_bridge_loop(
                         info!("daemon disconnected: {reason}");
                     }
                     ConnEvent::Message(msg) => {
-                        let target = if matches!(msg, shore_protocol::server_msg::ServerMessage::NewMessage(_)) {
-                            push_target(&known_characters, &room_manager)
-                                .or(active_room.clone())
+                        if mirror_all {
+                            dispatch_mirror(
+                                &bot, &msg, &room_manager, &active_room,
+                                &mut pending_self_inputs,
+                            ).await;
                         } else {
-                            active_room.clone()
-                        };
-
-                        if let Some(ref room_id) = target {
-                            let collector = collectors
-                                .entry(room_id.clone())
-                                .or_default();
-                            let action = collector.feed(&msg);
-                            dispatch_action(&bot, room_id, action).await;
+                            dispatch_legacy(
+                                &bot, &msg, &room_manager, &known_characters,
+                                &active_room, &mut collectors,
+                            ).await;
                         }
                     }
                 }
@@ -746,6 +796,139 @@ async fn run_bridge_loop(
 }
 
 // ── Bridge helpers ──────────────────────────────────────────────────────
+
+const MAX_PENDING_SELF_INPUTS: usize = 8;
+
+/// Record a prompt this bridge forwarded so the daemon's `UserInput` echo for it
+/// can be suppressed (the sender already sees their own Matrix message).
+fn record_self_input(
+    pending: &mut HashMap<String, VecDeque<String>>,
+    room_manager: &RoomManager,
+    room_id: &RoomId,
+    swp_msg: &ClientMessage,
+) {
+    let ClientMessage::Message(body) = swp_msg else {
+        return;
+    };
+    let Some(character) = room_manager.character_for_room(room_id.as_str()) else {
+        return;
+    };
+    let queue = pending.entry(character.to_string()).or_default();
+    queue.push_back(body.text.clone());
+    while queue.len() > MAX_PENDING_SELF_INPUTS {
+        queue.pop_front();
+    }
+}
+
+/// Consume a matching pending self-input. Returns true if `content` was this
+/// bridge's own echo for `character` (and should not be re-posted).
+fn consume_self_echo(
+    pending: &mut HashMap<String, VecDeque<String>>,
+    character: Option<&str>,
+    content: &str,
+) -> bool {
+    let Some(character) = character else {
+        return false;
+    };
+    let Some(queue) = pending.get_mut(character) else {
+        return false;
+    };
+    match queue.iter().position(|c| c == content) {
+        Some(pos) => {
+            queue.remove(pos);
+            true
+        }
+        None => false,
+    }
+}
+
+/// Resolve the Matrix room bound to a character, if any.
+fn resolve_character_room(
+    room_manager: &RoomManager,
+    character: Option<&str>,
+) -> Option<OwnedRoomId> {
+    let character = character?;
+    let room_str = room_manager.room_for_character(character)?;
+    <&RoomId>::try_from(room_str).ok().map(RoomId::to_owned)
+}
+
+/// Route one daemon message in `mirror_all` mode: each NewMessage goes to its
+/// character's bound room; stream/command/error frames ride the active room.
+async fn dispatch_mirror(
+    bot: &MatrixBot,
+    msg: &ServerMessage,
+    room_manager: &RoomManager,
+    active_room: &Option<OwnedRoomId>,
+    pending_self_inputs: &mut HashMap<String, VecDeque<String>>,
+) {
+    let route = route_mirror(msg);
+    let character = match &route.target {
+        RoomTarget::Character(character) => character.clone(),
+        RoomTarget::Active => None,
+    };
+    let room = match &route.target {
+        RoomTarget::Active => active_room.clone(),
+        RoomTarget::Character(character) => {
+            resolve_character_room(room_manager, character.as_deref())
+                .or_else(|| active_room.clone())
+        }
+    };
+    let Some(room) = room else {
+        return;
+    };
+
+    match route.action {
+        MirrorAction::StartTyping => bot.set_typing(&room, true).await,
+        MirrorAction::StopTyping => bot.set_typing(&room, false).await,
+        MirrorAction::Post { text, images } => {
+            bot.set_typing(&room, false).await;
+            for img in &images {
+                bot.send_image(&room, &img.path, img.caption.as_deref())
+                    .await;
+            }
+            if !text.is_empty() {
+                bot.send_text(&room, &text).await;
+            }
+        }
+        MirrorAction::UserPrompt(content) => {
+            if !consume_self_echo(pending_self_inputs, character.as_deref(), &content) {
+                bot.send_text(&room, &format_user_mirror(&content)).await;
+            }
+        }
+        MirrorAction::CommandOutput { name, data } => {
+            bot.send_text(&room, &format!("**{name}**\n```\n{data}\n```"))
+                .await;
+        }
+        MirrorAction::Error(err) => {
+            bot.send_text(&room, &format!("Error: {err}")).await;
+        }
+        MirrorAction::None => {}
+    }
+}
+
+/// Legacy routing (`mirror_all = false`): NewMessage goes to the first bound
+/// room (or the active room); everything else rides the active room, assembled
+/// through the streaming `ResponseCollector`.
+async fn dispatch_legacy(
+    bot: &MatrixBot,
+    msg: &ServerMessage,
+    room_manager: &RoomManager,
+    known_characters: &[String],
+    active_room: &Option<OwnedRoomId>,
+    collectors: &mut HashMap<OwnedRoomId, ResponseCollector>,
+) {
+    let target = if matches!(msg, ServerMessage::NewMessage(_)) {
+        push_target(known_characters, room_manager).or_else(|| active_room.clone())
+    } else {
+        active_room.clone()
+    };
+
+    if let Some(ref room_id) = target {
+        let collector = collectors.entry(room_id.clone()).or_default();
+        let action = collector.feed(msg);
+        dispatch_action(bot, room_id, action).await;
+    }
+}
 
 async fn handle_bind(
     bot: &MatrixBot,
@@ -912,5 +1095,109 @@ bogus = true
 
         assert!(err.contains("[connections.matrix]"));
         assert!(err.contains("bogus"));
+    }
+
+    // ── mirror_all flag + self-echo routing ───────────────────────────────
+
+    use super::{consume_self_echo, record_self_input, resolve_character_room};
+    use matrix_sdk::ruma::RoomId;
+    use shore_matrix::rooms::RoomManager;
+    use shore_protocol::client_msg::{ClientMessage, ClientMessageBody};
+    use std::collections::{HashMap, VecDeque};
+
+    fn user_message(text: &str) -> ClientMessage {
+        ClientMessage::Message(ClientMessageBody {
+            rid: None,
+            text: text.into(),
+            stream: true,
+            images: vec![],
+            image_data: vec![],
+            absence_seconds: None,
+            overrides: None,
+        })
+    }
+
+    #[test]
+    fn mirror_all_defaults_on_when_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("config.toml"),
+            "[connections.matrix]\nhomeserver = \"https://m.example.com\"\n",
+        )
+        .unwrap();
+        let raw = dir.path().to_string_lossy().into_owned();
+        let cfg = load_matrix_config(&Some(raw)).unwrap();
+        assert!(cfg.mirror_all);
+    }
+
+    #[test]
+    fn mirror_all_false_parses_and_strips_key() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("config.toml"),
+            "[connections.matrix]\nhomeserver = \"https://m.example.com\"\nmirror_all = false\n",
+        )
+        .unwrap();
+        let raw = dir.path().to_string_lossy().into_owned();
+        let cfg = load_matrix_config(&Some(raw)).unwrap();
+        // Flag read, and the typed MatrixConfig still parsed (key was stripped
+        // before the deny_unknown_fields deserialize).
+        assert!(!cfg.mirror_all);
+        assert!(cfg.matrix.is_some());
+    }
+
+    #[test]
+    fn self_echo_suppresses_only_matching_input() {
+        let mut mgr = RoomManager::new();
+        mgr.bind("!room:example.com", "Alice");
+        let room = RoomId::parse("!room:example.com").unwrap();
+
+        let mut pending: HashMap<String, VecDeque<String>> = HashMap::new();
+        record_self_input(
+            &mut pending,
+            &mgr,
+            &room,
+            &user_message("hello from matrix"),
+        );
+
+        // The matching echo is suppressed (and consumed)...
+        assert!(consume_self_echo(
+            &mut pending,
+            Some("Alice"),
+            "hello from matrix"
+        ));
+        // ...exactly once.
+        assert!(!consume_self_echo(
+            &mut pending,
+            Some("Alice"),
+            "hello from matrix"
+        ));
+        // A prompt from another client (no pending entry) is not suppressed.
+        assert!(!consume_self_echo(
+            &mut pending,
+            Some("Alice"),
+            "from the cli"
+        ));
+    }
+
+    #[test]
+    fn self_input_not_recorded_for_unbound_room() {
+        let mgr = RoomManager::new(); // no bindings
+        let room = RoomId::parse("!room:example.com").unwrap();
+        let mut pending: HashMap<String, VecDeque<String>> = HashMap::new();
+        record_self_input(&mut pending, &mgr, &room, &user_message("hi"));
+        assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn resolve_character_room_maps_via_bindings() {
+        let mut mgr = RoomManager::new();
+        mgr.bind("!alice:example.com", "Alice");
+        assert_eq!(
+            resolve_character_room(&mgr, Some("Alice")).map(|r| r.to_string()),
+            Some("!alice:example.com".to_string())
+        );
+        assert_eq!(resolve_character_room(&mgr, Some("Bob")), None);
+        assert_eq!(resolve_character_room(&mgr, None), None);
     }
 }
