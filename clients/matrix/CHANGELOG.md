@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4](https://github.com/mythofmeat/shore-matrix/compare/v0.1.3...v0.1.4) - 2026-06-09
+
+### Other
+
+- *(deps)* upgrade to shore-swp-client 0.3.4 for the mirror_all fix ([#10](https://github.com/mythofmeat/shore-matrix/pull/10))
+
 ## [0.1.3](https://github.com/mythofmeat/shore-matrix/compare/v0.1.2...v0.1.3) - 2026-06-09
 
 ### Added
