@@ -7,10 +7,10 @@ repository = "https://github.com/mythofmeat/shore-matrix"
 description = "Matrix bridge for the Silvershore chat daemon."
 
 [dependencies]
-shore-protocol = "0.1"
-shore-config = "0.1"
-shore-swp-client = "0.1"
-shore-diagnostics = "0.1"
+shore-protocol = "0.8"
+shore-config = "0.12"
+shore-swp-client = "0.3"
+shore-diagnostics = "0.2"
 matrix-sdk = { version = "0.17", default-features = false, features = ["e2e-encryption", "markdown", "sqlite"] }
 tokio = { version = "1", features = ["full"] }
 clap = { version = "4", features = ["derive", "env"] }

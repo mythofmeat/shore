@@ -1,6 +1,4 @@
-use shore_protocol::client_msg::{
-    Cancel, ClientMessage, ClientMessageBody, Command, Regen, SetLiveSpeak, Speak,
-};
+use shore_protocol::client_msg::{Cancel, ClientMessage, ClientMessageBody, Command, Regen};
 use shore_protocol::server_msg::ServerMessage;
 
 /// Routing decision for a Matrix message.
@@ -64,23 +62,9 @@ fn parse_bang_command(name: &str, args: &str) -> MatrixInput {
             stream: true,
             guidance: (!args.is_empty()).then(|| args.to_string()),
         })),
-        "speak" => match args {
-            "" => forward_one(ClientMessage::Speak(Speak {
-                rid: None,
-                msg_id: None,
-            })),
-            "on" => forward_one(ClientMessage::SetLiveSpeak(SetLiveSpeak {
-                rid: None,
-                enabled: true,
-            })),
-            "off" => forward_one(ClientMessage::SetLiveSpeak(SetLiveSpeak {
-                rid: None,
-                enabled: false,
-            })),
-            _ => MatrixInput::LocalReply(
-                "usage: `!speak [on|off]` (bare `!speak` plays the last message)".into(),
-            ),
-        },
+        "speak" => MatrixInput::LocalReply(
+            "Text-to-speech was removed from Shore; `!speak` is no longer supported.".into(),
+        ),
 
         // Translated daemon commands
         "character" => parse_character(args),
@@ -327,10 +311,6 @@ fn help_text() -> String {
         "- `!reasoning [value|reset]` — set reasoning effort",
         "- `!memory <query>` — search character memory",
         "",
-        "**TTS**",
-        "- `!speak` — play the last message",
-        "- `!speak on|off` — toggle live TTS",
-        "",
         "Unknown `!cmd` is forwarded to the daemon as-is.",
     ]
     .join("\n")
@@ -559,36 +539,17 @@ mod tests {
         }
     }
 
-    fn first_forwarded(text: &str) -> ClientMessage {
-        forward_msgs(parse_matrix_input(text)).remove(0)
-    }
-
     #[test]
-    fn parse_speak_bare() {
-        assert!(matches!(first_forwarded("!speak"), ClientMessage::Speak(_)));
-    }
-
-    #[test]
-    fn parse_speak_on() {
-        match first_forwarded("!speak on") {
-            ClientMessage::SetLiveSpeak(s) => assert!(s.enabled),
-            other => panic!("expected SetLiveSpeak, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn parse_speak_off() {
-        match first_forwarded("!speak off") {
-            ClientMessage::SetLiveSpeak(s) => assert!(!s.enabled),
-            other => panic!("expected SetLiveSpeak, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn parse_speak_unknown_returns_usage() {
-        match parse_matrix_input("!speak loud") {
-            MatrixInput::LocalReply(text) => assert!(text.contains("usage")),
-            other => panic!("expected LocalReply, got {:?}", other),
+    fn parse_speak_reports_removed() {
+        // TTS was removed from the protocol; every `!speak ...` form should
+        // now be a bridge-local reply rather than a forwarded SWP message.
+        for input in ["!speak", "!speak on", "!speak off", "!speak loud"] {
+            match parse_matrix_input(input) {
+                MatrixInput::LocalReply(text) => {
+                    assert!(text.contains("no longer supported"), "got: {text}")
+                }
+                other => panic!("expected LocalReply for {input:?}, got {other:?}"),
+            }
         }
     }
 
@@ -984,6 +945,7 @@ mod tests {
                 alt_count: None,
                 alternatives: vec![],
                 timestamp: "2026-01-01T00:00:00Z".into(),
+                provider_key: None,
             },
         }));
         if let CollectorAction::SendPush(text) = action {
