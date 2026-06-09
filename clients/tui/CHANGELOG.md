@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.11](https://github.com/mythofmeat/shore-tui/compare/v0.1.10...v0.1.11) - 2026-06-09
+
+### Added
+
+- *(setting)* mirror daemon's cache_keepalive and max_tool_iterations keys ([#27](https://github.com/mythofmeat/shore-tui/pull/27))
+- *(tui)* add sub-agent section toggle ([#25](https://github.com/mythofmeat/shore-tui/pull/25))
+
 ## [0.1.10](https://github.com/mythofmeat/shore-tui/compare/v0.1.9...v0.1.10) - 2026-06-05
 
 ### Other
