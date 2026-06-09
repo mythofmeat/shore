@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use matrix_sdk::config::SyncSettings;
 use matrix_sdk::event_handler::Ctx;
@@ -108,12 +109,45 @@ impl MatrixBot {
     }
 
     /// Start the Matrix sync loop in the background.
+    ///
+    /// `Client::sync` retries some errors internally but *returns* on others
+    /// (e.g. the homeserver dropping a long-poll connection mid-response —
+    /// `hyper::Error(IncompleteMessage)`). If we let the task end there, the
+    /// bridge silently stops receiving Matrix events while still appearing to
+    /// run. Instead, reconnect with capped exponential backoff. The sync token
+    /// is persisted in the SQLite store, so each retry resumes where it left
+    /// off — no full resync, no missed events.
     pub fn start_sync(&self) {
         let client = self.client.clone();
         tokio::spawn(async move {
+            const INITIAL_BACKOFF: Duration = Duration::from_secs(1);
+            const MAX_BACKOFF: Duration = Duration::from_secs(30);
+            // If a sync ran healthily for at least this long before failing,
+            // treat the failure as fresh and reset the backoff.
+            const HEALTHY_RESET: Duration = Duration::from_secs(60);
+
             info!("starting Matrix sync");
-            if let Err(e) = client.sync(SyncSettings::default()).await {
-                error!("Matrix sync error: {e}");
+            let mut backoff = INITIAL_BACKOFF;
+            loop {
+                let started = Instant::now();
+                match client.sync(SyncSettings::default()).await {
+                    // `sync` only returns `Ok` when a stop was requested.
+                    Ok(()) => {
+                        info!("Matrix sync stopped");
+                        break;
+                    }
+                    Err(e) => {
+                        if started.elapsed() >= HEALTHY_RESET {
+                            backoff = INITIAL_BACKOFF;
+                        }
+                        warn!(
+                            "Matrix sync error: {e}; reconnecting in {}s",
+                            backoff.as_secs()
+                        );
+                        tokio::time::sleep(backoff).await;
+                        backoff = (backoff * 2).min(MAX_BACKOFF);
+                    }
+                }
             }
         });
     }
