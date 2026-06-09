@@ -88,6 +88,9 @@ pub struct HomeserverManager {
     config: HomeserverConfig,
     child: Option<Child>,
     binary: String,
+    /// True when we adopted an already-running homeserver instead of spawning
+    /// our own. We must not kill a process we did not start.
+    adopted: bool,
 }
 
 /// Try to find a compatible Matrix homeserver binary.
@@ -121,13 +124,33 @@ impl HomeserverManager {
             config,
             child: None,
             binary,
+            adopted: false,
         }
     }
 
     /// Write config files and start the homeserver process.
     pub async fn start(&mut self) -> Result<(), HomeserverError> {
-        if self.child.is_some() {
+        if self.child.is_some() || self.adopted {
             return Err(HomeserverError::AlreadyRunning);
+        }
+
+        // If a homeserver is already serving this port, adopt it instead of
+        // spawning a duplicate. A second process would only collide on the
+        // RocksDB lock ("Resource temporarily unavailable"), log a CRITICAL
+        // error, exit, and linger as an unreaped zombie. This commonly happens
+        // when an instance from a previous run outlived its bridge, but also
+        // covers an externally-managed homeserver on the same port.
+        if http_health_check(&self.config.homeserver_url())
+            .await
+            .unwrap_or(false)
+        {
+            self.adopted = true;
+            info!(
+                "homeserver already healthy at {}; adopting it (not spawning {})",
+                self.config.homeserver_url(),
+                self.binary
+            );
+            return Ok(());
         }
 
         // Ensure directories exist
@@ -150,21 +173,49 @@ impl HomeserverManager {
             config_path.display()
         );
 
-        let child = Command::new(&self.binary)
+        let mut command = Command::new(&self.binary);
+        command
             .env("CONDUWUIT_CONFIG", &config_path)
-            .kill_on_drop(true)
-            .spawn()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    HomeserverError::SpawnFailed(format!(
-                        "'{}' not found. Install a conduwuit-compatible Matrix homeserver \
+            .kill_on_drop(true);
+
+        // Belt-and-suspenders against orphaning: `kill_on_drop` and `stop()`
+        // only fire if the bridge unwinds normally. If the bridge is SIGKILLed
+        // (e.g. by a supervising daemon), Drop never runs and the homeserver is
+        // reparented to init, keeping the RocksDB lock + port held across
+        // restarts. PR_SET_PDEATHSIG asks the kernel to SIGKILL this child the
+        // moment its parent dies, for any reason.
+        #[cfg(target_os = "linux")]
+        {
+            let parent_pid = unsafe { libc::getpid() };
+            unsafe {
+                command.pre_exec(move || {
+                    if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL as libc::c_ulong) != 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    // Close the race where the parent already died between fork
+                    // and prctl: if so, getppid() is no longer the bridge.
+                    if libc::getppid() != parent_pid {
+                        // pre_exec runs after fork: only async-signal-safe
+                        // calls are allowed. _exit avoids the atexit handlers
+                        // and stdio flushing that std::process::exit runs.
+                        libc::_exit(0);
+                    }
+                    Ok(())
+                });
+            }
+        }
+
+        let child = command.spawn().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                HomeserverError::SpawnFailed(format!(
+                    "'{}' not found. Install a conduwuit-compatible Matrix homeserver \
                          (continuwuity, conduwuit, or tuwunel)",
-                        self.binary
-                    ))
-                } else {
-                    HomeserverError::SpawnFailed(e.to_string())
-                }
-            })?;
+                    self.binary
+                ))
+            } else {
+                HomeserverError::SpawnFailed(e.to_string())
+            }
+        })?;
 
         self.child = Some(child);
         info!("{} started (port {})", self.binary, self.config.port);
@@ -173,6 +224,12 @@ impl HomeserverManager {
 
     /// Stop the homeserver process.
     pub async fn stop(&mut self) -> Result<(), HomeserverError> {
+        if self.adopted {
+            // We did not start this process, so we must not kill it.
+            self.adopted = false;
+            info!("leaving adopted homeserver running (not ours to stop)");
+            return Ok(());
+        }
         if let Some(mut child) = self.child.take() {
             info!("stopping {}", self.binary);
             child
@@ -200,9 +257,12 @@ impl HomeserverManager {
                     return HealthStatus::Unknown;
                 }
             }
-        } else {
+        } else if !self.adopted {
+            // No child of ours and nothing adopted: there is nothing to check.
             return HealthStatus::NotRunning;
         }
+        // An adopted homeserver has no child handle; fall through to the HTTP
+        // probe, which is the only liveness signal we have for it.
 
         match http_health_check(&self.config.homeserver_url()).await {
             Ok(true) => HealthStatus::Healthy,
@@ -216,7 +276,7 @@ impl HomeserverManager {
     }
 
     pub fn is_running(&self) -> bool {
-        self.child.is_some()
+        self.child.is_some() || self.adopted
     }
 
     pub fn binary_name(&self) -> &str {
@@ -414,5 +474,25 @@ mod tests {
         let mgr = HomeserverManager::new(config, Some("test-binary".into()));
         assert!(!mgr.is_running());
         assert_eq!(mgr.binary_name(), "test-binary");
+    }
+
+    #[tokio::test]
+    async fn adopted_homeserver_is_running_but_not_killed_on_stop() {
+        let config = HomeserverConfig::default();
+        let mut mgr = HomeserverManager::new(config, Some("test-binary".into()));
+        // Simulate having adopted an already-running homeserver we don't own.
+        mgr.adopted = true;
+        assert!(mgr.is_running(), "an adopted homeserver counts as running");
+        // stop() must be a no-op success — never kill a process we didn't spawn.
+        assert!(mgr.stop().await.is_ok());
+        assert!(!mgr.adopted, "stop() clears the adopted flag");
+        assert!(!mgr.is_running());
+    }
+
+    #[tokio::test]
+    async fn stop_without_running_server_reports_not_running() {
+        let config = HomeserverConfig::default();
+        let mut mgr = HomeserverManager::new(config, Some("test-binary".into()));
+        assert!(matches!(mgr.stop().await, Err(HomeserverError::NotRunning)));
     }
 }

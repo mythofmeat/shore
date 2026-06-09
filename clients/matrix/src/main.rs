@@ -563,11 +563,42 @@ async fn run_embedded(
         character_states.len()
     );
     info!("shore-matrix bridge running (embedded mode)");
-    run_bridge_loop(bot, matrix_rx, daemon_tx, daemon_rx, room_manager).await;
+    tokio::select! {
+        _ = run_bridge_loop(bot, matrix_rx, daemon_tx, daemon_rx, room_manager) => {}
+        _ = shutdown_signal() => {
+            info!("received shutdown signal, stopping homeserver");
+        }
+    }
 
     // 12. Cleanup
     hs_manager.stop().await.ok();
     Ok(())
+}
+
+/// Resolve when the process is asked to terminate (SIGTERM from a supervising
+/// daemon/systemd, or Ctrl-C interactively), so we can stop the homeserver
+/// instead of leaking it. SIGKILL cannot be caught — PR_SET_PDEATHSIG on the
+/// child (see `homeserver::HomeserverManager::start`) covers that case.
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+        match signal(SignalKind::terminate()) {
+            Ok(mut term) => {
+                tokio::select! {
+                    _ = term.recv() => {}
+                    _ = tokio::signal::ctrl_c() => {}
+                }
+            }
+            Err(_) => {
+                let _ = tokio::signal::ctrl_c().await;
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
 }
 
 fn load_or_init_state(

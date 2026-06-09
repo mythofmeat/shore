@@ -3767,6 +3767,7 @@ name = "shore-matrix"
 version = "0.1.2"
 dependencies = [
  "clap",
+ "libc",
  "matrix-sdk",
  "mime",
  "mime_guess",
