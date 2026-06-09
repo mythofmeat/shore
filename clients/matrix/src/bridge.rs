@@ -932,6 +932,7 @@ mod tests {
         let action = c.feed(&ServerMessage::StreamStart(StreamStart {
             regen: false,
             rid: None,
+            subagent: None,
         }));
         assert!(matches!(action, CollectorAction::StartTyping));
         assert!(c.is_streaming());
@@ -940,6 +941,7 @@ mod tests {
             text: "hello".into(),
             content_type: "text".into(),
             rid: None,
+            subagent: None,
         }));
         assert!(matches!(action, CollectorAction::None));
 
@@ -963,6 +965,7 @@ mod tests {
             is_final: true,
             msg_id: None,
             revision: None,
+            subagent: None,
         }));
         if let CollectorAction::SendMessage { text, images } = action {
             assert_eq!(text, "hello world");
@@ -980,6 +983,7 @@ mod tests {
         c.feed(&ServerMessage::StreamStart(StreamStart {
             regen: false,
             rid: None,
+            subagent: None,
         }));
 
         c.feed(&ServerMessage::SendImage(SendImage {
@@ -987,12 +991,14 @@ mod tests {
             caption: Some("test image".into()),
             data: None,
             rid: None,
+            subagent: None,
         }));
         c.feed(&ServerMessage::SendImage(SendImage {
             path: "/tmp/img2.png".into(),
             caption: None,
             data: None,
             rid: None,
+            subagent: None,
         }));
 
         let action = c.feed(&ServerMessage::StreamEnd(StreamEnd {
@@ -1015,6 +1021,7 @@ mod tests {
             is_final: true,
             msg_id: None,
             revision: None,
+            subagent: None,
         }));
 
         if let CollectorAction::SendMessage { text, images } = action {
@@ -1134,12 +1141,14 @@ mod tests {
         c.feed(&ServerMessage::StreamStart(StreamStart {
             regen: false,
             rid: None,
+            subagent: None,
         }));
         c.feed(&ServerMessage::SendImage(SendImage {
             path: "/old.png".into(),
             caption: None,
             data: None,
             rid: None,
+            subagent: None,
         }));
         c.feed(&ServerMessage::StreamEnd(StreamEnd {
             content: "first".into(),
@@ -1161,12 +1170,14 @@ mod tests {
             is_final: true,
             msg_id: None,
             revision: None,
+            subagent: None,
         }));
 
         // Second stream should start clean
         c.feed(&ServerMessage::StreamStart(StreamStart {
             regen: false,
             rid: None,
+            subagent: None,
         }));
         let action = c.feed(&ServerMessage::StreamEnd(StreamEnd {
             content: "second".into(),
@@ -1188,6 +1199,7 @@ mod tests {
             is_final: true,
             msg_id: None,
             revision: None,
+            subagent: None,
         }));
 
         if let CollectorAction::SendMessage { images, .. } = action {
@@ -1270,6 +1282,7 @@ mod tests {
         let start = route_mirror(&ServerMessage::StreamStart(StreamStart {
             regen: false,
             rid: None,
+            subagent: None,
         }));
         assert_eq!(start.target, RoomTarget::Active);
         assert_eq!(start.action, MirrorAction::StartTyping);
@@ -1296,6 +1309,7 @@ mod tests {
             is_final: true,
             msg_id: None,
             revision: None,
+            subagent: None,
         }));
         assert_eq!(end.target, RoomTarget::Active);
         assert_eq!(end.action, MirrorAction::StopTyping);

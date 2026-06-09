@@ -3438,9 +3438,9 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "shore-config"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "440aeedcbcb62f9dc89de34c090880b970edfcd6495cd1ce8982460dcd86863c"
+checksum = "7c7cb21500f34ad14bdda54cafbe2008cf8025d1759082952073d738f2061964"
 dependencies = [
  "chrono",
  "dirs",
@@ -3491,9 +3491,9 @@ dependencies = [
 
 [[package]]
 name = "shore-protocol"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64b0d373bae1773bc4f8c1a843285b5f2d75b63c3f1c230f5213bf012b209495"
+checksum = "02653f947a8d1662e333f24f0a40e5b0d615fbfa4606fb3677f4c96e4505ffef"
 dependencies = [
  "serde",
  "serde_json",
@@ -3502,9 +3502,9 @@ dependencies = [
 
 [[package]]
 name = "shore-swp-client"
-version = "0.3.2"
+version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5da250c5b05c045e7dae42df290b3d56b6b8add96d6ed99ccfaebcfc3609bc38"
+checksum = "44d1892bdc6aeac620b607d64c2e11783fae8b2334d54d83bc1a9021b6dddf9a"
 dependencies = [
  "base64",
  "libc",

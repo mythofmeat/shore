@@ -266,16 +266,19 @@ fn full_stream_response_lifecycle() {
         ServerMessage::StreamStart(StreamStart {
             regen: false,
             rid: None,
+            subagent: None,
         }),
         ServerMessage::StreamChunk(StreamChunk {
             text: "Hello".into(),
             content_type: "text".into(),
             rid: None,
+            subagent: None,
         }),
         ServerMessage::StreamChunk(StreamChunk {
             text: ", world!".into(),
             content_type: "text".into(),
             rid: None,
+            subagent: None,
         }),
         ServerMessage::StreamEnd(StreamEnd {
             content: "Hello, world!".into(),
@@ -297,6 +300,7 @@ fn full_stream_response_lifecycle() {
             is_final: true,
             msg_id: None,
             revision: None,
+            subagent: None,
         }),
     ];
 
@@ -321,18 +325,21 @@ fn stream_with_images_delivers_both() {
         ServerMessage::StreamStart(StreamStart {
             regen: false,
             rid: None,
+            subagent: None,
         }),
         ServerMessage::SendImage(SendImage {
             path: "/tmp/generated_art.png".into(),
             caption: Some("A sunset painting".into()),
             data: None,
             rid: None,
+            subagent: None,
         }),
         ServerMessage::SendImage(SendImage {
             path: "/tmp/chart.svg".into(),
             caption: None,
             data: None,
             rid: None,
+            subagent: None,
         }),
         ServerMessage::StreamEnd(StreamEnd {
             content: "Here are the images you requested.".into(),
@@ -354,6 +361,7 @@ fn stream_with_images_delivers_both() {
             is_final: true,
             msg_id: None,
             revision: None,
+            subagent: None,
         }),
     ];
 
@@ -458,6 +466,7 @@ fn cross_room_isolation_with_independent_collectors() {
         .push(ServerMessage::StreamStart(StreamStart {
             regen: false,
             rid: None,
+            subagent: None,
         }));
 
     // Bob's room: independent stream
@@ -467,6 +476,7 @@ fn cross_room_isolation_with_independent_collectors() {
         .push(ServerMessage::StreamStart(StreamStart {
             regen: false,
             rid: None,
+            subagent: None,
         }));
 
     // Alice's room: receives image
@@ -478,6 +488,7 @@ fn cross_room_isolation_with_independent_collectors() {
             caption: None,
             data: None,
             rid: None,
+            subagent: None,
         }));
 
     // Alice's room: stream ends
@@ -504,6 +515,7 @@ fn cross_room_isolation_with_independent_collectors() {
             is_final: true,
             msg_id: None,
             revision: None,
+            subagent: None,
         }));
 
     // Bob's room: stream ends (no images)
@@ -530,6 +542,7 @@ fn cross_room_isolation_with_independent_collectors() {
             is_final: true,
             msg_id: None,
             revision: None,
+            subagent: None,
         }));
 
     // Verify isolation: Alice's room has 3 messages (start + image + end)
@@ -721,6 +734,7 @@ fn full_bridge_message_flow() {
         ServerMessage::StreamStart(StreamStart {
             regen: false,
             rid: None,
+            subagent: None,
         }),
         ServerMessage::StreamEnd(StreamEnd {
             content: "Hello! How can I help you today?".into(),
@@ -742,6 +756,7 @@ fn full_bridge_message_flow() {
             is_final: true,
             msg_id: None,
             revision: None,
+            subagent: None,
         }),
         // Response to status command
         ServerMessage::CommandOutput(CommandOutput {
@@ -808,6 +823,7 @@ fn e2e_encryption_verification_types() {
         is_final: true,
         msg_id: None,
         revision: None,
+        subagent: None,
     });
 
     if let ServerMessage::StreamEnd(end) = &stream_end {
