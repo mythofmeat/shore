@@ -1149,10 +1149,12 @@ fn parse_setting_value_str(key: &str, raw: &str) -> serde_json::Value {
             .and_then(serde_json::Number::from_f64)
             .map(Value::Number)
             .unwrap_or_else(|| Value::String(trimmed.to_string())),
-        "budget_tokens" | "max_output_tokens" | "gemini_generation" => trimmed
-            .parse::<u64>()
-            .map(|n| Value::Number(n.into()))
-            .unwrap_or_else(|_| Value::String(trimmed.to_string())),
+        "budget_tokens" | "max_output_tokens" | "gemini_generation" | "max_tool_iterations" => {
+            trimmed
+                .parse::<u64>()
+                .map(|n| Value::Number(n.into()))
+                .unwrap_or_else(|_| Value::String(trimmed.to_string()))
+        }
         "reasoning_effort" => match trimmed.to_ascii_lowercase().as_str() {
             // Send the literal "off" sentinel (not null) so the daemon's
             // overlay explicitly suppresses reasoning_effort. Null would
@@ -1206,6 +1208,21 @@ mod tests {
 
         // Integer vendor knob.
         assert_eq!(parse_setting_value_str("gemini_generation", "3"), json!(3));
+
+        // max_tool_iterations coerces to an integer; cache_keepalive's
+        // `off`/duration domain passes through as a string for the daemon.
+        assert_eq!(
+            parse_setting_value_str("max_tool_iterations", "16"),
+            json!(16)
+        );
+        assert_eq!(
+            parse_setting_value_str("cache_keepalive", "55m"),
+            json!("55m")
+        );
+        assert_eq!(
+            parse_setting_value_str("cache_keepalive", "off"),
+            json!("off")
+        );
 
         // Free-form string knobs stay strings.
         assert_eq!(

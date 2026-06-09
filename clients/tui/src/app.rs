@@ -720,8 +720,10 @@ pub struct EffectiveSamplerSnapshot {
     pub budget_tokens: EffectiveSamplerField,
     pub max_output_tokens: EffectiveSamplerField,
     pub cache_ttl: EffectiveSamplerField,
+    pub cache_keepalive: EffectiveSamplerField,
     pub sdk: EffectiveSamplerField,
     pub replay_prior_thinking: EffectiveSamplerField,
+    pub max_tool_iterations: EffectiveSamplerField,
     pub openrouter_provider: EffectiveSamplerField,
     pub vertex_project: EffectiveSamplerField,
     pub vertex_location: EffectiveSamplerField,
@@ -761,8 +763,10 @@ impl EffectiveSamplerSnapshot {
             budget_tokens: Self::field(sampler, scopes, "budget_tokens"),
             max_output_tokens: Self::field(sampler, scopes, "max_output_tokens"),
             cache_ttl: Self::field(sampler, scopes, "cache_ttl"),
+            cache_keepalive: Self::field(sampler, scopes, "cache_keepalive"),
             sdk: Self::field(sampler, scopes, "sdk"),
             replay_prior_thinking: Self::field(sampler, scopes, "replay_prior_thinking"),
+            max_tool_iterations: Self::field(sampler, scopes, "max_tool_iterations"),
             openrouter_provider: Self::field(sampler, scopes, "openrouter_provider"),
             vertex_project: Self::field(sampler, scopes, "vertex_project"),
             vertex_location: Self::field(sampler, scopes, "vertex_location"),
@@ -837,8 +841,10 @@ impl EffectiveSamplerSnapshot {
             "budget_tokens" => Some(&self.budget_tokens),
             "max_output_tokens" => Some(&self.max_output_tokens),
             "cache_ttl" => Some(&self.cache_ttl),
+            "cache_keepalive" => Some(&self.cache_keepalive),
             "sdk" => Some(&self.sdk),
             "replay_prior_thinking" => Some(&self.replay_prior_thinking),
+            "max_tool_iterations" => Some(&self.max_tool_iterations),
             "openrouter_provider" => Some(&self.openrouter_provider),
             "vertex_project" => Some(&self.vertex_project),
             "vertex_location" => Some(&self.vertex_location),
@@ -1697,8 +1703,10 @@ impl App {
         "budget_tokens",
         "max_output_tokens",
         "cache_ttl",
+        "cache_keepalive",
         "sdk",
         "replay_prior_thinking",
+        "max_tool_iterations",
         "openrouter_provider",
         "vertex_project",
         "vertex_location",
@@ -2283,11 +2291,32 @@ impl App {
                 }
                 self.completion.candidates = candidates;
             }
+            // Daemon-side keepalive ping cadence: the `off` sentinel or a
+            // duration like `55m`. Mirrors the `cache_ttl` custom-entry handling.
+            "setting:cache_keepalive" => {
+                let mut candidates = Self::filtered_presets(&["off", "55m", "reset"], &filter);
+                if !raw_filter.is_empty()
+                    && !raw_filter.eq_ignore_ascii_case("off")
+                    && !raw_filter.eq_ignore_ascii_case("reset")
+                {
+                    candidates.push(format!("Custom: {raw_filter}"));
+                }
+                self.completion.candidates = candidates;
+            }
             "setting:max_output_tokens" | "setting:budget_tokens" => {
                 let mut candidates = Self::filtered_presets(
                     &["1024", "2048", "4096", "8192", "16384", "32768", "reset"],
                     &filter,
                 );
+                if raw_filter.parse::<u32>().is_ok() {
+                    candidates.push(format!("Custom: {raw_filter}"));
+                }
+                self.completion.candidates = candidates;
+            }
+            // Per-model tool-iteration cap (>= 1; reset/unset = unlimited).
+            "setting:max_tool_iterations" => {
+                let mut candidates =
+                    Self::filtered_presets(&["8", "16", "32", "64", "reset"], &filter);
                 if raw_filter.parse::<u32>().is_ok() {
                     candidates.push(format!("Custom: {raw_filter}"));
                 }
@@ -2625,6 +2654,10 @@ mod tests {
                 "replay_prior_thinking": "always",
                 "budget_tokens": "ignored",
                 "zai_clear_thinking": "rejected",
+                // Daemon reports the keepalive cadence as honored everywhere
+                // and the tool-iteration cap as always-applicable.
+                "cache_keepalive": "honored",
+                "max_tool_iterations": "always",
                 // `vertex_project` deliberately omitted — "no opinion" must
                 // still be shown.
             },
@@ -2646,6 +2679,8 @@ mod tests {
         assert!(visible.contains(&"temperature"));
         assert!(visible.contains(&"sdk")); // "always"
         assert!(visible.contains(&"vertex_project")); // no opinion → shown
+        assert!(visible.contains(&"cache_keepalive")); // honored everywhere
+        assert!(visible.contains(&"max_tool_iterations")); // "always"
         assert!(!visible.contains(&"budget_tokens")); // ignored → hidden
         assert!(!visible.contains(&"zai_clear_thinking")); // rejected → hidden
     }
