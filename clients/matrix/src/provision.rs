@@ -203,6 +203,51 @@ pub async fn register_account(
     Ok(result)
 }
 
+/// Why a saved `ProvisionState` is no longer usable for the current request.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum StaleReason {
+    /// The `character` field doesn't match the requested character
+    /// (e.g. the user renamed the data directory, carrying old state over).
+    CharacterMismatch {
+        /// Character name stored in provision state.
+        saved: String,
+        /// Character name currently being provisioned.
+        requested: String,
+    },
+    /// The `homeserver_url` field doesn't match.
+    HomeserverUrlMismatch {
+        /// URL stored in provision state.
+        saved: String,
+        /// URL currently being requested.
+        requested: String,
+    },
+}
+
+/// Check whether a saved [`ProvisionState`] is stale due to identity mismatch.
+///
+/// Returns `None` if the state matches the expected character *and* homeserver,
+/// meaning it's worth proceeding to a token‑liveness check. Returns
+/// `Some(reason)` if the state is definitively stale and should be wiped.
+fn check_stale(
+    state: &ProvisionState,
+    character: &str,
+    homeserver_url: &str,
+) -> Option<StaleReason> {
+    if state.character != character {
+        return Some(StaleReason::CharacterMismatch {
+            saved: state.character.clone(),
+            requested: character.to_string(),
+        });
+    }
+    if state.homeserver_url != homeserver_url {
+        return Some(StaleReason::HomeserverUrlMismatch {
+            saved: state.homeserver_url.clone(),
+            requested: homeserver_url.to_string(),
+        });
+    }
+    None
+}
+
 /// Full provisioning flow for a character.
 ///
 /// 1. Load existing state (skip if already provisioned)
@@ -215,15 +260,25 @@ pub async fn provision_character(
     password: &str,
     paths: &CharacterPaths,
 ) -> Result<ProvisionState, ProvisionError> {
-    // Check for existing provisioning. URL equality is necessary but not
-    // sufficient — the DB at that URL may have been wiped since we last ran.
-    // Verify the saved token still works, and if not, re-provision.
+    // Check for existing provisioning. Identity mismatches (wrong character
+    // name, wrong homeserver URL) make saved state definitively stale.
+    // Otherwise, verify the saved token still works, and if not, re-provision.
     if let Some(state) = ProvisionState::load(&paths.provision_file)? {
-        if state.homeserver_url != homeserver_url {
-            warn!(
-                "character {} provisioned for different homeserver ({}), re-provisioning",
-                character, state.homeserver_url
-            );
+        if let Some(reason) = check_stale(&state, character, homeserver_url) {
+            match reason {
+                StaleReason::CharacterMismatch { ref saved, .. } => {
+                    warn!(
+                        "character {} loaded stale provision state for {}, re-provisioning",
+                        character, saved
+                    );
+                }
+                StaleReason::HomeserverUrlMismatch { ref saved, .. } => {
+                    warn!(
+                        "character {} provisioned for different homeserver ({}), re-provisioning",
+                        character, saved
+                    );
+                }
+            }
             wipe_character_state(paths).await?;
         } else {
             match check_token(homeserver_url, &state.access_token).await {
@@ -893,5 +948,52 @@ mod tests {
 
         state.save(&path).unwrap();
         assert!(path.exists());
+    }
+
+    // ── check_stale tests ───────────────────────────────────────────
+
+    fn make_state(character: &str, homeserver_url: &str) -> ProvisionState {
+        ProvisionState {
+            character: character.to_string(),
+            user_id: format!("@shore-{character}:localhost"),
+            device_id: "DEV".to_string(),
+            access_token: "tok".to_string(),
+            room_id: None,
+            avatar_set: false,
+            homeserver_url: homeserver_url.to_string(),
+        }
+    }
+
+    #[test]
+    fn check_stale_matching_character_and_url() {
+        let state = make_state("alice", "http://localhost:8008");
+        let result = check_stale(&state, "alice", "http://localhost:8008");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn check_stale_character_mismatch() {
+        let state = make_state("qifei", "http://localhost:8008");
+        let result = check_stale(&state, "poppy", "http://localhost:8008");
+        assert_eq!(
+            result,
+            Some(StaleReason::CharacterMismatch {
+                saved: "qifei".to_string(),
+                requested: "poppy".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn check_stale_homeserver_url_mismatch() {
+        let state = make_state("alice", "http://old:8008");
+        let result = check_stale(&state, "alice", "http://new:9000");
+        assert_eq!(
+            result,
+            Some(StaleReason::HomeserverUrlMismatch {
+                saved: "http://old:8008".to_string(),
+                requested: "http://new:9000".to_string(),
+            })
+        );
     }
 }
