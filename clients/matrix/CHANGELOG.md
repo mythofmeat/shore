@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5](https://github.com/mythofmeat/shore-matrix/compare/v0.1.4...v0.1.5) - 2026-06-11
+
+### Fixed
+
+- *(provision)* re-provision when saved state belongs to a different character ([#12](https://github.com/mythofmeat/shore-matrix/pull/12))
+
 ## [0.1.4](https://github.com/mythofmeat/shore-matrix/compare/v0.1.3...v0.1.4) - 2026-06-09
 
 ### Other
