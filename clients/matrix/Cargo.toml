@@ -7,9 +7,9 @@ repository = "https://github.com/mythofmeat/shore-matrix"
 description = "Matrix bridge for the Silvershore chat daemon."
 
 [dependencies]
-shore-protocol = "0.9"
-shore-config = "0.13"
-shore-swp-client = "0.3"
+shore-protocol = "0.10"
+shore-config = "0.15"
+shore-swp-client = "0.3.5"
 shore-diagnostics = "0.2"
 matrix-sdk = { version = "0.17", default-features = false, features = ["e2e-encryption", "markdown", "sqlite"] }
 tokio = { version = "1", features = ["full"] }
@@ -21,6 +21,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 mime = "0.3"
 mime_guess = "2"
+base64 = "0.22"
 reqwest = { version = "0.12", default-features = false, features = ["json", "native-tls"] }
 toml = "0.8"
 urlencoding = "2"
@@ -32,3 +33,15 @@ libc = "0.2"
 
 [dev-dependencies]
 tempfile = "3"
+
+# ImageUpload.mime_type lands in the first shore-protocol release after
+# 0.10.0 (shore-core branch claude/matrix-image-sending-35e0fp). Until that
+# release is published, build against the pinned shore-core commit.
+# shore-swp-client is patched from the same commit because the published
+# 0.3.8 constructs ImageUpload without the new field and won't compile
+# against the patched protocol.
+# TODO: once they're on crates.io, drop these patches and bump the
+# shore-protocol / shore-swp-client requirements above to those releases.
+[patch.crates-io]
+shore-protocol = { git = "https://github.com/mythofmeat/shore-core", rev = "8a5459b3b33ad50d86b143a7a5d566e61160fd67" }
+shore-swp-client = { git = "https://github.com/mythofmeat/shore-core", rev = "8a5459b3b33ad50d86b143a7a5d566e61160fd67" }

@@ -426,7 +426,6 @@ fn push_message_delivers_content() {
     let new_msg = NewMessage {
         revision: 0,
         character: None,
-        origin: None,
         message: Message {
             msg_id: "push_001".into(),
             role: Role::Assistant,
@@ -438,6 +437,7 @@ fn push_message_delivers_content() {
             alternatives: vec![],
             timestamp: "2026-03-25T14:30:00Z".into(),
             provider_key: None,
+            origin: None,
         },
     };
 

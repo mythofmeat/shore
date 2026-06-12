@@ -13,6 +13,8 @@ use matrix_sdk::{Client, Room};
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
+use crate::bridge::sanitize_filename;
+
 /// Configuration for the Matrix bot.
 pub struct BotConfig {
     pub homeserver: String,
@@ -33,11 +35,16 @@ pub enum MatrixEvent {
         sender: OwnedUserId,
         text: String,
     },
-    /// An image was sent in a room (downloaded to a local temp path).
+    /// An image was sent in a room (downloaded from the homeserver).
     Image {
         room_id: OwnedRoomId,
         sender: OwnedUserId,
+        /// Local temp copy, for the legacy shared-filesystem path mechanism.
         path: String,
+        /// Raw image bytes, forwarded to the daemon as base64 image_data.
+        data: Vec<u8>,
+        /// Declared media type from the event's `info.mimetype`, if any.
+        mime_type: Option<String>,
         body: String,
     },
 }
@@ -276,18 +283,28 @@ impl MatrixBot {
                 };
                 match client.media().get_media_content(&request, false).await {
                     Ok(data) => {
-                        let filename = &image_content.body;
+                        // The body is remote input — keep it from contributing
+                        // path separators (or traversal) to the temp filename.
+                        let filename = sanitize_filename(&image_content.body);
                         let temp_path = std::env::temp_dir()
                             .join(format!("shore_matrix_{}_{filename}", std::process::id()));
+                        // The temp file only serves daemons that share our
+                        // filesystem; the bytes travel in the event, so a
+                        // failed write is not fatal.
                         if let Err(e) = tokio::fs::write(&temp_path, &data).await {
                             warn!("failed to save downloaded image: {e}");
-                            return;
                         }
+                        let mime_type = image_content
+                            .info
+                            .as_ref()
+                            .and_then(|info| info.mimetype.clone());
                         let _ = tx
                             .send(MatrixEvent::Image {
                                 room_id: room.room_id().to_owned(),
                                 sender: ev.sender.clone(),
                                 path: temp_path.to_string_lossy().into_owned(),
+                                data,
+                                mime_type,
                                 body: image_content.body.clone(),
                             })
                             .await;

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- *(bridge)* send Matrix image uploads as base64 `image_data` (with the event's declared mime type) instead of relying solely on the legacy shared-filesystem path mechanism, which silently dropped images whenever the daemon couldn't see the bridge's temp dir (systemd `PrivateTmp`, remote daemons). The temp path is still sent alongside for older daemons.
+- *(bot)* sanitize the Matrix image event body before building the temp filename — it's remote input, and a path separator in it broke the write or escaped the temp dir
+
+### Other
+
+- *(deps)* shore-protocol 0.10 / shore-swp-client 0.3.8 / shore-config 0.15; shore-protocol and shore-swp-client are temporarily patched to a pinned shore-core commit for `ImageUpload.mime_type` until the next shore-protocol release is published
+
 ## [0.1.5](https://github.com/mythofmeat/shore-matrix/compare/v0.1.4...v0.1.5) - 2026-06-11
 
 ### Fixed

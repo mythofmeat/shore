@@ -3438,9 +3438,24 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "shore-config"
-version = "0.13.0"
+version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c7cb21500f34ad14bdda54cafbe2008cf8025d1759082952073d738f2061964"
+checksum = "db8368220a97868f1e78a3bc79cd93b35d4ea5053cac89372b1e5ee281bef238"
+dependencies = [
+ "chrono",
+ "dirs",
+ "dotenvy",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "toml 0.8.23",
+ "tracing",
+]
+
+[[package]]
+name = "shore-config"
+version = "0.15.1"
+source = "git+https://github.com/mythofmeat/shore-core?rev=8a5459b3b33ad50d86b143a7a5d566e61160fd67#8a5459b3b33ad50d86b143a7a5d566e61160fd67"
 dependencies = [
  "chrono",
  "dirs",
@@ -3468,6 +3483,7 @@ dependencies = [
 name = "shore-matrix"
 version = "0.1.5"
 dependencies = [
+ "base64",
  "clap",
  "libc",
  "matrix-sdk",
@@ -3476,7 +3492,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
- "shore-config",
+ "shore-config 0.15.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "shore-diagnostics",
  "shore-protocol",
  "shore-swp-client",
@@ -3491,9 +3507,8 @@ dependencies = [
 
 [[package]]
 name = "shore-protocol"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02653f947a8d1662e333f24f0a40e5b0d615fbfa4606fb3677f4c96e4505ffef"
+version = "0.10.0"
+source = "git+https://github.com/mythofmeat/shore-core?rev=8a5459b3b33ad50d86b143a7a5d566e61160fd67#8a5459b3b33ad50d86b143a7a5d566e61160fd67"
 dependencies = [
  "serde",
  "serde_json",
@@ -3502,15 +3517,14 @@ dependencies = [
 
 [[package]]
 name = "shore-swp-client"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44d1892bdc6aeac620b607d64c2e11783fae8b2334d54d83bc1a9021b6dddf9a"
+version = "0.3.8"
+source = "git+https://github.com/mythofmeat/shore-core?rev=8a5459b3b33ad50d86b143a7a5d566e61160fd67#8a5459b3b33ad50d86b143a7a5d566e61160fd67"
 dependencies = [
  "base64",
  "libc",
  "serde",
  "serde_json",
- "shore-config",
+ "shore-config 0.15.1 (git+https://github.com/mythofmeat/shore-core?rev=8a5459b3b33ad50d86b143a7a5d566e61160fd67)",
  "shore-protocol",
  "thiserror 2.0.18",
  "tokio",

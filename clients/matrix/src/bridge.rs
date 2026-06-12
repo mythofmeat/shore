@@ -1,4 +1,7 @@
-use shore_protocol::client_msg::{Cancel, ClientMessage, ClientMessageBody, Command, Regen};
+use base64::Engine as _;
+use shore_protocol::client_msg::{
+    Cancel, ClientMessage, ClientMessageBody, Command, ImageUpload, Regen,
+};
 use shore_protocol::server_msg::{MessageOrigin, ServerMessage};
 use shore_protocol::types::ImageRef;
 
@@ -7,9 +10,15 @@ use shore_protocol::types::ImageRef;
 pub enum MatrixInput {
     /// Regular text → SWP user message.
     Text(String),
-    /// Image attachment → SWP message with image path.
+    /// Image attachment → SWP message with base64 image data.
     Image {
+        /// Local temp copy, sent as a legacy `images` path for daemons that
+        /// share the bridge's filesystem.
         path: String,
+        /// Raw image bytes, sent base64-encoded via `image_data`.
+        data: Vec<u8>,
+        /// Declared media type from the Matrix event (`info.mimetype`).
+        mime_type: Option<String>,
         caption: Option<String>,
     },
     /// `!bind [character]` — bridge-local room binding (None lists bindings).
@@ -331,16 +340,41 @@ pub fn input_to_swp(input: &MatrixInput) -> Option<ClientMessage> {
             absence_seconds: None,
             overrides: None,
         })),
-        MatrixInput::Image { path, caption } => Some(ClientMessage::Message(ClientMessageBody {
+        MatrixInput::Image {
+            path,
+            data,
+            mime_type,
+            caption,
+        } => Some(ClientMessage::Message(ClientMessageBody {
             rid: None,
             text: caption.clone().unwrap_or_default(),
             stream: true,
+            // Legacy path mechanism, kept for older daemons. Daemons that
+            // understand image_data prefer it when both are present, so a
+            // path the daemon can't see (PrivateTmp, remote daemon) is
+            // harmless.
             images: vec![path.clone()],
-            image_data: vec![],
+            image_data: vec![ImageUpload {
+                filename: sanitize_filename(caption.as_deref().unwrap_or_default()),
+                data: base64::engine::general_purpose::STANDARD.encode(data),
+                mime_type: mime_type.clone(),
+            }],
             absence_seconds: None,
             overrides: None,
         })),
         MatrixInput::Bind { .. } | MatrixInput::Forward(_) | MatrixInput::LocalReply(_) => None,
+    }
+}
+
+/// Reduce a Matrix image event body to a single safe path component for use
+/// as a filename. The body is arbitrary remote input: a separator in it would
+/// break (or escape) any path built from it, so keep only the last component
+/// and fall back to `"image"` when nothing usable remains.
+pub fn sanitize_filename(body: &str) -> String {
+    let name = body.rsplit(['/', '\\']).next().unwrap_or_default().trim();
+    match name {
+        "" | "." | ".." => "image".to_string(),
+        n => n.to_string(),
     }
 }
 
@@ -493,7 +527,7 @@ pub fn route_mirror(msg: &ServerMessage) -> MirrorRoute {
     match msg {
         ServerMessage::NewMessage(nm) => {
             let character = nm.character.clone();
-            let action = match nm.origin {
+            let action = match nm.message.origin {
                 Some(MessageOrigin::UserInput) => {
                     MirrorAction::UserPrompt(nm.message.content.clone())
                 }
@@ -1074,7 +1108,6 @@ mod tests {
         let action = c.feed(&ServerMessage::NewMessage(NewMessage {
             revision: 0,
             character: None,
-            origin: None,
             message: Message {
                 msg_id: "1".into(),
                 role: Role::Assistant,
@@ -1086,6 +1119,7 @@ mod tests {
                 alternatives: vec![],
                 timestamp: "2026-01-01T00:00:00Z".into(),
                 provider_key: None,
+                origin: None,
             },
         }));
         if let CollectorAction::SendPush(text) = action {
@@ -1104,15 +1138,29 @@ mod tests {
 
     #[test]
     fn image_to_swp_message() {
+        let bytes = b"fake image bytes".to_vec();
         let input = MatrixInput::Image {
             path: "/tmp/photo.jpg".into(),
-            caption: Some("sunset".into()),
+            data: bytes.clone(),
+            mime_type: Some("image/jpeg".into()),
+            caption: Some("photo.jpg".into()),
         };
         let msg = input_to_swp(&input).unwrap();
         if let ClientMessage::Message(body) = msg {
-            assert_eq!(body.text, "sunset");
-            assert_eq!(body.images, vec!["/tmp/photo.jpg"]);
+            assert_eq!(body.text, "photo.jpg");
             assert!(body.stream);
+            // Legacy path stays populated for older daemons...
+            assert_eq!(body.images, vec!["/tmp/photo.jpg"]);
+            // ...but the bytes travel as base64 image_data, which works even
+            // when the daemon can't see the bridge's filesystem.
+            assert_eq!(body.image_data.len(), 1);
+            let upload = &body.image_data[0];
+            assert_eq!(upload.filename, "photo.jpg");
+            assert_eq!(upload.mime_type.as_deref(), Some("image/jpeg"));
+            let decoded = base64::engine::general_purpose::STANDARD
+                .decode(&upload.data)
+                .unwrap();
+            assert_eq!(decoded, bytes);
         } else {
             panic!("expected Message");
         }
@@ -1122,15 +1170,54 @@ mod tests {
     fn image_to_swp_no_caption() {
         let input = MatrixInput::Image {
             path: "/tmp/photo.jpg".into(),
+            data: vec![1, 2, 3],
+            mime_type: None,
             caption: None,
         };
         let msg = input_to_swp(&input).unwrap();
         if let ClientMessage::Message(body) = msg {
             assert_eq!(body.text, "");
             assert_eq!(body.images, vec!["/tmp/photo.jpg"]);
+            assert_eq!(body.image_data.len(), 1);
+            assert_eq!(body.image_data[0].filename, "image");
+            assert!(body.image_data[0].mime_type.is_none());
         } else {
             panic!("expected Message");
         }
+    }
+
+    #[test]
+    fn image_to_swp_sanitizes_body_with_path_separators() {
+        // The event body is remote input; it must not contribute more than a
+        // single path component to the upload filename.
+        let input = MatrixInput::Image {
+            path: "/tmp/x".into(),
+            data: vec![1, 2, 3],
+            mime_type: None,
+            caption: Some("../../etc/passwd".into()),
+        };
+        let msg = input_to_swp(&input).unwrap();
+        if let ClientMessage::Message(body) = msg {
+            // The caption text passes through untouched; only the filename
+            // is sanitized.
+            assert_eq!(body.text, "../../etc/passwd");
+            assert_eq!(body.image_data[0].filename, "passwd");
+        } else {
+            panic!("expected Message");
+        }
+    }
+
+    #[test]
+    fn sanitize_filename_reduces_to_single_component() {
+        assert_eq!(sanitize_filename("photo.jpg"), "photo.jpg");
+        assert_eq!(sanitize_filename("a/b/c.png"), "c.png");
+        assert_eq!(sanitize_filename("a\\b.png"), "b.png");
+        assert_eq!(sanitize_filename("../../etc/passwd"), "passwd");
+        assert_eq!(sanitize_filename(""), "image");
+        assert_eq!(sanitize_filename("dir/"), "image");
+        assert_eq!(sanitize_filename(".."), "image");
+        assert_eq!(sanitize_filename("."), "image");
+        assert_eq!(sanitize_filename("  "), "image");
     }
 
     #[test]
@@ -1219,7 +1306,6 @@ mod tests {
         ServerMessage::NewMessage(NewMessage {
             revision: 1,
             character: character.map(str::to_string),
-            origin,
             message: Message {
                 msg_id: "m1".into(),
                 role: Role::Assistant,
@@ -1231,6 +1317,7 @@ mod tests {
                 alternatives: vec![],
                 timestamp: "2026-01-01T00:00:00Z".into(),
                 provider_key: None,
+                origin,
             },
         })
     }

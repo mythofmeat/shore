@@ -741,9 +741,11 @@ async fn run_bridge_loop(
                             }
                         }
                     }
-                    MatrixEvent::Image { room_id, path, body, .. } => {
+                    MatrixEvent::Image { room_id, path, data, mime_type, body, .. } => {
                         let input = MatrixInput::Image {
                             path,
+                            data,
+                            mime_type,
                             caption: Some(body),
                         };
                         if let Some(swp_msg) = input_to_swp(&input) {
