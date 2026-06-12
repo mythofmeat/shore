@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/mythofmeat/shore-matrix/compare/v0.1.5...v0.2.0) - 2026-06-12
+
+### Fixed
+
+- *(bridge)* send Matrix images as base64 image_data, not just temp paths ([#14](https://github.com/mythofmeat/shore-matrix/pull/14))
+
 ### Fixed
 
 - *(bridge)* send Matrix image uploads as base64 `image_data` (with the event's declared mime type) instead of relying solely on the legacy shared-filesystem path mechanism, which silently dropped images whenever the daemon couldn't see the bridge's temp dir (systemd `PrivateTmp`, remote daemons). The temp path is still sent alongside for older daemons.
