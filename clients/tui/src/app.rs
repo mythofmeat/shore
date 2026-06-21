@@ -2536,6 +2536,12 @@ impl App {
     /// into `parse_command`. Most command-producing selections clear
     /// completion state and exit command mode; local-only palettes may
     /// instead apply in place and return `None`.
+    /// True when the palette is in the `view` submenu, whose options
+    /// toggle local prefs in-place via [`apply_submenu`].
+    pub fn is_view_submenu(&self) -> bool {
+        matches!(&self.completion.mode, PaletteMode::Submenu(s) if s.parent == "view")
+    }
+
     pub fn apply_submenu(&mut self) -> Option<String> {
         let parent = match &self.completion.mode {
             PaletteMode::Submenu(s) => s.parent.clone(),

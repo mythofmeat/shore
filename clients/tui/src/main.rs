@@ -25,7 +25,7 @@ use ratatui::Terminal;
 use shore_protocol::client_msg::{ClientMessage, Command};
 use shore_protocol::server_msg::ServerMessage;
 use shore_protocol::types::{ContentBlock, Message, Role, StreamMetadata};
-use tracing::{info, instrument};
+use tracing::{info, instrument, warn};
 use tracing_subscriber::EnvFilter;
 
 use app::{
@@ -414,6 +414,20 @@ fn resolve_character(cli_character: Option<String>) -> Option<String> {
 }
 
 fn prefs_path() -> std::path::PathBuf {
+    let config_dir = std::env::var_os("XDG_CONFIG_HOME")
+        .map(std::path::PathBuf::from)
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| {
+            let home = std::env::var_os("HOME").unwrap_or_else(|| ".".into());
+            std::path::Path::new(&home).join(".config")
+        });
+    config_dir.join("shore").join("tui_prefs.json")
+}
+
+/// Pre-0.1.12 prefs lived in the runtime dir (XDG_RUNTIME_DIR or /tmp),
+/// which is wiped on logout/reboot. Kept only to migrate old files into
+/// [`prefs_path`] on first run.
+fn legacy_prefs_path() -> std::path::PathBuf {
     let runtime_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into());
     std::path::Path::new(&runtime_dir)
         .join("shore")
@@ -421,7 +435,9 @@ fn prefs_path() -> std::path::PathBuf {
 }
 
 fn load_prefs(app: &mut App) {
-    if let Ok(data) = std::fs::read_to_string(prefs_path()) {
+    let data = std::fs::read_to_string(prefs_path())
+        .or_else(|_| std::fs::read_to_string(legacy_prefs_path()));
+    if let Ok(data) = data {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&data) {
             if let Some(b) = v.get("show_thinking").and_then(|v| v.as_bool()) {
                 app.show_thinking = b;
@@ -469,7 +485,24 @@ fn save_prefs(app: &App) {
         "show_metadata": app.show_metadata,
         "usage_display": app.usage_display.as_str(),
     });
-    let _ = std::fs::write(prefs_path(), v.to_string());
+    let path = prefs_path();
+    if let Some(dir) = path.parent() {
+        if let Err(e) = std::fs::create_dir_all(dir) {
+            warn!("failed to create prefs dir {}: {e}", dir.display());
+            return;
+        }
+    }
+    // Write to a temp file and rename so a crash mid-write can't leave a
+    // truncated/corrupt prefs file behind.
+    let tmp = path.with_extension("json.tmp");
+    if let Err(e) = std::fs::write(&tmp, v.to_string()) {
+        warn!("failed to write prefs: {e}");
+        return;
+    }
+    if let Err(e) = std::fs::rename(&tmp, &path) {
+        warn!("failed to persist prefs: {e}");
+        let _ = std::fs::remove_file(&tmp);
+    }
 }
 
 fn open_in_editor(
@@ -790,6 +823,10 @@ async fn handle_action(
                 Ok(Err(_join)) => app.set_error("paste task panicked"),
                 Err(_elapsed) => app.set_error("clipboard read timed out"),
             }
+            Ok(true)
+        }
+        Action::SavePrefs => {
+            save_prefs(app);
             Ok(true)
         }
         Action::Redraw => Ok(true),

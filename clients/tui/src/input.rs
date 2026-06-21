@@ -18,6 +18,8 @@ pub enum Action {
     /// SIGINT-equivalent quit (Ctrl+C). Same graceful shutdown, but exits 130.
     Interrupt,
     Redraw,
+    /// Redraw and persist view preferences to disk (a pref was toggled).
+    SavePrefs,
     OpenInEditor,
     /// Open external file picker to select an image.
     PickImage(Option<String>),
@@ -189,25 +191,25 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
         // Toggle thinking blocks
         (KeyModifiers::NONE, KeyCode::Char('t')) => {
             app.show_thinking = !app.show_thinking;
-            Action::Redraw
+            Action::SavePrefs
         }
 
         // Toggle tool-use blocks in history
         (KeyModifiers::SHIFT, KeyCode::Char('T')) => {
             app.show_tools = !app.show_tools;
-            Action::Redraw
+            Action::SavePrefs
         }
 
         // Toggle nested sub-agent sections
         (KeyModifiers::NONE, KeyCode::Char('s')) => {
             app.show_subagent = !app.show_subagent;
-            Action::Redraw
+            Action::SavePrefs
         }
 
         // Toggle inline images in history
         (KeyModifiers::NONE, KeyCode::Char('p')) => {
             app.show_images = !app.show_images;
-            Action::Redraw
+            Action::SavePrefs
         }
 
         // Open input in $EDITOR
@@ -601,8 +603,14 @@ fn handle_submenu_mode(app: &mut App, key: KeyEvent) -> Action {
             if app.completion.selected.is_none() && !app.completion.candidates.is_empty() {
                 app.completion.selected = Some(0);
             }
+            // The `view` submenu toggles a local pref in-place and returns
+            // None (it stays open for more toggles), so it never reaches
+            // parse_command. Persist explicitly in that case.
+            let in_view_submenu = app.is_view_submenu();
             if let Some(cmd) = app.apply_submenu() {
                 parse_command(app, &cmd)
+            } else if in_view_submenu {
+                Action::SavePrefs
             } else {
                 Action::Redraw
             }
@@ -787,7 +795,7 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                 };
                 app.update_completions();
                 app.set_status(format!("view usage: {}", mode.as_str()));
-                return Action::Redraw;
+                return Action::SavePrefs;
             }
             let enabled = match value.to_ascii_lowercase().as_str() {
                 "on" | "true" | "yes" | "1" => {
@@ -811,7 +819,7 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                 "view {key}: {}",
                 if enabled { "on" } else { "off" }
             ));
-            Action::Redraw
+            Action::SavePrefs
         }
 
         "character" | "characters" => {
@@ -1409,12 +1417,36 @@ mod tests {
         assert!(!app.show_timestamps);
 
         let action = parse_command(&mut app, "view timestamps on");
-        assert!(matches!(action, Action::Redraw));
+        assert!(matches!(action, Action::SavePrefs));
         assert!(app.show_timestamps);
 
         let action = parse_command(&mut app, "view metadata off");
-        assert!(matches!(action, Action::Redraw));
+        assert!(matches!(action, Action::SavePrefs));
         assert!(!app.show_metadata);
+    }
+
+    #[test]
+    fn toggle_keys_persist_prefs() {
+        let mut app = App::default();
+        app.input.mode = InputMode::Normal;
+        let before = app.show_thinking;
+        let action = handle_key(&mut app, make_key(KeyModifiers::NONE, KeyCode::Char('t')));
+        assert!(matches!(action, Action::SavePrefs));
+        assert_eq!(app.show_thinking, !before);
+    }
+
+    #[test]
+    fn view_submenu_toggle_persists_prefs() {
+        let mut app = App::default();
+        app.input.mode = InputMode::Command;
+        app.enter_submenu("view");
+        assert!(app.is_view_submenu());
+        assert!(!app.completion.candidates.is_empty());
+
+        // Enter applies the selected view toggle in-place and returns None
+        // from apply_submenu; the handler must still persist the change.
+        let action = handle_key(&mut app, make_key(KeyModifiers::NONE, KeyCode::Enter));
+        assert!(matches!(action, Action::SavePrefs));
     }
 
     #[test]
