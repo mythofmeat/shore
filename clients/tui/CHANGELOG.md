@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.12](https://github.com/mythofmeat/shore-tui/compare/v0.1.11...v0.1.12) - 2026-06-21
+
+### Fixed
+
+- *(tui)* persist view prefs reliably ([#28](https://github.com/mythofmeat/shore-tui/pull/28))
+
 ## [0.1.11](https://github.com/mythofmeat/shore-tui/compare/v0.1.10...v0.1.11) - 2026-06-09
 
 ### Added
