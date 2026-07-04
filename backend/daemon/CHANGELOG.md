@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.17](https://github.com/mythofmeat/shore-core/compare/shore-daemon-v0.1.16...shore-daemon-v0.1.17) - 2026-07-04
+
+### Other
+
+- *(memory-compaction)* drop write-path restriction, split-file + HEARTBEAT.md guidance ([#310](https://github.com/mythofmeat/shore-core/pull/310))
+- Per-message model provenance for the memory agent ([#309](https://github.com/mythofmeat/shore-core/pull/309))
+
 ## [0.1.16](https://github.com/mythofmeat/shore-core/compare/shore-daemon-v0.1.15...shore-daemon-v0.1.16) - 2026-06-22
 
 ### Added

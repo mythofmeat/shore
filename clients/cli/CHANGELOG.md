@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.3](https://github.com/mythofmeat/shore-core/compare/shore-cli-v2.6.2...shore-cli-v2.6.3) - 2026-07-04
+
+### Other
+
+- Per-message model provenance for the memory agent ([#309](https://github.com/mythofmeat/shore-core/pull/309))
+
 ## [2.6.2](https://github.com/mythofmeat/shore-core/compare/shore-cli-v2.6.1...shore-cli-v2.6.2) - 2026-06-22
 
 ### Other

@@ -1,6 +1,6 @@
 [package]
 name = "shore-cli"
-version = "2.6.2"
+version = "2.6.3"
 edition = "2021"
 license.workspace = true
 repository.workspace = true

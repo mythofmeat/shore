@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.13](https://github.com/mythofmeat/shore-core/compare/shore-swp-client-v0.3.12...shore-swp-client-v0.3.13) - 2026-07-04
+
+### Other
+
+- Per-message model provenance for the memory agent ([#309](https://github.com/mythofmeat/shore-core/pull/309))
+
 ## [0.3.12](https://github.com/mythofmeat/shore-core/compare/shore-swp-client-v0.3.11...shore-swp-client-v0.3.12) - 2026-06-22
 
 ### Other

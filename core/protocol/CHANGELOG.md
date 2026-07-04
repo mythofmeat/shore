@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0](https://github.com/mythofmeat/shore-core/compare/shore-protocol-v0.11.0...shore-protocol-v0.12.0) - 2026-07-04
+
+### Breaking
+
+- `Message` and `MessageAlternative` gained a new public
+  `model: Option<String>` field recording the model id that minted the
+  content. Downstream code that constructs either struct with a struct
+  literal must account for the new field (use `None` for messages no model
+  minted or persisted before model tracking). Existing payloads on the wire
+  and on disk stay compatible — the field defaults to `None` and is skipped
+  when serializing.
+
+### Other
+
+- Per-message model provenance for the memory agent ([#309](https://github.com/mythofmeat/shore-core/pull/309))
+
 ## [0.11.0](https://github.com/mythofmeat/shore-core/compare/shore-protocol-v0.10.0...shore-protocol-v0.11.0) - 2026-06-12
 
 ### Fixed
