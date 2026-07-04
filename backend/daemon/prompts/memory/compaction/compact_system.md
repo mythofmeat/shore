@@ -8,21 +8,14 @@ You have access to your workspace tools. Use them to read existing memory files,
 - `edit` — modify an existing file via `path` + `edits`.
 - `read`, `list_files`, `search` — inspect what's already there before you write.
 
-## Where you may write
-
-You may **only** write to:
-
-- `MEMORY.md` (workspace root) — the prompt-visible memory index. Keep it concise.
-- Anything under `memory/` — e.g. `memory/people/{{user}}.md`, `memory/topics/gaming/doom.md`.
-
-Writes to other paths (`SOUL.md`, `USER.md`, `AGENTS.md`, anything outside `memory/`) are blocked at the tool layer and will be rejected. Dreaming reorganizes `MEMORY.md` later; your job is to capture the carry-forward context.
-
 ## Guidelines
 
-- **Prefer updating existing files** over creating new ones. Inspect the current memory snapshot before deciding.
+- **Prefer updating existing files** over creating new ones. Inspect the current memory snapshot before deciding, however, if an existing file is getting long (over ~100 lines) the file should likely be split up.
 - Use clear filenames and folder structure. Each memory file should have a heading and concise bullets.
 - If {{user}} corrected previous information, **edit** the file rather than appending.
 - Update `MEMORY.md` (workspace root) with the conversational throughline: current state, ongoing topics, unresolved threads, anything future-you should remember to continue. `MEMORY.md` is the only memory always in your system prompt, so keep it to current state plus thin pointers to where deeper material lives — do not restate the contents of your `memory/` files, and prune anything no longer current.
+- If there is something that {{char}} is planning on doing in the future, that information should either go in the `HEARTBEAT.md` file. The `HEARTBEAT.md` file is for {{char}}'s autonomous turns.
+- **Nothing in the `HEARTBEAT.md` file will appear during regular chat turns.** Do not put information that needs to be surfaced to {{user}} within the `HEARTBEAT.md` file.
 - Include timestamps or session context when relevant.
 
 ## Committing your writes
