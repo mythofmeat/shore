@@ -8,6 +8,23 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
 ## [Unreleased]
 
 ### Added
+- **Per-message model provenance.** Assistant messages (and regeneration
+  alternatives) now persist the model id that minted them (`model`, next to
+  the existing `provider_key` provider stamp) — chat replies, tool-loop
+  intermediates, and autonomous heartbeat messages alike. Messages stored
+  before this change stay valid and simply lack the stamp. Groundwork for
+  history tooling that attributes past turns to models (e.g. auditing voice
+  drift across model switches).
+- **Model provenance in history tools.** `search_chat_logs` results now carry
+  each message's minting `model` (regenerated alternatives report their own),
+  plus two new optional parameters: `model` (dot/dash-folded substring filter,
+  so `opus-4.6` matches `claude-opus-4-6` and `anthropic/claude-opus-4.6`
+  alike) and `excerpt_chars` (up to 2000, for full quotes instead of
+  snippets). New `model_history` tool reports which models generated the
+  character's words over a time period from the usage ledger — per
+  model/provider/call-type rows with first/last timestamps, call counts, and
+  an interactive/autonomous/background classification. Add it to
+  `enabled_tools` or a sub-agent's `tools` list to expose it.
 - **MCP (Model Context Protocol) client support.** The daemon can now connect to
   external MCP servers (stdio child processes or remote HTTP endpoints) declared
   in `[mcp.<name>]` and surface their tools to characters as

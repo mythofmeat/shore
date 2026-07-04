@@ -231,6 +231,56 @@ pub fn usage_summary_by_call_type(
     })
 }
 
+// ── Model usage history ──────────────────────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub struct ModelUsageRow {
+    pub model: String,
+    pub provider: String,
+    pub call_type: String,
+    pub first_ts: String,
+    pub last_ts: String,
+    pub call_count: u32,
+}
+
+/// Per-(model, provider, call_type) usage over the filtered window: first and
+/// last call timestamps plus call count, ordered by first appearance. Backs
+/// the `model_history` character tool ("which models generated my words, and
+/// when").
+pub fn model_usage_summary(
+    ledger: &Ledger,
+    filter: &QueryFilter,
+) -> Result<Vec<ModelUsageRow>, rusqlite::Error> {
+    let (where_clause, values) = build_where(filter);
+    let sql = format!(
+        r"SELECT model,
+                  provider,
+                  call_type,
+                  MIN(ts) as first_ts,
+                  MAX(ts) as last_ts,
+                  COUNT(*) as call_count
+             FROM calls
+             {where_clause}
+            GROUP BY model, provider, call_type
+            ORDER BY first_ts ASC",
+    );
+
+    ledger.with_conn(|conn| {
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(params_from_iter(values.iter()), |row| {
+            Ok(ModelUsageRow {
+                model: row.get(0)?,
+                provider: row.get(1)?,
+                call_type: row.get(2)?,
+                first_ts: row.get(3)?,
+                last_ts: row.get(4)?,
+                call_count: i64_to_u32(row.get::<_, i64>(5)?),
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>()
+    })
+}
+
 // ── Summary by usage kind ────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
@@ -633,6 +683,47 @@ mod tests {
         _ = ledger.insert(&row3).unwrap();
 
         ledger
+    }
+
+    #[test]
+    fn model_usage_summary_groups_and_orders_by_first_seen() {
+        let ledger = populated_ledger();
+        let rows = model_usage_summary(&ledger, &QueryFilter::default()).unwrap();
+        // (claude-opus-4-6, anthropic, message), (claude-opus-4-6, anthropic,
+        // tool_loop), (gpt-4o, openai, message) — ordered by first appearance.
+        let [opus_message, opus_tool_loop, gpt] = &rows[..] else {
+            panic!("expected 3 rows, got {rows:?}");
+        };
+        assert_eq!(opus_message.model, "claude-opus-4-6");
+        assert_eq!(opus_message.call_type, "message");
+        assert_eq!(opus_message.call_count, 1);
+        assert_eq!(opus_message.first_ts, "2026-04-05T10:00:00Z");
+        assert_eq!(opus_tool_loop.call_type, "tool_loop");
+        assert_eq!(gpt.model, "gpt-4o");
+        assert_eq!(gpt.provider, "openai");
+
+        // Character + time filters compose through build_where.
+        let filtered = model_usage_summary(
+            &ledger,
+            &QueryFilter {
+                character: Some("aria".into()),
+                since: Some("2026-04-05T10:02:00Z".into()),
+                ..QueryFilter::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(first_item(&filtered).model, "gpt-4o");
+
+        let nobody = model_usage_summary(
+            &ledger,
+            &QueryFilter {
+                character: Some("nobody".into()),
+                ..QueryFilter::default()
+            },
+        )
+        .unwrap();
+        assert!(nobody.is_empty());
     }
 
     #[test]

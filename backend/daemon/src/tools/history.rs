@@ -19,6 +19,8 @@ use super::{ToolCategory, ToolContext, ToolDef, ToolError};
 const DEFAULT_MAX_RESULTS: usize = 20;
 const MAX_RESULTS: usize = 100;
 const EXCERPT_CHARS: usize = 360;
+const MIN_EXCERPT_CHARS: usize = 80;
+const MAX_EXCERPT_CHARS: usize = 2000;
 
 /// Relevance weights for ranking keyword matches. A contiguous phrase match is
 /// worth more than scattered terms, and full term coverage beats partial.
@@ -52,6 +54,14 @@ pub fn tool_defs() -> Vec<ToolDef> {
                 "max_results": {
                     "type": "number",
                     "description": "Maximum matching messages to return. Defaults to 20, maximum 100."
+                },
+                "model": {
+                    "type": "string",
+                    "description": "Optional model filter: only return assistant messages minted by a matching model. Case-insensitive substring match with '.' and '-' treated as equal, so 'opus-4.6' matches both 'claude-opus-4-6' and 'anthropic/claude-opus-4.6'. Messages stored before model tracking carry no model and never match."
+                },
+                "excerpt_chars": {
+                    "type": "number",
+                    "description": "Approximate excerpt length in characters. Defaults to 360; maximum 2000. Use larger values when you need full quotes rather than context snippets."
                 }
             },
             "required": []
@@ -91,7 +101,21 @@ struct SearchStats {
     skipped_invalid_timestamps: usize,
 }
 
-fn optional_trimmed_string(input: &Value, field: &str) -> Result<Option<String>, ToolError> {
+/// Per-request filters threaded through the corpus scan.
+#[derive(Clone, Copy)]
+struct SearchFilters<'req> {
+    matcher: Option<&'req QueryMatcher>,
+    range: &'req TimeRange,
+    /// Normalized (`normalize_model`) model substring, if the caller filters
+    /// by minting model.
+    model_filter: Option<&'req str>,
+    excerpt_chars: usize,
+}
+
+pub(super) fn optional_trimmed_string(
+    input: &Value,
+    field: &str,
+) -> Result<Option<String>, ToolError> {
     let Some(value) = input.get(field) else {
         return Ok(None);
     };
@@ -105,7 +129,7 @@ fn optional_trimmed_string(input: &Value, field: &str) -> Result<Option<String>,
     Ok(Some(trimmed.to_owned()))
 }
 
-fn parse_time_bound(
+pub(super) fn parse_time_bound(
     input: &Value,
     field: &str,
 ) -> Result<Option<DateTime<FixedOffset>>, ToolError> {
@@ -133,12 +157,6 @@ fn filters_from(input: &Value) -> Result<(Option<String>, TimeRange), ToolError>
         }
     }
 
-    if query.is_none() && range.is_empty() {
-        return Err(ToolError::InvalidArgs(
-            "provide query, start_time, end_time, or a combination".into(),
-        ));
-    }
-
     Ok((query, range))
 }
 
@@ -148,6 +166,36 @@ fn max_results_from(input: &Value) -> usize {
         .and_then(Value::as_u64)
         .map_or(DEFAULT_MAX_RESULTS, u64_to_usize)
         .clamp(1, MAX_RESULTS)
+}
+
+fn excerpt_chars_from(input: &Value) -> usize {
+    input
+        .get("excerpt_chars")
+        .and_then(Value::as_u64)
+        .map_or(EXCERPT_CHARS, u64_to_usize)
+        .clamp(MIN_EXCERPT_CHARS, MAX_EXCERPT_CHARS)
+}
+
+/// Model ids for the same model differ by route (`claude-opus-4-6` direct,
+/// `anthropic/claude-opus-4.6` via a gateway), so the filter compares with
+/// `.` and `-` folded together, case-insensitively.
+fn normalize_model(id: &str) -> String {
+    id.to_lowercase().replace('.', "-")
+}
+
+/// Pre-normalized model filter, or `None` when the input omits it.
+fn model_filter_from(input: &Value) -> Result<Option<String>, ToolError> {
+    Ok(optional_trimmed_string(input, "model")?.map(|raw| normalize_model(&raw)))
+}
+
+/// Whether an (optional) minting model passes an (optional) normalized filter.
+/// Messages without a model stamp never match an explicit filter — they
+/// predate model tracking and cannot be attributed.
+fn model_matches(model: Option<&str>, filter: Option<&str>) -> bool {
+    match filter {
+        None => true,
+        Some(wanted) => model.is_some_and(|m| normalize_model(m).contains(wanted)),
+    }
 }
 
 fn role_label(role: &Role) -> &'static str {
@@ -227,10 +275,10 @@ impl QueryMatcher {
     }
 }
 
-fn excerpt_for(content: &str, matcher_opt: Option<&QueryMatcher>) -> String {
+fn excerpt_for(content: &str, matcher_opt: Option<&QueryMatcher>, excerpt_chars: usize) -> String {
     let Some(matcher) = matcher_opt else {
-        let mut excerpt: String = content.chars().take(EXCERPT_CHARS).collect();
-        if content.chars().count() > EXCERPT_CHARS {
+        let mut excerpt: String = content.chars().take(excerpt_chars).collect();
+        if content.chars().count() > excerpt_chars {
             excerpt.push_str("...");
         }
         return excerpt;
@@ -238,21 +286,25 @@ fn excerpt_for(content: &str, matcher_opt: Option<&QueryMatcher>) -> String {
 
     let content_lower = content.to_lowercase();
     let Some(byte_idx) = matcher.earliest_index(&content_lower) else {
-        return content.chars().take(EXCERPT_CHARS).collect();
+        return content.chars().take(excerpt_chars).collect();
     };
 
+    // Leading context must stay well under the window size: a fixed 80-char
+    // lead-in with `excerpt_chars` at the 80 minimum would end the excerpt
+    // exactly where the match begins.
+    let leading = excerpt_chars.saturating_div(4).min(80);
     let start_char = content
         .get(..byte_idx)
-        .map_or(0, |prefix| prefix.chars().count().saturating_sub(80));
+        .map_or(0, |prefix| prefix.chars().count().saturating_sub(leading));
     let mut excerpt: String = content
         .chars()
         .skip(start_char)
-        .take(EXCERPT_CHARS)
+        .take(excerpt_chars)
         .collect();
     if start_char > 0 {
         excerpt = format!("...{excerpt}");
     }
-    if content.chars().count() > start_char.saturating_add(EXCERPT_CHARS) {
+    if content.chars().count() > start_char.saturating_add(excerpt_chars) {
         excerpt.push_str("...");
     }
     excerpt
@@ -316,16 +368,21 @@ fn collect_matches(
     candidates: &mut Vec<ScoredCandidate>,
     messages: &[Message],
     source: &str,
-    matcher: Option<&QueryMatcher>,
-    range: &TimeRange,
+    filters: &SearchFilters<'_>,
     stats: &mut SearchStats,
 ) {
+    let SearchFilters {
+        matcher,
+        range,
+        model_filter,
+        excerpt_chars,
+    } = *filters;
     for message in messages {
         // Search the user-visible chat text only — never thinking or tool
         // results. A message with no chat text (e.g. a tool-result-only turn)
         // is skipped entirely, including for time-range-only queries.
         let text = chat_text(&message.content_blocks);
-        if !text.is_empty() {
+        if !text.is_empty() && model_matches(message.model.as_deref(), model_filter) {
             if let Some(relevance) = relevance_for(matcher, &text) {
                 if matches_time_range(
                     &message.timestamp,
@@ -340,7 +397,8 @@ fn collect_matches(
                             "role": role_label(&message.role),
                             "timestamp": message.timestamp,
                             "source": source,
-                            "excerpt": excerpt_for(&text, matcher),
+                            "model": message.model,
+                            "excerpt": excerpt_for(&text, matcher, excerpt_chars),
                         }),
                     ));
                 }
@@ -353,6 +411,12 @@ fn collect_matches(
             }
             let alt_text = chat_text(&alternative.content_blocks);
             if alt_text.is_empty() {
+                continue;
+            }
+            // Alternatives stamped before per-alternative provenance inherit
+            // the parent message's model, mirroring alternative selection.
+            let alt_model = alternative.model.as_deref().or(message.model.as_deref());
+            if !model_matches(alt_model, model_filter) {
                 continue;
             }
             let Some(relevance) = relevance_for(matcher, &alt_text) else {
@@ -376,7 +440,8 @@ fn collect_matches(
                     "source": format!("{source}:alt:{index}"),
                     "alternative_index": index,
                     "alternative_count": message.alternatives.len(),
-                    "excerpt": excerpt_for(&alt_text, matcher),
+                    "model": alt_model,
+                    "excerpt": excerpt_for(&alt_text, matcher, excerpt_chars),
                 }),
             ));
         }
@@ -437,8 +502,20 @@ pub fn handle_search_history(input: &Value, ctx: &dyn ToolContext) -> Result<Val
     }
 
     let (query, range) = filters_from(input)?;
+    let model_filter = model_filter_from(input)?;
+    if query.is_none() && range.is_empty() && model_filter.is_none() {
+        return Err(ToolError::InvalidArgs(
+            "provide query, start_time, end_time, model, or a combination".into(),
+        ));
+    }
     let matcher = query.as_deref().map(QueryMatcher::new);
     let max_results = max_results_from(input);
+    let filters = SearchFilters {
+        matcher: matcher.as_ref(),
+        range: &range,
+        model_filter: model_filter.as_deref(),
+        excerpt_chars: excerpt_chars_from(input),
+    };
     let character_dir = PathBuf::from(character_data_dir);
 
     let mut candidates: Vec<ScoredCandidate> = Vec::new();
@@ -457,8 +534,7 @@ pub fn handle_search_history(input: &Value, ctx: &dyn ToolContext) -> Result<Val
             &mut candidates,
             &messages,
             &format!("segment:{index}"),
-            matcher.as_ref(),
-            &range,
+            &filters,
             &mut stats,
         );
     }
@@ -470,8 +546,7 @@ pub fn handle_search_history(input: &Value, ctx: &dyn ToolContext) -> Result<Val
         &mut candidates,
         active.messages(),
         "active",
-        matcher.as_ref(),
-        &range,
+        &filters,
         &mut stats,
     );
 
@@ -495,6 +570,7 @@ pub fn handle_search_history(input: &Value, ctx: &dyn ToolContext) -> Result<Val
             "end_time": range.end.map(|ts| ts.to_rfc3339()),
             "inclusive": true,
         },
+        "model_filter": model_filter,
         "results": results,
         "count": count,
         "searched_messages": searched_messages,
@@ -522,6 +598,7 @@ mod tests {
             alt_count: None,
             alternatives: vec![],
             provider_key: None,
+            model: None,
             timestamp: "2026-01-01T00:00:00Z".to_owned(),
         }
     }
@@ -604,6 +681,7 @@ mod tests {
                 content_blocks: active.content_blocks.clone(),
                 timestamp: active.timestamp.clone(),
                 provider_key: None,
+                model: None,
             },
             MessageAlternative {
                 content: "Coffee came up in a regenerated reply.".to_owned(),
@@ -613,6 +691,7 @@ mod tests {
                 }],
                 timestamp: "2026-01-01T00:01:00Z".to_owned(),
                 provider_key: None,
+                model: None,
             },
         ];
         std::fs::write(
@@ -772,6 +851,7 @@ mod tests {
                 content_blocks: active.content_blocks.clone(),
                 timestamp: active.timestamp.clone(),
                 provider_key: None,
+                model: None,
             },
             MessageAlternative {
                 content: "Tea appeared in a regenerated reply.".to_owned(),
@@ -781,6 +861,7 @@ mod tests {
                 }],
                 timestamp: "2026-05-13T09:30:00+10:00".to_owned(),
                 provider_key: None,
+                model: None,
             },
         ];
         write_active(character_dir, &[active]);
@@ -826,6 +907,7 @@ mod tests {
                 content_blocks: first.content_blocks.clone(),
                 timestamp: first.timestamp.clone(),
                 provider_key: None,
+                model: None,
             },
             MessageAlternative {
                 content: "Regenerated reply.".to_owned(),
@@ -835,6 +917,7 @@ mod tests {
                 }],
                 timestamp: "2026-05-13T11:00:00+10:00".to_owned(),
                 provider_key: None,
+                model: None,
             },
         ];
         let second = msg_at(
@@ -877,6 +960,149 @@ mod tests {
         let ctx = TestToolContext::new().with_character_data_dir("/tmp");
         let result = handle_search_history(&json!({}), &ctx);
         assert!(matches!(result, Err(ToolError::InvalidArgs(_))));
+    }
+
+    #[tokio::test]
+    async fn search_history_surfaces_and_filters_by_model() {
+        let tmp = tempfile::tempdir().unwrap();
+        let character_dir = tmp.path();
+
+        let mut opus = msg_at(
+            "opus",
+            Role::Assistant,
+            "Tea talk under opus.",
+            "2026-01-01T00:00:00Z",
+        );
+        opus.model = Some("claude-opus-4-6".to_owned());
+        let mut deepseek = msg_at(
+            "deepseek",
+            Role::Assistant,
+            "Tea talk under deepseek.",
+            "2026-01-02T00:00:00Z",
+        );
+        deepseek.model = Some("deepseek-v4-pro".to_owned());
+        let unstamped = msg_at(
+            "unstamped",
+            Role::Assistant,
+            "Tea talk before model tracking.",
+            "2026-01-03T00:00:00Z",
+        );
+        write_active(character_dir, &[opus, deepseek, unstamped]);
+
+        let ctx = TestToolContext::new().with_character_data_dir(character_dir.to_str().unwrap());
+
+        // Unfiltered: everything matches; model is surfaced (null when absent).
+        let all = handle_search_history(&json!({"query": "tea"}), &ctx).unwrap();
+        let hits = all["results"].as_array().unwrap();
+        assert_eq!(hits.len(), 3);
+        let by_id = |id: &str| {
+            hits.iter()
+                .find(|h| h["msg_id"] == id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+        };
+        assert_eq!(by_id("opus")["model"], "claude-opus-4-6");
+        assert_eq!(by_id("deepseek")["model"], "deepseek-v4-pro");
+        assert_eq!(by_id("unstamped")["model"], Value::Null);
+
+        // Dot/dash-folded substring filter: 'opus-4.6' matches 'claude-opus-4-6'.
+        // Unstamped messages never match an explicit filter.
+        let filtered =
+            handle_search_history(&json!({"query": "tea", "model": "opus-4.6"}), &ctx).unwrap();
+        let filtered_hits = filtered["results"].as_array().unwrap();
+        assert_eq!(filtered_hits.len(), 1);
+        assert_eq!(filtered_hits[0]["msg_id"], "opus");
+
+        // Model-only search is valid and returns chronological results.
+        let model_only = handle_search_history(&json!({"model": "deepseek"}), &ctx).unwrap();
+        let model_only_hits = model_only["results"].as_array().unwrap();
+        assert_eq!(model_only_hits.len(), 1);
+        assert_eq!(model_only_hits[0]["msg_id"], "deepseek");
+    }
+
+    #[tokio::test]
+    async fn search_history_alternative_model_falls_back_to_parent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let character_dir = tmp.path();
+
+        let mut active = msg("active", Role::Assistant, "Tea came up again today.");
+        active.model = Some("claude-opus-4-6".to_owned());
+        active.alt_index = Some(0);
+        active.alt_count = Some(2);
+        active.alternatives = vec![
+            MessageAlternative {
+                content: active.content.clone(),
+                images: vec![],
+                content_blocks: active.content_blocks.clone(),
+                timestamp: active.timestamp.clone(),
+                provider_key: None,
+                model: active.model.clone(),
+            },
+            // Legacy alternative: no model stamp of its own.
+            MessageAlternative {
+                content: "Coffee came up in a regenerated reply.".to_owned(),
+                images: vec![],
+                content_blocks: vec![ContentBlock::Text {
+                    text: "Coffee came up in a regenerated reply.".to_owned(),
+                }],
+                timestamp: "2026-01-01T00:01:00Z".to_owned(),
+                provider_key: None,
+                model: None,
+            },
+        ];
+        write_active(character_dir, &[active]);
+
+        let ctx = TestToolContext::new().with_character_data_dir(character_dir.to_str().unwrap());
+        let result = handle_search_history(&json!({"query": "coffee"}), &ctx).unwrap();
+        let hits = result["results"].as_array().unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0]["source"], "active:alt:1");
+        assert_eq!(
+            hits[0]["model"], "claude-opus-4-6",
+            "legacy alternative should inherit the parent message's model"
+        );
+    }
+
+    #[tokio::test]
+    async fn search_history_respects_excerpt_chars() {
+        let tmp = tempfile::tempdir().unwrap();
+        let character_dir = tmp.path();
+        let long_text = format!("tea {}", "x".repeat(1200));
+        write_active(character_dir, &[msg("long", Role::Assistant, &long_text)]);
+
+        let ctx = TestToolContext::new().with_character_data_dir(character_dir.to_str().unwrap());
+
+        let default_run = handle_search_history(&json!({"query": "tea"}), &ctx).unwrap();
+        let default_excerpt = default_run["results"][0]["excerpt"].as_str().unwrap();
+        assert!(default_excerpt.chars().count() <= EXCERPT_CHARS + 3);
+
+        let wide =
+            handle_search_history(&json!({"query": "tea", "excerpt_chars": 2000}), &ctx).unwrap();
+        let wide_excerpt = wide["results"][0]["excerpt"].as_str().unwrap();
+        assert!(
+            wide_excerpt.chars().count() > 1200,
+            "excerpt_chars should widen the excerpt to cover the full message"
+        );
+        assert!(!wide_excerpt.ends_with("..."));
+    }
+
+    #[tokio::test]
+    async fn minimum_excerpt_still_contains_deep_match() {
+        let tmp = tempfile::tempdir().unwrap();
+        let character_dir = tmp.path();
+        let deep_text = format!("{} tea and biscuits", "x".repeat(500));
+        write_active(character_dir, &[msg("deep", Role::Assistant, &deep_text)]);
+
+        let ctx = TestToolContext::new().with_character_data_dir(character_dir.to_str().unwrap());
+        let narrow = handle_search_history(
+            &json!({"query": "tea", "excerpt_chars": MIN_EXCERPT_CHARS}),
+            &ctx,
+        )
+        .unwrap();
+        let excerpt = narrow["results"][0]["excerpt"].as_str().unwrap();
+        assert!(
+            excerpt.contains("tea"),
+            "minimum-width excerpt must include the matched term, got: {excerpt}"
+        );
     }
 
     #[tokio::test]

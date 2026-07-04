@@ -4,6 +4,7 @@ pub(crate) mod context;
 pub mod history;
 pub mod images;
 pub mod mcp_registry;
+pub mod model_history;
 pub(crate) mod subagent;
 pub mod web;
 pub mod workspace;
@@ -158,6 +159,15 @@ pub trait ToolContext: Sync {
         Box::pin(async move { Err(ToolError::NotImplemented(format!("ask_{name}"))) })
     }
 
+    /// Read access to the usage ledger for provenance queries
+    /// (`model_history`). Default: unavailable — only contexts that carry a
+    /// ledger handle (chat and background paths) override this; compaction
+    /// and bare test contexts return `None` and the tool reports itself
+    /// unavailable instead of panicking.
+    fn ledger(&self) -> Option<&shore_ledger::Ledger> {
+        None
+    }
+
     /// Invoke an MCP tool (`mcp__<server>__<tool>`) and return its result.
     ///
     /// Default: unavailable — only contexts wired with an MCP registry override
@@ -186,6 +196,7 @@ pub fn all_tools() -> Vec<ToolDef> {
     tools.extend(basic::tool_defs());
     tools.extend(workspace::tool_defs());
     tools.extend(history::tool_defs());
+    tools.extend(model_history::tool_defs());
     tools
 }
 
@@ -286,6 +297,7 @@ pub fn dispatch_tool<'ctx>(
     Box::pin(async move {
         match name {
             "search_chat_logs" => history::handle_search_history(&input, ctx),
+            "model_history" => model_history::handle_model_history(&input, ctx),
             "generate_image" => images::handle_generate_image(input, ctx).await,
             // Web tools
             "web_search" => web::handle_web_search(input, ctx).await,
@@ -460,9 +472,10 @@ mod tests {
     #[test]
     fn test_all_tools_returns_expected_count() {
         let tools = all_tools();
-        // images(1) + web(2) + activity(1) + basic(2) + workspace(7) + history(1) = 14
+        // images(1) + web(2) + activity(1) + basic(2) + workspace(7) + history(1)
+        // + model_history(1) = 15
         // (basic = check_time, roll_dice; set_next_wake is undeclared — see basic.rs)
-        assert_eq!(tools.len(), 14);
+        assert_eq!(tools.len(), 15);
     }
 
     #[test]

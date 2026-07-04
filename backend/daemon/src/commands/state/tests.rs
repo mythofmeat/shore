@@ -167,6 +167,7 @@ fn make_msg(id: &str, role: Role, content: &str) -> Message {
         alt_count: None,
         alternatives: vec![],
         provider_key: None,
+        model: None,
         timestamp: "2026-01-01T00:00:00Z".to_owned(),
     }
 }
@@ -187,6 +188,7 @@ fn tool_use_msg(id: &str) -> Message {
         alt_count: None,
         alternatives: vec![],
         provider_key: None,
+        model: None,
         timestamp: "2026-01-01T00:00:00Z".to_owned(),
     }
 }
@@ -207,6 +209,7 @@ fn tool_result_msg(id: &str) -> Message {
         alt_count: None,
         alternatives: vec![],
         provider_key: None,
+        model: None,
         timestamp: "2026-01-01T00:00:00Z".to_owned(),
     }
 }

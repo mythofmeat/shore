@@ -49,6 +49,7 @@ fn msg(id: &str, role: Role, text: &str, ts: &str) -> Message {
         alt_count: None,
         alternatives: vec![],
         provider_key: None,
+        model: None,
         timestamp: ts.to_owned(),
     }
 }

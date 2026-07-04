@@ -115,14 +115,19 @@ fn arb_message_alternative() -> impl Strategy<Value = MessageAlternative> {
         prop::collection::vec(arb_image_ref(), 0..2),
         prop::collection::vec(arb_content_block(), 0..3),
         arb_small_string(),
+        prop::option::of(arb_ident()),
+        prop::option::of(arb_ident()),
     )
         .prop_map(
-            |(content, images, content_blocks, timestamp)| MessageAlternative {
-                content,
-                images,
-                content_blocks,
-                timestamp,
-                provider_key: None,
+            |(content, images, content_blocks, timestamp, provider_key, model)| {
+                MessageAlternative {
+                    content,
+                    images,
+                    content_blocks,
+                    timestamp,
+                    provider_key,
+                    model,
+                }
             },
         )
 }
@@ -138,6 +143,7 @@ fn arb_message() -> impl Strategy<Value = Message> {
         prop::option::of(1_u32..5),
         prop::collection::vec(arb_message_alternative(), 0..2),
         prop::option::of(arb_ident()),
+        prop::option::of(arb_ident()),
         arb_small_string(),
         prop::option::of(arb_message_origin()),
     )
@@ -152,6 +158,7 @@ fn arb_message() -> impl Strategy<Value = Message> {
                 alt_count,
                 alternatives,
                 provider_key,
+                model,
                 timestamp,
                 origin,
             )| Message {
@@ -165,6 +172,7 @@ fn arb_message() -> impl Strategy<Value = Message> {
                 alternatives,
                 timestamp,
                 provider_key,
+                model,
                 origin,
             },
         )

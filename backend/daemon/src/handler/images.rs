@@ -761,9 +761,11 @@ mod tests {
                 content_blocks: vec![],
                 timestamp: "t".into(),
                 provider_key: None,
+                model: None,
             }],
             timestamp: "t".into(),
             provider_key: None,
+            model: None,
         };
 
         embed_message_image_data(&mut message);

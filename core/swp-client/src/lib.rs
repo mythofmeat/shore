@@ -148,6 +148,7 @@ mod tests {
                     alt_count: None,
                     alternatives: vec![],
                     provider_key: None,
+                    model: None,
                     timestamp: "2026-01-01T00:00:00Z".into(),
                 }],
                 active_start: 0,

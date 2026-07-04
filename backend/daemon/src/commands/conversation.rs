@@ -567,6 +567,7 @@ pub fn inject_system(
         alt_count: None,
         alternatives: vec![],
         provider_key: None,
+        model: None,
         timestamp: chrono::Local::now().to_rfc3339(),
     };
 
@@ -651,6 +652,7 @@ mod tests {
             alt_count: None,
             alternatives: vec![],
             provider_key: None,
+            model: None,
             timestamp: "2026-01-01T00:00:00Z".to_owned(),
         }
     }
@@ -1018,6 +1020,7 @@ mod tests {
                 }],
                 timestamp: "2026-01-01T00:00:00Z".into(),
                 provider_key: None,
+                model: None,
             },
             shore_protocol::types::MessageAlternative {
                 content: "Second answer".into(),
@@ -1027,6 +1030,7 @@ mod tests {
                 }],
                 timestamp: "2026-01-01T00:00:01Z".into(),
                 provider_key: None,
+                model: None,
             },
         ];
         engine.append_message(msg).unwrap();
@@ -1058,6 +1062,7 @@ mod tests {
                 }],
                 timestamp: "2026-01-01T00:00:00Z".into(),
                 provider_key: None,
+                model: None,
             },
             shore_protocol::types::MessageAlternative {
                 content: "Second answer".into(),
@@ -1067,6 +1072,7 @@ mod tests {
                 }],
                 timestamp: "2026-01-01T00:00:01Z".into(),
                 provider_key: None,
+                model: None,
             },
         ];
         engine.append_message(msg).unwrap();

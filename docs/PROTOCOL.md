@@ -1020,6 +1020,8 @@ unspecified mode runs the default `summary`.
   "alt_index": 1,
   "alt_count": 2,
   "alternatives": [ MessageAlternative, … ],
+  "provider_key": "anthropic",
+  "model": "claude-opus-4-6",
   "timestamp": "2026-05-20T12:00:00Z",
   "origin": "autonomous"
 }
@@ -1035,6 +1037,12 @@ unspecified mode runs the default `summary`.
 - `alt_index` / `alt_count` / `alternatives` are present only when the
   message has more than one stored response. `alt_index` is 0-based;
   `alternatives[alt_index]` matches the top-level `content`.
+- `provider_key` and `model` are optional provenance stamps on
+  assistant messages: the provider entry and model id that minted the
+  content. Both are omitted on user/system turns and on messages stored
+  before provenance tracking (provider stamping predates model stamping,
+  so either may appear without the other). Clients should treat them as
+  display/audit metadata only.
 - `origin` is optional: `"user_input"`, `"assistant_reply"`, or
   `"autonomous"`. In `new_message` frames it is always stamped (§7.3). In
   `history` snapshots it appears only on autonomous (heartbeat-initiated)
@@ -1065,9 +1073,17 @@ on read when omitted.
   "content": "…",
   "images": [ ImageRef, … ],
   "content_blocks": [ ContentBlock, … ],
-  "timestamp": "2026-05-20T12:00:00Z"
+  "timestamp": "2026-05-20T12:00:00Z",
+  "provider_key": "openrouter",
+  "model": "deepseek-v4-pro"
 }
 ```
+
+- `provider_key` / `model`: optional per-alternative provenance, as on
+  `Message` (§9.1). Regenerated bodies can come from a different
+  provider/model than the original or a sibling alternative, so each
+  alternative carries its own stamps; when absent, consumers fall back
+  to the parent message's values.
 
 ### 9.4 `StreamMetadata`
 

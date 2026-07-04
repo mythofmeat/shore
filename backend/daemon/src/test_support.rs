@@ -12,6 +12,7 @@ use crate::memory::markdown_store::MarkdownMemoryStore;
 use crate::tools::ToolContext;
 use shore_config::app::{RetrievalConfig, SearchConfig};
 use shore_config::models::{ResolvedModel, Sdk};
+use shore_ledger::Ledger;
 use shore_llm::embed::Embedder;
 use shore_llm::LlmClient;
 use shore_protocol::types::Message;
@@ -117,6 +118,7 @@ pub struct TestToolContext {
     pub memory_index_path_val: Option<std::path::PathBuf>,
     pub workspace_dir_val: String,
     pub character_data_dir_val: String,
+    pub ledger_val: Option<Arc<Ledger>>,
 }
 
 impl std::fmt::Debug for TestToolContext {
@@ -136,6 +138,7 @@ impl std::fmt::Debug for TestToolContext {
             .field("memory_index_path_val", &self.memory_index_path_val)
             .field("workspace_dir_val", &self.workspace_dir_val)
             .field("character_data_dir_val", &self.character_data_dir_val)
+            .field("ledger_val", &self.ledger_val.as_ref().map(|_| "<ledger>"))
             .finish()
     }
 }
@@ -155,6 +158,7 @@ impl TestToolContext {
             memory_index_path_val: None,
             workspace_dir_val: String::new(),
             character_data_dir_val: String::new(),
+            ledger_val: None,
         }
     }
 
@@ -191,6 +195,19 @@ impl TestToolContext {
 
     pub fn with_retrieval_config(mut self, config: RetrievalConfig) -> Self {
         self.retrieval_config_val = config;
+        self
+    }
+
+    /// Set the character name.
+    pub fn with_character(mut self, name: &str) -> Self {
+        self.character_name_val = name.to_owned();
+        self
+    }
+
+    /// Set a ledger (usually `Ledger::open_in_memory()`) for model-history
+    /// tool tests.
+    pub fn with_ledger(mut self, ledger: Ledger) -> Self {
+        self.ledger_val = Some(Arc::new(ledger));
         self
     }
 }
@@ -237,6 +254,9 @@ impl ToolContext for TestToolContext {
     }
     fn character_data_dir(&self) -> &str {
         &self.character_data_dir_val
+    }
+    fn ledger(&self) -> Option<&Ledger> {
+        self.ledger_val.as_deref()
     }
     fn config_dir(&self) -> &'static str {
         ""

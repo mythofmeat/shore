@@ -232,6 +232,7 @@ async fn append_user_turn(
         alt_count: None,
         alternatives: vec![],
         provider_key: None,
+        model: None,
         timestamp: chrono::Local::now().to_rfc3339(),
     };
     engine.append_message(user_msg.clone())?;

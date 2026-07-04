@@ -383,6 +383,11 @@ impl ToolContext for SubagentGuardContext<'_> {
     fn defer_edit(&self, path: &str) {
         self.inner.defer_edit(path);
     }
+    // Forward ledger access so a sub-agent (e.g. the memory agent) can run
+    // `model_history`.
+    fn ledger(&self) -> Option<&shore_ledger::Ledger> {
+        self.inner.ledger()
+    }
     // Forward MCP calls to the parent context so a sub-agent can use MCP tools.
     // `run_subagent` is deliberately *not* overridden (falls back to the
     // `NotImplemented` trait default), so the one-level nesting cap holds.

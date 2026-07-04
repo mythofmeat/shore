@@ -146,6 +146,18 @@ commands see durable state. During tool use, clients may see intermediate
 `StreamEnd(tool_use)` events; they should buffer one assistant turn across tool
 phases.
 
+Persisted assistant messages carry provenance stamps: `provider_key` (the
+provider entry that minted the content, used by the thinking-replay
+portability filter) and `model` (the model id, audit metadata for history
+tooling). Tool-loop intermediates, heartbeat-minted autonomous messages, and
+regeneration alternatives are stamped the same way; each alternative carries
+its own stamps because regenerated bodies can come from a different
+provider/model than their siblings. Messages persisted before provenance
+tracking simply lack the fields. History tooling surfaces the stamps:
+`search_chat_logs` reports each result's minting model and can filter by it,
+and the `model_history` tool summarizes per-model usage over time from the
+usage ledger (which predates per-message stamping).
+
 Regeneration uses the same prompt assembly path, but the prompt view stops at
 the last real user turn so the model does not see the response being
 regenerated. The daemon does not rewrite `active.jsonl` until the replacement

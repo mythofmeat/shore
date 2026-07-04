@@ -2294,6 +2294,7 @@ fn heartbeat_idle_anchor_message() -> Message {
         alt_count: None,
         alternatives: Vec::new(),
         provider_key: None,
+        model: None,
         timestamp: chrono::Local::now().to_rfc3339(),
         origin: None,
     }
@@ -2978,6 +2979,7 @@ fn build_autonomous_message(
     text: &str,
     images: Vec<ImageRef>,
     provider_key: Option<String>,
+    model: Option<String>,
 ) -> Message {
     // Omit the text block for an image-only tick — otherwise the persisted
     // message carries a blank `ContentBlock::Text`.
@@ -3000,6 +3002,7 @@ fn build_autonomous_message(
         alt_count: None,
         alternatives: vec![],
         provider_key,
+        model,
         timestamp: chrono::Local::now().to_rfc3339(),
     }
 }
@@ -3033,7 +3036,15 @@ async fn persist_heartbeat_message(
             "Heartbeat: sending message to user"
         );
 
-        let msg = build_autonomous_message(&user_msg, images, request.provider_key.clone());
+        // The heartbeat's minting model is whatever the background request was
+        // resolved to — the model that actually wrote this autonomous message.
+        let minting_model = (!request.model.is_empty()).then(|| request.model.clone());
+        let msg = build_autonomous_message(
+            &user_msg,
+            images,
+            request.provider_key.clone(),
+            minting_model,
+        );
 
         // Persist via the engine lock to avoid racing with the handler's
         // MessageStore writes (atomic temp+rename). The engine's append_message
@@ -3456,6 +3467,7 @@ mod tests {
             alt_count: None,
             alternatives: vec![],
             provider_key: None,
+            model: None,
             timestamp: chrono::Local::now().to_rfc3339(),
         }
     }
@@ -3979,7 +3991,7 @@ mod tests {
             caption: Some("dawn".into()),
             data: None,
         }];
-        let msg = build_autonomous_message("", images, None);
+        let msg = build_autonomous_message("", images, None, None);
         assert!(
             msg.content_blocks.is_empty(),
             "image-only message should carry no blank text block"
@@ -3989,7 +4001,7 @@ mod tests {
 
     #[test]
     fn build_autonomous_message_keeps_text_block_when_present() {
-        let msg = build_autonomous_message("hello", Vec::new(), None);
+        let msg = build_autonomous_message("hello", Vec::new(), None, None);
         assert_eq!(msg.content_blocks.len(), 1);
         assert_eq!(msg.content, "hello");
     }
@@ -4386,6 +4398,7 @@ mod tests {
                 alt_count: None,
                 alternatives: vec![],
                 provider_key: None,
+                model: None,
                 timestamp: chrono::Local::now().to_rfc3339(),
             })
             .unwrap();
@@ -4631,6 +4644,7 @@ api_key_env = "{api_key_env}"
                 alt_count: None,
                 alternatives: vec![],
                 provider_key: None,
+                model: None,
                 timestamp: chrono::Local::now().to_rfc3339(),
             })
             .unwrap();

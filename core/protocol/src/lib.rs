@@ -196,6 +196,7 @@ mod tests {
                 alt_count: None,
                 alternatives: vec![],
                 provider_key: None,
+                model: None,
                 timestamp: "2026-01-01T00:00:00Z".into(),
             }],
             active_start: 0,
@@ -377,6 +378,7 @@ mod tests {
                 alt_count: None,
                 alternatives: vec![],
                 provider_key: None,
+                model: None,
                 timestamp: "2026-01-01T00:00:01Z".into(),
             },
         });
@@ -493,23 +495,31 @@ mod tests {
                     text: "response".into(),
                 }],
                 timestamp: "2026-01-01T00:00:00Z".into(),
-                provider_key: None,
+                provider_key: Some("openrouter".into()),
+                model: Some("anthropic/claude-opus-4.6".into()),
             }],
             timestamp: "2026-01-01T00:00:00Z".into(),
-            provider_key: None,
+            provider_key: Some("anthropic".into()),
+            model: Some("claude-opus-4-6".into()),
         };
         let (json, back) = round_trip(&msg);
         assert_eq!(field(&json, "alt_index"), 0);
         assert_eq!(field(&json, "alt_count"), 1);
+        assert_eq!(field(&json, "model"), "claude-opus-4-6");
         let alternatives = field(&json, "alternatives")
             .as_array()
             .expect("alternatives array");
         let images = field(&json, "images").as_array().expect("images array");
         assert_eq!(field(item(alternatives, 0), "content"), "response");
+        assert_eq!(
+            field(item(alternatives, 0), "model"),
+            "anthropic/claude-opus-4.6"
+        );
         assert_eq!(field(item(images, 0), "path"), "/img/a.png");
         assert_eq!(back.alt_index, Some(0));
         assert_eq!(back.alt_count, Some(1));
         assert_eq!(back.alternatives.len(), 1);
+        assert_eq!(back.model.as_deref(), Some("claude-opus-4-6"));
     }
 
     #[test]
@@ -525,12 +535,15 @@ mod tests {
             alt_count: None,
             alternatives: vec![],
             provider_key: None,
+            model: None,
             timestamp: "2026-01-01T00:00:00Z".into(),
         };
         let json = serde_json::to_value(&msg).unwrap();
         assert!(json.get("alt_index").is_none());
         assert!(json.get("alt_count").is_none());
         assert!(json.get("alternatives").is_none());
+        assert!(json.get("provider_key").is_none());
+        assert!(json.get("model").is_none());
     }
 
     #[test]
@@ -764,6 +777,7 @@ mod tests {
             alt_count: None,
             alternatives: vec![],
             provider_key: None,
+            model: None,
             timestamp: "2026-01-01T00:00:00Z".into(),
         };
         let json = serde_json::to_value(&msg).unwrap();
@@ -792,6 +806,7 @@ mod tests {
             alt_count: None,
             alternatives: vec![],
             provider_key: None,
+            model: None,
             timestamp: "2026-01-01T00:00:00Z".into(),
         };
         let json = serde_json::to_value(&msg).unwrap();

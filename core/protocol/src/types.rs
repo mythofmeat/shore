@@ -104,6 +104,15 @@ pub struct Message {
     /// (user turns, system recaps) that carry no provider-bound data.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_key: Option<String>,
+    /// Model id that minted this message's content (e.g. `"claude-opus-4-6"`,
+    /// `"anthropic/claude-opus-4.6"`), in the same vocabulary as the usage
+    /// ledger. Unlike [`Message::provider_key`] (which drives thinking-replay
+    /// portability), this is pure provenance: it lets history tooling
+    /// attribute a stored turn to the model that generated it. `None` for
+    /// messages persisted before model provenance tracking and for messages
+    /// no model minted (user turns, system recaps).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
     /// How this message entered the conversation. Currently only
     /// `Some(Autonomous)` is persisted (heartbeat `<sendMessage>` output);
     /// compaction's deep-idle archive uses it to keep unanswered autonomous
@@ -138,6 +147,13 @@ pub struct MessageAlternative {
     /// in which case callers fall back to [`Message::provider_key`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_key: Option<String>,
+    /// Model id that minted this alternative's content. Like
+    /// [`MessageAlternative::provider_key`], each alternative carries its own
+    /// provenance because regenerated bodies can come from different models.
+    /// `None` for alternatives persisted before model provenance tracking, in
+    /// which case callers fall back to [`Message::model`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
 }
 
 impl MessageAlternative {
@@ -424,6 +440,7 @@ mod tests {
             alt_count: None,
             alternatives: vec![],
             provider_key: None,
+            model: None,
             timestamp: "2026-01-01T00:00:00Z".into(),
         }
     }
@@ -517,6 +534,7 @@ mod tests {
             content_blocks: vec![],
             timestamp: "2026-01-01T00:00:00Z".into(),
             provider_key: None,
+            model: None,
         }];
 
         let json_str = msg.serialize_for_storage().unwrap();

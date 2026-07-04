@@ -618,6 +618,7 @@ enabled_tools = [
   "search",
   "delete",
   "search_chat_logs",
+  "model_history",
   "exec",
   "set_next_wake",   # heartbeat self-scheduling; only usable during heartbeat ticks
 ]
@@ -637,7 +638,10 @@ max_result_chars = 10000
 
 The registered tool names are: `web_search`, `fetch_url`, `generate_image`,
 `check_time`, `roll_dice`, `activity_heatmap`, `read`, `write`, `edit`,
-`list_files`, `search`, `delete`, `search_chat_logs`, `exec`, `set_next_wake`.
+`list_files`, `search`, `delete`, `search_chat_logs`, `model_history`, `exec`,
+`set_next_wake`. (`model_history` reports which models generated the
+character's messages over a time period, from the usage ledger — pairs with
+`search_chat_logs`' per-message `model` field and filter.)
 List exactly the ones you want; comment a line out to disable that tool.
 Dynamic MCP tools (`mcp__<server>__<tool>`, see [`[mcp]`](#mcp)) can also be
 listed here, by exact name or with a trailing-`*` glob (e.g. `mcp__hue__*`).
@@ -707,14 +711,14 @@ enabled_subagents = ["memory"]   # nothing is exposed until listed here
 [subagents.memory]
 description = "Ask {{char}}'s archivist about past conversations and saved notes."
 prompt = "You are {{char}}'s memory archivist. Search and read what's relevant, answer concisely. Say so if you find nothing."
-tools = ["search", "search_chat_logs", "read", "list_files"]
+tools = ["search", "search_chat_logs", "model_history", "read", "list_files"]
 # model = "anthropic:claude-haiku-4-5"   # optional; else defaults.subagent_model → defaults.model
 # max_iterations = 8                      # optional; else the model's own cap
 ```
 
 **Tip — "moved, not doubled":** if you expose `ask_memory`, you usually want to
-*omit* its underlying tools (`search`, `search_chat_logs`, `read`,
-`list_files`) from the primary character's `enabled_tools`, so the character
+*omit* its underlying tools (`search`, `search_chat_logs`, `model_history`,
+`read`, `list_files`) from the primary character's `enabled_tools`, so the character
 delegates instead of doing the lookup itself. Leave them in only if you want
 both a quick direct lookup and a deep delegated dig.
 

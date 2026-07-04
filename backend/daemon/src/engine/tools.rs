@@ -204,6 +204,13 @@ fn append_assistant_tool_use_turn(
         "content": assistant_content,
     }));
 
+    // Model provenance mirrors the final-response path: prefer what the
+    // provider reported for this iteration, fall back to what we requested.
+    let minting_model = if result.model.is_empty() {
+        request.model.clone()
+    } else {
+        result.model.clone()
+    };
     intermediate_messages.push(Message {
         msg_id: format!("m_{}", uuid::Uuid::new_v4()),
         origin: None,
@@ -216,6 +223,7 @@ fn append_assistant_tool_use_turn(
         alternatives: vec![],
         timestamp: chrono::Local::now().to_rfc3339(),
         provider_key: request.provider_key.clone(),
+        model: (!minting_model.is_empty()).then_some(minting_model),
     });
 }
 
@@ -418,6 +426,7 @@ fn append_user_tool_result_turn(
         alternatives: vec![],
         timestamp: chrono::Local::now().to_rfc3339(),
         provider_key: None,
+        model: None,
     });
 }
 

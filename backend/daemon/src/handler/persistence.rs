@@ -76,9 +76,16 @@ pub(super) async fn persist_and_notify(
             .provider_key
             .clone()
             .unwrap_or_else(|| resolved.provider_key.clone());
+        // Prefer the model the provider reported for this call (matching the
+        // ledger/diagnostics entries); fall back to the model we requested.
+        let minting_model = if result.model.is_empty() {
+            request.model.clone()
+        } else {
+            result.model.clone()
+        };
         let response_messages: Vec<Message> = completed_messages
             .into_iter()
-            .map(|m| message_from_response(m, &minting_provider))
+            .map(|m| message_from_response(m, &minting_provider, &minting_model))
             .collect();
         let response_event_ids: Vec<String> = response_messages
             .iter()
@@ -298,7 +305,11 @@ fn emit_new_message_event(
     }));
 }
 
-fn message_from_response(response_msg: CompletedResponseMessage, provider_key: &str) -> Message {
+fn message_from_response(
+    response_msg: CompletedResponseMessage,
+    provider_key: &str,
+    model: &str,
+) -> Message {
     let content = derive_content_from_blocks(&response_msg.content_blocks);
     Message {
         msg_id: format!("m_{}", uuid::Uuid::new_v4()),
@@ -312,6 +323,7 @@ fn message_from_response(response_msg: CompletedResponseMessage, provider_key: &
         alternatives: vec![],
         timestamp: chrono::Local::now().to_rfc3339(),
         provider_key: Some(provider_key.to_owned()),
+        model: (!model.is_empty()).then(|| model.to_owned()),
     }
 }
 
@@ -434,5 +446,25 @@ mod tests {
         let msgs = completed_response_messages(&result, &Sdk::Anthropic);
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0].role, Role::Assistant);
+    }
+
+    #[test]
+    fn message_from_response_stamps_provenance() {
+        let result = result_with("hello", vec![]);
+        let mut msgs = completed_response_messages(&result, &Sdk::Anthropic);
+        let msg = message_from_response(msgs.remove(0), "anthropic", "claude-opus-4-6");
+        assert_eq!(msg.provider_key.as_deref(), Some("anthropic"));
+        assert_eq!(msg.model.as_deref(), Some("claude-opus-4-6"));
+    }
+
+    #[test]
+    fn message_from_response_empty_model_stays_none() {
+        // A provider that reports no model id must not stamp an empty string —
+        // downstream consumers treat `Some("")` as a real (garbage) model.
+        let result = result_with("hello", vec![]);
+        let mut msgs = completed_response_messages(&result, &Sdk::Anthropic);
+        let msg = message_from_response(msgs.remove(0), "anthropic", "");
+        assert_eq!(msg.provider_key.as_deref(), Some("anthropic"));
+        assert_eq!(msg.model, None);
     }
 }

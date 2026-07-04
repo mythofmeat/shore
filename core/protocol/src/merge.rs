@@ -163,6 +163,7 @@ pub fn merge_tool_loop_messages(messages: &[Message]) -> Vec<Message> {
             alternatives: last_assistant.alternatives.clone(),
             timestamp: last_assistant.timestamp.clone(),
             provider_key: last_assistant.provider_key.clone(),
+            model: last_assistant.model.clone(),
             origin: last_assistant.origin,
         });
     }
@@ -188,6 +189,7 @@ mod tests {
             alt_count: None,
             alternatives: vec![],
             provider_key: None,
+            model: None,
             origin: None,
             timestamp: "2026-01-01T00:00:00Z".into(),
         }
@@ -553,6 +555,8 @@ mod tests {
         final_msg.timestamp = "2026-03-29T15:30:00Z".into();
         final_msg.alt_index = Some(1);
         final_msg.alt_count = Some(3);
+        final_msg.provider_key = Some("anthropic".into());
+        final_msg.model = Some("claude-opus-4-6".into());
 
         let msgs = vec![
             user_msg("u1", "test"),
@@ -566,6 +570,8 @@ mod tests {
         assert_eq!(assistant.timestamp, "2026-03-29T15:30:00Z");
         assert_eq!(assistant.alt_index, Some(1));
         assert_eq!(assistant.alt_count, Some(3));
+        assert_eq!(assistant.provider_key.as_deref(), Some("anthropic"));
+        assert_eq!(assistant.model.as_deref(), Some("claude-opus-4-6"));
     }
 
     // ── Filtering ───────────────────────────────────────────────────

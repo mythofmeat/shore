@@ -73,6 +73,14 @@ impl ToolContext for SharedToolContext {
     fn character_data_dir(&self) -> &str {
         &self.character_data_dir
     }
+    // The ledger handle rides on the sub-agent runtime's ledger-wrapped
+    // client, which every path except compaction populates — no separate
+    // field to thread through construction sites.
+    fn ledger(&self) -> Option<&shore_ledger::Ledger> {
+        self.subagent_runtime
+            .as_ref()
+            .map(|rt| rt.ledger_client.ledger().as_ref())
+    }
     fn markdown_store(&self) -> Option<&MarkdownMemoryStore> {
         self.markdown_store.as_ref()
     }
