@@ -23,6 +23,13 @@ pub enum MatrixInput {
     },
     /// `!bind [character]` — bridge-local room binding (None lists bindings).
     Bind { character: Option<String> },
+    /// `!view [key] [on|off|toggle]` — per-room display preferences
+    /// (thinking / tools / usage). `key: None` shows current settings;
+    /// `value: None` toggles.
+    View {
+        key: Option<String>,
+        value: Option<bool>,
+    },
     /// One or more SWP messages to forward to the daemon, in order.
     Forward(Vec<ClientMessage>),
     /// Bridge-local reply (help text, usage hints, "not applicable").
@@ -99,6 +106,8 @@ fn parse_bang_command(name: &str, args: &str) -> MatrixInput {
             }
         }
         "reasoning" => parse_reasoning(args),
+        "alt" => parse_alt(args),
+        "view" => parse_view(args),
 
         // Fallback — any unknown command goes to the daemon as a generic
         // Command. The daemon will reject it with "Unknown command" if it
@@ -270,6 +279,88 @@ fn parse_reasoning(args: &str) -> MatrixInput {
     )
 }
 
+/// `!view [key] [on|off|toggle]` — mirrors the TUI's `:view` toggles that
+/// make sense over Matrix (thinking / tools / usage).
+fn parse_view(args: &str) -> MatrixInput {
+    const USAGE: &str = "usage: `!view [thinking|tools|usage] [on|off|toggle]`";
+    let mut parts = args.split_whitespace();
+    let Some(key) = parts.next() else {
+        return MatrixInput::View {
+            key: None,
+            value: None,
+        };
+    };
+    let value = match parts.next().map(str::to_ascii_lowercase).as_deref() {
+        None | Some("toggle") => None,
+        Some("on" | "true" | "yes" | "1") => Some(true),
+        Some("off" | "false" | "no" | "0") => Some(false),
+        Some(_) => return MatrixInput::LocalReply(USAGE.into()),
+    };
+    if parts.next().is_some() {
+        return MatrixInput::LocalReply(USAGE.into());
+    }
+    MatrixInput::View {
+        key: Some(key.to_ascii_lowercase()),
+        value,
+    }
+}
+
+/// Selector half of an `!alt` invocation: which alternative to switch to.
+enum AltSelector {
+    Direction(&'static str),
+    Position(u64),
+}
+
+fn classify_alt_selector(word: &str) -> Option<AltSelector> {
+    match word.to_ascii_lowercase().as_str() {
+        "next" => Some(AltSelector::Direction("next")),
+        "prev" | "previous" => Some(AltSelector::Direction("prev")),
+        _ => match word.parse::<u64>() {
+            // 1-based position; 0 is never valid and negative ints are refs.
+            Ok(n) if n > 0 => Some(AltSelector::Position(n)),
+            _ => None,
+        },
+    }
+}
+
+/// `!alt` — browse/select alternate responses (the TUI's alt picker).
+///
+/// - `!alt` / `!alt <ref>` — list alternatives (of the last assistant
+///   message, or of `<ref>`; refs are `last`, negative indices, msg_ids)
+/// - `!alt next|prev` / `!alt <n>` — switch the last assistant message's
+///   alternative (by direction or 1-based position)
+/// - `!alt <ref> next|prev|<n>` — same, for a specific message
+fn parse_alt(args: &str) -> MatrixInput {
+    const USAGE: &str = "usage: `!alt [ref] [next|prev|<position>]`";
+    let parts: Vec<&str> = args.split_whitespace().collect();
+    let (msg_ref, selector) = match parts.as_slice() {
+        [] => {
+            return forward_command("list_alternatives", serde_json::json!({}));
+        }
+        [one] => match classify_alt_selector(one) {
+            Some(sel) => (None, sel),
+            // Not a selector → treat as a message ref and list its alternatives.
+            None => {
+                return forward_command("list_alternatives", serde_json::json!({ "ref": one }));
+            }
+        },
+        [msg_ref, sel] => match classify_alt_selector(sel) {
+            Some(sel) => (Some(*msg_ref), sel),
+            None => return MatrixInput::LocalReply(USAGE.into()),
+        },
+        _ => return MatrixInput::LocalReply(USAGE.into()),
+    };
+    let mut a = serde_json::Map::new();
+    if let Some(r) = msg_ref {
+        a.insert("ref".into(), serde_json::json!(r));
+    }
+    match selector {
+        AltSelector::Direction(d) => a.insert("direction".into(), serde_json::json!(d)),
+        AltSelector::Position(n) => a.insert("position".into(), serde_json::json!(n)),
+    };
+    forward_command("alt", serde_json::Value::Object(a))
+}
+
 /// Map a `!setting` value string to the JSON shape the daemon's
 /// `set_model_setting` expects. Mirrors the TUI's `parse_setting_value_str`.
 fn parse_setting_value_str(key: &str, raw: &str) -> serde_json::Value {
@@ -301,11 +392,20 @@ fn parse_setting_value_str(key: &str, raw: &str) -> serde_json::Value {
 
 fn help_text() -> String {
     [
+        "**Native Matrix interactions**",
+        "- Edit your message → the conversation updates and the reply can be regenerated",
+        "- Delete (redact) a message → it's removed from the conversation",
+        "- React 🔁 to the latest reply → regenerate",
+        "- React 🗑️ to any message → delete it",
+        "- React ◀️ / ▶️ on a reply → cycle alternate responses",
+        "",
         "**Bridge commands**",
         "- `!bind [character]` — bind this room to a character (no arg lists bindings)",
+        "- `!view [thinking|tools|usage] [on|off|toggle]` — per-room display of generation internals",
         "",
         "**Conversation**",
         "- `!regen [guidance]` — regenerate the last response",
+        "- `!alt [ref] [next|prev|<n>]` — list or switch alternate responses",
         "- `!cancel` — cancel an in-flight generation",
         "- `!log [count]` — fetch recent message history",
         "- `!edit <ref> <content>` — edit a message by ref (e.g. `last`, `-1`)",
@@ -362,7 +462,10 @@ pub fn input_to_swp(input: &MatrixInput) -> Option<ClientMessage> {
             absence_seconds: None,
             overrides: None,
         })),
-        MatrixInput::Bind { .. } | MatrixInput::Forward(_) | MatrixInput::LocalReply(_) => None,
+        MatrixInput::Bind { .. }
+        | MatrixInput::View { .. }
+        | MatrixInput::Forward(_)
+        | MatrixInput::LocalReply(_) => None,
     }
 }
 
@@ -394,8 +497,11 @@ pub enum CollectorAction {
         text: String,
         images: Vec<PendingImage>,
     },
-    /// Send a command response.
-    SendCommandOutput { name: String, data: String },
+    /// Send a command response (rendered by the caller).
+    SendCommandOutput {
+        name: String,
+        data: serde_json::Value,
+    },
     /// Send an error message.
     SendError(String),
     /// Send an autonomous/push message.
@@ -430,8 +536,10 @@ impl ResponseCollector {
                 CollectorAction::StartTyping
             }
             ServerMessage::StreamChunk(_) => {
-                // Chunks accumulate server-side; we just maintain the typing indicator.
-                CollectorAction::None
+                // Chunks accumulate server-side; re-assert typing on each one so
+                // the indicator survives generations longer than the ~4s Matrix
+                // typing timeout (the SDK debounces to one request per 3s).
+                CollectorAction::StartTyping
             }
             ServerMessage::StreamEnd(end) => {
                 self.streaming = false;
@@ -448,14 +556,10 @@ impl ResponseCollector {
                 });
                 CollectorAction::None
             }
-            ServerMessage::CommandOutput(out) => {
-                let data = serde_json::to_string_pretty(&out.data)
-                    .unwrap_or_else(|_| format!("{:?}", out.data));
-                CollectorAction::SendCommandOutput {
-                    name: out.name.clone(),
-                    data,
-                }
-            }
+            ServerMessage::CommandOutput(out) => CollectorAction::SendCommandOutput {
+                name: out.name.clone(),
+                data: out.data.clone(),
+            },
             ServerMessage::Error(err) => {
                 CollectorAction::SendError(format!("{:?}: {}", err.code, err.message))
             }
@@ -467,16 +571,17 @@ impl ResponseCollector {
     }
 }
 
-// ── Full-conversation mirroring (mirror_all) ──────────────────────────────
+// ── Conversation mirroring ─────────────────────────────────────────────────
 //
-// When `mirror_all` is on (the default), each character's bound room shows that
-// character's *entire* conversation regardless of which client drove it. The
-// daemon already broadcasts every conversation message as `NewMessage` (tagged
-// with `character` and `MessageOrigin`); the bridge just routes each one to the
-// right room. Streaming frames stay private to the originating session, so they
-// only drive the typing indicator here — the reply content arrives via
-// `NewMessage(AssistantReply)`, which is the single source of truth (this also
-// avoids double-posting a Matrix-originated reply).
+// In mirror modes (`mirror = "all"` or the default `"replies"`), the daemon
+// broadcasts every conversation message as `NewMessage` (tagged with
+// `character` and `MessageOrigin`) and the bridge routes each one to the right
+// room. This module only *translates* frames; mode-dependent filtering — in
+// `"replies"` mode other clients' prompts and their replies stay out of the
+// room — is applied by the caller, which knows which generations the bridge
+// itself requested. Streaming frames stay private to the originating session;
+// `NewMessage(AssistantReply)` is the single source of truth for reply content
+// (this also avoids double-posting a Matrix-originated reply).
 
 /// Which room a routed daemon message targets, before room resolution.
 #[derive(Debug, PartialEq, Eq)]
@@ -497,16 +602,37 @@ pub enum MirrorAction {
     StopTyping,
     /// Post assistant/autonomous content as the character bot.
     Post {
+        /// Daemon message id, for the event map. `None` on legacy daemons.
+        msg_id: Option<String>,
+        /// `alternatives.len() >= 2` on a *fresh* `AssistantReply` means this
+        /// message replaced the previous reply (regen attaches the old content
+        /// as an alternative) — the caller edits the old reply in place
+        /// instead of appending.
+        replaces_last: bool,
+        /// Heartbeat-initiated message — never the product of a stream this
+        /// bridge is mirroring, so it must not adopt an in-flight streamed
+        /// event.
+        autonomous: bool,
+        /// Concatenated thinking blocks, for rooms with `!view thinking on`.
+        thinking: Option<String>,
         text: String,
         images: Vec<PendingImage>,
     },
     /// Mirror a user prompt that arrived for this character. The caller drops it
     /// first if it is this bridge's own echo (see self-echo suppression).
-    UserPrompt(String),
-    /// Post a command response.
-    CommandOutput { name: String, data: String },
+    UserPrompt {
+        msg_id: Option<String>,
+        content: String,
+    },
+    /// Post a command response (rendered by the caller).
+    CommandOutput {
+        name: String,
+        data: serde_json::Value,
+    },
     /// Post an error.
     Error(String),
+    /// Post dimmed system output (`m.notice`) — warnings and the like.
+    Notice(String),
     /// Nothing to do for this frame.
     None,
 }
@@ -527,15 +653,33 @@ pub fn route_mirror(msg: &ServerMessage) -> MirrorRoute {
     match msg {
         ServerMessage::NewMessage(nm) => {
             let character = nm.character.clone();
+            let msg_id = Some(nm.message.msg_id.clone()).filter(|id| !id.is_empty());
             let action = match nm.message.origin {
-                Some(MessageOrigin::UserInput) => {
-                    MirrorAction::UserPrompt(nm.message.content.clone())
-                }
-                // AssistantReply, Autonomous, or unset → post as the bot.
-                _ => MirrorAction::Post {
-                    text: nm.message.content.clone(),
-                    images: pending_images(&nm.message.images),
+                Some(MessageOrigin::UserInput) => MirrorAction::UserPrompt {
+                    msg_id,
+                    content: nm.message.content.clone(),
                 },
+                // AssistantReply, Autonomous, or unset → post as the bot.
+                _ => {
+                    let alt_count = nm
+                        .message
+                        .alt_count
+                        .map(|c| c as usize)
+                        .unwrap_or(nm.message.alternatives.len());
+                    // Regen persists the replacement with the prior reply
+                    // attached as an alternative, so a *fresh* AssistantReply
+                    // carrying ≥2 alternatives displaced the previous reply.
+                    let replaces_last =
+                        nm.message.origin == Some(MessageOrigin::AssistantReply) && alt_count >= 2;
+                    MirrorAction::Post {
+                        msg_id,
+                        replaces_last,
+                        autonomous: nm.message.origin == Some(MessageOrigin::Autonomous),
+                        thinking: extract_thinking(&nm.message.content_blocks),
+                        text: nm.message.content.clone(),
+                        images: pending_images(&nm.message.images),
+                    }
+                }
             };
             MirrorRoute {
                 target: RoomTarget::Character(character),
@@ -543,6 +687,12 @@ pub fn route_mirror(msg: &ServerMessage) -> MirrorRoute {
             }
         }
         ServerMessage::StreamStart(_) => MirrorRoute {
+            target: RoomTarget::Active,
+            action: MirrorAction::StartTyping,
+        },
+        // Re-assert typing per chunk; the indicator otherwise expires ~4s in
+        // (matrix-sdk debounces, so this costs at most one request per 3s).
+        ServerMessage::StreamChunk(_) => MirrorRoute {
             target: RoomTarget::Active,
             action: MirrorAction::StartTyping,
         },
@@ -554,21 +704,68 @@ pub fn route_mirror(msg: &ServerMessage) -> MirrorRoute {
             target: RoomTarget::Active,
             action: MirrorAction::CommandOutput {
                 name: out.name.clone(),
-                data: serde_json::to_string_pretty(&out.data)
-                    .unwrap_or_else(|_| format!("{:?}", out.data)),
+                data: out.data.clone(),
             },
         },
         ServerMessage::Error(err) => MirrorRoute {
             target: RoomTarget::Active,
             action: MirrorAction::Error(format!("{:?}: {}", err.code, err.message)),
         },
-        // StreamChunk accumulates server-side; SendImage is covered by the
-        // NewMessage images in mirror mode; Ping/Hello/History/Shutdown and any
-        // unknown frame need no per-room action here.
+        ServerMessage::UsageWarning(w) => MirrorRoute {
+            target: RoomTarget::Active,
+            action: MirrorAction::Notice(format!(
+                "⚠️ {} — ${:.2} of ${:.2} ({:.0}%) this {}",
+                w.message,
+                w.current_cost,
+                w.cost_limit,
+                w.percent_used * 100.0,
+                w.period,
+            )),
+        },
+        ServerMessage::CacheWarning(w) => MirrorRoute {
+            target: RoomTarget::Active,
+            action: MirrorAction::Notice(format!("⚠️ cache: {}", w.message)),
+        },
+        ServerMessage::ProviderFallbackWarning(w) => MirrorRoute {
+            target: RoomTarget::Active,
+            action: MirrorAction::Notice(match w.status {
+                Some(status) => format!(
+                    "⚠️ provider `{}`: key **{}** failed ({}, HTTP {status}) — now using **{}**",
+                    w.provider, w.from_key, w.kind, w.to_key,
+                ),
+                None => format!(
+                    "⚠️ provider `{}`: key **{}** failed ({}) — now using **{}**",
+                    w.provider, w.from_key, w.kind, w.to_key,
+                ),
+            }),
+        },
+        // SendImage is covered by the NewMessage images in mirror mode;
+        // Ping/Hello/History/Shutdown and any unknown frame need no per-room
+        // action here.
         _ => MirrorRoute {
             target: RoomTarget::Active,
             action: MirrorAction::None,
         },
+    }
+}
+
+/// Concatenate a message's thinking blocks (redacted ones are ciphertext and
+/// are skipped). `None` when the message carries no readable thinking.
+fn extract_thinking(blocks: &[shore_protocol::types::ContentBlock]) -> Option<String> {
+    let parts: Vec<&str> = blocks
+        .iter()
+        .filter_map(|b| match b {
+            shore_protocol::types::ContentBlock::Thinking { thinking, .. } => {
+                Some(thinking.as_str())
+            }
+            _ => None,
+        })
+        .filter(|t| !t.trim().is_empty())
+        .collect();
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("\n\n"))
     }
 }
 
@@ -580,6 +777,34 @@ fn pending_images(images: &[ImageRef]) -> Vec<PendingImage> {
             caption: img.caption.clone(),
         })
         .collect()
+}
+
+/// A control action requested by reacting to a mapped message.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum ReactionControl {
+    /// Regenerate the last reply (valid only on the room's latest reply).
+    Regen,
+    /// Delete the reacted-to message.
+    Delete,
+    /// Switch to the previous alternate response.
+    AltPrev,
+    /// Switch to the next alternate response.
+    AltNext,
+}
+
+/// Map a reaction emoji to a control action.
+///
+/// Variation selectors (U+FE0F) are stripped first so emoji-style and
+/// text-style renderings of the same character both match.
+pub fn parse_reaction(key: &str) -> Option<ReactionControl> {
+    let normalized: String = key.chars().filter(|&c| c != '\u{fe0f}').collect();
+    match normalized.as_str() {
+        "🔁" | "🔄" => Some(ReactionControl::Regen),
+        "🗑" | "❌" => Some(ReactionControl::Delete),
+        "◀" | "⬅" => Some(ReactionControl::AltPrev),
+        "▶" | "➡" => Some(ReactionControl::AltNext),
+        _ => None,
+    }
 }
 
 /// Render a user prompt that arrived from another client (CLI/TUI) for mirroring
@@ -921,6 +1146,120 @@ mod tests {
     }
 
     #[test]
+    fn parse_alt_variants() {
+        // Bare → list alternatives of the last assistant message.
+        let cmd = forward_command_only(parse_matrix_input("!alt"));
+        assert_eq!(cmd.name, "list_alternatives");
+        assert!(cmd.args.as_object().unwrap().is_empty());
+
+        // A lone non-selector arg is a message ref.
+        let cmd = forward_command_only(parse_matrix_input("!alt -2"));
+        assert_eq!(cmd.name, "list_alternatives");
+        assert_eq!(cmd.args["ref"], "-2");
+
+        // Directions switch the last assistant message's alternative.
+        let cmd = forward_command_only(parse_matrix_input("!alt next"));
+        assert_eq!(cmd.name, "alt");
+        assert_eq!(cmd.args["direction"], "next");
+        assert!(cmd.args.get("ref").is_none());
+
+        let cmd = forward_command_only(parse_matrix_input("!alt previous"));
+        assert_eq!(cmd.args["direction"], "prev");
+
+        // Positive integers are 1-based positions, not refs.
+        let cmd = forward_command_only(parse_matrix_input("!alt 2"));
+        assert_eq!(cmd.name, "alt");
+        assert_eq!(cmd.args["position"], 2);
+
+        // Ref + selector.
+        let cmd = forward_command_only(parse_matrix_input("!alt -3 prev"));
+        assert_eq!(cmd.name, "alt");
+        assert_eq!(cmd.args["ref"], "-3");
+        assert_eq!(cmd.args["direction"], "prev");
+
+        let cmd = forward_command_only(parse_matrix_input("!alt last 3"));
+        assert_eq!(cmd.args["ref"], "last");
+        assert_eq!(cmd.args["position"], 3);
+
+        // Unrecognized selector → usage hint.
+        match parse_matrix_input("!alt last bogus") {
+            MatrixInput::LocalReply(t) => assert!(t.contains("usage")),
+            other => panic!("expected LocalReply, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_view_variants() {
+        // Bare → show current settings.
+        match parse_matrix_input("!view") {
+            MatrixInput::View { key: None, value } => assert!(value.is_none()),
+            other => panic!("expected View, got {other:?}"),
+        }
+
+        // Key alone toggles.
+        match parse_matrix_input("!view thinking") {
+            MatrixInput::View { key, value } => {
+                assert_eq!(key.as_deref(), Some("thinking"));
+                assert!(value.is_none());
+            }
+            other => panic!("expected View, got {other:?}"),
+        }
+
+        // Explicit on/off (case-insensitive key).
+        match parse_matrix_input("!view TOOLS on") {
+            MatrixInput::View { key, value } => {
+                assert_eq!(key.as_deref(), Some("tools"));
+                assert_eq!(value, Some(true));
+            }
+            other => panic!("expected View, got {other:?}"),
+        }
+        match parse_matrix_input("!view usage off") {
+            MatrixInput::View { key, value } => {
+                assert_eq!(key.as_deref(), Some("usage"));
+                assert_eq!(value, Some(false));
+            }
+            other => panic!("expected View, got {other:?}"),
+        }
+
+        // Junk value / extra args → usage hint.
+        for bad in ["!view thinking maybe", "!view thinking on extra"] {
+            match parse_matrix_input(bad) {
+                MatrixInput::LocalReply(t) => assert!(t.contains("usage"), "{bad}"),
+                other => panic!("{bad}: expected LocalReply, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn extract_thinking_joins_blocks_and_skips_redacted() {
+        use shore_protocol::types::ContentBlock;
+        let blocks = vec![
+            ContentBlock::Thinking {
+                thinking: "first thought".into(),
+                signature: None,
+            },
+            ContentBlock::Text {
+                text: "the reply".into(),
+            },
+            ContentBlock::RedactedThinking {
+                data: "opaque".into(),
+            },
+            ContentBlock::Thinking {
+                thinking: "second thought".into(),
+                signature: Some("sig".into()),
+            },
+        ];
+        assert_eq!(
+            extract_thinking(&blocks).as_deref(),
+            Some("first thought\n\nsecond thought")
+        );
+
+        assert_eq!(extract_thinking(&[]), None);
+        let only_text = vec![ContentBlock::Text { text: "hi".into() }];
+        assert_eq!(extract_thinking(&only_text), None);
+    }
+
+    #[test]
     fn parse_unknown_command_falls_through_to_daemon() {
         // `log` isn't translated by the bridge, so it's forwarded as-is and
         // the daemon's dispatcher handles it.
@@ -971,13 +1310,14 @@ mod tests {
         assert!(matches!(action, CollectorAction::StartTyping));
         assert!(c.is_streaming());
 
+        // Chunks re-assert typing so the indicator outlives the 4s timeout.
         let action = c.feed(&ServerMessage::StreamChunk(StreamChunk {
             text: "hello".into(),
             content_type: "text".into(),
             rid: None,
             subagent: None,
         }));
-        assert!(matches!(action, CollectorAction::None));
+        assert!(matches!(action, CollectorAction::StartTyping));
 
         let action = c.feed(&ServerMessage::StreamEnd(StreamEnd {
             content: "hello world".into(),
@@ -1080,7 +1420,7 @@ mod tests {
         }));
         if let CollectorAction::SendCommandOutput { name, data } = action {
             assert_eq!(name, "status");
-            assert!(data.contains("active"));
+            assert_eq!(data["active"], true);
         } else {
             panic!("expected SendCommandOutput");
         }
@@ -1333,6 +1673,10 @@ mod tests {
         assert_eq!(
             route.action,
             MirrorAction::Post {
+                msg_id: Some("m1".into()),
+                replaces_last: false,
+                autonomous: false,
+                thinking: None,
                 text: "hi there".into(),
                 images: vec![],
             }
@@ -1351,6 +1695,36 @@ mod tests {
     }
 
     #[test]
+    fn mirror_regen_reply_marks_replaces_last() {
+        // A fresh AssistantReply carrying ≥2 alternatives is a regen
+        // replacement of the previous reply.
+        let mut msg = new_message(
+            Some("Alice"),
+            Some(MessageOrigin::AssistantReply),
+            "better answer",
+        );
+        if let ServerMessage::NewMessage(nm) = &mut msg {
+            nm.message.alt_count = Some(2);
+            nm.message.alt_index = Some(1);
+        }
+        let route = route_mirror(&msg);
+        match route.action {
+            MirrorAction::Post { replaces_last, .. } => assert!(replaces_last),
+            other => panic!("expected Post, got {other:?}"),
+        }
+
+        // Autonomous messages never replace, whatever their alt metadata.
+        let mut msg = new_message(Some("Alice"), Some(MessageOrigin::Autonomous), "hey");
+        if let ServerMessage::NewMessage(nm) = &mut msg {
+            nm.message.alt_count = Some(2);
+        }
+        match route_mirror(&msg).action {
+            MirrorAction::Post { replaces_last, .. } => assert!(!replaces_last),
+            other => panic!("expected Post, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn mirror_user_input_becomes_user_prompt() {
         let route = route_mirror(&new_message(
             Some("Alice"),
@@ -1360,8 +1734,29 @@ mod tests {
         assert_eq!(route.target, RoomTarget::Character(Some("Alice".into())));
         assert_eq!(
             route.action,
-            MirrorAction::UserPrompt("ping from the cli".into())
+            MirrorAction::UserPrompt {
+                msg_id: Some("m1".into()),
+                content: "ping from the cli".into()
+            }
         );
+    }
+
+    #[test]
+    fn parse_reaction_controls() {
+        // With and without the emoji variation selector.
+        assert_eq!(parse_reaction("🔁"), Some(ReactionControl::Regen));
+        assert_eq!(parse_reaction("🔄"), Some(ReactionControl::Regen));
+        assert_eq!(parse_reaction("🗑️"), Some(ReactionControl::Delete));
+        assert_eq!(parse_reaction("🗑"), Some(ReactionControl::Delete));
+        assert_eq!(parse_reaction("❌"), Some(ReactionControl::Delete));
+        assert_eq!(parse_reaction("◀️"), Some(ReactionControl::AltPrev));
+        assert_eq!(parse_reaction("▶️"), Some(ReactionControl::AltNext));
+        assert_eq!(parse_reaction("⬅️"), Some(ReactionControl::AltPrev));
+        assert_eq!(parse_reaction("➡"), Some(ReactionControl::AltNext));
+
+        assert_eq!(parse_reaction("👍"), None);
+        assert_eq!(parse_reaction("❤️"), None);
+        assert_eq!(parse_reaction(""), None);
     }
 
     #[test]
@@ -1373,6 +1768,16 @@ mod tests {
         }));
         assert_eq!(start.target, RoomTarget::Active);
         assert_eq!(start.action, MirrorAction::StartTyping);
+
+        // Chunks keep the typing indicator alive across long generations.
+        let chunk = route_mirror(&ServerMessage::StreamChunk(StreamChunk {
+            text: "partial".into(),
+            content_type: "text".into(),
+            rid: None,
+            subagent: None,
+        }));
+        assert_eq!(chunk.target, RoomTarget::Active);
+        assert_eq!(chunk.action, MirrorAction::StartTyping);
 
         // StreamEnd stops typing only — the reply content arrives via NewMessage,
         // so it must NOT post here (otherwise a Matrix-originated reply doubles).

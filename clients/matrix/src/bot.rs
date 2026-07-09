@@ -4,11 +4,14 @@ use std::time::{Duration, Instant};
 use matrix_sdk::config::SyncSettings;
 use matrix_sdk::event_handler::Ctx;
 use matrix_sdk::media::{MediaFormat, MediaRequestParameters};
+use matrix_sdk::ruma::events::reaction::OriginalSyncReactionEvent;
 use matrix_sdk::ruma::events::room::member::StrippedRoomMemberEvent;
 use matrix_sdk::ruma::events::room::message::{
-    MessageType, OriginalSyncRoomMessageEvent, RoomMessageEventContent,
+    MessageType, OriginalSyncRoomMessageEvent, Relation, ReplacementMetadata,
+    RoomMessageEventContent,
 };
-use matrix_sdk::ruma::{OwnedRoomId, OwnedUserId, RoomId};
+use matrix_sdk::ruma::events::room::redaction::OriginalSyncRoomRedactionEvent;
+use matrix_sdk::ruma::{EventId, OwnedEventId, OwnedRoomId, OwnedUserId, RoomId};
 use matrix_sdk::{Client, Room};
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
@@ -33,12 +36,14 @@ pub enum MatrixEvent {
     Message {
         room_id: OwnedRoomId,
         sender: OwnedUserId,
+        event_id: OwnedEventId,
         text: String,
     },
     /// An image was sent in a room (downloaded from the homeserver).
     Image {
         room_id: OwnedRoomId,
         sender: OwnedUserId,
+        event_id: OwnedEventId,
         /// Local temp copy, for the legacy shared-filesystem path mechanism.
         path: String,
         /// Raw image bytes, forwarded to the daemon as base64 image_data.
@@ -46,6 +51,28 @@ pub enum MatrixEvent {
         /// Declared media type from the event's `info.mimetype`, if any.
         mime_type: Option<String>,
         body: String,
+    },
+    /// A message was edited (`m.replace` relation).
+    Edit {
+        room_id: OwnedRoomId,
+        sender: OwnedUserId,
+        /// The event being replaced (the original message's event id).
+        target_event_id: OwnedEventId,
+        new_text: String,
+    },
+    /// A message was redacted (deleted).
+    Redaction {
+        room_id: OwnedRoomId,
+        sender: OwnedUserId,
+        redacts: OwnedEventId,
+    },
+    /// A reaction was added to a message.
+    Reaction {
+        room_id: OwnedRoomId,
+        sender: OwnedUserId,
+        target_event_id: OwnedEventId,
+        /// The reaction emoji/key (e.g. "🔁").
+        key: String,
     },
 }
 
@@ -105,6 +132,8 @@ impl MatrixBot {
         client.add_event_handler_context(tx);
         client.add_event_handler(Self::on_stripped_member);
         client.add_event_handler(Self::on_room_message);
+        client.add_event_handler(Self::on_room_redaction);
+        client.add_event_handler(Self::on_reaction);
 
         Ok((
             Self {
@@ -160,14 +189,64 @@ impl MatrixBot {
     }
 
     /// Send a text message (with markdown formatting) to a room.
-    pub async fn send_text(&self, room_id: &RoomId, text: &str) {
+    ///
+    /// Returns the sent event's id so callers can map it to a daemon msg_id.
+    pub async fn send_text(&self, room_id: &RoomId, text: &str) -> Option<OwnedEventId> {
+        let content = RoomMessageEventContent::text_markdown(text);
+        self.send_content(room_id, content).await
+    }
+
+    /// Send an `m.notice` (rendered dimmed, no push notification) — used for
+    /// bridge/system output like warnings so it reads apart from the character.
+    pub async fn send_notice(&self, room_id: &RoomId, text: &str) -> Option<OwnedEventId> {
+        let content = RoomMessageEventContent::notice_markdown(text);
+        self.send_content(room_id, content).await
+    }
+
+    async fn send_content(
+        &self,
+        room_id: &RoomId,
+        content: RoomMessageEventContent,
+    ) -> Option<OwnedEventId> {
+        let Some(room) = self.client.get_room(room_id) else {
+            warn!("room {room_id} not found");
+            return None;
+        };
+        match room.send(content).await {
+            Ok(resp) => Some(resp.response.event_id),
+            Err(e) => {
+                error!("failed to send message to {room_id}: {e}");
+                None
+            }
+        }
+    }
+
+    /// Replace an earlier bot message's content in place (`m.replace`).
+    pub async fn edit_text(&self, room_id: &RoomId, event_id: &EventId, new_text: &str) -> bool {
+        let Some(room) = self.client.get_room(room_id) else {
+            warn!("room {room_id} not found");
+            return false;
+        };
+        let content = RoomMessageEventContent::text_markdown(new_text)
+            .make_replacement(ReplacementMetadata::new(event_id.to_owned(), None));
+        match room.send(content).await {
+            Ok(_) => true,
+            Err(e) => {
+                error!("failed to edit {event_id} in {room_id}: {e}");
+                false
+            }
+        }
+    }
+
+    /// Redact (delete) an event. Fails quietly if the bot lacks power to
+    /// redact the target (e.g. another user's message).
+    pub async fn redact(&self, room_id: &RoomId, event_id: &EventId, reason: Option<&str>) {
         let Some(room) = self.client.get_room(room_id) else {
             warn!("room {room_id} not found");
             return;
         };
-        let content = RoomMessageEventContent::text_markdown(text);
-        if let Err(e) = room.send(content).await {
-            error!("failed to send message to {room_id}: {e}");
+        if let Err(e) = room.redact(event_id, reason, None).await {
+            warn!("failed to redact {event_id} in {room_id}: {e}");
         }
     }
 
@@ -265,12 +344,30 @@ impl MatrixBot {
             return;
         }
 
+        // Edits arrive as fresh messages whose body is a `* <new text>`
+        // fallback plus an `m.replace` relation. Route them as edits — the
+        // fallback body must never be forwarded as a new prompt.
+        if let Some(Relation::Replacement(repl)) = &ev.content.relates_to {
+            if let MessageType::Text(new_text) = &repl.new_content.msgtype {
+                let _ = tx
+                    .send(MatrixEvent::Edit {
+                        room_id: room.room_id().to_owned(),
+                        sender: ev.sender.clone(),
+                        target_event_id: repl.event_id.clone(),
+                        new_text: new_text.body.clone(),
+                    })
+                    .await;
+            }
+            return;
+        }
+
         match &ev.content.msgtype {
             MessageType::Text(text_content) => {
                 let _ = tx
                     .send(MatrixEvent::Message {
                         room_id: room.room_id().to_owned(),
                         sender: ev.sender.clone(),
+                        event_id: ev.event_id.clone(),
                         text: text_content.body.clone(),
                     })
                     .await;
@@ -302,6 +399,7 @@ impl MatrixBot {
                             .send(MatrixEvent::Image {
                                 room_id: room.room_id().to_owned(),
                                 sender: ev.sender.clone(),
+                                event_id: ev.event_id.clone(),
                                 path: temp_path.to_string_lossy().into_owned(),
                                 data,
                                 mime_type,
@@ -316,6 +414,52 @@ impl MatrixBot {
             }
             _ => {}
         }
+    }
+
+    /// Forward redactions (message deletions) to the bridge.
+    async fn on_room_redaction(
+        ev: OriginalSyncRoomRedactionEvent,
+        room: Room,
+        client: Client,
+        Ctx(tx): Ctx<mpsc::Sender<MatrixEvent>>,
+    ) {
+        // Our own redactions are mirrors of daemon-side deletions; looping
+        // them back would re-issue the delete against a gone message.
+        if client.user_id() == Some(&*ev.sender) {
+            return;
+        }
+        // `redacts` lives on the event in room versions ≤10 and in the
+        // content from v11 on.
+        let Some(redacts) = ev.redacts.clone().or_else(|| ev.content.redacts.clone()) else {
+            return;
+        };
+        let _ = tx
+            .send(MatrixEvent::Redaction {
+                room_id: room.room_id().to_owned(),
+                sender: ev.sender.clone(),
+                redacts,
+            })
+            .await;
+    }
+
+    /// Forward reactions to the bridge (reaction-as-control: regen/delete/alt).
+    async fn on_reaction(
+        ev: OriginalSyncReactionEvent,
+        room: Room,
+        client: Client,
+        Ctx(tx): Ctx<mpsc::Sender<MatrixEvent>>,
+    ) {
+        if client.user_id() == Some(&*ev.sender) {
+            return;
+        }
+        let _ = tx
+            .send(MatrixEvent::Reaction {
+                room_id: room.room_id().to_owned(),
+                sender: ev.sender.clone(),
+                target_event_id: ev.content.relates_to.event_id.clone(),
+                key: ev.content.relates_to.key.clone(),
+            })
+            .await;
     }
 }
 

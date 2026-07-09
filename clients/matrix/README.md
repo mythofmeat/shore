@@ -11,6 +11,21 @@ Features:
 - Per-character Matrix accounts with avatars + display names.
 - Embedded-homeserver provisioning (continuwuity / conduwuit / tuwunel).
 - Health checks and reconnection.
+- Live streaming replies (progressive message edits with a typing cursor).
+- Matrix-native conversation editing: edit your message to edit the
+  conversation, redact to delete, react 🔁 / 🗑️ / ◀️ ▶️ to regenerate,
+  delete, or cycle alternate responses.
+- Daemon-side mutations (regen, alt swaps, TUI edits) update the room's
+  messages in place instead of appending.
+- Quiet by default: rooms receive replies to Matrix-sent prompts and the
+  character's autonomous (heartbeat) messages. Set
+  `[connections.matrix].mirror = "all"` to mirror the entire conversation
+  (other clients' prompts render as blockquotes), or `"off"` for legacy
+  request/response routing.
+- `!` commands mirroring the TUI's (`!help` in any bound room), with
+  Markdown-rendered output.
+- Per-room `!view` toggles for thinking blocks, tool activity, and a
+  token/timing usage footer.
 
 ## Build
 
