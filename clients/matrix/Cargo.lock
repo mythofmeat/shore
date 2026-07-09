@@ -3438,24 +3438,9 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "shore-config"
-version = "0.15.1"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db8368220a97868f1e78a3bc79cd93b35d4ea5053cac89372b1e5ee281bef238"
-dependencies = [
- "chrono",
- "dirs",
- "dotenvy",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "toml 0.8.23",
- "tracing",
-]
-
-[[package]]
-name = "shore-config"
-version = "0.15.1"
-source = "git+https://github.com/mythofmeat/shore-core?rev=8a5459b3b33ad50d86b143a7a5d566e61160fd67#8a5459b3b33ad50d86b143a7a5d566e61160fd67"
+checksum = "83ed99ffd99636e3af43e9ac8d019805626a98766bf3205563f1909a5b44e8e2"
 dependencies = [
  "chrono",
  "dirs",
@@ -3492,7 +3477,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
- "shore-config 0.15.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "shore-config",
  "shore-diagnostics",
  "shore-protocol",
  "shore-swp-client",
@@ -3507,8 +3492,9 @@ dependencies = [
 
 [[package]]
 name = "shore-protocol"
-version = "0.10.0"
-source = "git+https://github.com/mythofmeat/shore-core?rev=8a5459b3b33ad50d86b143a7a5d566e61160fd67#8a5459b3b33ad50d86b143a7a5d566e61160fd67"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57a3335a24a3d5971ef5a6b35ab0f362a8b800288950b59d427b9d8df6385b07"
 dependencies = [
  "serde",
  "serde_json",
@@ -3517,14 +3503,15 @@ dependencies = [
 
 [[package]]
 name = "shore-swp-client"
-version = "0.3.8"
-source = "git+https://github.com/mythofmeat/shore-core?rev=8a5459b3b33ad50d86b143a7a5d566e61160fd67#8a5459b3b33ad50d86b143a7a5d566e61160fd67"
+version = "0.3.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e755e0c98fb1afccf0fc35bbfd0d99a3a5c33c41cbd33de2ffd28e5493a26ef6"
 dependencies = [
  "base64",
  "libc",
  "serde",
  "serde_json",
- "shore-config 0.15.1 (git+https://github.com/mythofmeat/shore-core?rev=8a5459b3b33ad50d86b143a7a5d566e61160fd67)",
+ "shore-config",
  "shore-protocol",
  "thiserror 2.0.18",
  "tokio",
