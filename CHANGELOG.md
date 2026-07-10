@@ -77,6 +77,33 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
   burying `cache_read: 0` in a success line.
 
 ### Fixed
+- **Cache keepalive no longer pays full cold cache writes after budget blocks,
+  restarts, or model switches.** Three ways an armed keepalive could fire a
+  ping at a cold cache (each observed live, one paying a ~66k-token write —
+  roughly a whole day's budget — in a single ping):
+  failed/skipped pings (budget block, provider outage) used to retry on
+  backoff indefinitely, so retries outlived the block and the first ping
+  through recreated the dead prefix at full cost — pings now give up and
+  disarm once the last confirmed warm is older than the ping interval plus a
+  small grace, resuming on the next real warm; the armed schedule now
+  persists in `autonomy_state.json` and is restored on startup when the
+  prefix is provably still warm, so a quick daemon restart or redeploy no
+  longer silently stops pinging a warm cache (previously the user's next
+  message paid the cold write); and a model switch now always requires a
+  fresh warm on the new model before pinging, instead of carrying the old
+  model's armed timer into a prefix that was never cached.
+- **Cache anomaly log: fewer false alarms.** `keepalive_miss` now measures the
+  idle gap from the last foreground activity (the same anchor the keepalive's
+  ceiling uses) instead of the last observation — overnight ping runs no
+  longer make a by-design past-the-ceiling cold start look like a keepalive
+  failure. The tracker also now follows the *configured*
+  `[behavior.autonomy].cache_keepalive_max` (pushed in at startup and on
+  config reload, like the usage-budget config) instead of assuming the 12h
+  default, so raising the ceiling keeps anomaly classification honest. Compaction now resets the Anthropic tracker even when it runs on a
+  non-Anthropic model (the common cheap-background-model setup), so the first
+  post-compaction message is no longer misflagged as an `unexpected_write`
+  against the stale baseline. Read decreases with a sub-1%-of-read tail write
+  (edited/regenerated turns hitting a warm prefix) are no longer flagged.
 - **An empty assistant turn no longer wedges a whole conversation.** A tool
   loop that ended without the model emitting any closing text (e.g. the user
   sent the next message before the assistant's final turn produced text)

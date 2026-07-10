@@ -656,6 +656,14 @@ impl MessageHandler {
         self.cmd_ctx
             .llm_client
             .set_usage_config(reloaded_config.app.usage.clone());
+        self.cmd_ctx.llm_client.set_cache_keepalive_ceiling(
+            reloaded_config
+                .app
+                .behavior
+                .autonomy
+                .cache_keepalive_max
+                .as_duration(),
+        );
         self.cmd_ctx
             .autonomy
             .reload_runtime_config(reloaded_config.clone());

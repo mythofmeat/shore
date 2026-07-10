@@ -250,17 +250,32 @@ LLM) lives in `dev/test-harness` and `backend/daemon/tests/suite/`.
 An observed cache-read decrease while the ledger believes the cache is warm is
 not an expected invalidation path. It is recorded as `UnexpectedWrite` and must
 be treated as a regression signal unless explained by a known deliberate
-breakpoint above. The warm/cold state machine encodes Anthropic-specific
+breakpoint above. A read decrease whose accompanying write is under 1% of the
+read is not flagged: that shape is a shorter request (edit/regen) hitting a
+still-warm prefix and recaching its tail, and the baseline follows the shorter
+prefix. The warm/cold state machine encodes Anthropic-specific
 invariants (the provider-side prompt-cache TTL, keepalive cadence, and monotonic
 prefix growth), so anomalies are evaluated **only for Anthropic-family calls**
 (native or `anthropic/...`-routed). Other providers report cache metrics with
-different semantics and are not tracked. Only `message` calls feed the message
+different semantics and are not tracked — with two exceptions that feed an
+already-existing tracker without creating one: a compaction on any provider
+resets the state machine (it rewrites the conversation the Anthropic prefix is
+built from, so the post-compaction baseline must not be the stale one), and
+foreground `message`/`tool_loop` calls update the activity anchor below. Only
+`message` calls feed the message
 cache-read baseline; keepalive pings, heartbeats, subagents, and memory queries
 each run on a different prefix and are never compared against it. A
 `KeepaliveMiss` (cache went cold without a keepalive bridging the gap) is
 suppressed when the idle gap exceeds the keepalive ceiling
-(`[behavior.autonomy].cache_keepalive_max`, default 12h): past that point the
+(`[behavior.autonomy].cache_keepalive_max`): past that point the
 keepalive subsystem deliberately stops pinging, so the cold start is expected.
+The daemon pushes the configured ceiling into the ledger's trackers at startup
+and on config reload (mirroring the usage-budget push), so the classifier and
+the keepalive subsystem always judge against the same value.
+The gap is measured from the last foreground activity (`message`/`tool_loop`) —
+the same anchor the keepalive's own ceiling uses — never from pings or
+background calls, which would shrink the apparent gap and misflag the
+by-design overnight stop as a miss.
 A `ColdKeepalive` (a keepalive ping with `cache_read == 0` and
 `cache_write > 0`) flags the keepalive *itself* paying a cache creation instead
 of refreshing a warm prefix — the keepalive's most expensive failure mode. It is
@@ -544,12 +559,29 @@ that ran on the **same model the keepalive pings** counts: a background tick
 (heartbeat/dreaming) pinned to a cheaper model does not warm the foreground
 model's cache, so it must not advance the ping or reset the idle clock —
 otherwise the cache silently expires between pings and every ping pays a full
-cache recreation. A model switch updates the cadence (and pauses pinging if the
-new model's prefix is cold). Compaction clears any cached request body that contains
+cache recreation. A model switch retargets the keepalive and always pauses
+pinging until a real call warms the new model's prefix — an armed timer carried
+across the switch would fire a ping at a cold cache. Compaction clears any
+cached request body that contains
 the old conversation tail, but does not cancel the keepalive deadline; a later
 keepalive can rebuild from disk to keep stable pinned system prompt sections
 warm. `cache_keepalive` is a literal cadence and is unrelated to the
 Anthropic-only `cache_ttl` wire setting that enables 1h caching.
+
+The subsystem's governing invariant is **never ping a cache it cannot prove
+warm** — a ping that lands cold pays a full cache creation for a user who may
+be gone for hours, turning the cost-saver into a cost-center. Two mechanisms
+enforce it beyond the ceiling. Failed or skipped pings (budget block, provider
+outage, missing request) retry on a short exponential backoff only while the
+last confirmed warm is younger than the ping interval plus a small grace;
+past that the prefix is beyond any plausible TTL and the keepalive disarms
+until the next real warm, rather than letting retries outlive a budget block
+and pay a full cold write the moment the budget resets. And because the
+provider-side cache outlives the daemon process, the armed schedule (target
+model, cadence, last-warm and last-activity anchors) is persisted in
+`autonomy_state.json` and re-armed on startup — but only when the persisted
+warm is younger than one ping interval, so a restart can never revive a ping
+against a prefix that may have gone cold while the daemon was down.
 
 ## Provider Boundary
 

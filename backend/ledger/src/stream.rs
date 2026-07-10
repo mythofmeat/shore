@@ -1,13 +1,12 @@
 //! LedgerStream: stream wrapper that records on finalization.
 
-use crate::cache_tracker::CacheTracker;
+use crate::cache_tracker::CacheTrackers;
 use crate::client::{record_call, CallType};
 use crate::ledger::Ledger;
 use crate::pricing::PricingEngine;
 use shore_llm::types::StreamResult;
 use shore_llm::StreamReader;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tracing::error;
 
 /// Owned call metadata carried by a [`LedgerStream`] until finalization, where
@@ -28,7 +27,7 @@ pub struct LedgerStream {
     meta: CallMeta,
     ledger: Arc<Ledger>,
     pricing: Arc<PricingEngine>,
-    cache_trackers: Arc<Mutex<HashMap<String, CacheTracker>>>,
+    cache_trackers: Arc<CacheTrackers>,
     finalized: bool,
 }
 
@@ -50,7 +49,7 @@ impl LedgerStream {
         meta: CallMeta,
         ledger: Arc<Ledger>,
         pricing: Arc<PricingEngine>,
-        cache_trackers: Arc<Mutex<HashMap<String, CacheTracker>>>,
+        cache_trackers: Arc<CacheTrackers>,
     ) -> Self {
         Self {
             reader,
@@ -67,7 +66,7 @@ impl LedgerStream {
         meta: CallMeta,
         ledger: Arc<Ledger>,
         pricing: Arc<PricingEngine>,
-        cache_trackers: Arc<Mutex<HashMap<String, CacheTracker>>>,
+        cache_trackers: Arc<CacheTrackers>,
     ) -> Self {
         let (_write, read) = tokio::io::duplex(1);
         let boxed: Box<dyn tokio::io::AsyncRead + Send + Unpin> = Box::new(read);
@@ -182,14 +181,13 @@ mod tests {
     use crate::ledger::Ledger;
     use crate::pricing::PricingEngine;
     use shore_llm::types::{StreamResult, Timing, Usage};
-    use std::collections::HashMap;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
     #[test]
     fn finalize_records_to_ledger() {
         let ledger = Arc::new(Ledger::open_in_memory().unwrap());
         let pricing = Arc::new(PricingEngine::new(Arc::clone(&ledger)));
-        let trackers = Arc::new(Mutex::new(HashMap::<String, CacheTracker>::new()));
+        let trackers = Arc::new(CacheTrackers::default());
 
         let mut stream = LedgerStream::new_test(
             CallMeta {
@@ -244,7 +242,7 @@ mod tests {
     fn finalize_error_records_partial_usage_from_stream_errored() {
         let ledger = Arc::new(Ledger::open_in_memory().unwrap());
         let pricing = Arc::new(PricingEngine::new(Arc::clone(&ledger)));
-        let trackers = Arc::new(Mutex::new(HashMap::<String, CacheTracker>::new()));
+        let trackers = Arc::new(CacheTrackers::default());
 
         let mut stream = LedgerStream::new_test(
             CallMeta {
@@ -295,7 +293,7 @@ mod tests {
     fn finalize_error_without_usage_records_zeros() {
         let ledger = Arc::new(Ledger::open_in_memory().unwrap());
         let pricing = Arc::new(PricingEngine::new(Arc::clone(&ledger)));
-        let trackers = Arc::new(Mutex::new(HashMap::<String, CacheTracker>::new()));
+        let trackers = Arc::new(CacheTrackers::default());
 
         let mut stream = LedgerStream::new_test(
             CallMeta {
@@ -330,7 +328,7 @@ mod tests {
     fn drop_without_finalize_records_cancelled_row() {
         let ledger = Arc::new(Ledger::open_in_memory().unwrap());
         let pricing = Arc::new(PricingEngine::new(Arc::clone(&ledger)));
-        let trackers = Arc::new(Mutex::new(HashMap::<String, CacheTracker>::new()));
+        let trackers = Arc::new(CacheTrackers::default());
 
         {
             let _stream = LedgerStream::new_test(
@@ -359,14 +357,14 @@ mod tests {
         assert_eq!(row.output_tokens, 0);
         assert_eq!(row.cache_write_tokens, 0);
         // Zero-usage cancellation must not perturb the cache tracker.
-        assert!(trackers.lock().unwrap().get("qifei").is_none());
+        assert!(trackers.lock().get("qifei").is_none());
     }
 
     #[test]
     fn finalize_updates_cache_tracker() {
         let ledger = Arc::new(Ledger::open_in_memory().unwrap());
         let pricing = Arc::new(PricingEngine::new(Arc::clone(&ledger)));
-        let trackers = Arc::new(Mutex::new(HashMap::<String, CacheTracker>::new()));
+        let trackers = Arc::new(CacheTrackers::default());
 
         let mut stream = LedgerStream::new_test(
             CallMeta {
@@ -403,7 +401,7 @@ mod tests {
         };
 
         stream.finalize(&result);
-        let map = trackers.lock().unwrap();
+        let map = trackers.lock();
         assert_eq!(
             map.get("aria").unwrap().state(),
             crate::cache_tracker::CacheState::Warm

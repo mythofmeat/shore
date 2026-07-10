@@ -601,6 +601,14 @@ fn build_llm_client(
 
     let llm_client = LedgerClient::new(raw_llm_client, &loaded.dirs.data.join("ledger.db"))?;
     llm_client.set_usage_config(loaded.app.usage.clone());
+    llm_client.set_cache_keepalive_ceiling(
+        loaded
+            .app
+            .behavior
+            .autonomy
+            .cache_keepalive_max
+            .as_duration(),
+    );
 
     // Reconstruct cache tracker state from the ledger for each known character.
     // This prevents false-positive anomalies when the cache is still warm from

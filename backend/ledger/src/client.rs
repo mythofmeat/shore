@@ -4,11 +4,10 @@ use crate::budget::{
     enforce_budget_for_call, newly_crossed_budget_warnings, BudgetCallContext,
     UsageBudgetWarningEvent,
 };
-use crate::cache_tracker::{Anomaly, CacheState, CacheTracker, Observation};
+use crate::cache_tracker::{Anomaly, CacheState, CacheTracker, CacheTrackers, Observation};
 use crate::ledger::{CallRow, Ledger};
 use crate::pricing::PricingEngine;
 use crate::stream::LedgerStream;
-use crate::sync::lock_or_recover;
 use chrono::Utc;
 use shore_config::app::UsageConfig;
 use shore_config::models::ResolvedModel;
@@ -20,9 +19,8 @@ use shore_llm::credentials::{
 };
 use shore_llm::types::{GenerateResponse, LlmRequest, Timing, Usage};
 use shore_llm::{LlmClient, LlmError};
-use std::collections::HashMap;
 use std::path::Path;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use tracing::{debug, error, info, instrument, warn};
 
 // ── CallType ────────────────────────────────────────────────────────────────
@@ -92,7 +90,7 @@ pub(crate) struct RecordCall<'ctx> {
 /// emitting a forensics anomaly notification on divergence. Returns the
 /// `(cache_state, cache_anomaly)` strings to persist on the call row.
 fn track_cache_state(
-    cache_trackers: &Mutex<HashMap<String, CacheTracker>>,
+    cache_trackers: &CacheTrackers,
     record: &RecordCall<'_>,
     ts: &str,
 ) -> (Option<String>, Option<String>) {
@@ -120,6 +118,8 @@ fn track_cache_state(
     // but never emit an anomaly. Native Anthropic and OpenRouter-routed
     // Anthropic (`anthropic/...` model id) get the full machine.
     if !crate::pricing::is_anthropic_pricing(record.provider, record.model) {
+        feed_foreign_call_to_tracker(cache_trackers, record, ts);
+
         let has_metrics =
             record.usage.cache_read_tokens > 0 || record.usage.cache_creation_tokens > 0;
         if !has_metrics {
@@ -142,8 +142,11 @@ fn track_cache_state(
         call_type: record.call_type.as_str().to_owned(),
     };
 
-    let mut trackers = lock_or_recover("ledger cache tracker map", cache_trackers);
-    let tracker = trackers.entry(record.character.to_owned()).or_default();
+    let max_idle_secs = cache_trackers.max_idle_secs();
+    let mut trackers = cache_trackers.lock();
+    let tracker = trackers
+        .entry(record.character.to_owned())
+        .or_insert_with(|| CacheTracker::with_max_idle_secs(max_idle_secs));
     let result = tracker.observe(&obs);
 
     let state_str = match result.state {
@@ -178,6 +181,42 @@ fn track_cache_state(
     }
 
     (Some(state_str.to_owned()), anomaly_str.map(String::from))
+}
+
+/// Feed the two non-Anthropic call shapes the Anthropic tracker still cares
+/// about, without ever creating an entry for a character that has no
+/// Anthropic history:
+/// - Compaction rewrites the conversation the Anthropic prefix is built from
+///   no matter which model ran it (the common setup: a cheap background model
+///   compacting under an Anthropic chat). The tracker must observe the reset,
+///   or the next foreground call is judged against the stale pre-compaction
+///   baseline and misflagged as an `unexpected_write`.
+/// - Foreground activity keeps the `KeepaliveMiss` window anchor honest even
+///   when the user chats on another model.
+fn feed_foreign_call_to_tracker(cache_trackers: &CacheTrackers, record: &RecordCall<'_>, ts: &str) {
+    let mut trackers = cache_trackers.lock();
+    let Some(tracker) = trackers.get_mut(record.character) else {
+        return;
+    };
+    match record.call_type {
+        CallType::Compaction => {
+            _ = tracker.observe(&Observation {
+                ts: ts.to_owned(),
+                model: record.model.to_owned(),
+                thinking_enabled: record.thinking_enabled,
+                cache_read_tokens: record.usage.cache_read_tokens,
+                cache_write_tokens: record.usage.cache_creation_tokens,
+                call_type: record.call_type.as_str().to_owned(),
+            });
+        }
+        CallType::Message | CallType::ToolLoop => tracker.note_activity(ts),
+        CallType::HeartbeatToolLoop
+        | CallType::Keepalive
+        | CallType::Heartbeat
+        | CallType::Dreaming
+        | CallType::MemoryQuery
+        | CallType::Subagent => {}
+    }
 }
 
 /// Build a [`CallRow`] from a record, computing cost and assembling all fields.
@@ -269,7 +308,7 @@ fn build_call_row(
 pub(crate) fn record_call(
     ledger: &Ledger,
     pricing: &PricingEngine,
-    cache_trackers: &Mutex<HashMap<String, CacheTracker>>,
+    cache_trackers: &CacheTrackers,
     record: RecordCall<'_>,
 ) {
     let ts = Utc::now().to_rfc3339();
@@ -325,7 +364,7 @@ pub(crate) fn record_call(
 pub struct LedgerClient {
     inner: LlmClient,
     ledger: Arc<Ledger>,
-    cache_trackers: Arc<Mutex<HashMap<String, CacheTracker>>>,
+    cache_trackers: Arc<CacheTrackers>,
     pricing: Arc<PricingEngine>,
     usage_config: Arc<RwLock<UsageConfig>>,
 }
@@ -338,7 +377,7 @@ impl LedgerClient {
         Ok(Self {
             inner: client,
             ledger,
-            cache_trackers: Arc::new(Mutex::new(HashMap::new())),
+            cache_trackers: Arc::new(CacheTrackers::default()),
             pricing,
             usage_config: Arc::new(RwLock::new(UsageConfig::default())),
         })
@@ -352,7 +391,7 @@ impl LedgerClient {
         Self {
             inner: client,
             ledger,
-            cache_trackers: Arc::new(Mutex::new(HashMap::new())),
+            cache_trackers: Arc::new(CacheTrackers::default()),
             pricing,
             usage_config: Arc::new(RwLock::new(UsageConfig::default())),
         }
@@ -368,6 +407,17 @@ impl LedgerClient {
                 *poisoned.into_inner() = config;
             }
         }
+    }
+
+    /// Push the keepalive idle ceiling (`[behavior.autonomy].cache_keepalive_max`)
+    /// into the cache anomaly trackers, so `KeepaliveMiss` is judged against
+    /// the ceiling the keepalive subsystem actually enforces rather than the
+    /// built-in default. Called at startup and on config reload, mirroring
+    /// [`set_usage_config`].
+    ///
+    /// [`set_usage_config`]: LedgerClient::set_usage_config
+    pub fn set_cache_keepalive_ceiling(&self, ceiling: std::time::Duration) {
+        self.cache_trackers.set_max_idle_secs(ceiling.as_secs());
     }
 
     fn usage_config_snapshot(&self) -> UsageConfig {
@@ -786,14 +836,17 @@ impl LedgerClient {
     pub fn reconstruct_cache_state(&self, character: &str, ttl_secs: u64) {
         match self.ledger.last_anthropic_call(character) {
             Ok(Some(row)) => {
-                let tracker = CacheTracker::reconstruct(
+                let mut tracker = CacheTracker::reconstruct(
                     &row.ts,
                     &row.model,
                     row.thinking_enabled,
                     row.cache_read_tokens,
                     ttl_secs,
                 );
-                let _ignored = lock_or_recover("ledger cache tracker map", &self.cache_trackers)
+                tracker.set_max_idle_secs(self.cache_trackers.max_idle_secs());
+                let _ignored = self
+                    .cache_trackers
+                    .lock()
                     .insert(character.to_owned(), tracker);
             }
             Ok(None) => {} // No prior call — start cold
@@ -940,21 +993,16 @@ fn report_key_exhaustion(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cache_tracker::CacheTracker;
     use crate::ledger::Ledger;
     use crate::pricing::PricingEngine;
     use std::sync::Arc;
 
-    type TestParts = (
-        Arc<Ledger>,
-        Arc<PricingEngine>,
-        Arc<Mutex<HashMap<String, CacheTracker>>>,
-    );
+    type TestParts = (Arc<Ledger>, Arc<PricingEngine>, Arc<CacheTrackers>);
 
     fn test_parts() -> TestParts {
         let ledger = Arc::new(Ledger::open_in_memory().unwrap());
         let pricing = Arc::new(PricingEngine::new(Arc::clone(&ledger)));
-        let trackers = Arc::new(Mutex::new(HashMap::new()));
+        let trackers = Arc::new(CacheTrackers::default());
         (ledger, pricing, trackers)
     }
 
@@ -1108,7 +1156,7 @@ mod tests {
                 cache_ttl: None,
             },
         );
-        let map = trackers.lock().unwrap();
+        let map = trackers.lock();
         let tracker = map.get("aria").unwrap();
         assert_eq!(tracker.state(), CacheState::Warm);
     }
@@ -1169,7 +1217,7 @@ mod tests {
             },
         );
 
-        let map = trackers.lock().unwrap();
+        let map = trackers.lock();
         let tracker = map.get("aria").unwrap();
         assert_eq!(tracker.state(), CacheState::Warm);
         assert_eq!(tracker.last_cache_read(), 400);
@@ -1212,7 +1260,7 @@ mod tests {
         let rows = ledger.recent(1).unwrap();
         let row = first_item(&rows);
         assert!(row.cache_state.is_none());
-        assert!(!trackers.lock().unwrap().contains_key("aria"));
+        assert!(!trackers.lock().contains_key("aria"));
     }
 
     #[test]
@@ -1251,7 +1299,70 @@ mod tests {
         let row = first_item(&rows);
         assert_eq!(row.cache_state.as_deref(), Some("warm"));
         assert!(row.cache_anomaly.is_none());
-        assert!(!trackers.lock().unwrap().contains_key("poppy"));
+        assert!(!trackers.lock().contains_key("poppy"));
+    }
+
+    #[test]
+    fn foreign_model_compaction_resets_anthropic_tracker() {
+        // The daily-driver setup: an Anthropic chat compacted by a cheap
+        // non-Anthropic background model. The compaction rewrites the
+        // conversation the Anthropic prefix is built from, so the tracker must
+        // observe the reset — otherwise the first post-compaction message
+        // (with its legitimately smaller read) is judged against the stale
+        // baseline and misflagged as an `unexpected_write` (seen live).
+        let (ledger, pricing, trackers) = test_parts();
+        let record = |provider, model, call_type, read, write| {
+            record_call(
+                &ledger,
+                &pricing,
+                &trackers,
+                RecordCall {
+                    provider,
+                    api_key_name: Some("default".into()),
+                    model,
+                    call_type,
+                    character: "poppy",
+                    usage: &Usage {
+                        input_tokens: 100,
+                        output_tokens: 50,
+                        cache_read_tokens: read,
+                        cache_creation_tokens: write,
+                        ..Default::default()
+                    },
+                    timing: &Timing {
+                        total_ms: 500,
+                        time_to_first_token_ms: 0,
+                    },
+                    finish_reason: "end_turn",
+                    thinking_enabled: true,
+                    cache_ttl: None,
+                },
+            );
+        };
+
+        // Warm an Anthropic baseline at 50k.
+        record("anthropic", "claude-opus-4-6", CallType::Message, 50_000, 0);
+        // Compaction runs on a non-Anthropic model.
+        record("zai", "glm-5.2", CallType::Compaction, 0, 0);
+        // First post-compaction Anthropic message: much smaller read plus a
+        // real write of the new tail — a fresh warm-up, not an anomaly.
+        record(
+            "anthropic",
+            "claude-opus-4-6",
+            CallType::Message,
+            8_382,
+            11_381,
+        );
+
+        let rows = ledger.recent(1).unwrap();
+        let row = first_item(&rows);
+        assert_eq!(row.cache_state.as_deref(), Some("warm"));
+        assert!(
+            row.cache_anomaly.is_none(),
+            "post-compaction warm-up must not be flagged against the stale baseline"
+        );
+        let map = trackers.lock();
+        assert_eq!(map.get("poppy").unwrap().state(), CacheState::Warm);
     }
 
     #[test]

@@ -23,7 +23,7 @@ use tracing::{debug, error, info, warn};
 use super::activity::ActivityTracker;
 use super::heartbeat::{HeartbeatAction, HeartbeatClock};
 use super::{AutonomyStatus, HeartbeatEventKind, HeartbeatLog};
-use crate::cache_keepalive::{CacheKeepalive, CacheKeepaliveAction};
+use crate::cache_keepalive::{CacheKeepalive, CacheKeepaliveAction, KeepaliveSnapshot};
 use crate::characters::CharacterRegistry;
 use crate::memory::compaction_impls::resolve_image_gen_config;
 use crate::memory::retrieval::resolve_embedder;
@@ -193,7 +193,7 @@ fn background_retry_delay(failure_count: u32) -> Duration {
 const STATE_VERSION: u32 = 4;
 const STATE_FILENAME: &str = "autonomy_state.json";
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 struct PersistedState {
     version: u32,
     ticks_without_user: u32,
@@ -207,6 +207,20 @@ struct PersistedState {
     /// older state files, which fails safe (a pass is run when in doubt).
     #[serde(default)]
     covered_turn_count: usize,
+    /// Armed cache-keepalive schedule, persisted because the provider-side
+    /// prompt cache outlives the process: without these, every daemon restart
+    /// silently stopped pinging a still-warm cache, and the user's next
+    /// message paid a full cold write. All-or-nothing — any absent field
+    /// leaves the keepalive unarmed, which fails safe (never ping a cache we
+    /// can't prove warm).
+    #[serde(default)]
+    keepalive_model: Option<String>,
+    #[serde(default)]
+    keepalive_interval_secs: Option<u64>,
+    #[serde(default)]
+    keepalive_last_warm_at: Option<String>,
+    #[serde(default)]
+    keepalive_last_active_at: Option<String>,
 }
 
 fn state_path(data_dir: &Path, character: &str) -> PathBuf {
@@ -273,12 +287,21 @@ fn save_state(data_dir: &Path, character: &str, state: &mut AutonomyState) {
         return;
     }
 
+    let keepalive = state.cache_keepalive.snapshot();
     let persisted = PersistedState {
         version: STATE_VERSION,
         ticks_without_user: state.heartbeat.ticks_without_user(),
         next_wake_at: state.heartbeat.next_wake().map(instant_to_rfc3339),
         last_user_at: state.heartbeat.last_user_at().map(instant_to_rfc3339),
         covered_turn_count: state.covered_turn_count,
+        keepalive_model: keepalive.as_ref().map(|k| k.model.clone()),
+        keepalive_interval_secs: keepalive.as_ref().map(|k| k.interval.as_secs()),
+        keepalive_last_warm_at: keepalive
+            .as_ref()
+            .map(|k| instant_to_rfc3339(k.last_warm_at)),
+        keepalive_last_active_at: keepalive
+            .as_ref()
+            .map(|k| instant_to_rfc3339(k.last_active_at)),
     };
 
     let path = state_path(data_dir, character);
@@ -332,6 +355,42 @@ fn restore_from_persisted(persisted: &PersistedState, heartbeat: &mut HeartbeatC
         .as_deref()
         .and_then(rfc3339_to_instant);
     heartbeat.restore(persisted.ticks_without_user, next_wake, last_user);
+}
+
+/// Build the cache keepalive for a (re)started character. The provider-side
+/// prompt cache lives on Anthropic's servers and outlives the process, so the
+/// persisted ping schedule is re-armed when the last warm is recent enough to
+/// provably still be warm (see [`CacheKeepalive::restore`] for the guard).
+/// Otherwise the keepalive starts unarmed until the first real LLM call warms
+/// a prefix and supplies the active model's `cache_keepalive` cadence.
+fn build_cache_keepalive(
+    autonomy_cfg: &AutonomyConfig,
+    snapshot: Option<KeepaliveSnapshot>,
+    character: &str,
+) -> CacheKeepalive {
+    let mut cache_keepalive = CacheKeepalive::new(autonomy_cfg.cache_keepalive_max.as_duration());
+    if let Some(snap) = snapshot {
+        if cache_keepalive.restore(&snap, Instant::now()) {
+            info!(
+                character,
+                model = %snap.model,
+                "Cache keepalive re-armed from persisted state"
+            );
+        }
+    }
+    cache_keepalive
+}
+
+/// Assemble the keepalive snapshot from a persisted state file. Any missing
+/// or unparseable field yields `None`, leaving the keepalive unarmed —
+/// fail-safe, since arming with a wrong anchor could ping a cold cache.
+fn keepalive_snapshot_from_persisted(persisted: &PersistedState) -> Option<KeepaliveSnapshot> {
+    Some(KeepaliveSnapshot {
+        model: persisted.keepalive_model.clone()?,
+        interval: Duration::from_secs(persisted.keepalive_interval_secs?),
+        last_warm_at: rfc3339_to_instant(persisted.keepalive_last_warm_at.as_deref()?)?,
+        last_active_at: rfc3339_to_instant(persisted.keepalive_last_active_at.as_deref()?)?,
+    })
 }
 
 /// Whether the dreaming inactivity window is satisfied: enough time has elapsed
@@ -510,19 +569,17 @@ impl AutonomyManager {
 
         // Restore persisted state if available.
         let mut covered_turn_count = 0;
+        let mut keepalive_snapshot = None;
         if let Some(persisted) = load_state(&self.data_dir, character) {
             restore_from_persisted(&persisted, &mut heartbeat);
             covered_turn_count = persisted.covered_turn_count;
+            keepalive_snapshot = keepalive_snapshot_from_persisted(&persisted);
             info!(character, "Autonomy state restored from disk");
         } else {
             info!(character, "Autonomy state created (no prior state)");
         }
 
-        // The keepalive starts unarmed: after a (re)start the provider-side
-        // cache is cold anyway, so there is nothing to keep warm until the first
-        // real LLM call (user message or heartbeat tick) rebuilds and warms a
-        // prefix and supplies the active model's `cache_keepalive` cadence.
-        let cache_keepalive = CacheKeepalive::new(autonomy_cfg.cache_keepalive_max.as_duration());
+        let cache_keepalive = build_cache_keepalive(&autonomy_cfg, keepalive_snapshot, character);
 
         let heartbeat_log_path =
             character_data_dir(&self.data_dir, character).join("heartbeat.jsonl");
@@ -3848,6 +3905,61 @@ mod tests {
         assert_eq!(persisted.ticks_without_user, 0);
         // next_wake_at should be None (clock was fresh, no deadline set).
         assert!(persisted.next_wake_at.is_none());
+        // Keepalive was never armed — nothing persisted, restore stays unarmed.
+        assert!(persisted.keepalive_model.is_none());
+        assert!(keepalive_snapshot_from_persisted(&persisted).is_none());
+    }
+
+    #[test]
+    fn keepalive_schedule_survives_save_and_restore() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data_dir = tmp.path();
+        std::fs::create_dir_all(data_dir.join("alice")).unwrap();
+
+        // Arm the keepalive as a real warm call would.
+        let mut cache_keepalive = CacheKeepalive::new(Duration::from_hours(12));
+        let now = Instant::now();
+        cache_keepalive.set_interval(Some(Duration::from_mins(55)), "claude-opus-4-6", now);
+        cache_keepalive.on_cache_warmed("claude-opus-4-6", now);
+
+        let mut state = AutonomyState {
+            heartbeat: HeartbeatClock::with_config(&HeartbeatConfig::default()),
+            cache_keepalive,
+            activity: ActivityTracker::new(),
+            heartbeat_log: HeartbeatLog::new(),
+            paused: false,
+            dirty: true,
+            last_compaction_activity: Instant::now(),
+            compaction_triggered: false,
+            active_turn_count: 0,
+            compaction_pending: false,
+            covered_turn_count: 0,
+            deep_archive_done: false,
+            last_request: None,
+            next_dream_attempt_at: None,
+            dream_failure_count: 0,
+        };
+        save_state(data_dir, "alice", &mut state);
+
+        // A "restarted daemon" loads the state and re-arms: the warm is only
+        // seconds old, well within one interval, so the schedule comes back
+        // and the ping fires roughly one interval after the original warm.
+        let persisted = load_state(data_dir, "alice").unwrap();
+        assert_eq!(
+            persisted.keepalive_model.as_deref(),
+            Some("claude-opus-4-6")
+        );
+        let snapshot = keepalive_snapshot_from_persisted(&persisted).unwrap();
+        let mut restored = CacheKeepalive::new(Duration::from_hours(12));
+        assert!(restored.restore(&snapshot, Instant::now()));
+        assert_eq!(
+            restored.tick(now + Duration::from_mins(54)),
+            CacheKeepaliveAction::None
+        );
+        assert_eq!(
+            restored.tick(now + Duration::from_mins(56)),
+            CacheKeepaliveAction::Ping
+        );
     }
 
     #[test]
@@ -3862,6 +3974,7 @@ mod tests {
             covered_turn_count: 0,
             next_wake_at: Some("2026-04-08T20:00:00+00:00".into()),
             last_user_at: Some("2026-04-08T14:00:00+00:00".into()),
+            ..Default::default()
         };
         let json = serde_json::to_string(&persisted).unwrap();
         std::fs::write(state_path(data_dir, "alice"), json).unwrap();
@@ -4051,6 +4164,7 @@ mod tests {
             covered_turn_count: 0,
             next_wake_at: None,
             last_user_at: None,
+            ..Default::default()
         };
         let mut clock = HeartbeatClock::with_config(&HeartbeatConfig::default());
         restore_from_persisted(&persisted, &mut clock);
@@ -4125,15 +4239,16 @@ mod tests {
     }
 
     /// Arm a keepalive with a 55m interval whose deadline is already due (last
-    /// real activity 1h ago, well within the 12h idle ceiling).
+    /// real activity 56m ago — past the interval, but with the prefix still
+    /// inside its warm window so failed pings retry rather than give up).
     fn due_keepalive(now: Instant) -> CacheKeepalive {
         let mut ka = CacheKeepalive::new(Duration::from_hours(12));
         ka.set_interval(
             Some(Duration::from_mins(55)),
             "test-model",
-            now - Duration::from_hours(1),
+            now - Duration::from_mins(56),
         );
-        ka.on_cache_warmed("test-model", now - Duration::from_hours(1));
+        ka.on_cache_warmed("test-model", now - Duration::from_mins(56));
         ka
     }
 
@@ -4290,6 +4405,7 @@ mod tests {
             covered_turn_count: 0,
             next_wake_at: Some(wake_time),
             last_user_at: Some(chrono::Utc::now().to_rfc3339()),
+            ..Default::default()
         };
         let json = serde_json::to_string_pretty(&persisted).unwrap();
         std::fs::write(state_path(data_dir, "alice"), json).unwrap();

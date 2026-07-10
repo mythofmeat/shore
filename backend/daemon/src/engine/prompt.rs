@@ -1240,7 +1240,7 @@ mod tests {
         // System block should contain character info.
         assert!(result.system[0].content.contains("TestChar"));
         assert!(result.system[0].content.contains("TestUser"));
-        assert!(result.system[0].label == "system");
+        assert_eq!(result.system[0].label, "system");
 
         // Character and user definitions in separate blocks.
         let char_block = result

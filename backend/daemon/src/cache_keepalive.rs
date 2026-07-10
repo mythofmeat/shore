@@ -55,8 +55,29 @@ pub struct CacheKeepalive {
     /// Last *real* cache-warming activity (user message / heartbeat). Keepalive
     /// pings do NOT update this — it anchors the `max_idle` cutoff.
     last_active_at: Option<Instant>,
+    /// Last confirmed cache-warming event on the target model: a real call
+    /// ([`on_cache_warmed`]) or a successful ping ([`on_ping_succeeded`]).
+    /// Unlike `last_active_at`, pings DO update this — it tracks how fresh the
+    /// warm prefix itself is, not user presence. Anchors the retry give-up
+    /// check and the restart [`restore`] guard.
+    ///
+    /// [`on_cache_warmed`]: CacheKeepalive::on_cache_warmed
+    /// [`on_ping_succeeded`]: CacheKeepalive::on_ping_succeeded
+    /// [`restore`]: CacheKeepalive::restore
+    last_warm_at: Option<Instant>,
     /// Consecutive failed ping attempts. Used for retry backoff.
     failure_count: u32,
+}
+
+/// Wall-clock-restorable snapshot of an armed keepalive schedule. Produced by
+/// [`CacheKeepalive::snapshot`] for persistence and consumed by
+/// [`CacheKeepalive::restore`] after a daemon restart.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeepaliveSnapshot {
+    pub model: String,
+    pub interval: Duration,
+    pub last_warm_at: Instant,
+    pub last_active_at: Instant,
 }
 
 fn retry_delay(failure_count: u32) -> Duration {
@@ -64,6 +85,15 @@ fn retry_delay(failure_count: u32) -> Duration {
     let secs = 30_u64.saturating_mul(1_u64 << exponent);
     Duration::from_secs(secs.min(15 * 60))
 }
+
+/// Grace past the ping interval during which failed pings keep retrying. The
+/// interval sits below the provider cache TTL by convention (Anthropic: 55m
+/// interval, 1h TTL), so `interval + grace` approximates the moment the warm
+/// prefix actually dies. Retrying past that point cannot refresh anything —
+/// the next "successful" ping would land on a cold cache and pay a full write
+/// (the exact cost-center this subsystem must never become) — so the keepalive
+/// disarms instead and waits for the next real warm.
+const PING_RETRY_GRACE: Duration = Duration::from_mins(5);
 
 impl CacheKeepalive {
     /// Create a keepalive with the global idle ceiling. The per-model interval
@@ -78,6 +108,7 @@ impl CacheKeepalive {
             max_idle,
             next_ping_at: None,
             last_active_at: None,
+            last_warm_at: None,
             failure_count: 0,
         }
     }
@@ -100,6 +131,15 @@ impl CacheKeepalive {
         // Record the model the keepalive ping runs on. Warms are gated on this:
         // only a call on this model actually refreshes the cache we maintain.
         if self.target_model.as_deref() != Some(model) {
+            // A real model switch (not the first-request bootstrap): the prefix
+            // we were keeping warm belongs to the old model, and nothing has
+            // warmed the new model's prefix yet. An armed timer carried across
+            // the switch would fire a ping at a cold cache and pay a full
+            // write, so pause until the next real warm — exactly like
+            // `on_cache_invalidated`.
+            if self.target_model.is_some() {
+                self.on_cache_invalidated();
+            }
             self.target_model = Some(model.to_owned());
         }
         let changed = self.interval != interval;
@@ -131,6 +171,7 @@ impl CacheKeepalive {
             return;
         }
         self.last_active_at = Some(now);
+        self.last_warm_at = Some(now);
         self.failure_count = 0;
         self.next_ping_at = self.interval.and_then(|iv| now.checked_add(iv));
     }
@@ -140,6 +181,7 @@ impl CacheKeepalive {
     /// keeps counting from the last real message).
     pub fn on_ping_succeeded(&mut self, now: Instant) {
         self.failure_count = 0;
+        self.last_warm_at = Some(now);
         self.next_ping_at = self.interval.and_then(|iv| now.checked_add(iv));
     }
 
@@ -155,7 +197,43 @@ impl CacheKeepalive {
         // `set_interval` must NOT re-arm off the stale timestamp. Pinging only
         // resumes once a real call re-warms via `on_cache_warmed`.
         self.last_active_at = None;
+        self.last_warm_at = None;
         self.failure_count = 0;
+    }
+
+    /// Snapshot the armed schedule for persistence, or `None` when there is
+    /// nothing worth restoring (keepalive off, never warmed, or invalidated).
+    pub fn snapshot(&self) -> Option<KeepaliveSnapshot> {
+        Some(KeepaliveSnapshot {
+            model: self.target_model.clone()?,
+            interval: self.interval?,
+            last_warm_at: self.last_warm_at?,
+            last_active_at: self.last_active_at?,
+        })
+    }
+
+    /// Re-arm from a persisted snapshot after a restart. The provider-side
+    /// cache lives on Anthropic's servers, so a daemon restart does NOT cool
+    /// it — losing the schedule here is what used to turn a quick redeploy
+    /// into a full cold cache write on the user's next message.
+    ///
+    /// Guard: only re-arms while the snapshot's last warm is younger than one
+    /// ping interval (the interval sits below the cache TTL by convention, so
+    /// such a prefix is provably still warm). Anything staler could fire a
+    /// ping at a cold cache — the one thing this subsystem must never do — so
+    /// it stays unarmed and waits for the next real warm. Returns whether the
+    /// schedule was re-armed.
+    pub fn restore(&mut self, snapshot: &KeepaliveSnapshot, now: Instant) -> bool {
+        if now.duration_since(snapshot.last_warm_at) >= snapshot.interval {
+            return false;
+        }
+        self.target_model = Some(snapshot.model.clone());
+        self.interval = Some(snapshot.interval);
+        self.last_warm_at = Some(snapshot.last_warm_at);
+        self.last_active_at = Some(snapshot.last_active_at);
+        self.next_ping_at = snapshot.last_warm_at.checked_add(snapshot.interval);
+        self.failure_count = 0;
+        true
     }
 
     /// Called by the autonomy loop on each tick.
@@ -194,9 +272,24 @@ impl CacheKeepalive {
 
     /// Called when a keepalive ping fails or is skipped. Retries with a short
     /// exponential backoff so transient failures still get another chance before
-    /// the cache goes cold, while budget/provider outages don't hammer the
-    /// account every scheduler tick.
+    /// the cache goes cold — but once the last confirmed warm is older than
+    /// `interval + PING_RETRY_GRACE` the prefix is past any plausible TTL, and a
+    /// later retry could only recreate a cold cache at full write cost for a
+    /// user who may be gone for hours (the failure mode a budget block used to
+    /// trigger: retries outlive the block, then the first ping through pays the
+    /// whole prefix). At that point the keepalive disarms instead; the next
+    /// real warm re-arms it.
     pub fn on_ping_failed(&mut self, now: Instant) {
+        let warm_expired = match (self.last_warm_at, self.interval) {
+            (Some(warm), Some(iv)) => {
+                now.duration_since(warm) >= iv.saturating_add(PING_RETRY_GRACE)
+            }
+            _ => true,
+        };
+        if warm_expired {
+            self.on_cache_invalidated();
+            return;
+        }
         self.failure_count = self.failure_count.saturating_add(1);
         self.next_ping_at = now.checked_add(retry_delay(self.failure_count));
     }
@@ -399,6 +492,100 @@ mod tests {
         ka.set_interval(Some(hours(6)), MODEL, now + minutes(30));
         assert_eq!(ka.tick(now + minutes(55)), CacheKeepaliveAction::None);
         assert_eq!(ka.tick(now + hours(6)), CacheKeepaliveAction::Ping);
+    }
+
+    #[test]
+    fn persistent_ping_failures_disarm_once_warm_window_expires() {
+        // A budget block (or provider outage) fails every ping. Retries are
+        // fine while the prefix could still be warm, but once the last warm is
+        // older than interval + grace the cache is dead — retrying further
+        // would eventually "succeed" with a full cold write hours later (the
+        // $-burning failure mode observed live). The keepalive must disarm.
+        let now = Instant::now();
+        let mut ka = armed(now);
+        assert_eq!(ka.tick(now + minutes(55)), CacheKeepaliveAction::Ping);
+
+        // Failures within the warm window keep retrying...
+        ka.on_ping_failed(now + minutes(55));
+        assert_eq!(
+            ka.tick(now + minutes(55) + Duration::from_secs(30)),
+            CacheKeepaliveAction::Ping
+        );
+        ka.on_ping_failed(now + minutes(56));
+        assert_eq!(ka.tick(now + minutes(57)), CacheKeepaliveAction::Ping);
+
+        // ...but a failure past interval (55m) + grace (5m) disarms for good.
+        ka.on_ping_failed(now + minutes(61));
+        assert_eq!(ka.tick(now + minutes(62)), CacheKeepaliveAction::None);
+        assert_eq!(ka.tick(now + hours(3)), CacheKeepaliveAction::None);
+
+        // A real warm re-arms the schedule.
+        ka.on_cache_warmed(MODEL, now + hours(4));
+        ka.set_interval(Some(minutes(55)), MODEL, now + hours(4));
+        assert_eq!(
+            ka.tick(now + hours(4) + minutes(55)),
+            CacheKeepaliveAction::Ping
+        );
+    }
+
+    #[test]
+    fn model_switch_requires_fresh_warm_before_pinging() {
+        // Switching the chat model retargets the keepalive, but the new
+        // model's prefix has never been warmed — an armed timer carried across
+        // the switch would fire a cold ping (observed live: a sonnet keepalive
+        // paying a 21k write right after an opus→sonnet switch).
+        let now = Instant::now();
+        let mut ka = armed(now);
+        ka.set_interval(Some(minutes(55)), OTHER_MODEL, now + minutes(10));
+        assert_eq!(ka.tick(now + minutes(55)), CacheKeepaliveAction::None);
+        assert_eq!(ka.tick(now + hours(3)), CacheKeepaliveAction::None);
+
+        // A real warm on the new model resumes pinging.
+        ka.on_cache_warmed(OTHER_MODEL, now + hours(4));
+        assert_eq!(
+            ka.tick(now + hours(4) + minutes(55)),
+            CacheKeepaliveAction::Ping
+        );
+    }
+
+    #[test]
+    fn snapshot_roundtrips_through_restore() {
+        let now = Instant::now();
+        let ka = armed(now);
+        let snapshot = ka.snapshot().expect("armed keepalive must snapshot");
+        assert_eq!(snapshot.model, MODEL);
+        assert_eq!(snapshot.interval, minutes(55));
+
+        // Restart 20 minutes later: warm is fresher than one interval, so the
+        // schedule re-arms and the ping still fires at last_warm + interval.
+        let mut restored = CacheKeepalive::new(hours(12));
+        assert!(restored.restore(&snapshot, now + minutes(20)));
+        assert_eq!(restored.tick(now + minutes(54)), CacheKeepaliveAction::None);
+        assert_eq!(restored.tick(now + minutes(55)), CacheKeepaliveAction::Ping);
+    }
+
+    #[test]
+    fn restore_stays_unarmed_when_warm_is_stale() {
+        // Restart after more than one interval since the last warm: the prefix
+        // may already be past its TTL, so re-arming could fire a cold ping.
+        // Stay unarmed until the next real warm.
+        let now = Instant::now();
+        let ka = armed(now);
+        let snapshot = ka.snapshot().expect("armed keepalive must snapshot");
+
+        let mut restored = CacheKeepalive::new(hours(12));
+        assert!(!restored.restore(&snapshot, now + minutes(56)));
+        assert_eq!(restored.tick(now + hours(2)), CacheKeepaliveAction::None);
+    }
+
+    #[test]
+    fn snapshot_absent_when_unarmed_or_invalidated() {
+        let now = Instant::now();
+        assert!(CacheKeepalive::new(hours(12)).snapshot().is_none());
+
+        let mut ka = armed(now);
+        ka.on_cache_invalidated();
+        assert!(ka.snapshot().is_none());
     }
 
     #[test]
