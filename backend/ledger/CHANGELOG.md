@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.13](https://github.com/mythofmeat/shore-core/compare/shore-ledger-v0.1.12...shore-ledger-v0.1.13) - 2026-07-10
+
+### Fixed
+
+- *(keepalive)* never ping a cache we can't prove warm; persist schedule across restarts ([#312](https://github.com/mythofmeat/shore-core/pull/312))
+
 ## [0.1.12](https://github.com/mythofmeat/shore-core/compare/shore-ledger-v0.1.11...shore-ledger-v0.1.12) - 2026-07-04
 
 ### Other

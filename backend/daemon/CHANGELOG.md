@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.18](https://github.com/mythofmeat/shore-core/compare/shore-daemon-v0.1.17...shore-daemon-v0.1.18) - 2026-07-10
+
+### Fixed
+
+- *(keepalive)* never ping a cache we can't prove warm; persist schedule across restarts ([#312](https://github.com/mythofmeat/shore-core/pull/312))
+
 ## [0.1.17](https://github.com/mythofmeat/shore-core/compare/shore-daemon-v0.1.16...shore-daemon-v0.1.17) - 2026-07-04
 
 ### Other
