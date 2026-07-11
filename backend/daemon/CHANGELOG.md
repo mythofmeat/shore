@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.19](https://github.com/mythofmeat/shore-core/compare/shore-daemon-v0.1.18...shore-daemon-v0.1.19) - 2026-07-11
+
+### Fixed
+
+- *(handler)* replay assistant-turn generated images as tool_use/tool_result ([#314](https://github.com/mythofmeat/shore-core/pull/314))
+
 ## [0.1.18](https://github.com/mythofmeat/shore-core/compare/shore-daemon-v0.1.17...shore-daemon-v0.1.18) - 2026-07-10
 
 ### Fixed
