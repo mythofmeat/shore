@@ -120,12 +120,14 @@ pub(crate) fn prepare_chat_context(params: PrepareChatContextParams<'_>) -> Prep
     });
 
     let cache_dir = &config.dirs.cache;
+    let tools_available = config.app.tools.any_enabled() || !mcp_tool_defs.is_empty();
     let (mut llm_messages, system) = super::build_llm_messages(
         &prompt,
         include_unsigned_thinking,
         config.app.advanced.max_image_size,
         cache_dir,
         &resolved.provider_key,
+        super::AssistantImageMode::for_request(&resolved.sdk, tools_available),
     );
     crate::content_util::maybe_strip_prior_thinking(
         &mut llm_messages,
@@ -137,7 +139,7 @@ pub(crate) fn prepare_chat_context(params: PrepareChatContextParams<'_>) -> Prep
         &resolved.provider_key,
     );
 
-    let tool_defs = if config.app.tools.any_enabled() || !mcp_tool_defs.is_empty() {
+    let tool_defs = if tools_available {
         let mut defs = crate::tools::render_tool_defs(&config.app.tools, character, &display_name);
         // Append `ask_<name>` delegation tools (only for enabled sub-agents)
         // after the static surface so the tool ordering — and thus the cache

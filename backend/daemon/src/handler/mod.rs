@@ -31,8 +31,8 @@ pub(crate) use context::{
 pub(crate) use images::{
     build_content, embed_image_data, embed_messages_image_data, image_data_for_path,
 };
-pub(crate) use task::build_llm_messages;
 use task::handle_generation;
+pub(crate) use task::{build_llm_messages, AssistantImageMode};
 
 use shore_protocol::client_msg::{ClientMessage, ClientMessageBody};
 use shore_protocol::error::ErrorCode;

@@ -4,9 +4,10 @@ use std::time::Instant;
 
 use serde_json::{json, Value};
 use shore_config::character_data_dir;
+use shore_config::models::Sdk;
 use shore_config::LoadedConfig;
 use shore_protocol::client_msg::ClientMessageBody;
-use shore_protocol::types::{ContentBlock, Message, Role};
+use shore_protocol::types::{ContentBlock, ImageRef, Message, Role};
 use tokio::sync::Mutex;
 use tracing::{debug, info, instrument};
 
@@ -663,6 +664,248 @@ async fn run_inline_compaction(
     }
 }
 
+/// How images attached to *assistant* messages render on the wire.
+///
+/// Anthropic rejects raw `image` blocks inside assistant turns at any
+/// position, and one such turn fails the entire request — so a persisted
+/// assistant message carrying a generated image (heartbeat `generate_image`,
+/// #293) would wedge the conversation if replayed directly.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum AssistantImageMode {
+    /// Replay the image as the tool call it originally was: the assistant
+    /// turn gains a synthetic `generate_image` `tool_use` block and the
+    /// following user turn carries the matching `tool_result` with the image
+    /// and caption. This is the only wire position where the model can
+    /// actually see the image it generated.
+    ToolPair,
+    /// Fold the image into a caption-derived text stand-in on the assistant
+    /// turn itself. Used when tool blocks can't ship: non-Anthropic dialects
+    /// (image-bearing `tool_result` blocks aren't portable across the other
+    /// SDKs' tool-message shapes) and requests without tool definitions
+    /// (tool blocks require a non-empty `tools` param).
+    TextStandin,
+}
+
+impl AssistantImageMode {
+    pub(crate) fn for_request(sdk: &Sdk, has_tool_defs: bool) -> Self {
+        if *sdk == Sdk::Anthropic && has_tool_defs {
+            Self::ToolPair
+        } else {
+            Self::TextStandin
+        }
+    }
+}
+
+/// Rendered wire form of the images attached to one assistant message.
+struct AssistantImageRender {
+    /// Blocks appended to the assistant turn itself (`tool_use` or text
+    /// stand-ins).
+    assistant_blocks: Vec<Value>,
+    /// `tool_result` blocks owed to the turn immediately after the assistant
+    /// message (empty in [`AssistantImageMode::TextStandin`]).
+    tool_results: Vec<Value>,
+}
+
+fn render_assistant_images(
+    images: &[ImageRef],
+    mode: AssistantImageMode,
+    max_image_size: u64,
+    cache_dir: &Path,
+) -> AssistantImageRender {
+    let mut render = AssistantImageRender {
+        assistant_blocks: Vec::new(),
+        tool_results: Vec::new(),
+    };
+    for (index, img) in images.iter().enumerate() {
+        let encoded = match mode {
+            AssistantImageMode::ToolPair => {
+                super::images::encode_image_block(img, max_image_size, cache_dir)
+            }
+            AssistantImageMode::TextStandin => None,
+        };
+        let caption = img
+            .caption
+            .as_deref()
+            .map(str::trim)
+            .filter(|c| !c.is_empty());
+        match encoded {
+            Some(image_block) => {
+                let id = synthetic_tool_use_id(&img.path, index);
+                render.assistant_blocks.push(json!({
+                    "type": "tool_use",
+                    "id": id,
+                    "name": "generate_image",
+                    // The generation prompt isn't persisted, so the input
+                    // carries only what is: the caption.
+                    "input": match caption {
+                        Some(c) => json!({ "caption": c }),
+                        None => json!({}),
+                    },
+                }));
+                let mut result_content = vec![image_block];
+                if let Some(c) = caption {
+                    result_content.push(json!({ "type": "text", "text": c }));
+                }
+                render.tool_results.push(json!({
+                    "type": "tool_result",
+                    "tool_use_id": id,
+                    "content": result_content,
+                }));
+            }
+            // TextStandin mode — or the image failed to encode (missing/
+            // unreadable file), where emitting the `tool_use` anyway would
+            // leave it dangling without a result and fail the request.
+            None => {
+                render.assistant_blocks.push(json!({
+                    "type": "text",
+                    "text": match caption {
+                        Some(c) => format!("[sent an image: {c}]"),
+                        None => "[sent an image]".to_owned(),
+                    },
+                }));
+            }
+        }
+    }
+    render
+}
+
+/// Deterministic `tool_use` id for a replayed generated image. The same
+/// history must render byte-identically across requests, processes, and
+/// daemon restarts (prompt-cache stability), so the id derives from the
+/// image's file stem — unique per generated image — never from randomness
+/// or an unstable hash.
+fn synthetic_tool_use_id(path: &str, index: usize) -> String {
+    let stem = Path::new(path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("image");
+    let safe: String = stem
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .take(48)
+        .collect();
+    format!("toolu_gen_{index}_{safe}")
+}
+
+/// Convert `content` — a plain string or an array of blocks, the only two
+/// shapes this file constructs — into block-array form. A blank string
+/// contributes no block.
+fn content_to_blocks(content: Value) -> Vec<Value> {
+    match content {
+        Value::String(s) => {
+            if s.trim().is_empty() {
+                vec![]
+            } else {
+                vec![json!({ "type": "text", "text": s })]
+            }
+        }
+        Value::Array(blocks) => blocks,
+        // Never constructed here; spelled out because wildcard enum arms are
+        // denied workspace-wide.
+        other @ (Value::Null | Value::Bool(_) | Value::Number(_) | Value::Object(_)) => {
+            vec![other]
+        }
+    }
+}
+
+/// Render one prompt message's wire `content`, plus the `tool_result` blocks
+/// it owes the following turn (generated-image replay — see
+/// [`AssistantImageMode`]).
+///
+/// Returns `None` for a message that rendered to nothing — an empty string or
+/// an empty content array. This happens for a degenerate persisted turn that
+/// carries no usable content (e.g. an assistant turn that ended a tool loop
+/// without emitting any final text). Anthropic rejects such a turn with
+/// "messages: text content blocks must be non-empty", failing the *entire*
+/// request, so any conversation whose window contains one could no longer
+/// generate. Mirrors the empty-turn skip in
+/// `append_response_messages_to_request`.
+fn render_message_content(
+    m: &prompt::PromptMessage,
+    include_unsigned_thinking: bool,
+    max_image_size: u64,
+    cache_dir: &Path,
+    active_provider_key: &str,
+    assistant_image_mode: AssistantImageMode,
+) -> Option<(Value, Vec<Value>)> {
+    // Images on assistant turns can't ship as raw `image` blocks (see
+    // `AssistantImageMode`); render them separately and keep them out of
+    // the shared content paths below.
+    let image_render = (m.role == Role::Assistant && !m.images.is_empty()).then(|| {
+        render_assistant_images(&m.images, assistant_image_mode, max_image_size, cache_dir)
+    });
+    let turn_images: &[ImageRef] = if image_render.is_some() {
+        &[]
+    } else {
+        &m.images
+    };
+    let mut content = if m.content_blocks.is_empty() {
+        super::build_content(&m.content, turn_images, max_image_size, cache_dir)
+    } else {
+        let mut blocks: Vec<Value> = Vec::new();
+
+        for img in turn_images {
+            if let Some(block) = super::images::encode_image_block(img, max_image_size, cache_dir) {
+                blocks.push(block);
+            }
+        }
+
+        // Drop opaque thinking data (signatures, redacted blobs) that
+        // a different provider minted — replaying it to the active
+        // provider hard-fails the request.
+        let minting = m.provider_key.as_deref();
+        let portable = m.content_blocks.iter().filter(|b| {
+            crate::content_util::thinking_block_portable_to(b, minting, active_provider_key)
+        });
+        if include_unsigned_thinking {
+            blocks.extend(portable.filter_map(|b| {
+                // Drop empty text blocks even on the unsigned path
+                // (they can't anchor a cache breakpoint).
+                if matches!(b, ContentBlock::Text { text } if text.trim().is_empty()) {
+                    None
+                } else {
+                    Some(crate::content_util::content_block_to_json(b))
+                }
+            }));
+        } else {
+            blocks.extend(portable.filter_map(crate::content_util::content_block_to_api_json));
+        }
+
+        // If every block was dropped (e.g. a message whose only content
+        // was an empty text block), fall back to the string-content
+        // path so we never emit an empty content array, which the API
+        // also rejects.
+        if blocks.is_empty() {
+            super::build_content(&m.content, turn_images, max_image_size, cache_dir)
+        } else {
+            json!(blocks)
+        }
+    };
+
+    if let Some(render) = &image_render {
+        let mut blocks = content_to_blocks(content);
+        blocks.extend(render.assistant_blocks.iter().cloned());
+        content = json!(blocks);
+    }
+
+    // `content` is only ever a string (build_content) or an array of
+    // blocks here; the other JSON shapes never occur but are spelled
+    // out because wildcard enum arms are denied workspace-wide.
+    let is_empty = match &content {
+        Value::String(s) => s.trim().is_empty(),
+        Value::Array(a) => a.is_empty(),
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::Object(_) => false,
+    };
+    if is_empty {
+        return None;
+    }
+
+    Some((
+        content,
+        image_render.map(|r| r.tool_results).unwrap_or_default(),
+    ))
+}
+
 /// Convert assembled prompt messages into LLM API JSON format.
 pub(crate) fn build_llm_messages(
     prompt_result: &prompt::AssembledPrompt,
@@ -670,86 +913,53 @@ pub(crate) fn build_llm_messages(
     max_image_size: u64,
     cache_dir: &Path,
     active_provider_key: &str,
+    assistant_image_mode: AssistantImageMode,
 ) -> (Vec<Value>, Option<Value>) {
-    let llm_messages: Vec<Value> = prompt_result
-        .messages
-        .iter()
-        .filter_map(|m| {
-            let role = match m.role {
-                Role::User => "user",
-                Role::Assistant => "assistant",
-                Role::System => "system",
-            };
-            let content = if m.content_blocks.is_empty() {
-                super::build_content(&m.content, &m.images, max_image_size, cache_dir)
+    let mut llm_messages: Vec<Value> = Vec::new();
+    // `tool_result` blocks owed by a preceding assistant turn whose images
+    // rendered as synthetic `generate_image` tool calls. The API requires a
+    // tool_use's result in the turn immediately after it, so these merge into
+    // the front of the next emitted user message — or a user turn of their
+    // own when the next emitted message isn't one (or nothing follows).
+    let mut pending_tool_results: Vec<Value> = Vec::new();
+
+    for m in &prompt_result.messages {
+        let role = match m.role {
+            Role::User => "user",
+            Role::Assistant => "assistant",
+            Role::System => "system",
+        };
+        let Some((mut content, owed_tool_results)) = render_message_content(
+            m,
+            include_unsigned_thinking,
+            max_image_size,
+            cache_dir,
+            active_provider_key,
+            assistant_image_mode,
+        ) else {
+            // Dropped empty turn; owed tool_results (if any) survive to the
+            // next emitted message.
+            continue;
+        };
+
+        if !pending_tool_results.is_empty() {
+            let owed = std::mem::take(&mut pending_tool_results);
+            if m.role == Role::User {
+                let mut blocks = owed;
+                blocks.extend(content_to_blocks(content));
+                content = json!(blocks);
             } else {
-                let mut blocks: Vec<Value> = Vec::new();
-
-                for img in &m.images {
-                    if let Some(block) =
-                        super::images::encode_image_block(img, max_image_size, cache_dir)
-                    {
-                        blocks.push(block);
-                    }
-                }
-
-                // Drop opaque thinking data (signatures, redacted blobs) that
-                // a different provider minted — replaying it to the active
-                // provider hard-fails the request.
-                let minting = m.provider_key.as_deref();
-                let portable = m.content_blocks.iter().filter(|b| {
-                    crate::content_util::thinking_block_portable_to(b, minting, active_provider_key)
-                });
-                if include_unsigned_thinking {
-                    blocks.extend(portable.filter_map(|b| {
-                        // Drop empty text blocks even on the unsigned path
-                        // (they can't anchor a cache breakpoint).
-                        if matches!(b, ContentBlock::Text { text } if text.trim().is_empty()) {
-                            None
-                        } else {
-                            Some(crate::content_util::content_block_to_json(b))
-                        }
-                    }));
-                } else {
-                    blocks.extend(
-                        portable.filter_map(crate::content_util::content_block_to_api_json),
-                    );
-                }
-
-                // If every block was dropped (e.g. a message whose only content
-                // was an empty text block), fall back to the string-content
-                // path so we never emit an empty content array, which the API
-                // also rejects.
-                if blocks.is_empty() {
-                    super::build_content(&m.content, &m.images, max_image_size, cache_dir)
-                } else {
-                    json!(blocks)
-                }
-            };
-
-            // Drop a message that rendered to nothing — an empty string or an
-            // empty content array. This happens for a degenerate persisted
-            // turn that carries no usable content (e.g. an assistant turn that
-            // ended a tool loop without emitting any final text). Anthropic
-            // rejects such a turn with "messages: text content blocks must be
-            // non-empty", failing the *entire* request, so any conversation
-            // whose window contains one can no longer generate. Mirrors the
-            // empty-turn skip in `append_response_messages_to_request`.
-            // `content` is only ever a string (build_content) or an array of
-            // blocks here; the other JSON shapes never occur but are spelled
-            // out because wildcard enum arms are denied workspace-wide.
-            let is_empty = match &content {
-                Value::String(s) => s.trim().is_empty(),
-                Value::Array(a) => a.is_empty(),
-                Value::Null | Value::Bool(_) | Value::Number(_) | Value::Object(_) => false,
-            };
-            if is_empty {
-                return None;
+                llm_messages.push(json!({ "role": "user", "content": owed }));
             }
+        }
 
-            Some(json!({ "role": role, "content": content }))
-        })
-        .collect();
+        llm_messages.push(json!({ "role": role, "content": content }));
+        pending_tool_results.extend(owed_tool_results);
+    }
+
+    if !pending_tool_results.is_empty() {
+        llm_messages.push(json!({ "role": "user", "content": pending_tool_results }));
+    }
 
     let system = if prompt_result.system.is_empty() {
         None
@@ -784,14 +994,46 @@ mod build_llm_messages_tests {
         }
     }
 
-    fn build(messages: Vec<PromptMessage>) -> Vec<Value> {
+    fn pm_img(
+        role: Role,
+        content_blocks: Vec<ContentBlock>,
+        images: Vec<ImageRef>,
+    ) -> PromptMessage {
+        let mut m = pm(role, content_blocks);
+        m.images = images;
+        m
+    }
+
+    fn img(path: &str, caption: Option<&str>) -> ImageRef {
+        ImageRef {
+            path: path.to_owned(),
+            caption: caption.map(str::to_owned),
+            data: None,
+        }
+    }
+
+    /// Write a tiny valid PNG (well under the test max_image_size, so the
+    /// resize path never triggers) and return its path.
+    fn write_test_image(dir: &Path, name: &str) -> String {
+        let path = dir.join(name);
+        image::RgbImage::from_pixel(4, 4, image::Rgb([200, 120, 40]))
+            .save(&path)
+            .unwrap();
+        path.to_string_lossy().into_owned()
+    }
+
+    fn build_with_mode(messages: Vec<PromptMessage>, mode: AssistantImageMode) -> Vec<Value> {
         let prompt = AssembledPrompt {
             system: vec![],
             messages,
         };
         let (llm_messages, _) =
-            build_llm_messages(&prompt, false, 1024, Path::new("/tmp"), "anthropic");
+            build_llm_messages(&prompt, false, 1024, Path::new("/tmp"), "anthropic", mode);
         llm_messages
+    }
+
+    fn build(messages: Vec<PromptMessage>) -> Vec<Value> {
+        build_with_mode(messages, AssistantImageMode::ToolPair)
     }
 
     fn content(m: &Value) -> &Vec<Value> {
@@ -856,5 +1098,163 @@ mod build_llm_messages_tests {
             vec![ContentBlock::Text { text: "   ".into() }],
         )]);
         assert!(msgs.is_empty(), "message with no usable content is dropped");
+    }
+
+    #[test]
+    fn assistant_image_replays_as_generate_image_tool_pair() {
+        // Anthropic rejects raw `image` blocks in assistant turns, so a
+        // persisted generated image replays as the tool call it originally
+        // was: tool_use on the assistant turn, tool_result (image + caption)
+        // merged into the front of the next user turn.
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_test_image(dir.path(), "20260711_121732.jpg");
+        let msgs = build(vec![
+            pm(Role::User, vec![ContentBlock::Text { text: "hi".into() }]),
+            pm_img(
+                Role::Assistant,
+                vec![ContentBlock::Text {
+                    text: "made you a thing".into(),
+                }],
+                vec![img(&path, Some("sunset over the bay"))],
+            ),
+            pm(
+                Role::User,
+                vec![ContentBlock::Text {
+                    text: "thanks".into(),
+                }],
+            ),
+        ]);
+        assert_eq!(
+            msgs.len(),
+            3,
+            "no extra turn is injected when a user turn follows"
+        );
+
+        let assistant = content(&msgs[1]);
+        assert_eq!(assistant[0]["text"], "made you a thing");
+        assert_eq!(assistant[1]["type"], "tool_use");
+        assert_eq!(assistant[1]["name"], "generate_image");
+        assert_eq!(assistant[1]["input"]["caption"], "sunset over the bay");
+        assert!(assistant.iter().all(|b| b["type"] != "image"));
+
+        let user = content(&msgs[2]);
+        assert_eq!(user[0]["type"], "tool_result");
+        assert_eq!(user[0]["tool_use_id"], assistant[1]["id"]);
+        assert_eq!(user[0]["content"][0]["type"], "image");
+        assert_eq!(user[0]["content"][1]["text"], "sunset over the bay");
+        assert_eq!(user[1]["text"], "thanks");
+    }
+
+    #[test]
+    fn image_only_assistant_turn_at_history_end_gets_own_tool_result_turn() {
+        // The exact shape that wedged a live conversation: an autonomous
+        // heartbeat message whose only content is a generated image, sitting
+        // at the end of the rendered history.
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_test_image(dir.path(), "gen.png");
+        let msgs = build(vec![
+            pm(Role::User, vec![ContentBlock::Text { text: "hi".into() }]),
+            pm_img(Role::Assistant, vec![], vec![img(&path, None)]),
+        ]);
+        assert_eq!(
+            msgs.len(),
+            3,
+            "owed tool_result flushes as its own user turn"
+        );
+
+        let assistant = content(&msgs[1]);
+        assert_eq!(assistant.len(), 1);
+        assert_eq!(assistant[0]["type"], "tool_use");
+        assert_eq!(assistant[0]["input"], json!({}));
+
+        assert_eq!(msgs[2]["role"], "user");
+        let flushed = content(&msgs[2]);
+        assert_eq!(flushed.len(), 1);
+        assert_eq!(flushed[0]["type"], "tool_result");
+        assert_eq!(flushed[0]["tool_use_id"], assistant[0]["id"]);
+        assert_eq!(flushed[0]["content"][0]["type"], "image");
+    }
+
+    #[test]
+    fn text_standin_mode_folds_assistant_image_into_caption_text() {
+        // Non-Anthropic dialects and tool-less requests can't carry tool
+        // blocks: the image becomes a text stand-in and no turn is injected.
+        // The stand-in never reads the file, so the path may not exist.
+        let msgs = build_with_mode(
+            vec![
+                pm_img(
+                    Role::Assistant,
+                    vec![ContentBlock::Text {
+                        text: "made you a thing".into(),
+                    }],
+                    vec![img("/nonexistent/gen.jpg", Some("sunset"))],
+                ),
+                pm(
+                    Role::User,
+                    vec![ContentBlock::Text {
+                        text: "thanks".into(),
+                    }],
+                ),
+            ],
+            AssistantImageMode::TextStandin,
+        );
+        assert_eq!(msgs.len(), 2);
+        let assistant = content(&msgs[0]);
+        assert_eq!(assistant[1]["type"], "text");
+        assert_eq!(assistant[1]["text"], "[sent an image: sunset]");
+        assert_eq!(content(&msgs[1])[0]["text"], "thanks");
+    }
+
+    #[test]
+    fn unreadable_assistant_image_degrades_to_text_standin() {
+        // A tool_use whose image can't be encoded would dangle without its
+        // result and fail the request — degrade to the stand-in instead.
+        let msgs = build(vec![pm_img(
+            Role::Assistant,
+            vec![],
+            vec![img("/nonexistent/gone.jpg", None)],
+        )]);
+        assert_eq!(msgs.len(), 1);
+        let assistant = content(&msgs[0]);
+        assert_eq!(assistant.len(), 1);
+        assert_eq!(
+            assistant[0],
+            json!({ "type": "text", "text": "[sent an image]" })
+        );
+    }
+
+    #[test]
+    fn assistant_image_render_is_deterministic_across_calls() {
+        // Prompt-cache stability: identical history must render to identical
+        // JSON, so the synthetic tool_use ids derive from the image path —
+        // never from randomness or an unstable hash.
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_test_image(dir.path(), "20260711_121732.jpg");
+        let history = || {
+            vec![
+                pm_img(Role::Assistant, vec![], vec![img(&path, Some("sunset"))]),
+                pm(
+                    Role::User,
+                    vec![ContentBlock::Text {
+                        text: "thanks".into(),
+                    }],
+                ),
+            ]
+        };
+        assert_eq!(build(history()), build(history()));
+    }
+
+    #[test]
+    fn user_images_still_render_as_raw_image_blocks() {
+        // Only *assistant* turns reroute images; user attachments keep the
+        // plain image-block shape.
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_test_image(dir.path(), "upload.png");
+        let mut m = pm_img(Role::User, vec![], vec![img(&path, None)]);
+        m.content = "look at this".into();
+        let msgs = build(vec![m]);
+        let user = content(&msgs[0]);
+        assert_eq!(user[0]["type"], "image");
+        assert_eq!(user[1]["text"], "look at this");
     }
 }

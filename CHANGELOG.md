@@ -77,6 +77,21 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
   burying `cache_read: 0` in a success line.
 
 ### Fixed
+- **A generated image on an assistant turn no longer wedges the conversation.**
+  Since heartbeat-generated images started persisting onto the autonomous
+  assistant message (0.1.14), replaying one shipped a raw `image` block inside
+  an assistant turn — Anthropic rejects that at any position (`'image' blocks
+  are not permitted within assistant turns`), failing every subsequent request
+  until the turn scrolled out of the window. Generated images now replay as
+  the tool call they originally were: a synthetic `generate_image` `tool_use`
+  on the assistant turn with the matching `tool_result` (image + caption) in
+  the following user turn — which also means the character can now actually
+  see the images it generated (live generation never fed the image back).
+  Deterministic tool-use ids keep the rendering byte-identical across requests
+  and restarts, so cache prefixes are unaffected. Non-Anthropic dialects and
+  tool-less requests, where tool blocks can't ship, fold the image into a
+  caption-derived text stand-in instead. The fix is render-side, so histories
+  already carrying such a turn heal without data surgery.
 - **Cache keepalive no longer pays full cold cache writes after budget blocks,
   restarts, or model switches.** Three ways an armed keepalive could fire a
   ping at a cold cache (each observed live, one paying a ~66k-token write —
