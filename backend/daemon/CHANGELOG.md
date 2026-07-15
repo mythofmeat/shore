@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.20](https://github.com/mythofmeat/shore-core/compare/shore-daemon-v0.1.19...shore-daemon-v0.1.20) - 2026-07-15
+
+### Added
+
+- *(config)* add shore config reload with confirmed prompt activation ([#316](https://github.com/mythofmeat/shore-core/pull/316))
+
 ## [0.1.19](https://github.com/mythofmeat/shore-core/compare/shore-daemon-v0.1.18...shore-daemon-v0.1.19) - 2026-07-11
 
 ### Fixed
