@@ -110,6 +110,7 @@ pub async fn dispatch(
         "config" => state::config(ctx, &cmd.args),
         "tools" => state::tools(ctx),
         "config_check" => state::config_check(ctx).await,
+        "config_reload" => state::config_reload(ctx, &cmd.args),
         "config_reset" => state::config_reset(ctx),
         "diagnostics" => state::diagnostics(ctx, &cmd.args),
         "heartbeat_log" => state::heartbeat_log(engine, ctx, &cmd.args),

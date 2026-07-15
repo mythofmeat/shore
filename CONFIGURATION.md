@@ -1172,3 +1172,19 @@ shore config --check
 shore config
 shore config --path
 ```
+
+## Manual Reload
+
+```sh
+shore config reload        # validate + reload config; asks before activating
+                           # changed system-prompt (workspace) files
+shore config reload --yes  # activate changed prompt files without asking
+```
+
+Config TOML edits normally hot-reload on save; `shore config reload` is the
+explicit counterpart that surfaces parse errors instead of logging them, and
+the only command that activates edited prompt-visible workspace files
+(`SOUL.md`, `USER.md`, `AGENTS.md`, `TOOLS.md`, `HEARTBEAT.md`, `MEMORY.md`)
+outside a compaction. Activation changes the system prompt bytes, so the
+provider prompt cache goes cold and the next message pays a one-time cache
+write — the command lists the differing files and asks first.

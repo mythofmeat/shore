@@ -172,10 +172,14 @@ stateful providers do not keep remembering the discarded active response.
 The daemon loads config at startup and keeps a runtime copy in the message
 handler, command context, autonomy manager, and character registry.
 
-Manual `config_reset` and automatic hot reload use the same application path:
-parse config, replace runtime config, invalidate merged per-character config
-caches, rescan character discovery, update autonomy runtime config, and push
-fresh snapshots to connected sessions.
+Manual `config_reset`, manual `config_reload`, and automatic hot reload use the
+same application path: parse config, replace runtime config, invalidate merged
+per-character config caches, rescan character discovery, update autonomy
+runtime config, and push fresh snapshots to connected sessions. `config_reload`
+(CLI: `shore config reload`) differs from `config_reset` in that it preserves
+runtime overrides, aborts with the parse error when the on-disk config is
+invalid, and can additionally activate staged prompt edits (below) after the
+client confirms with the user.
 
 The watcher covers config TOML inputs, `.env`, `conf.d/`, and per-character
 `config.toml` overlays. It deliberately ignores
@@ -215,7 +219,12 @@ Prompt-visible workspace files are:
 When a model writes or edits one of these files through workspace tools, the
 workspace file changes immediately, but the path is queued in
 `deferred_edits.jsonl`. Normal prompt assembly keeps using the old snapshot until
-compaction/reload refreshes `active_prompt/` and clears the queue.
+compaction/reload refreshes `active_prompt/` and clears the queue. A daemon
+restart does not refresh the snapshot: the provider cache is server-side and
+survives restarts, so prompt bytes stay byte-identical until an explicit
+boundary. Boundaries are compaction (manual, inline, or autonomy-driven) and a
+confirmed `shore config reload`, which reports the differing files and asks
+before activating them (the next call pays a one-time cache write).
 
 Unexpected Anthropic cache invalidation is a serious regression. Things that
 should not bust cache include ordinary workspace edits, ordinary markdown memory

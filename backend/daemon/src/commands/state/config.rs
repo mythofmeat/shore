@@ -225,6 +225,115 @@ fn config_set(ctx: &mut CommandContext, key: &str, value: &str) -> CommandResult
     }
 }
 
+/// Manually reload configuration from disk, optionally activating pending
+/// system-prompt (workspace) edits for the current character.
+///
+/// Two-phase protocol driven by the client:
+/// - `{}` (check): validate the on-disk config (global + per-character
+///   overlays) and report which prompt-visible files differ from the active
+///   snapshot. No state changes.
+/// - `{ "apply": true, "refresh_prompts": bool }`: re-validate, then refresh
+///   the active prompt snapshot if requested, then adopt the fresh config.
+///   Unlike `config_reset`, runtime overrides (active model) are preserved.
+///
+/// Any validation failure aborts before any state changes.
+pub fn config_reload(ctx: &mut CommandContext, args: &serde_json::Value) -> CommandResult {
+    let apply = args
+        .get("apply")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    let refresh_prompts = args
+        .get("refresh_prompts")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+
+    let config_path = ctx.config_path.clone();
+    let fresh = shore_config::load_config(Some(&config_path))
+        .map_err(|e| (ErrorCode::InvalidRequest, format!("Config error: {e}")))?;
+
+    // Validate per-character overlays against the fresh global config so a
+    // broken characters/<name>/config.toml aborts the reload instead of
+    // silently falling back to the global config at merge time.
+    for name in shore_config::discover_characters(&fresh.dirs.config) {
+        if let Err(e) = shore_config::load_character_config(&fresh, &name) {
+            return Err((
+                ErrorCode::InvalidRequest,
+                format!("Config error in character overlay '{name}': {e}"),
+            ));
+        }
+    }
+
+    let char_name = ctx.character_name.clone().ok_or((
+        ErrorCode::InvalidRequest,
+        "config_reload requires a character context".to_owned(),
+    ))?;
+    let character_data_dir = ctx.config.dirs.data.join(&char_name);
+    let changed_prompt_files = crate::memory::deferred_edits::changed_prompt_files(
+        &character_data_dir,
+        &fresh.dirs.config,
+        &char_name,
+    );
+
+    // `restart_required` is annotated by the dispatcher's post-processing,
+    // which compares global-to-global; this context only holds the
+    // character-merged config, which would produce false positives.
+    if !apply {
+        return Ok(json!({
+            "applied": false,
+            "config_path": config_path.display().to_string(),
+            "character": char_name,
+            "changed_prompt_files": changed_prompt_files,
+        }));
+    }
+
+    // Refresh prompts before adopting the config so an IO failure leaves the
+    // daemon fully on the previous state.
+    let mut prompts_refreshed = false;
+    if refresh_prompts {
+        crate::memory::deferred_edits::apply_deferred_edits(
+            &character_data_dir,
+            &fresh.dirs.config,
+            &char_name,
+        )
+        .map_err(|e| {
+            (
+                ErrorCode::InternalError,
+                format!("Failed to refresh active prompt snapshot: {e}"),
+            )
+        })?;
+        // The cached heartbeat/keepalive request still carries the old prompt
+        // bytes; drop it so background calls rebuild from the new snapshot.
+        ctx.autonomy.notify_prompt_snapshot_refreshed(&char_name);
+        prompts_refreshed = true;
+        info!(
+            character = %char_name,
+            files = ?changed_prompt_files,
+            "Active prompt snapshot refreshed via config_reload"
+        );
+    }
+
+    ctx.autonomy.reload_runtime_config(fresh.clone());
+    ctx.llm_client.set_usage_config(fresh.app.usage.clone());
+    ctx.llm_client.set_cache_keepalive_ceiling(
+        fresh
+            .app
+            .behavior
+            .autonomy
+            .cache_keepalive_max
+            .as_duration(),
+    );
+    ctx.config = fresh;
+    info!(path = %config_path.display(), "Configuration reloaded from disk (manual)");
+
+    Ok(json!({
+        "applied": true,
+        "config_path": config_path.display().to_string(),
+        "character": char_name,
+        "changed_prompt_files": changed_prompt_files,
+        "prompts_refreshed": prompts_refreshed,
+    }))
+}
+
 /// Reset all runtime config overrides by reloading from disk.
 pub fn config_reset(ctx: &mut CommandContext) -> CommandResult {
     let config_path = ctx.config_path.clone();

@@ -160,6 +160,10 @@ impl MessageHandler {
             self.post_process_config_reset(&cmd_ctx, &mut result).await;
         }
 
+        if cmd.name == "config_reload" {
+            self.post_process_config_reload(&cmd_ctx, &mut result).await;
+        }
+
         if cmd.name == "switch_character" {
             self.post_process_switch_character(meta, session_id, &mut result)
                 .await;
@@ -421,6 +425,58 @@ impl MessageHandler {
                         "removed_character_engines".into(),
                         json!(summary.dropped_engines),
                     );
+                }
+            }
+        }
+    }
+
+    /// Post-process a `config_reload`: annotate `restart_required` (computed
+    /// global-to-global against the handler's pre-reload config — the command
+    /// context only sees the character-merged config) and, for applied
+    /// reloads, propagate the fresh config to handler-owned runtime state
+    /// (registry, MCP, autonomy) same as hot reload. Unlike `config_reset`,
+    /// the session's runtime overrides are preserved.
+    async fn post_process_config_reload(
+        &mut self,
+        cmd_ctx: &CommandContext,
+        result: &mut ServerMessage,
+    ) {
+        if let ServerMessage::CommandOutput(output) = result {
+            let applied = output
+                .data
+                .get("applied")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false);
+
+            // On apply the command context already holds the fresh global
+            // config; on check it still holds the merged config, so re-read
+            // the (just-validated) file. A racing edit that breaks it now
+            // just drops the annotation.
+            let maybe_fresh = if applied {
+                Some(cmd_ctx.config.clone())
+            } else {
+                shore_config::load_config(Some(&self.cmd_ctx.config_path)).ok()
+            };
+            if let Some(fresh) = maybe_fresh {
+                let restart_required =
+                    super::restart_required_changes(&self.cmd_ctx.config, &fresh);
+                if let Some(data) = output.data.as_object_mut() {
+                    let _ignored = data.insert("restart_required".into(), json!(restart_required));
+                }
+                if applied {
+                    let summary = self
+                        .apply_reloaded_config(fresh, RuntimeReloadSource::ManualReload)
+                        .await;
+                    if let Some(data) = output.data.as_object_mut() {
+                        let _ignored = data.insert(
+                            "invalidated".into(),
+                            json!({
+                                "character_discovery": summary.character_discovery_changed,
+                                "merged_character_configs": true,
+                                "removed_character_engines": summary.dropped_engines,
+                            }),
+                        );
+                    }
                 }
             }
         }

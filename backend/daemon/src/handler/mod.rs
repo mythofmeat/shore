@@ -180,6 +180,7 @@ pub enum HandlerControl {
 #[derive(Debug, Clone, Copy)]
 pub(super) enum RuntimeReloadSource {
     ManualReset,
+    ManualReload,
     HotReload,
 }
 
@@ -739,7 +740,10 @@ impl MessageHandler {
     }
 }
 
-fn restart_required_changes(old: &LoadedConfig, new: &LoadedConfig) -> Vec<&'static str> {
+pub(crate) fn restart_required_changes(
+    old: &LoadedConfig,
+    new: &LoadedConfig,
+) -> Vec<&'static str> {
     let mut changes = Vec::new();
     if old.app.daemon != new.app.daemon {
         changes.push("[daemon]");

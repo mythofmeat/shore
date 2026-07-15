@@ -139,6 +139,16 @@ async fn handle_generic_swp_command(
     conn: &mut SWPConnection,
     other: &CliCommand,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    // `config reload` is a two-round-trip interactive flow, not a single
+    // mapped command.
+    if let CliCommand::Config {
+        subcommand: Some(_),
+        ..
+    } = other
+    {
+        return handle_config_reload(conn, other).await;
+    }
+
     let json_mode = match other {
         CliCommand::Model {
             json, subcommand, ..
@@ -206,6 +216,82 @@ async fn handle_generic_swp_command(
         output::commands::print_config(&data, show_all);
     } else {
         output::format_command(name, &data);
+    }
+    Ok(())
+}
+
+/// Handle `shore config reload`: validate and reload config from disk, and
+/// activate pending system-prompt edits only after the user confirms.
+///
+/// Two round-trips: a check call reports which prompt-visible files differ
+/// from the active snapshot (any config error aborts here), then the apply
+/// call adopts the fresh config and — if confirmed — refreshes the snapshot.
+/// Refreshing changes the system prompt bytes, so the provider prompt cache
+/// goes cold and the next message pays a one-time cache write.
+async fn handle_config_reload(
+    conn: &mut SWPConnection,
+    cmd: &CliCommand,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let CliCommand::Config {
+        subcommand: Some(crate::cli::ConfigCommand::Reload { yes, json }),
+        ..
+    } = cmd
+    else {
+        return Err("config reload handler requires the reload subcommand".into());
+    };
+    let (auto_yes, json_mode) = (*yes, *json);
+
+    _ = conn
+        .send_command("config_reload", serde_json::json!({}))
+        .await?;
+    // Config errors surface here as a printed server error + Err.
+    let check = recv_command_data(conn).await?;
+
+    let changed: Vec<String> = check
+        .get("changed_prompt_files")
+        .and_then(serde_json::Value::as_array)
+        .map(|files| {
+            files
+                .iter()
+                .filter_map(|f| f.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let refresh_prompts = if changed.is_empty() {
+        false
+    } else if auto_yes {
+        true
+    } else if io::stdin().is_terminal() {
+        cli_err!("System prompt files differ from the active (cached) version:");
+        for file in &changed {
+            cli_err!("  {file}");
+        }
+        cli_err!("Activating them invalidates the warm prompt cache; the next message pays a one-time cache write.");
+        cli_err!("Activate now? [y/N]");
+        let mut answer = String::new();
+        let _ignored = io::stdin().read_line(&mut answer)?;
+        matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes")
+    } else {
+        cli_err!(
+            "System prompt files differ ({}); leaving them inactive — re-run with --yes to activate.",
+            changed.join(", ")
+        );
+        false
+    };
+
+    _ = conn
+        .send_command(
+            "config_reload",
+            serde_json::json!({ "apply": true, "refresh_prompts": refresh_prompts }),
+        )
+        .await?;
+    let data = recv_command_data(conn).await?;
+
+    if json_mode {
+        cli_out!("{}", serde_json::to_string_pretty(&data)?);
+    } else {
+        output::format_command("config_reload", &data);
     }
     Ok(())
 }

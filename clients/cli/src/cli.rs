@@ -277,7 +277,11 @@ pub(crate) enum CliCommand {
     },
 
     /// Show or modify configuration
+    #[command(args_conflicts_with_subcommands = true)]
     Config {
+        #[command(subcommand)]
+        subcommand: Option<ConfigCommand>,
+
         /// Optional key to get/set
         key: Option<String>,
 
@@ -634,6 +638,23 @@ pub(crate) enum MemoryCommand {
 }
 
 #[derive(Subcommand, Debug)]
+pub(crate) enum ConfigCommand {
+    /// Reload config files from disk and, after confirmation, activate any
+    /// pending system-prompt (workspace) edits. Prompt activation invalidates
+    /// the provider prompt cache: the next message pays a one-time cache
+    /// write.
+    Reload {
+        /// Refresh changed system prompt files without asking
+        #[arg(short = 'y', long)]
+        yes: bool,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand, Debug)]
 #[command(rename_all = "snake_case")]
 pub(crate) enum DebugCommand {
     /// Schedule a heartbeat tick to fire immediately
@@ -773,6 +794,10 @@ pub(crate) fn to_swp_command(cmd: &CliCommand) -> Option<(&'static str, serde_js
             path: true,
             check: false,
             reset: false,
+            ..
+        }
+        | CliCommand::Config {
+            subcommand: Some(_),
             ..
         } => None,
 
@@ -1926,6 +1951,53 @@ mod tests {
     }
 
     #[test]
+    fn parse_config_reload() {
+        let cli = parse(&["config", "reload"]);
+        assert_variant!(
+            &cli.command,
+            CliCommand::Config {
+                subcommand: Some(ConfigCommand::Reload { yes, json }),
+                ..
+            } => {
+                assert!(!yes);
+                assert!(!json);
+            }
+        );
+    }
+
+    #[test]
+    fn parse_config_reload_yes() {
+        let cli = parse(&["config", "reload", "-y"]);
+        assert_variant!(
+            &cli.command,
+            CliCommand::Config {
+                subcommand: Some(ConfigCommand::Reload { yes, .. }),
+                ..
+            } => assert!(yes)
+        );
+    }
+
+    #[test]
+    fn config_reload_maps_to_none() {
+        // Handled by a dedicated two-phase flow in run.rs, not the generic path.
+        let cmd = CliCommand::Config {
+            subcommand: Some(ConfigCommand::Reload {
+                yes: false,
+                json: false,
+            }),
+            key: None,
+            value: None,
+            path: false,
+            check: false,
+            reset: false,
+            json: false,
+            toml: false,
+            all: false,
+        };
+        assert!(to_swp_command(&cmd).is_none());
+    }
+
+    #[test]
     fn parse_config_path() {
         let cli = parse(&["config", "--path"]);
         assert_variant!(
@@ -2418,6 +2490,7 @@ mod tests {
     #[test]
     fn config_path_maps_to_none() {
         let cmd = CliCommand::Config {
+            subcommand: None,
             key: None,
             value: None,
             path: true,
@@ -2820,6 +2893,7 @@ mod tests {
                 json: false,
             },
             CliCommand::Config {
+                subcommand: None,
                 key: None,
                 value: None,
                 path: false,

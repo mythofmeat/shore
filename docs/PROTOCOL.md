@@ -857,6 +857,28 @@ with that role.
   `config_dir` / `data_dir` / `cache_dir` paths, `chat_models` (count),
   `memory_mode`.
 
+#### `config_reload`
+Manual config reload with optional activation of staged system-prompt edits
+for the current character. Two-phase, client-driven:
+- **check:** `{}` — validates the on-disk config (global + per-character
+  overlays) and reports without changing anything:
+  `{ "applied": false, "config_path": "…", "character": "…",
+  "changed_prompt_files": [ "SOUL.md", … ], "restart_required": [ "…" ] }`.
+  `changed_prompt_files` lists prompt-visible files whose canonical workspace
+  content differs from the `active_prompt/` snapshot; clients should confirm
+  with the user before activating them, since activation changes the system
+  prompt bytes and invalidates the provider prompt cache.
+- **apply:** `{ "apply": true, "refresh_prompts": bool }` — re-validates, then
+  refreshes the active prompt snapshot when `refresh_prompts` is true, then
+  adopts the fresh config (runtime overrides such as the session model are
+  preserved, unlike `config_reset`).
+- **data (apply):** `{ "applied": true, "config_path": "…", "character": "…",
+  "changed_prompt_files": [ … ], "prompts_refreshed": bool,
+  "restart_required": [ … ], "invalidated": { "character_discovery": bool,
+  "merged_character_configs": true, "removed_character_engines": [ … ] } }`.
+- **errors:** `invalid_request` when the on-disk config (or a character
+  overlay) fails to parse — nothing is applied.
+
 #### `tools`
 - **args:** none
 - **data:** the effective tool surface:

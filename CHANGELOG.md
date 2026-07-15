@@ -8,6 +8,19 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
 ## [Unreleased]
 
 ### Added
+- **`shore config reload`.** Manual config reload that surfaces parse errors
+  (and aborts) instead of logging them like the hot-reload watcher, and — new —
+  offers to activate edited system-prompt workspace files (`SOUL.md`,
+  `USER.md`, `AGENTS.md`, `TOOLS.md`, `HEARTBEAT.md`, `MEMORY.md`) without
+  waiting for the next compaction. The command lists which files differ from
+  the active (cached) snapshot and asks for confirmation first, since
+  activation changes the system prompt bytes and the next message pays a
+  one-time provider cache write (`--yes` skips the prompt). Config-only
+  reloads keep runtime overrides (unlike `shore config --reset`) and never
+  touch the prompt cache. Backed by a new two-phase `config_reload` SWP
+  command; a confirmed refresh also drops the cached heartbeat/keepalive
+  request so background pings rebuild with the new prompt instead of keeping
+  the dead cache prefix warm.
 - **Per-message model provenance.** Assistant messages (and regeneration
   alternatives) now persist the model id that minted them (`model`, next to
   the existing `provider_key` provider stamp) — chat replies, tool-loop

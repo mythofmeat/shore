@@ -446,6 +446,74 @@ async fn config_reset_refreshes_registry_runtime_state() {
 }
 
 #[tokio::test]
+async fn config_reload_check_is_side_effect_free_and_apply_propagates() {
+    let tmp = TempDir::new().unwrap();
+    let (mut handler, _rx, _direct_rx) = make_handler(&tmp, &["Alice"]).await;
+
+    std::fs::write(
+        tmp.path().join("config").join("config.toml"),
+        "[defaults]\nstream = false\n",
+    )
+    .unwrap();
+
+    // Check phase: reports without adopting the new config.
+    let check_result = handler
+        .dispatch_command(
+            &Command {
+                rid: None,
+                name: "config_reload".into(),
+                args: serde_json::json!({}),
+            },
+            &test_request_meta(Some("Alice"), None),
+        )
+        .await;
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "exhaustive-by-panic test arm"
+    )]
+    match check_result {
+        ServerMessage::CommandOutput(output) => {
+            assert_eq!(output.name, "config_reload");
+            assert_eq!(output.data["applied"], false);
+            assert_eq!(output.data["restart_required"], serde_json::json!([]));
+        }
+        other => panic!("Expected CommandOutput, got {other:?}"),
+    }
+    assert!(
+        handler.cmd_ctx.config.app.defaults.stream,
+        "check phase must not adopt the on-disk config"
+    );
+
+    // Apply phase: adopts the config handler-wide.
+    let apply_result = handler
+        .dispatch_command(
+            &Command {
+                rid: None,
+                name: "config_reload".into(),
+                args: serde_json::json!({ "apply": true }),
+            },
+            &test_request_meta(Some("Alice"), None),
+        )
+        .await;
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "exhaustive-by-panic test arm"
+    )]
+    match apply_result {
+        ServerMessage::CommandOutput(output) => {
+            assert_eq!(output.name, "config_reload");
+            assert_eq!(output.data["applied"], true);
+            assert_eq!(output.data["invalidated"]["merged_character_configs"], true);
+        }
+        other => panic!("Expected CommandOutput, got {other:?}"),
+    }
+    assert!(
+        !handler.cmd_ctx.config.app.defaults.stream,
+        "apply phase must propagate the fresh config to the handler"
+    );
+}
+
+#[tokio::test]
 async fn hot_reload_refreshes_global_and_character_config() {
     let tmp = TempDir::new().unwrap();
     let (mut handler, _rx, _direct_rx) = make_handler(&tmp, &["Alice"]).await;

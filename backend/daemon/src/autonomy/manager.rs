@@ -778,6 +778,16 @@ impl AutonomyManager {
         });
     }
 
+    /// Call after a manual prompt-snapshot refresh (`config_reload`). The
+    /// cached request still carries the pre-refresh system prompt bytes, so
+    /// replaying it for keepalive would keep a dead cache prefix warm. Drop it
+    /// so the next heartbeat/keepalive call rebuilds from disk.
+    pub fn notify_prompt_snapshot_refreshed(&self, character: &str) {
+        let _ignored = self.with_state(character, |s| {
+            invalidate_cached_request(s, character, CachedRequestInvalidationReason::PromptReload);
+        });
+    }
+
     /// Call after compaction fails. Resets the trigger so it can retry.
     pub fn notify_compaction_failed(&self, character: &str) {
         warn!(character, "Compaction failed — resetting trigger for retry");
@@ -1030,6 +1040,7 @@ enum CachedRequestInvalidationReason {
     IdleCompaction,
     PreDreamCompaction,
     DeepIdleArchive,
+    PromptReload,
 }
 
 /// Single point of invalidation for `AutonomyState::last_request`.

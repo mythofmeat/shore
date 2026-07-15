@@ -275,6 +275,7 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "config" => print_config(data, false),
         "tools" => print_tools(data),
         "config_check" => print_config_check(data),
+        "config_reload" => print_config_reload(data),
         "config_reset" => print_config_reset(data),
         "edit" => print_edit_confirmation(data),
         "delete" => print_delete_confirmation(data),
@@ -1772,6 +1773,41 @@ fn print_config_check(data: &serde_json::Value) {
         }
     }
     _ = writeln!(out);
+}
+
+/// Print config reload result: what was reloaded, whether system prompt
+/// edits were activated, and any sections that still need a daemon restart.
+fn print_config_reload(data: &serde_json::Value) {
+    let path = data["config_path"].as_str().unwrap_or("config");
+    cli_out!("Configuration reloaded from {path}");
+
+    let changed: Vec<&str> = data["changed_prompt_files"]
+        .as_array()
+        .map(|files| files.iter().filter_map(|f| f.as_str()).collect())
+        .unwrap_or_default();
+    if data["prompts_refreshed"].as_bool().unwrap_or(false) {
+        cli_out!(
+            "System prompt refreshed: {} (next message pays a one-time cache write)",
+            changed.join(", ")
+        );
+    } else if !changed.is_empty() {
+        cli_out!(
+            "System prompt files left inactive: {} (activate with `shore config reload --yes` or at the next compaction)",
+            changed.join(", ")
+        );
+    } else {
+        // No pending prompt edits — nothing to report.
+    }
+
+    if let Some(sections) = data["restart_required"].as_array() {
+        if !sections.is_empty() {
+            let list: Vec<&str> = sections.iter().filter_map(|s| s.as_str()).collect();
+            cli_out!(
+                "Restart shore-daemon to apply startup-owned changes: {}",
+                list.join(", ")
+            );
+        }
+    }
 }
 
 /// Print config reset confirmation.

@@ -256,6 +256,40 @@ pub fn queue_deferred_edit(character_data_dir: &Path, requested_path: &str) -> i
     Ok(())
 }
 
+/// Effective prompt-visible content of a file: present and non-blank, matching
+/// the load semantics of [`load_active_prompt_file`] / [`load_memory_index`].
+fn effective_content(path: &Path) -> Option<String> {
+    fs::read_to_string(path)
+        .ok()
+        .filter(|content| !content.trim().is_empty())
+}
+
+/// Report which prompt-visible files would change if the active prompt
+/// snapshot were refreshed from the canonical config workspace right now.
+///
+/// Compares effective content (missing and blank are equivalent), but any
+/// byte-level difference between two non-blank versions counts — the provider
+/// prompt cache is keyed on exact bytes.
+pub fn changed_prompt_files(
+    character_data_dir: &Path,
+    config_dir: &Path,
+    char_name: &str,
+) -> Vec<String> {
+    let mut changed = Vec::new();
+    let paths = PROTECTED_PATHS
+        .iter()
+        .copied()
+        .chain(std::iter::once(MEMORY_INDEX_DEFERRED_PATH));
+    for path in paths {
+        let canonical = canonical_prompt_visible_file(config_dir, char_name, path);
+        let active = active_prompt_file(character_data_dir, active_prompt_snapshot_name(path));
+        if effective_content(&canonical) != effective_content(&active) {
+            changed.push(path.to_owned());
+        }
+    }
+    changed
+}
+
 /// Refresh the active prompt snapshot from the canonical config workspace and
 /// clear any deferred-edit queue.
 pub fn apply_deferred_edits(
@@ -472,6 +506,56 @@ mod tests {
             "new user"
         );
         assert!(!char_dir.join("deferred_edits.jsonl").exists());
+    }
+
+    #[test]
+    fn test_changed_prompt_files_reports_workspace_edits() {
+        let tmp = TempDir::new().unwrap();
+        let char_dir = tmp.path().join("data").join("TestChar");
+        let config_dir = tmp.path().join("config");
+        let workspace = character_workspace_dir(&config_dir, "TestChar");
+
+        fs::create_dir_all(&workspace).unwrap();
+        fs::write(workspace.join(SOUL_FILE), "soul v1").unwrap();
+        fs::write(workspace.join(MEMORY_INDEX_FILE), "index v1").unwrap();
+
+        ensure_active_prompt_snapshot(&char_dir, &config_dir, "TestChar").unwrap();
+        assert!(changed_prompt_files(&char_dir, &config_dir, "TestChar").is_empty());
+
+        // Edit two workspace files; only those show as changed.
+        fs::write(workspace.join(SOUL_FILE), "soul v2").unwrap();
+        fs::write(workspace.join(MEMORY_INDEX_FILE), "index v2").unwrap();
+        assert_eq!(
+            changed_prompt_files(&char_dir, &config_dir, "TestChar"),
+            vec![SOUL_FILE.to_owned(), MEMORY_INDEX_FILE.to_owned()]
+        );
+
+        // Refresh clears the delta.
+        apply_deferred_edits(&char_dir, &config_dir, "TestChar").unwrap();
+        assert!(changed_prompt_files(&char_dir, &config_dir, "TestChar").is_empty());
+    }
+
+    #[test]
+    fn test_changed_prompt_files_treats_blank_as_missing() {
+        let tmp = TempDir::new().unwrap();
+        let char_dir = tmp.path().join("data").join("TestChar");
+        let config_dir = tmp.path().join("config");
+        let workspace = character_workspace_dir(&config_dir, "TestChar");
+
+        fs::create_dir_all(&workspace).unwrap();
+        ensure_active_prompt_snapshot(&char_dir, &config_dir, "TestChar").unwrap();
+
+        // Blank canonical vs. absent snapshot: both load as None, so no delta.
+        fs::write(workspace.join(SOUL_FILE), "  \n").unwrap();
+        assert!(!changed_prompt_files(&char_dir, &config_dir, "TestChar")
+            .contains(&SOUL_FILE.to_owned()));
+
+        // The deferred memory-index sentinel (empty active file) vs. real
+        // canonical content must count as a change.
+        fs::write(workspace.join(MEMORY_INDEX_FILE), "fresh index").unwrap();
+        ensure_deferred_memory_index_sentinel(&char_dir).unwrap();
+        assert!(changed_prompt_files(&char_dir, &config_dir, "TestChar")
+            .contains(&MEMORY_INDEX_FILE.to_owned()));
     }
 
     #[test]

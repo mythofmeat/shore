@@ -671,6 +671,142 @@ fn config_reset_clears_active_model_and_reloads() {
     );
 }
 
+/// Seed a canonical workspace + active snapshot for TestChar, then edit the
+/// workspace copy so a prompt delta is pending. Returns the character data dir.
+fn seed_pending_prompt_edit(ctx: &CommandContext) -> std::path::PathBuf {
+    let config_dir = ctx.config.dirs.config.clone();
+    let char_data_dir = ctx.config.dirs.data.join("TestChar");
+    let workspace = shore_config::character_workspace_dir(&config_dir, "TestChar");
+
+    std::fs::create_dir_all(&workspace).unwrap();
+    std::fs::write(workspace.join(shore_config::SOUL_FILE), "soul v1").unwrap();
+    crate::memory::deferred_edits::ensure_active_prompt_snapshot(
+        &char_data_dir,
+        &config_dir,
+        "TestChar",
+    )
+    .unwrap();
+    std::fs::write(workspace.join(shore_config::SOUL_FILE), "soul v2").unwrap();
+    char_data_dir
+}
+
+fn active_soul(char_data_dir: &std::path::Path) -> String {
+    std::fs::read_to_string(crate::memory::deferred_edits::active_prompt_file(
+        char_data_dir,
+        shore_config::SOUL_FILE,
+    ))
+    .unwrap()
+}
+
+#[test]
+fn config_reload_check_reports_changes_without_applying() {
+    let tmp = TempDir::new().unwrap();
+    let (_engine, mut ctx, _rx) = make_ctx(&tmp);
+
+    std::fs::create_dir_all(tmp.path().join("config")).unwrap();
+    std::fs::write(
+        tmp.path().join("config").join("config.toml"),
+        "[defaults]\nstream = false\n",
+    )
+    .unwrap();
+    ctx.config.app.defaults.stream = true;
+    let char_data_dir = seed_pending_prompt_edit(&ctx);
+
+    let result = config_reload(&mut ctx, &json!({})).unwrap();
+
+    assert_eq!(result["applied"], false);
+    assert_eq!(result["changed_prompt_files"], json!(["SOUL.md"]));
+    assert!(
+        ctx.config.app.defaults.stream,
+        "check phase must not adopt the on-disk config"
+    );
+    assert_eq!(
+        active_soul(&char_data_dir),
+        "soul v1",
+        "check phase must not touch the active snapshot"
+    );
+}
+
+#[test]
+fn config_reload_apply_refreshes_prompts_and_keeps_overrides() {
+    let tmp = TempDir::new().unwrap();
+    let (_engine, mut ctx, _rx) = make_ctx(&tmp);
+
+    std::fs::create_dir_all(tmp.path().join("config")).unwrap();
+    std::fs::write(
+        tmp.path().join("config").join("config.toml"),
+        "[defaults]\nstream = false\n",
+    )
+    .unwrap();
+    ctx.config.app.defaults.stream = true;
+    ctx.active_model = Some("custom-override".into());
+    let char_data_dir = seed_pending_prompt_edit(&ctx);
+
+    let result =
+        config_reload(&mut ctx, &json!({ "apply": true, "refresh_prompts": true })).unwrap();
+
+    assert_eq!(result["applied"], true);
+    assert_eq!(result["prompts_refreshed"], true);
+    assert_eq!(result["changed_prompt_files"], json!(["SOUL.md"]));
+    assert_eq!(active_soul(&char_data_dir), "soul v2");
+    assert!(!ctx.config.app.defaults.stream, "config should be adopted");
+    assert_eq!(
+        ctx.active_model.as_deref(),
+        Some("custom-override"),
+        "reload preserves runtime overrides (unlike config_reset)"
+    );
+}
+
+#[test]
+fn config_reload_apply_without_refresh_leaves_snapshot_deferred() {
+    let tmp = TempDir::new().unwrap();
+    let (_engine, mut ctx, _rx) = make_ctx(&tmp);
+
+    std::fs::create_dir_all(tmp.path().join("config")).unwrap();
+    std::fs::write(tmp.path().join("config").join("config.toml"), "").unwrap();
+    let char_data_dir = seed_pending_prompt_edit(&ctx);
+
+    let result = config_reload(&mut ctx, &json!({ "apply": true })).unwrap();
+
+    assert_eq!(result["applied"], true);
+    assert_eq!(result["prompts_refreshed"], false);
+    assert_eq!(result["changed_prompt_files"], json!(["SOUL.md"]));
+    assert_eq!(
+        active_soul(&char_data_dir),
+        "soul v1",
+        "prompt edits stay deferred when refresh was declined"
+    );
+}
+
+#[test]
+fn config_reload_aborts_on_invalid_config() {
+    let tmp = TempDir::new().unwrap();
+    let (_engine, mut ctx, _rx) = make_ctx(&tmp);
+
+    std::fs::create_dir_all(tmp.path().join("config")).unwrap();
+    std::fs::write(
+        tmp.path().join("config").join("config.toml"),
+        "this is not valid toml [",
+    )
+    .unwrap();
+    let char_data_dir = seed_pending_prompt_edit(&ctx);
+    ctx.config.app.defaults.stream = true;
+
+    let err =
+        config_reload(&mut ctx, &json!({ "apply": true, "refresh_prompts": true })).unwrap_err();
+
+    assert_eq!(err.0, shore_protocol::error::ErrorCode::InvalidRequest);
+    assert!(
+        ctx.config.app.defaults.stream,
+        "invalid config must leave runtime config untouched"
+    );
+    assert_eq!(
+        active_soul(&char_data_dir),
+        "soul v1",
+        "invalid config must abort before the prompt refresh"
+    );
+}
+
 #[test]
 fn rfc3339_comparison_handles_mixed_timezones() {
     let utc = "2026-01-01T00:00:00Z";
