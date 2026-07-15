@@ -1397,6 +1397,29 @@ fn transmit_image_ref(
     }
 }
 
+/// The switch-ready identifier for a `list_models` row — what completion
+/// inserts and `switch_model` receives. The daemon's `qualified_name` is
+/// canonical and never ambiguous (`chat.<provider>.<name>` for static
+/// entries, `provider:model_id` for discovered ones); a bare `name` is not —
+/// two providers can expose the same upstream id (e.g.
+/// `deepseek:deepseek-v4-pro` vs `opencode-go:deepseek-v4-pro`), which the
+/// daemon rejects as ambiguous. Compose `provider:model_id`, then fall back
+/// to the bare name, for daemons that omit `qualified_name`.
+fn model_switch_name(model: &serde_json::Value) -> Option<String> {
+    if let Some(qualified) = model.get("qualified_name").and_then(|v| v.as_str()) {
+        return Some(qualified.to_string());
+    }
+    let provider = model.get("provider").and_then(|v| v.as_str());
+    let model_id = model.get("model_id").and_then(|v| v.as_str());
+    if let (Some(provider), Some(model_id)) = (provider, model_id) {
+        return Some(format!("{provider}:{model_id}"));
+    }
+    model
+        .get("name")
+        .and_then(|v| v.as_str())
+        .map(str::to_owned)
+}
+
 fn active_model_candidate_name(active: &str, model: &serde_json::Value) -> Option<String> {
     let name = model.get("name").and_then(|v| v.as_str())?;
     let mut identifiers = vec![name];
@@ -1408,15 +1431,19 @@ fn active_model_candidate_name(active: &str, model: &serde_json::Value) -> Optio
         if let Some(provider) = model.get("provider").and_then(|v| v.as_str()) {
             let provider_model = format!("{provider}:{model_id}");
             if App::model_identifier_matches(active, &provider_model) {
-                return Some(name.to_string());
+                return model_switch_name(model);
             }
         }
     }
 
+    // Return the switch name, not the bare `name`: these strings become
+    // `active_model_names` match keys, and a bare key would mark every
+    // provider's copy of a shared upstream id as active.
     identifiers
         .into_iter()
         .any(|identifier| App::model_identifier_matches(active, identifier))
-        .then(|| name.to_string())
+        .then(|| model_switch_name(model))
+        .flatten()
 }
 
 pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffect {
@@ -1722,12 +1749,9 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 }
                 "list_models" => {
                     if let Some(models) = co.data.get("models").and_then(|v| v.as_array()) {
-                        let names: Vec<&str> = models
-                            .iter()
-                            .filter_map(|m| m.get("name").and_then(|n| n.as_str()))
-                            .collect();
-                        // Cache model names for tab completion
-                        app.model_names = names.iter().map(|n| n.to_string()).collect();
+                        // Cache switch-ready identifiers for tab completion —
+                        // bare names collide when providers share an upstream id.
+                        app.model_names = models.iter().filter_map(model_switch_name).collect();
                         let active = co
                             .data
                             .get("active")
@@ -1773,11 +1797,25 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                                     let n = m.get("name").and_then(|v| v.as_str()).unwrap_or("?");
                                     let provider =
                                         m.get("provider").and_then(|v| v.as_str()).unwrap_or("?");
+                                    // Show the provider-qualified upstream identity on
+                                    // every row: it keeps same-named models from
+                                    // different providers tellable apart, in the form
+                                    // `switch_model` accepts.
+                                    let qualified = match m.get("model_id").and_then(|v| v.as_str())
+                                    {
+                                        Some(model_id) => format!("{provider}:{model_id}"),
+                                        None => provider.to_string(),
+                                    };
                                     let source =
                                         m.get("source").and_then(|v| v.as_str()).unwrap_or("");
                                     let hidden =
                                         m.get("hidden").and_then(|v| v.as_bool()).unwrap_or(false);
-                                    let marker = if app.is_active_model_candidate(n) {
+                                    // Match on the switch name rather than the bare
+                                    // name so only the active provider's copy of a
+                                    // shared upstream id gets the marker.
+                                    let marker = if model_switch_name(m)
+                                        .is_some_and(|s| app.is_active_model_candidate(&s))
+                                    {
                                         "*"
                                     } else {
                                         " "
@@ -1789,7 +1827,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                                     } else {
                                         String::new()
                                     };
-                                    format!("  {marker} {n:<28}{provider}{tag}")
+                                    format!("  {marker} {n:<28}{qualified}{tag}")
                                 })
                                 .collect::<Vec<_>>()
                                 .join("\n");
@@ -2359,11 +2397,69 @@ mod redraw_tests {
         );
 
         assert_eq!(effect.redraw, RedrawEffect::Immediate);
-        assert_eq!(app.completion.candidates, vec!["alpha", "beta", "reset"]);
+        assert_eq!(
+            app.completion.candidates,
+            vec!["chat.anthropic.alpha", "chat.anthropic.beta", "reset"]
+        );
         assert!(app.is_active_model_candidate("beta"));
         assert!(!app.entries.iter().any(|entry| {
             matches!(entry, ConversationEntry::System { content, .. } if content.contains("Models:"))
         }));
+    }
+
+    /// Two providers exposing the same upstream id must yield distinct,
+    /// provider-qualified completion entries — switching by the bare name
+    /// is rejected by the daemon as ambiguous.
+    #[test]
+    fn list_models_caches_provider_qualified_switch_names() {
+        let mut app = App {
+            show_model_list: true,
+            ..App::default()
+        };
+
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::CommandOutput(CommandOutput {
+                rid: None,
+                name: "list_models".into(),
+                data: serde_json::json!({
+                    "models": [
+                        {
+                            "name": "deepseek-v4-pro",
+                            "qualified_name": "deepseek:deepseek-v4-pro",
+                            "provider": "deepseek",
+                            "model_id": "deepseek-v4-pro",
+                            "source": "discovered"
+                        },
+                        {
+                            "name": "deepseek-v4-pro",
+                            "qualified_name": "opencode-go:deepseek-v4-pro",
+                            "provider": "opencode-go",
+                            "model_id": "deepseek-v4-pro",
+                            "source": "discovered"
+                        }
+                    ]
+                }),
+            }),
+        );
+
+        assert_eq!(
+            app.model_names,
+            vec!["deepseek:deepseek-v4-pro", "opencode-go:deepseek-v4-pro"]
+        );
+        // The printed list shows the provider-qualified identity per row.
+        let listing = app
+            .entries
+            .iter()
+            .find_map(|entry| match entry {
+                ConversationEntry::System { content, .. } if content.contains("Models:") => {
+                    Some(content.clone())
+                }
+                _ => None,
+            })
+            .expect("`:model` prints the model list");
+        assert!(listing.contains("deepseek:deepseek-v4-pro"), "{listing}");
+        assert!(listing.contains("opencode-go:deepseek-v4-pro"), "{listing}");
     }
 
     #[test]

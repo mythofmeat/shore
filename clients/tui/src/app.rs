@@ -916,6 +916,10 @@ pub struct App {
     pub connection_status: ConnectionStatus,
     pub character_name: String,
     pub characters: Vec<CharacterInfo>,
+    /// Switch-ready model identifiers from `list_models` — the daemon's
+    /// `qualified_name` (static `chat.<provider>.<name>` or discovered
+    /// `provider:model_id`), never the bare name, which is ambiguous when
+    /// two providers expose the same upstream id.
     pub model_names: Vec<String>,
     pub active_model_names: Vec<String>,
     pub show_model_list: bool,
@@ -2065,11 +2069,13 @@ impl App {
                 }
                 "model" => {
                     self.completion.header = Some("model".into());
+                    // Substring match, mirroring the model submenu: qualified
+                    // identifiers put the provider before the model id.
                     let mut candidates: Vec<String> = self
                         .model_names
                         .iter()
                         .filter(|n| {
-                            arg.is_empty() || n.to_lowercase().starts_with(&arg.to_lowercase())
+                            arg.is_empty() || n.to_lowercase().contains(&arg.to_lowercase())
                         })
                         .map(|n| format!("model {n}"))
                         .collect();
@@ -2205,10 +2211,13 @@ impl App {
 
         match parent.as_str() {
             "model" => {
+                // Qualified identifiers put the provider first, so a prefix
+                // filter would force typing the provider to reach the model
+                // id — match anywhere in the string instead.
                 let mut candidates: Vec<String> = self
                     .model_names
                     .iter()
-                    .filter(|n| filter.is_empty() || n.to_lowercase().starts_with(&filter))
+                    .filter(|n| filter.is_empty() || n.to_lowercase().contains(&filter))
                     .cloned()
                     .collect();
                 if filter.is_empty() || "reset".starts_with(&filter) {
