@@ -61,13 +61,13 @@ proptest = "1"
 # after cargo-semver-checks inflated them into the double digits; their
 # versions here are local-only and just track each crate's own Cargo.toml.
 shore-protocol = { path = "core/protocol", version = "0.12.0" }
-shore-config = { path = "core/config", version = "0.16.0" }
-shore-swp-client = { path = "core/swp-client", version = "0.3.13" }
+shore-config = { path = "core/config", version = "0.17.0" }
+shore-swp-client = { path = "core/swp-client", version = "0.3.14" }
 shore-diagnostics = { path = "backend/diagnostics", version = "0.2.4" }
-shore-llm = { path = "backend/llm", version = "0.1.9" }
-shore-ledger = { path = "backend/ledger", version = "0.1.13" }
-shore-swp-server = { path = "backend/swp-server", version = "0.1.9" }
-shore-daemon = { path = "backend/daemon", version = "0.1.21" }
+shore-llm = { path = "backend/llm", version = "0.1.10" }
+shore-ledger = { path = "backend/ledger", version = "0.1.14" }
+shore-swp-server = { path = "backend/swp-server", version = "0.1.10" }
+shore-daemon = { path = "backend/daemon", version = "0.2.0" }
 # Intentionally path-only (no `version`). shore-test-harness is a dev-only
 # crate that shore-daemon pulls in as a dev-dependency, and it depends
 # back on shore-daemon — a versioned cycle there causes

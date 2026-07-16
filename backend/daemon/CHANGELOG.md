@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/mythofmeat/shore-core/compare/shore-daemon-v0.1.21...shore-daemon-v0.2.0) - 2026-07-16
+
+### Added
+
+- *(exec)* [**breaking**] sandbox exec subprocesses with Landlock + seccomp ([#241](https://github.com/mythofmeat/shore-core/pull/241)) ([#307](https://github.com/mythofmeat/shore-core/pull/307))
+- *(memory)* [**breaking**] remove HEARTBEAT.md; MEMORY.md is the single active-memory surface ([#321](https://github.com/mythofmeat/shore-core/pull/321))
+- *(subagents)* add {{file:}} and {{active_history:}} prompt macros ([#320](https://github.com/mythofmeat/shore-core/pull/320))
+
 ## [0.1.21](https://github.com/mythofmeat/shore-core/compare/shore-daemon-v0.1.20...shore-daemon-v0.1.21) - 2026-07-16
 
 ### Other

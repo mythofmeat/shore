@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0](https://github.com/mythofmeat/shore-core/compare/shore-config-v0.16.0...shore-config-v0.17.0) - 2026-07-16
+
+### Added
+
+- *(exec)* [**breaking**] sandbox exec subprocesses with Landlock + seccomp ([#241](https://github.com/mythofmeat/shore-core/pull/241)) ([#307](https://github.com/mythofmeat/shore-core/pull/307))
+- *(memory)* [**breaking**] remove HEARTBEAT.md; MEMORY.md is the single active-memory surface ([#321](https://github.com/mythofmeat/shore-core/pull/321))
+
 ## [0.16.0](https://github.com/mythofmeat/shore-core/compare/shore-config-v0.15.3...shore-config-v0.16.0) - 2026-06-22
 
 ### Added
