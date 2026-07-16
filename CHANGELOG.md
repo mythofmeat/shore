@@ -89,6 +89,21 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
   per-character timeline can thrash) and the dormant-ping path warns instead of
   burying `cache_read: 0` in a success line.
 
+### Changed
+- **Compaction can now write all workspace-root prompt files.** The compaction
+  tool loop previously accepted writes only under `memory/` and to the
+  workspace-root `MEMORY.md`; writes to `SOUL.md`, `USER.md`, `AGENTS.md`,
+  `TOOLS.md`, and `HEARTBEAT.md` were rejected at the dispatch wrapper even
+  though the compaction prompt directs durable facts and future plans to those
+  files. All six root prompt files are now writable during compaction. Root
+  prompt-file writes go through the same deferred-edit queue as chat-turn
+  edits, so they become prompt-active at the boundary the pass creates —
+  cache behavior is unchanged. Daemon-owned artifacts (`DREAMS.md`,
+  dreaming-owned paths under `memory/`) and everything else outside `memory/`
+  remain blocked. The compaction prompt also now tells the model to delete
+  obsolete or corrected facts instead of preserving everything, and uses
+  `{{user}}` instead of a hard-coded user name.
+
 ### Fixed
 - **A generated image on an assistant turn no longer wedges the conversation.**
   Since heartbeat-generated images started persisting onto the autonomous

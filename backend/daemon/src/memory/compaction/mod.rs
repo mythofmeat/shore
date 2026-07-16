@@ -333,11 +333,12 @@ impl CompactionManager {
         let normalized = path.trim().trim_start_matches("./").replace('\\', "/");
 
         // Defense-in-depth: reject absolute paths and any `..` traversal
-        // component outright. A path like `memory/../../SOUL.md` would
+        // component outright. A path like `memory/../../secrets.md` would
         // otherwise satisfy the `memory/` prefix check below yet escape the
         // memory root. resolve_path enforces this again at write time, but
         // rejecting here keeps this documented compaction guard self-contained
-        // and fails closed at the layer meant to protect workspace-root files.
+        // and fails closed at the layer meant to keep writes inside the
+        // workspace.
         for component in Path::new(&normalized).components() {
             match component {
                 Component::ParentDir | Component::RootDir | Component::Prefix(_) => return false,
@@ -353,8 +354,17 @@ impl CompactionManager {
             return true;
         }
 
-        // All other compaction writes must live under memory/. This keeps the
-        // protected workspace-root files (SOUL.md, USER.md, AGENTS.md, etc.)
+        // The other workspace-root prompt files (SOUL.md, USER.md, AGENTS.md,
+        // TOOLS.md, HEARTBEAT.md) are allowed too: the compaction prompt asks
+        // the model to distill durable facts into them. These writes go
+        // through the same deferred-edit queue as chat-turn edits, so they
+        // only become prompt-active at the boundary this pass creates.
+        if crate::memory::deferred_edits::is_prompt_visible_path(&normalized) {
+            return true;
+        }
+
+        // All other compaction writes must live under memory/. This keeps
+        // daemon-owned artifacts (DREAMS.md) and arbitrary workspace paths
         // out of compaction's reach.
         let Some(rest) = normalized.strip_prefix("memory/") else {
             return false;
@@ -1014,9 +1024,9 @@ fn extract_memory_write_intent(name: &str, input: &Value) -> Option<(String, Opt
 ///   still recorded in `dry_run_previews` for the returned outcome.
 /// * For live `write`/`edit`, the compaction path filter
 ///   ([`CompactionManager::write_allowed_path`]) rejects writes outside
-///   `memory/*` / `MEMORY.md`, and the resolved file's previous content
-///   is snapshotted so a downstream archive failure can roll the writes
-///   back.
+///   `memory/*` and the workspace-root prompt files, and the resolved
+///   file's previous content is snapshotted so a downstream archive
+///   failure can roll the writes back.
 async fn dispatch_compaction_tool(
     name: &str,
     input: &Value,
@@ -1083,7 +1093,7 @@ async fn dispatch_compaction_tool(
             state.rejected_paths.push(display_path.clone());
             return (
                 format!(
-                    "{name} blocked: compaction may only write under memory/* or to MEMORY.md (got: {display_path})"
+                    "{name} blocked: compaction may only write under memory/* or to the workspace-root prompt files (MEMORY.md, SOUL.md, USER.md, AGENTS.md, TOOLS.md, HEARTBEAT.md) (got: {display_path})"
                 ),
                 true,
             );
@@ -1669,6 +1679,17 @@ mod tests {
     }
 
     #[test]
+    fn test_write_allowed_path_accepts_root_prompt_files() {
+        assert!(CompactionManager::write_allowed_path("SOUL.md"));
+        assert!(CompactionManager::write_allowed_path("USER.md"));
+        assert!(CompactionManager::write_allowed_path("AGENTS.md"));
+        assert!(CompactionManager::write_allowed_path("TOOLS.md"));
+        assert!(CompactionManager::write_allowed_path("HEARTBEAT.md"));
+        assert!(CompactionManager::write_allowed_path("workspace/SOUL.md"));
+        assert!(CompactionManager::write_allowed_path("./USER.md"));
+    }
+
+    #[test]
     fn test_write_allowed_path_rejects_traversal_and_absolute() {
         // `..` escapes that would otherwise satisfy the memory/ prefix.
         assert!(!CompactionManager::write_allowed_path(
@@ -1690,7 +1711,9 @@ mod tests {
 
     #[test]
     fn test_write_allowed_path_rejects_outside_memory() {
-        assert!(!CompactionManager::write_allowed_path("SOUL.md"));
+        assert!(!CompactionManager::write_allowed_path("DREAMS.md"));
+        assert!(!CompactionManager::write_allowed_path("notes.md"));
+        assert!(!CompactionManager::write_allowed_path("topics/foo.md"));
         assert!(!CompactionManager::write_allowed_path("memory/dreams.md"));
         assert!(!CompactionManager::write_allowed_path("memory/"));
     }
@@ -1972,14 +1995,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_tool_loop_disallowed_paths_do_not_count_as_writes() {
-        // The model attempts to write protected workspace files only.
-        // None of them should count toward "writes_applied", so the
+        // The model attempts to write daemon-owned or out-of-scope paths
+        // only. None of them should count toward "writes_applied", so the
         // outcome is NoMemoryWrites with `rejected_paths` populated.
         let llm = ScriptedLlm::new(vec![
             tool_use_round(&[
-                ("SOUL.md", "should be blocked"),
-                ("workspace/USER.md", "should be blocked"),
                 ("DREAMS.md", "should be blocked"),
+                ("notes.md", "should be blocked"),
+                ("memory/dreaming/log.md", "should be blocked"),
                 ("memory/.dreams/notes.md", "should be blocked"),
                 ("topics/foo.md", "missing memory/ prefix"),
             ]),
@@ -2022,8 +2045,8 @@ mod tests {
             result,
             CompactionOutcome::NoMemoryWrites(r) => {
                 assert_eq!(r.rejected_paths.len(), 5);
-                assert!(r.rejected_paths.iter().any(|p| p == "SOUL.md"));
                 assert!(r.rejected_paths.iter().any(|p| p == "DREAMS.md"));
+                assert!(r.rejected_paths.iter().any(|p| p == "notes.md"));
                 assert!(r
                     .rejected_paths
                     .iter()
@@ -2037,10 +2060,9 @@ mod tests {
             conv_mgr.archived_calls().is_empty(),
             "rejected writes must not trigger archive"
         );
-        // No protected files were touched.
-        assert!(!tmp.path().join("SOUL.md").exists());
-        assert!(!tmp.path().join("USER.md").exists());
+        // No blocked files were touched.
         assert!(!tmp.path().join("DREAMS.md").exists());
+        assert!(!tmp.path().join("notes.md").exists());
     }
 
     #[tokio::test]
@@ -2100,7 +2122,8 @@ mod tests {
         let llm = ScriptedLlm::new(vec![
             tool_use_round(&[
                 ("MEMORY.md", "# Memory Index\n\n## Throughline\n- ongoing"),
-                ("SOUL.md", "blocked"),
+                ("SOUL.md", "# Soul\n\n- root prompt files are writable"),
+                ("DREAMS.md", "blocked"),
                 ("memory/notes/ok.md", "# OK\n- accepted"),
             ]),
             end_turn("done"),
@@ -2141,18 +2164,22 @@ mod tests {
             outcome,
             CompactionOutcome::Compacted(r) => r,
         );
-        assert_eq!(result.memory_files_written.len(), 2);
+        assert_eq!(result.memory_files_written.len(), 3);
         assert!(result.memory_files_written.iter().any(|p| p == "MEMORY.md"));
+        assert!(result.memory_files_written.iter().any(|p| p == "SOUL.md"));
         assert!(result
             .memory_files_written
             .iter()
             .any(|p| p == "memory/notes/ok.md"));
 
-        // MEMORY.md lands at workspace root, memory/notes/ok.md inside memory/.
+        // MEMORY.md and SOUL.md land at the workspace root,
+        // memory/notes/ok.md inside memory/. DREAMS.md stays blocked.
         let mem = std::fs::read_to_string(tmp.path().join("MEMORY.md")).unwrap();
         assert!(mem.contains("Throughline"));
+        let soul = std::fs::read_to_string(tmp.path().join("SOUL.md")).unwrap();
+        assert!(soul.contains("writable"));
         assert!(store.read("notes/ok.md").await.is_ok());
-        assert!(!tmp.path().join("SOUL.md").exists());
+        assert!(!tmp.path().join("DREAMS.md").exists());
     }
 
     #[tokio::test]
