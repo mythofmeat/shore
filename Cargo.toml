@@ -67,7 +67,7 @@ shore-diagnostics = { path = "backend/diagnostics", version = "0.2.4" }
 shore-llm = { path = "backend/llm", version = "0.1.9" }
 shore-ledger = { path = "backend/ledger", version = "0.1.13" }
 shore-swp-server = { path = "backend/swp-server", version = "0.1.9" }
-shore-daemon = { path = "backend/daemon", version = "0.1.20" }
+shore-daemon = { path = "backend/daemon", version = "0.1.21" }
 # Intentionally path-only (no `version`). shore-test-harness is a dev-only
 # crate that shore-daemon pulls in as a dev-dependency, and it depends
 # back on shore-daemon — a versioned cycle there causes
