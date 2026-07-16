@@ -1,16 +1,32 @@
-# Shore — single-host personal deployment.
+# Shore — disposable test instance.
 #
-# Run:   docker compose up -d --build
-# Logs:  docker compose logs -f daemon
-# CLI:   docker compose exec daemon shore status
-#        (or just use a host-built `shore` — see network_mode below)
+# This is not a production deployment. It exists to answer one question:
+# "does a build of shore-daemon actually boot and work?" Config, data, and
+# cache live under /tmp — deliberately NOT ~/.config/shore, ~/.local/share/shore,
+# ~/.cache/shore — so this can never collide with (or accidentally mutate) a
+# real deployment on the same machine, and a host reboot wipes it back to a
+# clean slate for free.
+#
+# First run — Docker bind-mounts create missing host dirs as root, which the
+# container's uid-1000 user then can't write to, so create them yourself first:
+#   mkdir -p /tmp/shore-test/{config,data,cache}
+#
+# The daemon self-seeds a default config.toml on first launch (see
+# create_default_config() in core/config/src/lib.rs), so it boots with zero
+# setup. To exercise real provider calls, drop a config.toml + .env (API
+# keys) into /tmp/shore-test/config, same as a real deployment would.
+#
+# Run:    docker compose up -d --build
+# Logs:   docker compose logs -f daemon
+# CLI:    docker compose exec daemon shore status
+# Reset:  rm -rf /tmp/shore-test   (also gone on next host reboot)
 
 services:
   daemon:
     build:
       context: .
       target: slim
-    image: shore-daemon:slim
+    image: shore-daemon:test
 
     # Host networking, deliberately.
     #
@@ -19,34 +35,40 @@ services:
     # networking the daemon would have to bind 0.0.0.0 for a published port to
     # reach it, which trips the guard and forces
     # `unsafe_allow_remote_access = true` — a flag whose whole job is to
-    # acknowledge unauthenticated remote TCP — even when compose only publishes
-    # to 127.0.0.1. Host networking keeps the default
-    # `addr = "127.0.0.1:7320"` honest: the listener really is host loopback,
-    # the guard really does pass, and your config.toml needs no changes.
+    # acknowledge unauthenticated remote TCP. Host networking keeps
+    # `addr = "127.0.0.1:..."` honest: the listener really is host loopback
+    # and the guard really does pass.
     #
-    # Cost: no compose network isolation, and Linux-only. If you later add a
-    # shore-matrix service, either give it host networking too (both then meet
-    # at 127.0.0.1:7320) or switch to bridge and accept the flag.
+    # SHORE_ADDR picks a different port than the default 127.0.0.1:7320 so
+    # this throwaway instance can run alongside a real daemon on the same
+    # host instead of fighting it for the port.
+    #
+    # Cost: no compose network isolation, and Linux-only.
     network_mode: host
+    environment:
+      - SHORE_ADDR=127.0.0.1:7321
 
     # The daemon supervises the Bun sidecar as a child process; init reaps it
     # and makes SIGTERM propagate on `compose down`.
     init: true
 
-    # Must match the host owner of ~/.config/shore. The workspace is a real git
-    # repo — a UID mismatch breaks commits and memory writes.
+    # Must match the owner of the /tmp/shore-test dirs created above. The
+    # workspace is a real git repo — a UID mismatch breaks commits and memory
+    # writes.
     user: "1000:1000"
 
     volumes:
-      # Config dir carries config.toml, .env (provider keys — dotenvy loads it
-      # from here, so no separate env_file is needed), and every character's
-      # workspace/ + memory git repo. Read-write: the daemon owns this state.
-      - ${HOME}/.config/shore:/config
-      - ${HOME}/.local/share/shore:/data
-      - ${HOME}/.cache/shore:/cache
+      # Config dir carries config.toml, .env (provider keys — dotenvy loads
+      # it from here), and every character's workspace/ + memory git repo.
+      # Read-write: the daemon owns this state.
+      - /tmp/shore-test/config:/config
+      - /tmp/shore-test/data:/data
+      - /tmp/shore-test/cache:/cache
 
     # llm.sock + scratch. tmpfs keeps it out of the container's write layer.
     tmpfs:
       - /tmp
 
-    restart: unless-stopped
+    # Disposable by design: no auto-restart. `docker compose up` to check
+    # something, `docker compose down` when you're done with it.
+    restart: "no"
