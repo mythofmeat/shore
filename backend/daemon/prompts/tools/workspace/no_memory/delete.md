@@ -1,1 +1,1 @@
-Move a file in your workspace to a trash folder. Bare paths resolve under workspace/. The file is moved out of your workspace into a timestamped trash folder, not permanently erased. Refuses prompt-visible files (SOUL.md, USER.md, AGENTS.md, TOOLS.md, HEARTBEAT.md, MEMORY.md) and directories.
+Move a file in your workspace to a trash folder. Bare paths resolve under workspace/. The file is moved out of your workspace into a timestamped trash folder, not permanently erased. Refuses prompt-visible files (SOUL.md, USER.md, AGENTS.md, TOOLS.md, MEMORY.md) and directories.

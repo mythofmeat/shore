@@ -1,7 +1,6 @@
 use serde_json::json;
 use shore_config::{
-    character_data_dir, character_workspace_dir, AGENTS_FILE, HEARTBEAT_FILE, SOUL_FILE,
-    TOOLS_FILE, USER_FILE,
+    character_data_dir, character_workspace_dir, AGENTS_FILE, SOUL_FILE, TOOLS_FILE, USER_FILE,
 };
 use shore_protocol::error::ErrorCode;
 use shore_protocol::types::{CharacterAvatar, CharacterInfo};
@@ -103,17 +102,11 @@ pub fn character_info(
         None
     };
 
-    let bootstrap_files = [
-        SOUL_FILE,
-        USER_FILE,
-        AGENTS_FILE,
-        TOOLS_FILE,
-        HEARTBEAT_FILE,
-    ]
-    .into_iter()
-    .filter(|file| workspace_dir.join(file).exists())
-    .map(str::to_owned)
-    .collect::<Vec<_>>();
+    let bootstrap_files = [SOUL_FILE, USER_FILE, AGENTS_FILE, TOOLS_FILE]
+        .into_iter()
+        .filter(|file| workspace_dir.join(file).exists())
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
 
     let config_override_path = char_dir.join("config.toml");
     let has_config_override = config_override_path.exists();

@@ -94,8 +94,7 @@ character's own hand:
     USER.md       # what this character knows about the user
     AGENTS.md     # standing operating guidance (built-in default otherwise)
     TOOLS.md      # tool-use guidance
-    HEARTBEAT.md  # heartbeat-only guidance
-    MEMORY.md     # generated prompt-visible memory index
+    MEMORY.md     # active memory: dated, pruned, prompt-visible
     memory/       # markdown long-term memory
 ```
 

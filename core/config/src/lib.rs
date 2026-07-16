@@ -257,7 +257,6 @@ pub const SOUL_FILE: &str = "SOUL.md";
 pub const USER_FILE: &str = "USER.md";
 pub const AGENTS_FILE: &str = "AGENTS.md";
 pub const TOOLS_FILE: &str = "TOOLS.md";
-pub const HEARTBEAT_FILE: &str = "HEARTBEAT.md";
 pub const MEMORY_DIR: &str = "memory";
 
 /// Filename of the per-character active conversation log under

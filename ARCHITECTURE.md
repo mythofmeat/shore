@@ -75,8 +75,7 @@ $XDG_CONFIG_HOME/shore/
     USER.md
     AGENTS.md
     TOOLS.md
-    HEARTBEAT.md
-    MEMORY.md     # optional/generated prompt-visible index
+    MEMORY.md     # active memory: dated, pruned, prompt-visible
     memory/       # markdown long-term memory
 ```
 
@@ -90,7 +89,6 @@ $XDG_DATA_HOME/shore/<Character>/
     USER.md
     AGENTS.md
     TOOLS.md
-    HEARTBEAT.md
     MEMORY.md
   compaction.json
   deferred_edits.jsonl
@@ -204,8 +202,7 @@ Normal chat uses:
 - current conversation messages
 - stable capability/tool guidance
 
-Heartbeat additionally uses active `HEARTBEAT.md` and heartbeat runtime
-affordances.
+Heartbeat additionally uses heartbeat runtime affordances.
 
 Prompt-visible workspace files are:
 
@@ -213,7 +210,6 @@ Prompt-visible workspace files are:
 - `USER.md`
 - `AGENTS.md`
 - `TOOLS.md`
-- `HEARTBEAT.md`
 - `MEMORY.md`
 
 When a model writes or edits one of these files through workspace tools, the
@@ -314,9 +310,20 @@ Curated markdown files are authoritative. SQLite/vector/RAG memory is not part
 of normal runtime memory. Optional semantic indexes are rebuildable ranking aids.
 
 `MEMORY.md` lives at the workspace root and is prompt-visible through
-`active_prompt/MEMORY.md`. It is a concise map of memory files, recent updates,
-and conversational throughlines. It is not the character definition, user
-profile, standing behavior, tool guide, or heartbeat guide.
+`active_prompt/MEMORY.md`. It is the character's **active memory**: a dated,
+continuously pruned scratchpad carrying what is live right now — current state,
+conversational throughlines, and thin pointers to where deeper material lives.
+Its purpose is instant conversation-to-conversation continuity, so it is scoped
+to the temporary and the current, not used as storage. Long-term memory is the
+job of every other file and folder in the workspace. It is not the character
+definition, user profile, standing behavior, or tool guide.
+
+Entries in `MEMORY.md` are dated. Compaction and dreaming re-date an entry when
+they update or re-confirm it, and reap low-priority entries older than ~2 weeks —
+relocating anything still valuable into a `memory/` file. Heartbeat carry-forward
+notes land here too: a single active-memory surface, visible in every kind of
+turn, replaced the separate heartbeat-only file that models used
+interchangeably with it.
 
 Compaction turns older conversation material into durable markdown memory,
 archives compacted messages into `segments/`, retains configured recent turns,
@@ -346,7 +353,7 @@ A deep-idle archive empties `active.jsonl`, but the heartbeat does not go
 dormant as a result: whenever the active conversation has no usable user turn,
 the heartbeat request is rebuilt against a synthetic anchor turn so ticks keep
 firing and reflecting on memory until the user returns. This does not require a
-compaction segment to exist — the character's system prompt, `HEARTBEAT.md`, and
+compaction segment to exist — the character's system prompt and
 memory are reason enough to act, and the same rebuild gives the keepalive ping a
 stable system+tools prefix to keep warm even with an empty `active.jsonl` (so the
 cache stays hot overnight rather than going cold the moment the conversation is
@@ -533,7 +540,7 @@ by default.
 Heartbeat ticks:
 
 1. Rebuild the latest prompt from disk.
-2. Inject active `HEARTBEAT.md` plus runtime affordances.
+2. Inject heartbeat runtime affordances.
 3. Run a bounded tool loop.
 4. Extract an optional user-facing message — from a `<sendMessage>` tag or an
    intercepted `sendMessage` tool call (last-wins).

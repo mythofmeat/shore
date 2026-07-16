@@ -33,9 +33,7 @@ use crate::tools::context::SharedToolContext;
 use crate::tools::{ToolContext, ToolError};
 use shore_config::app::{AutonomyConfig, CompactionConfig, DreamingConfig};
 use shore_config::LoadedConfig;
-use shore_config::{
-    character_data_dir, character_memory_dir, character_workspace_dir, HEARTBEAT_FILE,
-};
+use shore_config::{character_data_dir, character_memory_dir, character_workspace_dir};
 use shore_diagnostics::truncate_summary;
 use shore_ledger::{CallType, CredentialFallbackEvent, LedgerClient};
 use shore_llm::types::LlmRequest;
@@ -2118,10 +2116,10 @@ async fn run_pre_dream_compaction(
 
 /// Build the dynamic heartbeat prompt.
 ///
-/// This intentionally keeps heartbeat-specific behavior in HEARTBEAT.md and
-/// only documents the scheduler affordances that the runtime understands.
-/// A `[Current time: ...]` line is prepended so the character has a fresh
-/// time anchor on every tick without needing to call `check_time`.
+/// This documents the scheduler affordances the runtime understands and points
+/// carry-forward notes at `MEMORY.md`. A `[Current time: ...]` line is prepended
+/// so the character has a fresh time anchor on every tick without needing to
+/// call `check_time`.
 fn build_heartbeat_prompt(user_name: &str, default_interval: &str) -> String {
     let now = chrono::Local::now()
         .format("%A %Y-%m-%d · %-I:%M %p")
@@ -2130,7 +2128,7 @@ fn build_heartbeat_prompt(user_name: &str, default_interval: &str) -> String {
         "\
 [Current time: {now}]
 
-[This is a private heartbeat turn governed by the active HEARTBEAT.md content above. \
+[This is a private heartbeat turn — your own time, to use however seems useful. \
 You have real tools and can search or write workspace and memory files, search \
 your conversation history, check the web, generate images, and schedule the next wake.
 
@@ -2154,22 +2152,15 @@ of `<sendMessage>` tags are private and ephemeral. If you want to carry \
 something forward, write it down with a workspace tool.
 
 If you have a multi-step task in progress and want future-you to pick it up, \
-edit HEARTBEAT.md to record what you were doing and what to come back to. \
-HEARTBEAT.md is read into your prompt at the start of every heartbeat tick, \
-so notes you leave there will be visible to your next session.
+record it in MEMORY.md with today's date, and keep it short. MEMORY.md is in \
+your system prompt for every turn — heartbeat and conversation alike — so notes \
+you leave there are visible to your next session either way. Anything durable \
+belongs in a memory/ file instead; MEMORY.md only carries what is still live, \
+and you should clear entries out of it once they are done or stale.
 
 Changes you make to workspace files, including files under memory/, will persist. \
 If nothing needs doing right now, respond with HEARTBEAT_OK and stop.]"
     )
-}
-
-fn default_heartbeat_instructions() -> &'static str {
-    "# HEARTBEAT\n\n- Use this private turn however seems useful.\n- You may use tools, schedule the next wake, or send {user} a message.\n- If nothing needs action, respond HEARTBEAT_OK."
-}
-
-fn load_heartbeat_instructions(character_data_dir: &Path) -> String {
-    crate::memory::deferred_edits::load_active_prompt_file(character_data_dir, HEARTBEAT_FILE)
-        .unwrap_or_else(|| default_heartbeat_instructions().to_owned())
 }
 
 fn history_is_between_turns(messages: &[Message]) -> bool {
@@ -2187,7 +2178,7 @@ fn history_is_between_turns(messages: &[Message]) -> bool {
 /// so a synthetic anchor turn is prepended.
 ///
 /// An empty active conversation is **not** treated as "nothing to do": the
-/// character's system prompt, `HEARTBEAT.md`, and memory still give it plenty to
+/// character's system prompt and memory still give it plenty to
 /// act on, and the keepalive ping wants a stable system+tools prefix to keep
 /// warm regardless of whether compaction has written a segment yet. So the only
 /// reason to skip is a conversation that is genuinely mid-turn (a dangling
@@ -2250,7 +2241,7 @@ fn heartbeat_rebuild_messages(
 /// When the active conversation is empty — the state a deep-idle keep-0 archive
 /// leaves behind, or simply a character that has never chatted in this session —
 /// this rebuilds using a synthetic anchor turn rather than bailing. That keeps
-/// the heartbeat firing from memory/`HEARTBEAT.md` and gives the keepalive ping a
+/// the heartbeat firing from memory and gives the keepalive ping a
 /// stable system+tools prefix to keep warm (so the cache stays hot overnight even
 /// with nothing in `active.jsonl`). It does not require any compaction segment to
 /// exist. The anchor only ever appears in this cold state, so it can never
@@ -2611,11 +2602,9 @@ fn prepare_heartbeat_request(
             .unwrap_or_default();
         format!("{minutes} minutes")
     };
-    let heartbeat_instructions =
-        load_heartbeat_instructions(&character_data_dir).replace("{user}", &user_name);
     let heartbeat_prompt = build_heartbeat_prompt(&user_name, &default_interval_str);
 
-    // Pin the heartbeat instructions + prompt at a fixed slot in
+    // Pin the heartbeat prompt at a fixed slot in
     // `request.messages` via `push_inline_system`. The heartbeat tool
     // loop below pushes `assistant` + `user(tool_result)` after this,
     // so the system entry's index must not depend on tail length. (The
@@ -2627,7 +2616,7 @@ fn prepare_heartbeat_request(
     // The cached chat prefix is left untouched — the inline system
     // entry sits AFTER chat's messages, so subsequent chat calls
     // reusing `last_request`'s prefix never see this text either.
-    request.push_inline_system(format!("{heartbeat_instructions}\n\n{heartbeat_prompt}"));
+    request.push_inline_system(heartbeat_prompt);
     // Heartbeat ticks fire on a slow cadence; route the payload log to
     // the long-retention tier so reflection traces survive past chat's
     // 3-day prune.
@@ -3339,8 +3328,8 @@ fn extract_tool_send_message(input: &Value) -> Option<String> {
 }
 
 const WRAP_UP_NUDGE_TEXT: &str = "[System nudge: heartbeat tool-use budget reached. Wrap up now — \
-if you have unfinished work, edit HEARTBEAT.md so future-you can pick it up where you left off. \
-Then either send a final <sendMessage> or respond HEARTBEAT_OK and stop.]";
+if you have unfinished work, note it in MEMORY.md with today's date so future-you can pick it up \
+where you left off. Then either send a final <sendMessage> or respond HEARTBEAT_OK and stop.]";
 
 /// Append the wrap-up nudge text to the request. The nudge has to land on the
 /// last user message (Anthropic rejects two consecutive user turns), so this
@@ -3602,10 +3591,7 @@ mod tests {
             .expect("array content");
         assert_eq!(content.len(), 2);
         assert_eq!(content[1]["type"], "text");
-        assert!(content[1]["text"]
-            .as_str()
-            .unwrap()
-            .contains("HEARTBEAT.md"));
+        assert!(content[1]["text"].as_str().unwrap().contains("MEMORY.md"));
     }
 
     #[test]
@@ -3616,7 +3602,7 @@ mod tests {
         assert_eq!(req.messages.len(), 1);
         let s = req.messages[0]["content"].as_str().expect("string content");
         assert!(s.starts_with("hi"));
-        assert!(s.contains("HEARTBEAT.md"));
+        assert!(s.contains("MEMORY.md"));
     }
 
     #[test]
@@ -3631,7 +3617,7 @@ mod tests {
         assert!(req.messages[2]["content"]
             .as_str()
             .unwrap()
-            .contains("HEARTBEAT.md"));
+            .contains("MEMORY.md"));
     }
 
     #[test]
@@ -4812,7 +4798,7 @@ api_key_env = "{api_key_env}"
     }
 
     /// An empty active conversation with no segments still rebuilds via the
-    /// synthetic anchor: the system prompt, `HEARTBEAT.md`, and memory give the
+    /// synthetic anchor: the system prompt and memory give the
     /// heartbeat something to act on, and the keepalive ping a stable
     /// system+tools prefix to keep warm overnight. Previously this returned
     /// `None`, which silenced both the heartbeat and the keepalive ping (the

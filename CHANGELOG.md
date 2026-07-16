@@ -27,7 +27,7 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
 - **`shore config reload`.** Manual config reload that surfaces parse errors
   (and aborts) instead of logging them like the hot-reload watcher, and — new —
   offers to activate edited system-prompt workspace files (`SOUL.md`,
-  `USER.md`, `AGENTS.md`, `TOOLS.md`, `HEARTBEAT.md`, `MEMORY.md`) without
+  `USER.md`, `AGENTS.md`, `TOOLS.md`, `MEMORY.md`) without
   waiting for the next compaction. The command lists which files differ from
   the active (cached) snapshot and asks for confirmation first, since
   activation changes the system prompt bytes and the next message pays a
@@ -106,12 +106,38 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
   burying `cache_read: 0` in a success line.
 
 ### Changed
+- **`HEARTBEAT.md` is gone; `MEMORY.md` is now the single active-memory
+  surface.** Characters treated the two files interchangeably, so heartbeat
+  notes and conversational continuity drifted between them at random — and
+  because `HEARTBEAT.md` was only prompt-visible during heartbeat ticks,
+  anything a character filed there intending to raise with the user was
+  invisible in chat and silently lost. Prompt wording that actively caused this
+  is removed: compaction was explicitly instructed to route "something {{char}}
+  is planning on doing in the future" into `HEARTBEAT.md`. Heartbeat
+  carry-forward notes now go in `MEMORY.md`, which is prompt-visible in every
+  kind of turn. The file is no longer seeded into new workspaces, is no longer
+  a protected/deferred-edit prompt file, and is no longer writable by
+  compaction or dreaming; the stale `active_prompt/HEARTBEAT.md` snapshot is
+  cleaned up on the next seed, alongside the legacy `RECENT_MEMORY.md` one. The
+  heartbeat loop itself is unchanged — ticks, `set_next_wake`, dormancy, and
+  autonomous messaging all behave exactly as before. An existing
+  `workspace/HEARTBEAT.md` is left on disk and simply stops being read; delete
+  it at your leisure (it is now deletable, having been un-protected).
+- **`MEMORY.md` is scoped to active memory, and its entries are dated.** It is
+  documented and prompted as a scratchpad for instant
+  conversation-to-conversation continuity — what is live and what is
+  potentially temporary — rather than as storage; long-term memory is the job
+  of every other file and folder in the workspace. Compaction and dreaming now
+  date each entry, re-date entries they update or re-confirm, and reap
+  low-priority entries older than ~2 weeks, relocating anything still valuable
+  into a `memory/` file. This targets the observed failure mode of `MEMORY.md`
+  accreting stale material with no signal for what had gone cold.
 - **Compaction can now write all workspace-root prompt files.** The compaction
   tool loop previously accepted writes only under `memory/` and to the
-  workspace-root `MEMORY.md`; writes to `SOUL.md`, `USER.md`, `AGENTS.md`,
-  `TOOLS.md`, and `HEARTBEAT.md` were rejected at the dispatch wrapper even
-  though the compaction prompt directs durable facts and future plans to those
-  files. All six root prompt files are now writable during compaction. Root
+  workspace-root `MEMORY.md`; writes to `SOUL.md`, `USER.md`, `AGENTS.md`, and
+  `TOOLS.md` were rejected at the dispatch wrapper even
+  though the compaction prompt directs durable facts to those
+  files. All five root prompt files are now writable during compaction. Root
   prompt-file writes go through the same deferred-edit queue as chat-turn
   edits, so they become prompt-active at the boundary the pass creates —
   cache behavior is unchanged. Daemon-owned artifacts (`DREAMS.md`,
@@ -232,7 +258,7 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
   went cold (and the heartbeat could go dormant) until the user returned. The
   rebuild now reconstructs the request against a synthetic anchor turn whenever
   the active conversation has no usable user turn, **without** requiring a
-  segment: the character's system prompt, `HEARTBEAT.md`, and memory are enough to
+  segment: the character's system prompt and memory are enough to
   act on, and the keepalive gets a stable system+tools prefix to keep warm
   overnight. The only state that still skips is a conversation genuinely mid-turn
   (a dangling tool-result tail).

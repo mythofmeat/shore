@@ -2492,8 +2492,8 @@ async fn write_memory_index(
     body.push_str("# Memory Index\n\n");
     let _ignored = writeln!(body, "Character: {character}");
     _ = write!(body, "Last updated: {ran_at}\n\n");
-    body.push_str("This file is the prompt-visible memory index. It maps durable memory files in workspace/memory, recent updates, and still-relevant conversational throughlines.\n\n");
-    body.push_str("It is not the character definition, user profile, standing behavior, tool guide, or heartbeat guide. Those roles stay in SOUL.md, USER.md, AGENTS.md, TOOLS.md, and HEARTBEAT.md.\n\n");
+    body.push_str("This file is your active memory: a dated, continuously pruned scratchpad of what is live right now. It maps durable memory files in workspace/memory, recent updates, and still-relevant conversational throughlines.\n\n");
+    body.push_str("It is not long-term storage — that is the job of the files under workspace/memory. It is also not the character definition, user profile, standing behavior, or tool guide. Those roles stay in SOUL.md, USER.md, AGENTS.md, and TOOLS.md.\n\n");
 
     push_memory_files_section(&mut body, &entries);
     push_recent_updates_section(&mut body, &recent);

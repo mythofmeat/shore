@@ -2733,7 +2733,6 @@ mod tests {
             "USER.md",
             "AGENTS.md",
             "TOOLS.md",
-            "HEARTBEAT.md",
             "MEMORY.md",
             "workspace/SOUL.md",
         ] {

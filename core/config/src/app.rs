@@ -390,7 +390,7 @@ pub struct HeartbeatConfig {
     pub minimum_heartbeat_latency: ConfigDuration,
 
     /// Extra tool-use rounds granted after the wrap-up nudge fires, so the
-    /// model can summarize unfinished work into HEARTBEAT.md and respond. Only
+    /// model can summarize unfinished work into MEMORY.md and respond. Only
     /// takes effect when the per-model `max_tool_iterations` cap is set to a
     /// finite value; with the default (unlimited) there is no count-based
     /// wrap-up nudge.

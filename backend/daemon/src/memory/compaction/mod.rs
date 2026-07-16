@@ -355,7 +355,7 @@ impl CompactionManager {
         }
 
         // The other workspace-root prompt files (SOUL.md, USER.md, AGENTS.md,
-        // TOOLS.md, HEARTBEAT.md) are allowed too: the compaction prompt asks
+        // TOOLS.md) are allowed too: the compaction prompt asks
         // the model to distill durable facts into them. These writes go
         // through the same deferred-edit queue as chat-turn edits, so they
         // only become prompt-active at the boundary this pass creates.
@@ -1093,7 +1093,7 @@ async fn dispatch_compaction_tool(
             state.rejected_paths.push(display_path.clone());
             return (
                 format!(
-                    "{name} blocked: compaction may only write under memory/* or to the workspace-root prompt files (MEMORY.md, SOUL.md, USER.md, AGENTS.md, TOOLS.md, HEARTBEAT.md) (got: {display_path})"
+                    "{name} blocked: compaction may only write under memory/* or to the workspace-root prompt files (MEMORY.md, SOUL.md, USER.md, AGENTS.md, TOOLS.md) (got: {display_path})"
                 ),
                 true,
             );
@@ -1684,9 +1684,16 @@ mod tests {
         assert!(CompactionManager::write_allowed_path("USER.md"));
         assert!(CompactionManager::write_allowed_path("AGENTS.md"));
         assert!(CompactionManager::write_allowed_path("TOOLS.md"));
-        assert!(CompactionManager::write_allowed_path("HEARTBEAT.md"));
         assert!(CompactionManager::write_allowed_path("workspace/SOUL.md"));
         assert!(CompactionManager::write_allowed_path("./USER.md"));
+    }
+
+    #[test]
+    fn test_write_allowed_path_rejects_retired_heartbeat_file() {
+        // HEARTBEAT.md is no longer a prompt file: carry-forward notes belong in
+        // MEMORY.md. A leftover copy in an existing workspace is an ordinary
+        // file, and compaction has no business writing to it.
+        assert!(!CompactionManager::write_allowed_path("HEARTBEAT.md"));
     }
 
     #[test]

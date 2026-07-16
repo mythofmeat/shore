@@ -1,8 +1,8 @@
 //! Integration tests for organic heartbeat semantics.
 //!
-//! A heartbeat is a bounded private tool loop governed by HEARTBEAT.md. The
-//! runtime may deliver `<sendMessage>` and intercept `set_next_wake`, but it
-//! must not force recap generation or write daily memory notes by itself.
+//! A heartbeat is a bounded private tool loop. The runtime may deliver
+//! `<sendMessage>` and intercept `set_next_wake`, but it must not force recap
+//! generation or write daily memory notes by itself.
 
 use std::time::Duration;
 

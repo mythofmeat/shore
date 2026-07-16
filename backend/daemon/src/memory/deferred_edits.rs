@@ -5,18 +5,12 @@ use std::path::{Path, PathBuf};
 
 use shore_config::{
     character_config_dir, character_memory_dir, character_workspace_dir, character_workspace_file,
-    AGENTS_FILE, HEARTBEAT_FILE, SOUL_FILE, TOOLS_FILE, USER_FILE,
+    AGENTS_FILE, SOUL_FILE, TOOLS_FILE, USER_FILE,
 };
 
 /// Top-level workspace files that are editable immediately but only become
 /// prompt-active after the next compaction/reload boundary.
-const PROTECTED_PATHS: &[&str] = &[
-    SOUL_FILE,
-    USER_FILE,
-    AGENTS_FILE,
-    TOOLS_FILE,
-    HEARTBEAT_FILE,
-];
+const PROTECTED_PATHS: &[&str] = &[SOUL_FILE, USER_FILE, AGENTS_FILE, TOOLS_FILE];
 
 /// Persisted snapshot directory under the character data dir.
 const ACTIVE_PROMPT_DIR: &str = "active_prompt";
@@ -26,10 +20,11 @@ const ACTIVE_PROMPT_DIR: &str = "active_prompt";
 pub const MEMORY_INDEX_FILE: &str = "MEMORY.md";
 pub const MEMORY_INDEX_DEFERRED_PATH: &str = "MEMORY.md";
 
-/// Stale active-prompt snapshot left behind by the pre-rename `<recent_memory>`
-/// block. Cleaned up opportunistically when the active prompt directory is
-/// (re)seeded so it doesn't accumulate forever.
-const LEGACY_RECENT_MEMORY_SNAPSHOT: &str = "RECENT_MEMORY.md";
+/// Stale active-prompt snapshots left behind by retired prompt files: the
+/// pre-rename `<recent_memory>` block, and `HEARTBEAT.md` from before heartbeat
+/// carry-forward folded into `MEMORY.md`. Cleaned up opportunistically when the
+/// active prompt directory is (re)seeded so they don't accumulate forever.
+const LEGACY_SNAPSHOTS: &[&str] = &["RECENT_MEMORY.md", "HEARTBEAT.md"];
 
 const DEFAULT_TOOLS_GUIDANCE: &str = "\
 # TOOLS
@@ -39,14 +34,6 @@ Use tools when they materially help.
 - Read files before editing them.
 - Search memory files before guessing facts about the user or past events.
 - Prefer concise, direct tool use over busywork.
-";
-
-const DEFAULT_HEARTBEAT_GUIDANCE: &str = "\
-# HEARTBEAT
-
-- Use this private turn however seems useful.
-- You may use tools, schedule the next wake, or send the user a message.
-- If nothing needs action, respond HEARTBEAT_OK.
 ";
 
 fn normalize_workspace_path(path: &str) -> String {
@@ -340,10 +327,6 @@ pub fn ensure_character_workspace(
     }
 
     write_default_if_missing(workspace_dir.join(TOOLS_FILE), DEFAULT_TOOLS_GUIDANCE)?;
-    write_default_if_missing(
-        workspace_dir.join(HEARTBEAT_FILE),
-        DEFAULT_HEARTBEAT_GUIDANCE,
-    )?;
 
     let legacy_memories = character_data_dir.join("memories");
     if legacy_memories.exists() {
@@ -377,9 +360,11 @@ pub fn ensure_active_prompt_snapshot(
         true,
     )?;
 
-    let legacy_snapshot = active_dir.join(LEGACY_RECENT_MEMORY_SNAPSHOT);
-    if legacy_snapshot.exists() {
-        fs::remove_file(legacy_snapshot)?;
+    for legacy in LEGACY_SNAPSHOTS {
+        let legacy_snapshot = active_dir.join(legacy);
+        if legacy_snapshot.exists() {
+            fs::remove_file(legacy_snapshot)?;
+        }
     }
 
     Ok(())
@@ -490,7 +475,6 @@ mod tests {
         fs::write(workspace.join(USER_FILE), "new user").unwrap();
         fs::write(workspace.join(AGENTS_FILE), "new agents").unwrap();
         fs::write(workspace.join(TOOLS_FILE), "new tools").unwrap();
-        fs::write(workspace.join(HEARTBEAT_FILE), "new heartbeat").unwrap();
 
         queue_deferred_edit(&char_dir, "workspace/SOUL.md").unwrap();
         queue_deferred_edit(&char_dir, "USER.md").unwrap();
@@ -618,7 +602,10 @@ mod tests {
             "orig agents"
         );
         assert!(workspace.join(TOOLS_FILE).exists());
-        assert!(workspace.join(HEARTBEAT_FILE).exists());
+        assert!(
+            !workspace.join("HEARTBEAT.md").exists(),
+            "retired HEARTBEAT.md must not be seeded into new workspaces"
+        );
         assert_eq!(
             fs::read_to_string(
                 character_memory_dir(&config_dir, "TestChar").join("daily/2026-01-01.md")
@@ -640,7 +627,6 @@ mod tests {
         fs::write(workspace.join(USER_FILE), "workspace user").unwrap();
         fs::write(workspace.join(AGENTS_FILE), "workspace agents").unwrap();
         fs::write(workspace.join(TOOLS_FILE), "workspace tools").unwrap();
-        fs::write(workspace.join(HEARTBEAT_FILE), "workspace heartbeat").unwrap();
 
         ensure_active_prompt_snapshot(&char_dir, &config_dir, "TestChar").unwrap();
         fs::write(workspace.join(SOUL_FILE), "edited later").unwrap();
@@ -664,7 +650,6 @@ mod tests {
         fs::write(workspace.join(USER_FILE), "active user").unwrap();
         fs::write(workspace.join(AGENTS_FILE), "active agents").unwrap();
         fs::write(workspace.join(TOOLS_FILE), "active tools").unwrap();
-        fs::write(workspace.join(HEARTBEAT_FILE), "active heartbeat").unwrap();
 
         ensure_active_prompt_snapshot(&char_dir, &config_dir, "TestChar").unwrap();
 
@@ -747,7 +732,7 @@ mod tests {
     }
 
     #[test]
-    fn test_legacy_recent_memory_snapshot_cleaned_on_seed() {
+    fn test_legacy_snapshots_cleaned_on_seed() {
         let tmp = TempDir::new().unwrap();
         let char_dir = tmp.path().join("data").join("TestChar");
         let config_dir = tmp.path().join("config");
@@ -758,17 +743,20 @@ mod tests {
         fs::write(workspace.join(USER_FILE), "user").unwrap();
         fs::write(workspace.join(AGENTS_FILE), "agents").unwrap();
         fs::write(workspace.join(TOOLS_FILE), "tools").unwrap();
-        fs::write(workspace.join(HEARTBEAT_FILE), "heartbeat").unwrap();
 
         let active_dir = active_prompt_dir(&char_dir);
         fs::create_dir_all(&active_dir).unwrap();
-        fs::write(active_dir.join(LEGACY_RECENT_MEMORY_SNAPSHOT), "stale").unwrap();
-        assert!(active_dir.join(LEGACY_RECENT_MEMORY_SNAPSHOT).exists());
+        for legacy in LEGACY_SNAPSHOTS {
+            fs::write(active_dir.join(legacy), "stale").unwrap();
+            assert!(active_dir.join(legacy).exists());
+        }
 
         ensure_active_prompt_snapshot(&char_dir, &config_dir, "TestChar").unwrap();
-        assert!(
-            !active_dir.join(LEGACY_RECENT_MEMORY_SNAPSHOT).exists(),
-            "legacy RECENT_MEMORY.md snapshot must be cleaned up on seed"
-        );
+        for legacy in LEGACY_SNAPSHOTS {
+            assert!(
+                !active_dir.join(legacy).exists(),
+                "legacy {legacy} snapshot must be cleaned up on seed"
+            );
+        }
     }
 }

@@ -213,9 +213,11 @@ fn build_system_blocks(params: &PromptParams<'_>, template: &str) -> Vec<SystemB
             label: "memory_index".into(),
             content: format!(
                 "<memory_index>\n\
-                 The following is your prompt-visible memory index from workspace/MEMORY.md. \
-                 It is a map of memory files, recently updated files, and still-relevant conversational throughlines; \
-                 it does not replace SOUL.md, USER.md, AGENTS.md, TOOLS.md, or HEARTBEAT.md.\n\n\
+                 The following is your active memory from workspace/MEMORY.md — a dated, \
+                 continuously pruned scratchpad of what is live right now: current state, \
+                 still-relevant conversational throughlines, and thin pointers to where deeper \
+                 material lives. It is not long-term storage; that is the job of your memory/ \
+                 files, and it does not replace SOUL.md, USER.md, AGENTS.md, or TOOLS.md.\n\n\
                  {index}\n\
                  </memory_index>"
             ),
@@ -1298,7 +1300,8 @@ mod tests {
             .find(|b| b.label == "memory_index")
             .unwrap();
         assert!(index_block.content.contains("topics/rust.md"));
-        assert!(index_block.content.contains("prompt-visible memory index"));
+        assert!(index_block.content.contains("active memory"));
+        assert!(index_block.content.contains("workspace/MEMORY.md"));
         assert!(index_block.content.contains("<memory_index>"));
     }
 
