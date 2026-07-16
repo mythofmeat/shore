@@ -39,6 +39,12 @@ which = { workspace = true }
 libc = { workspace = true }
 notify = "8.2"
 
+# Exec-tool sandbox (Linux only): Landlock for filesystem confinement and
+# seccomp for syscall cuts. Other platforms fall back to denylist-only exec.
+[target.'cfg(target_os = "linux")'.dependencies]
+landlock = "0.4"
+seccompiler = "0.5"
+
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }
 shore-swp-client = { workspace = true }

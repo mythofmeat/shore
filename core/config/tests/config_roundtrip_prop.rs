@@ -321,6 +321,18 @@ fn arb_tool_override() -> impl Strategy<Value = ToolOverride> {
         .prop_map(|max_result_chars| ToolOverride { max_result_chars })
 }
 
+fn arb_exec_config() -> impl Strategy<Value = shore_config::app::ExecConfig> {
+    use shore_config::app::SandboxMode;
+    (
+        prop::sample::select(vec![SandboxMode::Auto, SandboxMode::On, SandboxMode::Off]),
+        any::<bool>(),
+    )
+        .prop_map(|(sandbox, allow_network)| shore_config::app::ExecConfig {
+            sandbox,
+            allow_network,
+        })
+}
+
 fn arb_tools_config() -> impl Strategy<Value = ToolsConfig> {
     (
         prop::collection::vec(arb_nonempty_text(), 0..5),
@@ -332,10 +344,18 @@ fn arb_tools_config() -> impl Strategy<Value = ToolsConfig> {
             arb_nonempty_text(),
             any::<bool>(),
         ),
+        arb_exec_config(),
         prop::collection::vec((arb_nonempty_text(), arb_tool_override()), 0..3),
     )
         .prop_map(
-            |(enabled_tools, enabled_subagents, max_result_chars, search, per_tool_entries)| {
+            |(
+                enabled_tools,
+                enabled_subagents,
+                max_result_chars,
+                search,
+                exec,
+                per_tool_entries,
+            )| {
                 let (api_key_env, result_limit, search_depth, include_answer) = search;
                 let config = per_tool_entries.into_iter().collect();
                 ToolsConfig {
@@ -348,6 +368,7 @@ fn arb_tools_config() -> impl Strategy<Value = ToolsConfig> {
                         search_depth,
                         include_answer,
                     },
+                    exec,
                     config,
                 }
             },

@@ -514,6 +514,44 @@ Load-bearing invariants:
   injection flags
 - the `write`, `edit`, and `delete` tools reject paths under `.git/`
 
+The allowlist and git denylist are a fat-finger guard, not containment — they
+cannot fully enclose a programmable surface like `git`. Underneath them sits a
+**capability sandbox** (`sandbox.rs`, Linux only). Each exec'd program is
+re-executed through the daemon binary's hidden `__sandbox-exec` mode, which —
+single-threaded, before `execve` — applies:
+
+- **`no_new_privs`**, so privileges cannot be regained across `execve`;
+- **Landlock**: readable everywhere, writable only under the character
+  workspace and the standard build-tool caches (`~/.cargo`, `~/.rustup`,
+  `~/.npm`, `~/.cache`, temp dirs). An escape cannot write to `~/.ssh`, the
+  daemon's `~/.config/shore` (other characters' memory, the keys `.env`), or
+  the rest of the system;
+- **seccomp**: blocks IPv4/IPv6 socket creation (no network egress; AF_UNIX
+  and local lookups still work), namespace tricks (`unshare`/`setns`/`mount`/
+  namespace `clone` flags), and `ptrace`. `clone3` returns `ENOSYS` so glibc
+  falls back to the screened `clone`.
+
+`[tools.exec].sandbox` selects `auto` (default — enforce when the kernel
+supports Landlock, else log a warning and fall back to denylist-only), `on`
+(require it; exec fails when it cannot be enforced), or `off`.
+`[tools.exec].allow_network` (default `false`) lifts the seccomp network cut for
+deployments that need package managers to fetch. The design goal is
+invisibility: `git`/read workloads and cached `cargo`/`npm` builds are
+unaffected; only dangerous or malicious actions are blocked.
+
+The sandbox and the denylist are complementary, not redundant:
+
+| Mechanism | Protects | Against |
+|---|---|---|
+| Destructive git denylist | Memory **integrity** | The model foot-gunning its own history (`reset --hard`, `rebase`, …) |
+| Capability sandbox | The **system** + network | An exec/git escape reaching outside the workspace |
+
+The sandbox confines the workspace *from the rest of the system*; it does not
+protect the workspace from itself (the workspace **is** the memory — a
+sandboxed `git reset --hard` still rewrites history), which is why the denylist
+remains the memory-integrity layer above it. Non-Linux platforms keep
+denylist-only behavior.
+
 Remote daemon access is explicit. Non-loopback binding requires:
 
 ```toml

@@ -1659,8 +1659,34 @@ pub async fn handle_exec(
         .map(|w| resolve_path(workspace_dir, w))
         .transpose()?;
 
-    let mut cmd = tokio::process::Command::new(program);
-    let _ignored = cmd.args(program_args);
+    // Containment layer: when the sandbox is enabled, the program is re-executed
+    // through the daemon's hidden helper mode, which applies Landlock + seccomp
+    // before running it. Falls back to a direct spawn when disabled/unavailable.
+    let mut cmd = match crate::sandbox::plan_for(workspace_dir) {
+        crate::sandbox::SandboxPlan::Direct => {
+            let mut cmd = tokio::process::Command::new(program);
+            let _ignored = cmd.args(program_args);
+            cmd
+        }
+        crate::sandbox::SandboxPlan::Wrapped {
+            helper,
+            prefix_args,
+        } => {
+            let mut cmd = tokio::process::Command::new(helper);
+            let _prefix = cmd.args(&prefix_args);
+            let _sep = cmd.arg("--");
+            let _prog = cmd.arg(program);
+            let _args = cmd.args(program_args);
+            cmd
+        }
+        // `sandbox = "on"` requires enforcement we cannot provide here: fail
+        // closed rather than run the command unsandboxed.
+        crate::sandbox::SandboxPlan::Unavailable { reason } => {
+            return Err(ToolError::Io(format!(
+                "exec sandbox required but unavailable: {reason}"
+            )));
+        }
+    };
 
     // exec runs as the character: attribute any git commits to it (per-process
     // env, ignored by non-git programs), keeping them distinct from operator

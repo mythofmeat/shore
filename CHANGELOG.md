@@ -54,6 +54,17 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
   model/provider/call-type rows with first/last timestamps, call counts, and
   an interactive/autonomous/background classification. Add it to
   `enabled_tools` or a sub-agent's `tools` list to expose it.
+- **Capability sandbox for the `exec` tool (Linux).** Programs run through
+  `exec` are re-executed inside a Landlock + seccomp sandbox that confines
+  writes to the character workspace and standard build-tool caches, cuts
+  outbound network, and sets `no_new_privs` — so an escaped command (e.g. via
+  `git`) cannot reach `~/.ssh`, the daemon's config/keys, or the rest of the
+  system. It sits beneath the existing allowlist/denylist as the containment
+  layer. Designed to be invisible: `git`/read workloads and cached `cargo`/`npm`
+  builds are unaffected. Configure via `[tools.exec].sandbox`
+  (`auto`/`on`/`off`, default `auto`) and `[tools.exec].allow_network` (default
+  `false`). Non-Linux platforms keep denylist-only behavior. See ARCHITECTURE.md
+  "Tools And Security".
 - **MCP (Model Context Protocol) client support.** The daemon can now connect to
   external MCP servers (stdio child processes or remote HTTP endpoints) declared
   in `[mcp.<name>]` and surface their tools to characters as

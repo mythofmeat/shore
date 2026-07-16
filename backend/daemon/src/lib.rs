@@ -105,6 +105,7 @@ pub mod notifications;
 pub mod preferences;
 pub mod prompts;
 pub mod runtime_state;
+pub mod sandbox;
 mod sync;
 pub mod templates;
 pub mod tools;

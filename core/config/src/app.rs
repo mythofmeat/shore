@@ -532,6 +532,10 @@ pub struct ToolsConfig {
     #[serde(default)]
     pub web_search: SearchConfig,
 
+    /// Exec-tool subprocess sandbox settings — `[tools.exec]`.
+    #[serde(default)]
+    pub exec: ExecConfig,
+
     /// Per-tool config tables `[tools.config.<name>]`, keyed by tool name;
     /// currently carries per-tool `max_result_chars`. (A flattened
     /// `[tools.<name>]` form would be nicer but serde's `flatten` drops fields
@@ -550,9 +554,50 @@ impl Default for ToolsConfig {
             enabled_subagents: Vec::new(),
             max_result_chars: default_max_result_chars(),
             web_search: SearchConfig::default(),
+            exec: ExecConfig::default(),
             config: BTreeMap::new(),
         }
     }
+}
+
+// ── [tools.exec] ─────────────────────────────────────────────────────────
+
+/// Exec-tool subprocess sandbox configuration (`[tools.exec]`).
+///
+/// The sandbox confines programs run through the `exec` tool with Landlock
+/// (filesystem) and seccomp (syscalls) so an escaped command cannot reach
+/// outside the character workspace, regain privileges, or open the network.
+/// Linux-only; other platforms always behave as if disabled.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(deny_unknown_fields)]
+pub struct ExecConfig {
+    /// Sandbox mode. `auto` (default) enforces the sandbox when the kernel
+    /// supports Landlock and silently falls back to the command denylist
+    /// otherwise; `on` requires it (exec fails when it cannot be enforced);
+    /// `off` disables it.
+    #[serde(default)]
+    pub sandbox: SandboxMode,
+
+    /// Permit outbound network from sandboxed subprocesses. Default `false`:
+    /// the seccomp layer blocks IPv4/IPv6 socket creation, which is invisible
+    /// to the git/read workloads exec is used for. Set `true` to let package
+    /// managers (cargo/npm) fetch over the network.
+    #[serde(default)]
+    pub allow_network: bool,
+}
+
+/// Exec sandbox enforcement mode (`[tools.exec].sandbox`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum SandboxMode {
+    /// Enforce when the kernel supports Landlock; fall back to denylist-only
+    /// (with a logged warning) when it does not.
+    #[default]
+    Auto,
+    /// Require the sandbox: exec fails when it cannot be enforced.
+    On,
+    /// Disable the sandbox; rely on the command denylist alone.
+    Off,
 }
 
 /// Whether allowlist `pattern` matches tool `name`.
@@ -2029,6 +2074,29 @@ cache_forensics = true
 ";
         let enabled_config: AppConfig = toml::from_str(toml_str).unwrap();
         assert!(enabled_config.advanced.cache_forensics);
+    }
+
+    #[test]
+    fn exec_sandbox_defaults_to_auto_no_network() {
+        let tools = ToolsConfig::default();
+        assert_eq!(tools.exec.sandbox, SandboxMode::Auto);
+        assert!(!tools.exec.allow_network);
+    }
+
+    #[test]
+    fn exec_sandbox_parses_mode_and_network() {
+        let toml_str = r#"
+[tools.exec]
+sandbox = "on"
+allow_network = true
+"#;
+        let cfg: AppConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(cfg.tools.exec.sandbox, SandboxMode::On);
+        assert!(cfg.tools.exec.allow_network);
+
+        let off: AppConfig = toml::from_str("[tools.exec]\nsandbox = \"off\"\n").unwrap();
+        assert_eq!(off.tools.exec.sandbox, SandboxMode::Off);
+        assert!(!off.tools.exec.allow_network);
     }
 
     #[test]

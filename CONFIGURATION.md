@@ -630,6 +630,10 @@ result_limit = 5
 search_depth = "basic"
 include_answer = true
 
+[tools.exec]
+sandbox = "auto"          # auto (default) | on | off
+allow_network = false     # lift the seccomp network cut when true
+
 # Per-tool override of the global max_result_chars:
 [tools.config.search]
 max_result_chars = 10000
@@ -652,6 +656,17 @@ whether it's enabled on the main character, which sub-agents own it, the `exec`
 allowlist, and any dangling references (an `enabled_tools` / sub-agent `tools`
 entry that names no real tool, or an `enabled_subagents` entry with no
 definition).
+
+`[tools.exec]` configures the sandbox applied to programs run through the
+`exec` tool (Linux only; other platforms always behave as `off`). `sandbox`
+selects `auto` (default — enforce Landlock + seccomp when the kernel supports
+Landlock, else log a warning and fall back to the command denylist only), `on`
+(require the sandbox; exec fails when it cannot be enforced), or `off` (denylist
+only). The sandbox keeps writes inside the character workspace and the standard
+build-tool caches, and cuts outbound network — invisible to `git`/read
+workloads and cached `cargo`/`npm` builds. `allow_network` (default `false`)
+lifts the network cut for deployments that need package managers to fetch over
+the network. See ARCHITECTURE.md "Tools And Security" for the full model.
 
 The maximum number of tool-loop rounds per chat turn is the per-model
 `max_tool_iterations` cap (see [Model Sections](#model-sections)), not a
