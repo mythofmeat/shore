@@ -1,0 +1,52 @@
+# Shore — single-host personal deployment.
+#
+# Run:   docker compose up -d --build
+# Logs:  docker compose logs -f daemon
+# CLI:   docker compose exec daemon shore status
+#        (or just use a host-built `shore` — see network_mode below)
+
+services:
+  daemon:
+    build:
+      context: .
+      target: slim
+    image: shore-daemon:slim
+
+    # Host networking, deliberately.
+    #
+    # validate_remote_access_policy() (backend/daemon/src/main.rs:893-932)
+    # decides exposure from the bind-address literal alone. Under bridge
+    # networking the daemon would have to bind 0.0.0.0 for a published port to
+    # reach it, which trips the guard and forces
+    # `unsafe_allow_remote_access = true` — a flag whose whole job is to
+    # acknowledge unauthenticated remote TCP — even when compose only publishes
+    # to 127.0.0.1. Host networking keeps the default
+    # `addr = "127.0.0.1:7320"` honest: the listener really is host loopback,
+    # the guard really does pass, and your config.toml needs no changes.
+    #
+    # Cost: no compose network isolation, and Linux-only. If you later add a
+    # shore-matrix service, either give it host networking too (both then meet
+    # at 127.0.0.1:7320) or switch to bridge and accept the flag.
+    network_mode: host
+
+    # The daemon supervises the Bun sidecar as a child process; init reaps it
+    # and makes SIGTERM propagate on `compose down`.
+    init: true
+
+    # Must match the host owner of ~/.config/shore. The workspace is a real git
+    # repo — a UID mismatch breaks commits and memory writes.
+    user: "1000:1000"
+
+    volumes:
+      # Config dir carries config.toml, .env (provider keys — dotenvy loads it
+      # from here, so no separate env_file is needed), and every character's
+      # workspace/ + memory git repo. Read-write: the daemon owns this state.
+      - ${HOME}/.config/shore:/config
+      - ${HOME}/.local/share/shore:/data
+      - ${HOME}/.cache/shore:/cache
+
+    # llm.sock + scratch. tmpfs keeps it out of the container's write layer.
+    tmpfs:
+      - /tmp
+
+    restart: unless-stopped

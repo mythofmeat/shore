@@ -1,0 +1,18 @@
+*
+
+# Only what the build actually needs. No build.rs / vergen in the tree, so
+# .git is not required to compile.
+!Cargo.toml
+!Cargo.lock
+!clippy.toml
+!core/
+!backend/
+!clients/
+!dev/
+
+# Build outputs and deps that must never be copied into the build context —
+# they are rebuilt inside the image and would poison the cache mounts.
+target/
+**/target/
+backend/llm-sidecar/node_modules/
+backend/llm-sidecar/dist/
