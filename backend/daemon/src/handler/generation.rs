@@ -146,6 +146,7 @@ fn build_tool_context(
     data_dir: &std::path::Path,
     char_name: &str,
     effective_config: &LoadedConfig,
+    conversation: &[shore_protocol::types::Message],
 ) -> HandlerToolContext {
     let image_gen_config = resolve_image_gen_config(
         effective_config.app.defaults.image_generation.as_deref(),
@@ -209,6 +210,7 @@ fn build_tool_context(
                         diagnostics: std::sync::Arc::clone(&ctx.diagnostics),
                         config: std::sync::Arc::new(effective_config.clone()),
                         direct_tx: Some(ctx.direct_tx.clone()),
+                        conversation: conversation.to_vec(),
                     },
                 ))
             },
@@ -219,6 +221,10 @@ fn build_tool_context(
 
 /// Phase 11: Set up tool context and run the tool loop.
 #[instrument(skip(ctx, effective_config, request, result), fields(char = char_name))]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "generation-pipeline stage; params are distinct threaded values"
+)]
 pub(super) async fn run_tool_phase(
     ctx: &GenContext,
     data_dir: &std::path::Path,
@@ -227,9 +233,10 @@ pub(super) async fn run_tool_phase(
     request: &mut shore_llm::types::LlmRequest,
     result: shore_llm::types::StreamResult,
     resolved: &shore_config::models::ResolvedModel,
+    conversation: &[shore_protocol::types::Message],
 ) -> Result<tools::ToolLoopResult, Box<dyn std::error::Error + Send + Sync>> {
     debug!(character = char_name, "run_tool_phase starting");
-    let tool_ctx = build_tool_context(ctx, data_dir, char_name, effective_config);
+    let tool_ctx = build_tool_context(ctx, data_dir, char_name, effective_config, conversation);
 
     let thinking_enabled = thinking_enabled_from_request(request);
 

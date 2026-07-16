@@ -8,6 +8,22 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
 ## [Unreleased]
 
 ### Added
+- **Sub-agent prompt macros (`{{file:}}`, `{{active_history:}}`).** A sub-agent
+  otherwise sees none of the character's definition and none of the live
+  conversation, so its replies can drift off-voice and poison the character's
+  own turn. Two new `[subagents.<name>].prompt` macros hand that context back:
+  `{{file: <path>}}` inserts a workspace file (preferring the active-prompt
+  snapshot, so `{{file: ./SOUL.md}}` yields the exact bytes the main prompt used
+  this turn, and confined to the workspace by the same rules the `read`/`write`
+  tools use — absolute paths, `..`, and symlinks out of the workspace expand to
+  nothing), and `{{active_history: <n>}}` inserts the last `n` turns as a
+  plain `Speaker: text` transcript (capped at 100). Both insert their content
+  literally and it is never re-scanned for further macros, so a chat message
+  containing `{{file: ...}}` can never trigger a file read — mirroring the main
+  prompt, where `SOUL.md`/`USER.md` are inserted raw. A missing file expands to
+  nothing and logs a warning; neither macro is expanded in `description`. The
+  conversation tail is only cloned when sub-agents are configured. See
+  `[subagents]` in CONFIGURATION.md.
 - **`shore config reload`.** Manual config reload that surfaces parse errors
   (and aborts) instead of logging them like the hot-reload watcher, and — new —
   offers to activate edited system-prompt workspace files (`SOUL.md`,

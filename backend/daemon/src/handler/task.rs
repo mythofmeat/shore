@@ -135,6 +135,21 @@ pub(super) async fn handle_generation(
     request.rid = params.rid.clone();
     request.forensic_character = Some(params.char_name.clone());
 
+    // Snapshot a bounded tail of the conversation for any `{{active_history:}}`
+    // macros in sub-agent prompts. Only when sub-agents are configured —
+    // otherwise an empty slice, so the macro (if present) degrades to empty and
+    // no per-turn clone is paid.
+    let subagent_history: Vec<Message> = if params.effective_config.app.subagents.is_empty() {
+        Vec::new()
+    } else {
+        let engine = engine_arc.lock().await;
+        let msgs = engine.messages();
+        let start = msgs
+            .len()
+            .saturating_sub(crate::tools::subagent::MAX_HISTORY_MESSAGES);
+        msgs.iter().skip(start).cloned().collect()
+    };
+
     let (result, tool_intermediate_messages) = run_generation_stream(
         &ctx,
         &params.data_dir,
@@ -143,6 +158,7 @@ pub(super) async fn handle_generation(
         &mut request,
         resolved,
         params.regen,
+        &subagent_history,
     )
     .await?;
 
@@ -441,6 +457,10 @@ async fn build_generation_request(
 /// Stream the LLM response, then run the tool-use phase when the model
 /// requested tools and tool use is enabled. Returns the final stream result
 /// plus any intermediate (tool-loop) messages to persist.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "generation-pipeline stage; params are distinct threaded values"
+)]
 async fn run_generation_stream(
     ctx: &GenContext,
     data_dir: &Path,
@@ -449,6 +469,7 @@ async fn run_generation_stream(
     request: &mut shore_llm::types::LlmRequest,
     resolved: &shore_config::models::ResolvedModel,
     regen: bool,
+    conversation: &[Message],
 ) -> Result<(shore_llm::types::StreamResult, Vec<Message>), Box<dyn std::error::Error + Send + Sync>>
 {
     info!(
@@ -480,6 +501,7 @@ async fn run_generation_stream(
                 request,
                 result,
                 resolved,
+                conversation,
             )
             .await?;
             result = tool_loop_result.result;

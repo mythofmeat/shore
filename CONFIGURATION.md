@@ -728,6 +728,31 @@ both a quick direct lookup and a deep delegated dig.
   LLM call and never sees the conversation's injected time markers, so adding
   `Today is {{date}}.` to a research prompt keeps it from treating its training
   cutoff as "now" and accepting stale sources.
+- `prompt` additionally supports two sub-agent-only macros, expanded after the
+  templating above. A sub-agent otherwise sees none of the character's
+  definition or the live conversation, so its replies can drift off-voice and
+  "poison" the character's own turn; these give it that context back:
+  - `{{file: <path>}}` — inserts the contents of a workspace file, path resolved
+    relative to the character's workspace (a leading `./` is optional). It
+    prefers the active-prompt snapshot, so `{{file: ./SOUL.md}}` /
+    `{{file: ./USER.md}}` yield the exact bytes the main prompt used this turn. A
+    missing or unreadable file expands to nothing (logged at `warn`). Use it to
+    hand the sub-agent the character's SOUL/USER so its answers match register
+    and know who they're for. The path is **confined to the workspace** by the
+    same rules the `read`/`write` tools use: absolute paths, `..` traversal, and
+    symlinks pointing outside the workspace are rejected and expand to nothing
+    (logged at `warn`). Expanded content is sent to the sub-agent's model — often
+    a different provider than the character's — so the confinement keeps a
+    mistyped path from shipping an unrelated file off-box.
+  - `{{active_history: <n>}}` — inserts the last `n` conversation turns as a
+    plain `Speaker: text` transcript (assistant turns labelled with the
+    character name, user turns with the display name; `n` is capped at 100).
+    Grounds the sub-agent in what was just said.
+  - Both macros insert their content **literally** — it is never re-scanned for
+    further macros. A chat message that happens to contain `{{file: ...}}` can
+    never trigger a file read, mirroring the main prompt, where `SOUL.md` /
+    `USER.md` are inserted raw. These macros are not expanded in `description`
+    (which carries no conversation context).
 - `tools` must name registered tools; unknown names are skipped with a warning.
   `ask_*` tools are never offered to a sub-agent, so **nesting is hard-capped at
   one level** — a sub-agent cannot delegate further.
