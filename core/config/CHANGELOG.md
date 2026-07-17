@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.1](https://github.com/mythofmeat/shore-core/compare/shore-config-v0.18.0...shore-config-v0.18.1) - 2026-07-17
+
+### Other
+
+- *(docs)* clear rustdoc warnings and gate on them in CI ([#328](https://github.com/mythofmeat/shore-core/pull/328))
+
 ## [0.18.0](https://github.com/mythofmeat/shore-core/compare/shore-config-v0.17.0...shore-config-v0.18.0) - 2026-07-17
 
 ### Added

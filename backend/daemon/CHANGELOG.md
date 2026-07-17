@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1](https://github.com/mythofmeat/shore-core/compare/shore-daemon-v0.3.0...shore-daemon-v0.3.1) - 2026-07-17
+
+### Other
+
+- *(docs)* clear rustdoc warnings and gate on them in CI ([#328](https://github.com/mythofmeat/shore-core/pull/328))
+- *(sandbox)* repoint SandboxPlan doc link at handle_git ([#327](https://github.com/mythofmeat/shore-core/pull/327))
+
 ## [0.3.0](https://github.com/mythofmeat/shore-core/compare/shore-daemon-v0.2.0...shore-daemon-v0.3.0) - 2026-07-17
 
 ### Added
