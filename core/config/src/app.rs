@@ -15,8 +15,8 @@ macro_rules! serde_default {
 
 /// Top-level daemon configuration loaded from config.toml.
 ///
-/// Covers all sections from §8: [defaults], [models], [behavior.autonomy],
-/// [behavior.tools], [memory], [connections], [advanced].
+/// Covers all sections from §8: `[defaults]`, `[models]`, `[behavior.autonomy]`,
+/// `[behavior.tools]`, `[memory]`, `[connections]`, `[advanced]`.
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct AppConfig {

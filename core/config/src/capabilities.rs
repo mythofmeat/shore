@@ -273,7 +273,7 @@ pub struct ClaudeVersion {
 /// minor (`claude-sonnet-4-20250514` = Sonnet 4.0). A recognized family token is
 /// required, so non-Claude ids (`gpt-4o`) return `None`.
 ///
-/// This is the shared parser the [`CAPS`] Claude rules evaluate against; the TS
+/// This is the shared parser the `CAPS` Claude rules evaluate against; the TS
 /// sidecar's `parseClaudeModel` mirrors it (kept in lockstep by the parity
 /// fixtures).
 pub fn parse_claude_version(model_id: &str) -> Option<ClaudeVersion> {
@@ -594,7 +594,7 @@ fn model_override_rejects_sampling(model_id: &str) -> bool {
 
 /// Whether `model_id`'s wire rejects sampler knobs (`temperature` / `top_p`),
 /// from EITHER the Claude >=4.7 cutoff ([`claude_rejects_sampling`]) or a
-/// per-model `[[model_override]]` ([`model_override_rejects_sampling`], the
+/// per-model `[[model_override]]` (`model_override_rejects_sampling`, the
 /// OpenRouter passthrough case). Both inputs key off the model id alone, so this
 /// is sdk-independent — every adapter forwards `temperature`/`top_p` verbatim.
 pub fn rejects_sampling(model_id: &str) -> bool {

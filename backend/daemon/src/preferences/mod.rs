@@ -939,7 +939,7 @@ pub fn resolve_background_model(
 
 /// Resolve the user's currently-selected chat model with the sampler
 /// overlay applied, mirroring what
-/// [`crate::handler::Handler`] would build for a fresh chat request.
+/// [`crate::handler::MessageHandler`] would build for a fresh chat request.
 ///
 /// Used by the heartbeat cold-rebuild path so the rebuilt request shares
 /// chat's cache prefix instead of diverging on a stale `defaults.model`

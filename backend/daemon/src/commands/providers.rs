@@ -214,7 +214,7 @@ pub(crate) async fn refresh_one(
     Ok(RefreshOutcome { cache, cache_path })
 }
 
-/// JSON-args wrapper around [`refresh_one`] for the single-provider
+/// JSON-args wrapper around `refresh_one` for the single-provider
 /// `shore provider refresh <name>` command path.
 pub async fn refresh_provider_models(ctx: &CommandContext, args: &Value) -> CommandResult {
     let provider = require_provider(args)?;

@@ -108,7 +108,7 @@ impl CharacterRegistry {
 
     /// Get the engine for a character, creating it lazily if needed.
     ///
-    /// Returns an Arc<Mutex<ConversationEngine>> so callers can hold independent
+    /// Returns an `Arc<Mutex<ConversationEngine>>` so callers can hold independent
     /// locks without blocking on the registry. The registry lock only needs to be
     /// held briefly to call this; the returned Arc stays valid after release.
     pub fn get_or_create(

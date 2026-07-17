@@ -1623,9 +1623,9 @@ fn git_command(
 ///
 /// The only tool that spawns a process. Everything it can do is bounded by
 /// three checks: the subcommand must not be a global flag
-/// ([`validate_git_subcommand_token`]), it must not be destructive or
-/// history-rewriting ([`validate_git_subcommand`]), and every path-like
-/// argument must stay inside the workspace ([`validate_git_args`]).
+/// (`validate_git_subcommand_token`), it must not be destructive or
+/// history-rewriting (`validate_git_subcommand`), and every path-like
+/// argument must stay inside the workspace (`validate_git_args`).
 ///
 /// Initializes the workspace repository if it is missing. The memory passes do
 /// the same before they run ([`ensure_workspace_git_repo_best_effort`]), but
@@ -1781,7 +1781,7 @@ pub(crate) fn character_git_identity(character: &str) -> (String, String) {
 /// Ensure the character workspace is a git repository so memory passes can
 /// commit their changes. When `.git` is missing, initializes a bare-config
 /// repository. Deliberately sets **no** local identity: the daemon injects the
-/// character identity per-commit (see [`character_git_identity`]), leaving an
+/// character identity per-commit (see `character_git_identity`), leaving an
 /// operator's own commits attributed to their global git identity. Pre-existing
 /// repositories are left untouched. Returns `true` if a repository was created.
 pub async fn ensure_workspace_git_repo(

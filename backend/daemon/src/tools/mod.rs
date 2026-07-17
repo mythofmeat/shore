@@ -149,7 +149,7 @@ pub trait ToolContext: Sync {
     /// Default: unavailable — only the chat tool context wires a sub-agent
     /// runtime. The `NotImplemented` default is also the recursion cap: a
     /// sub-agent's own tool loop runs against a context that does not override
-    /// this, so it can never delegate further (see [`subagent`]).
+    /// this, so it can never delegate further (see the `subagent` module).
     fn run_subagent<'ctx>(
         &'ctx self,
         name: &'ctx str,
