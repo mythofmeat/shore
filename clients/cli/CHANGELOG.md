@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0](https://github.com/mythofmeat/shore-core/compare/shore-cli-v2.7.1...shore-cli-v3.0.0) - 2026-07-17
+
+### Added
+
+- *(tools)* [**breaking**] fold write/list_files into edit/read, replace exec with git ([#325](https://github.com/mythofmeat/shore-core/pull/325))
+
 ## [2.7.1](https://github.com/mythofmeat/shore-core/compare/shore-cli-v2.7.0...shore-cli-v2.7.1) - 2026-07-16
 
 ### Other
