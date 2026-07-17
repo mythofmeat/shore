@@ -303,22 +303,11 @@ pub fn dispatch_tool<'ctx>(
             "web_search" => web::handle_web_search(input, ctx).await,
             "fetch_url" => web::handle_fetch_url(input).await,
             // Basic tools
-            "check_time" => basic::handle_check_time(input),
             "roll_dice" => basic::handle_roll_dice(&input),
             // Other
             "activity_heatmap" => activity::handle_activity_heatmap(&input, ctx),
             // Workspace tools
             "read" => workspace::handle_read(input, ctx.workspace_dir()).await,
-            "write" => {
-                let path = input
-                    .get("path")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_owned();
-                let mut result = workspace::handle_write(input, ctx.workspace_dir()).await?;
-                annotate_deferred_edit(&path, &mut result, ctx);
-                Ok(result)
-            }
             "edit" => {
                 let path = input
                     .get("path")
@@ -329,7 +318,6 @@ pub fn dispatch_tool<'ctx>(
                 annotate_deferred_edit(&path, &mut result, ctx);
                 Ok(result)
             }
-            "list_files" => workspace::handle_list_files(input, ctx.workspace_dir()).await,
             "search" => {
                 let index_path = ctx.memory_index_path();
                 apply_default_search_mode(&mut input, ctx, index_path.is_some());
@@ -345,9 +333,7 @@ pub fn dispatch_tool<'ctx>(
             "delete" => {
                 workspace::handle_delete(input, ctx.workspace_dir(), ctx.character_data_dir()).await
             }
-            "exec" => {
-                workspace::handle_exec(input, ctx.workspace_dir(), ctx.character_name()).await
-            }
+            "git" => workspace::handle_git(input, ctx.workspace_dir(), ctx.character_name()).await,
             // set_next_wake is an undeclared, heartbeat-only capability: the
             // heartbeat loop intercepts it before dispatch (see
             // `dispatch_heartbeat_tools`). This arm only fires if some other
@@ -435,21 +421,21 @@ mod tests {
 
     #[test]
     fn render_tool_defs_substitutes_user_placeholder() {
-        // {{user}} appears in check_time and must resolve, not ship
-        // literal to the model.
+        // {{user}} opens activity_heatmap's description and must resolve, not
+        // ship literal to the model.
         let cfg = all_enabled();
         let defs = render_tool_defs(&cfg, "qifei", "ren");
-        let check_time = defs
+        let heatmap = defs
             .iter()
-            .find(|d| d["name"] == "check_time")
-            .expect("check_time present");
-        let desc = check_time["description"].as_str().unwrap();
+            .find(|d| d["name"] == "activity_heatmap")
+            .expect("activity_heatmap present");
+        let desc = heatmap["description"].as_str().unwrap();
         assert!(
             !desc.contains("{{user}}"),
             "{{{{user}}}} must be substituted, got: {desc}"
         );
         assert!(
-            desc.contains("ren"),
+            desc.starts_with("View ren's activity heatmap"),
             "substituted name 'ren' must appear in description, got: {desc}"
         );
     }
@@ -472,10 +458,12 @@ mod tests {
     #[test]
     fn test_all_tools_returns_expected_count() {
         let tools = all_tools();
-        // images(1) + web(2) + activity(1) + basic(2) + workspace(7) + history(1)
-        // + model_history(1) = 15
-        // (basic = check_time, roll_dice; set_next_wake is undeclared — see basic.rs)
-        assert_eq!(tools.len(), 15);
+        // images(1) + web(2) + activity(1) + basic(1) + workspace(5) + history(1)
+        // + model_history(1) = 12
+        // (basic = roll_dice; set_next_wake is undeclared — see basic.rs)
+        // (workspace = read, edit, search, delete, git — read absorbs listing,
+        //  edit absorbs whole-file writes, git replaces exec)
+        assert_eq!(tools.len(), 12);
     }
 
     #[test]
@@ -485,7 +473,7 @@ mod tests {
             enabled_tools: vec![
                 "search".to_owned(),
                 "search_chat_logs".to_owned(),
-                "check_time".to_owned(),
+                "git".to_owned(),
             ],
             ..ToolsConfig::default()
         };
@@ -494,7 +482,7 @@ mod tests {
 
         assert!(names.contains(&"search"));
         assert!(names.contains(&"search_chat_logs"));
-        assert!(names.contains(&"check_time"));
+        assert!(names.contains(&"git"));
         // Not listed → not offered.
         assert!(!names.contains(&"roll_dice"));
         assert!(!names.contains(&"web_search"));
@@ -530,14 +518,20 @@ mod tests {
 
     // ── dispatch_tool tests ───────────────────────────────────────────
 
+    /// The tools folded away in the tool-surface simplification: `write` and
+    /// `list_files` were absorbed into `edit`/`read`, `check_time` is served by
+    /// the injected time marker, and `exec` gave way to the narrower `git`.
+    /// None may quietly come back as a dispatch arm.
     #[tokio::test]
-    async fn test_dispatch_check_time() {
+    async fn test_dispatch_retired_tools_are_not_implemented() {
         let ctx = TestToolContext::new();
-        let result = dispatch_tool("check_time", serde_json::json!({}), &ctx).await;
-        assert!(result.is_ok(), "check_time should succeed");
-        let val = result.unwrap();
-        // Should contain a datetime string.
-        assert!(val.get("time").is_some() || val.is_string());
+        for name in ["write", "list_files", "check_time", "exec"] {
+            let result = dispatch_tool(name, serde_json::json!({}), &ctx).await;
+            assert!(
+                matches!(result, Err(ToolError::NotImplemented(_))),
+                "retired tool '{name}' must not dispatch"
+            );
+        }
     }
 
     #[tokio::test]
@@ -655,7 +649,7 @@ mod tests {
         let ctx = TestToolContext::new().with_workspace_dir(&ws_str);
 
         let result = dispatch_tool(
-            "write",
+            "edit",
             serde_json::json!({"path": "memory/people/ren.md", "content": "Ren likes tea."}),
             &ctx,
         )

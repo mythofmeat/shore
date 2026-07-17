@@ -74,7 +74,6 @@ pub fn tools(ctx: &CommandContext) -> CommandResult {
     Ok(json!({
         "tools": tool_rows,
         "subagents": subagent_rows,
-        "exec_allowlist": crate::tools::workspace::exec_allowlist(),
         "warnings": warnings,
     }))
 }

@@ -27,13 +27,13 @@ Finish with a concise summary covering:
 
 ## Committing your changes
 
-Your workspace is a git repository, and your memory has a history. Use the `exec` tool to commit as you work — during this pass `exec` accepts `git` commands only.
+Your workspace is a git repository, and your memory has a history. Use the `git` tool to commit as you work, passing the subcommand and its arguments separately — `subcommand: "add"`, `args: ["memory/people/alex.md"]`.
 
-- Start by running `git status`. If earlier passes left uncommitted changes, commit those first as their own commit (e.g. `chore: carry-over from previous pass`) so they don't mix with this pass's work.
-- Commit after each logical unit of work — one dedupe, one move, one supersession, one index update — rather than one bulk commit at the end. Stage the specific files involved (`git add <path> ...`), not `git add -A`.
+- Start with `subcommand: "status"`. If earlier passes left uncommitted changes, commit those first as their own commit (e.g. `chore: carry-over from previous pass`) so they don't mix with this pass's work.
+- Commit after each logical unit of work — one dedupe, one move, one supersession, one index update — rather than one bulk commit at the end. Stage the specific files involved, not `-A`.
 - The commit message is the explanation. Say what changed and *why*: the reasoning behind a supersession, the source of a new fact (which conversation or file it came from), what a moved fact was deduplicated against. Reference files by workspace-relative path.
-- Do not configure remotes, push, or rewrite history. Local commits only.
-- Finish the pass with `git status` clean.
+- Local commits only. Pushing, remotes, config, and history rewriting are refused by the tool.
+- Finish the pass with a clean `status`.
 
 You may edit any workspace file, including the protected prompt files (`SOUL.md`, `USER.md`, `AGENTS.md`, `TOOLS.md`). Edits to those files are staged through an active-prompt snapshot and take effect at the next compaction or reload boundary, not immediately within this pass. Be deliberate when changing them.
 

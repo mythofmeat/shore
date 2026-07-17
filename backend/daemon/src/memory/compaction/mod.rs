@@ -997,32 +997,31 @@ async fn append_compaction_dream_log(
     }
 }
 
-/// Extract the model's intended path (and `write`-tool content, if any)
-/// from a tool input value. Returns `None` if the input is malformed; the
-/// dispatch wrapper surfaces that as a tool error.
-fn extract_memory_write_intent(name: &str, input: &Value) -> Option<(String, Option<String>)> {
+/// Extract the model's intended path (and whole-file content, if the call
+/// carries any) from a tool input value. Returns `None` if the input is
+/// malformed; the dispatch wrapper surfaces that as a tool error.
+///
+/// Only `edit`'s `content` form names the resulting file outright. Its `edits`
+/// form describes replacements against the file on disk, so a dry run — which
+/// by definition hasn't applied them — can preview the path but not the result.
+fn extract_memory_write_intent(input: &Value) -> Option<(String, Option<String>)> {
     let path = input.get("path").and_then(|v| v.as_str())?.to_owned();
-    let content = match name {
-        "write" => input
-            .get("content")
-            .and_then(|v| v.as_str())
-            .map(str::to_owned),
-        // `edit` carries an `edits` array, not a single content blob —
-        // the dry-run preview just records the path.
-        _ => None,
-    };
+    let content = input
+        .get("content")
+        .and_then(|v| v.as_str())
+        .map(str::to_owned);
     Some((path, content))
 }
 
 /// Dispatch a single tool call from the compaction tool loop. Wraps the
 /// canonical `tool_system::dispatch_tool`:
 ///
-/// * `delete` is always blocked from compaction, and `exec` is gated to
-///   `git` commands so the pass can commit its memory writes — compaction
-///   curates files, it does not run other programs.
-/// * In dry-run mode, `write`/`edit` are blocked but the intended path is
-///   still recorded in `dry_run_previews` for the returned outcome.
-/// * For live `write`/`edit`, the compaction path filter
+/// * `delete` is always blocked from compaction. `git` is allowed so the pass
+///   can commit its memory writes; the tool is git-only by construction, so
+///   compaction no longer has to inspect a command line to know that.
+/// * In dry-run mode, `edit` is blocked but the intended path is still
+///   recorded in `dry_run_previews` for the returned outcome.
+/// * For a live `edit`, the compaction path filter
 ///   ([`CompactionManager::write_allowed_path`]) rejects writes outside
 ///   `memory/*` and the workspace-root prompt files, and the resolved
 ///   file's previous content is snapshotted so a downstream archive
@@ -1038,28 +1037,19 @@ async fn dispatch_compaction_tool(
     if name == "delete" {
         return (format!("{name} is not available during compaction"), true);
     }
-    if name == "exec" {
-        if state.dry_run {
-            return (
-                "exec blocked: dry-run compaction does not run commands".to_owned(),
-                true,
-            );
-        }
-        if !crate::tools::workspace::exec_input_is_git(input) {
-            return (
-                "exec during compaction is limited to git commands".to_owned(),
-                true,
-            );
-        }
-        // Falls through to the canonical dispatch below.
+    if name == "git" && state.dry_run {
+        return (
+            "git blocked: dry-run compaction does not run commands".to_owned(),
+            true,
+        );
     }
 
-    let is_write_like = matches!(name, "write" | "edit");
+    let is_write_like = name == "edit";
 
     // Dry-run mode blocks writes but records the intent so the manager
     // can return a useful preview.
     if state.dry_run && is_write_like {
-        if let Some((path, content)) = extract_memory_write_intent(name, input) {
+        if let Some((path, content)) = extract_memory_write_intent(input) {
             if CompactionManager::write_allowed_path(&path) {
                 state.dry_run_previews.push(MemoryFileOp {
                     path,
@@ -1078,7 +1068,7 @@ async fn dispatch_compaction_tool(
     }
 
     if is_write_like {
-        let Some((display_path, _)) = extract_memory_write_intent(name, input) else {
+        let Some((display_path, _)) = extract_memory_write_intent(input) else {
             return (
                 format!("{name} blocked: missing required 'path' field"),
                 true,
@@ -1292,15 +1282,15 @@ mod tests {
         }
     }
 
-    /// Build a single tool-use round that calls `write` once per
-    /// `(path, content)` pair, then ends the loop with `end_turn`.
+    /// Build a single tool-use round that calls `edit` in whole-file mode once
+    /// per `(path, content)` pair, then ends the loop with `end_turn`.
     fn tool_use_round(entries: &[(&str, &str)]) -> GenerateResponse {
         let blocks = entries
             .iter()
             .enumerate()
             .map(|(i, (path, content))| ContentBlock::ToolUse {
                 id: format!("call_{i}"),
-                name: "write".into(),
+                name: "edit".into(),
                 input: json!({
                     "path": path,
                     "content": content,
@@ -1332,15 +1322,15 @@ mod tests {
         }
     }
 
-    /// Read-only tool-use round (e.g. a `list_files` call) used to
-    /// exercise the no-memory-writes path: the model engaged tools but
-    /// never persisted anything.
+    /// Read-only tool-use round (a bare `read`, which lists the workspace
+    /// root) used to exercise the no-memory-writes path: the model engaged
+    /// tools but never persisted anything.
     fn read_only_round() -> GenerateResponse {
         GenerateResponse {
             content: String::new(),
             content_blocks: vec![ContentBlock::ToolUse {
                 id: "call_ro".into(),
-                name: "list_files".into(),
+                name: "read".into(),
                 input: json!({}),
             }],
             finish_reason: "tool_use".into(),
@@ -1922,7 +1912,7 @@ mod tests {
                 assert_eq!(r.retained_count, 4);
                 assert_eq!(r.retained_turns, 2);
                 assert_eq!(r.tool_rounds, 1);
-                assert!(r.tools_called.iter().all(|n| n == "write"));
+                assert!(r.tools_called.iter().all(|n| n == "edit"));
             }
 
 
@@ -1987,7 +1977,7 @@ mod tests {
                 assert!(r.tool_rounds >= 1);
                 assert!(r.rejected_paths.is_empty());
                 assert!(!r.max_rounds_hit);
-                assert!(r.tools_called.iter().any(|n| n == "list_files"));
+                assert!(r.tools_called.iter().any(|n| n == "read"));
             }
 
 
@@ -2073,7 +2063,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_dispatch_gates_exec_to_git() {
+    async fn test_dispatch_allows_git_but_not_in_dry_run() {
         if !git_available() {
             return;
         }
@@ -2081,19 +2071,11 @@ mod tests {
         let ws = tmp.path().to_string_lossy().into_owned();
         let ctx = TestCtx::new(ws.clone());
 
-        // Non-git exec is blocked.
-        let mut state = ToolLoopState::new(false);
-        let (blocked_msg, blocked_is_error) =
-            dispatch_compaction_tool("exec", &json!({"command": "ls -la"}), &ctx, &ws, &mut state)
-                .await;
-        assert!(blocked_is_error);
-        assert!(blocked_msg.contains("limited to git"));
-
-        // Dry run blocks exec entirely, git included.
+        // Dry run runs no commands at all, git included.
         let mut dry_state = ToolLoopState::new(true);
         let (dry_msg, dry_is_error) = dispatch_compaction_tool(
-            "exec",
-            &json!({"command": "git status"}),
+            "git",
+            &json!({"subcommand": "status"}),
             &ctx,
             &ws,
             &mut dry_state,
@@ -2102,23 +2084,50 @@ mod tests {
         assert!(dry_is_error);
         assert!(dry_msg.contains("dry-run"));
 
-        // Live git reaches the real exec handler.
+        // Live git reaches the real handler.
+        let mut state = ToolLoopState::new(false);
         let _created = crate::tools::workspace::ensure_workspace_git_repo(tmp.path(), "test")
             .await
             .unwrap();
         let (out, is_error) = dispatch_compaction_tool(
-            "exec",
-            &json!({"command": "git status"}),
+            "git",
+            &json!({"subcommand": "status"}),
             &ctx,
             &ws,
             &mut state,
         )
         .await;
-        assert!(!is_error, "git exec should dispatch: {out}");
+        assert!(!is_error, "git should dispatch: {out}");
         assert!(out.contains("\"exit_code\""));
 
-        // Exec calls never count as memory writes.
+        // Git calls never count as memory writes.
         assert!(state.writes_applied.is_empty());
+    }
+
+    /// `delete` stays blocked, and the tools that used to need argv-sniffing
+    /// to keep out of compaction are simply gone from the surface.
+    #[tokio::test]
+    async fn test_dispatch_blocks_delete_and_retired_tools() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ws = tmp.path().to_string_lossy().into_owned();
+        let ctx = TestCtx::new(ws.clone());
+        let mut state = ToolLoopState::new(false);
+
+        let (msg, is_error) = dispatch_compaction_tool(
+            "delete",
+            &json!({"path": "memory/x.md"}),
+            &ctx,
+            &ws,
+            &mut state,
+        )
+        .await;
+        assert!(is_error);
+        assert!(msg.contains("not available during compaction"));
+
+        let (exec_msg, exec_is_error) =
+            dispatch_compaction_tool("exec", &json!({"command": "ls -la"}), &ctx, &ws, &mut state)
+                .await;
+        assert!(exec_is_error, "exec must not dispatch: {exec_msg}");
     }
 
     #[tokio::test]

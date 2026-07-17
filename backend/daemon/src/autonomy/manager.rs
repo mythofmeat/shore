@@ -2118,8 +2118,10 @@ async fn run_pre_dream_compaction(
 ///
 /// This documents the scheduler affordances the runtime understands and points
 /// carry-forward notes at `MEMORY.md`. A `[Current time: ...]` line is prepended
-/// so the character has a fresh time anchor on every tick without needing to
-/// call `check_time`.
+/// so the character has a fresh time anchor on every tick. This is the
+/// heartbeat's half of the reason there is no time tool: chat gets its anchor
+/// from the injected time marker (see `engine::prompt`), heartbeat ticks get it
+/// from here.
 fn build_heartbeat_prompt(user_name: &str, default_interval: &str) -> String {
     let now = chrono::Local::now()
         .format("%A %Y-%m-%d · %-I:%M %p")
@@ -4440,7 +4442,7 @@ mod tests {
         // Simulate what execute_heartbeat_tick does: clone last_request,
         // then check if tools are modified.
         let original_tools: Vec<Value> = vec![
-            json!({"name": "check_time", "input_schema": {}}),
+            json!({"name": "read", "input_schema": {}}),
             json!({"name": "search_chat_logs", "input_schema": {}}),
         ];
 
@@ -4849,7 +4851,7 @@ api_key_env = "{api_key_env}"
             base_url: None,
             messages: vec![json!({"role": "user", "content": "hi"})],
             system: Some(json!([{"type": "text", "text": "sys"}])),
-            tools: Some(vec![json!({"name": "check_time", "input_schema": {}})]),
+            tools: Some(vec![json!({"name": "read", "input_schema": {}})]),
             max_tokens: 4096,
             temperature: None,
             top_p: None,

@@ -1177,22 +1177,13 @@ fn build_librarian_tool_defs(character: &str, display_name: &str, dry_run: bool)
     // The librarian uses its own fixed tool set, independent of the character's
     // `[tools]` allowlist. Express it directly as an allowlist so
     // `render_tool_defs` yields exactly these (in registry order).
-    let mut names: Vec<String> = [
-        "read",
-        "list_files",
-        "search",
-        "search_chat_logs",
-        "check_time",
-    ]
-    .into_iter()
-    .map(str::to_owned)
-    .collect();
+    let mut names: Vec<String> = ["read", "search", "search_chat_logs"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
     if !dry_run {
-        names.push("write".to_owned());
         names.push("edit".to_owned());
-        // Offered for git commits only; the dispatch gate in
-        // `blocked_librarian_tool_result` rejects every other program.
-        names.push("exec".to_owned());
+        names.push("git".to_owned());
     }
     let tools_cfg = shore_config::app::ToolsConfig {
         enabled_tools: names,
@@ -1376,7 +1367,7 @@ async fn dispatch_librarian_tools(
         );
 
         let (output, is_error) =
-            if let Some(blocked) = blocked_librarian_tool_result(&name, &input, dry_run) {
+            if let Some(blocked) = blocked_librarian_tool_result(&name, dry_run) {
                 blocked
             } else {
                 crate::content_util::dispatch_result_to_output(
@@ -1384,7 +1375,7 @@ async fn dispatch_librarian_tools(
                 )
             };
 
-        if !is_error && matches!(name.as_str(), "write" | "edit") {
+        if !is_error && name == "edit" {
             if let Some(path) = tool_path(&input) {
                 loop_result.changed.push(path.to_owned());
             }
@@ -1460,27 +1451,15 @@ fn push_assistant_response(request: &mut LlmRequest, resp: &GenerateResponse) {
     }
 }
 
-fn blocked_librarian_tool_result(
-    name: &str,
-    input: &Value,
-    dry_run: bool,
-) -> Option<(String, bool)> {
-    if name == "exec" {
-        if dry_run {
-            return Some(("dry-run dreaming does not run commands".to_owned(), true));
-        }
-        // Git is allowed through so the librarian can commit its memory
-        // changes. Everything else stays blocked: the dreaming pass curates
-        // files, it does not run programs.
-        if !crate::tools::workspace::exec_input_is_git(input) {
-            return Some((
-                "exec during dreaming passes is limited to git commands".to_owned(),
-                true,
-            ));
-        }
-        return None;
+fn blocked_librarian_tool_result(name: &str, dry_run: bool) -> Option<(String, bool)> {
+    // `git` is allowed through so the librarian can commit its memory changes.
+    // The dreaming pass curates files, it does not run programs — and with the
+    // git tool being the only one that spawns a process, that's now a property
+    // of the tool surface rather than something this gate has to enforce.
+    if name == "git" && dry_run {
+        return Some(("dry-run dreaming does not run commands".to_owned(), true));
     }
-    if dry_run && matches!(name, "write" | "edit") {
+    if dry_run && name == "edit" {
         return Some((
             "dry-run dreaming does not write or edit files".to_owned(),
             true,
@@ -1491,7 +1470,7 @@ fn blocked_librarian_tool_result(
 
 fn record_librarian_tool_intent(result: &mut LibrarianLoopResult, name: &str, input: &Value) {
     match name {
-        "read" | "list_files" => {
+        "read" => {
             if let Some(path) = tool_path(input) {
                 push_unique(&mut result.inspected, path.to_owned());
             }
@@ -3026,7 +3005,7 @@ mod tests {
         .await
         .unwrap();
 
-        mock.enqueue_json_tool_use("t_list", "list_files", json!({"path": "memory"}))
+        mock.enqueue_json_tool_use("t_list", "read", json!({"path": "memory"}))
             .await;
         mock.enqueue_json_tool_use("t_read", "read", json!({"path": "memory/daily/2026-04.md"}))
             .await;
@@ -3038,7 +3017,7 @@ mod tests {
         .await;
         mock.enqueue_json_tool_use(
             "t_write_notes",
-            "write",
+            "edit",
             json!({
                 "path": "memory/shore-notes.md",
                 "content": "# Shore Notes\n\n- Shore memory uses `MEMORY.md` as a prompt-visible index rather than an old recap block.\n- Duplicate daily notes about the index direction were consolidated here.\n"
@@ -3047,7 +3026,7 @@ mod tests {
         .await;
         mock.enqueue_json_tool_use(
             "t_write_memory",
-            "write",
+            "edit",
             json!({
                 "path": "MEMORY.md",
                 "content": "# Memory Index\n\nThis file is the character's map of long-term memory. It is not the full memory itself.\nUse it to decide which memory files to inspect before answering.\n\nCore user facts and standing behavior guidance are already loaded from USER.md and AGENTS.md; do not duplicate them here unless needed as pointers to memory files.\n\n## Memory areas\n\n- `shore-notes.md` - Durable Shore memory architecture notes.\n- `daily/2026-04.md` - Raw April notes; read only for source context.\n\n## Recently updated files\n\n- `shore-notes.md` - Consolidated duplicate daily notes about MEMORY.md replacing recap.\n\n## Current conversational throughlines\n\n- Shore memory should remain markdown-first, with dreaming acting as an AI librarian.\n\n## Needs review\n\n- None.\n"
@@ -3056,7 +3035,7 @@ mod tests {
         .await;
         mock.enqueue_json_tool_use(
             "t_write_dreams",
-            "write",
+            "edit",
             json!({
                 "path": "memory/DREAMS.md",
                 "content": "# Dreams\n\n## 2026-04-27 - AI librarian dreaming pass\n\n- Files inspected: `daily/2026-04.md`, `shore-notes.md`.\n- Files changed: `shore-notes.md`, `MEMORY.md`, `DREAMS.md`.\n- Moved/deduped/superseded: duplicate daily notes about MEMORY.md were consolidated into `shore-notes.md`; old recap language was superseded.\n- Unresolved issues: none.\n- MEMORY.md updated: yes.\n"
@@ -3082,10 +3061,10 @@ mod tests {
         // The daemon now always writes the audit; model writes to DREAMS.md
         // are no longer wired (DREAMS lives in data_dir, outside the workspace).
         assert!(result.audit_appended);
-        assert!(result.tools_used.contains(&"list_files".to_owned()));
+        assert!(result.tools_used.contains(&"read".to_owned()));
         assert!(result.tools_used.contains(&"read".to_owned()));
         assert!(result.tools_used.contains(&"search".to_owned()));
-        assert!(result.tools_used.contains(&"write".to_owned()));
+        assert!(result.tools_used.contains(&"edit".to_owned()));
         assert_eq!(result.tool_rounds, 6);
 
         let notes = fs::read_to_string(mem.join("shore-notes.md"))
@@ -3281,7 +3260,7 @@ mod tests {
         // iter-0: tool_use (loop continues) → caller pushes assistant +
         // user(tool_result). iter-1: text (loop ends). Two LLM calls, so
         // two captured request bodies to diff.
-        mock.enqueue_json_tool_use("t_list", "list_files", json!({"path": "memory"}))
+        mock.enqueue_json_tool_use("t_list", "read", json!({"path": "memory"}))
             .await;
         mock.enqueue_json_text("Librarian pass complete.").await;
 
@@ -3385,7 +3364,7 @@ mod tests {
 
         // Only one response is enqueued: if the cap weren't enforced, the loop
         // would call generate a second time and the mock would error.
-        mock.enqueue_json_tool_use("t_list", "list_files", json!({"path": "memory"}))
+        mock.enqueue_json_tool_use("t_list", "read", json!({"path": "memory"}))
             .await;
 
         let result = run_librarian_sweep(
@@ -3431,7 +3410,7 @@ mod tests {
 
         mock.enqueue_json_tool_use(
             "t_write",
-            "write",
+            "edit",
             json!({"path": "MEMORY.md", "content": "# Bad"}),
         )
         .await;
@@ -3521,7 +3500,7 @@ mod tests {
 
         mock.enqueue_json_tool_use(
             "t_write_soul",
-            "write",
+            "edit",
             json!({"path": "SOUL.md", "content": "new soul"}),
         )
         .await;
@@ -3540,7 +3519,7 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert!(result.tools_used.contains(&"write".to_owned()));
+        assert!(result.tools_used.contains(&"edit".to_owned()));
         assert_eq!(
             fs::read_to_string(workspace.join(SOUL_FILE)).await.unwrap(),
             "new soul"
@@ -3956,26 +3935,25 @@ mod tests {
     }
 
     #[test]
-    fn librarian_exec_gate_allows_only_git() {
-        let git = json!({"command": "git commit -m 'memory: dedupe tea notes'"});
-        assert!(blocked_librarian_tool_result("exec", &git, false).is_none());
+    fn librarian_git_gate_allows_live_commits_and_blocks_dry_runs() {
+        // Live: git is the pass's own bookkeeping, and the tool cannot reach
+        // any other program, so it passes straight through.
+        assert!(blocked_librarian_tool_result("git", false).is_none());
 
-        let (blocked_msg, blocked_is_error) =
-            blocked_librarian_tool_result("exec", &json!({"command": "ls -la"}), false).unwrap();
-        assert!(blocked_is_error);
-        assert!(blocked_msg.contains("limited to git"));
-
-        // Dry run blocks exec entirely, git included.
-        let (dry_msg, dry_is_error) = blocked_librarian_tool_result("exec", &git, true).unwrap();
+        // Dry run runs no commands at all, git included.
+        let (dry_msg, dry_is_error) = blocked_librarian_tool_result("git", true).unwrap();
         assert!(dry_is_error);
         assert!(dry_msg.contains("dry-run"));
 
-        // Malformed input does not slip through the gate.
-        assert!(blocked_librarian_tool_result("exec", &json!({}), false).is_some());
+        // Dry run also blocks the writes themselves.
+        let (edit_msg, edit_is_error) = blocked_librarian_tool_result("edit", true).unwrap();
+        assert!(edit_is_error);
+        assert!(edit_msg.contains("dry-run"));
+        assert!(blocked_librarian_tool_result("edit", false).is_none());
     }
 
     #[test]
-    fn librarian_tool_defs_offer_exec_only_when_live() {
+    fn librarian_tool_defs_offer_mutating_tools_only_when_live() {
         let names = |dry_run: bool| -> Vec<String> {
             build_librarian_tool_defs("alice", "Alice", dry_run)
                 .iter()
@@ -3984,10 +3962,13 @@ mod tests {
                 .collect()
         };
         let live = names(false);
-        assert!(live.iter().any(|n| n == "exec"));
-        assert!(live.iter().any(|n| n == "write"));
+        assert!(live.iter().any(|n| n == "git"));
+        assert!(live.iter().any(|n| n == "edit"));
         let dry = names(true);
-        assert!(!dry.iter().any(|n| n == "exec"));
-        assert!(!dry.iter().any(|n| n == "write"));
+        assert!(!dry.iter().any(|n| n == "git"));
+        assert!(!dry.iter().any(|n| n == "edit"));
+        // Inspection is available either way.
+        assert!(dry.iter().any(|n| n == "read"));
+        assert!(dry.iter().any(|n| n == "search"));
     }
 }

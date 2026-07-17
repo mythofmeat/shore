@@ -22,7 +22,7 @@
 
 use std::sync::OnceLock;
 
-use shore_config::app::{ExecConfig, SandboxMode};
+use shore_config::app::{SandboxConfig, SandboxMode};
 
 /// Hidden first argument that switches the daemon binary into sandbox-helper
 /// mode. The entrypoint dispatches to [`run_sandbox_child`] when it sees this as
@@ -30,20 +30,20 @@ use shore_config::app::{ExecConfig, SandboxMode};
 /// single-threaded, before `execve`).
 pub const HELPER_ARG: &str = "__sandbox-exec";
 
-static POLICY: OnceLock<ExecConfig> = OnceLock::new();
+static POLICY: OnceLock<SandboxConfig> = OnceLock::new();
 
 /// Install the process-wide exec sandbox policy. Called once at daemon startup
 /// from the loaded config; later calls are ignored.
-pub fn init_policy(cfg: ExecConfig) {
+pub fn init_policy(cfg: SandboxConfig) {
     let _ignored = POLICY.set(cfg);
 }
 
 /// The active policy. Defaults to fully disabled when uninitialized so that test
 /// binaries and any other non-daemon caller of [`plan_for`] never accidentally
 /// re-exec themselves as a sandbox helper.
-fn policy() -> ExecConfig {
-    POLICY.get().cloned().unwrap_or(ExecConfig {
-        sandbox: SandboxMode::Off,
+fn policy() -> SandboxConfig {
+    POLICY.get().cloned().unwrap_or(SandboxConfig {
+        mode: SandboxMode::Off,
         allow_network: false,
     })
 }
@@ -71,7 +71,7 @@ pub enum SandboxPlan {
 #[must_use]
 pub fn plan_for(workspace_dir: &str) -> SandboxPlan {
     let pol = policy();
-    let require = match pol.sandbox {
+    let require = match pol.mode {
         SandboxMode::Off => return SandboxPlan::Direct,
         SandboxMode::On => true,
         SandboxMode::Auto => {

@@ -628,7 +628,7 @@ impl MockLlmSidecar {
     pub async fn enqueue_json_compaction_write_optional(&self, path: &str, content: &str) {
         self.enqueue_json_tool_use(
             "call_compact_write",
-            "write",
+            "edit",
             json!({"path": path, "content": content}),
         )
         .await;

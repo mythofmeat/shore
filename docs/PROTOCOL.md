@@ -882,10 +882,14 @@ for the current character. Two-phase, client-driven:
 #### `tools`
 - **args:** none
 - **data:** the effective tool surface:
-  `{ "tools": [ { "tool", "main", "subagents" } ], "subagents": [ { "name", "enabled", "tools", "model" } ], "exec_allowlist": [ "…" ], "warnings": [ "…" ] }`.
+  `{ "tools": [ { "tool", "main", "subagents" } ], "subagents": [ { "name", "enabled", "tools", "model" } ], "warnings": [ "…" ] }`.
   `main` is whether the primary character offers the tool; `subagents` lists
   which enabled sub-agents own it. `warnings` surfaces dangling
   `enabled_tools` / `enabled_subagents` / sub-agent tool references.
+  > **Changed:** the `exec_allowlist` field was removed along with the `exec`
+  > tool. Clients that rendered it should drop it; the `git` tool that replaced
+  > `exec` has a fixed denylist rather than a configurable allowlist, so there
+  > is nothing to introspect.
 
 #### `config_reset`
 - **args:** none

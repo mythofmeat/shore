@@ -231,17 +231,15 @@ model = "anthropic:claude-sonnet-4-6"   # Chat default as provider:model_id; als
 #   "web_search",        # Tavily web search
 #   "fetch_url",         # fetch a URL's content
 #   "generate_image",
-#   "check_time",
 #   "roll_dice",
 #   "activity_heatmap",
-#   "read",              # read workspace files (memory/ is an ordinary subdir)
-#   "write",             # write workspace files; protected prompt files defer to compaction
-#   "edit",
-#   "list_files",
+#   "read",              # read a file, or list a directory (memory/ is an ordinary subdir)
+#   "edit",              # write a whole file (content) or replace text in one (edits);
+#                        #   protected prompt files defer to compaction
 #   "search",            # search workspace files
 #   "delete",
+#   "git",               # commit workspace history; no shell, no push, no history rewriting
 #   "search_chat_logs",  # search compacted + active conversation history (hidden in private convos)
-#   "exec",              # allowlisted, argument-sandboxed workspace commands (hidden in private convos)
 #   "set_next_wake",     # heartbeat self-scheduling (only usable during heartbeat ticks)
 # ]
 # enabled_subagents = ["memory"]   # exposes ask_memory (see [subagents] below)
@@ -269,7 +267,7 @@ model = "anthropic:claude-sonnet-4-6"   # Chat default as provider:model_id; als
 # [subagents.memory]
 # description = "Ask {{char}}'s archivist about past conversations and saved notes."
 # prompt = "You are {{char}}'s memory archivist. Search and read what's relevant, answer concisely."
-# tools = ["search", "search_chat_logs", "read", "list_files"]
+# tools = ["search", "search_chat_logs", "read"]
 # # model = "anthropic:claude-haiku-4-5"   # optional; else defaults.subagent_model
 # # max_iterations = 8                      # optional; else the model's own cap
 

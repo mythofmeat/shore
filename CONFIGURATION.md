@@ -607,18 +607,15 @@ enabled_tools = [
   "web_search",
   "fetch_url",
   "generate_image",
-  "check_time",
   "roll_dice",
   "activity_heatmap",
-  "read",
-  "write",
-  "edit",
-  "list_files",
+  "read",              # read a file, or list a directory
+  "edit",              # write a whole file, or replace text within one
   "search",
   "delete",
+  "git",               # commit workspace/memory history; no push, no history rewriting
   "search_chat_logs",
   "model_history",
-  "exec",
   "set_next_wake",   # heartbeat self-scheduling; only usable during heartbeat ticks
 ]
 enabled_subagents = ["memory"]   # exposes ask_memory (see [subagents])
@@ -630,8 +627,8 @@ result_limit = 5
 search_depth = "basic"
 include_answer = true
 
-[tools.exec]
-sandbox = "auto"          # auto (default) | on | off
+[tools.sandbox]
+mode = "auto"             # auto (default) | on | off
 allow_network = false     # lift the seccomp network cut when true
 
 # Per-tool override of the global max_result_chars:
@@ -640,11 +637,11 @@ max_result_chars = 10000
 ```
 
 The registered tool names are: `web_search`, `fetch_url`, `generate_image`,
-`check_time`, `roll_dice`, `activity_heatmap`, `read`, `write`, `edit`,
-`list_files`, `search`, `delete`, `search_chat_logs`, `model_history`, `exec`,
-`set_next_wake`. (`model_history` reports which models generated the
-character's messages over a time period, from the usage ledger — pairs with
-`search_chat_logs`' per-message `model` field and filter.)
+`roll_dice`, `activity_heatmap`, `read`, `edit`, `search`, `delete`, `git`,
+`search_chat_logs`, `model_history`, `set_next_wake`. (`model_history` reports
+which models generated the character's messages over a time period, from the
+usage ledger — pairs with `search_chat_logs`' per-message `model` field and
+filter.)
 List exactly the ones you want; comment a line out to disable that tool.
 Dynamic MCP tools (`mcp__<server>__<tool>`, see [`[mcp]`](#mcp)) can also be
 listed here, by exact name or with a trailing-`*` glob (e.g. `mcp__hue__*`).
@@ -652,21 +649,24 @@ listed here, by exact name or with a trailing-`*` glob (e.g. `mcp__hue__*`).
 for the autonomous heartbeat to schedule its own next wake.)
 
 Run **`shore tools`** to see the effective surface: every registered tool,
-whether it's enabled on the main character, which sub-agents own it, the `exec`
-allowlist, and any dangling references (an `enabled_tools` / sub-agent `tools`
-entry that names no real tool, or an `enabled_subagents` entry with no
-definition).
+whether it's enabled on the main character, which sub-agents own it, and any
+dangling references (an `enabled_tools` / sub-agent `tools` entry that names no
+real tool, or an `enabled_subagents` entry with no definition).
 
-`[tools.exec]` configures the sandbox applied to programs run through the
-`exec` tool (Linux only; other platforms always behave as `off`). `sandbox`
-selects `auto` (default — enforce Landlock + seccomp when the kernel supports
-Landlock, else log a warning and fall back to the command denylist only), `on`
-(require the sandbox; exec fails when it cannot be enforced), or `off` (denylist
-only). The sandbox keeps writes inside the character workspace and the standard
-build-tool caches, and cuts outbound network — invisible to `git`/read
-workloads and cached `cargo`/`npm` builds. `allow_network` (default `false`)
-lifts the network cut for deployments that need package managers to fetch over
-the network. See ARCHITECTURE.md "Tools And Security" for the full model.
+`[tools.sandbox]` configures the sandbox applied to the subprocesses tools spawn
+(Linux only; other platforms always behave as `off`). It is keyed on the
+mechanism, not on a tool: `git` is currently the only tool that spawns a
+process, and any tool that gains one later is confined by the same settings.
+`mode` selects `auto` (default — enforce Landlock + seccomp when the kernel
+supports Landlock, else log a warning and fall back to the subcommand denylist
+only), `on` (require the sandbox; the tool call fails when it cannot be
+enforced), or `off` (denylist only). The sandbox keeps writes inside the
+character workspace and the standard build-tool caches, and cuts outbound
+network — invisible to the local-repo git workloads it wraps today.
+`allow_network` (default `false`) lifts the network cut. Note that the `git`
+tool refuses `fetch`/`pull`/`clone`/`push` outright, so the network cut is a
+second layer rather than the only one. See ARCHITECTURE.md "Tools And Security"
+for the full model.
 
 The maximum number of tool-loop rounds per chat turn is the per-model
 `max_tool_iterations` cap (see [Model Sections](#model-sections)), not a
@@ -683,10 +683,10 @@ model knows output was dropped. The truncation is persisted, so the shortened
 result — not the original — is what gets replayed on later turns, capping its
 context cost for the rest of the conversation.
 
-- Workspace file tools (`read`, `write`, `edit`, `list_files`, `search`, `delete`) treat `memory/...` as an ordinary workspace subdirectory.
+- Workspace file tools (`read`, `edit`, `search`, `delete`) treat `memory/...` as an ordinary workspace subdirectory.
 - There is no `send_image` toggle for uploaded attachments; generated-image sending is controlled by `generate_image`.
 
-`exec` is allowlisted and argument-sandboxed. Path-like arguments must stay inside the character workspace.
+`git` is the only tool that runs a program, and it only ever runs `git`. Its subcommand is passed separately from its arguments, so there is no shell and no command line to parse: pipes, redirects, and chaining have no meaning. Destructive and history-rewriting subcommands (`reset --hard`, `rebase`, `restore`, `clean -f`, forced checkouts, checking a path back out over the working copy, deletions), `config`, `push`, and remote mutation are refused, and path-like arguments must stay inside the character workspace. Repository-controlled hooks and filter drivers are neutralized on every invocation, so an imported repo cannot run code when the character commits.
 
 ### `[tools.web_search]`
 
@@ -725,14 +725,14 @@ enabled_subagents = ["memory"]   # nothing is exposed until listed here
 [subagents.memory]
 description = "Ask {{char}}'s archivist about past conversations and saved notes."
 prompt = "You are {{char}}'s memory archivist. Search and read what's relevant, answer concisely. Say so if you find nothing."
-tools = ["search", "search_chat_logs", "model_history", "read", "list_files"]
+tools = ["search", "search_chat_logs", "model_history", "read"]
 # model = "anthropic:claude-haiku-4-5"   # optional; else defaults.subagent_model → defaults.model
 # max_iterations = 8                      # optional; else the model's own cap
 ```
 
 **Tip — "moved, not doubled":** if you expose `ask_memory`, you usually want to
 *omit* its underlying tools (`search`, `search_chat_logs`, `model_history`,
-`read`, `list_files`) from the primary character's `enabled_tools`, so the character
+`read`) from the primary character's `enabled_tools`, so the character
 delegates instead of doing the lookup itself. Leave them in only if you want
 both a quick direct lookup and a deep delegated dig.
 
@@ -866,7 +866,7 @@ model = "anthropic:claude-haiku-4-5"
 git_push = false  # push the workspace repo after a successful pass
 ```
 
-The character workspace is a git repository; compaction and dreaming passes commit their memory changes there (the model commits via the git-gated `exec` tool — it cannot `push`). `git_push` is the only top-level `[memory]` key: when `true`, the daemon runs a plain `git push` (honoring the repo's own remote/upstream) after each successful compaction or dreaming pass. It is **off by default**, the daemon never configures a remote for you, a repo with no remote is skipped silently, and a failed push is logged but never fails the pass. Leave it off unless you have set up a remote you want the memory history mirrored to; offsite durability is better served by backing up the workspace directory directly.
+The character workspace is a git repository; compaction and dreaming passes commit their memory changes there (the model commits via the `git` tool — it cannot `push`). `git_push` is the only top-level `[memory]` key: when `true`, the daemon runs a plain `git push` (honoring the repo's own remote/upstream) after each successful compaction or dreaming pass. It is **off by default**, the daemon never configures a remote for you, a repo with no remote is skipped silently, and a failed push is logged but never fails the pass. Leave it off unless you have set up a remote you want the memory history mirrored to; offsite durability is better served by backing up the workspace directory directly.
 
 ## `[memory.compaction]`
 

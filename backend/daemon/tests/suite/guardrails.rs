@@ -75,16 +75,16 @@ async fn tool_events_are_direct_to_requesting_client() {
 
     harness
         .mock_llm
-        .enqueue_tool_use("toolu_guardrail01", "check_time", json!({}))
+        .enqueue_tool_use("toolu_guardrail01", "roll_dice", json!({"notation": "2d6"}))
         .await;
     harness
         .mock_llm
-        .enqueue_text("Time checked for one client.")
+        .enqueue_text("Rolled for one client.")
         .await;
 
     let _ignored = harness
         .conn
-        .send_message("What time is it?", true)
+        .send_message("Roll me some dice.", true)
         .await
         .expect("failed to send message");
 
@@ -100,7 +100,7 @@ async fn tool_events_are_direct_to_requesting_client() {
     let (phase1, phase2) = first_phases;
     assert!(phase1.stream_ended);
     assert!(phase2.stream_ended);
-    phase2.assert_text_contains("Time checked for one client");
+    phase2.assert_text_contains("Rolled for one client");
     assert!(
         phase2
             .raw_messages

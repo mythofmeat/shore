@@ -1,7 +1,13 @@
-//! Workspace filesystem tools — read, write, edit, list, search, delete, exec.
+//! Workspace filesystem tools — read, edit, search, delete, git.
 //!
 //! These tools give the assistant access to a real filesystem workspace
 //! (`{character}/workspace/`), mirroring OpenClaw's model of agent-curated files.
+//!
+//! `read` doubles as directory listing (a directory path returns its entries),
+//! and `edit` doubles as file creation (`content` writes a whole file, `edits`
+//! replaces text within one). `git` is the only process-spawning tool: the
+//! workspace is a git repository and the memory passes commit their own
+//! changes there.
 
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -25,11 +31,7 @@ pub fn tool_defs() -> Vec<ToolDef> {
     defs
 }
 
-/// `read` / `write` / `edit` workspace file tools.
-#[expect(
-    clippy::too_many_lines,
-    reason = "defines all workspace editing tool schemas with parameter specs"
-)]
+/// `read` / `edit` workspace file tools.
 fn editing_tool_defs() -> Vec<ToolDef> {
     vec![
         ToolDef {
@@ -40,37 +42,18 @@ fn editing_tool_defs() -> Vec<ToolDef> {
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Relative path within your workspace."
+                        "description": "Relative path within your workspace. A file path returns its contents; a directory path lists its entries. Omit for a listing of the workspace root."
                     },
                     "offset": {
                         "type": "number",
-                        "description": "Line number to start reading from (1-based). Optional."
+                        "description": "Line number to start reading from (1-based). Files only; ignored for directories. Optional."
                     },
                     "limit": {
                         "type": "number",
-                        "description": "Maximum number of lines to read. Optional."
+                        "description": "Maximum number of lines to read. Files only; ignored for directories. Optional."
                     }
                 },
-                "required": ["path"]
-            }),
-            category: ToolCategory::Other,
-        },
-        ToolDef {
-            name: "write",
-            description: crate::include_prompt!("../../prompts/tools/workspace/write.md"),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "Relative path within your workspace."
-                    },
-                    "content": {
-                        "type": "string",
-                        "description": "Full content to write."
-                    }
-                },
-                "required": ["path", "content"]
+                "required": []
             }),
             category: ToolCategory::Other,
         },
@@ -84,9 +67,13 @@ fn editing_tool_defs() -> Vec<ToolDef> {
                         "type": "string",
                         "description": "Relative path within your workspace."
                     },
+                    "content": {
+                        "type": "string",
+                        "description": "Full content for the file, creating it or overwriting it wholesale. Parent directories are created automatically. Mutually exclusive with `edits`."
+                    },
                     "edits": {
                         "type": "array",
-                        "description": "List of replacements to apply in order.",
+                        "description": "List of replacements to apply in order to an existing file. Mutually exclusive with `content`.",
                         "items": {
                             "type": "object",
                             "properties": {
@@ -107,31 +94,16 @@ fn editing_tool_defs() -> Vec<ToolDef> {
                         }
                     }
                 },
-                "required": ["path", "edits"]
+                "required": ["path"]
             }),
             category: ToolCategory::Other,
         },
     ]
 }
 
-/// `list_files` / `search` / `delete` / `exec` workspace tools.
+/// `search` / `delete` / `git` workspace tools.
 fn discovery_tool_defs() -> Vec<ToolDef> {
     vec![
-        ToolDef {
-            name: "list_files",
-            description: crate::include_prompt!("../../prompts/tools/workspace/list_files.md"),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "Relative directory path within your workspace. Omit for workspace root."
-                    }
-                },
-                "required": []
-            }),
-            category: ToolCategory::Other,
-        },
         ToolDef {
             name: "search",
             description: crate::include_prompt!("../../prompts/tools/workspace/search.md"),
@@ -176,21 +148,26 @@ fn discovery_tool_defs() -> Vec<ToolDef> {
             category: ToolCategory::Other,
         },
         ToolDef {
-            name: "exec",
-            description: crate::include_prompt!("../../prompts/tools/workspace/exec.md"),
+            name: "git",
+            description: crate::include_prompt!("../../prompts/tools/workspace/git.md"),
             parameters: json!({
                 "type": "object",
                 "properties": {
-                    "command": {
+                    "subcommand": {
                         "type": "string",
-                        "description": "Shell command to execute."
+                        "description": "The git subcommand to run, e.g. \"status\", \"add\", \"commit\", \"log\", \"diff\"."
+                    },
+                    "args": {
+                        "type": "array",
+                        "description": "Arguments for the subcommand, one array element per argument. For example [\"-m\", \"note why this matters\"]. Optional.",
+                        "items": { "type": "string" }
                     },
                     "workdir": {
                         "type": "string",
-                        "description": "Working directory for the command (relative to workspace root). Optional."
+                        "description": "Directory to run in, relative to your workspace root. Optional; defaults to the workspace root."
                     }
                 },
-                "required": ["command"]
+                "required": ["subcommand"]
             }),
             category: ToolCategory::Other,
         },
@@ -481,19 +458,30 @@ fn reject_git_internal_path(path_str: &str) -> Result<(), ToolError> {
 // Handlers
 // ---------------------------------------------------------------------------
 
+/// Read a file's contents, or list a directory's entries.
+///
+/// The path decides which: a file is read, a directory is listed, and an
+/// omitted path lists the workspace root. This is why `path` is optional and
+/// why a missing path can't be an error — a bare `read` is the root listing
+/// that `list_files` used to serve.
 pub async fn handle_read(input: Value, workspace_dir: &str) -> Result<Value, ToolError> {
-    let path_str = input
-        .get("path")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| ToolError::InvalidArgs("missing required field: path".into()))?;
+    let Some(path_str) = input.get("path").and_then(|v| v.as_str()) else {
+        return list_directory(workspace_dir, None).await;
+    };
 
     let path = resolve_path(workspace_dir, path_str)?;
+
+    if path.is_dir() {
+        return list_directory(workspace_dir, Some(path_str)).await;
+    }
 
     if !path.exists() {
         return Err(ToolError::Io(format!("file not found: {path_str}")));
     }
     if !path.is_file() {
-        return Err(ToolError::InvalidArgs(format!("{path_str} is not a file")));
+        return Err(ToolError::InvalidArgs(format!(
+            "{path_str} is neither a file nor a directory"
+        )));
     }
 
     let content = tokio::fs::read_to_string(&path)
@@ -552,17 +540,13 @@ pub async fn handle_read(input: Value, workspace_dir: &str) -> Result<Value, Too
     Ok(result)
 }
 
-pub async fn handle_write(input: Value, workspace_dir: &str) -> Result<Value, ToolError> {
-    let path_str = input
-        .get("path")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| ToolError::InvalidArgs("missing required field: path".into()))?;
-    reject_git_internal_path(path_str)?;
-    let content = input
-        .get("content")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| ToolError::InvalidArgs("missing required field: content".into()))?;
-
+/// Write `content` to `path` wholesale, creating parent directories and the
+/// file itself as needed. The `content` half of [`handle_edit`].
+async fn write_whole_file(
+    path_str: &str,
+    content: &str,
+    workspace_dir: &str,
+) -> Result<Value, ToolError> {
     let path = resolve_path(workspace_dir, path_str)?;
 
     if let Some(parent) = path.parent() {
@@ -581,6 +565,13 @@ pub async fn handle_write(input: Value, workspace_dir: &str) -> Result<Value, To
     }))
 }
 
+/// Create/overwrite a file (`content`) or replace text within an existing one
+/// (`edits`).
+///
+/// The two modes are mutually exclusive. `edits` deliberately still fails on a
+/// missing file rather than creating it: an unmatched path is far more often a
+/// mistake than an intent to create, and `content` is the unambiguous way to
+/// say "make this file".
 pub async fn handle_edit(input: Value, workspace_dir: &str) -> Result<Value, ToolError> {
     let path_str = input
         .get("path")
@@ -588,16 +579,40 @@ pub async fn handle_edit(input: Value, workspace_dir: &str) -> Result<Value, Too
         .ok_or_else(|| ToolError::InvalidArgs("missing required field: path".into()))?;
     reject_git_internal_path(path_str)?;
 
-    let edits = input
-        .get("edits")
-        .and_then(|v| v.as_array())
-        .filter(|a| !a.is_empty())
-        .ok_or_else(|| ToolError::InvalidArgs("missing or empty 'edits' array".into()))?;
+    let content_arg = input.get("content").and_then(|v| v.as_str());
+    let edits_arg = input.get("edits").and_then(|v| v.as_array());
+
+    match (content_arg, edits_arg) {
+        (Some(_), Some(_)) => Err(ToolError::InvalidArgs(
+            "pass either 'content' (whole file) or 'edits' (targeted replacements), not both"
+                .into(),
+        )),
+        (Some(content), None) => write_whole_file(path_str, content, workspace_dir).await,
+        (None, Some(edits)) => apply_edits(path_str, edits, workspace_dir).await,
+        (None, None) => Err(ToolError::InvalidArgs(
+            "missing required field: pass 'content' to write a whole file, or 'edits' to replace text within one"
+                .into(),
+        )),
+    }
+}
+
+/// Apply ordered text replacements to an existing file. The `edits` half of
+/// [`handle_edit`].
+async fn apply_edits(
+    path_str: &str,
+    edits: &[Value],
+    workspace_dir: &str,
+) -> Result<Value, ToolError> {
+    if edits.is_empty() {
+        return Err(ToolError::InvalidArgs("'edits' array is empty".into()));
+    }
 
     let path = resolve_path(workspace_dir, path_str)?;
 
     if !path.exists() {
-        return Err(ToolError::Io(format!("file not found: {path_str}")));
+        return Err(ToolError::Io(format!(
+            "file not found: {path_str} (pass 'content' instead of 'edits' to create it)"
+        )));
     }
 
     let mut content = tokio::fs::read_to_string(&path)
@@ -668,8 +683,9 @@ pub async fn handle_edit(input: Value, workspace_dir: &str) -> Result<Value, Too
     }))
 }
 
-pub async fn handle_list_files(input: Value, workspace_dir: &str) -> Result<Value, ToolError> {
-    let path_str = input.get("path").and_then(|v| v.as_str());
+/// Flat listing of a directory's entries. Reached through [`handle_read`] when
+/// the resolved path is a directory (or no path was given at all).
+async fn list_directory(workspace_dir: &str, path_str: Option<&str>) -> Result<Value, ToolError> {
     let dir = resolve_list_path(workspace_dir, path_str)?;
 
     if !dir.exists() {
@@ -1266,70 +1282,8 @@ pub async fn handle_delete(
 }
 
 // ---------------------------------------------------------------------------
-// Exec allowlist
+// Git argument confinement
 // ---------------------------------------------------------------------------
-
-/// Default allowed commands for the exec tool.
-static DEFAULT_ALLOWLIST: &[&str] = &[
-    "ls",
-    "cat",
-    "rg",
-    "git",
-    "wc",
-    "pwd",
-    "sort",
-    "uniq",
-    "dirname",
-    "basename",
-    "file",
-    "stat",
-    "du",
-    "df",
-    "which",
-    "whoami",
-    "date",
-    "tree",
-    "fd",
-    "cargo",
-    "rustc",
-    "rustfmt",
-    "clippy",
-    "rust-analyzer",
-    "npm",
-    "pnpm",
-    "yarn",
-    "make",
-    "cmake",
-];
-
-/// The exec tool's allowed command names (read-only view for introspection,
-/// e.g. `shore tools`).
-pub fn exec_allowlist() -> &'static [&'static str] {
-    DEFAULT_ALLOWLIST
-}
-
-fn parse_command(command: &str) -> Result<Vec<String>, ToolError> {
-    let argv = shell_words::split(command)
-        .map_err(|e| ToolError::InvalidArgs(format!("invalid command line: {e}")))?;
-    if argv.is_empty() {
-        return Err(ToolError::InvalidArgs("command is empty".into()));
-    }
-    Ok(argv)
-}
-
-fn is_command_allowed(argv: &[String]) -> bool {
-    let Some(first_token) = argv.first() else {
-        return false;
-    };
-
-    if first_token.contains('/') || first_token.contains('\\') {
-        return false;
-    }
-
-    let cmd_name = first_token.as_str();
-
-    DEFAULT_ALLOWLIST.contains(&cmd_name)
-}
 
 fn is_path_like_arg(arg: &str) -> bool {
     if arg.is_empty() || arg == "-" || arg == "--" {
@@ -1353,18 +1307,18 @@ fn is_path_like_arg(arg: &str) -> bool {
         )
 }
 
-fn validate_exec_path_arg(workspace_dir: &str, arg: &str) -> Result<(), ToolError> {
+fn validate_git_path_arg(workspace_dir: &str, arg: &str) -> Result<(), ToolError> {
     let path = Path::new(arg);
     for component in path.components() {
         match component {
             std::path::Component::ParentDir => {
                 return Err(ToolError::InvalidArgs(format!(
-                    "exec argument escapes workspace: {arg}"
+                    "git argument escapes workspace: {arg}"
                 )));
             }
             std::path::Component::RootDir | std::path::Component::Prefix(_) => {
                 return Err(ToolError::InvalidArgs(format!(
-                    "exec argument uses an absolute path: {arg}"
+                    "git argument uses an absolute path: {arg}"
                 )));
             }
             std::path::Component::CurDir | std::path::Component::Normal(_) => {}
@@ -1379,7 +1333,7 @@ fn validate_exec_path_arg(workspace_dir: &str, arg: &str) -> Result<(), ToolErro
     if let Ok(canonical) = resolved.canonicalize() {
         if !canonical.starts_with(&workspace_root) {
             return Err(ToolError::InvalidArgs(format!(
-                "exec argument escapes workspace: {arg}"
+                "git argument escapes workspace: {arg}"
             )));
         }
         return Ok(());
@@ -1390,7 +1344,7 @@ fn validate_exec_path_arg(workspace_dir: &str, arg: &str) -> Result<(), ToolErro
         if let Ok(canonical_parent) = parent.canonicalize() {
             if !canonical_parent.starts_with(&workspace_root) {
                 return Err(ToolError::InvalidArgs(format!(
-                    "exec argument escapes workspace: {arg}"
+                    "git argument escapes workspace: {arg}"
                 )));
             }
             return Ok(());
@@ -1401,101 +1355,84 @@ fn validate_exec_path_arg(workspace_dir: &str, arg: &str) -> Result<(), ToolErro
     Ok(())
 }
 
-fn validate_exec_args(workspace_dir: &str, argv: &[String]) -> Result<(), ToolError> {
+/// Confine every path-like argument to the workspace. Unlike the argv form
+/// this replaces, `args` never contains the program or subcommand — the caller
+/// passes only the subcommand's own arguments.
+fn validate_git_args(workspace_dir: &str, args: &[String]) -> Result<(), ToolError> {
     if workspace_dir.is_empty() {
         return Err(ToolError::InvalidArgs("workspace not configured".into()));
     }
 
-    for arg in argv.iter().skip(1) {
+    for arg in args {
         if arg.starts_with("file:") {
             return Err(ToolError::InvalidArgs(format!(
-                "exec argument uses a file URL: {arg}"
+                "git argument uses a file URL: {arg}"
             )));
         }
 
         if let Some((_, value)) = arg.split_once('=') {
             if is_path_like_arg(value) {
-                validate_exec_path_arg(workspace_dir, value)?;
+                validate_git_path_arg(workspace_dir, value)?;
             }
         }
 
         if is_path_like_arg(arg) {
-            validate_exec_path_arg(workspace_dir, arg)?;
+            validate_git_path_arg(workspace_dir, arg)?;
         }
     }
 
     Ok(())
 }
 
-/// Validate a `git` invocation via exec: block destructive/history-rewriting
-/// operations, remote modification, config manipulation, and ACE-injection
-/// flags.  Non-git programs are unaffected — only argv[0] == "git" is checked.
-fn validate_git_command(argv: &[String]) -> Result<(), ToolError> {
-    debug_assert!(
-        argv.first().is_some_and(|p| p == "git"),
-        "validate_git_command called for non-git program"
-    );
-
-    // Walk argv[1..] to find the subcommand, skipping global options.
-    let mut i = 1_usize;
-    while i < argv.len() {
-        let Some(tok_arg) = argv.get(i) else {
-            return Ok(());
-        };
-        let tok = tok_arg.as_str();
-
-        // ACE-injection global flags — block outright.
-        if tok == "-c" || tok.starts_with("--config-env") {
-            return Err(ToolError::InvalidArgs(
-                "git config/exec-path injection is not allowed".into(),
-            ));
-        }
-        if tok == "--exec-path" || tok.starts_with("--exec-path=") {
-            return Err(ToolError::InvalidArgs(
-                "git config/exec-path injection is not allowed".into(),
-            ));
-        }
-
-        // value-consuming global flags (separate-token value form): skip flag + value
-        if tok == "-C"
-            || tok == "--git-dir"
-            || tok == "--work-tree"
-            || tok == "--namespace"
-            || tok == "--super-prefix"
-        {
-            i = i.saturating_add(2);
-            continue;
-        }
-
-        // attached-value form (--flag=value): skip one token
-        if tok.starts_with("--git-dir=")
-            || tok.starts_with("--work-tree=")
-            || tok.starts_with("--namespace=")
-            || tok.starts_with("--super-prefix=")
-        {
-            i = i.saturating_add(1);
-            continue;
-        }
-
-        // any other option token: skip it (bare global flag like -p, --bare, --no-pager)
-        if tok.starts_with('-') {
-            i = i.saturating_add(1);
-            continue;
-        }
-
-        // first non-option token = subcommand
-        let Some(sub_slice) = argv.get(i..) else {
-            return Ok(());
-        };
-        return validate_git_subcommand(sub_slice);
+/// Reject a subcommand that is really a git *global* flag in disguise.
+///
+/// The structured `{subcommand, args}` shape is what makes this cheap: the
+/// runtime always spawns `git <subcommand> <args…>`, so `-c core.pager=…`,
+/// `--exec-path=…`, `--git-dir=…` and friends can never land in the global
+/// slot ahead of the subcommand the way they could when the model handed us a
+/// whole command line. Guarding argv[0] closes the only remaining door.
+fn validate_git_subcommand_token(subcommand: &str) -> Result<(), ToolError> {
+    if subcommand.is_empty() {
+        return Err(ToolError::InvalidArgs("subcommand is empty".into()));
     }
-
-    // bare `git` with no subcommand (prints usage) — harmless
+    if subcommand.starts_with('-') {
+        return Err(ToolError::InvalidArgs(format!(
+            "'{subcommand}' is a git option, not a subcommand; pass options in `args`"
+        )));
+    }
+    if subcommand.contains('/') || subcommand.contains('\\') {
+        return Err(ToolError::InvalidArgs(format!(
+            "'{subcommand}' is not a valid git subcommand"
+        )));
+    }
     Ok(())
+}
+
+/// True when a `checkout`'s arguments name a pathspec rather than just a branch
+/// — the form that overwrites working-tree files from a tree-ish.
+///
+/// Two shapes reach it: an explicit `--` separator, or a bare `<tree-ish>
+/// <path>` pair. Branch creation (`-b`/`-B`) legitimately takes two operands
+/// (`-b topic origin/main`), so it is not a pathspec by operand count alone.
+fn checkout_targets_a_pathspec(rest: &[String]) -> bool {
+    if rest.iter().any(|a| a == "--") {
+        return true;
+    }
+    if rest
+        .iter()
+        .any(|a| a == "-b" || a == "-B" || a == "--orphan")
+    {
+        return false;
+    }
+    // `checkout main` is a branch switch; `checkout HEAD note.md` is a discard.
+    rest.iter().filter(|a| !a.starts_with('-')).count() >= 2
 }
 
 /// Validate a git subcommand + its arguments against the destructive denylist.
 /// `sub[0]` is the subcommand name; `rest = &sub[1..]`.
+///
+/// Blocks history rewriting, forced discards, remote mutation, `config`, and
+/// `push` — the model commits, the daemon pushes.
 #[expect(
     clippy::too_many_lines,
     reason = "validates all blocked git subcommands in one place"
@@ -1551,12 +1488,24 @@ fn validate_git_subcommand(sub: &[String]) -> Result<(), ToolError> {
         }
         "checkout" => {
             if rest_has("-f") || rest_has("--force") {
-                Err(ToolError::InvalidArgs(
+                return Err(ToolError::InvalidArgs(
                     "git checkout --force is not allowed".into(),
-                ))
-            } else {
-                Ok(())
+                ));
             }
+            // `git checkout <tree-ish> -- <path>` overwrites the file from the
+            // tree, discarding uncommitted work — it is precisely what
+            // `git restore` was split out of, and `restore` is denied right
+            // below for exactly that. Deny the pathspec forms too, or the
+            // denylist blocks the modern spelling and waves through the old
+            // one. Branch operations (`checkout main`, `checkout -b topic
+            // origin/main`) keep working.
+            if checkout_targets_a_pathspec(rest) {
+                return Err(ToolError::InvalidArgs(
+                    "git checkout of a path is not allowed (discards changes); commit first, or read the file and edit it"
+                        .into(),
+                ));
+            }
+            Ok(())
         }
         "switch" => {
             if rest_has("-f") || rest_has("--force") || rest_has("--discard-changes") {
@@ -1616,6 +1565,13 @@ fn validate_git_subcommand(sub: &[String]) -> Result<(), ToolError> {
         "push" => Err(ToolError::InvalidArgs(
             "git push is not allowed (the daemon pushes after a pass when [memory] git_push is enabled)".into(),
         )),
+        // Remote access is the daemon's job, the same way `push` is: the model
+        // works in the local repo. These would also fail opaquely under the
+        // sandbox — seccomp blocks `socket(AF_INET)` unless `allow_network` is
+        // set — so deny them here, where the refusal can explain itself.
+        "fetch" | "pull" | "clone" => Err(ToolError::InvalidArgs(format!(
+            "git {cmd} is not allowed (the daemon owns remote access)"
+        ))),
         "remote" => match rest.first().map(String::as_str) {
             Some("add" | "set-url" | "rename" | "remove" | "rm") => Err(ToolError::InvalidArgs(
                 "modifying git remotes is not allowed".into(),
@@ -1626,47 +1582,23 @@ fn validate_git_subcommand(sub: &[String]) -> Result<(), ToolError> {
     }
 }
 
-pub async fn handle_exec(
-    input: Value,
+/// Build the `git` invocation for `sub_slice`, applying the sandbox when it is
+/// enabled.
+///
+/// git is the only tool that spawns a process, and it can still run
+/// repo-supplied code (hooks), so it keeps the containment the exec tool had:
+/// the program is re-executed through the daemon's hidden helper mode, which
+/// applies Landlock + seccomp before running it. Falls back to a direct spawn
+/// when the sandbox is disabled or unavailable under `auto`.
+fn git_command(
     workspace_dir: &str,
-    character: &str,
-) -> Result<Value, ToolError> {
-    let command = input
-        .get("command")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| ToolError::InvalidArgs("missing required field: command".into()))?;
-
-    let argv = parse_command(command)?;
-    let Some((program, program_args)) = argv.split_first() else {
-        return Err(ToolError::InvalidArgs("command is empty".into()));
-    };
-
-    if !is_command_allowed(&argv) {
-        return Err(ToolError::InvalidArgs(format!(
-            "command '{program}' is not in the allowlist"
-        )));
-    }
-
-    if program == "git" {
-        validate_git_command(&argv)?;
-    }
-
-    validate_exec_args(workspace_dir, &argv)?;
-
-    let workdir = input
-        .get("workdir")
-        .and_then(|v| v.as_str())
-        .map(|w| resolve_path(workspace_dir, w))
-        .transpose()?;
-
-    // Containment layer: when the sandbox is enabled, the program is re-executed
-    // through the daemon's hidden helper mode, which applies Landlock + seccomp
-    // before running it. Falls back to a direct spawn when disabled/unavailable.
-    let mut cmd = match crate::sandbox::plan_for(workspace_dir) {
+    sub_slice: &[String],
+) -> Result<tokio::process::Command, ToolError> {
+    match crate::sandbox::plan_for(workspace_dir) {
         crate::sandbox::SandboxPlan::Direct => {
-            let mut cmd = tokio::process::Command::new(program);
-            let _ignored = cmd.args(program_args);
-            cmd
+            let mut cmd = tokio::process::Command::new("git");
+            let _ignored = cmd.args(sub_slice);
+            Ok(cmd)
         }
         crate::sandbox::SandboxPlan::Wrapped {
             helper,
@@ -1675,30 +1607,98 @@ pub async fn handle_exec(
             let mut cmd = tokio::process::Command::new(helper);
             let _prefix = cmd.args(&prefix_args);
             let _sep = cmd.arg("--");
-            let _prog = cmd.arg(program);
-            let _args = cmd.args(program_args);
-            cmd
+            let _prog = cmd.arg("git");
+            let _args = cmd.args(sub_slice);
+            Ok(cmd)
         }
         // `sandbox = "on"` requires enforcement we cannot provide here: fail
-        // closed rather than run the command unsandboxed.
-        crate::sandbox::SandboxPlan::Unavailable { reason } => {
-            return Err(ToolError::Io(format!(
-                "exec sandbox required but unavailable: {reason}"
-            )));
+        // closed rather than run git unsandboxed.
+        crate::sandbox::SandboxPlan::Unavailable { reason } => Err(ToolError::Io(format!(
+            "git sandbox required but unavailable: {reason}"
+        ))),
+    }
+}
+
+/// Run a git subcommand in the character's workspace repository.
+///
+/// The only tool that spawns a process. Everything it can do is bounded by
+/// three checks: the subcommand must not be a global flag
+/// ([`validate_git_subcommand_token`]), it must not be destructive or
+/// history-rewriting ([`validate_git_subcommand`]), and every path-like
+/// argument must stay inside the workspace ([`validate_git_args`]).
+///
+/// Initializes the workspace repository if it is missing. The memory passes do
+/// the same before they run ([`ensure_workspace_git_repo_best_effort`]), but
+/// they are the only ones that used to: on the chat path a character offered
+/// this tool would otherwise meet `fatal: not a git repository` until the first
+/// compaction or dreaming pass happened to create one.
+pub async fn handle_git(
+    input: Value,
+    workspace_dir: &str,
+    character: &str,
+) -> Result<Value, ToolError> {
+    let subcommand = input
+        .get("subcommand")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| ToolError::InvalidArgs("missing required field: subcommand".into()))?
+        .trim();
+
+    validate_git_subcommand_token(subcommand)?;
+
+    let args: Vec<String> = match input.get("args") {
+        Some(Value::Array(items)) => items
+            .iter()
+            .map(|v| {
+                v.as_str().map(str::to_owned).ok_or_else(|| {
+                    ToolError::InvalidArgs("every element of `args` must be a string".into())
+                })
+            })
+            .collect::<Result<_, _>>()?,
+        Some(Value::Null) | None => Vec::new(),
+        Some(_) => {
+            return Err(ToolError::InvalidArgs(
+                "`args` must be an array of strings".into(),
+            ))
         }
     };
 
-    // exec runs as the character: attribute any git commits to it (per-process
-    // env, ignored by non-git programs), keeping them distinct from operator
-    // commits in the same repo.
-    if program == "git" {
-        let (name, email) = character_git_identity(character);
-        let _env = cmd
-            .env("GIT_AUTHOR_NAME", &name)
-            .env("GIT_AUTHOR_EMAIL", &email)
-            .env("GIT_COMMITTER_NAME", &name)
-            .env("GIT_COMMITTER_EMAIL", &email);
+    // `validate_git_subcommand` expects the subcommand at index 0 followed by
+    // its arguments — the same slice layout the exec argv walk used to hand it.
+    let mut sub_slice = Vec::with_capacity(args.len().saturating_add(1));
+    sub_slice.push(subcommand.to_owned());
+    sub_slice.extend(args.iter().cloned());
+    validate_git_subcommand(&sub_slice)?;
+
+    validate_git_args(workspace_dir, &args)?;
+
+    if !workspace_dir.is_empty() {
+        ensure_workspace_git_repo_best_effort(Path::new(workspace_dir), character, "git tool")
+            .await;
     }
+
+    let workdir = input
+        .get("workdir")
+        .and_then(|v| v.as_str())
+        .map(|w| resolve_path(workspace_dir, w))
+        .transpose()?;
+
+    // Safety flags first, then the subcommand: a repo the operator imported
+    // must not get to run its `.git/hooks/pre-commit` just because the model
+    // committed. `run_git` has always done this for the daemon's own calls;
+    // the model-facing path needs it at least as much.
+    let mut spawn_args: Vec<String> = GIT_SAFETY_FLAGS.iter().map(|f| (*f).to_owned()).collect();
+    spawn_args.extend(sub_slice.iter().cloned());
+
+    let mut cmd = git_command(workspace_dir, &spawn_args)?;
+
+    // git runs as the character: attribute commits to it, keeping them
+    // distinct from operator commits in the same repo.
+    let (name, email) = character_git_identity(character);
+    let _env = cmd
+        .env("GIT_AUTHOR_NAME", &name)
+        .env("GIT_AUTHOR_EMAIL", &email)
+        .env("GIT_COMMITTER_NAME", &name)
+        .env("GIT_COMMITTER_EMAIL", &email);
 
     if let Some(dir) = workdir {
         _ = cmd.current_dir(dir);
@@ -1717,7 +1717,8 @@ pub async fn handle_exec(
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     Ok(json!({
-        "command": command,
+        "subcommand": subcommand,
+        "args": args,
         "exit_code": output.status.code(),
         "stdout": stdout,
         "stderr": stderr,
@@ -1728,32 +1729,26 @@ pub async fn handle_exec(
 // Workspace git history
 // ---------------------------------------------------------------------------
 
-/// True when an exec tool input's command line invokes `git`. The memory
-/// passes (compaction, dreaming) use this as their exec gate: git is allowed
-/// through so the model can commit its memory changes; everything else stays
-/// blocked. The full exec validation (allowlist, argv parsing, path
-/// confinement) still runs at dispatch.
-pub fn exec_input_is_git(input: &Value) -> bool {
-    input
-        .get("command")
-        .and_then(Value::as_str)
-        .and_then(|command| parse_command(command).ok())
-        .and_then(|argv| argv.into_iter().next())
-        .is_some_and(|program| program == "git")
-}
+/// Global `-c` flags that neutralize repo-controlled execution surfaces: a
+/// pre-existing (e.g. imported) `.git/config` or `.gitattributes` must not run
+/// hooks or filter drivers when git runs. Prepended before the subcommand so
+/// they apply to all of them, and passed on the command line so they outrank
+/// the repo's own config.
+///
+/// Every git spawn in this module goes through these — the daemon's own calls
+/// via [`run_git`], and the model's via [`handle_git`]. The model cannot inject
+/// its own `-c` (the subcommand slot rejects option tokens, and `git config` is
+/// denied), so these are the daemon's to set and nobody else's.
+const GIT_SAFETY_FLAGS: [&str; 4] = [
+    "-c",
+    "core.hooksPath=/dev/null",
+    "-c",
+    "core.attributesFile=/dev/null",
+];
 
 async fn run_git(workspace_dir: &Path, args: &[&str]) -> std::io::Result<std::process::Output> {
-    // Neutralize repo-controlled execution surfaces for the daemon's own git
-    // calls: a pre-existing (e.g. imported) `.git/config` or `.gitattributes`
-    // must not run hooks or filter drivers when we init/commit. These are
-    // global `-c` flags so they apply to every subcommand; commits additionally
-    // pass `--no-verify` (see `git_commit_all`).
-    let mut full_args: Vec<&str> = vec![
-        "-c",
-        "core.hooksPath=/dev/null",
-        "-c",
-        "core.attributesFile=/dev/null",
-    ];
+    // Commits additionally pass `--no-verify` (see `git_commit_all`).
+    let mut full_args: Vec<&str> = GIT_SAFETY_FLAGS.to_vec();
     full_args.extend_from_slice(args);
     tokio::process::Command::new("git")
         .args(&full_args)
@@ -1829,7 +1824,7 @@ pub async fn ensure_workspace_git_repo_best_effort(
 /// Stage and commit everything in the workspace repository, attributed to the
 /// character (identity injected per-commit, not via repo config). Used by the
 /// daemon for bookkeeping commits (e.g. recording a compaction rollback) —
-/// model-authored commits go through the exec tool instead. A clean tree is
+/// model-authored commits go through the `git` tool instead. A clean tree is
 /// not an error; returns `true` only when a commit was created.
 pub async fn git_commit_all(
     workspace_dir: &Path,
@@ -1933,7 +1928,10 @@ mod tests {
 
     #[test]
     fn tool_defs_count() {
-        assert_eq!(tool_defs().len(), 7);
+        // read, edit, search, delete, git
+        assert_eq!(tool_defs().len(), 5);
+        let names: Vec<&str> = tool_defs().iter().map(|d| d.name).collect();
+        assert_eq!(names, vec!["read", "edit", "search", "delete", "git"]);
     }
 
     #[test]
@@ -1960,7 +1958,7 @@ mod tests {
         let ws_str = ws.to_string_lossy().to_string();
 
         // Write
-        let write_result = handle_write(
+        let write_result = handle_edit(
             json!({"path": "test.txt", "content": "hello world"}),
             &ws_str,
         )
@@ -1976,7 +1974,7 @@ mod tests {
         assert_eq!(read_result["total_lines"], 1);
 
         // List
-        let list_result = handle_list_files(json!({}), &ws_str).await.unwrap();
+        let list_result = handle_read(json!({}), &ws_str).await.unwrap();
         let entries = list_result["entries"].as_array().unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0]["name"], "test.txt");
@@ -1988,7 +1986,7 @@ mod tests {
         let ws = tmp.path().join("workspace");
         let ws_str = ws.to_string_lossy().to_string();
 
-        let _ignored = handle_write(
+        let _ignored = handle_edit(
             json!({"path": "test.txt", "content": "hello world\nfoo bar\n"}),
             &ws_str,
         )
@@ -2020,7 +2018,7 @@ mod tests {
         let ws = tmp.path().join("workspace");
         let ws_str = ws.to_string_lossy().to_string();
 
-        let _ignored = handle_write(
+        let _ignored = handle_edit(
             json!({"path": "test.txt", "content": "foo foo foo"}),
             &ws_str,
         )
@@ -2052,7 +2050,7 @@ mod tests {
         let ws = tmp.path().join("workspace");
         let ws_str = ws.to_string_lossy().to_string();
 
-        let _ignored = handle_write(
+        let _ignored = handle_edit(
             json!({"path": "test.txt", "content": "foo foo foo"}),
             &ws_str,
         )
@@ -2086,7 +2084,7 @@ mod tests {
         let ws = tmp.path().join("workspace");
         let ws_str = ws.to_string_lossy().to_string();
 
-        let _ignored = handle_write(
+        let _ignored = handle_edit(
             json!({"path": "test.txt", "content": "hello world"}),
             &ws_str,
         )
@@ -2112,7 +2110,7 @@ mod tests {
         let ws = tmp.path().join("workspace");
         let ws_str = ws.to_string_lossy().to_string();
 
-        let _ignored = handle_write(
+        let _ignored = handle_edit(
             json!({"path": "test.txt", "content": "🙂".repeat(900)}),
             &ws_str,
         )
@@ -2138,7 +2136,7 @@ mod tests {
         let ws = tmp.path().join("workspace");
         let ws_str = ws.to_string_lossy().to_string();
 
-        let _ignored = handle_write(
+        let _ignored = handle_edit(
             json!({"path": "deep/nested/file.txt", "content": "nested"}),
             &ws_str,
         )
@@ -2158,7 +2156,7 @@ mod tests {
         let ws_str = ws.to_string_lossy().to_string();
 
         let content = "line1\nline2\nline3\nline4\nline5";
-        let _ignored = handle_write(json!({"path": "test.txt", "content": content}), &ws_str)
+        let _ignored = handle_edit(json!({"path": "test.txt", "content": content}), &ws_str)
             .await
             .unwrap();
 
@@ -2178,7 +2176,7 @@ mod tests {
         let ws = tmp.path().join("workspace");
         let ws_str = ws.to_string_lossy().to_string();
 
-        let _ignored = handle_write(
+        let _ignored = handle_edit(
             json!({"path": "memory/people/ren.md", "content": "# Ren\n\nLikes tea."}),
             &ws_str,
         )
@@ -2238,13 +2236,13 @@ mod tests {
         let ws = tmp.path().join("workspace");
         let ws_str = ws.to_string_lossy().to_string();
 
-        let _ignored = handle_write(
+        let _ignored = handle_edit(
             json!({"path": "notes/ideas.md", "content": "Tea in the garden\nCoffee later"}),
             &ws_str,
         )
         .await
         .unwrap();
-        _ = handle_write(
+        _ = handle_edit(
             json!({"path": "memory/people/ren.md", "content": "Ren likes tea."}),
             &ws_str,
         )
@@ -2269,7 +2267,7 @@ mod tests {
         let ws = tmp.path().join("workspace");
         let ws_str = ws.to_string_lossy().to_string();
 
-        let _ignored = handle_write(
+        let _ignored = handle_edit(
             json!({"path": "older.md", "content": "tea in the garden"}),
             &ws_str,
         )
@@ -2287,7 +2285,7 @@ mod tests {
             .set_modified(past)
             .unwrap();
 
-        _ = handle_write(
+        _ = handle_edit(
             json!({"path": "newer.md", "content": "tea on the porch"}),
             &ws_str,
         )
@@ -2316,7 +2314,7 @@ mod tests {
         let ws = tmp.path().join("workspace");
         let ws_str = ws.to_string_lossy().to_string();
 
-        let _ignored = handle_write(
+        let _ignored = handle_edit(
             json!({"path": "notes.md", "content": "nothing relevant"}),
             &ws_str,
         )
@@ -2341,7 +2339,7 @@ mod tests {
             r#"{{"metadata":"{metadata}","message":"spotted a German Shepherd near the gate"}}"#
         );
 
-        let _ignored = handle_write(
+        let _ignored = handle_edit(
             json!({"path": "archive/chat.jsonl", "content": line}),
             &ws_str,
         )
@@ -2374,7 +2372,7 @@ mod tests {
         let ws = tmp.path().join("workspace");
         let ws_str = ws.to_string_lossy().to_string();
 
-        let _ignored = handle_write(
+        let _ignored = handle_edit(
             json!({"path": "notes.md", "content": "no match here"}),
             &ws_str,
         )
@@ -2403,7 +2401,7 @@ mod tests {
         let ws = tmp.path().join("workspace");
         let ws_str = ws.to_string_lossy().to_string();
 
-        let _ignored = handle_write(json!({"path": "notes.md", "content": "tea time"}), &ws_str)
+        let _ignored = handle_edit(json!({"path": "notes.md", "content": "tea time"}), &ws_str)
             .await
             .unwrap();
 
@@ -2429,7 +2427,7 @@ mod tests {
         let ws = tmp.path().join("workspace");
         let ws_str = ws.to_string_lossy().to_string();
 
-        let _ignored = handle_write(json!({"path": "notes.md", "content": "tea time"}), &ws_str)
+        let _ignored = handle_edit(json!({"path": "notes.md", "content": "tea time"}), &ws_str)
             .await
             .unwrap();
 
@@ -2471,13 +2469,13 @@ mod tests {
         let ws = tmp.path().join("workspace");
         let ws_str = ws.to_string_lossy().to_string();
 
-        let _ignored = handle_write(
+        let _ignored = handle_edit(
             json!({"path": "notes/a.md", "content": "tea time"}),
             &ws_str,
         )
         .await
         .unwrap();
-        _ = handle_write(
+        _ = handle_edit(
             json!({"path": "other/b.md", "content": "tea ceremony"}),
             &ws_str,
         )
@@ -2510,7 +2508,7 @@ mod tests {
         let ws = tmp.path().join("workspace");
         let ws_str = ws.to_string_lossy().to_string();
 
-        let _ignored = handle_write(json!({"path": "notes.md", "content": "tea time"}), &ws_str)
+        let _ignored = handle_edit(json!({"path": "notes.md", "content": "tea time"}), &ws_str)
             .await
             .unwrap();
 
@@ -2532,90 +2530,241 @@ mod tests {
         }
     }
 
-    #[test]
-    fn exec_allowlist_basic() {
-        assert!(is_command_allowed(&parse_command("ls -la").unwrap()));
-        assert!(is_command_allowed(&parse_command("git status").unwrap()));
-        assert!(is_command_allowed(&parse_command("rg pattern").unwrap()));
-        assert!(!is_command_allowed(
-            &parse_command("/usr/bin/git status").unwrap()
-        ));
-        assert!(!is_command_allowed(
-            &parse_command("python3 -c 'print(1)'").unwrap()
-        ));
-        assert!(parse_command("").is_err());
-        assert!(parse_command("  ").is_err());
+    /// A workspace with an initialized git repo and one committed file.
+    async fn git_workspace() -> (tempfile::TempDir, String) {
+        let tmp = tempfile::tempdir().unwrap();
+        let ws = tmp.path().join("workspace");
+        tokio::fs::create_dir_all(&ws).await.unwrap();
+        let ws_str = ws.to_string_lossy().to_string();
+        let _created = ensure_workspace_git_repo(&ws, "test").await.unwrap();
+        tokio::fs::write(ws.join("note.md"), "tea").await.unwrap();
+        (tmp, ws_str)
     }
 
     #[tokio::test]
-    async fn exec_runs_allowed_command() {
+    async fn git_runs_subcommand_in_workspace() {
+        if !git_available() {
+            return;
+        }
+        let (_tmp, ws_str) = git_workspace().await;
+
+        let result = handle_git(
+            json!({"subcommand": "status", "args": ["--porcelain"]}),
+            &ws_str,
+            "test",
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result["exit_code"], 0);
+        assert_eq!(result["subcommand"], "status");
+        let stdout = result["stdout"].as_str().unwrap();
+        assert!(
+            stdout.contains("note.md"),
+            "expected untracked note.md in status output: {stdout}"
+        );
+    }
+
+    /// A character offered `git` on the chat path meets a workspace that no
+    /// memory pass has touched yet. Note this deliberately does NOT use
+    /// `git_workspace()` — that helper inits the repo, which is precisely what
+    /// hid this from every other test here.
+    #[tokio::test]
+    async fn git_initializes_a_workspace_that_is_not_yet_a_repo() {
+        if !git_available() {
+            return;
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        let ws = tmp.path().join("workspace");
+        tokio::fs::create_dir_all(&ws).await.unwrap();
+        let ws_str = ws.to_string_lossy().to_string();
+        assert!(!ws.join(".git").exists(), "precondition: bare workspace");
+
+        let result = handle_git(json!({"subcommand": "status"}), &ws_str, "test")
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result["exit_code"], 0,
+            "git must not report 'not a git repository': {:?}",
+            result["stderr"]
+        );
+        assert!(ws.join(".git").exists(), "repository must be initialized");
+    }
+
+    /// An operator can import a repository that already carries hooks. Those
+    /// hooks are arbitrary code the daemon never approved, and the model must
+    /// not be able to trigger them just by committing its memory.
+    #[tokio::test]
+    async fn git_commit_does_not_run_repository_hooks() {
+        if !git_available() {
+            return;
+        }
+        let (_tmp, ws_str) = git_workspace().await;
+        let hooks = PathBuf::from(&ws_str).join(".git/hooks");
+        tokio::fs::create_dir_all(&hooks).await.unwrap();
+        let hook = hooks.join("pre-commit");
+        // A hook that fails loudly: if it runs, the commit dies with its marker.
+        tokio::fs::write(&hook, "#!/bin/sh\necho HOOK_RAN >&2\nexit 1\n")
+            .await
+            .unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            tokio::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755))
+                .await
+                .unwrap();
+        }
+
+        let _add = handle_git(
+            json!({"subcommand": "add", "args": ["note.md"]}),
+            &ws_str,
+            "test",
+        )
+        .await
+        .unwrap();
+        let commit = handle_git(
+            json!({"subcommand": "commit", "args": ["-m", "save"]}),
+            &ws_str,
+            "test",
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            commit["exit_code"], 0,
+            "commit must succeed with the hook neutralized: {commit:?}"
+        );
+        assert!(
+            !commit["stderr"].as_str().unwrap().contains("HOOK_RAN"),
+            "repository hook must not execute: {:?}",
+            commit["stderr"]
+        );
+    }
+
+    #[tokio::test]
+    async fn git_omitted_args_defaults_to_empty() {
+        if !git_available() {
+            return;
+        }
+        let (_tmp, ws_str) = git_workspace().await;
+
+        let result = handle_git(json!({"subcommand": "status"}), &ws_str, "test")
+            .await
+            .unwrap();
+        assert_eq!(result["exit_code"], 0);
+        assert_eq!(result["args"], json!([]));
+    }
+
+    #[tokio::test]
+    async fn git_commit_is_attributed_to_the_character() {
+        if !git_available() {
+            return;
+        }
+        let (_tmp, ws_str) = git_workspace().await;
+
+        let add = handle_git(
+            json!({"subcommand": "add", "args": ["note.md"]}),
+            &ws_str,
+            "qifei",
+        )
+        .await
+        .unwrap();
+        assert_eq!(add["exit_code"], 0);
+
+        let commit = handle_git(
+            json!({"subcommand": "commit", "args": ["-m", "save note"]}),
+            &ws_str,
+            "qifei",
+        )
+        .await
+        .unwrap();
+        assert_eq!(commit["exit_code"], 0);
+
+        let log = handle_git(
+            json!({"subcommand": "log", "args": ["-1", "--format=%an <%ae>"]}),
+            &ws_str,
+            "qifei",
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            log["stdout"].as_str().unwrap().trim(),
+            "qifei <qifei@shore.local>"
+        );
+    }
+
+    /// The subcommand slot only ever holds a subcommand, so git's global
+    /// ACE-injection flags have nowhere to land.
+    #[tokio::test]
+    async fn git_rejects_global_flags_in_the_subcommand_slot() {
         let tmp = tempfile::tempdir().unwrap();
         let ws = tmp.path().join("workspace");
         tokio::fs::create_dir_all(&ws).await.unwrap();
         let ws_str = ws.to_string_lossy().to_string();
 
-        let result = handle_exec(json!({"command": "pwd"}), &ws_str, "test")
-            .await
-            .unwrap();
-        let stdout = result["stdout"].as_str().unwrap();
-        assert!(
-            stdout.contains("workspace"),
-            "expected workspace path in pwd output: {stdout}"
-        );
-        assert_eq!(result["exit_code"], 0);
+        for sub in [
+            "-c",
+            "--exec-path=/tmp/evil",
+            "--git-dir=/tmp/other",
+            "-C",
+            "--work-tree=/tmp",
+        ] {
+            let result = handle_git(json!({"subcommand": sub}), &ws_str, "test").await;
+            assert!(
+                result.is_err(),
+                "'{sub}' must be rejected as a subcommand, not run as a global flag"
+            );
+        }
     }
 
     #[tokio::test]
-    async fn exec_rejects_disallowed() {
+    async fn git_rejects_empty_and_path_subcommands() {
         let tmp = tempfile::tempdir().unwrap();
         let ws_str = tmp.path().to_string_lossy().to_string();
 
-        let result = handle_exec(json!({"command": "rm -rf /"}), &ws_str, "test").await;
-        assert!(result.is_err());
+        assert!(handle_git(json!({"subcommand": ""}), &ws_str, "test")
+            .await
+            .is_err());
+        assert!(
+            handle_git(json!({"subcommand": "/usr/bin/git"}), &ws_str, "test")
+                .await
+                .is_err()
+        );
+        assert!(handle_git(json!({}), &ws_str, "test").await.is_err());
     }
 
     #[tokio::test]
-    async fn exec_rejects_absolute_path_argument() {
+    async fn git_rejects_destructive_subcommands() {
         let tmp = tempfile::tempdir().unwrap();
         let ws = tmp.path().join("workspace");
         tokio::fs::create_dir_all(&ws).await.unwrap();
         let ws_str = ws.to_string_lossy().to_string();
 
-        let result = handle_exec(json!({"command": "cat /etc/passwd"}), &ws_str, "test").await;
-        assert!(result.is_err());
+        for (sub, args) in [
+            ("push", vec![]),
+            ("config", vec!["user.name", "someone"]),
+            ("reset", vec!["--hard"]),
+            ("rebase", vec!["-i"]),
+            ("restore", vec!["note.md"]),
+            ("clean", vec!["-fd"]),
+            ("gc", vec![]),
+        ] {
+            let result =
+                handle_git(json!({"subcommand": sub, "args": args}), &ws_str, "test").await;
+            assert!(result.is_err(), "git {sub} must be refused");
+        }
     }
 
     #[tokio::test]
-    async fn exec_rejects_parent_path_argument() {
+    async fn git_rejects_absolute_path_argument() {
         let tmp = tempfile::tempdir().unwrap();
         let ws = tmp.path().join("workspace");
         tokio::fs::create_dir_all(&ws).await.unwrap();
         let ws_str = ws.to_string_lossy().to_string();
 
-        let result = handle_exec(json!({"command": "rg tea ../"}), &ws_str, "test").await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn exec_rejects_absolute_workdir_argument() {
-        let tmp = tempfile::tempdir().unwrap();
-        let ws = tmp.path().join("workspace");
-        tokio::fs::create_dir_all(&ws).await.unwrap();
-        let ws_str = ws.to_string_lossy().to_string();
-
-        let result = handle_exec(json!({"command": "git -C /tmp status"}), &ws_str, "test").await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn exec_rejects_equals_absolute_path_argument() {
-        let tmp = tempfile::tempdir().unwrap();
-        let ws = tmp.path().join("workspace");
-        tokio::fs::create_dir_all(&ws).await.unwrap();
-        let ws_str = ws.to_string_lossy().to_string();
-
-        let result = handle_exec(
-            json!({"command": "cargo --manifest-path=/tmp/Cargo.toml test"}),
+        let result = handle_git(
+            json!({"subcommand": "add", "args": ["/etc/passwd"]}),
             &ws_str,
             "test",
         )
@@ -2624,52 +2773,137 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn exec_allows_workspace_relative_path_arguments() {
-        let tmp = tempfile::tempdir().unwrap();
-        let ws = tmp.path().join("workspace");
-        tokio::fs::create_dir_all(ws.join("src")).await.unwrap();
-        tokio::fs::write(ws.join("src/note.txt"), "tea")
-            .await
-            .unwrap();
-        let ws_str = ws.to_string_lossy().to_string();
-
-        let result = handle_exec(json!({"command": "cat src/note.txt"}), &ws_str, "test")
-            .await
-            .unwrap();
-        assert_eq!(result["stdout"], "tea");
-    }
-
-    #[tokio::test]
-    async fn exec_rejects_shell_chaining() {
+    async fn git_rejects_parent_path_argument() {
         let tmp = tempfile::tempdir().unwrap();
         let ws = tmp.path().join("workspace");
         tokio::fs::create_dir_all(&ws).await.unwrap();
         let ws_str = ws.to_string_lossy().to_string();
 
-        let result = handle_exec(json!({"command": "pwd; pwd"}), &ws_str, "test").await;
+        let result = handle_git(
+            json!({"subcommand": "add", "args": ["../outside.md"]}),
+            &ws_str,
+            "test",
+        )
+        .await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
-    async fn exec_with_workdir() {
+    async fn git_rejects_equals_absolute_path_argument() {
         let tmp = tempfile::tempdir().unwrap();
         let ws = tmp.path().join("workspace");
+        tokio::fs::create_dir_all(&ws).await.unwrap();
         let ws_str = ws.to_string_lossy().to_string();
 
-        tokio::fs::create_dir_all(ws.join("subdir")).await.unwrap();
+        let result = handle_git(
+            json!({"subcommand": "log", "args": ["--output=/tmp/leak.txt"]}),
+            &ws_str,
+            "test",
+        )
+        .await;
+        assert!(result.is_err());
+    }
 
-        let result = handle_exec(
-            json!({"command": "pwd", "workdir": "subdir"}),
+    #[tokio::test]
+    async fn git_rejects_absolute_workdir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ws = tmp.path().join("workspace");
+        tokio::fs::create_dir_all(&ws).await.unwrap();
+        let ws_str = ws.to_string_lossy().to_string();
+
+        let result = handle_git(
+            json!({"subcommand": "status", "workdir": "/tmp"}),
+            &ws_str,
+            "test",
+        )
+        .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn git_rejects_non_string_args() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ws_str = tmp.path().to_string_lossy().to_string();
+
+        assert!(
+            handle_git(json!({"subcommand": "log", "args": [1]}), &ws_str, "test")
+                .await
+                .is_err()
+        );
+        assert!(
+            handle_git(json!({"subcommand": "log", "args": "-1"}), &ws_str, "test")
+                .await
+                .is_err()
+        );
+    }
+
+    /// A shell metacharacter is just a literal argument: there is no shell, so
+    /// `; rm -rf` reaches git as an ordinary (unmatched) pathspec and nothing
+    /// is executed. git is content to exit 0 on a pathspec that matches
+    /// nothing — the proof is that the workspace survives, not the exit code.
+    #[tokio::test]
+    async fn git_does_not_interpret_shell_syntax() {
+        if !git_available() {
+            return;
+        }
+        let (_tmp, ws_str) = git_workspace().await;
+        let note = PathBuf::from(&ws_str).join("note.md");
+
+        let result = handle_git(
+            json!({"subcommand": "status", "args": ["; rm -rf ."]}),
             &ws_str,
             "test",
         )
         .await
         .unwrap();
-        let stdout = result["stdout"].as_str().unwrap();
+
         assert!(
-            stdout.contains("subdir"),
-            "expected subdir in pwd output: {stdout}"
+            result["stdout"].as_str().is_some_and(|s| !s.contains("rm")),
+            "the argument must be passed to git, not run: {:?}",
+            result["stdout"]
         );
+        assert!(note.exists(), "workspace file must survive");
+        assert!(
+            PathBuf::from(&ws_str).join(".git").exists(),
+            "repository must survive"
+        );
+    }
+
+    #[tokio::test]
+    async fn git_allows_workspace_relative_path_arguments() {
+        if !git_available() {
+            return;
+        }
+        let (_tmp, ws_str) = git_workspace().await;
+
+        let result = handle_git(
+            json!({"subcommand": "add", "args": ["note.md"]}),
+            &ws_str,
+            "test",
+        )
+        .await
+        .unwrap();
+        assert_eq!(result["exit_code"], 0);
+    }
+
+    #[tokio::test]
+    async fn git_with_workdir() {
+        if !git_available() {
+            return;
+        }
+        let (_tmp, ws_str) = git_workspace().await;
+        tokio::fs::create_dir_all(PathBuf::from(&ws_str).join("subdir"))
+            .await
+            .unwrap();
+
+        let result = handle_git(
+            json!({"subcommand": "rev-parse", "args": ["--show-toplevel"], "workdir": "subdir"}),
+            &ws_str,
+            "test",
+        )
+        .await
+        .unwrap();
+        assert_eq!(result["exit_code"], 0);
     }
 
     #[tokio::test]
@@ -2680,7 +2914,7 @@ mod tests {
         let data_dir = tmp.path().join("data");
         let data_str = data_dir.to_string_lossy().to_string();
 
-        let _ignored = handle_write(json!({"path": "notes/old.md", "content": "stale"}), &ws_str)
+        let _ignored = handle_edit(json!({"path": "notes/old.md", "content": "stale"}), &ws_str)
             .await
             .unwrap();
 
@@ -2715,7 +2949,7 @@ mod tests {
         let data_dir = tmp.path().join("data");
         let data_str = data_dir.to_string_lossy().to_string();
 
-        let _ignored = handle_write(
+        let _ignored = handle_edit(
             json!({"path": "memory/people/ren.md", "content": "Ren"}),
             &ws_str,
         )
@@ -2747,10 +2981,10 @@ mod tests {
         let data_dir = tmp.path().join("data");
         let data_str = data_dir.to_string_lossy().to_string();
 
-        let _ignored = handle_write(json!({"path": "SOUL.md", "content": "soul"}), &ws_str)
+        let _ignored = handle_edit(json!({"path": "SOUL.md", "content": "soul"}), &ws_str)
             .await
             .unwrap();
-        _ = handle_write(json!({"path": "MEMORY.md", "content": "idx"}), &ws_str)
+        _ = handle_edit(json!({"path": "MEMORY.md", "content": "idx"}), &ws_str)
             .await
             .unwrap();
 
@@ -2812,7 +3046,7 @@ mod tests {
         let ws = tmp.path().join("workspace");
         let ws_str = ws.to_string_lossy().to_string();
 
-        let _ignored = handle_write(json!({"path": "foo.md", "content": "x"}), &ws_str)
+        let _ignored = handle_edit(json!({"path": "foo.md", "content": "x"}), &ws_str)
             .await
             .unwrap();
 
@@ -2827,7 +3061,7 @@ mod tests {
         let ws = tmp.path().join("workspace");
         let ws_str = ws.to_string_lossy().to_string();
 
-        let _written = handle_write(
+        let _written = handle_edit(
             json!({"path": "note.md", "content": "jasmine tea preferences"}),
             &ws_str,
         )
@@ -2852,7 +3086,7 @@ mod tests {
         let ws = tmp.path().join("workspace");
         let ws_str = ws.to_string_lossy().to_string();
 
-        let _written = handle_write(
+        let _written = handle_edit(
             json!({"path": "note.md", "content": "jasmine tea preferences"}),
             &ws_str,
         )
@@ -2869,18 +3103,6 @@ mod tests {
             "worktree .git file must not be searched"
         );
         assert_eq!(result["results"][0]["path"], "note.md");
-    }
-
-    #[test]
-    fn exec_input_is_git_matches_program_only() {
-        assert!(exec_input_is_git(&json!({"command": "git status"})));
-        assert!(exec_input_is_git(
-            &json!({"command": "git commit -m 'move notes'"})
-        ));
-        assert!(!exec_input_is_git(&json!({"command": "ls -la"})));
-        assert!(!exec_input_is_git(&json!({"command": "/usr/bin/git log"})));
-        assert!(!exec_input_is_git(&json!({"command": ""})));
-        assert!(!exec_input_is_git(&json!({})));
     }
 
     #[tokio::test]
@@ -2990,102 +3212,123 @@ mod tests {
         );
     }
 
-    // -- validate_git_command allow list --------------------------------------
+    // -- git subcommand validation -------------------------------------------
 
-    fn vgc_ok(cmd: &str) {
-        let argv = parse_command(cmd).unwrap();
-        assert!(
-            argv.first().is_some_and(|p| p == "git"),
-            "not a git command: {cmd}"
-        );
-        validate_git_command(&argv).unwrap();
+    /// Validate a `{subcommand, args}` pair exactly as [`handle_git`] does:
+    /// the subcommand-token guard, then the destructive denylist.
+    fn vg(subcommand: &str, args: &[&str]) -> Result<(), ToolError> {
+        validate_git_subcommand_token(subcommand)?;
+        let mut sub: Vec<String> = vec![subcommand.to_owned()];
+        sub.extend(args.iter().map(|a| (*a).to_owned()));
+        validate_git_subcommand(&sub)
     }
 
-    fn vgc_err(cmd: &str) {
-        let argv = parse_command(cmd).unwrap();
+    fn vg_ok(subcommand: &str, args: &[&str]) {
+        vg(subcommand, args)
+            .unwrap_or_else(|e| panic!("expected Ok for git {subcommand} {args:?}: {e}"));
+    }
+
+    fn vg_err(subcommand: &str, args: &[&str]) {
         assert!(
-            argv.first().is_some_and(|p| p == "git"),
-            "not a git command: {cmd}"
-        );
-        assert!(
-            validate_git_command(&argv).is_err(),
-            "expected Err for: {cmd}"
+            vg(subcommand, args).is_err(),
+            "expected Err for: git {subcommand} {args:?}"
         );
     }
 
     #[test]
     fn git_validate_allows_basic_commands() {
-        vgc_ok("git status");
-        vgc_ok("git add memory/foo.md");
-        vgc_ok(r#"git commit -m "reset the counter""#); // "reset" inside message must not trip the reset rule
-                                                        // push is daemon-only; see git_validate_blocks_destructive
-        vgc_ok("git checkout main");
-        vgc_ok("git remote -v");
-        vgc_ok("git -C . status");
-        vgc_ok("git log --oneline");
-        vgc_ok("git diff");
-        vgc_ok("git branch");
-        vgc_ok("git stash");
-        vgc_ok("git tag -l");
-        vgc_ok("git reflog");
-        vgc_ok("git merge feature");
-        vgc_ok("git fetch");
-        vgc_ok("git pull");
-        vgc_ok("git blame README.md");
-        vgc_ok("git show HEAD");
-        vgc_ok("git rev-parse HEAD");
-        // bare git (no subcommand) is harmless
-        vgc_ok("git");
+        vg_ok("status", &[]);
+        vg_ok("add", &["memory/foo.md"]);
+        // "reset" inside a message must not trip the reset rule.
+        vg_ok("commit", &["-m", "reset the counter"]);
+        // push is daemon-only; see git_validate_blocks_destructive
+        vg_ok("checkout", &["main"]);
+        vg_ok("checkout", &["-b", "topic"]);
+        // Branch creation from a start point: two operands, still not a pathspec.
+        vg_ok("checkout", &["-b", "topic", "origin/main"]);
+        vg_ok("remote", &["-v"]);
+        vg_ok("log", &["--oneline"]);
+        vg_ok("diff", &[]);
+        vg_ok("branch", &[]);
+        vg_ok("stash", &[]);
+        vg_ok("tag", &["-l"]);
+        vg_ok("reflog", &[]);
+        vg_ok("merge", &["feature"]);
+        vg_ok("blame", &["README.md"]);
+        vg_ok("show", &["HEAD"]);
+        vg_ok("rev-parse", &["HEAD"]);
     }
 
     #[test]
     fn git_validate_blocks_destructive() {
-        vgc_err("git reset --hard HEAD~3");
-        vgc_err("git clean -fdx");
-        vgc_err("git rebase main");
-        vgc_err(r"git -c core.pager='!sh' log");
-        vgc_err("git --exec-path=. foo");
-        vgc_err("git config alias.x '!sh'");
-        vgc_err("git remote add origin git@x:y");
-        vgc_err("git push --force");
-        vgc_err("git push origin main"); // all push is daemon-only, even plain push
-        vgc_err("git push");
-        vgc_err("git branch -D main");
-        vgc_err("git restore .");
-        vgc_err("git gc");
-        vgc_err("git reflog expire --all");
-        vgc_err("git filter-branch --tree-filter 'rm secrets' HEAD");
-        vgc_err("git filter-repo --path secrets");
-        vgc_err("git reset --merge HEAD~1");
-        vgc_err("git reset --keep HEAD~1");
-        vgc_err("git checkout -f main");
-        vgc_err("git checkout --force other");
-        vgc_err("git switch -f topic");
-        vgc_err("git switch --force topic");
-        vgc_err("git switch --discard-changes topic");
-        vgc_err("git branch -d old");
-        vgc_err("git branch --delete old");
-        vgc_err("git tag -d v1");
-        vgc_err("git tag --delete v1");
-        vgc_err("git stash drop");
-        vgc_err("git stash clear");
-        vgc_err("git stash pop");
-        vgc_err("git reflog delete HEAD@{1}");
-        vgc_err("git update-ref -d refs/heads/bad");
-        vgc_err("git update-ref --delete refs/heads/bad");
-        vgc_err("git push --force-with-lease");
-        vgc_err("git push --delete origin bad");
-        vgc_err("git remote set-url origin git@x:z");
-        vgc_err("git remote rename origin upstream");
-        vgc_err("git remote remove origin");
-        vgc_err("git remote rm origin");
-        vgc_err("git clean -fd");
-        vgc_err("git clean -xd");
-        vgc_err("git clean -X");
-        vgc_err("git clean -xdf");
-        vgc_err("git --config-env=GIT_CONFIG env status");
-        // Note: the spec mentions blocking -c without a value too
-        vgc_err("git -c status");
+        vg_err("reset", &["--hard", "HEAD~3"]);
+        vg_err("clean", &["-fdx"]);
+        vg_err("rebase", &["main"]);
+        vg_err("config", &["alias.x", "!sh"]);
+        vg_err("remote", &["add", "origin", "git@x:y"]);
+        vg_err("push", &["--force"]);
+        vg_err("push", &["origin", "main"]); // all push is daemon-only, even plain push
+        vg_err("push", &[]);
+        // Remote access is daemon-only in both directions, not just outbound.
+        vg_err("fetch", &[]);
+        vg_err("fetch", &["origin", "main"]);
+        vg_err("pull", &[]);
+        vg_err("pull", &["--rebase", "origin", "main"]);
+        vg_err("clone", &["https://example.com/x.git"]);
+        vg_err("branch", &["-D", "main"]);
+        vg_err("restore", &["."]);
+        vg_err("gc", &[]);
+        vg_err("reflog", &["expire", "--all"]);
+        vg_err("filter-branch", &["--tree-filter", "rm secrets", "HEAD"]);
+        vg_err("filter-repo", &["--path", "secrets"]);
+        vg_err("reset", &["--merge", "HEAD~1"]);
+        vg_err("reset", &["--keep", "HEAD~1"]);
+        vg_err("checkout", &["-f", "main"]);
+        vg_err("checkout", &["--force", "other"]);
+        // The pathspec forms discard working-tree changes exactly as `restore`
+        // does, and `restore` is denied outright — deny these too.
+        vg_err("checkout", &["--", "note.md"]);
+        vg_err("checkout", &["HEAD", "--", "note.md"]);
+        vg_err("checkout", &["HEAD", "note.md"]);
+        vg_err("checkout", &["main", "memory/people/ren.md"]);
+        vg_err("switch", &["-f", "topic"]);
+        vg_err("switch", &["--force", "topic"]);
+        vg_err("switch", &["--discard-changes", "topic"]);
+        vg_err("branch", &["-d", "old"]);
+        vg_err("branch", &["--delete", "old"]);
+        vg_err("tag", &["-d", "v1"]);
+        vg_err("tag", &["--delete", "v1"]);
+        vg_err("stash", &["drop"]);
+        vg_err("stash", &["clear"]);
+        vg_err("stash", &["pop"]);
+        vg_err("reflog", &["delete", "HEAD@{1}"]);
+        vg_err("update-ref", &["-d", "refs/heads/bad"]);
+        vg_err("update-ref", &["--delete", "refs/heads/bad"]);
+        vg_err("push", &["--force-with-lease"]);
+        vg_err("push", &["--delete", "origin", "bad"]);
+        vg_err("remote", &["set-url", "origin", "git@x:z"]);
+        vg_err("remote", &["rename", "origin", "upstream"]);
+        vg_err("remote", &["remove", "origin"]);
+        vg_err("remote", &["rm", "origin"]);
+        vg_err("clean", &["-fd"]);
+        vg_err("clean", &["-xd"]);
+        vg_err("clean", &["-X"]);
+        vg_err("clean", &["-xdf"]);
+    }
+
+    /// The global ACE-injection flags that `validate_git_command` used to hunt
+    /// for in an argv stream. The structured shape retires that walk: a global
+    /// flag can only arrive in the subcommand slot, where the token guard
+    /// refuses it outright.
+    #[test]
+    fn git_validate_blocks_global_flags_as_subcommands() {
+        vg_err("-c", &["core.pager=!sh", "log"]);
+        vg_err("-c", &["status"]);
+        vg_err("--exec-path=.", &["foo"]);
+        vg_err("--config-env=GIT_CONFIG", &["env", "status"]);
+        vg_err("--git-dir=/tmp/other", &["status"]);
+        vg_err("--work-tree=/tmp", &["status"]);
+        vg_err("-C", &["/tmp", "status"]);
     }
 
     // -- reject_git_internal_path --------------------------------------------
@@ -3126,7 +3369,7 @@ mod tests {
         let ws = tmp.path().join("workspace");
         let ws_str = ws.to_string_lossy().to_string();
 
-        let result = handle_write(
+        let result = handle_edit(
             json!({"path": ".git/hooks/pre-commit", "content": "#!/bin/sh\necho hacked"}),
             &ws_str,
         )

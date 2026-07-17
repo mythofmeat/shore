@@ -79,11 +79,11 @@ async fn test_streaming_chunks_arrive_in_order() {
 }
 
 /// Verify the full tool execution roundtrip:
-/// 1. Enqueue a tool_use response (LLM wants to call check_time).
+/// 1. Enqueue a tool_use response (LLM wants to call roll_dice).
 /// 2. Enqueue a final text response (LLM's reply after seeing the tool result).
 /// 3. Send a user message and collect both stream phases.
 /// 4. Assert the mock received at least 2 requests (initial + post-tool).
-/// 5. Assert the collected response contains the check_time tool call.
+/// 5. Assert the collected response contains the roll_dice tool call.
 #[expect(
     clippy::indexing_slicing,
     reason = "indexes known-shape command-output JSON / Vec fixtures and panics on mismatch"
@@ -95,20 +95,20 @@ async fn test_tool_use_roundtrip() {
     // Phase 1: LLM responds with a tool_use call.
     harness
         .mock_llm
-        .enqueue_tool_use("toolu_test01", "check_time", json!({}))
+        .enqueue_tool_use("toolu_test01", "roll_dice", json!({"notation": "2d6"}))
         .await;
 
     // Phase 2: LLM responds with final text after receiving the tool result.
     harness
         .mock_llm
-        .enqueue_text("The current time has been checked successfully.")
+        .enqueue_text("The dice have been rolled successfully.")
         .await;
 
     // Send the user message. The daemon will:
-    //   call LLM → get tool_use → execute check_time → call LLM again → get text
+    //   call LLM → get tool_use → execute roll_dice → call LLM again → get text
     let _ignored = harness
         .conn
-        .send_message("What time is it right now?", true)
+        .send_message("Roll me some dice right now.", true)
         .await
         .expect("failed to send message");
 
@@ -124,7 +124,7 @@ async fn test_tool_use_roundtrip() {
     let second_phase = harness.collect_stream().await;
 
     // The second phase should carry the final text response.
-    second_phase.assert_text_contains("current time has been checked successfully");
+    second_phase.assert_text_contains("dice have been rolled successfully");
 
     // Both phases must have ended their stream.
     assert!(
@@ -185,21 +185,21 @@ async fn test_tool_use_roundtrip() {
 
 /// Verify that tool_use blocks are persisted to the JSONL conversation log.
 ///
-/// After a check_time roundtrip the persisted JSONL file should contain either
-/// "tool_use" (the assistant block type) or "check_time" (the tool name).
+/// After a roll_dice roundtrip the persisted JSONL file should contain either
+/// "tool_use" (the assistant block type) or "roll_dice" (the tool name).
 #[tokio::test]
 async fn test_tool_result_persisted_in_jsonl() {
     let mut harness = TestHarness::boot().await;
 
     harness
         .mock_llm
-        .enqueue_tool_use("toolu_persist01", "check_time", json!({}))
+        .enqueue_tool_use("toolu_persist01", "roll_dice", json!({"notation": "2d6"}))
         .await;
-    harness.mock_llm.enqueue_text("Time check complete.").await;
+    harness.mock_llm.enqueue_text("Dice roll complete.").await;
 
     let _ignored = harness
         .conn
-        .send_message("Check the time please.", true)
+        .send_message("Roll the dice please.", true)
         .await
         .expect("failed to send message");
 
@@ -217,7 +217,7 @@ async fn test_tool_result_persisted_in_jsonl() {
         "Expected persisted messages but found none"
     );
 
-    // The JSONL must contain either a "tool_use" type block or the "check_time" name.
+    // The JSONL must contain either a "tool_use" type block or the "roll_dice" name.
     let raw_jsonl: String = messages
         .iter()
         .map(ToString::to_string)
@@ -225,8 +225,8 @@ async fn test_tool_result_persisted_in_jsonl() {
         .join("\n");
 
     assert!(
-        raw_jsonl.contains("tool_use") || raw_jsonl.contains("check_time"),
-        "Expected JSONL to contain 'tool_use' or 'check_time', but got:\n{raw_jsonl}"
+        raw_jsonl.contains("tool_use") || raw_jsonl.contains("roll_dice"),
+        "Expected JSONL to contain 'tool_use' or 'roll_dice', but got:\n{raw_jsonl}"
     );
 
     harness.shutdown().await;

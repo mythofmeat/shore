@@ -62,14 +62,14 @@ struct ScriptedCompactionLlm {
 
 impl ScriptedCompactionLlm {
     /// Build an LLM that replies with one tool-use round containing a
-    /// `write` call per `(path, content)` pair, then ends with an empty
-    /// text turn.
+    /// whole-file `edit` call per `(path, content)` pair, then ends with an
+    /// empty text turn.
     fn writing(entries: &[(&str, &str)]) -> Self {
         let mut blocks: Vec<ContentBlock> = Vec::new();
         for (i, (path, content)) in entries.iter().enumerate() {
             blocks.push(ContentBlock::ToolUse {
                 id: format!("call_{i}"),
-                name: "write".into(),
+                name: "edit".into(),
                 input: serde_json::json!({
                     "path": path,
                     "content": content,

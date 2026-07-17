@@ -1,1 +1,0 @@
-Return the current date and time in {{user}}'s local timezone. Use when the exact time matters — working out how long it's been since an event, whether it's late, day-of-week reasoning, or anchoring a timestamped memory. Returns a human-readable string like 'Saturday, April 4th, 2026 at 4:34 PM'. Takes no parameters.

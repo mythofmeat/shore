@@ -4,7 +4,7 @@
 //!   1. SWP handshake (ServerHello → ClientHello → History)
 //!   2. Streaming "Hello" message (StreamStart/StreamChunk/StreamEnd)
 //!   3. Commands: status, list_characters, new_chat
-//!   4. Tool use: check_time triggered by "What time is it?"
+//!   4. Tool use: roll_dice triggered by an explicit request
 //!   5. JSONL persistence with msg_id fields
 //!   6. Structured logs with rid correlation
 //!
@@ -410,11 +410,11 @@ async fn e2e_conversation_milestone() {
         "StreamEnd content should not be empty"
     );
 
-    // ── AC 4: Tool use — "What time is it?" triggers check_time ───────
-    test_err!("=== AC 4: Tool Use (check_time) ===");
+    // ── AC 4: Tool use — an explicit request triggers roll_dice ───────
+    test_err!("=== AC 4: Tool Use (roll_dice) ===");
     _ = conn
         .send_message(
-            "Use the check_time tool right now and tell me the exact time.",
+            "Use the roll_dice tool right now to roll 2d6 and tell me the total.",
             true,
         )
         .await
@@ -488,10 +488,10 @@ async fn e2e_conversation_milestone() {
             got_tool_result,
             "If ToolCall was received, ToolResult should follow"
         );
-        // check_time returns RFC 3339 datetime which contains 'T'.
+        // roll_dice returns a JSON object carrying the roll total.
         assert!(
-            tool_result_output.contains('T'),
-            "check_time output should be RFC 3339: {tool_result_output}"
+            tool_result_output.contains("total"),
+            "roll_dice output should carry a total: {tool_result_output}"
         );
         test_err!("  Tool use verified successfully");
     }
@@ -548,7 +548,7 @@ async fn e2e_conversation_milestone() {
 
         // After "Hello" exchange + tool use exchange, we expect:
         //   user("Hello"), assistant(response),
-        //   user("Use check_time..."), assistant(tool_use), user(tool_result), assistant(final)
+        //   user("Use roll_dice..."), assistant(tool_use), user(tool_result), assistant(final)
         // That's at least 6 messages (could be more if multi-iteration tool loop).
         assert!(
             lines_after.len() >= 4,

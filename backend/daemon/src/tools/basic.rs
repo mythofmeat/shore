@@ -1,6 +1,11 @@
-//! Basic tools: check_time, roll_dice.
+//! Basic tools: roll_dice.
 //!
 //! Migrated from the legacy `engine/tools.rs` ToolRegistry.
+//!
+//! Time is not a tool. The chat path injects a time marker on the user message
+//! (see `engine::prompt`) and the heartbeat prepends `[Current time: …]` to
+//! every tick, so the model reads the clock from its prompt rather than
+//! spending a tool round-trip to ask for it.
 
 use chrono::{Datelike, Local};
 use rand::Rng;
@@ -14,16 +19,6 @@ use super::{ToolCategory, ToolDef, ToolError};
 
 pub fn tool_defs() -> Vec<ToolDef> {
     vec![
-        ToolDef {
-            name: "check_time",
-            description: crate::include_prompt!("../../prompts/tools/basic/check_time.md"),
-            parameters: json!({
-                "type": "object",
-                "properties": {},
-                "required": []
-            }),
-            category: ToolCategory::Other,
-        },
         ToolDef {
             name: "roll_dice",
             description: crate::include_prompt!("../../prompts/tools/basic/roll_dice.md"),
@@ -65,15 +60,6 @@ fn ordinal_suffix(n: u32) -> &'static str {
     }
 }
 
-/// Human-friendly datetime string, e.g. `"Saturday, April 4th, 2026 at 4:34 PM"`.
-pub(crate) fn format_friendly_datetime() -> String {
-    let now = Local::now();
-    let day = now.day();
-    let suffix = ordinal_suffix(day);
-    now.format(&format!("%A, %B {day}{suffix}, %Y at %-I:%M %p"))
-        .to_string()
-}
-
 /// Human-friendly local date, e.g. `"Saturday, April 4th, 2026"`. Feeds the
 /// `{{date}}` template variable so prompts can anchor freshness to "today".
 pub(crate) fn format_friendly_date() -> String {
@@ -91,10 +77,6 @@ pub(crate) fn format_friendly_time() -> String {
 // ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
-
-pub fn handle_check_time(_input: Value) -> Result<Value, ToolError> {
-    Ok(json!(format_friendly_datetime()))
-}
 
 pub fn handle_roll_dice(input: &Value) -> Result<Value, ToolError> {
     let notation_str = input
@@ -282,15 +264,6 @@ mod tests {
             }
             assert!((5..=15).contains(&total));
         }
-    }
-
-    #[test]
-    fn handle_check_time_returns_friendly_datetime() {
-        let result = handle_check_time(json!({})).unwrap();
-        let s = result.as_str().unwrap();
-        // e.g. "Saturday, April 4th, 2026 at 4:34 PM"
-        assert!(s.contains(" at "), "expected friendly format, got: {s}");
-        assert!(s.contains(','), "expected friendly format, got: {s}");
     }
 
     #[test]

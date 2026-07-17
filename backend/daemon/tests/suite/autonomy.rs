@@ -734,7 +734,7 @@ async fn keepalive_prefix_matches_chat_across_tool_surfaces() {
 
     // Static tools only.
     assert_keepalive_prefix_matches_chat(
-        TestConfigBuilder::new().enabled_tools(&["read", "search", "check_time"]),
+        TestConfigBuilder::new().enabled_tools(&["read", "search", "roll_dice"]),
         "static-tools",
     )
     .await;

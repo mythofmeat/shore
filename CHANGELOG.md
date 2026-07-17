@@ -14,7 +14,7 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
   own turn. Two new `[subagents.<name>].prompt` macros hand that context back:
   `{{file: <path>}}` inserts a workspace file (preferring the active-prompt
   snapshot, so `{{file: ./SOUL.md}}` yields the exact bytes the main prompt used
-  this turn, and confined to the workspace by the same rules the `read`/`write`
+  this turn, and confined to the workspace by the same rules the `read`/`edit`
   tools use — absolute paths, `..`, and symlinks out of the workspace expand to
   nothing), and `{{active_history: <n>}}` inserts the last `n` turns as a
   plain `Speaker: text` transcript (capped at 100). Both insert their content
@@ -54,17 +54,19 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
   model/provider/call-type rows with first/last timestamps, call counts, and
   an interactive/autonomous/background classification. Add it to
   `enabled_tools` or a sub-agent's `tools` list to expose it.
-- **Capability sandbox for the `exec` tool (Linux).** Programs run through
-  `exec` are re-executed inside a Landlock + seccomp sandbox that confines
-  writes to the character workspace and standard build-tool caches, cuts
-  outbound network, and sets `no_new_privs` — so an escaped command (e.g. via
-  `git`) cannot reach `~/.ssh`, the daemon's config/keys, or the rest of the
-  system. It sits beneath the existing allowlist/denylist as the containment
-  layer. Designed to be invisible: `git`/read workloads and cached `cargo`/`npm`
-  builds are unaffected. Configure via `[tools.exec].sandbox`
-  (`auto`/`on`/`off`, default `auto`) and `[tools.exec].allow_network` (default
-  `false`). Non-Linux platforms keep denylist-only behavior. See ARCHITECTURE.md
-  "Tools And Security".
+- **Capability sandbox for tool subprocesses (Linux).** Programs a tool spawns —
+  `git` is the only one, now that `exec` is gone (below) — are re-executed
+  inside a Landlock + seccomp sandbox that confines writes to the character
+  workspace and standard build-tool caches, cuts outbound network, and sets
+  `no_new_privs`, so a command that escapes (via a repository's hooks or filter
+  drivers, say) cannot reach `~/.ssh`, the daemon's config/keys, or the rest of
+  the system. It sits beneath the subcommand denylist as the containment layer.
+  Designed to be invisible: local-repo git workloads and cached `cargo`/`npm`
+  builds are unaffected. Configure via `[tools.sandbox].mode` (`auto`/`on`/`off`,
+  default `auto`) and `[tools.sandbox].allow_network` (default `false`) — the
+  key is named for the mechanism, so a future tool that spawns a process is
+  covered by the same settings. Non-Linux platforms keep denylist-only behavior.
+  See ARCHITECTURE.md "Tools And Security".
 - **MCP (Model Context Protocol) client support.** The daemon can now connect to
   external MCP servers (stdio child processes or remote HTTP endpoints) declared
   in `[mcp.<name>]` and surface their tools to characters as
@@ -115,6 +117,49 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
   of the warm/cold state machine, which interleaved multi-model traffic on the
   per-character timeline can thrash) and the dormant-ping path warns instead of
   burying `cache_read: 0` in a success line.
+
+### Removed (BREAKING)
+- **`exec` is gone; `git` replaces it.** The daemon runs a character, not a
+  terminal, and an allowlist stretching from `ls` to `cargo` to `npm` was a
+  terminal. The only part worth keeping was git — the workspace is a git
+  repository and the memory passes commit their own changes to it — so that is
+  now its own tool, and the only one that spawns a process. It takes a
+  `subcommand` plus an `args` array instead of a command line, which removes
+  the shell-shaped surface entirely: nothing is parsed out of a string, and
+  git's global flags (`-c`, `--exec-path`, `--git-dir`, …) can no longer
+  precede the subcommand, so the injection-flag walk the old validator needed
+  is gone with them. The destructive/history-rewriting denylist carries over
+  unchanged: no `push`, `config`, remote mutation, `rebase`, `restore`, forced
+  discards, or history deletion — and now also no `checkout` of a pathspec,
+  which discarded uncommitted work exactly as the already-denied `restore`
+  does, and no `fetch`, `pull`, or `clone`: reaching a remote is the daemon's
+  job in both directions, not the character's. Every git spawn additionally neutralizes repository-controlled hooks
+  and filter drivers, which the daemon's own git calls have always done but the
+  model-facing path did not: an imported repo must not get to run its
+  `pre-commit` because the character saved a memory. **Configs listing `exec` in `enabled_tools`
+  will warn on an unknown tool and silently lose the capability — replace it
+  with `git` if you want commits.**
+- **`write` folded into `edit`.** `edit` now takes either `content` (create the
+  file, or replace it end to end) or `edits` (replace text within an existing
+  one). `edits` against a missing file still errors rather than creating it —
+  a path that doesn't match is far more often a typo than an intent to create,
+  and that error is what tells the model so. **Replace `write` with `edit` in
+  `enabled_tools`.**
+- **`list_files` folded into `read`.** `read` now decides by what the path
+  points at: a file returns its contents, a directory returns its entries, and
+  an omitted path lists the workspace root. **Drop `list_files` from
+  `enabled_tools`; `read` covers it.**
+- **`check_time` removed.** Chat turns already carry an injected time marker
+  and heartbeat ticks are prepended with `[Current time: …]`, so the tool spent
+  a round-trip retrieving something the prompt had already told the model.
+  **Drop it from `enabled_tools`.** Note the marker refreshes on a 30-minute
+  gap or hourly, not per message — during a fast back-and-forth the model's
+  sense of "now" can lag by up to an hour, where `check_time` was exact.
+- **`exec_allowlist` removed from the SWP `tools` response.** It described a
+  tool that no longer exists, and `git`'s denylist is fixed rather than
+  configurable, so there is nothing to introspect. Clients rendering the field
+  (TUI, GUI, Matrix and MCP bridges) should drop it; `shore tools` no longer
+  prints an allowlist section.
 
 ### Changed
 - **`HEARTBEAT.md` is gone; `MEMORY.md` is now the single active-memory

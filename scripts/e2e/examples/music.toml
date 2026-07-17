@@ -20,7 +20,7 @@ display_name   = "e2e-music"
 subagent_model = "opencode-go:glm-5.2"
 
 [tools]
-enabled_tools     = ["read", "search", "list_files", "check_time"]
+enabled_tools     = ["read", "search"]
 enabled_subagents = ["music"]
 
 [tools.web_search]

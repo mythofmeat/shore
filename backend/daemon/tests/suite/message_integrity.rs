@@ -28,32 +28,32 @@ async fn test_multi_turn_tool_conversation_valid() {
     // Round 2: LLM responds with a tool call, then a follow-up text
     harness
         .mock_llm
-        .enqueue_tool_use("toolu_r2_01", "check_time", json!({}))
+        .enqueue_tool_use("toolu_r2_01", "roll_dice", json!({"notation": "2d6"}))
         .await;
-    harness.mock_llm.enqueue_text("The time is noon.").await;
+    harness.mock_llm.enqueue_text("You rolled a nine.").await;
     let _ignored = harness
         .conn
-        .send_message("What time is it?", true)
+        .send_message("Roll me some dice.", true)
         .await
         .expect("failed to send message");
     let _r2_phase1 = harness.collect_stream().await;
     let r2_phase2 = harness.collect_stream().await;
-    r2_phase2.assert_text_contains("noon");
+    r2_phase2.assert_text_contains("rolled a nine");
 
     // Round 3: another tool call
     harness
         .mock_llm
-        .enqueue_tool_use("toolu_r3_01", "check_time", json!({}))
+        .enqueue_tool_use("toolu_r3_01", "roll_dice", json!({"notation": "2d6"}))
         .await;
-    harness.mock_llm.enqueue_text("Time checked again.").await;
+    harness.mock_llm.enqueue_text("Rolled again.").await;
     _ = harness
         .conn
-        .send_message("And now what time is it?", true)
+        .send_message("And roll again.", true)
         .await
         .expect("failed to send message");
     let _r3_phase1 = harness.collect_stream().await;
     let r3_phase2 = harness.collect_stream().await;
-    r3_phase2.assert_text_contains("Time checked again");
+    r3_phase2.assert_text_contains("Rolled again");
 
     // Round 4: plain text final response
     harness.mock_llm.enqueue_text("All done!").await;
@@ -203,12 +203,12 @@ async fn test_system_prompt_always_array_format() {
     // Round 2: tool call round-trip (exercises post-tool request too)
     harness
         .mock_llm
-        .enqueue_tool_use("toolu_sys_01", "check_time", json!({}))
+        .enqueue_tool_use("toolu_sys_01", "roll_dice", json!({"notation": "2d6"}))
         .await;
-    harness.mock_llm.enqueue_text("It is noon.").await;
+    harness.mock_llm.enqueue_text("You rolled a seven.").await;
     let _ignored = harness
         .conn
-        .send_message("What time?", true)
+        .send_message("Roll again?", true)
         .await
         .expect("failed to send message");
     let _phase1 = harness.collect_stream().await;
@@ -267,8 +267,8 @@ async fn test_multiple_tool_calls_have_unique_ids() {
 
     // Enqueue a response with TWO tool_use blocks in the same message.
     let two_tools = AnthropicStreamBuilder::new()
-        .tool_use("toolu_multi_01", "check_time", json!({}))
-        .tool_use("toolu_multi_02", "check_time", json!({}));
+        .tool_use("toolu_multi_01", "roll_dice", json!({"notation": "2d6"}))
+        .tool_use("toolu_multi_02", "roll_dice", json!({"notation": "2d6"}));
     harness.mock_llm.enqueue_stream(two_tools).await;
 
     // Follow-up text response after both tools execute.

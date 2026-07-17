@@ -85,25 +85,25 @@ async fn test_tool_loop_records_multiple_calls() {
     // Phase 1: LLM returns a tool_use block.
     harness
         .mock_llm
-        .enqueue_tool_use("toolu_ledger01", "check_time", json!({}))
+        .enqueue_tool_use("toolu_ledger01", "roll_dice", json!({"notation": "2d6"}))
         .await;
 
     // Phase 2: LLM returns the final text after seeing the tool result.
     harness
         .mock_llm
-        .enqueue_text("Time checked and ledger updated.")
+        .enqueue_text("Rolled and ledger updated.")
         .await;
 
     let _ignored = harness
         .conn
-        .send_message("What time is it?", true)
+        .send_message("Roll me some dice.", true)
         .await
         .expect("failed to send message");
 
     // Two stream phases: one for the tool_use response, one for the final reply.
     let _first = harness.collect_stream().await;
     let second = harness.collect_stream().await;
-    second.assert_text_contains("Time checked and ledger updated");
+    second.assert_text_contains("Rolled and ledger updated");
 
     // Give the daemon time to flush both ledger writes.
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;

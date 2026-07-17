@@ -1683,20 +1683,6 @@ fn print_tools(data: &serde_json::Value) {
         }
     }
 
-    // Exec allowlist (only meaningful when `exec` is enabled).
-    if let Some(exec) = data["exec_allowlist"].as_array() {
-        let cmds: Vec<&str> = exec.iter().filter_map(|c| c.as_str()).collect();
-        if use_color() {
-            _ = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-        }
-        _ = writeln!(out, "  exec allowlist:");
-        if use_color() {
-            _ = crossterm::execute!(out, ResetColor);
-        }
-        _ = writeln!(out, "    {}", cmds.join(" "));
-        _ = writeln!(out);
-    }
-
     // Dangling references.
     if let Some(warnings) = data["warnings"].as_array() {
         for w in warnings {
@@ -2625,14 +2611,13 @@ mod tests {
                 { "tool": "read", "main": true, "subagents": ["memory"] },
                 { "tool": "search", "main": false, "subagents": ["memory"] },
                 { "tool": "web_search", "main": true, "subagents": [] },
-                { "tool": "write", "main": false, "subagents": [] },
-                { "tool": "exec", "main": true, "subagents": [] },
+                { "tool": "edit", "main": false, "subagents": [] },
+                { "tool": "git", "main": true, "subagents": [] },
             ],
             "subagents": [
                 { "name": "memory", "enabled": true, "tools": ["search", "read"], "model": "anthropic:claude-haiku-4-5" },
                 { "name": "research", "enabled": false, "tools": ["web_search", "fetch_url"], "model": null },
             ],
-            "exec_allowlist": ["ls", "cat", "rg", "git", "find"],
             "warnings": ["subagent 'research' references unknown tool 'crawl'"],
         });
         format_command("tools", &data);

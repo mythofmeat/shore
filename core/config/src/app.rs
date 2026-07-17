@@ -532,9 +532,9 @@ pub struct ToolsConfig {
     #[serde(default)]
     pub web_search: SearchConfig,
 
-    /// Exec-tool subprocess sandbox settings — `[tools.exec]`.
+    /// Tool subprocess sandbox settings — `[tools.sandbox]`.
     #[serde(default)]
-    pub exec: ExecConfig,
+    pub sandbox: SandboxConfig,
 
     /// Per-tool config tables `[tools.config.<name>]`, keyed by tool name;
     /// currently carries per-tool `max_result_chars`. (A flattened
@@ -554,39 +554,41 @@ impl Default for ToolsConfig {
             enabled_subagents: Vec::new(),
             max_result_chars: default_max_result_chars(),
             web_search: SearchConfig::default(),
-            exec: ExecConfig::default(),
+            sandbox: SandboxConfig::default(),
             config: BTreeMap::new(),
         }
     }
 }
 
-// ── [tools.exec] ─────────────────────────────────────────────────────────
+// ── [tools.sandbox] ──────────────────────────────────────────────────────
 
-/// Exec-tool subprocess sandbox configuration (`[tools.exec]`).
+/// Tool subprocess sandbox configuration (`[tools.sandbox]`).
 ///
-/// The sandbox confines programs run through the `exec` tool with Landlock
-/// (filesystem) and seccomp (syscalls) so an escaped command cannot reach
-/// outside the character workspace, regain privileges, or open the network.
-/// Linux-only; other platforms always behave as if disabled.
+/// The sandbox confines the programs tools spawn with Landlock (filesystem) and
+/// seccomp (syscalls) so an escaped command cannot reach outside the character
+/// workspace, regain privileges, or open the network. It is named for the
+/// mechanism rather than any one tool: `git` is currently the only tool that
+/// spawns a process, but anything else that gains one is confined by the same
+/// settings. Linux-only; other platforms always behave as if disabled.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
-pub struct ExecConfig {
-    /// Sandbox mode. `auto` (default) enforces the sandbox when the kernel
-    /// supports Landlock and silently falls back to the command denylist
-    /// otherwise; `on` requires it (exec fails when it cannot be enforced);
-    /// `off` disables it.
+pub struct SandboxConfig {
+    /// Enforcement mode. `auto` (default) enforces the sandbox when the kernel
+    /// supports Landlock and silently falls back to the subcommand denylist
+    /// otherwise; `on` requires it (the tool call fails when it cannot be
+    /// enforced); `off` disables it.
     #[serde(default)]
-    pub sandbox: SandboxMode,
+    pub mode: SandboxMode,
 
     /// Permit outbound network from sandboxed subprocesses. Default `false`:
     /// the seccomp layer blocks IPv4/IPv6 socket creation, which is invisible
-    /// to the git/read workloads exec is used for. Set `true` to let package
-    /// managers (cargo/npm) fetch over the network.
+    /// to the local-repo git workloads the sandbox wraps today. Set `true` if a
+    /// future tool's subprocesses need the network.
     #[serde(default)]
     pub allow_network: bool,
 }
 
-/// Exec sandbox enforcement mode (`[tools.exec].sandbox`).
+/// Sandbox enforcement mode (`[tools.sandbox].mode`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum SandboxMode {
@@ -594,9 +596,9 @@ pub enum SandboxMode {
     /// (with a logged warning) when it does not.
     #[default]
     Auto,
-    /// Require the sandbox: exec fails when it cannot be enforced.
+    /// Require the sandbox: the tool call fails when it cannot be enforced.
     On,
-    /// Disable the sandbox; rely on the command denylist alone.
+    /// Disable the sandbox; rely on the subcommand denylist alone.
     Off,
 }
 
@@ -2077,26 +2079,36 @@ cache_forensics = true
     }
 
     #[test]
-    fn exec_sandbox_defaults_to_auto_no_network() {
+    fn tool_sandbox_defaults_to_auto_no_network() {
         let tools = ToolsConfig::default();
-        assert_eq!(tools.exec.sandbox, SandboxMode::Auto);
-        assert!(!tools.exec.allow_network);
+        assert_eq!(tools.sandbox.mode, SandboxMode::Auto);
+        assert!(!tools.sandbox.allow_network);
     }
 
     #[test]
-    fn exec_sandbox_parses_mode_and_network() {
+    fn tool_sandbox_parses_mode_and_network() {
         let toml_str = r#"
-[tools.exec]
-sandbox = "on"
+[tools.sandbox]
+mode = "on"
 allow_network = true
 "#;
         let cfg: AppConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(cfg.tools.exec.sandbox, SandboxMode::On);
-        assert!(cfg.tools.exec.allow_network);
+        assert_eq!(cfg.tools.sandbox.mode, SandboxMode::On);
+        assert!(cfg.tools.sandbox.allow_network);
 
-        let off: AppConfig = toml::from_str("[tools.exec]\nsandbox = \"off\"\n").unwrap();
-        assert_eq!(off.tools.exec.sandbox, SandboxMode::Off);
-        assert!(!off.tools.exec.allow_network);
+        let off: AppConfig = toml::from_str("[tools.sandbox]\nmode = \"off\"\n").unwrap();
+        assert_eq!(off.tools.sandbox.mode, SandboxMode::Off);
+        assert!(!off.tools.sandbox.allow_network);
+    }
+
+    /// The pre-release key was `[tools.exec]`; `deny_unknown_fields` makes the
+    /// old name a hard parse error rather than a silently ignored table that
+    /// would leave the sandbox on its default.
+    #[test]
+    fn legacy_tools_exec_key_is_rejected() {
+        let err = toml::from_str::<AppConfig>("[tools.exec]\nsandbox = \"off\"\n")
+            .expect_err("[tools.exec] must not parse");
+        assert!(err.to_string().contains("exec"), "{err}");
     }
 
     #[test]

@@ -227,7 +227,7 @@ async fn run_daemon() -> Result<(), Box<dyn std::error::Error>> {
     create_runtime_dirs(&loaded)?;
 
     // Install the exec-tool sandbox policy before any tool can run.
-    shore_daemon::sandbox::init_policy(loaded.app.tools.exec.clone());
+    shore_daemon::sandbox::init_policy(loaded.app.tools.sandbox.clone());
 
     // ── Notification service ──────────────────────────────────────────
     let notifier = NotificationService::new(loaded.app.notifications.clone());

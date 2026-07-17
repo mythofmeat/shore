@@ -130,8 +130,8 @@ fn tools_reports_surface_ownership_and_warnings() {
     assert_eq!(search_row["main"], false);
     assert_eq!(search_row["subagents"][0], "memory");
 
-    // Exec allowlist is surfaced and non-empty.
-    assert!(!out["exec_allowlist"].as_array().unwrap().is_empty());
+    // The exec tool is gone, and so is the allowlist that described it.
+    assert!(out.get("exec_allowlist").is_none());
 
     // Warnings flag the undefined sub-agent and the unknown tool reference.
     let warnings = out["warnings"].as_array().unwrap();
@@ -181,8 +181,8 @@ fn tool_use_msg(id: &str) -> Message {
         images: vec![],
         content_blocks: vec![ContentBlock::ToolUse {
             id: "toolu_1".to_owned(),
-            name: "check_time".to_owned(),
-            input: json!({}),
+            name: "roll_dice".to_owned(),
+            input: json!({"notation": "2d6"}),
         }],
         alt_index: None,
         alt_count: None,

@@ -618,7 +618,7 @@ mod tests {
 
         let mut request = test_request(
             &base_url,
-            vec![json!({"role": "user", "content": "What time is it?"})],
+            vec![json!({"role": "user", "content": "Roll me some dice."})],
         );
 
         let initial = StreamResult {
@@ -629,8 +629,8 @@ mod tests {
             timing: Timing::default(),
             tool_uses: vec![ToolUseEvent {
                 id: "t1".into(),
-                name: "check_time".into(),
-                input: json!({}),
+                name: "roll_dice".into(),
+                input: json!({"notation": "2d6"}),
             }],
             content_blocks: vec![],
         };
@@ -678,7 +678,7 @@ mod tests {
         match tc {
             ServerMessage::ToolCall(call) => {
                 assert_eq!(call.tool_id, "t1");
-                assert_eq!(call.tool_name, "check_time");
+                assert_eq!(call.tool_name, "roll_dice");
             }
             other => panic!("Expected ToolCall, got {other:?}"),
         }
@@ -687,11 +687,11 @@ mod tests {
         match tr {
             ServerMessage::ToolResult(res) => {
                 assert_eq!(res.tool_id, "t1");
-                assert_eq!(res.tool_name, "check_time");
+                assert_eq!(res.tool_name, "roll_dice");
                 assert!(!res.is_error);
                 assert!(
-                    res.output.contains(" at "),
-                    "expected friendly format: {}",
+                    res.output.contains("\"total\""),
+                    "expected the handler's real result to reach the client: {}",
                     res.output
                 );
             }
@@ -709,7 +709,7 @@ mod tests {
         );
 
         assert_eq!(request.messages.len(), 3);
-        assert_eq!(request.messages[1]["content"][0]["name"], "check_time");
+        assert_eq!(request.messages[1]["content"][0]["name"], "roll_dice");
         assert_eq!(request.messages[2]["content"][0]["type"], "tool_result");
     }
 
@@ -718,7 +718,7 @@ mod tests {
         let sidecar = MockLlmSidecar::start().await;
         for _ in 0..3 {
             sidecar
-                .enqueue_stream_tool_use("t1", "check_time", json!({}))
+                .enqueue_stream_tool_use("t1", "roll_dice", json!({"notation": "2d6"}))
                 .await;
         }
         let base_url = sidecar.base_url();
@@ -738,8 +738,8 @@ mod tests {
             timing: Timing::default(),
             tool_uses: vec![ToolUseEvent {
                 id: "t1".into(),
-                name: "check_time".into(),
-                input: json!({}),
+                name: "roll_dice".into(),
+                input: json!({"notation": "2d6"}),
             }],
             content_blocks: vec![],
         };
@@ -897,7 +897,7 @@ mod tests {
 
         let mut request = test_request(
             &base_url,
-            vec![json!({"role": "user", "content": "What time is it?"})],
+            vec![json!({"role": "user", "content": "Roll me some dice."})],
         );
 
         let initial = StreamResult {
@@ -908,8 +908,8 @@ mod tests {
             timing: Timing::default(),
             tool_uses: vec![ToolUseEvent {
                 id: "t1".into(),
-                name: "check_time".into(),
-                input: json!({}),
+                name: "roll_dice".into(),
+                input: json!({"notation": "2d6"}),
             }],
             content_blocks: vec![],
         };
@@ -970,7 +970,7 @@ mod tests {
     #[tokio::test]
     async fn tool_loop_honors_per_tool_result_char_override() {
         // A `[tools.config.<name>]` override must win over the global cap: the
-        // global limit here is generous, but `check_time` carries a tiny
+        // global limit here is generous, but `roll_dice` carries a tiny
         // per-tool override, so only that tool's result is truncated.
         let sidecar = MockLlmSidecar::start().await;
         sidecar.enqueue_stream_text("Noted.").await;
@@ -983,7 +983,7 @@ mod tests {
 
         let mut request = test_request(
             &base_url,
-            vec![json!({"role": "user", "content": "What time is it?"})],
+            vec![json!({"role": "user", "content": "Roll me some dice."})],
         );
 
         let initial = StreamResult {
@@ -994,16 +994,16 @@ mod tests {
             timing: Timing::default(),
             tool_uses: vec![ToolUseEvent {
                 id: "t1".into(),
-                name: "check_time".into(),
-                input: json!({}),
+                name: "roll_dice".into(),
+                input: json!({"notation": "2d6"}),
             }],
             content_blocks: vec![],
         };
 
-        // Generous global cap, but a 5-char override scoped to `check_time`.
+        // Generous global cap, but a 5-char override scoped to `roll_dice`.
         let mut tools = tools_cfg(10_000);
         let _ = tools.config.insert(
-            "check_time".into(),
+            "roll_dice".into(),
             shore_config::app::ToolOverride {
                 max_result_chars: Some(5),
             },
@@ -1030,7 +1030,7 @@ mod tests {
             ContentBlock::ToolResult { content, .. } => {
                 assert!(
                     content.contains("tool_result truncated"),
-                    "per-tool override should truncate check_time under a generous \
+                    "per-tool override should truncate roll_dice under a generous \
                      global cap: {content}"
                 );
             }
@@ -1051,7 +1051,7 @@ mod tests {
 
         let mut request = test_request(&base_url, vec![]);
 
-        // Two tools in one response.
+        // Two tool calls in one response.
         let initial = StreamResult {
             content: String::new(),
             model: "test".into(),
@@ -1061,8 +1061,8 @@ mod tests {
             tool_uses: vec![
                 ToolUseEvent {
                     id: "t1".into(),
-                    name: "check_time".into(),
-                    input: json!({}),
+                    name: "roll_dice".into(),
+                    input: json!({"notation": "2d6"}),
                 },
                 ToolUseEvent {
                     id: "t2".into(),
@@ -1108,7 +1108,7 @@ mod tests {
 
         assert_eq!(tool_calls.len(), 2);
         assert_eq!(tool_results.len(), 2);
-        assert_eq!(tool_calls[0].tool_name, "check_time");
+        assert_eq!(tool_calls[0].tool_name, "roll_dice");
         assert_eq!(tool_calls[1].tool_name, "roll_dice");
         assert!(!tool_results[0].is_error);
         assert!(!tool_results[1].is_error);

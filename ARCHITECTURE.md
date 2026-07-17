@@ -374,13 +374,13 @@ dreaming pass, the daemon ensures the workspace is a git repository
 (initializing one with a local identity when `.git` is missing; pre-existing
 repositories, including their identity config, are left alone). Both passes
 are prompted to commit their changes in small, explained chunks through the
-exec tool, which is gated to `git` commands there — the commit messages carry
-the reasoning and sources for each memory change. Those commits are attributed
+`git` tool — the commit messages carry the reasoning and sources for each
+memory change. Those commits are attributed
 to the character (`<character> <slug@shore.local>`), injected per-commit rather
 than written to the repo's config, so an operator committing in the same
 workspace keeps their own git identity and stays distinguishable in the log.
-The daemon never configures a remote, and the model cannot push (it is blocked
-at the exec layer): history is local unless the operator adds a remote. If a compaction archive fails after
+The daemon never configures a remote, and the model cannot push (`push` is
+refused by the git tool): history is local unless the operator adds a remote. If a compaction archive fails after
 the model already committed, the daemon records the rolled-back file restores as
 a `revert:` commit so history matches the tree. Git bootstrap and commits are
 best-effort: a host without git still compacts and dreams normally, just
@@ -480,8 +480,9 @@ Load-bearing invariants:
   the source config the registry was built from), then swaps the `Arc`. In-flight
   generations keep their snapshot; the old registry is gracefully shut down if
   uniquely owned, else cleaned up on `Drop` (rmcp kills stdio children on drop).
-- **Trust boundary.** An MCP server is arbitrary external code — the same risk
-  class as `exec`. Exposure is opt-in via the allowlists, and stdio servers are
+- **Trust boundary.** An MCP server is arbitrary external code, and since the
+  removal of `exec` it is the only way arbitrary programs reach the host.
+  Exposure is opt-in via the allowlists, and stdio servers are
   spawned with a cleared environment (only `PATH`, `HOME`, and the configured
   `env` pass through) so the daemon's provider keys are not leaked to them.
 - **Scope.** MCP applies to the chat path and the heartbeat (the character
@@ -495,30 +496,43 @@ Load-bearing invariants:
   it uses a fixed, character-tool-independent toolset (`build_librarian_tool_defs`),
   so MCP tools never enter memory maintenance.
 
-`exec` is intentionally narrow:
+`git` is the only tool that spawns a process, and the program it spawns is
+always `git`. There is no general command execution: the daemon runs a
+character, not a terminal.
 
-- command strings are parsed to argv and executed directly
-- no shell is invoked
-- executable names are allowlisted
-- executable paths are rejected
+- the tool takes a `subcommand` and an `args` array, never a command line
+- no shell is invoked, and nothing is parsed out of a string — pipes,
+  redirects, substitution, and `;` chaining are inert data
+- the subcommand slot is guarded: a token starting with `-` is refused, so
+  git's global flags (`-c`, `--exec-path`, `--git-dir`, `--work-tree`,
+  `--config-env`) can never precede the subcommand. This retires the argv walk
+  the exec-era validator needed to find those flags — the structure now
+  excludes them
+- destructive and history-rewriting subcommands are refused: `reset
+  --hard/--merge/--keep`, `clean -f`, `rebase`, `filter-*`, `restore`, forced
+  `checkout`/`switch`, branch/tag/ref deletion, `gc`, `reflog expire`, `stash
+  drop/clear/pop`. `checkout` of a *pathspec* (`checkout HEAD -- <path>`) is
+  refused with them: it discards uncommitted work exactly as `restore` does,
+  being the older spelling of it. Branch operations still work
+- repo-controlled execution surfaces are neutralized on every spawn
+  (`core.hooksPath=/dev/null`, `core.attributesFile=/dev/null`, prepended
+  before the subcommand): an operator may import a repository carrying hooks
+  or filter drivers, and the model committing its memory must not run them.
+  The daemon's own calls (`run_git`) and the model's (`handle_git`) share one
+  constant so they cannot drift
+- `push` is refused (network egress is daemon policy, not the model's — see
+  above), as are `config` and remote modification (`remote add`/`set-url`)
 - path-like arguments must stay inside the character workspace
 - the command runs in the workspace or a validated subdirectory
-- background memory passes (compaction, dreaming) gate `exec` to `git`
-  commands so they can commit memory changes; every other program is
-  rejected at dispatch, and dry runs block `exec` entirely
-- git invocations through `exec` additionally forbid destructive or
-  history-rewriting operations (`reset --hard`, `clean -f`, `rebase`,
-  `filter-*`, branch/tag/ref deletion, `gc`, `reflog expire`), `push` (network
-  egress is daemon policy, not the model's — see below), remote modification
-  (`remote add`/`set-url`), `config`, and the `-c`/`--config-env`/`--exec-path`
-  injection flags
-- the `write`, `edit`, and `delete` tools reject paths under `.git/`
+- dry-run memory passes block `git` entirely; live passes allow it so they can
+  commit their own memory changes
+- the `edit` and `delete` tools reject paths under `.git/`
 
 The allowlist and git denylist are a fat-finger guard, not containment — they
 cannot fully enclose a programmable surface like `git`. Underneath them sits a
-**capability sandbox** (`sandbox.rs`, Linux only). Each exec'd program is
-re-executed through the daemon binary's hidden `__sandbox-exec` mode, which —
-single-threaded, before `execve` — applies:
+**capability sandbox** (`sandbox.rs`, Linux only). Every program a tool spawns —
+`git` is the only one today — is re-executed through the daemon binary's hidden
+`__sandbox-exec` mode, which — single-threaded, before `execve` — applies:
 
 - **`no_new_privs`**, so privileges cannot be regained across `execve`;
 - **Landlock**: readable everywhere, writable only under the character
@@ -531,20 +545,21 @@ single-threaded, before `execve` — applies:
   namespace `clone` flags), and `ptrace`. `clone3` returns `ENOSYS` so glibc
   falls back to the screened `clone`.
 
-`[tools.exec].sandbox` selects `auto` (default — enforce when the kernel
+`[tools.sandbox].mode` selects `auto` (default — enforce when the kernel
 supports Landlock, else log a warning and fall back to denylist-only), `on`
-(require it; exec fails when it cannot be enforced), or `off`.
-`[tools.exec].allow_network` (default `false`) lifts the seccomp network cut for
-deployments that need package managers to fetch. The design goal is
-invisibility: `git`/read workloads and cached `cargo`/`npm` builds are
-unaffected; only dangerous or malicious actions are blocked.
+(require it; the tool call fails when it cannot be enforced), or `off`.
+`[tools.sandbox].allow_network` (default `false`) lifts the seccomp network cut.
+The key is named for the mechanism, not for `git`, so a future tool that spawns
+a process is confined by the same settings. The design goal is invisibility:
+local-repo git workloads and cached `cargo`/`npm` builds are unaffected; only
+dangerous or malicious actions are blocked.
 
 The sandbox and the denylist are complementary, not redundant:
 
 | Mechanism | Protects | Against |
 |---|---|---|
 | Destructive git denylist | Memory **integrity** | The model foot-gunning its own history (`reset --hard`, `rebase`, …) |
-| Capability sandbox | The **system** + network | An exec/git escape reaching outside the workspace |
+| Capability sandbox | The **system** + network | A git escape (hooks, filters) reaching outside the workspace |
 
 The sandbox confines the workspace *from the rest of the system*; it does not
 protect the workspace from itself (the workspace **is** the memory — a

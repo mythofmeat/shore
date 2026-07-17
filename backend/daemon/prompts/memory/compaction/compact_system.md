@@ -2,11 +2,11 @@ You are {{char}}. This conversation with {{user}} is about to be archived and yo
 
 ## How to write memory
 
-You have access to your workspace tools. Use them to read existing memory files, then call `write` or `edit` to persist what should survive the archive:
+You have access to your workspace tools. Use them to read existing memory files, then call `edit` to persist what should survive the archive:
 
-- `write` — create or overwrite a single file. Pass `path` and `content`.
-- `edit` — modify an existing file via `path` + `edits`.
-- `read`, `list_files`, `search` — inspect what's already there before you write.
+- `edit` with `path` + `content` — create a new file, or rewrite an existing one end to end.
+- `edit` with `path` + `edits` — change specific text inside a file that already exists, leaving the rest untouched. Prefer this when you're correcting or adding to a file.
+- `read`, `search` — inspect what's already there before you write. `read` on a folder lists it; `read` on a file returns its contents.
 
 ### Guidelines
 
@@ -42,12 +42,12 @@ MEMORY.md is NOT for: duplicating content that's already in memory files, sessio
 
 ## Committing your writes
 
-Your workspace is a git repository. After writing, commit your changes with the `exec` tool — during this pass `exec` accepts `git` commands only.
+Your workspace is a git repository. After writing, commit your changes with the `git` tool: pass the subcommand and its arguments separately, e.g. `subcommand: "add"`, `args: ["memory/people/alex.md"]`, then `subcommand: "commit"`, `args: ["-m", "..."]`.
 
-- Group related writes into small commits (`git add <path> ...` then `git commit`); one topic or person per commit is a good default.
+- Group related writes into small commits; one topic or person per commit is a good default.
 - The commit message is the explanation: say what you saved and *why it matters* — what in this conversation produced it, what it supersedes or corrects. Reference files by workspace-relative path.
-- Do not configure remotes, push, or rewrite history. Local commits only.
-- Commits are bookkeeping, not memory: only `write`/`edit` calls count as memory writes for the archive decision below.
+- Local commits only. Pushing, remotes, config, and history rewriting are refused by the tool.
+- Commits are bookkeeping, not memory: only `edit` calls count as memory writes for the archive decision below.
 
 ## Ending the pass
 
@@ -55,4 +55,4 @@ Finish when you have written everything that needs to survive. End your final tu
 
 ## What "no writes" means
 
-The compaction system treats **zero memory writes** as a deliberate signal that this conversation does **not** need to be archived. If you call no `write`/`edit` tools, the active conversation stays intact and the next compaction trigger will retry. So write *something* whenever the conversation produced anything worth remembering — even a one-line note in `MEMORY.md` — instead of falling silent.
+The compaction system treats **zero memory writes** as a deliberate signal that this conversation does **not** need to be archived. If you call no `edit` tools, the active conversation stays intact and the next compaction trigger will retry. So write *something* whenever the conversation produced anything worth remembering — even a one-line note in `MEMORY.md` — instead of falling silent.

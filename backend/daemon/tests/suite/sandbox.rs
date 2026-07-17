@@ -1,7 +1,7 @@
-//! End-to-end tests for the exec-tool sandbox helper (`__sandbox-exec`).
+//! End-to-end tests for the sandbox helper (`__sandbox-exec`).
 //!
-//! These drive the real daemon binary in helper mode, the same way
-//! `handle_exec` does. They are Linux-only and skip themselves (with a logged
+//! These drive the real daemon binary in helper mode, the same way the `git`
+//! tool does. They are Linux-only and skip themselves (with a logged
 //! note) when the kernel lacks Landlock, so they are safe to run anywhere.
 
 #![cfg(target_os = "linux")]
