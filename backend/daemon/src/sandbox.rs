@@ -48,7 +48,7 @@ fn policy() -> SandboxConfig {
     })
 }
 
-/// How [`crate::tools::workspace::handle_exec`] should spawn a validated command.
+/// How [`crate::tools::workspace::handle_git`] should spawn a validated command.
 #[derive(Debug)]
 pub enum SandboxPlan {
     /// Spawn the program directly — the sandbox is disabled, or it is `auto` and
