@@ -429,8 +429,8 @@ Merge order (lowest to highest precedence):
 5. Saved global preferences (`preferences/global.toml`).
 6. Saved per-character preferences (`characters/<C>/preferences/models.toml`).
 
-`reasoning_effort` accepts `low`/`medium`/`high` or `off`. On OpenRouter
-models `off` is an explicit **disable** — it is sent as
+`reasoning_effort` accepts a per-sdk set of graded levels (enumerated below)
+plus the `off` sentinel. On OpenRouter models `off` is an explicit **disable** — it is sent as
 `reasoning: { effort: "none" }` (rather than merely omitting the field), so a
 reasoning-by-default model that supports toggling actually stops reasoning.
 Dedicated thinking-only endpoints (e.g. `moonshotai/kimi-k2-thinking`) reject
@@ -476,8 +476,9 @@ is refused, as is a `reasoning_effort` value outside the sdk's accepted set
 (the allowed set is shown in the error). The accepted `reasoning_effort`
 values are grounded in the provider docs: Anthropic
 `low|medium|high|xhigh|max` (plus the `adaptive`/`off` sentinels),
-OpenAI/OpenRouter `minimal|low|medium|high|xhigh` (`xhigh` is their ceiling —
-`max` is Anthropic-only), Gemini `minimal|low|medium|high` (with a per-model
+OpenAI/OpenRouter `minimal|low|medium|high|xhigh|max` (`max` is their ceiling —
+OpenAI exposes it on GPT-5.6+, OpenRouter remaps it to the nearest level a
+model supports), Gemini `minimal|low|medium|high` (with a per-model
 override dropping `minimal` for Gemini 3.x **Pro**, where it is Flash-only —
 see the matrix below).
 

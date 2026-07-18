@@ -234,7 +234,7 @@ export function buildCall(
   } else {
     const effortRaw = req.provider_options?.["reasoning_effort"];
     if (typeof effortRaw === "string") {
-      // foldEffort only ever returns an in-domain OpenRouter value (minimal/low/medium/high).
+      // foldEffort only ever returns an in-domain OpenRouter value (minimal/low/medium/high/xhigh/max).
       const effort = foldEffort("openrouter", effortRaw, req.model);
       if (effort) {
         chatRequest.reasoning = { effort: effort as NonNullable<ChatRequest["reasoning"]>["effort"] };

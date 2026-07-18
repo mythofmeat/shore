@@ -9,14 +9,14 @@ import {
   rejectsSampling,
 } from "../src/llm/capabilities.ts";
 
-test("openai/openrouter accept xhigh (passthrough) and reject max", () => {
+test("openai/openrouter accept xhigh and max (both passthrough)", () => {
   for (const sdk of ["openai", "openrouter"] as const) {
-    expect(reasoningDomain(sdk)).toEqual(["minimal", "low", "medium", "high", "xhigh"]);
-    // xhigh is the real ceiling — sent as-is, NOT folded to high.
+    expect(reasoningDomain(sdk)).toEqual(["minimal", "low", "medium", "high", "xhigh", "max"]);
+    // xhigh/max are the ceiling — sent as-is, NOT folded to high.
     expect(foldEffort(sdk, "xhigh")).toBe("xhigh");
     expect(foldEffort(sdk, "high")).toBe("high");
-    // max is Anthropic-only — out of domain here, so nothing is sent.
-    expect(foldEffort(sdk, "max")).toBeUndefined();
+    // max is a valid level (OpenAI GPT-5.6+; OpenRouter remaps per-model).
+    expect(foldEffort(sdk, "max")).toBe("max");
   }
 });
 
@@ -66,7 +66,7 @@ test("OpenRouter per-vendor reasoning domains (issue #164)", () => {
   expect(reasoningDomain("openrouter", "x-ai/grok-4.3")).toEqual(["low", "medium", "high"]);
   // No-tier / budget-mapped OR vendors keep the generic set (OR maps
   // effort→budget). Kimi is the issue's example but its reasoning is on/off (#166).
-  const generic = ["minimal", "low", "medium", "high", "xhigh"];
+  const generic = ["minimal", "low", "medium", "high", "xhigh", "max"];
   expect(reasoningDomain("openrouter", "moonshotai/kimi-k2.6")).toEqual(generic);
   expect(reasoningDomain("openrouter", "z-ai/glm-5.1")).toEqual(generic);
   expect(reasoningDomain("openrouter", "some-vendor/mystery")).toEqual(generic);

@@ -530,7 +530,9 @@ pub fn default_value(sdk: &Sdk, field: Field) -> Option<&'static str> {
 /// * **Anthropic** — `buildThinkingParams` named efforts `max|xhigh|high|medium|low`
 ///   plus `adaptive` (`providers/anthropic.ts`). Note: no `minimal`.
 /// * **OpenAI / OpenRouter** — `mapReasoningEffort` accepts
-///   `minimal|low|medium|high|xhigh|max` (`xhigh`/`max` fold to `high`).
+///   `minimal|low|medium|high|xhigh|max`, all passed through (not folded).
+///   `max` is the ceiling (OpenAI GPT-5.6+; OpenRouter remaps to the nearest
+///   level a model supports).
 /// * **Gemini** — `thinkingLevel` accepts `minimal|low|medium|high`.
 /// * **Z.AI** — ignores `reasoning_effort` entirely (empty set; also `Ignored`
 ///   in [`applicability`], so [`validate`] returns `Inapplicable` before this).
@@ -1073,22 +1075,15 @@ mod tests {
     fn reasoning_effort_domain_is_sdk_specific() {
         let eff = |v: &str| toml::Value::String(v.into());
 
-        // OpenAI/OpenRouter accept minimal..xhigh; `xhigh` is the real ceiling.
-        // `max` is Anthropic-only — out of domain here (not a valid option).
-        for v in ["minimal", "low", "medium", "high", "xhigh"] {
-            assert!(
-                validate(&Sdk::Openai, "gpt-5.5", Field::ReasoningEffort, &eff(v)).is_ok(),
-                "openai should accept {v}"
-            );
-        }
+        // OpenAI/OpenRouter accept minimal..max; `max` is the real ceiling
+        // (OpenAI GPT-5.6+; OpenRouter accepts it and remaps per-model).
         for sdk in [Sdk::Openai, Sdk::Openrouter] {
-            assert!(
-                matches!(
-                    validate(&sdk, "gpt-5.5", Field::ReasoningEffort, &eff("max")),
-                    Err(CapabilityError::OutOfDomain { .. })
-                ),
-                "{sdk:?} must reject `max` (Anthropic-only)"
-            );
+            for v in ["minimal", "low", "medium", "high", "xhigh", "max"] {
+                assert!(
+                    validate(&sdk, "gpt-5.5", Field::ReasoningEffort, &eff(v)).is_ok(),
+                    "{sdk:?} should accept {v}"
+                );
+            }
         }
 
         // Anthropic accepts adaptive/xhigh/max but NOT minimal.
@@ -1193,7 +1188,7 @@ mod tests {
         // No-tier / budget-mapped OR vendors keep the generic set (OR maps
         // effort→budget ratio), matching the #166 audit. Kimi is the issue's own
         // example — its native reasoning is on/off, not graded.
-        let generic = ["minimal", "low", "medium", "high", "xhigh"];
+        let generic = ["minimal", "low", "medium", "high", "xhigh", "max"];
         assert_eq!(dom("moonshotai/kimi-k2.6"), generic);
         assert_eq!(dom("deepseek/deepseek-v4-pro"), generic);
         assert_eq!(dom("z-ai/glm-5.1"), generic);

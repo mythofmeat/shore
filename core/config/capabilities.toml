@@ -21,14 +21,18 @@
 domain = ["adaptive", "low", "medium", "high", "xhigh", "max"]
 budget = { low = 4096, medium = 8192, high = 12288, xhigh = 16384, max = 24576 }
 
-# OpenAI / OpenRouter `reasoning.effort` accept none|minimal|low|medium|high|xhigh.
-# `xhigh` is the real ceiling — passed through, NOT folded. `max` is intentionally
-# absent: it is an Anthropic-only effort, so it is not a valid option here.
+# OpenAI / OpenRouter `reasoning.effort` accept none|minimal|low|medium|high|xhigh|max.
+# `max` is the real ceiling: OpenAI exposes it on GPT-5.6+ (above `xhigh`), and
+# OpenRouter accepts it as a first-class effort level (remapping to the nearest
+# level a given model supports, so it never 400s there). Both `xhigh` and `max`
+# are passed through, NOT folded. The domain is a per-sdk superset — a model that
+# predates `max` (older OpenAI models) may 400 if set, exactly as `xhigh` already
+# can; per-model validity is not enforced at this layer.
 [reasoning_effort.openai]
-domain = ["minimal", "low", "medium", "high", "xhigh"]
+domain = ["minimal", "low", "medium", "high", "xhigh", "max"]
 
 [reasoning_effort.openrouter]
-domain = ["minimal", "low", "medium", "high", "xhigh"]
+domain = ["minimal", "low", "medium", "high", "xhigh", "max"]
 
 [reasoning_effort.gemini]
 # Gemini maps each accepted effort to a thinkingLevel of the same name.
@@ -135,7 +139,7 @@ rejects_sampling = true
 # `deepseek/*`, `z-ai/*` (GLM), `minimax/*` — are deliberately left on the
 # generic OpenRouter effort set. Their reasoning is an enable/disable toggle
 # (not a graded enum), so OpenRouter maps a requested effort to a reasoning-token
-# BUDGET ratio (minimal≈0.1 … xhigh≈0.95) rather than a fixed level — every value
+# BUDGET ratio (minimal≈0.1 … xhigh/max≈0.95) rather than a fixed level — every value
 # produces distinct behavior, so the full set is meaningful. This matches the
 # provider-doc audit in CONFIGURATION.md (issue #166), which lists e.g.
 # `kimi-k2.6` as "thinking on/off, no tiers (OR maps)". Only true enum-effort

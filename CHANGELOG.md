@@ -203,6 +203,18 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
   `{{user}}` instead of a hard-coded user name.
 
 ### Fixed
+- **`reasoning_effort = "max"` is now accepted on the OpenAI and OpenRouter
+  sdks.** `max` was wrongly treated as an Anthropic-only effort and rejected on
+  those sdks, so it was impossible to select the top reasoning tier for models
+  that expose it — OpenAI GPT-5.6+ (where `max` sits above `xhigh`) and
+  OpenRouter-routed models on the generic effort set, including
+  `moonshotai/kimi-*`. The OpenAI/OpenRouter `reasoning_effort` domain now
+  includes `max` (passed through, not folded), so the OpenRouter SDK accepts it
+  and remaps to the nearest level the resolved model supports;
+  `shore model setting reasoning_effort max` validates and reaches the wire.
+  Per-model overrides that narrow the domain (e.g. OR-routed Grok/Gemini) still
+  exclude `max`, and a model predating it may 400 — exactly as `xhigh` already
+  can.
 - **A generated image on an assistant turn no longer wedges the conversation.**
   Since heartbeat-generated images started persisting onto the autonomous
   assistant message (0.1.14), replaying one shipped a raw `image` block inside

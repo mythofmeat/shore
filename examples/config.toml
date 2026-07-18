@@ -81,7 +81,7 @@ model = "anthropic:claude-sonnet-4-6"   # Chat default as provider:model_id; als
 #   — Reasoning / thinking —  (accepted set is capability-checked per model)
 #   reasoning_effort = "high"
 #     anthropic         low|medium|high|xhigh|max  (+ "adaptive", "off")
-#     openai/openrouter minimal|low|medium|high|xhigh   ("max" is Anthropic-only)
+#     openai/openrouter minimal|low|medium|high|xhigh|max  (max = OpenAI 5.6+ / OR remaps)
 #     gemini            minimal|low|medium|high    ("minimal" is Flash-only on 3.x Pro)
 #     deepseek (native) low|medium|high|xhigh|max
 #     moonshot (native) thinking on/off, driven by budget_tokens
