@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2](https://github.com/mythofmeat/shore-core/compare/shore-daemon-v0.3.1...shore-daemon-v0.3.2) - 2026-07-18
+
+### Fixed
+
+- *(config)* accept reasoning_effort "max" on OpenAI/OpenRouter sdks ([#330](https://github.com/mythofmeat/shore-core/pull/330))
+
 ## [0.3.1](https://github.com/mythofmeat/shore-core/compare/shore-daemon-v0.3.0...shore-daemon-v0.3.1) - 2026-07-17
 
 ### Other
