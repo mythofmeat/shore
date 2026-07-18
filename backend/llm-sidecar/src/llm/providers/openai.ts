@@ -9,12 +9,19 @@
  *
  * No client-side cache markers: OpenAI-compatible backends cache server-side.
  *
- * **It must never replay prior thinking back into the request** (no
- * `reasoning_content`/`reasoning` field on outbound assistant messages). That
- * replay was the retired Rust adapter's deepseek/kimi tool-loop bug; the
- * conversion regression test pins that we don't do it. (Inbound reasoning deltas ARE
- * surfaced as `thinking` events for display/persistence; they're dropped from
- * the request on the next turn by `turnToOpenAI`.)
+ * **Thinking replay is decided upstream, transmitted faithfully here.** The
+ * daemon's `maybe_strip_prior_thinking` (tri-state `replay_prior_thinking`,
+ * #191) controls which assistant turns still carry thinking blocks by the time
+ * a request reaches this adapter; whatever survives is emitted as
+ * `reasoning_content` on the corresponding assistant message. Kimi K2.5+/K3
+ * are trained in preserved-thinking-history mode and degrade erratically
+ * without it; backends that reject inbound `reasoning_content` (DeepSeek
+ * treats it as output-only) surface an API error the user can act on by
+ * setting `replay_prior_thinking = "none"` for that model — never a silent
+ * drop here. The retired Rust adapter's deepseek/kimi tool-loop bug was
+ * replaying reasoning in the WRONG SHAPE unconditionally; the conversion
+ * regression test now pins the faithful mapping in both directions (thinking
+ * block ⇄ `reasoning_content`, absent ⇄ absent).
  */
 
 import OpenAI from "openai";
@@ -271,10 +278,11 @@ function systemToText(system: SystemContent | undefined): string {
 
 /**
  * Convert one canonical turn into OpenAI chat-completion message(s). Exported
- * for the conversion regression test: it must NEVER emit a `reasoning_content`
- * / `reasoning` field (the deepseek/kimi tool-loop bug — the retired Rust
- * adapter replayed prior thinking here; we don't), and must omit `content` (not emit
- * `null`) on tool-call-only assistant turns.
+ * for the conversion regression test: assistant thinking blocks map to
+ * `reasoning_content` exactly when present (the daemon's replay setting
+ * already decided what survives — see the module docs), the bare `reasoning`
+ * field is never emitted, and tool-call-only assistant turns must omit
+ * `content` (not emit `null`).
  */
 export function turnToOpenAI(turn: TurnMessage): ChatCompletionMessageParam[] {
   if (turn.role === "system") {
@@ -291,11 +299,21 @@ export function turnToOpenAI(turn: TurnMessage): ChatCompletionMessageParam[] {
       .filter((b) => b.type === "text")
       .map((b) => (b as { text: string }).text)
       .join("");
+    const reasoning = turn.content
+      .filter((b): b is Extract<ContentBlock, { type: "thinking" }> => b.type === "thinking")
+      .map((b) => b.thinking)
+      .join("\n\n");
     const toolUses = turn.content.filter(
       (b): b is Extract<ContentBlock, { type: "tool_use" }> => b.type === "tool_use",
     );
     const msg: ChatCompletionAssistantMessageParam = { role: "assistant" };
     if (text) msg.content = text;
+    // `reasoning_content` is not in the OpenAI SDK's param type — it's the
+    // DeepSeek/Kimi/GLM dialect extension the daemon's replay setting opted
+    // into by leaving the thinking block in place.
+    if (reasoning) {
+      (msg as unknown as Record<string, unknown>)["reasoning_content"] = reasoning;
+    }
     if (toolUses.length > 0) {
       msg.tool_calls = toolUses.map((tu) => ({
         id: tu.id,

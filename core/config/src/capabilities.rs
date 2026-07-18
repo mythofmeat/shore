@@ -188,6 +188,7 @@ pub enum Field {
     GeminiWebSearch,
     ZaiClearThinking,
     ZaiSubscription,
+    ReplayPriorThinking,
 }
 
 impl Field {
@@ -210,11 +211,12 @@ impl Field {
             Field::GeminiWebSearch => "gemini_web_search",
             Field::ZaiClearThinking => "zai_clear_thinking",
             Field::ZaiSubscription => "zai_subscription",
+            Field::ReplayPriorThinking => "replay_prior_thinking",
         }
     }
 
     /// Parse a TOML key back into its [`Field`] — the inverse of [`key`]. Keys
-    /// that name no matrix field (Shore-only behaviors like `replay_prior_thinking`,
+    /// that name no matrix field (Shore-only behaviors like `max_tool_iterations`,
     /// or transport like `sdk`) return `None`, which callers treat as "no
     /// capability opinion — always applicable".
     ///
@@ -236,6 +238,7 @@ impl Field {
             "gemini_web_search" => Field::GeminiWebSearch,
             "zai_clear_thinking" => Field::ZaiClearThinking,
             "zai_subscription" => Field::ZaiSubscription,
+            "replay_prior_thinking" => Field::ReplayPriorThinking,
             _ => return None,
         };
         Some(field)
@@ -478,6 +481,23 @@ pub fn applicability(sdk: &Sdk, model_id: &str, field: Field) -> Applicability {
         | Field::GeminiWebSearch => vendor_field(sdk, &Sdk::Gemini),
 
         Field::ZaiClearThinking | Field::ZaiSubscription => vendor_field(sdk, &Sdk::Zai),
+
+        // `replay_prior_thinking` (#191) is honored wherever an adapter puts
+        // surviving thinking blocks on the wire: Anthropic (verbatim
+        // thinking-block round-trip), OpenAI-compatible (`reasoning_content`
+        // on assistant turns — whether a given backend accepts that field is
+        // per-backend; ones that reject it surface an API error), Z.AI (the
+        // Preserved-Thinking carrier, composing with `zai_clear_thinking`),
+        // and OpenRouter (opaque `reasoning_details` round-trip). Ignored on
+        // Gemini (the adapter has no reasoning-replay wire surface) and on
+        // native DeepSeek/Moonshot, where the provider contract forces full
+        // replay regardless of the setting
+        // (`shore_llm::requires_reasoning_replay`), so the knob can change
+        // nothing.
+        Field::ReplayPriorThinking => match sdk {
+            Sdk::Anthropic | Sdk::Openai | Sdk::Zai | Sdk::Openrouter => Applicability::Honored,
+            Sdk::Gemini | Sdk::Deepseek | Sdk::Moonshot => Applicability::Ignored,
+        },
     }
 }
 
@@ -708,6 +728,7 @@ mod tests {
             Field::GeminiWebSearch,
             Field::ZaiClearThinking,
             Field::ZaiSubscription,
+            Field::ReplayPriorThinking,
         ] {
             assert_eq!(Field::from_key(field.key()), Some(field), "{field}");
         }
@@ -717,8 +738,30 @@ mod tests {
     fn from_key_is_none_for_non_matrix_keys() {
         // Shore-only behaviors and transport name no capability field — callers
         // treat `None` as "always applicable".
-        for key in ["replay_prior_thinking", "sdk", "nonsense"] {
+        for key in ["max_tool_iterations", "sdk", "nonsense"] {
             assert_eq!(Field::from_key(key), None, "{key}");
+        }
+    }
+
+    #[test]
+    fn replay_prior_thinking_applicability_tracks_adapter_replay_surfaces() {
+        // Honored wherever an adapter transmits surviving thinking blocks;
+        // Ignored where no adapter surface exists (gemini) or where the
+        // provider floor forces full replay regardless of the setting
+        // (native deepseek/moonshot — `requires_reasoning_replay`).
+        for sdk in [Sdk::Anthropic, Sdk::Openai, Sdk::Zai, Sdk::Openrouter] {
+            assert_eq!(
+                applicability(&sdk, "any-model", Field::ReplayPriorThinking),
+                Applicability::Honored,
+                "{sdk:?}"
+            );
+        }
+        for sdk in [Sdk::Gemini, Sdk::Deepseek, Sdk::Moonshot] {
+            assert_eq!(
+                applicability(&sdk, "any-model", Field::ReplayPriorThinking),
+                Applicability::Ignored,
+                "{sdk:?}"
+            );
         }
     }
 

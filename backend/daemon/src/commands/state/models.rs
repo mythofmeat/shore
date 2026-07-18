@@ -21,6 +21,10 @@ const SAMPLER_KEYS: &[&str] = &[
     // capability matrix (`Field::CacheKeepalive`) gates the value domain.
     "cache_keepalive",
     "sdk",
+    // Thinking-history replay (#191). Capability-gated: honored where an
+    // adapter puts surviving thinking on the wire, a soft error where it
+    // cannot change anything (gemini; native deepseek/moonshot, whose
+    // provider floor forces full replay) — see `Field::ReplayPriorThinking`.
     "replay_prior_thinking",
     // Unified per-model tool-iteration cap (None/unset = unlimited). Honored by
     // every sdk and every tool loop (chat, heartbeat, compaction, dreaming), so
@@ -291,7 +295,7 @@ fn load_char_prefs(
 
 /// Map each settable sampler key to how the resolved `sdk` treats it (#162):
 /// `"honored"` / `"ignored"` / `"rejected"` from the capability matrix, or
-/// `"always"` for Shore-only keys (`sdk`, `replay_prior_thinking`) that name no
+/// `"always"` for Shore-only keys (`sdk`, `max_tool_iterations`) that name no
 /// matrix field. Clients show only `honored` / `always` keys.
 fn key_applicability(sdk: &shore_config::models::Sdk, model_id: &str) -> Value {
     use shore_config::capabilities::{applicability, Applicability, Field};
@@ -637,7 +641,7 @@ pub fn set_model_setting(ctx: &mut CommandContext, args: &Value) -> CommandResul
     // Capability boundary (#162): reject keys the resolved sdk ignores/rejects
     // and out-of-domain values *before* they reach the preference file (and
     // later the wire). Keys with no matrix field — `sdk`,
-    // `replay_prior_thinking` — are Shore behaviors / transport and skip this.
+    // `max_tool_iterations` — are Shore behaviors / transport and skip this.
     capability_check(&active.sdk, &model_id, &key, &value)?;
 
     // Load the appropriate preferences file.
@@ -693,7 +697,7 @@ pub fn set_model_setting(ctx: &mut CommandContext, args: &Value) -> CommandResul
 
 /// Reject a setting the model's resolved `sdk` cannot honor, sourcing the
 /// message from [`shore_config::capabilities`] (#162). Returns `Ok(())` for
-/// keys outside the capability matrix (`sdk`, `replay_prior_thinking`) and for
+/// keys outside the capability matrix (`sdk`, `max_tool_iterations`) and for
 /// clearing a value (`null`).
 fn capability_check(
     sdk: &shore_config::models::Sdk,

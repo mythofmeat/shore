@@ -144,12 +144,17 @@ export function buildZaiMessages(req: SidecarRequest): ChatCompletionMessagePara
  * Turn → Z.ai message(s). Identical to the OpenAI conversion EXCEPT that, under
  * Preserved Thinking, assistant turns replay the prior `reasoning_content`
  * verbatim from the thinking block's `zair:` signature carrier. We reuse
- * `turnToOpenAI` for the message shell (which never emits reasoning) and graft
- * the reasoning field on afterward, so the OpenAI adapter's no-replay contract
- * is untouched.
+ * `turnToOpenAI` for the message shell with thinking blocks filtered out —
+ * `turnToOpenAI` would replay their (possibly mutated) *text* as
+ * `reasoning_content`, but Z.ai's documented contract wants the verbatim
+ * carrier bytes or nothing — and graft the reasoning field on afterward.
  */
 function turnToZai(turn: TurnMessage, preserveThinking: boolean): ChatCompletionMessageParam[] {
-  const msgs = turnToOpenAI(turn);
+  const msgs = turnToOpenAI({
+    role: turn.role,
+    content: turn.content.filter((b) => b.type !== "thinking"),
+    ...(turn.images ? { images: turn.images } : {}),
+  });
   if (turn.role !== "assistant" || !preserveThinking || msgs.length === 0) return msgs;
   const thinking = turn.content.find(
     (b): b is Extract<ContentBlock, { type: "thinking" }> => b.type === "thinking",

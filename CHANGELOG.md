@@ -7,6 +7,23 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
 
 ## [Unreleased]
 
+### Fixed
+- **Prior-turn thinking now actually replays on the OpenAI-compatible sdk**
+  (Kimi K3 via opencode-go intermittently skipped thinking). The sidecar's
+  OpenAI adapter silently dropped every thinking block at conversion — a
+  blanket ban pinned by the old deepseek tool-loop regression — so
+  `replay_prior_thinking` was a no-op on `sdk = "openai"` and Kimi K2.5+/K3,
+  which are trained in preserved-thinking-history mode, degraded erratically
+  (the coin-flip think/no-think behavior on otherwise identical requests).
+  Surviving thinking blocks now emit as `reasoning_content` on assistant
+  turns; the daemon's tri-state strip remains the gate. Backends that treat
+  the field as output-only surface an API error instead of a silent drop —
+  set `replay_prior_thinking = "none"` for those models. Relatedly,
+  `replay_prior_thinking` joined the capability matrix: `shore model setting`
+  now hides/rejects it where it cannot work (gemini — no replay surface;
+  native deepseek/moonshot — provider floor forces full replay), instead of
+  accepting a setting that changed nothing.
+
 ### Added
 - **Sub-agent prompt macros (`{{file:}}`, `{{active_history:}}`).** A sub-agent
   otherwise sees none of the character's definition and none of the live

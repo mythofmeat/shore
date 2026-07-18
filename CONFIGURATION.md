@@ -1032,6 +1032,17 @@ Tri-state control over how much prior-turn thinking/redacted-thinking is replaye
 
 Stripping is only safe with providers that don't depend on prior-turn thinking (e.g. Anthropic Claude 4.x). DeepSeek V3.1+ and Moonshot Kimi-thinking reject requests that omit prior `reasoning_content` while in thinking mode, so their reasoning-replay floor forces full replay regardless of this setting. In-progress tool-loop thinking is always preserved.
 
+How replay reaches the wire is per-sdk, and the setting is capability-gated to match (`shore model setting` hides/rejects it where it cannot work):
+
+| sdk | replay surface |
+|-----|----------------|
+| `anthropic` | signed thinking / redacted-thinking blocks, verbatim |
+| `openai` | `reasoning_content` on assistant turns. Kimi K2.5+/K3 are trained in preserved-thinking-history mode and degrade erratically without it; backends that treat the field as output-only (e.g. DeepSeek reached through a plain OpenAI-compatible endpoint) return an API error — set `replay_prior_thinking = "none"` for that model |
+| `zai` | Preserved-Thinking carrier (composes with `zai_clear_thinking = false`) |
+| `openrouter` | opaque `reasoning_details` round-trip |
+| `deepseek` / `moonshot` | forced full replay by the provider floor — the setting is not offered |
+| `gemini` | no replay surface — the setting is not offered |
+
 This value is the **global fallback**. The quality effect is model-dependent — for example Claude Opus 4.8 is reproducibly better with less prior thinking, while minimax-m3 / glm-5.1 want it all — so it can be overridden **per model** through the preference overlay (`shore model setting replay_prior_thinking <all|last_turn|none>` / `:setting replay_prior_thinking <…>`, the same path as `reasoning_effort` etc.). An unset per-model value inherits this global default; there is no auto-promotion in either direction.
 
 ## `[notifications]`

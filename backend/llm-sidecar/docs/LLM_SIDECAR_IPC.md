@@ -122,9 +122,17 @@ Notes:
   sidecar's per-SDK adapter converts canonical → that SDK's wire shape.
 - `api_key` crosses the boundary. UDS `0600` keeps it host-local; acceptable,
   documented. Never logged by the sidecar.
-- **The sidecar does NOT replay prior thinking as `reasoning_content`/`reasoning`**
-  (the deepseek/kimi tool-loop bug — see `project_deepseek_reasoning_replay_bug`).
-  This divergence from the Rust `openai.rs` is intentional and is the fix.
+- **Thinking replay is decided by the daemon, transmitted faithfully by the
+  adapters.** The daemon's `replay_prior_thinking` strip
+  (`maybe_strip_prior_thinking`) controls which assistant turns still carry
+  thinking blocks when a request arrives; the OpenAI-compatible adapter emits
+  whatever survives as `reasoning_content` (Kimi K2.5+/K3
+  preserved-thinking-history mode requires this; backends that treat the field
+  as output-only surface an API error rather than a silent drop). The old
+  deepseek/kimi tool-loop bug (see `project_deepseek_reasoning_replay_bug`) was
+  the retired Rust `openai.rs` replaying reasoning in the wrong shape
+  unconditionally — the fix is the faithful, daemon-gated mapping, not a
+  blanket ban.
 
 ## Stream response — `StreamEvent` NDJSON (the existing vocabulary)
 
@@ -230,9 +238,11 @@ base_url swap (`src/llm/providers/zai.ts`):
 - a `reasoning_content` field.
 Use the official Z.ai JS SDK if a maintained one exists; otherwise the `openai`
 SDK pointed at the Z.ai base_url with the thinking/clear_thinking fields injected
-via the SDK's extra-body passthrough. Either way it's a dedicated adapter. (Like
-all sidecar adapters, it does NOT replay prior thinking as `reasoning_content` —
-only honors Z.ai's documented `clear_thinking` input control.)
+via the SDK's extra-body passthrough. Either way it's a dedicated adapter.
+(Unlike the OpenAI adapter, which replays surviving thinking-block *text* as
+`reasoning_content`, Z.ai replays only the verbatim `zair:` carrier bytes, and
+only under Preserved Thinking — `clear_thinking: false` with thinking enabled;
+otherwise nothing is replayed.)
 
 ## TS adapter gap (what must change to emit the contract)
 

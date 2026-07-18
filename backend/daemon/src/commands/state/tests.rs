@@ -1170,6 +1170,29 @@ fn set_model_setting_replay_prior_thinking_rejects_unknown_value() {
 }
 
 #[test]
+fn set_model_setting_replay_prior_thinking_rejected_where_no_adapter_replays() {
+    // The gemini adapter has no reasoning-replay wire surface, so the knob
+    // would be a silent no-op there — the capability boundary rejects it
+    // instead of persisting it (the rule: never expose a setting that cannot
+    // do what it says).
+    let tmp = TempDir::new().unwrap();
+    let (_engine, mut ctx, _rx) = make_ctx_with_models(&tmp, vendor_models());
+    ctx.active_model = Some("flash".into());
+
+    let err = set_model_setting(
+        &mut ctx,
+        &json!({"key": "replay_prior_thinking", "value": "all"}),
+    )
+    .unwrap_err();
+    assert_eq!(err.0, shore_protocol::error::ErrorCode::InvalidRequest);
+    assert!(
+        err.1.contains("replay_prior_thinking") && err.1.contains("not applicable"),
+        "expected Inapplicable, got {:?}",
+        err.1
+    );
+}
+
+#[test]
 fn set_model_setting_replay_prior_thinking_accepts_tristate_and_legacy_bool() {
     let tmp = TempDir::new().unwrap();
     let (_engine, mut ctx, _rx) = make_ctx_with_models(&tmp, sample_models());
@@ -1530,8 +1553,20 @@ fn model_settings_vendor_knob_applicability_per_sdk() {
     assert_eq!(out["applicability"]["zai_clear_thinking"], "honored");
     assert_eq!(out["applicability"]["gemini_generation"], "ignored");
     assert_eq!(out["applicability"]["budget_tokens"], "ignored");
+    // Thinking replay is honored on zai (Preserved-Thinking carrier)…
+    assert_eq!(out["applicability"]["replay_prior_thinking"], "honored");
     // Shore-only keys stay always-applicable.
-    assert_eq!(out["applicability"]["replay_prior_thinking"], "always");
+    assert_eq!(out["applicability"]["max_tool_iterations"], "always");
+
+    // …but ignored on gemini, whose adapter has no replay surface — clients
+    // hide non-honored keys, so the setting disappears where it cannot work.
+    ctx.active_model = Some("flash".into());
+    ctx.active_resolved_model = None;
+    let out_gemini = model_settings(&ctx, &json!({})).unwrap();
+    assert_eq!(
+        out_gemini["applicability"]["replay_prior_thinking"],
+        "ignored"
+    );
 }
 
 #[test]

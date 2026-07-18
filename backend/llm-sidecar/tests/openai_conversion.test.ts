@@ -9,10 +9,14 @@
  * converter and assert the wire shape strict OpenAI-compatible backends
  * (deepseek, kimi, glm) actually accept.
  *
- * The retired Rust adapter failed these two ways — replaying prior thinking as
- * deepseek's output-only `reasoning_content`, and emitting `"content": null` on
- * tool-call-only assistant turns. This test pins that the TS converter does
- * NEITHER.
+ * The retired Rust adapter failed these two ways — replaying prior thinking in
+ * the wrong shape unconditionally, and emitting `"content": null` on
+ * tool-call-only assistant turns. This test pins the faithful mapping instead:
+ * an assistant turn's thinking blocks emit as `reasoning_content` exactly when
+ * present (Kimi K2.5+/K3 preserved-thinking-history mode requires the replay;
+ * the daemon's `replay_prior_thinking` setting decides what survives to this
+ * converter), turns without thinking gain no reasoning field, the bare
+ * `reasoning` key is never emitted, and `content: null` never appears.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -59,12 +63,31 @@ describe("OpenAI conversion regression (real production sequences)", () => {
     describe(name, () => {
       const out = convert(fx);
 
-      // ── The headline bug: deepseek reasoning_content replay ──────────────
-      test("emits no reasoning_content / reasoning field on any message", () => {
-        for (const msg of out) {
-          expect(msg).not.toHaveProperty("reasoning_content");
-          expect(msg).not.toHaveProperty("reasoning");
+      // ── The headline behavior: faithful thinking ⇄ reasoning_content ─────
+      test("assistant thinking blocks emit reasoning_content; nothing else does", () => {
+        // Walk fixture turns and emitted messages in lockstep: each source
+        // turn maps to 1..n wire messages (tool_results fan out), and the
+        // assistant message for a turn is the only place reasoning may land.
+        let cursor = 0;
+        for (const turn of fx.messages) {
+          const emitted = turnToOpenAI(turn) as unknown as Array<Record<string, unknown>>;
+          const slice = out.slice(cursor, cursor + emitted.length);
+          cursor += emitted.length;
+
+          const thinking = turn.content
+            .filter((b) => b.type === "thinking")
+            .map((b) => (b as { thinking: string }).thinking)
+            .join("\n\n");
+          for (const msg of slice) {
+            expect(msg).not.toHaveProperty("reasoning");
+            if (msg["role"] === "assistant" && thinking) {
+              expect(msg["reasoning_content"]).toBe(thinking);
+            } else {
+              expect(msg).not.toHaveProperty("reasoning_content");
+            }
+          }
         }
+        expect(cursor).toBe(out.length);
       });
 
       // ── Secondary divergence: content:null on tool-call-only turns ───────

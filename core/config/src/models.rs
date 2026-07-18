@@ -205,7 +205,9 @@ impl Sdk {
     pub fn echoes_unsigned_thinking(&self) -> bool {
         // DeepSeek/Moonshot (Kimi) hard-require prior `reasoning_content` to
         // round-trip during a tool loop; the Vercel AI SDK adapter replays it as
-        // an assistant `reasoning` content part.
+        // an assistant `reasoning` content part, and the OpenAI-compatible
+        // adapter as assistant `reasoning_content` (gated upstream by the
+        // `replay_prior_thinking` strip — see `maybe_strip_prior_thinking`).
         matches!(self, Sdk::Openai | Sdk::Zai | Sdk::Deepseek | Sdk::Moonshot)
     }
 
