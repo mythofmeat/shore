@@ -136,6 +136,17 @@ icons still work when the daemon's config directory is on another machine.
 
 Use `shore notify --all-messages` to notify for normal assistant replies too.
 
+## Personal Install (portable app dir)
+
+`scripts/install.sh` builds every binary from the checkout and installs the
+whole suite into one self-contained, backup-friendly directory (default
+`~/shore`): binaries in `bin/`, all state in `config/` + `data/`, systemd user
+units and PATH wrappers pointing in via `SHORE_*_DIR`. Rerun it after
+`git pull` to update. `--adopt` copies an existing XDG-dirs deployment into
+the app dir (daemon must be stopped; originals are kept). Back up `config/` +
+`data/` — `bin/` and `cache/` are derivable. See the script header for
+details and overrides.
+
 ## Repo Layout
 
 | Path | Contents |
