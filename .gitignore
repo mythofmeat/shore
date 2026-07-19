@@ -3,6 +3,7 @@
 **/*.rs.bk
 *.profraw
 *.profdata
+*.lock
 
 # IDE / AI tooling
 .idea/
