@@ -19,6 +19,10 @@
 # Run:    docker compose up -d --build
 # Logs:   docker compose logs -f daemon
 # CLI:    docker compose exec daemon shore status
+# TUI:    docker compose run --rm tui        (interactive, against this daemon)
+# Matrix: docker compose --profile matrix up -d
+#         (needs [connections.matrix] in /tmp/shore-test/config/config.toml or
+#          MATRIX_* env vars — see the matrix service below)
 # Reset:  rm -rf /tmp/shore-test   (also gone on next host reboot)
 
 services:
@@ -71,4 +75,66 @@ services:
 
     # Disposable by design: no auto-restart. `docker compose up` to check
     # something, `docker compose down` when you're done with it.
+    restart: "no"
+
+  # Interactive TUI against the test daemon. Profile-gated so a plain
+  # `docker compose up -d` never tries to run a TUI detached; instead:
+  #   docker compose run --rm tui
+  # (compose starts the daemon first via depends_on). No mounts, no env:
+  # the tui talks plain TCP and persists its view prefs daemon-side.
+  tui:
+    build:
+      context: .
+      target: tui
+    image: shore-tui:test
+    profiles: ["tui"]
+    network_mode: host
+    user: "1000:1000"
+    stdin_open: true
+    tty: true
+    depends_on:
+      - daemon
+    command: ["--addr", "127.0.0.1:7321"]
+
+  # Matrix bridge against the test daemon, as its own service — the daemon
+  # image deliberately ships no shore-matrix binary (binary presence toggles
+  # in-daemon supervision; see Dockerfile).
+  #
+  # Profile-gated because it needs real Matrix credentials to do anything:
+  # either [connections.matrix] in /tmp/shore-test/config/config.toml
+  # (external mode — `homeserver`, not `embedded`; this image ships no
+  # homeserver binary to spawn) or the MATRIX_* env vars passed through
+  # below. Then:
+  #   docker compose --profile matrix up -d
+  matrix:
+    build:
+      context: .
+      target: matrix
+    image: shore-matrix:test
+    profiles: ["matrix"]
+    network_mode: host
+    # The bridge manages child processes and expects SIGTERM to propagate
+    # cleanly on `compose down`, same as the daemon.
+    init: true
+    user: "1000:1000"
+    depends_on:
+      - daemon
+    # Pass-through only: unset vars stay unset in the container, so config
+    # file values win unless you export these on the host.
+    environment:
+      - MATRIX_HOMESERVER
+      - MATRIX_USER_ID
+      - MATRIX_ACCESS_TOKEN
+      - MATRIX_PASSWORD
+      - MATRIX_DEVICE_ID
+      - MATRIX_TRUSTED_USER
+    volumes:
+      # Same contract as the daemon: [connections.matrix] lives in config,
+      # the bridge's session store lives in data.
+      - /tmp/shore-test/config:/config
+      - /tmp/shore-test/data:/data
+      - /tmp/shore-test/cache:/cache
+    tmpfs:
+      - /tmp
+    command: ["--addr", "127.0.0.1:7321"]
     restart: "no"
