@@ -1,0 +1,495 @@
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+
+use matrix_sdk::config::SyncSettings;
+use matrix_sdk::event_handler::Ctx;
+use matrix_sdk::media::{MediaFormat, MediaRequestParameters};
+use matrix_sdk::ruma::events::reaction::OriginalSyncReactionEvent;
+use matrix_sdk::ruma::events::room::member::StrippedRoomMemberEvent;
+use matrix_sdk::ruma::events::room::message::{
+    MessageType, OriginalSyncRoomMessageEvent, Relation, ReplacementMetadata,
+    RoomMessageEventContent,
+};
+use matrix_sdk::ruma::events::room::redaction::OriginalSyncRoomRedactionEvent;
+use matrix_sdk::ruma::{EventId, OwnedEventId, OwnedRoomId, OwnedUserId, RoomId};
+use matrix_sdk::{Client, Room};
+use tokio::sync::mpsc;
+use tracing::{error, info, warn};
+
+use crate::bridge::sanitize_filename;
+
+/// Configuration for the Matrix bot.
+pub struct BotConfig {
+    pub homeserver: String,
+    pub user_id: String,
+    pub access_token: Option<String>,
+    pub password: Option<String>,
+    pub device_id: Option<String>,
+    pub store_path: String,
+    pub config_dir: PathBuf,
+}
+
+/// Events from Matrix forwarded to the bridge loop.
+#[derive(Debug)]
+pub enum MatrixEvent {
+    /// A text message was sent in a room.
+    Message {
+        room_id: OwnedRoomId,
+        sender: OwnedUserId,
+        event_id: OwnedEventId,
+        text: String,
+    },
+    /// An image was sent in a room (downloaded from the homeserver).
+    Image {
+        room_id: OwnedRoomId,
+        sender: OwnedUserId,
+        event_id: OwnedEventId,
+        /// Local temp copy, for the legacy shared-filesystem path mechanism.
+        path: String,
+        /// Raw image bytes, forwarded to the daemon as base64 image_data.
+        data: Vec<u8>,
+        /// Declared media type from the event's `info.mimetype`, if any.
+        mime_type: Option<String>,
+        body: String,
+    },
+    /// A message was edited (`m.replace` relation).
+    Edit {
+        room_id: OwnedRoomId,
+        sender: OwnedUserId,
+        /// The event being replaced (the original message's event id).
+        target_event_id: OwnedEventId,
+        new_text: String,
+    },
+    /// A message was redacted (deleted).
+    Redaction {
+        room_id: OwnedRoomId,
+        sender: OwnedUserId,
+        redacts: OwnedEventId,
+    },
+    /// A reaction was added to a message.
+    Reaction {
+        room_id: OwnedRoomId,
+        sender: OwnedUserId,
+        target_event_id: OwnedEventId,
+        /// The reaction emoji/key (e.g. "🔁").
+        key: String,
+    },
+}
+
+/// The Matrix bot client.
+pub struct MatrixBot {
+    pub client: Client,
+    config_dir: PathBuf,
+}
+
+impl MatrixBot {
+    /// Create a new Matrix bot and return it with a receiver for Matrix events.
+    pub async fn new(
+        config: &BotConfig,
+    ) -> Result<(Self, mpsc::Receiver<MatrixEvent>), Box<dyn std::error::Error>> {
+        let (tx, rx) = mpsc::channel::<MatrixEvent>(256);
+
+        let client = Client::builder()
+            .homeserver_url(&config.homeserver)
+            .sqlite_store(&config.store_path, None::<&str>)
+            .build()
+            .await?;
+
+        // Authenticate
+        if let Some(ref password) = config.password {
+            let mut login = client
+                .matrix_auth()
+                .login_username(&config.user_id, password);
+            if let Some(ref device_id) = config.device_id {
+                login = login.device_id(device_id);
+            }
+            login
+                .initial_device_display_name("Shore Matrix Bridge")
+                .send()
+                .await?;
+            info!("logged in as {} with password", config.user_id);
+        } else if let Some(ref token) = config.access_token {
+            let user_id: OwnedUserId = config.user_id.as_str().try_into()?;
+            let device_id = config.device_id.as_deref().unwrap_or("SHORE_MATRIX");
+
+            let session = matrix_sdk::authentication::matrix::MatrixSession {
+                meta: matrix_sdk::SessionMeta {
+                    user_id,
+                    device_id: device_id.into(),
+                },
+                tokens: matrix_sdk::SessionTokens {
+                    access_token: token.clone(),
+                    refresh_token: None,
+                },
+            };
+            client.restore_session(session).await?;
+            info!("restored session for {}", config.user_id);
+        } else {
+            return Err("either --password or --access-token is required".into());
+        }
+
+        // Register event handlers
+        client.add_event_handler_context(tx);
+        client.add_event_handler(Self::on_stripped_member);
+        client.add_event_handler(Self::on_room_message);
+        client.add_event_handler(Self::on_room_redaction);
+        client.add_event_handler(Self::on_reaction);
+
+        Ok((
+            Self {
+                client,
+                config_dir: config.config_dir.clone(),
+            },
+            rx,
+        ))
+    }
+
+    /// Start the Matrix sync loop in the background.
+    ///
+    /// `Client::sync` retries some errors internally but *returns* on others
+    /// (e.g. the homeserver dropping a long-poll connection mid-response —
+    /// `hyper::Error(IncompleteMessage)`). If we let the task end there, the
+    /// bridge silently stops receiving Matrix events while still appearing to
+    /// run. Instead, reconnect with capped exponential backoff. The sync token
+    /// is persisted in the SQLite store, so each retry resumes where it left
+    /// off — no full resync, no missed events.
+    pub fn start_sync(&self) {
+        let client = self.client.clone();
+        tokio::spawn(async move {
+            const INITIAL_BACKOFF: Duration = Duration::from_secs(1);
+            const MAX_BACKOFF: Duration = Duration::from_secs(30);
+            // If a sync ran healthily for at least this long before failing,
+            // treat the failure as fresh and reset the backoff.
+            const HEALTHY_RESET: Duration = Duration::from_secs(60);
+
+            info!("starting Matrix sync");
+            let mut backoff = INITIAL_BACKOFF;
+            loop {
+                let started = Instant::now();
+                match client.sync(SyncSettings::default()).await {
+                    // `sync` only returns `Ok` when a stop was requested.
+                    Ok(()) => {
+                        info!("Matrix sync stopped");
+                        break;
+                    }
+                    Err(e) => {
+                        if started.elapsed() >= HEALTHY_RESET {
+                            backoff = INITIAL_BACKOFF;
+                        }
+                        warn!(
+                            "Matrix sync error: {e}; reconnecting in {}s",
+                            backoff.as_secs()
+                        );
+                        tokio::time::sleep(backoff).await;
+                        backoff = (backoff * 2).min(MAX_BACKOFF);
+                    }
+                }
+            }
+        });
+    }
+
+    /// Send a text message (with markdown formatting) to a room.
+    ///
+    /// Returns the sent event's id so callers can map it to a daemon msg_id.
+    pub async fn send_text(&self, room_id: &RoomId, text: &str) -> Option<OwnedEventId> {
+        let content = RoomMessageEventContent::text_markdown(text);
+        self.send_content(room_id, content).await
+    }
+
+    /// Send an `m.notice` (rendered dimmed, no push notification) — used for
+    /// bridge/system output like warnings so it reads apart from the character.
+    pub async fn send_notice(&self, room_id: &RoomId, text: &str) -> Option<OwnedEventId> {
+        let content = RoomMessageEventContent::notice_markdown(text);
+        self.send_content(room_id, content).await
+    }
+
+    async fn send_content(
+        &self,
+        room_id: &RoomId,
+        content: RoomMessageEventContent,
+    ) -> Option<OwnedEventId> {
+        let Some(room) = self.client.get_room(room_id) else {
+            warn!("room {room_id} not found");
+            return None;
+        };
+        match room.send(content).await {
+            Ok(resp) => Some(resp.response.event_id),
+            Err(e) => {
+                error!("failed to send message to {room_id}: {e}");
+                None
+            }
+        }
+    }
+
+    /// Replace an earlier bot message's content in place (`m.replace`).
+    pub async fn edit_text(&self, room_id: &RoomId, event_id: &EventId, new_text: &str) -> bool {
+        let Some(room) = self.client.get_room(room_id) else {
+            warn!("room {room_id} not found");
+            return false;
+        };
+        let content = RoomMessageEventContent::text_markdown(new_text)
+            .make_replacement(ReplacementMetadata::new(event_id.to_owned(), None));
+        match room.send(content).await {
+            Ok(_) => true,
+            Err(e) => {
+                error!("failed to edit {event_id} in {room_id}: {e}");
+                false
+            }
+        }
+    }
+
+    /// Redact (delete) an event. Fails quietly if the bot lacks power to
+    /// redact the target (e.g. another user's message).
+    pub async fn redact(&self, room_id: &RoomId, event_id: &EventId, reason: Option<&str>) {
+        let Some(room) = self.client.get_room(room_id) else {
+            warn!("room {room_id} not found");
+            return;
+        };
+        if let Err(e) = room.redact(event_id, reason, None).await {
+            warn!("failed to redact {event_id} in {room_id}: {e}");
+        }
+    }
+
+    /// Upload and send an image to a room.
+    pub async fn send_image(&self, room_id: &RoomId, path: &str, caption: Option<&str>) {
+        let Some(room) = self.client.get_room(room_id) else {
+            warn!("room {room_id} not found");
+            return;
+        };
+        let data = match tokio::fs::read(path).await {
+            Ok(d) => d,
+            Err(e) => {
+                error!("failed to read image {path}: {e}");
+                return;
+            }
+        };
+        let mime = mime_guess::from_path(path).first_or_octet_stream();
+        let filename = std::path::Path::new(path)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "image".into());
+
+        let body = caption.unwrap_or(&filename);
+        let config = matrix_sdk::attachment::AttachmentConfig::new();
+        if let Err(e) = room.send_attachment(body, &mime, data, config).await {
+            error!("failed to send image to {room_id}: {e}");
+        }
+    }
+
+    /// Set or clear the typing indicator in a room.
+    pub async fn set_typing(&self, room_id: &RoomId, typing: bool) {
+        if let Some(room) = self.client.get_room(room_id) {
+            let _ = room.typing_notice(typing).await;
+        }
+    }
+
+    /// Upload character avatar and set display name on the Matrix profile.
+    ///
+    /// Looks for `avatar.{png,jpg,jpeg,webp}` in the character config
+    /// directory (`<config>/characters/<character>/`). Always sets the display
+    /// name to the character name.
+    pub async fn sync_avatar(&self, character: &str) {
+        // Set display name to character name
+        if let Err(e) = self
+            .client
+            .account()
+            .set_display_name(Some(character))
+            .await
+        {
+            warn!("failed to set display name: {e}");
+        } else {
+            info!("display name set to {character}");
+        }
+
+        for path in avatar_candidates(&self.config_dir, character) {
+            if path.exists() {
+                match tokio::fs::read(&path).await {
+                    Ok(data) => {
+                        let mime = mime_guess::from_path(&path).first_or_octet_stream();
+                        if let Err(e) = self.client.account().upload_avatar(&mime, data).await {
+                            warn!("failed to upload avatar: {e}");
+                        } else {
+                            info!("uploaded avatar for {character} from {}", path.display());
+                        }
+                    }
+                    Err(e) => warn!("failed to read avatar file {}: {e}", path.display()),
+                }
+                return;
+            }
+        }
+        info!("no avatar file found for {character}");
+    }
+
+    // --- Event handlers ---
+
+    /// Auto-join rooms the bot is invited to.
+    async fn on_stripped_member(ev: StrippedRoomMemberEvent, room: Room, client: Client) {
+        if client.user_id() == Some(&*ev.state_key) {
+            info!("auto-joining room {}", room.room_id());
+            if let Err(e) = room.join().await {
+                warn!("failed to auto-join {}: {e}", room.room_id());
+            }
+        }
+    }
+
+    /// Forward text and image messages from Matrix users to the bridge.
+    async fn on_room_message(
+        ev: OriginalSyncRoomMessageEvent,
+        room: Room,
+        client: Client,
+        Ctx(tx): Ctx<mpsc::Sender<MatrixEvent>>,
+    ) {
+        // Skip our own messages
+        if client.user_id() == Some(&*ev.sender) {
+            return;
+        }
+
+        // Edits arrive as fresh messages whose body is a `* <new text>`
+        // fallback plus an `m.replace` relation. Route them as edits — the
+        // fallback body must never be forwarded as a new prompt.
+        if let Some(Relation::Replacement(repl)) = &ev.content.relates_to {
+            if let MessageType::Text(new_text) = &repl.new_content.msgtype {
+                let _ = tx
+                    .send(MatrixEvent::Edit {
+                        room_id: room.room_id().to_owned(),
+                        sender: ev.sender.clone(),
+                        target_event_id: repl.event_id.clone(),
+                        new_text: new_text.body.clone(),
+                    })
+                    .await;
+            }
+            return;
+        }
+
+        match &ev.content.msgtype {
+            MessageType::Text(text_content) => {
+                let _ = tx
+                    .send(MatrixEvent::Message {
+                        room_id: room.room_id().to_owned(),
+                        sender: ev.sender.clone(),
+                        event_id: ev.event_id.clone(),
+                        text: text_content.body.clone(),
+                    })
+                    .await;
+            }
+            MessageType::Image(image_content) => {
+                // Download image from Matrix homeserver
+                let request = MediaRequestParameters {
+                    source: image_content.source.clone(),
+                    format: MediaFormat::File,
+                };
+                match client.media().get_media_content(&request, false).await {
+                    Ok(data) => {
+                        // The body is remote input — keep it from contributing
+                        // path separators (or traversal) to the temp filename.
+                        let filename = sanitize_filename(&image_content.body);
+                        let temp_path = std::env::temp_dir()
+                            .join(format!("shore_matrix_{}_{filename}", std::process::id()));
+                        // The temp file only serves daemons that share our
+                        // filesystem; the bytes travel in the event, so a
+                        // failed write is not fatal.
+                        if let Err(e) = tokio::fs::write(&temp_path, &data).await {
+                            warn!("failed to save downloaded image: {e}");
+                        }
+                        let mime_type = image_content
+                            .info
+                            .as_ref()
+                            .and_then(|info| info.mimetype.clone());
+                        let _ = tx
+                            .send(MatrixEvent::Image {
+                                room_id: room.room_id().to_owned(),
+                                sender: ev.sender.clone(),
+                                event_id: ev.event_id.clone(),
+                                path: temp_path.to_string_lossy().into_owned(),
+                                data,
+                                mime_type,
+                                body: image_content.body.clone(),
+                            })
+                            .await;
+                    }
+                    Err(e) => {
+                        warn!("failed to download image from Matrix: {e}");
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Forward redactions (message deletions) to the bridge.
+    async fn on_room_redaction(
+        ev: OriginalSyncRoomRedactionEvent,
+        room: Room,
+        client: Client,
+        Ctx(tx): Ctx<mpsc::Sender<MatrixEvent>>,
+    ) {
+        // Our own redactions are mirrors of daemon-side deletions; looping
+        // them back would re-issue the delete against a gone message.
+        if client.user_id() == Some(&*ev.sender) {
+            return;
+        }
+        // `redacts` lives on the event in room versions ≤10 and in the
+        // content from v11 on.
+        let Some(redacts) = ev.redacts.clone().or_else(|| ev.content.redacts.clone()) else {
+            return;
+        };
+        let _ = tx
+            .send(MatrixEvent::Redaction {
+                room_id: room.room_id().to_owned(),
+                sender: ev.sender.clone(),
+                redacts,
+            })
+            .await;
+    }
+
+    /// Forward reactions to the bridge (reaction-as-control: regen/delete/alt).
+    async fn on_reaction(
+        ev: OriginalSyncReactionEvent,
+        room: Room,
+        client: Client,
+        Ctx(tx): Ctx<mpsc::Sender<MatrixEvent>>,
+    ) {
+        if client.user_id() == Some(&*ev.sender) {
+            return;
+        }
+        let _ = tx
+            .send(MatrixEvent::Reaction {
+                room_id: room.room_id().to_owned(),
+                sender: ev.sender.clone(),
+                target_event_id: ev.content.relates_to.event_id.clone(),
+                key: ev.content.relates_to.key.clone(),
+            })
+            .await;
+    }
+}
+
+/// Candidate character avatar files, in lookup priority order.
+pub fn avatar_candidates(config_dir: &Path, character: &str) -> Vec<PathBuf> {
+    let char_dir = shore_config::character_config_dir(config_dir, character);
+    ["png", "jpg", "jpeg", "webp"]
+        .into_iter()
+        .map(|ext| char_dir.join(format!("avatar.{ext}")))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::avatar_candidates;
+    use std::path::PathBuf;
+
+    #[test]
+    fn avatar_candidates_use_character_config_dir() {
+        let config_dir = PathBuf::from("/home/user/.config/shore");
+        let paths = avatar_candidates(&config_dir, "qifei");
+
+        assert_eq!(
+            paths,
+            vec![
+                PathBuf::from("/home/user/.config/shore/characters/qifei/avatar.png"),
+                PathBuf::from("/home/user/.config/shore/characters/qifei/avatar.jpg"),
+                PathBuf::from("/home/user/.config/shore/characters/qifei/avatar.jpeg"),
+                PathBuf::from("/home/user/.config/shore/characters/qifei/avatar.webp"),
+            ]
+        );
+    }
+}

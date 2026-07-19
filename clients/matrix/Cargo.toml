@@ -1,0 +1,35 @@
+[package]
+name = "shore-matrix"
+version = "0.2.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/mythofmeat/shore-matrix"
+description = "Matrix bridge for the Silvershore chat daemon."
+
+[dependencies]
+shore-protocol = "0.12"
+shore-config = "0.16"
+shore-swp-client = "0.3.13"
+shore-diagnostics = "0.2"
+matrix-sdk = { version = "0.17", default-features = false, features = ["e2e-encryption", "markdown", "sqlite"] }
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive", "env"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+mime = "0.3"
+mime_guess = "2"
+base64 = "0.22"
+reqwest = { version = "0.12", default-features = false, features = ["json", "native-tls"] }
+toml = "0.8"
+urlencoding = "2"
+
+# Linux-only: PR_SET_PDEATHSIG so the homeserver child is reaped if the bridge
+# dies without running its Drop handlers (e.g. SIGKILL from a supervising daemon).
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3"
