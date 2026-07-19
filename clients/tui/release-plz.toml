@@ -1,8 +1,0 @@
-[workspace]
-git_release_enable = true
-changelog_update = true
-
-[[package]]
-name = "shore-tui"
-publish = true
-release = true

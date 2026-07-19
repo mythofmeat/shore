@@ -2,33 +2,39 @@
 pkgname=shore-cli
 pkgver=1.8.5
 pkgrel=1
+# The crate moved from its own 3.x version line to the unified workspace
+# version (0.20.0 at the switch). epoch=1 keeps `1:0.20.0` sorting above the
+# old `3.0.2` so installed packages upgrade across the reset instead of
+# treating it as a downgrade. The repo-arch build only rewrites pkgver from
+# the release tag and leaves epoch untouched.
+epoch=1
 pkgdesc='Persistent AI character engine — CLI'
 arch=('x86_64')
-url='https://github.com/mythofmeat/shore-core'
+url='https://github.com/mythofmeat/shore'
 license=('custom')
 depends=('gcc-libs')
 makedepends=('cargo' 'git')
 provides=('shore-cli')
 conflicts=('shore-cli' 'shore-core' 'shore-git')
-source=("shore-core::git+ssh://git@github.com/mythofmeat/shore-core.git")
+source=("shore::git+ssh://git@github.com/mythofmeat/shore.git")
 options=('!lto' '!debug' 'strip')
 sha256sums=('SKIP')
 
 prepare() {
-    cd shore-core
+    cd shore
     export RUSTUP_TOOLCHAIN=stable
     cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
 build() {
-    cd shore-core
+    cd shore
     export RUSTUP_TOOLCHAIN=stable
     export CARGO_TARGET_DIR=target
     cargo build --release --frozen -p shore-cli
 }
 
 package() {
-    cd shore-core
+    cd shore
 
     install -Dm755 target/release/shore "$pkgdir/usr/bin/shore"
 

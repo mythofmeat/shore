@@ -1,6 +1,6 @@
 # shore-matrix
 
-Matrix bridge for the [Shore](https://github.com/mythofmeat/shore-core)
+Matrix bridge for the [Shore](../../README.md)
 chat daemon. Talks to `shore-daemon` over the Shore Wire Protocol (SWP) and
 exposes characters as Matrix users on an embedded homeserver.
 
@@ -39,7 +39,7 @@ The resulting binary is `target/release/shore-matrix`.
 
 Reads connection settings from `~/.config/shore/client.toml` and Matrix-specific
 configuration from environment variables / CLI flags. See
-[Shore](https://github.com/mythofmeat/shore-core) for daemon-side
+[Shore](../../README.md) for daemon-side
 configuration.
 
 ## License

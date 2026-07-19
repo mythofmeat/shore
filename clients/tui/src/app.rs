@@ -2546,7 +2546,7 @@ impl App {
     /// completion state and exit command mode; local-only palettes may
     /// instead apply in place and return `None`.
     /// True when the palette is in the `view` submenu, whose options
-    /// toggle local prefs in-place via [`apply_submenu`].
+    /// toggle local prefs in-place via [`Self::apply_submenu`].
     pub fn is_view_submenu(&self) -> bool {
         matches!(&self.completion.mode, PaletteMode::Submenu(s) if s.parent == "view")
     }

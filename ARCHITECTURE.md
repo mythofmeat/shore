@@ -23,16 +23,16 @@ security boundaries, observability, and validation expectations.
 | `clients/cli` | `shore-cli` | CLI client |
 | `dev/test-harness` | `shore-test-harness` | integration harness and mock server |
 
-Out-of-tree clients live in separate repositories and consume the core
-library crates (`shore-protocol`, `shore-config`, `shore-swp-client`,
-`shore-diagnostics`) from crates.io:
+The TUI (`clients/tui`) and Matrix bridge (`clients/matrix`) are in-tree
+workspace members. Out-of-tree clients live in separate repositories, pinned
+to the last-published crates.io versions of the core library crates
+(`shore-protocol`, `shore-config`, `shore-swp-client`, `shore-diagnostics`) —
+this workspace no longer publishes to crates.io:
 
 | Crate | Repo |
 | --- | --- |
-| `shore-tui` (terminal UI) | [mythofmeat/shore-tui](https://github.com/mythofmeat/shore-tui) |
 | `shore-gui` (Tauri desktop) | [mythofmeat/shore-gui](https://github.com/mythofmeat/shore-gui) |
 | `shore-gui-godot` (Godot client) | [mythofmeat/shore-gui-godot](https://github.com/mythofmeat/shore-gui-godot) |
-| `shore-matrix` (Matrix bridge) | [mythofmeat/shore-matrix](https://github.com/mythofmeat/shore-matrix) |
 | `shore-mcp` (debug/development MCP bridge — distinct from the in-tree `shore-mcp-client`) | [mythofmeat/shore-mcp](https://github.com/mythofmeat/shore-mcp) |
 
 ## State Model

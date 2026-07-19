@@ -6,11 +6,11 @@ pkgrel=1
 # it into the double digits). epoch=1 keeps `1:0.1.0` sorting above the old
 # `16.1.0` so installed packages still upgrade across the reset instead of
 # treating it as a downgrade. The repo-arch build only rewrites pkgver from the
-# release-plz tag and leaves epoch untouched.
+# release tag and leaves epoch untouched.
 epoch=1
 pkgdesc='Persistent AI character engine — daemon'
 arch=('x86_64')
-url='https://github.com/mythofmeat/shore-core'
+url='https://github.com/mythofmeat/shore'
 license=('custom')
 # bun is a runtime dep: the LLM sidecar ships as a bundled JS script with a
 # `#!/usr/bin/env bun` shebang rather than a ~70MB --compile binary (the
@@ -22,18 +22,18 @@ depends=('gcc-libs' 'openssl' 'bun' 'git')
 makedepends=('bun' 'cargo' 'git')
 provides=('shore-daemon')
 conflicts=('shore-daemon' 'shore-core' 'shore-git')
-source=("shore-core::git+ssh://git@github.com/mythofmeat/shore-core.git")
+source=("shore::git+ssh://git@github.com/mythofmeat/shore.git")
 options=('!lto' '!debug' 'strip')
 sha256sums=('SKIP')
 
 prepare() {
-    cd shore-core
+    cd shore
     export RUSTUP_TOOLCHAIN=stable
     cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
 build() {
-    cd shore-core
+    cd shore
     export RUSTUP_TOOLCHAIN=stable
     export CARGO_TARGET_DIR=target
     cargo build --release --frozen -p shore-daemon
@@ -43,7 +43,7 @@ build() {
 }
 
 package() {
-    cd shore-core
+    cd shore
 
     install -Dm755 target/release/shore-daemon "$pkgdir/usr/bin/shore-daemon"
     # Kept out of /usr/bin on purpose: the daemon supervises this directly and

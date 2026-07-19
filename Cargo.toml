@@ -12,6 +12,8 @@ members = [
     "backend/swp-server",
     "backend/daemon",
     "clients/cli",
+    "clients/tui",
+    "clients/matrix",
     "dev/test-harness",
 ]
 default-members = [
@@ -23,14 +25,15 @@ default-members = [
 ]
 
 [workspace.package]
-# No shared `version` — every workspace member carries its own. The five
-# binary-side crates used to share `version.workspace = true`, which made
-# release-plz unable to compute per-crate bumps (it saw one workspace
-# version, not five independent versions). They now publish to crates.io
-# independently like the core libraries, each tracking its own version.
+# One version for the whole suite. Nothing publishes to crates.io anymore —
+# internal crates are consumed by path, releases are a single `v<version>`
+# git tag that builds every Arch package (see .github/workflows/package.yml).
+# To release: bump this version, commit, tag `v<version>`, push the tag.
+version = "0.20.0"
+publish = false
 edition = "2021"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/mythofmeat/shore-core"
+repository = "https://github.com/mythofmeat/shore"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -53,34 +56,22 @@ futures-util = "0.3"
 async-trait = "0.1"
 insta = { version = "1", features = ["json"] }
 proptest = "1"
-# `version` is required alongside `path` for `cargo package` to succeed
-# (cargo refuses path-only deps when packaging, even when publish is
-# disabled). For the core library crates these track what is published on
-# crates.io. The binary-side crates (llm/ledger/swp-server/daemon) are
-# `git_only` in release-plz.toml — never published — and were reset to 0.1.0
-# after cargo-semver-checks inflated them into the double digits; their
-# versions here are local-only and just track each crate's own Cargo.toml.
-shore-protocol = { path = "core/protocol", version = "0.12.0" }
-shore-config = { path = "core/config", version = "0.18.2" }
-shore-swp-client = { path = "core/swp-client", version = "0.3.17" }
-shore-diagnostics = { path = "backend/diagnostics", version = "0.2.4" }
-shore-llm = { path = "backend/llm", version = "0.1.13" }
-shore-ledger = { path = "backend/ledger", version = "0.1.17" }
-shore-swp-server = { path = "backend/swp-server", version = "0.1.13" }
-shore-daemon = { path = "backend/daemon", version = "0.3.2" }
-# Intentionally path-only (no `version`). shore-test-harness is a dev-only
-# crate that shore-daemon pulls in as a dev-dependency, and it depends
-# back on shore-daemon — a versioned cycle there causes
-# `cargo package --workspace` to silently skip shore-daemon (and several
-# other crates). Path-only dev-deps are stripped from packaged manifests
-# entirely, so the cycle vanishes for packaging while tests still link
-# against the harness via the path.
+# All internal crates are path-only: nothing publishes to crates.io, so no
+# dep carries a version and no crate can drift against another.
+shore-protocol = { path = "core/protocol" }
+shore-config = { path = "core/config" }
+shore-swp-client = { path = "core/swp-client" }
+shore-diagnostics = { path = "backend/diagnostics" }
+shore-llm = { path = "backend/llm" }
+shore-ledger = { path = "backend/ledger" }
+shore-swp-server = { path = "backend/swp-server" }
+shore-daemon = { path = "backend/daemon" }
 shore-test-harness = { path = "dev/test-harness" }
-shore-call-store = { path = "backend/call-store", version = "0.1.1" }
+shore-call-store = { path = "backend/call-store" }
 rusqlite = { version = "0.37", features = ["bundled"] }
 zstd = "0.13"
 rmcp = { version = "1.7", features = ["client", "transport-child-process", "transport-streamable-http-client-reqwest"] }
-shore-mcp-client = { path = "backend/mcp", version = "0.2.0" }
+shore-mcp-client = { path = "backend/mcp" }
 
 [workspace.lints.clippy]
 # Pedantic is enabled workspace-wide as a quality ratchet. priority = -1 lets
@@ -243,3 +234,13 @@ debug = "line-tables-only"
 strip = true        # drop symbol tables (~20% smaller, no behavior change)
 lto = "thin"        # most of the LTO size/perf win, far cheaper to link than "fat"
 codegen-units = 1   # smaller and slightly faster runtime
+
+# shore-tui's size-focused profile (was its own repo's [profile.release]).
+# `panic` and `lto` are profile-global in cargo — they can't be set per
+# package — so the tui keeps them via this dedicated profile. Its PKGBUILD
+# builds with `--profile tui-release`.
+[profile.tui-release]
+inherits = "release"
+opt-level = "z"
+lto = true
+panic = "abort"

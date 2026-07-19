@@ -1,21 +1,15 @@
 [package]
 name = "shore-tui"
-version = "0.1.13"
-edition = "2021"
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/mythofmeat/shore-tui"
+version.workspace = true
+publish.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "Terminal UI client for the Silvershore chat daemon."
 
-[profile.release]
-opt-level = "z"
-lto = true
-codegen-units = 1
-panic = "abort"
-strip = true
-
 [dependencies]
-shore-protocol = "0.9"
-shore-swp-client = "0.3"
+shore-protocol = { workspace = true }
+shore-swp-client = { workspace = true }
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "signal"] }
 tracing = "0.1"

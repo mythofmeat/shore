@@ -364,6 +364,10 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
                         image_uploads.push(shore_protocol::client_msg::ImageUpload {
                             filename,
                             data: b64,
+                            // The daemon sniffs magic bytes and falls back to the
+                            // filename extension; a declared mime type is only for
+                            // bridges without reliable filenames (e.g. Matrix).
+                            mime_type: None,
                         });
                     }
                     Err(e) => {

@@ -17,9 +17,10 @@ purpose. Then update the relevant kept doc in the same change.
 
 - `core/`: protocol, config, and shared SWP client crates.
 - `backend/`: daemon, SWP server, LLM, ledger, and diagnostics crates.
-- `clients/`: CLI. Other clients (TUI, GUI, Matrix bridge, MCP bridge) live
-  in their own repos under `mythofmeat/` and consume the core libraries from
-  crates.io.
+- `clients/`: CLI, TUI, and Matrix bridge, all building against the workspace
+  crates by path. The GUIs (`shore-gui`, `shore-gui-godot`) and debug MCP
+  (`shore-mcp`) still live in their own repos, pinned to the last-published
+  crates.io versions of the core libraries.
 - `dev/`: deterministic test harness.
 
 The daemon owns character state. Clients observe and send commands; they do not
@@ -46,6 +47,19 @@ cargo test -p shore-daemon --test suite
 
 Live/provider checks use real credentials and may cost money. Use them only when
 provider behavior is in scope.
+
+## Releasing
+
+One version for the whole suite, set in `[workspace.package]` in the root
+Cargo.toml (every crate inherits it). Nothing publishes to crates.io. To cut
+a release:
+
+1. Bump `version` in `[workspace.package]` and commit to main.
+2. `git tag v<version> && git push origin v<version>`
+
+The tag triggers `.github/workflows/package.yml`, which builds the four Arch
+packages (daemon, cli, tui, matrix) sequentially and creates a GitHub release
+with git-cliff notes.
 
 ## Documentation Policy
 

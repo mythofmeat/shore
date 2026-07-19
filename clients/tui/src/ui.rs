@@ -768,7 +768,7 @@ fn render_turn(
     }
 }
 
-/// Build the full Vec<Line> for the conversation pane from `app.entries`,
+/// Build the full `Vec<Line>` for the conversation pane from `app.entries`,
 /// the live stream state, and the active image cache. Returns the lines,
 /// the rebuilt image index, and the visual line count.
 fn build_conversation_lines(
@@ -2058,6 +2058,8 @@ mod scenario_tests {
                 alternatives: vec![],
                 timestamp: "t1".into(),
                 provider_key: None,
+                model: None,
+                origin: None,
             },
             Message {
                 msg_id: "m_new".into(),
@@ -2072,6 +2074,8 @@ mod scenario_tests {
                 alternatives: vec![],
                 timestamp: "t2".into(),
                 provider_key: None,
+                model: None,
+                origin: None,
             },
         ];
 
@@ -3996,6 +4000,8 @@ mod scenario_tests {
             alternatives: vec![],
             timestamp: "t2".into(),
             provider_key: None,
+            model: None,
+            origin: None,
         };
         let history_msgs = vec![
             Message {
@@ -4011,6 +4017,8 @@ mod scenario_tests {
                 alternatives: vec![],
                 timestamp: "t1".into(),
                 provider_key: None,
+                model: None,
+                origin: None,
             },
             persisted_assistant,
         ];
@@ -4113,6 +4121,8 @@ mod scenario_tests {
             alternatives: vec![],
             timestamp: "t".into(),
             provider_key: None,
+            model: None,
+            origin: None,
         };
 
         let mut h = Harness::new();
@@ -4230,6 +4240,8 @@ mod scenario_tests {
                 alternatives: vec![],
                 timestamp: "t1".into(),
                 provider_key: None,
+                model: None,
+                origin: None,
             },
             Message {
                 msg_id: "m_1".into(),
@@ -4244,6 +4256,8 @@ mod scenario_tests {
                 alternatives: vec![],
                 timestamp: "t2".into(),
                 provider_key: None,
+                model: None,
+                origin: None,
             },
         ];
         crate::handle_server_message(

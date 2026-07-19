@@ -1,16 +1,17 @@
 [package]
 name = "shore-matrix"
-version = "0.2.0"
-edition = "2021"
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/mythofmeat/shore-matrix"
+version.workspace = true
+publish.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "Matrix bridge for the Silvershore chat daemon."
 
 [dependencies]
-shore-protocol = "0.12"
-shore-config = "0.16"
-shore-swp-client = "0.3.13"
-shore-diagnostics = "0.2"
+shore-protocol = { workspace = true }
+shore-config = { workspace = true }
+shore-swp-client = { workspace = true }
+shore-diagnostics = { workspace = true }
 matrix-sdk = { version = "0.17", default-features = false, features = ["e2e-encryption", "markdown", "sqlite"] }
 tokio = { version = "1", features = ["full"] }
 clap = { version = "4", features = ["derive", "env"] }

@@ -142,7 +142,7 @@ Use `shore notify --all-messages` to notify for normal assistant replies too.
 | --- | --- |
 | `core/` | shared protocol, config, and SWP client crates |
 | `backend/` | daemon runtime plus backend support crates |
-| `clients/` | CLI client (other clients live in their own repos) |
+| `clients/` | CLI, TUI, and Matrix bridge clients |
 | `dev/` | deterministic test harness |
 
 Main binaries built here:
@@ -153,13 +153,12 @@ Main binaries built here:
 | `shore` | CLI client |
 | `shore-llm-sidecar` | supervised TypeScript LLM wire process |
 
-Out-of-tree clients and bridges (separate repos, consuming the core libraries
-from crates.io):
+Out-of-tree clients and bridges (separate repos, pinned to the last-published
+crates.io versions of the core libraries — this workspace no longer publishes
+to crates.io):
 
-- `shore-tui` — [mythofmeat/shore-tui](https://github.com/mythofmeat/shore-tui)
 - `shore-gui` (Tauri desktop) — [mythofmeat/shore-gui](https://github.com/mythofmeat/shore-gui)
 - `shore-gui-godot` (Godot client) — [mythofmeat/shore-gui-godot](https://github.com/mythofmeat/shore-gui-godot)
-- `shore-matrix` (Matrix bridge) — [mythofmeat/shore-matrix](https://github.com/mythofmeat/shore-matrix)
 - `shore-mcp` (debug/development MCP) — [mythofmeat/shore-mcp](https://github.com/mythofmeat/shore-mcp)
 
 ## Docs
