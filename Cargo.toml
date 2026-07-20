@@ -225,7 +225,17 @@ missing_debug_implementations = "warn"
 unreachable_pub = "warn"
 
 [profile.dev]
+opt-level = 1       # light optimization of our own crates (deps get 3, below)
 debug = "line-tables-only"
+
+# Optimize dependencies (not our own crates) in dev builds. The TUI render path
+# leans on pulldown-cmark and unicode-width every frame; at the default dev
+# opt-level of 0 they run ~10-30x slower, which showed up as the TUI going
+# nearly unresponsive (e.g. re-wrapping the whole input buffer while editing a
+# message). Dependencies compile once and are cached, so this doesn't slow the
+# edit->compile->run loop on our own code.
+[profile.dev.package."*"]
+opt-level = 3
 
 [profile.test]
 debug = "line-tables-only"
