@@ -569,6 +569,25 @@ memory/
 
 Legacy `character.md`, `user.md`, and `prompts/system.md` are migrated into the workspace on first load.
 
+## `[behavior]`
+
+```toml
+[behavior]
+user_message_timestamps = "auto"
+```
+
+`user_message_timestamps` controls the time markers the daemon prepends to user
+messages during prompt assembly — an absolute stamp like
+`[Saturday 2026-04-04 · 9:14 PM]`, plus a relative phrase (`6 hours later`) when
+a large gap precedes the message. Markers are deterministic, so injection stays
+prompt-cache stable.
+
+| value | behavior |
+| --- | --- |
+| `auto` (default) | Inject a marker only when it carries new information: a gap larger than 30 minutes since the previous in-context message, an hourly tick during long slow sessions, or the first user message after prior context was lost to compaction/trimming. |
+| `always` | Prepend a marker to every user message. |
+| `never` | Never inject time markers. The model loses conversational time awareness. |
+
 ## `[behavior.autonomy]`
 
 ```toml

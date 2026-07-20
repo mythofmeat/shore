@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::hash::BuildHasher;
 
 use chrono::{DateTime, FixedOffset, Local};
+use shore_config::app::UserTimestampMode;
 use shore_protocol::types::{ContentBlock, ImageRef, Message, Role};
 use tracing::{debug, warn};
 
@@ -106,6 +107,9 @@ pub struct PromptParams<'prompt> {
     pub max_context_tokens: Option<u32>,
     /// Maximum output tokens (reserved for response). `None` uses default.
     pub max_output_tokens: Option<u32>,
+    /// Controls time-marker injection on user messages (`[behavior]
+    /// user_message_timestamps`).
+    pub user_timestamp_mode: UserTimestampMode,
 }
 
 // ---------------------------------------------------------------------------
@@ -143,6 +147,7 @@ pub fn assemble_prompt(params: &PromptParams<'_>) -> AssembledPrompt {
         params.messages,
         available_for_messages,
         params.has_prior_context,
+        params.user_timestamp_mode,
     );
 
     debug!(
@@ -441,6 +446,7 @@ fn trim_messages(
     messages: &[Message],
     token_budget: usize,
     has_prior_context: bool,
+    timestamp_mode: UserTimestampMode,
 ) -> Vec<PromptMessage> {
     // Build from the end (most recent first), accumulating token cost.
     let mut selected: Vec<(PromptMessage, &str)> = Vec::new();
@@ -483,14 +489,19 @@ fn trim_messages(
 
     // ── Inject time markers on user messages ──────────────────────────
     // Markers are deterministic — same input timestamps always produce the
-    // same markers — so injection is cache-stable. Three triggers fire:
-    //   1. The gap from the previous in-context message exceeds the
-    //      relative threshold ("[6 hours later · 9:14 PM]").
-    //   2. An hour has elapsed since the last injected marker, so long
-    //      slow conversations still drop periodic time anchors.
-    //   3. Prior context was lost (compaction or in-trim drop) and this
-    //      is the first user message in the prompt — the model would
-    //      otherwise have no absolute date/time anchor at all.
+    // same markers — so injection is cache-stable. The `[behavior]
+    // user_message_timestamps` setting picks the policy:
+    //   • `never`  — no markers at all.
+    //   • `always` — a marker on every user message.
+    //   • `auto` (default) — a marker only when it carries new information,
+    //     via three triggers:
+    //       1. The gap from the previous in-context message exceeds the
+    //          relative threshold ("[6 hours later · 9:14 PM]").
+    //       2. An hour has elapsed since the last injected marker, so long
+    //          slow conversations still drop periodic time anchors.
+    //       3. Prior context was lost (compaction or in-trim drop) and this
+    //          is the first user message in the prompt — the model would
+    //          otherwise have no absolute date/time anchor at all.
     // Heartbeat recaps are persisted as Role::System messages in
     // active.jsonl by the tick itself, so they already sit at their
     // natural chronological position in the history.
@@ -506,15 +517,24 @@ fn trim_messages(
             if let Some(cur) = current_ts {
                 let gap_secs =
                     prev_ts.map(|p| i64_to_f64(cur.signed_duration_since(p).num_seconds()));
-                let elapsed_since_marker =
-                    last_marker_ts.map(|m| i64_to_f64(cur.signed_duration_since(m).num_seconds()));
 
-                let big_gap = matches!(gap_secs, Some(g) if g >= TIME_GAP_THRESHOLD_SECS);
-                let hourly_tick =
-                    matches!(elapsed_since_marker, Some(e) if e >= HOURLY_MARKER_INTERVAL_SECS);
-                let needs_anchor = first_user_pending && lost_context;
+                let inject = match timestamp_mode {
+                    UserTimestampMode::Never => false,
+                    UserTimestampMode::Always => true,
+                    UserTimestampMode::Auto => {
+                        let elapsed_since_marker = last_marker_ts
+                            .map(|m| i64_to_f64(cur.signed_duration_since(m).num_seconds()));
+                        let big_gap = matches!(gap_secs, Some(g) if g >= TIME_GAP_THRESHOLD_SECS);
+                        let hourly_tick = matches!(
+                            elapsed_since_marker,
+                            Some(e) if e >= HOURLY_MARKER_INTERVAL_SECS
+                        );
+                        let needs_anchor = first_user_pending && lost_context;
+                        big_gap || hourly_tick || needs_anchor
+                    }
+                };
 
-                if big_gap || hourly_tick || needs_anchor {
+                if inject {
                     let marker = format_time_marker(gap_secs, &cur);
                     pm.content = format!("{marker}\n\n{}", pm.content);
                     if let Some(ContentBlock::Text { text }) = pm.content_blocks.first_mut() {
@@ -602,6 +622,7 @@ mod tests {
             messages,
             max_context_tokens: None,
             max_output_tokens: None,
+            user_timestamp_mode: UserTimestampMode::Auto,
         }
     }
 
@@ -903,7 +924,7 @@ mod tests {
         let recent_msg = make_msg(Role::User, "Recent");
 
         let msgs = vec![small_msg, big_msg, recent_msg];
-        let result = trim_messages(&msgs, 10, false);
+        let result = trim_messages(&msgs, 10, false, UserTimestampMode::Auto);
         // The trim drops earlier messages, so "Recent" becomes the first
         // user message in the prompt and now carries an absolute-time
         // anchor marker — assert the suffix instead of full equality.
@@ -917,7 +938,7 @@ mod tests {
             make_msg(Role::User, "Hello"),
             make_msg(Role::Assistant, "Hi there"),
         ];
-        let result = trim_messages(&msgs, 1000, false);
+        let result = trim_messages(&msgs, 1000, false, UserTimestampMode::Auto);
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].content, "Hello");
         assert_eq!(result[1].content, "Hi there");
@@ -930,7 +951,7 @@ mod tests {
             make_msg(Role::Assistant, &"B".repeat(100)),
             make_msg(Role::User, "Recent"),
         ];
-        let result = trim_messages(&msgs, 30, false);
+        let result = trim_messages(&msgs, 30, false, UserTimestampMode::Auto);
         assert!(result.len() < 3);
         // "Recent" is the first surviving user message after the trim, so
         // it carries an absolute-time anchor marker.
@@ -940,7 +961,7 @@ mod tests {
     #[test]
     fn trim_messages_always_includes_at_least_one() {
         let msgs = vec![make_msg(Role::User, &"A".repeat(1000))];
-        let result = trim_messages(&msgs, 0, false);
+        let result = trim_messages(&msgs, 0, false, UserTimestampMode::Auto);
         assert_eq!(result.len(), 1);
     }
 
@@ -951,7 +972,7 @@ mod tests {
             make_msg(Role::Assistant, "Second"),
             make_msg(Role::User, "Third"),
         ];
-        let result = trim_messages(&msgs, 10000, false);
+        let result = trim_messages(&msgs, 10000, false, UserTimestampMode::Auto);
         assert_eq!(result[0].content, "First");
         assert_eq!(result[1].content, "Second");
         assert_eq!(result[2].content, "Third");
@@ -1048,7 +1069,7 @@ mod tests {
             make_msg_at(Role::Assistant, "Morning!", "2026-04-04T09:01:00-07:00"),
             make_msg_at(Role::User, "I'm back", "2026-04-04T15:30:00-07:00"),
         ];
-        let result = trim_messages(&msgs, 100_000, false);
+        let result = trim_messages(&msgs, 100_000, false, UserTimestampMode::Auto);
         assert_eq!(result.len(), 3);
         // First user message: no anchor (nothing was trimmed and there is
         // no prior context), and no relative gap to render.
@@ -1078,8 +1099,63 @@ mod tests {
             make_msg_at(Role::Assistant, "Hi", "2026-04-04T09:01:00-07:00"),
             make_msg_at(Role::User, "Quick follow-up", "2026-04-04T09:10:00-07:00"),
         ];
-        let result = trim_messages(&msgs, 100_000, false);
+        let result = trim_messages(&msgs, 100_000, false, UserTimestampMode::Auto);
         assert_eq!(result[2].content, "Quick follow-up");
+    }
+
+    #[test]
+    fn trim_messages_always_marks_every_user_message() {
+        // Same short-gap scenario as the auto test above (which yields no
+        // markers): `always` must stamp both user messages regardless.
+        let msgs = vec![
+            make_msg_at(Role::User, "Hello", "2026-04-04T09:00:00-07:00"),
+            make_msg_at(Role::Assistant, "Hi", "2026-04-04T09:01:00-07:00"),
+            make_msg_at(Role::User, "Quick follow-up", "2026-04-04T09:10:00-07:00"),
+        ];
+        let result = trim_messages(&msgs, 100_000, false, UserTimestampMode::Always);
+
+        // First user message: absolute-only marker (no prior gap to render).
+        let ts0 = DateTime::parse_from_rfc3339("2026-04-04T09:00:00-07:00").unwrap();
+        let local0 = ts0
+            .with_timezone(&Local)
+            .format("%A %Y-%m-%d · %-I:%M %p")
+            .to_string();
+        assert!(result[0].content.starts_with(&format!("[{local0}]")));
+        assert!(result[0].content.contains("Hello"));
+        // Third message (user, 10-min gap → still under the relative
+        // threshold): absolute-only marker, no "later" phrase.
+        assert!(result[2].content.starts_with('['));
+        assert!(!result[2].content.contains("later"));
+        assert!(result[2].content.contains("Quick follow-up"));
+        // The assistant turn in between is never marked.
+        assert_eq!(result[1].content, "Hi");
+    }
+
+    #[test]
+    fn trim_messages_never_suppresses_all_markers() {
+        // Big gap AND lost prior context — both of which trigger a marker
+        // under `auto` — must produce no markers under `never`.
+        let msgs = vec![
+            make_msg_at(Role::Assistant, "…", "2026-04-04T09:00:00-07:00"),
+            make_msg_at(Role::User, "Good morning", "2026-04-04T09:01:00-07:00"),
+            make_msg_at(Role::Assistant, "Morning!", "2026-04-04T09:02:00-07:00"),
+            make_msg_at(Role::User, "I'm back", "2026-04-04T18:00:00-07:00"),
+        ];
+        let result = trim_messages(&msgs, 100_000, true, UserTimestampMode::Never);
+        assert_eq!(result[1].content, "Good morning");
+        assert_eq!(result[3].content, "I'm back");
+        for pm in &result {
+            assert!(
+                !pm.content.contains('['),
+                "unexpected marker: {}",
+                pm.content
+            );
+            assert!(
+                !pm.content.contains("later"),
+                "unexpected gap: {}",
+                pm.content
+            );
+        }
     }
 
     #[test]
@@ -1094,7 +1170,7 @@ mod tests {
             ),
             make_msg_at(Role::User, "Yeah!", "2026-04-04T15:01:00-07:00"),
         ];
-        let result = trim_messages(&msgs, 100_000, false);
+        let result = trim_messages(&msgs, 100_000, false, UserTimestampMode::Auto);
         assert!(
             !result[1].content.contains("later"),
             "assistant messages should not get gap markers"
@@ -1114,7 +1190,7 @@ mod tests {
             make_msg_at(Role::Assistant, "…", "2026-04-04T09:00:00-07:00"),
             make_msg_at(Role::User, "Continuing on", "2026-04-04T09:01:00-07:00"),
         ];
-        let result = trim_messages(&msgs, 100_000, true);
+        let result = trim_messages(&msgs, 100_000, true, UserTimestampMode::Auto);
         assert_eq!(result.len(), 2);
 
         let user_ts = DateTime::parse_from_rfc3339("2026-04-04T09:01:00-07:00").unwrap();
@@ -1145,7 +1221,7 @@ mod tests {
             make_msg_at(Role::User, "Hello", "2026-04-04T09:00:00-07:00"),
             make_msg_at(Role::Assistant, "Hi", "2026-04-04T09:01:00-07:00"),
         ];
-        let result = trim_messages(&msgs, 100_000, false);
+        let result = trim_messages(&msgs, 100_000, false, UserTimestampMode::Auto);
         assert_eq!(result[0].content, "Hello");
     }
 
@@ -1165,7 +1241,7 @@ mod tests {
             make_msg_at(Role::Assistant, "ack", "2026-04-04T09:20:30-07:00"),
             make_msg_at(Role::User, "Third", "2026-04-04T10:25:00-07:00"),
         ];
-        let result = trim_messages(&msgs, 100_000, false);
+        let result = trim_messages(&msgs, 100_000, false, UserTimestampMode::Auto);
         // First user message: no anchor (no lost context, no gap, no
         // prior marker to time against).
         assert_eq!(result[0].content, "First");
@@ -1195,7 +1271,7 @@ mod tests {
             make_msg_at(Role::Assistant, "not much", "2026-04-04T16:20:00-07:00"),
             make_msg_at(Role::User, "Still here", "2026-04-04T16:34:00-07:00"),
         ];
-        let result = trim_messages(&msgs, 100_000, false);
+        let result = trim_messages(&msgs, 100_000, false, UserTimestampMode::Auto);
         // Big-gap marker on "Back".
         assert!(result[2].content.contains("later"));
         // No marker on the mid-conversation user turn (15-min gap, well
@@ -1235,6 +1311,7 @@ mod tests {
             messages: &messages,
             max_context_tokens: Some(200_000),
             max_output_tokens: Some(4096),
+            user_timestamp_mode: UserTimestampMode::Auto,
         };
 
         let result = assemble_prompt(&params);
@@ -1449,7 +1526,7 @@ mod tests {
         // With budget=5, newest-first picks Recent(2) + Done(1) + tool_result(~4) = 7 > 5,
         // so it stops. Result = [tool_result, Done, Recent].
         // Then orphan stripping removes the leading tool_result.
-        let result = trim_messages(&msgs, 5, false);
+        let result = trim_messages(&msgs, 5, false, UserTimestampMode::Auto);
 
         // Leading ToolResult should be stripped.
         assert!(
@@ -1481,7 +1558,7 @@ mod tests {
         // Newest-first: Recent(2) + tool_result(~4) + tool_use(~6) = 12 > 5,
         // stops before tool_use. Result = [tool_result, Recent].
         // Then orphan stripping removes leading tool_result.
-        let result = trim_messages(&msgs, 5, false);
+        let result = trim_messages(&msgs, 5, false, UserTimestampMode::Auto);
 
         assert!(
             !result.is_empty(),

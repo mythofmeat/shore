@@ -117,15 +117,15 @@ pub(crate) fn prepare_chat_context(params: PrepareChatContextParams<'_>) -> Prep
         messages,
         max_context_tokens: resolved.max_context_tokens,
         max_output_tokens: resolved.max_output_tokens,
+        user_timestamp_mode: config.app.behavior.user_message_timestamps,
     });
 
-    let cache_dir = &config.dirs.cache;
     let tools_available = config.app.tools.any_enabled() || !mcp_tool_defs.is_empty();
     let (mut llm_messages, system) = super::build_llm_messages(
         &prompt,
         include_unsigned_thinking,
         config.app.advanced.max_image_size,
-        cache_dir,
+        &config.dirs.cache,
         &resolved.provider_key,
         super::AssistantImageMode::for_request(&resolved.sdk, tools_available),
     );

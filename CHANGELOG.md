@@ -25,6 +25,12 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
   accepting a setting that changed nothing.
 
 ### Added
+- **`[behavior] user_message_timestamps` config.** Controls the time markers the
+  daemon prepends to user messages during prompt assembly. `auto` (default)
+  keeps the existing idle-aware behavior — a marker only on a large gap, an
+  hourly tick, or the first message after lost context. `always` stamps every
+  user message; `never` suppresses them entirely. Markers stay deterministic, so
+  none of the modes disturb prompt-cache stability.
 - **Sub-agent prompt macros (`{{file:}}`, `{{active_history:}}`).** A sub-agent
   otherwise sees none of the character's definition and none of the live
   conversation, so its replies can drift off-voice and poison the character's

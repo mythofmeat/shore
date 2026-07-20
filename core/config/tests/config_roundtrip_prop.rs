@@ -14,7 +14,7 @@ use shore_config::app::{
     MatrixConfig, McpServerConfig, MemoryConfig, NotificationBackend, NotificationEventsConfig,
     NotificationsConfig, NtfyConfig, RetrievalBinaryMode, RetrievalConfig, RetrievalMode,
     SearchConfig, SubagentConfig, ThinkingConfig, ToolOverride, ToolsConfig, UsageBudgetAction,
-    UsageBudgetConfig, UsageBudgetPeriod, UsageConfig, UsageSpikeWarningsConfig,
+    UsageBudgetConfig, UsageBudgetPeriod, UsageConfig, UsageSpikeWarningsConfig, UserTimestampMode,
 };
 use shore_config::models::{CacheKeepaliveSetting, ModelConfigFields, Sdk};
 use shore_config::providers::{ProviderDiscovery, ProviderEntry, ProviderKeyEntry};
@@ -427,16 +427,31 @@ fn arb_mcp_map() -> impl Strategy<Value = std::collections::BTreeMap<String, Mcp
     prop::collection::btree_map(arb_nonempty_text(), arb_mcp_server_config(), 0..3)
 }
 
+fn arb_user_timestamp_mode() -> impl Strategy<Value = UserTimestampMode> {
+    prop_oneof![
+        Just(UserTimestampMode::Auto),
+        Just(UserTimestampMode::Always),
+        Just(UserTimestampMode::Never),
+    ]
+}
+
 fn arb_behavior_config() -> impl Strategy<Value = BehaviorConfig> {
-    (any::<bool>(), arb_heartbeat_config(), arb_duration()).prop_map(
-        |(enabled, heartbeat, cache_keepalive_max)| BehaviorConfig {
-            autonomy: AutonomyConfig {
-                enabled,
-                heartbeat,
-                cache_keepalive_max,
-            },
-        },
+    (
+        any::<bool>(),
+        arb_heartbeat_config(),
+        arb_duration(),
+        arb_user_timestamp_mode(),
     )
+        .prop_map(
+            |(enabled, heartbeat, cache_keepalive_max, user_message_timestamps)| BehaviorConfig {
+                autonomy: AutonomyConfig {
+                    enabled,
+                    heartbeat,
+                    cache_keepalive_max,
+                },
+                user_message_timestamps,
+            },
+        )
 }
 
 fn arb_compaction_config() -> impl Strategy<Value = CompactionConfig> {

@@ -329,6 +329,30 @@ impl Default for DefaultsConfig {
 pub struct BehaviorConfig {
     #[serde(default)]
     pub autonomy: AutonomyConfig,
+
+    /// Controls the time markers the daemon injects on user messages during
+    /// prompt assembly (see [`UserTimestampMode`]). Default: `auto`.
+    #[serde(default)]
+    pub user_message_timestamps: UserTimestampMode,
+}
+
+/// Controls the time markers injected ahead of user messages during prompt
+/// assembly — an absolute stamp (`[Saturday 2026-04-04 · 9:14 PM]`) plus a
+/// relative phrase (`6 hours later`) when a large gap precedes the message.
+/// These give the model temporal awareness of the conversation.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum UserTimestampMode {
+    /// Inject a marker only when it carries new information: a gap larger than
+    /// the relative threshold since the previous in-context message, an hourly
+    /// tick during long slow sessions, or the first user message after prior
+    /// context was lost to compaction/trimming. Default.
+    #[default]
+    Auto,
+    /// Inject a marker on every user message.
+    Always,
+    /// Never inject time markers on user messages.
+    Never,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

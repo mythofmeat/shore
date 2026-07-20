@@ -189,6 +189,17 @@ model = "anthropic:claude-sonnet-4-6"   # Chat default as provider:model_id; als
 # [models."moonshot:kimi-k2-thinking"]
 # budget_tokens = 8192         # native Moonshot thinking budget
 
+# ── Behavior ─────────────────────────────────────────────────────────────
+# Time markers prepended to user messages during prompt assembly — an absolute
+# stamp (and a relative "6 hours later" phrase on large gaps) that give the
+# model temporal awareness.
+#   "auto"   (default) inject only on a large gap, an hourly tick, or the first
+#            message after context was lost to compaction/trimming
+#   "always" mark every user message
+#   "never"  no time markers at all
+# [behavior]
+# user_message_timestamps = "auto"
+
 # ── Autonomy ─────────────────────────────────────────────────────────────
 # Controls the character's autonomous behavior. Disabled by default; enable
 # to allow unprompted messages.
