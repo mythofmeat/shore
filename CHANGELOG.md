@@ -7,6 +7,13 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
 
 ## [Unreleased]
 
+### Changed
+- **`MEMORY.md` pruning softened.** Compaction and dreaming now prefer
+  relocating reaped entries into `memory/` files over deleting them, the
+  librarian's "prune at least as much as you add" quota is gone, and entries
+  the user wrote into `MEMORY.md` by hand are treated as deliberate pins to
+  keep in view — not clutter to reap.
+
 ### Fixed
 - **Prior-turn thinking now actually replays on the OpenAI-compatible sdk**
   (Kimi K3 via opencode-go intermittently skipped thinking). The sidecar's

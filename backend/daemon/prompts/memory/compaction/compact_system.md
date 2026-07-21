@@ -36,7 +36,8 @@ It has three jobs:
 **Keeping it tidy and current is part of the job, not cleanup for later.** Every pass, re-read what is already there and:
 - **Refresh** what is still live, re-dating it to today.
 - **Relocate** anything that turned out to be durable into the proper `memory/` file, leaving at most a one-line pointer behind.
-- **Reap** low-priority entries older than **~2 weeks**. If something sat there two weeks without mattering, it was never active memory: delete it, or move it into a `memory/` file if it still has value. A genuinely live thread may stay past two weeks, but only if you re-date it — an old date is a signal, so never refresh a date you cannot justify.
+- **Reap** low-priority entries older than **~2 weeks**. If something sat there two weeks without mattering, it was never active memory: move it into a `memory/` file if it still has value, deleting only what has none. A genuinely live thread may stay past two weeks, but only if you re-date it — an old date is a signal, so never refresh a date you cannot justify.
+- **Respect {{user}}'s hand edits.** If {{user}} wrote something into `MEMORY.md` themselves, that is a deliberate pin, not clutter: keep it in view until it is clearly resolved, and even then relocate it with a pointer rather than delete.
 
 MEMORY.md is NOT for: duplicating content that's already in memory files, session replays (that's what daily-logs are for), or detailed quick-references (that's what the dedicated files are for). Use `ask_memory` or `read` to pull detail on-demand when a topic actually comes up. **If you find yourself copying content from a memory file into MEMORY.md, you're doing it wrong — just point to the file.**
 

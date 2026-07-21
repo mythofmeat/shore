@@ -320,7 +320,9 @@ definition, user profile, standing behavior, or tool guide.
 
 Entries in `MEMORY.md` are dated. Compaction and dreaming re-date an entry when
 they update or re-confirm it, and reap low-priority entries older than ~2 weeks —
-relocating anything still valuable into a `memory/` file. Heartbeat carry-forward
+relocating anything still valuable into a `memory/` file rather than deleting
+it. Entries the user writes into `MEMORY.md` by hand are treated as deliberate
+pins: kept in view until clearly resolved, then relocated with a pointer. Heartbeat carry-forward
 notes land here too: a single active-memory surface, visible in every kind of
 turn, replaced the separate heartbeat-only file that models used
 interchangeably with it.
