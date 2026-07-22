@@ -2,6 +2,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+git pull || true
+
 PREFIX="${PREFIX:-/usr/local}"
 BINDIR="$PREFIX/bin"
 
@@ -19,12 +21,10 @@ for bin in "${BINARIES[@]}"; do
     sudo install -Dm755 target/release/"$bin" "$BINDIR/$bin"
 done
 
-(
-    cd ./backend/llm-sidecar
-    bun install
-    bun update
-    bun run build
-    sudo install -Dm755 ./dist/shore-llm-sidecar "$BINDIR/shore-llm-sidecar"
-)
+cd ./backend/llm-sidecar
+bun install
+bun update
+bun run build
+sudo install -Dm755 ./dist/shore-llm-sidecar "$BINDIR/shore-llm-sidecar"
 
 echo
