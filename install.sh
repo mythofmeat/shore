@@ -36,8 +36,10 @@ done
     bun update
     bun run build
 )
-
 sudo install -Dm755 ./backend/llm-sidecar/dist/shore-llm-sidecar "$LIBEXECDIR/shore-llm-sidecar"
+
+sudo install -Dm644 ./contrib/shore-daemon.service /usr/lib/systemd/user/shore-daemon.service
+sudo install -Dm644 ./contrib/shore-notify.service /usr/lib/systemd/user/shore-notify.service
 
 if command -v fish &> /dev/null; then
     "$BINDIR/shore" completions fish > ./target/shore.fish
