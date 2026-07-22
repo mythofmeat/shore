@@ -26,9 +26,10 @@ default-members = [
 
 [workspace.package]
 # One version for the whole suite. Nothing publishes to crates.io anymore —
-# internal crates are consumed by path, releases are a single `v<version>`
-# git tag that builds every Arch package (see .github/workflows/package.yml).
-# To release: bump this version, commit, tag `v<version>`, push the tag.
+# internal crates are consumed by path, and a release is a single `v<version>`
+# git tag used as a marker (no workflow fires on it). Installation is
+# install.sh in the repo root. To release: bump this version, commit, tag
+# `v<version>`, push the tag.
 version = "0.20.0"
 publish = false
 edition = "2021"
@@ -247,8 +248,12 @@ codegen-units = 1   # smaller and slightly faster runtime
 
 # shore-tui's size-focused profile (was its own repo's [profile.release]).
 # `panic` and `lto` are profile-global in cargo — they can't be set per
-# package — so the tui keeps them via this dedicated profile. Its PKGBUILD
-# builds with `--profile tui-release`.
+# package — so the tui keeps them via this dedicated profile.
+#
+# Nothing builds with it automatically: the Arch PKGBUILD that passed
+# `--profile tui-release` is gone, and install.sh builds the whole workspace
+# with plain `--release`. Kept for anyone who wants the smaller tui via
+# `cargo build -p shore-tui --profile tui-release`.
 [profile.tui-release]
 inherits = "release"
 opt-level = "z"
