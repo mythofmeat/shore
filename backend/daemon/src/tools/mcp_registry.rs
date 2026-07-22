@@ -61,7 +61,8 @@ impl McpRegistry {
     /// takes the daemon down. Returns an empty registry when `mcp` is empty.
     ///
     /// `plugins_dir` is `<data>/plugins/`; relative stdio paths resolve against
-    /// it (see [`to_spec`]).
+    /// it (see `to_spec`). Not an intra-doc link: `to_spec` is private, and
+    /// linking to it from public docs fails rustdoc under `-D warnings`.
     pub async fn from_config(mcp: &BTreeMap<String, McpServerConfig>, plugins_dir: &Path) -> Self {
         let mut clients = BTreeMap::new();
         let mut tools = Vec::new();
