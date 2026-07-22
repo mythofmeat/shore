@@ -427,16 +427,17 @@ mod tests {
         );
     }
 
-    /// Path to the in-tree `mcp_stub_server` bin. `CARGO_BIN_EXE_*` is only set
-    /// for integration tests, so derive it from this test binary's own location
-    /// (`target/<profile>/deps/<test>` -> `target/<profile>/mcp_stub_server`).
+    /// Path to the in-tree `daemon_mcp_stub_server` bin. `CARGO_BIN_EXE_*` is
+    /// only set for integration tests, so derive it from this test binary's own
+    /// location (`target/<profile>/deps/<test>` ->
+    /// `target/<profile>/daemon_mcp_stub_server`).
     fn stub_server_bin() -> PathBuf {
         let exe = std::env::current_exe().expect("test exe path");
         let bin = exe
             .parent()
             .and_then(Path::parent)
             .expect("target/<profile> dir")
-            .join("mcp_stub_server");
+            .join("daemon_mcp_stub_server");
         assert!(bin.exists(), "stub server not built at {}", bin.display());
         bin
     }

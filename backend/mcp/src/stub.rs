@@ -6,8 +6,10 @@
 //! Not for production use. It exists so the MCP test cases (this crate's stdio
 //! test and the daemon's keepalive cache-parity test) can launch a real MCP
 //! server process with zero external runtime. Each crate that needs it ships a
-//! one-line `src/bin/mcp_stub_server.rs` that calls [`run`], so the binary is
-//! reachable via `CARGO_BIN_EXE_mcp_stub_server` from that crate's tests.
+//! one-line bin that calls [`run`], so the binary is reachable via
+//! `CARGO_BIN_EXE_*` from that crate's tests. The names must stay distinct or
+//! the bins collide on one output path: `mcp_stub_server` here,
+//! `daemon_mcp_stub_server` in `shore-daemon`.
 
 use std::io::{BufRead as _, Write as _};
 

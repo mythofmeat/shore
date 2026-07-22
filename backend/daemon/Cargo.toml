@@ -46,13 +46,14 @@ notify = "8.2"
 landlock = "0.4"
 seccompiler = "0.5"
 
-# Duplicate of the `shore-mcp-client` bin of the same name, kept here so the
-# daemon's integration tests can launch it via `CARGO_BIN_EXE_mcp_stub_server`.
-# Excluded from docs: two bins with one name collide on the same rustdoc output
-# path, and `shore-mcp-client` owns the canonical copy.
+# Duplicate of `shore-mcp-client`'s `mcp_stub_server` bin, kept here so the
+# daemon's integration tests can launch it via
+# `CARGO_BIN_EXE_daemon_mcp_stub_server`. The name is deliberately distinct:
+# two bins with one name collide on the same output path in `target/<profile>`.
+# `shore-mcp-client` owns the canonical copy, so this one is excluded from docs.
 [[bin]]
-name = "mcp_stub_server"
-path = "src/bin/mcp_stub_server.rs"
+name = "daemon_mcp_stub_server"
+path = "src/bin/daemon_mcp_stub_server.rs"
 doc = false
 
 [dev-dependencies]

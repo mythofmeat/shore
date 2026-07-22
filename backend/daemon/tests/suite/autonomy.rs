@@ -655,7 +655,7 @@ async fn test_no_early_ping() {
 /// Path to the in-tree stub MCP server, built as a `shore-daemon` binary so it
 /// is always present for these tests (no external runtime needed).
 fn mcp_stub_path() -> &'static str {
-    env!("CARGO_BIN_EXE_mcp_stub_server")
+    env!("CARGO_BIN_EXE_daemon_mcp_stub_server")
 }
 
 /// Boot with `builder`, drive one chat turn, then force a cold keepalive
