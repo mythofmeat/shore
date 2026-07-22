@@ -51,15 +51,14 @@ provider behavior is in scope.
 ## Releasing
 
 One version for the whole suite, set in `[workspace.package]` in the root
-Cargo.toml (every crate inherits it). Nothing publishes to crates.io. To cut
-a release:
+Cargo.toml (every crate inherits it). Nothing publishes to crates.io, and
+nothing builds distro packages: the Arch PKGBUILDs, the Debian recipe, and
+the tag-triggered workflow that drove them are gone. Installation is from
+source — `install.sh` for a system-wide `<prefix>` install, or
+`scripts/install.sh` for the self-contained `~/shore` app dir.
 
-1. Bump `version` in `[workspace.package]` and commit to main.
-2. `git tag v<version> && git push origin v<version>`
-
-The tag triggers `.github/workflows/package.yml`, which builds the four Arch
-packages (daemon, cli, tui, matrix) sequentially and creates a GitHub release
-with git-cliff notes.
+To cut a release, bump `version` in `[workspace.package]`, commit to main, and
+tag `v<version>`. The tag is a marker only; no automation runs off it.
 
 ## Documentation Policy
 

@@ -10,8 +10,6 @@ Restart= on-failure
 RestartMaxDelaySec= 1min
 RestartSteps= 10
 
-# Both helpers live in libexec, off $PATH — nothing but the daemon should run
-# them by name. The daemon resolves them from these overrides.
 Environment= SHORE_LLM_SIDECAR_BIN=/usr/local/lib/shore/shore-llm-sidecar
 Environment= SHORE_MATRIX_BIN=/usr/local/lib/shore/shore-matrix
 
