@@ -168,7 +168,11 @@ impl TestHarness {
         // yields a cheap empty registry; a `[mcp.*]` table makes the harness
         // exercise real MCP tool discovery.
         let mcp_registry = Arc::new(
-            shore_daemon::tools::mcp_registry::McpRegistry::from_config(&config.app.mcp).await,
+            shore_daemon::tools::mcp_registry::McpRegistry::from_config(
+                &config.app.mcp,
+                &shore_config::plugins_dir(&config.dirs.data),
+            )
+            .await,
         );
 
         // Wire up autonomy with LLM resources (mirrors main.rs wiring).

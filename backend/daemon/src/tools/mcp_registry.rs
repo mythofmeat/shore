@@ -12,6 +12,7 @@
 //! runtime.
 
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 use shore_config::app::{tool_pattern_matches, McpServerConfig};
@@ -58,12 +59,15 @@ impl McpRegistry {
     /// Connect every configured server and discover its tools. A server that
     /// fails to connect or list is logged and skipped — a bad server never
     /// takes the daemon down. Returns an empty registry when `mcp` is empty.
-    pub async fn from_config(mcp: &BTreeMap<String, McpServerConfig>) -> Self {
+    ///
+    /// `plugins_dir` is `<data>/plugins/`; relative stdio paths resolve against
+    /// it (see [`to_spec`]).
+    pub async fn from_config(mcp: &BTreeMap<String, McpServerConfig>, plugins_dir: &Path) -> Self {
         let mut clients = BTreeMap::new();
         let mut tools = Vec::new();
 
         for (name, cfg) in mcp {
-            let Some(spec) = to_spec(name, cfg) else {
+            let Some(spec) = to_spec(name, cfg, plugins_dir) else {
                 tracing::warn!(server = %name, "mcp server has no valid transport; skipping");
                 continue;
             };
@@ -170,15 +174,28 @@ impl McpRegistry {
     }
 }
 
-/// Convert a config entry into a connection spec. Returns `None` if no transport
-/// is set (config validation rejects this, but stay defensive).
-fn to_spec(name: &str, cfg: &McpServerConfig) -> Option<McpServerSpec> {
+/// Convert a config entry into a connection spec, resolving relative stdio
+/// paths against `plugins_dir` (`<data>/plugins/`). Returns `None` if no
+/// transport is set (config validation rejects this, but stay defensive).
+///
+/// - `cwd`: relative resolves against `plugins_dir`, so `cwd = "hue-mcp"` means
+///   `<data>/plugins/hue-mcp` no matter where the daemon was started from.
+/// - `command`: a bare name (`node`, `npx`) is left alone for `PATH` lookup; a
+///   relative path (`./venv/bin/python`) resolves against the resolved `cwd`,
+///   falling back to `plugins_dir` when `cwd` is unset. Resolving it here is
+///   required, not cosmetic: `Command::current_dir` does *not* define whether a
+///   relative program path resolves against the parent's cwd or the child's.
+/// - `args` are left verbatim — they are the server's own, and the child
+///   already resolves them against its `cwd`.
+fn to_spec(name: &str, cfg: &McpServerConfig, plugins_dir: &Path) -> Option<McpServerSpec> {
     let transport = if let Some(command) = &cfg.command {
+        let cwd = cfg.cwd.as_ref().map(|dir| resolve_under(dir, plugins_dir));
+        let command_base = cwd.as_deref().unwrap_or(plugins_dir);
         Transport::Stdio {
-            command: command.clone(),
+            command: resolve_command(command, command_base),
             args: cfg.args.clone(),
             env: cfg.env.clone(),
-            cwd: cfg.cwd.clone(),
+            cwd: cwd.map(|dir| dir.to_string_lossy().into_owned()),
         }
     } else if let Some(url) = &cfg.url {
         Transport::Http { url: url.clone() }
@@ -189,6 +206,32 @@ fn to_spec(name: &str, cfg: &McpServerConfig) -> Option<McpServerSpec> {
         name: name.to_owned(),
         transport,
     })
+}
+
+/// Resolve `raw` against `base`, leaving absolute paths untouched. Bare `.`
+/// components are dropped so a `./`-prefixed entry doesn't produce a
+/// `<base>/./x` path in logs; `..` and symlinks are left for the OS to resolve.
+fn resolve_under(raw: &str, base: &Path) -> PathBuf {
+    let path = Path::new(raw);
+    if path.is_absolute() {
+        return path.to_path_buf();
+    }
+    let mut resolved = base.to_path_buf();
+    for component in path.components() {
+        if !matches!(component, std::path::Component::CurDir) {
+            resolved.push(component);
+        }
+    }
+    resolved
+}
+
+/// Resolve a configured `command`. A bare name with no path separator stays a
+/// `PATH` lookup; anything path-shaped resolves against `base`.
+fn resolve_command(command: &str, base: &Path) -> String {
+    if !command.contains('/') && !command.contains(std::path::MAIN_SEPARATOR) {
+        return command.to_owned();
+    }
+    resolve_under(command, base).to_string_lossy().into_owned()
 }
 
 #[cfg(test)]
@@ -298,5 +341,138 @@ mod tests {
             },
         );
         assert!(!r.matches_config(&changed));
+    }
+
+    fn stdio_cfg(command: &str, cwd: Option<&str>) -> McpServerConfig {
+        McpServerConfig {
+            command: Some(command.to_owned()),
+            args: vec!["dist/index.js".to_owned()],
+            env: BTreeMap::new(),
+            cwd: cwd.map(str::to_owned),
+            url: None,
+        }
+    }
+
+    /// Destructure a stdio spec into `(command, args, cwd)`.
+    fn stdio_parts(spec: &McpServerSpec) -> (&str, &[String], Option<&str>) {
+        match &spec.transport {
+            Transport::Stdio {
+                command, args, cwd, ..
+            } => (command, args, cwd.as_deref()),
+            Transport::Http { .. } => panic!("expected stdio transport"),
+        }
+    }
+
+    fn plugins() -> PathBuf {
+        PathBuf::from("/data/shore/plugins")
+    }
+
+    #[test]
+    fn relative_cwd_resolves_under_plugins_dir() {
+        let cfg = stdio_cfg("node", Some("hue-mcp"));
+        let spec = to_spec("hue", &cfg, &plugins()).expect("spec");
+        let (command, args, cwd) = stdio_parts(&spec);
+        assert_eq!(cwd, Some("/data/shore/plugins/hue-mcp"));
+        // A bare command stays a `PATH` lookup, and args are passed verbatim.
+        assert_eq!(command, "node");
+        assert_eq!(args, ["dist/index.js"]);
+    }
+
+    #[test]
+    fn absolute_cwd_is_left_alone() {
+        let cfg = stdio_cfg("node", Some("/srv/hue-mcp"));
+        let spec = to_spec("hue", &cfg, &plugins()).expect("spec");
+        assert_eq!(stdio_parts(&spec).2, Some("/srv/hue-mcp"));
+    }
+
+    #[test]
+    fn relative_command_resolves_against_resolved_cwd() {
+        let cfg = stdio_cfg("./venv/bin/python", Some("notes"));
+        let spec = to_spec("notes", &cfg, &plugins()).expect("spec");
+        assert_eq!(
+            stdio_parts(&spec).0,
+            "/data/shore/plugins/notes/venv/bin/python"
+        );
+    }
+
+    #[test]
+    fn relative_command_without_cwd_resolves_against_plugins_dir() {
+        let cfg = stdio_cfg("notes/server.sh", None);
+        let spec = to_spec("notes", &cfg, &plugins()).expect("spec");
+        let (command, _args, cwd) = stdio_parts(&spec);
+        assert_eq!(command, "/data/shore/plugins/notes/server.sh");
+        // No `cwd` configured stays no `cwd` — the child inherits the daemon's.
+        assert_eq!(cwd, None);
+    }
+
+    #[test]
+    fn absolute_command_is_left_alone() {
+        let cfg = stdio_cfg("/usr/bin/node", Some("hue-mcp"));
+        let spec = to_spec("hue", &cfg, &plugins()).expect("spec");
+        assert_eq!(stdio_parts(&spec).0, "/usr/bin/node");
+    }
+
+    #[test]
+    fn http_transport_ignores_plugins_dir() {
+        let cfg = McpServerConfig {
+            command: None,
+            args: vec![],
+            env: BTreeMap::new(),
+            cwd: Some("ignored".to_owned()),
+            url: Some("http://localhost:9123/sse".to_owned()),
+        };
+        let spec = to_spec("docs", &cfg, &plugins()).expect("spec");
+        assert!(
+            matches!(spec.transport, Transport::Http { url } if url == "http://localhost:9123/sse")
+        );
+    }
+
+    /// Path to the in-tree `mcp_stub_server` bin. `CARGO_BIN_EXE_*` is only set
+    /// for integration tests, so derive it from this test binary's own location
+    /// (`target/<profile>/deps/<test>` -> `target/<profile>/mcp_stub_server`).
+    fn stub_server_bin() -> PathBuf {
+        let exe = std::env::current_exe().expect("test exe path");
+        let bin = exe
+            .parent()
+            .and_then(Path::parent)
+            .expect("target/<profile> dir")
+            .join("mcp_stub_server");
+        assert!(bin.exists(), "stub server not built at {}", bin.display());
+        bin
+    }
+
+    /// End-to-end: a server installed under the plugins directory and
+    /// configured purely with relative paths actually spawns and lists tools.
+    /// Covers what the string-level tests above cannot — that a relative
+    /// `command` is resolved before spawn rather than left to the child's cwd.
+    #[tokio::test]
+    async fn relative_paths_connect_a_real_server_under_plugins_dir() {
+        let plugins = tempfile::tempdir().expect("tempdir");
+        let install = plugins.path().join("stub-server");
+        std::fs::create_dir_all(&install).expect("create install dir");
+        let _bytes =
+            std::fs::copy(stub_server_bin(), install.join("server")).expect("install stub binary");
+
+        let mut mcp = BTreeMap::new();
+        let _existing = mcp.insert(
+            "stub".to_owned(),
+            McpServerConfig {
+                command: Some("./server".to_owned()),
+                args: vec![],
+                env: BTreeMap::new(),
+                cwd: Some("stub-server".to_owned()),
+                url: None,
+            },
+        );
+
+        let registry = McpRegistry::from_config(&mcp, plugins.path()).await;
+        let names: Vec<String> = registry
+            .tool_defs_filtered(&["mcp__*".to_owned()])
+            .iter()
+            .map(|d| d["name"].as_str().unwrap().to_owned())
+            .collect();
+        assert_eq!(names, vec!["mcp__stub__echo"]);
+
+        registry.shutdown().await;
     }
 }

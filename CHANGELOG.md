@@ -7,6 +7,17 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
 
 ## [Unreleased]
 
+### Added
+- **A plugins directory for MCP servers: `$XDG_DATA_HOME/shore/plugins/`.**
+  Created at daemon startup. Relative `cwd` and `command` paths in `[mcp.*]`
+  now resolve against it, so `cwd = "hue-mcp"` points at
+  `plugins/hue-mcp` instead of depending on whatever cwd the daemon happened
+  to inherit — which under systemd is effectively arbitrary. Absolute paths
+  are untouched, so existing configs keep working. A bare `command` (`node`,
+  `npx`) still resolves via `PATH`; a path-shaped one (`./venv/bin/python`)
+  is made absolute before spawning, since a child's working directory does
+  not reliably govern where a relative program path is looked up.
+
 ### Changed
 - **`MEMORY.md` pruning softened.** Compaction and dreaming now prefer
   relocating reaped entries into `memory/` files over deleting them, the

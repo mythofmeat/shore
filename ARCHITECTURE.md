@@ -103,7 +103,12 @@ Global data:
 
 ```text
 $XDG_DATA_HOME/shore/ledger.db
+$XDG_DATA_HOME/shore/plugins/
 ```
+
+`plugins/` is created at startup and holds locally installed MCP servers.
+Relative `cwd` / `command` paths in `[mcp.*]` resolve against it, so a server
+config never has to hardcode an absolute install path.
 
 Cache:
 
@@ -767,6 +772,7 @@ Persistent surfaces:
 | Surface | Location |
 | --- | --- |
 | Usage ledger | `$XDG_DATA_HOME/shore/ledger.db` |
+| Locally installed MCP servers | `$XDG_DATA_HOME/shore/plugins/` |
 | Conversation log | `$XDG_DATA_HOME/shore/<Character>/active.jsonl` |
 | Compacted segments | `$XDG_DATA_HOME/shore/<Character>/segments/` |
 | Active prompt snapshot | `$XDG_DATA_HOME/shore/<Character>/active_prompt/` |
