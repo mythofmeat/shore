@@ -57,9 +57,17 @@ a release:
 1. Bump `version` in `[workspace.package]` and commit to main.
 2. `git tag v<version> && git push origin v<version>`
 
-The tag triggers `.github/workflows/package.yml`, which builds the four Arch
-packages (daemon, cli, tui, matrix) sequentially and creates a GitHub release
-with git-cliff notes.
+The tag is a marker only — no workflow fires on it. Installation is
+[`install.sh`](install.sh) in the repo root, which builds the workspace in
+release mode, installs the four binaries to `$PREFIX/bin` (default
+`/usr/local`), then builds and installs the bun-based LLM sidecar alongside
+them.
+
+Arch packaging was previously automated by `.github/workflows/package.yml`
+calling reusable workflows in a separate private repo. That approach is gone,
+along with the `contrib/shore-{daemon,cli,tui,matrix}` PKGBUILDs. The Debian
+packaging under `contrib/debian/` and the systemd units in `contrib/` are
+unaffected.
 
 ## Documentation Policy
 

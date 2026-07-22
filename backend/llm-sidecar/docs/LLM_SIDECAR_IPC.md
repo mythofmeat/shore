@@ -286,7 +286,9 @@ the `StreamEvent` NDJSON above:
   SIGTERMs the child on daemon shutdown.
 - If the binary is absent, the daemon logs a warning and continues; this keeps
   manually managed development sidecars possible at the configured socket path.
-- The Arch `shore-daemon` PKGBUILD installs both binaries.
+- `install.sh` in the repo root installs both binaries: it builds the workspace
+  with `cargo build --release`, then builds the sidecar with `bun run build`
+  and installs `shore-llm-sidecar` next to the Rust binaries.
 - The Debian/Pi helper at `contrib/debian/build-shore-daemon-deb.sh` builds a
   `.deb` that installs both `shore-daemon` and `shore-llm-sidecar`.
 

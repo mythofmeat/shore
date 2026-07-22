@@ -45,8 +45,8 @@ PKG_NAME=${PKG_NAME:-shore-daemon}
 PKG_VERSION=${PKG_VERSION:-$(awk -F '"' '/^version = / { print $2; exit }' backend/daemon/Cargo.toml)}
 # The crate version was reset 16.1.0 -> 0.1.0. The control Version below carries
 # an epoch (default 1) so `1:0.1.0` sorts above the old `16.1.0` and apt offers
-# it as an upgrade rather than refusing a downgrade. Mirrors `epoch=1` in
-# contrib/shore-daemon/PKGBUILD.
+# it as an upgrade rather than refusing a downgrade. (Mirrored `epoch=1` in
+# the Arch PKGBUILD, which has since been removed.)
 if [[ -z "$PKG_VERSION" ]]; then
     echo "error: could not read backend/daemon package version" >&2
     exit 1
@@ -70,7 +70,8 @@ fi
 
 # `bun` is a runtime dependency: the sidecar ships as a Bun-script bundle with a
 # `#!/usr/bin/env bun` shebang (not a self-contained binary), so the target must
-# provide `/usr/bin/bun`. Matches the Arch PKGBUILD's `depends=('bun')`.
+# provide `/usr/bin/bun`. (The removed Arch PKGBUILD declared the same
+# `depends=('bun')`.)
 DEB_DEPENDS=${DEB_DEPENDS:-"ca-certificates, libssl3, bun"}
 OUT_DIR=${OUT_DIR:-"$REPO_ROOT/target/debian"}
 CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-target}
