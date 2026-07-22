@@ -684,6 +684,13 @@ or cache economics are in scope. Live checks may cost money.
 conduwuit-compatible homeserver; external mode connects to an existing Matrix
 server. Matrix is a client bridge, not a trusted state store.
 
+The daemon supervises the bridge as a child process when it can locate the
+binary. That lookup — shared with `shore-llm-sidecar` in
+`shore_config::binaries` — prefers `SHORE_MATRIX_BIN`, then `$PATH` / a
+sibling of the running binary, then the packaged libexec directories. Packaged
+installs put both helpers in libexec precisely so they stay off `$PATH`:
+nothing but Shore should run them by name.
+
 `shore-mcp` is for development and agent-driven verification. It speaks to the
 daemon through the same SWP path as other clients. Its default profile is
 isolated; main-profile writes require explicit writable attachment.

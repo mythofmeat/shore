@@ -36,7 +36,6 @@ tempfile = "3"
 shell-words = "1.1"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 fast_image_resize = { version = "6", features = ["image"] }
-which = { workspace = true }
 libc = { workspace = true }
 notify = "8.2"
 

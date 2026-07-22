@@ -52,7 +52,10 @@ cp backend/llm-sidecar/dist/shore-llm-sidecar target/release/
 ```
 
 The daemon looks for `shore-llm-sidecar` next to its own binary or on `$PATH`
-— that is what the `cp` is for.
+— that is what the `cp` is for. Packaged installs instead keep it (and
+`shore-matrix`) off `$PATH` and point `SHORE_LLM_SIDECAR_BIN` /
+`SHORE_MATRIX_BIN` at them; see
+[CONFIGURATION.md](CONFIGURATION.md#helper-binaries).
 
 **2. Configure a provider** in `~/.config/shore/config.toml`:
 

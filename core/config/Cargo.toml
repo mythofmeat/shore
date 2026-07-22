@@ -16,6 +16,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 dirs = { workspace = true }
 dotenvy = { workspace = true }
+which = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

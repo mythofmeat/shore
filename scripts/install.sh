@@ -67,8 +67,9 @@ say "Building LLM sidecar"
 say "Installing into $SHORE_HOME"
 mkdir -p "$SHORE_HOME/bin" "$SHORE_HOME/config" "$SHORE_HOME/data" "$SHORE_HOME/cache"
 
-# shore-matrix sits next to shore-daemon on purpose: binary presence is what
-# enables in-daemon bridge supervision. Remove it from bin/ to disable.
+# shore-matrix sits next to shore-daemon on purpose: bin/ is off $PATH, and
+# binary presence is what enables in-daemon bridge supervision (the unit's
+# SHORE_MATRIX_BIN points here). Remove it from bin/ to disable the bridge.
 for bin in shore-daemon shore shore-tui shore-matrix; do
     install -m755 "$REPO/target/release/$bin" "$SHORE_HOME/bin/$bin"
 done
@@ -154,6 +155,7 @@ EnvironmentFile=$SHORE_HOME/env
 Environment=RUST_LOG=warn,shore_daemon=info,shore_llm=info,shore_ledger=info,shore_swp_server=info
 Environment=SHORE_MATRIX_RUST_LOG=warn,shore_matrix=info,matrix_sdk_crypto::backups=error
 Environment=SHORE_LLM_SIDECAR_BIN=$SHORE_HOME/bin/shore-llm-sidecar
+Environment=SHORE_MATRIX_BIN=$SHORE_HOME/bin/shore-matrix
 RuntimeDirectory=shore
 Environment=SHORE_RUNTIME_DIR=%t/shore
 

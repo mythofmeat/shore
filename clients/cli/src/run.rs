@@ -3,6 +3,7 @@ use std::io::{self, IsTerminal, Read as _};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+use shore_config::binaries::MATRIX_BIN_ENV;
 use shore_protocol::server_msg::{MessageOrigin, NewMessage, ServerMessage};
 use shore_protocol::types::{CharacterAvatar, CharacterInfo, Role};
 use shore_swp_client::{SWPConnection, ServerAddr};
@@ -874,11 +875,25 @@ fn handle_connectors_command(
 
 /// Handle `shore connectors matrix` subcommands by delegating to the
 /// `shore-matrix` binary.
+///
+/// Packaged installs keep the bridge off `$PATH`; [`MATRIX_BIN_ENV`] and the
+/// libexec fallbacks are what still make it reachable from here.
 fn handle_matrix_command(
     subcommand: &crate::cli::MatrixCommand,
     cli: &Cli,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = std::process::Command::new("shore-matrix");
+    // Resolved the same way the daemon resolves it, so `shore connectors
+    // matrix ...` keeps working when packaging holds the bridge off `$PATH`.
+    let binary = shore_config::binaries::resolve("shore-matrix", MATRIX_BIN_ENV)
+        .path
+        .ok_or_else(|| {
+            format!(
+                "shore-matrix binary not found via {}. Install it, or point \
+                 {MATRIX_BIN_ENV} at it.",
+                shore_config::binaries::searched_locations(MATRIX_BIN_ENV)
+            )
+        })?;
+    let mut cmd = std::process::Command::new(&binary);
 
     // Config + data discovery: ask the running daemon via the instance
     // registry so interactive invocations work even when the shell lacks
@@ -919,13 +934,7 @@ fn handle_matrix_command(
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
         .status()
-        .map_err(|e| {
-            if e.kind() == io::ErrorKind::NotFound {
-                "shore-matrix binary not found. Is it installed and in your PATH?".to_owned()
-            } else {
-                format!("failed to run shore-matrix: {e}")
-            }
-        })?;
+        .map_err(|e| format!("failed to run {}: {e}", binary.display()))?;
 
     if !status.success() {
         return Err(format!("shore-matrix exited with status {status}").into());
