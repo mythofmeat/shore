@@ -35,7 +35,7 @@ import {
 } from "ai";
 
 import type { ContentBlock, ImageRef } from "../../engine/types.ts";
-import { resolveImage } from "../images.ts";
+import { resolveImage, resolveImageBlock } from "../images.ts";
 import type {
   GenerateResponse,
   SidecarProvider,
@@ -311,9 +311,19 @@ export function turnToVercel(turn: TurnMessage, toolNames: Map<string, string>):
   const userParts: Array<
     { type: "text"; text: string } | { type: "image"; image: string; mediaType: string }
   > = [];
+  // `turn.images` is the legacy field; the daemon inlines images as `image`
+  // content blocks instead and never populates it. Honored first so anything
+  // that does set it keeps images-before-text ordering.
   for (const img of imageParts(turn.images)) userParts.push(img);
   for (const b of turn.content) {
-    if (b.type === "text") userParts.push({ type: "text", text: b.text });
+    if (b.type === "text") {
+      userParts.push({ type: "text", text: b.text });
+    } else if (b.type === "image") {
+      const resolved = resolveImageBlock(b.source);
+      if (resolved) {
+        userParts.push({ type: "image", image: resolved.base64, mediaType: resolved.mediaType });
+      }
+    }
   }
   if (userParts.length > 0) out.push({ role: "user", content: userParts });
   return out;

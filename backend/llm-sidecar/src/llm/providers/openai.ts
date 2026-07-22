@@ -36,7 +36,7 @@ import type {
 
 import type { ContentBlock, ImageRef } from "../../engine/types.ts";
 import { foldEffort } from "../capabilities.ts";
-import { resolveImage } from "../images.ts";
+import { type ResolvedImage, resolveImage, resolveImageBlock } from "../images.ts";
 import type {
   GenerateResponse,
   SidecarProvider,
@@ -325,9 +325,13 @@ export function turnToOpenAI(turn: TurnMessage): ChatCompletionMessageParam[] {
   }
 
   // User turn: tool_results → one `role:tool` message each; text + images ride
-  // on a single user message (images prepended).
+  // on a single user message, in content order (the daemon already inlines
+  // image blocks ahead of the text they accompany).
   const out: ChatCompletionMessageParam[] = [];
-  const textParts: Array<{ type: "text"; text: string }> = [];
+  // `turn.images` is the legacy field; the daemon inlines images as `image`
+  // content blocks instead and never populates it. Honored first so anything
+  // that does set it keeps images-before-text ordering.
+  const parts: Array<OpenAITextPart | OpenAIImagePart> = imagesToOpenAIParts(turn.images);
   for (const b of turn.content) {
     if (b.type === "tool_result") {
       const toolMsg: ChatCompletionToolMessageParam = {
@@ -337,31 +341,35 @@ export function turnToOpenAI(turn: TurnMessage): ChatCompletionMessageParam[] {
       };
       out.push(toolMsg);
     } else if (b.type === "text") {
-      textParts.push({ type: "text", text: b.text });
+      parts.push({ type: "text", text: b.text });
+    } else if (b.type === "image") {
+      const resolved = resolveImageBlock(b.source);
+      if (resolved) parts.push(imageUrlPart(resolved));
     }
   }
-  const imageParts = imagesToOpenAIParts(turn.images);
-  if (imageParts.length > 0 || textParts.length > 0) {
-    const parts: Array<
-      { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }
-    > = [...imageParts, ...textParts];
+  if (parts.length > 0) {
     out.push({ role: "user", content: parts });
   }
   return out;
 }
 
-function imagesToOpenAIParts(
-  images: ImageRef[] | undefined,
-): Array<{ type: "image_url"; image_url: { url: string } }> {
+type OpenAITextPart = { type: "text"; text: string };
+type OpenAIImagePart = { type: "image_url"; image_url: { url: string } };
+
+function imageUrlPart(resolved: ResolvedImage): OpenAIImagePart {
+  return {
+    type: "image_url",
+    image_url: { url: `data:${resolved.mediaType};base64,${resolved.base64}` },
+  };
+}
+
+function imagesToOpenAIParts(images: ImageRef[] | undefined): OpenAIImagePart[] {
   if (!images || images.length === 0) return [];
-  const out: Array<{ type: "image_url"; image_url: { url: string } }> = [];
+  const out: OpenAIImagePart[] = [];
   for (const img of images) {
     const resolved = resolveImage(img);
     if (!resolved) continue;
-    out.push({
-      type: "image_url",
-      image_url: { url: `data:${resolved.mediaType};base64,${resolved.base64}` },
-    });
+    out.push(imageUrlPart(resolved));
   }
   return out;
 }
