@@ -6,25 +6,43 @@ git pull || true
 
 PREFIX="${PREFIX:-/usr/local}"
 BINDIR="$PREFIX/bin"
+LIBEXECDIR="$PREFIX/lib/shore"
 
 BINARIES=(
     "shore"
     "shore-daemon"
-    "shore-matrix"
     "shore-tui"
+)
+
+HELPERS=(
+    "shore-matrix"
 )
 
 cargo build --release --workspace
 
+echo "Installing to $BINDIR..."
 for bin in "${BINARIES[@]}"; do
-    echo "Installing to $BINDIR..."
     sudo install -Dm755 target/release/"$bin" "$BINDIR/$bin"
 done
 
-cd ./backend/llm-sidecar
-bun install
-bun update
-bun run build
-sudo install -Dm755 ./dist/shore-llm-sidecar "$BINDIR/shore-llm-sidecar"
+echo "Installing to $LIBEXECDIR..."
+for bin in "${HELPERS[@]}"; do
+    sudo install -Dm755 target/release/"$bin" "$LIBEXECDIR/$bin"
+done
+
+(
+    cd ./backend/llm-sidecar
+    bun install
+    bun update
+    bun run build
+)
+
+sudo install -Dm755 ./backend/llm-sidecar/dist/shore-llm-sidecar "$LIBEXECDIR/shore-llm-sidecar"
+
+if command -v fish &> /dev/null; then
+    "$BINDIR/shore" completions fish > ./target/shore.fish
+    sudo install -Dm755 ./target/shore.fish /usr/share/fish/vendor_completions.d/shore.fish
+    rm -f ./target/shore.fish
+fi
 
 echo

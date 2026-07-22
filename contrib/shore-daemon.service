@@ -1,30 +1,17 @@
 [Unit]
-Description=Shore daemon — persistent AI character engine
-Documentation=https://localhost:3000/eshen/silvershore
-After=network.target
+StartLimitIntervalSec= 30m
+StartLimitBurst= 10
 
 [Service]
-Type=simple
-ExecSearchPath=%h/.local/bin /usr/bin
-ExecStart=shore-daemon
-Restart=on-failure
-RestartSec=5
+Type= exec
+ExecSearchPath= /usr/bin:/usr/local/bin
+ExecStart= shore-daemon
+Restart= on-failure
+RestartMaxDelaySec= 1min
+RestartSteps= 10
 
-# Environment
-Environment=RUST_LOG=warn,shore_daemon=info,shore_llm=info,shore_ledger=info,shore_swp_server=info
-Environment=SHORE_MATRIX_RUST_LOG=warn,shore_matrix=info,matrix_sdk_crypto::backups=error
-Environment=XDG_CONFIG_HOME=%h/.config
-Environment=XDG_DATA_HOME=%h/.local/share
-Environment=XDG_RUNTIME_DIR=/run/user/%U
-# Sidecar lives in /usr/lib/shore (off $PATH); the daemon resolves it from here.
-Environment=SHORE_LLM_SIDECAR_BIN=/usr/lib/shore/shore-llm-sidecar
-
-# Hardening
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=read-only
-ReadWritePaths=%h/.local/share/shore %h/.config/shore /run/user/%U/shore
-PrivateTmp=yes
+Environment= SHORE_LLM_SIDECAR_BIN=/usr/local/lib/shore/shore-llm-sidecar
+Environment= SHORE_MATRIX_BIN=/usr/local/lib/shore/shore-matrix
 
 [Install]
-WantedBy=default.target
+WantedBy= default.target

@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitStatus;
 use std::time::{Duration, Instant};
 
+use shore_config::binaries;
 #[cfg(unix)]
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
@@ -18,12 +19,6 @@ const MATRIX_LOG_ENV: &str = "SHORE_MATRIX_RUST_LOG";
 const DEFAULT_MATRIX_LOG_FILTER: &str = "warn,shore_matrix=info,matrix_sdk_crypto::backups=error";
 const MATRIX_BINARY: &str = "shore-matrix";
 const LLM_SIDECAR_BINARY: &str = "shore-llm-sidecar";
-/// Explicit path override for the sidecar binary, set by the packaged systemd
-/// unit so the daemon can find a sidecar installed off `$PATH`.
-const LLM_SIDECAR_BIN_ENV: &str = "SHORE_LLM_SIDECAR_BIN";
-/// Known install location for packaged builds. Deliberately kept out of `$PATH`
-/// (no user — or the AI's bash tool — should run the sidecar by name).
-const LLM_SIDECAR_LIBEXEC: &str = "/usr/lib/shore/shore-llm-sidecar";
 
 /// Handle to the supervisor's background task; `shutdown()` joins it.
 pub(crate) struct MatrixSupervisor {
@@ -36,8 +31,8 @@ pub(crate) struct LlmSidecarSupervisor {
 }
 
 /// Spawn a supervisor that manages the lifecycle of `shore-matrix` as a
-/// child process. Returns `None` when no binary can be located on PATH or
-/// next to the running daemon — the supervisor then becomes a no-op and
+/// child process. Returns `None` when no binary can be located (see
+/// [`shore_config::binaries`]) — the supervisor then becomes a no-op and
 /// the daemon continues without the Matrix bridge.
 pub(crate) fn spawn(shutdown_rx: watch::Receiver<()>) -> Option<MatrixSupervisor> {
     let binary = locate_matrix_binary()?;
@@ -51,8 +46,8 @@ pub(crate) fn spawn(shutdown_rx: watch::Receiver<()>) -> Option<MatrixSupervisor
 /// Spawn a supervisor that manages the Bun LLM sidecar child process.
 ///
 /// Returns `None` when no `shore-llm-sidecar` binary can be located. This keeps
-/// externally-managed sidecars possible during development, but packaged
-/// installs should ship the binary next to `shore-daemon` or on `PATH`.
+/// externally-managed sidecars possible during development; packaged installs
+/// point `SHORE_LLM_SIDECAR_BIN` at a libexec copy kept off `$PATH`.
 pub(crate) fn spawn_llm_sidecar(
     socket_path: PathBuf,
     shutdown_rx: watch::Receiver<()>,
@@ -82,66 +77,39 @@ impl LlmSidecarSupervisor {
 }
 
 fn locate_matrix_binary() -> Option<PathBuf> {
-    let binary = locate_binary(MATRIX_BINARY);
-    if binary.is_none() {
-        warn!(
-            "shore-matrix binary not found on PATH or next to shore-daemon; \
-             Matrix bridge disabled. Install shore-matrix or add it to PATH."
-        );
-    }
-    binary
+    locate_helper_binary(
+        MATRIX_BINARY,
+        binaries::MATRIX_BIN_ENV,
+        "Matrix bridge disabled",
+    )
 }
 
 fn locate_llm_sidecar_binary() -> Option<PathBuf> {
-    let binary = resolve_llm_sidecar_binary();
-    if binary.is_none() {
-        warn!(
-            "shore-llm-sidecar binary not found via {LLM_SIDECAR_BIN_ENV}, PATH, \
-             next to shore-daemon, or {LLM_SIDECAR_LIBEXEC}; LLM sidecar \
-             supervision disabled. Install shore-llm-sidecar, set \
-             {LLM_SIDECAR_BIN_ENV}, or run a sidecar manually at the configured \
-             socket path."
-        );
-    }
-    binary
+    locate_helper_binary(
+        LLM_SIDECAR_BINARY,
+        binaries::LLM_SIDECAR_BIN_ENV,
+        "LLM sidecar supervision disabled; run a sidecar manually at the \
+         configured socket path to keep LLM calls working",
+    )
 }
 
-/// Resolve the sidecar binary, in order of preference:
-/// 1. the `SHORE_LLM_SIDECAR_BIN` override (set by the packaged systemd unit),
-/// 2. `$PATH` and a sibling of `shore-daemon` (development from source),
-/// 3. the known `/usr/lib/shore` install location (packaged, off `$PATH`).
-fn resolve_llm_sidecar_binary() -> Option<PathBuf> {
-    if let Some(raw) = std::env::var_os(LLM_SIDECAR_BIN_ENV) {
-        let path = PathBuf::from(raw);
-        if path.is_file() {
-            return Some(path);
-        }
+/// Resolve a helper binary (see [`shore_config::binaries`] for the search
+/// order), warning about an unusable override and about a binary that no
+/// searched location holds. `consequence` describes what the daemon loses.
+fn locate_helper_binary(name: &str, env_var: &str, consequence: &str) -> Option<PathBuf> {
+    let resolved = binaries::resolve(name, env_var);
+    if let Some(ignored) = resolved.ignored_override {
         warn!(
-            path = %path.display(),
-            "{LLM_SIDECAR_BIN_ENV} is set but does not point at a file; \
-             falling back to PATH and known install locations"
+            path = %ignored.display(),
+            "{env_var} is set but does not point at a file; falling back to \
+             PATH and known install locations"
         );
     }
-    if let Some(found) = locate_binary(LLM_SIDECAR_BINARY) {
-        return Some(found);
+    if resolved.path.is_none() {
+        let searched = binaries::searched_locations(env_var);
+        warn!("{name} binary not found via {searched}; {consequence}.");
     }
-    let libexec = PathBuf::from(LLM_SIDECAR_LIBEXEC);
-    libexec.is_file().then_some(libexec)
-}
-
-fn locate_binary(name: &str) -> Option<PathBuf> {
-    if let Ok(p) = which::which(name) {
-        return Some(p);
-    }
-    if let Some(sibling) = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.join(name)))
-    {
-        if sibling.is_file() {
-            return Some(sibling);
-        }
-    }
-    None
+    resolved.path
 }
 
 async fn supervise(binary: PathBuf, shutdown_rx: &mut watch::Receiver<()>) {

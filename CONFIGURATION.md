@@ -14,12 +14,33 @@ Common variables:
 | `SHORE_CACHE_DIR` | override cache directory |
 | `SHORE_ADDR` | daemon address override |
 | `SHORE_CHARACTER` | default CLI character |
+| `SHORE_LLM_SIDECAR_BIN` | path to `shore-llm-sidecar` (see [Helper binaries](#helper-binaries)) |
+| `SHORE_MATRIX_BIN` | path to `shore-matrix` (see [Helper binaries](#helper-binaries)) |
 | `ANTHROPIC_API_KEY` | Anthropic provider key |
 | `OPENROUTER_API_KEY` | OpenRouter provider key |
 | `OPENCODE_API_KEY` | OpenCode Go subscription key |
 | `TAVILY_API_KEY` | web search key |
 
 A `.env` file in the config directory is loaded on startup.
+
+## Helper binaries
+
+`shore-llm-sidecar` and `shore-matrix` are spawned by other Shore processes,
+never invoked by hand, so packaged installs keep them out of `$PATH` — in
+`/usr/local/lib/shore/` or `/usr/lib/shore/` — and point the daemon at them
+with `SHORE_LLM_SIDECAR_BIN` and `SHORE_MATRIX_BIN` (see
+`contrib/shore-daemon.service`). Both are resolved the same way:
+
+1. the environment override, if it names an existing file,
+2. `$PATH`, then a sibling of the running binary — a `cargo build` checkout
+   needs no packaging or configuration,
+3. `/usr/local/lib/shore/`, then `/usr/lib/shore/`.
+
+An override naming a path that does not exist is logged and skipped, not
+fatal; the remaining locations are still searched. Absence is not an error
+either — the daemon runs without the sidecar (LLM calls then fail) or without
+the bridge, and logs which one it could not find. `shore connectors matrix`
+resolves the bridge the same way, so the CLI reaches it off `$PATH` too.
 
 ## Client Connection
 
@@ -996,10 +1017,9 @@ enabled = true
 - `max_image_size` — images larger than this many bytes are scaled down and
   re-encoded as JPEG before being sent to a provider. `0` disables resizing.
 - `[advanced.llm_sidecar]` — the supervised TypeScript LLM wire process.
-  Enabled by default; the daemon resolves the `shore-llm-sidecar` binary via
-  `SHORE_LLM_SIDECAR_BIN`, then `$PATH` / next to `shore-daemon`, then the
-  packaged `/usr/lib/shore` location, and supervises it over a Unix socket.
-  Set `socket_path` to override the socket location (default
+  Enabled by default; the daemon resolves the `shore-llm-sidecar` binary as
+  described under [Helper binaries](#helper-binaries) and supervises it over a
+  Unix socket. Set `socket_path` to override the socket location (default
   `<runtime_dir>/llm.sock`).
 
 ### Diagnostics toggles

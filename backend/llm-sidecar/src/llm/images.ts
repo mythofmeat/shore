@@ -32,6 +32,49 @@ export interface ResolvedImage {
   base64: string;
 }
 
+const SUPPORTED_MIME = new Set(Object.values(MIME_BY_EXT));
+
+/** Decoded byte count of a base64 payload (4 chars ≈ 3 bytes), so an oversized
+ * image is dropped before it reaches an adapter. */
+function base64Bytes(data: string): number {
+  const normalized = data.replace(/\s+/g, "");
+  const padding = normalized.endsWith("==") ? 2 : normalized.endsWith("=") ? 1 : 0;
+  return Math.floor((normalized.length * 3) / 4) - padding;
+}
+
+/**
+ * Resolve an inlined `image` content block into the same `ResolvedImage` the
+ * `ImageRef` path produces.
+ *
+ * This is the shape the daemon actually sends: it synthesizes base64 `image`
+ * blocks from a message's images and inlines them into the wire `content`
+ * array (`encode_image_block` in `handler/images.rs`), and never populates a
+ * separate `images` field. Adapters must therefore read images off `content`.
+ *
+ * Returns `undefined` — logging, never throwing — for an unsupported media
+ * type or an oversized payload, matching `resolveImage`: a bad attachment
+ * drops out of the turn rather than failing it.
+ */
+export function resolveImageBlock(
+  source: { media_type: string; data: string },
+  maxBytes: number = DEFAULT_MAX_IMAGE_BYTES,
+): ResolvedImage | undefined {
+  const mediaType = source.media_type?.toLowerCase();
+  if (!mediaType || !SUPPORTED_MIME.has(mediaType)) {
+    console.warn(`[image] unsupported media type ${source.media_type}; skipping`);
+    return undefined;
+  }
+  if (!source.data) return undefined;
+  const bytes = base64Bytes(source.data);
+  if (bytes > maxBytes) {
+    console.warn(
+      `[image] inline image block is ${bytes} bytes; exceeds cap ${maxBytes}; skipping`,
+    );
+    return undefined;
+  }
+  return { mediaType, base64: source.data };
+}
+
 /**
  * Resolve an `ImageRef` into base64 bytes + media type, ready for either
  * adapter to wrap. Returns `undefined` if the file is missing, the MIME
@@ -50,11 +93,7 @@ export function resolveImage(
   }
 
   if (ref.data !== undefined && ref.data.length > 0) {
-    // Estimate decoded size from the base64 length so a giant inline image is
-    // dropped before we hand it to an adapter (4 base64 chars ≈ 3 bytes).
-    const normalized = ref.data.replace(/\s+/g, "");
-    const padding = normalized.endsWith("==") ? 2 : normalized.endsWith("=") ? 1 : 0;
-    const inlineBytes = Math.floor((normalized.length * 3) / 4) - padding;
+    const inlineBytes = base64Bytes(ref.data);
     if (inlineBytes > maxBytes) {
       console.warn(
         `[image] inline image ${ref.path} is ${inlineBytes} bytes; exceeds cap ${maxBytes}; skipping`,
@@ -82,14 +121,10 @@ export function resolveImage(
   }
 }
 
-/**
- * Derive an `ImageRef` from an inline `{filename, data}` entry from the
- * ClientMessage. The data is already base64; we keep the original
- * filename so the model still sees a meaningful path.
- */
-export function imageRefFromInline(entry: {
-  filename: string;
-  data: string;
-}): ImageRef {
-  return { path: entry.filename, data: entry.data };
-}
+// NOTE: an `imageRefFromInline({filename, data})` helper used to live here,
+// unreferenced by anything. It encoded the same wrong assumption as the
+// `turn.images` path: that the sidecar receives client-shaped inline uploads.
+// It does not. The daemon ingests `image_data` uploads to disk
+// (`handler/images.rs::ingest_images`) and hands this process fully-encoded
+// `image` content blocks — see `resolveImageBlock`. Removed so it can't be
+// mistaken for a live path.

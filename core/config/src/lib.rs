@@ -52,6 +52,7 @@
 )]
 
 pub mod app;
+pub mod binaries;
 pub mod capabilities;
 pub mod cron;
 pub mod duration;

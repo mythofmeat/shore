@@ -279,18 +279,16 @@ the `StreamEvent` NDJSON above:
   Packagers should treat it as an executable Bun script and depend on `bun`.
 - By default, `shore-daemon` configures `shore-llm` to use the configured socket
   path, defaulting to `<runtime_dir>/llm.sock`.
-- The daemon starts a sidecar supervisor when `shore-llm-sidecar` is found on
-  `PATH` or next to the running daemon. It spawns
-  `shore-llm-sidecar --socket <path>`, creates the socket directory, polls
-  `GET /healthz`, restarts with backoff on spawn/health/exit failures, and
-  SIGTERMs the child on daemon shutdown.
+- The daemon starts a sidecar supervisor when it can locate
+  `shore-llm-sidecar` (`SHORE_LLM_SIDECAR_BIN`, then `PATH` / next to the
+  running daemon, then the libexec dirs — see `shore_config::binaries`). It
+  spawns `shore-llm-sidecar --socket <path>`, creates the socket directory,
+  polls `GET /healthz`, restarts with backoff on spawn/health/exit failures,
+  and SIGTERMs the child on daemon shutdown.
 - If the binary is absent, the daemon logs a warning and continues; this keeps
   manually managed development sidecars possible at the configured socket path.
-- `install.sh` in the repo root installs both binaries: it builds the workspace
-  with `cargo build --release`, then builds the sidecar with `bun run build`
-  and installs `shore-llm-sidecar` next to the Rust binaries.
-- The Debian/Pi helper at `contrib/debian/build-shore-daemon-deb.sh` builds a
-  `.deb` that installs both `shore-daemon` and `shore-llm-sidecar`.
+- `install.sh` installs it to `<prefix>/lib/shore/`, off `$PATH`, and points
+  the unit's `SHORE_LLM_SIDECAR_BIN` at it. There are no distro packages.
 
 ## Retry (resolved — stays Rust-side, unchanged)
 
