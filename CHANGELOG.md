@@ -35,6 +35,21 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
   keep in view — not clutter to reap.
 
 ### Fixed
+- **Images you attach are now actually sent to every non-Anthropic model**
+  (Kimi K3 via opencode-go saw only your text). The daemon does not put
+  attachments in a separate `images` field — it inlines them into the wire
+  `content` array as base64 `image` blocks. Only the Anthropic adapter read
+  them from there; the OpenAI, OpenRouter, Vercel (`deepseek`/`moonshot`),
+  Z.ai, and Gemini adapters all read a legacy `turn.images` field the daemon
+  never populates, and their content loops ignored `image` blocks entirely.
+  The image was dropped at conversion with no error, so a vision-capable
+  model simply answered as though nothing had been attached. Every adapter
+  now converts inlined `image` blocks into its own dialect's shape
+  (`image_url` for OpenAI/OpenRouter/Z.ai, `image` parts for the AI SDK,
+  `inlineData` for Gemini). Unreadable or oversized attachments still drop
+  individually with a warning rather than failing the turn. Assistant-side
+  generated images are unaffected — they were already routed through a
+  caption stand-in on non-Anthropic dialects.
 - **Switching models within one provider no longer poisons the history.**
   Thinking-replay portability was checked per `provider_key`, but an
   aggregator like OpenRouter fronts every model family behind a single

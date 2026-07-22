@@ -39,7 +39,7 @@ import type {
 
 import type { ContentBlock, ImageRef } from "../../engine/types.ts";
 import { foldEffort } from "../capabilities.ts";
-import { resolveImage } from "../images.ts";
+import { type ResolvedImage, resolveImage, resolveImageBlock } from "../images.ts";
 import type {
   GenerateResponse,
   SidecarProvider,
@@ -341,25 +341,38 @@ export function turnToOpenRouter(turn: TurnMessage): ChatMessages[] {
       out.push(toolMsg);
     }
   }
-  const textParts = turn.content
-    .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
-    .map((b) => ({ type: "text" as const, text: b.text }));
-  const imageParts = imagesToParts(turn.images);
-  if (imageParts.length > 0 || textParts.length > 0) {
-    out.push({ role: "user", content: [...imageParts, ...textParts] } as ChatMessages);
+  // `turn.images` is the legacy field; the daemon inlines images as `image`
+  // content blocks instead and never populates it. Honored first so anything
+  // that does set it keeps images-before-text ordering.
+  const parts: Array<TextPart | ImagePart> = imagesToParts(turn.images);
+  for (const b of turn.content) {
+    if (b.type === "text") {
+      parts.push({ type: "text", text: b.text });
+    } else if (b.type === "image") {
+      const resolved = resolveImageBlock(b.source);
+      if (resolved) parts.push(imageUrlPart(resolved));
+    }
+  }
+  if (parts.length > 0) {
+    out.push({ role: "user", content: parts } as ChatMessages);
   }
   return out;
 }
 
-function imagesToParts(
-  images: ImageRef[] | undefined,
-): Array<{ type: "image_url"; image_url: { url: string } }> {
+type TextPart = { type: "text"; text: string };
+type ImagePart = { type: "image_url"; image_url: { url: string } };
+
+function imageUrlPart(resolved: ResolvedImage): ImagePart {
+  return { type: "image_url", image_url: { url: `data:${resolved.mediaType};base64,${resolved.base64}` } };
+}
+
+function imagesToParts(images: ImageRef[] | undefined): ImagePart[] {
   if (!images || images.length === 0) return [];
-  const out: Array<{ type: "image_url"; image_url: { url: string } }> = [];
+  const out: ImagePart[] = [];
   for (const img of images) {
     const resolved = resolveImage(img);
     if (!resolved) continue;
-    out.push({ type: "image_url", image_url: { url: `data:${resolved.mediaType};base64,${resolved.base64}` } });
+    out.push(imageUrlPart(resolved));
   }
   return out;
 }

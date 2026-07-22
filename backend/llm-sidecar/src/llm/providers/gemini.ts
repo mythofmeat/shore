@@ -25,6 +25,7 @@ import {
 } from "@google/genai";
 
 import { geminiLevelName } from "../capabilities.ts";
+import { resolveImageBlock } from "../images.ts";
 import type { ContentBlock } from "../../engine/types.ts";
 import type {
   GenerateResponse,
@@ -268,6 +269,13 @@ function translateParts(content: WireMessage["content"], toolIdToName: Map<strin
       case "tool_result": {
         const name = toolIdToName.get(block.tool_use_id) ?? block.tool_use_id;
         parts.push({ functionResponse: { name, response: { result: block.content } } });
+        break;
+      }
+      case "image": {
+        const resolved = resolveImageBlock(block.source);
+        if (resolved) {
+          parts.push({ inlineData: { mimeType: resolved.mediaType, data: resolved.base64 } });
+        }
         break;
       }
       case "thinking":
