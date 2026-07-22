@@ -12,9 +12,9 @@
     "@ai-sdk/deepseek": "^2.0.50",
     "@ai-sdk/moonshotai": "^2.0.39",
     "@anthropic-ai/sdk": "^0.100.1",
-    "@google/genai": "^2.12.0",
+    "@google/genai": "^2.13.0",
     "@openrouter/sdk": "^0.12.79",
-    "ai": "^6.0.230",
+    "ai": "^6.0.233",
     "openai": "^6.48.0"
   },
   "devDependencies": {
