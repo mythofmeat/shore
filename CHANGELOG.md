@@ -15,6 +15,18 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
   keep in view — not clutter to reap.
 
 ### Fixed
+- **Switching models within one provider no longer poisons the history.**
+  Thinking-replay portability was checked per `provider_key`, but an
+  aggregator like OpenRouter fronts every model family behind a single
+  provider entry — so after chatting on `openrouter:google/gemini-3.6-flash`
+  and switching back to `openrouter:anthropic/claude-opus-4.6`, the Gemini
+  turns' `orrd:` reasoning blobs were replayed to Anthropic as if they were
+  Anthropic signatures. Every upstream rejected the request identically
+  (`messages.N.content.0: Invalid signature in thinking block`), wedging the
+  conversation until the poisoned turns aged out. The filter now matches
+  provenance at model granularity, with a carrier-prefix backstop so
+  `orrd:`/`zair:` signatures can never reach a different model even on
+  histories persisted before the `model` stamp existed.
 - **Prior-turn thinking now actually replays on the OpenAI-compatible sdk**
   (Kimi K3 via opencode-go intermittently skipped thinking). The sidecar's
   OpenAI adapter silently dropped every thinking block at conversion — a

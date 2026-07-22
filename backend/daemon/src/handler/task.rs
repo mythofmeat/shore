@@ -848,6 +848,7 @@ fn render_message_content(
     max_image_size: u64,
     cache_dir: &Path,
     active_provider_key: &str,
+    active_model_id: &str,
     assistant_image_mode: AssistantImageMode,
 ) -> Option<(Value, Vec<Value>)> {
     // Images on assistant turns can't ship as raw `image` blocks (see
@@ -872,12 +873,20 @@ fn render_message_content(
             }
         }
 
-        // Drop opaque thinking data (signatures, redacted blobs) that
-        // a different provider minted — replaying it to the active
-        // provider hard-fails the request.
+        // Drop opaque thinking data (signatures, redacted blobs) that a
+        // different model minted — replaying it to the active model
+        // hard-fails the request. Provider alone is too coarse: an
+        // aggregator fronts every model family behind one provider_key.
         let minting = m.provider_key.as_deref();
+        let minting_model = m.model.as_deref();
         let portable = m.content_blocks.iter().filter(|b| {
-            crate::content_util::thinking_block_portable_to(b, minting, active_provider_key)
+            crate::content_util::thinking_block_portable_to(
+                b,
+                minting,
+                minting_model,
+                active_provider_key,
+                active_model_id,
+            )
         });
         if include_unsigned_thinking {
             blocks.extend(portable.filter_map(|b| {
@@ -935,6 +944,7 @@ pub(crate) fn build_llm_messages(
     max_image_size: u64,
     cache_dir: &Path,
     active_provider_key: &str,
+    active_model_id: &str,
     assistant_image_mode: AssistantImageMode,
 ) -> (Vec<Value>, Option<Value>) {
     let mut llm_messages: Vec<Value> = Vec::new();
@@ -957,6 +967,7 @@ pub(crate) fn build_llm_messages(
             max_image_size,
             cache_dir,
             active_provider_key,
+            active_model_id,
             assistant_image_mode,
         ) else {
             // Dropped empty turn; owed tool_results (if any) survive to the
@@ -1013,6 +1024,7 @@ mod build_llm_messages_tests {
             images: vec![],
             content_blocks,
             provider_key: None,
+            model: None,
         }
     }
 
@@ -1049,8 +1061,15 @@ mod build_llm_messages_tests {
             system: vec![],
             messages,
         };
-        let (llm_messages, _) =
-            build_llm_messages(&prompt, false, 1024, Path::new("/tmp"), "anthropic", mode);
+        let (llm_messages, _) = build_llm_messages(
+            &prompt,
+            false,
+            1024,
+            Path::new("/tmp"),
+            "anthropic",
+            "claude-x",
+            mode,
+        );
         llm_messages
     }
 

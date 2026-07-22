@@ -153,23 +153,42 @@ pub fn dispatch_result_to_output(result: Result<Value, crate::tools::ToolError>)
     }
 }
 
-/// Whether `block` can be safely replayed to `active_provider`.
+/// Signature carriers that are bound to a specific non-Anthropic wire shape.
+/// `orrd:` is the OpenRouter `reasoning_details` blob minted on the
+/// [`Sdk::Openrouter`] path; `zair:` is the Z.AI Preserved-Thinking carrier.
+/// Neither is an Anthropic signature, so neither survives a hop onto the
+/// Anthropic wire shape no matter which upstream serves it.
+const FOREIGN_SIGNATURE_CARRIERS: [&str; 2] = ["orrd:", "zair:"];
+
+/// Whether `block` can be safely replayed to `active_provider`/`active_model`.
 ///
-/// Providers mint opaque, provider-bound data inside `thinking` blocks
+/// Providers mint opaque, **model-bound** data inside `thinking` blocks
 /// (signatures) and `redacted_thinking` blocks (encrypted blobs, or
 /// OpenRouter's `openrouter.reasoning:` envelopes). Replaying such a block to
-/// a provider that did not mint it triggers an HTTP 400 — e.g. Anthropic
-/// rejects an OpenRouter-relayed block with `Invalid `data` in
-/// `redacted_thinking` block`. Text, tool_use, tool_result, and unsigned
-/// thinking carry no provider-bound data and are always portable.
+/// anything but its minter triggers an HTTP 400 — e.g. Anthropic rejects an
+/// OpenRouter-relayed block with `Invalid `data` in `redacted_thinking``.
+/// Text, tool_use, tool_result, and unsigned thinking carry no bound data and
+/// are always portable.
 ///
-/// `minting_provider` is the provider that produced the message this block
-/// belongs to ([`shore_protocol::types::Message::provider_key`]), or `None`
-/// for messages persisted before provenance tracking existed.
+/// Provenance must be compared at **model** granularity, not provider. An
+/// aggregator fronts many model families behind one `provider_key`: a Gemini
+/// turn and a Claude turn are both `provider_key = "openrouter"`, so a
+/// provider-only check reports a `google-gemini-v1` reasoning blob as portable
+/// onto the Anthropic wire shape and every upstream rejects it identically
+/// (`messages.N.content.0: Invalid `signature` in `thinking` block`). Model
+/// equality is the honest rule — opaque reasoning is only ever valid for the
+/// exact model that minted it.
+///
+/// `minting_provider`/`minting_model` describe the message this block belongs
+/// to ([`shore_protocol::types::Message::provider_key`] and
+/// [`shore_protocol::types::Message::model`]); either is `None` for messages
+/// persisted before that provenance was tracked.
 pub fn thinking_block_portable_to(
     block: &ContentBlock,
     minting_provider: Option<&str>,
+    minting_model: Option<&str>,
     active_provider: &str,
+    active_model: &str,
 ) -> bool {
     let carries_opaque_data = match block {
         ContentBlock::Thinking { signature, .. } => signature.is_some(),
@@ -181,18 +200,39 @@ pub fn thinking_block_portable_to(
     if !carries_opaque_data {
         return true;
     }
-    match minting_provider {
-        // Known provenance: opaque data is only valid against its minter.
-        // Exact match is the safe rule — stripping on a mismatch only loses
-        // cache/reasoning continuity (already lost on a provider switch),
-        // whereas keeping a foreign block hard-fails the request.
-        Some(p) => p == active_provider,
+
+    // Carrier backstop, checked before provenance so it holds even for legacy
+    // messages: a signature stamped with a non-Anthropic carrier is only ever
+    // replayable to the exact model that minted it. Provenance-free histories
+    // would otherwise sail straight onto the Anthropic wire.
+    if let ContentBlock::Thinking {
+        signature: Some(sig),
+        ..
+    } = block
+    {
+        if FOREIGN_SIGNATURE_CARRIERS
+            .iter()
+            .any(|prefix| sig.starts_with(prefix))
+            && minting_model.is_none_or(|m| m != active_model)
+        {
+            return false;
+        }
+    }
+
+    match (minting_provider, minting_model) {
+        // Full provenance: opaque data is valid only against its exact minter.
+        // Stripping on a mismatch costs reasoning/cache continuity (already
+        // lost on a model switch); keeping a foreign block hard-fails.
+        (Some(p), Some(m)) => p == active_provider && m == active_model,
+        // Provider-only provenance (persisted before model tracking): the
+        // coarse check is all that is available.
+        (Some(p), None) => p == active_provider,
         // Unknown provenance (legacy messages): fall back to the one signal
         // readable off the wire. OpenRouter tags relayed reasoning with an
         // `openrouter.reasoning:` prefix; that envelope is OpenRouter-only.
         // Other legacy opaque blocks are kept, to avoid busting working
         // same-provider histories that predate provenance tracking.
-        None => match block {
+        (None, _) => match block {
             ContentBlock::RedactedThinking { data }
                 if data.starts_with("openrouter.reasoning:") =>
             {
@@ -960,7 +1000,9 @@ mod tests {
         assert!(thinking_block_portable_to(
             &text,
             Some("openrouter-anthropic"),
-            "anthropic"
+            Some("claude"),
+            "anthropic",
+            "claude",
         ));
     }
 
@@ -974,12 +1016,14 @@ mod tests {
         assert!(thinking_block_portable_to(
             &block,
             Some("openrouter-anthropic"),
-            "anthropic"
+            Some("gemini"),
+            "anthropic",
+            "claude",
         ));
     }
 
     #[test]
-    fn portable_known_provenance_same_provider_kept() {
+    fn portable_known_provenance_same_model_kept() {
         let signed = ContentBlock::Thinking {
             thinking: "t".into(),
             signature: Some("sig".into()),
@@ -988,12 +1032,16 @@ mod tests {
         assert!(thinking_block_portable_to(
             &signed,
             Some("anthropic"),
-            "anthropic"
+            Some("claude"),
+            "anthropic",
+            "claude",
         ));
         assert!(thinking_block_portable_to(
             &redacted,
             Some("anthropic"),
-            "anthropic"
+            Some("claude"),
+            "anthropic",
+            "claude",
         ));
     }
 
@@ -1008,28 +1056,96 @@ mod tests {
         assert!(!thinking_block_portable_to(
             &signed,
             Some("openrouter-anthropic"),
-            "anthropic"
+            Some("claude"),
+            "anthropic",
+            "claude",
         ));
         assert!(!thinking_block_portable_to(
             &redacted,
             Some("openrouter-anthropic"),
-            "anthropic"
+            Some("claude"),
+            "anthropic",
+            "claude",
+        ));
+    }
+
+    #[test]
+    fn portable_same_provider_cross_model_stripped() {
+        // The reported failure: one aggregator fronts many model families, so
+        // a Gemini turn and a Claude turn share `provider_key = "openrouter"`.
+        // A provider-only check called this portable and every Anthropic
+        // upstream rejected it with
+        // `messages.N.content.0: Invalid signature in thinking block`.
+        let gemini_thinking = ContentBlock::Thinking {
+            thinking: "**Analyzing**\n\nsome reasoning".into(),
+            signature: Some(r#"orrd:[{"format":"google-gemini-v1","index":0}]"#.into()),
+        };
+        assert!(!thinking_block_portable_to(
+            &gemini_thinking,
+            Some("openrouter"),
+            Some("google/gemini-3.6-flash"),
+            "openrouter",
+            "anthropic/claude-opus-4.6",
+        ));
+        // Still replayable to the model that minted it.
+        assert!(thinking_block_portable_to(
+            &gemini_thinking,
+            Some("openrouter"),
+            Some("google/gemini-3.6-flash"),
+            "openrouter",
+            "google/gemini-3.6-flash",
+        ));
+    }
+
+    #[test]
+    fn portable_foreign_carrier_stripped_without_provenance() {
+        // Carrier backstop: `orrd:`/`zair:` signatures predate model tracking
+        // in some histories, and neither is an Anthropic signature.
+        let orrd = ContentBlock::Thinking {
+            thinking: "t".into(),
+            signature: Some("orrd:[{\"format\":\"google-gemini-v1\"}]".into()),
+        };
+        let zai = ContentBlock::Thinking {
+            thinking: "t".into(),
+            signature: Some("zair:reasoning".into()),
+        };
+        assert!(!thinking_block_portable_to(
+            &orrd,
+            None,
+            None,
+            "openrouter",
+            "anthropic/claude-opus-4.6",
+        ));
+        assert!(!thinking_block_portable_to(
+            &zai,
+            Some("openrouter"),
+            None,
+            "openrouter",
+            "anthropic/claude-opus-4.6",
         ));
     }
 
     #[test]
     fn portable_unknown_provenance_openrouter_prefix_stripped_for_anthropic() {
-        // The exact failure mode: an `openrouter.reasoning:`-prefixed blob from
-        // a pre-provenance OpenRouter turn, replayed to Anthropic direct.
+        // An `openrouter.reasoning:`-prefixed blob from a pre-provenance
+        // OpenRouter turn, replayed to Anthropic direct.
         let block = ContentBlock::RedactedThinking {
             data: "openrouter.reasoning: signed payload".into(),
         };
-        assert!(!thinking_block_portable_to(&block, None, "anthropic"));
+        assert!(!thinking_block_portable_to(
+            &block,
+            None,
+            None,
+            "anthropic",
+            "claude"
+        ));
         // …but kept when the active provider is still OpenRouter.
         assert!(thinking_block_portable_to(
             &block,
             None,
-            "openrouter-anthropic"
+            None,
+            "openrouter-anthropic",
+            "claude",
         ));
     }
 
@@ -1040,6 +1156,12 @@ mod tests {
         let block = ContentBlock::RedactedThinking {
             data: "opaque-anthropic-blob".into(),
         };
-        assert!(thinking_block_portable_to(&block, None, "anthropic"));
+        assert!(thinking_block_portable_to(
+            &block,
+            None,
+            None,
+            "anthropic",
+            "claude"
+        ));
     }
 }

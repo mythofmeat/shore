@@ -145,9 +145,18 @@ commands see durable state. During tool use, clients may see intermediate
 phases.
 
 Persisted assistant messages carry provenance stamps: `provider_key` (the
-provider entry that minted the content, used by the thinking-replay
-portability filter) and `model` (the model id, audit metadata for history
-tooling). Tool-loop intermediates, heartbeat-minted autonomous messages, and
+provider entry that minted the content) and `model` (the model id). The
+thinking-replay portability filter matches on **both**, because opaque
+reasoning carriers — Anthropic thinking signatures, OpenRouter `orrd:`
+`reasoning_details` blobs, Z.AI `zair:` blobs, `redacted_thinking` payloads —
+are bound to the model that minted them, and an aggregator fronts many model
+families behind a single `provider_key`. Matching on provider alone treats a
+Gemini reasoning blob as replayable to Claude when both are
+`provider_key = "openrouter"`, and every upstream then rejects the request
+identically (`messages.N.content.0: Invalid signature in thinking block`). A
+carrier-prefix backstop additionally blocks `orrd:`/`zair:` signatures from
+reaching a different model even when a legacy message lacks the `model` stamp.
+Tool-loop intermediates, heartbeat-minted autonomous messages, and
 regeneration alternatives are stamped the same way; each alternative carries
 its own stamps because regenerated bodies can come from a different
 provider/model than their siblings. Messages persisted before provenance

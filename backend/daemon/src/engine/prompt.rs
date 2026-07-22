@@ -63,6 +63,12 @@ pub struct PromptMessage {
     /// [`shore_protocol::types::Message::provider_key`]) so the replay path
     /// can drop opaque thinking data the active provider cannot interpret.
     pub provider_key: Option<String>,
+    /// Model that minted this message (carried from
+    /// [`shore_protocol::types::Message::model`]). Opaque reasoning carriers
+    /// are model-bound, and an aggregator fronts many model families behind
+    /// one `provider_key`, so the replay guard needs this finer signal — see
+    /// [`crate::content_util::thinking_block_portable_to`].
+    pub model: Option<String>,
 }
 
 /// The fully assembled prompt ready for LLM submission.
@@ -466,6 +472,7 @@ fn trim_messages(
                 images: msg.images.clone(),
                 content_blocks: msg.content_blocks.clone(),
                 provider_key: msg.provider_key.clone(),
+                model: msg.model.clone(),
             },
             &msg.timestamp,
         ));

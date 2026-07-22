@@ -69,6 +69,18 @@ pub(crate) struct PreparedChatContext {
 /// The returned `prompt` is the [`AssembledPrompt`] that produced
 /// `llm_messages` and `system`; callers can use its `.messages` field
 /// directly for things like image cache warming.
+/// How much prior-turn thinking to replay for `resolved`. The per-model
+/// override (preferences overlay) falls back to the global
+/// `[memory.thinking]` default; the effect is model-dependent — see #129.
+fn resolved_replay(
+    resolved: &shore_config::models::ResolvedModel,
+    config: &LoadedConfig,
+) -> shore_config::app::ThinkingReplay {
+    resolved
+        .replay_prior_thinking
+        .unwrap_or(config.app.memory.thinking.replay_prior_thinking)
+}
+
 pub(crate) fn prepare_chat_context(params: PrepareChatContextParams<'_>) -> PreparedChatContext {
     let PrepareChatContextParams {
         character,
@@ -127,15 +139,12 @@ pub(crate) fn prepare_chat_context(params: PrepareChatContextParams<'_>) -> Prep
         config.app.advanced.max_image_size,
         &config.dirs.cache,
         &resolved.provider_key,
+        &resolved.model_id,
         super::AssistantImageMode::for_request(&resolved.sdk, tools_available),
     );
     crate::content_util::maybe_strip_prior_thinking(
         &mut llm_messages,
-        // Per-model override (preferences overlay) falls back to the global
-        // `[memory.thinking]` default. The effect is model-dependent — see #129.
-        resolved
-            .replay_prior_thinking
-            .unwrap_or(config.app.memory.thinking.replay_prior_thinking),
+        resolved_replay(resolved, config),
         &resolved.provider_key,
     );
 
