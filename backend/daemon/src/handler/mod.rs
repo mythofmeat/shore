@@ -676,8 +676,11 @@ impl MessageHandler {
         // down here if uniquely owned, else cleaned up on Drop when they finish.
         if !self.mcp_registry.matches_config(&reloaded_config.app.mcp) {
             let new_registry = Arc::new(
-                crate::tools::mcp_registry::McpRegistry::from_config(&reloaded_config.app.mcp)
-                    .await,
+                crate::tools::mcp_registry::McpRegistry::from_config(
+                    &reloaded_config.app.mcp,
+                    &shore_config::plugins_dir(&reloaded_config.dirs.data),
+                )
+                .await,
             );
             let old = std::mem::replace(&mut self.mcp_registry, Arc::clone(&new_registry));
             // Hand the new registry to autonomy too, so future heartbeat ticks

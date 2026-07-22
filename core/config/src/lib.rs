@@ -271,6 +271,16 @@ pub const SEGMENTS_DIR: &str = "segments";
 /// segment ordering, message counts, and timestamps.
 pub const COMPACTION_MANIFEST_FILE: &str = "compaction.json";
 
+/// Directory under `<data>/` holding locally installed MCP servers. Relative
+/// `cwd`/`command` paths in `[mcp.*]` resolve against it, so a server config
+/// need not hardcode an absolute install path.
+pub const PLUGINS_DIR: &str = "plugins";
+
+/// Return `<data_dir>/plugins/` — the root for relative `[mcp.*]` paths.
+pub fn plugins_dir(data_dir: &Path) -> PathBuf {
+    data_dir.join(PLUGINS_DIR)
+}
+
 /// Return `characters/{name}/`.
 pub fn character_config_dir(config_dir: &Path, character_name: &str) -> PathBuf {
     config_dir.join("characters").join(character_name)

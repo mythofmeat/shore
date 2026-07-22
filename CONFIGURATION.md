@@ -816,12 +816,17 @@ granted exactly like any other tool — directly on the character via
 either an exact name or an `mcp__<server>__*` glob.
 
 ```toml
-# Stdio server (a child process the daemon launches).
+# Stdio server installed under the plugins directory (see below).
 [mcp.hue]
 command = "node"
 args = ["dist/index.js"]                     # or command = "npx", args = ["-y", "@me/hue-mcp"]
-cwd = "/home/me/hue-mcp"                      # run the server from its own directory
+cwd = "hue-mcp"                               # -> $XDG_DATA_HOME/shore/plugins/hue-mcp
 env = { HUE_BRIDGE_IP = "192.168.1.42", HUE_API_KEY = "..." }
+
+# Stdio server living somewhere else on disk (absolute paths still work).
+[mcp.weather]
+command = "/opt/weather-mcp/bin/server"
+cwd = "/opt/weather-mcp"
 
 # Remote HTTP/SSE server.
 [mcp.docs]
@@ -849,6 +854,20 @@ model = "anthropic:claude-haiku-4-5"
   the server's own directory so relative `args` paths resolve and the server
   loads its own `.env` from there — a tidier alternative to listing every secret
   under `env`. Ignored by HTTP servers.
+- **The plugins directory: `$XDG_DATA_HOME/shore/plugins/`.** Created at daemon
+  startup; drop locally installed MCP servers in it. A **relative** `cwd`
+  resolves against it, so `cwd = "hue-mcp"` means
+  `$XDG_DATA_HOME/shore/plugins/hue-mcp` regardless of where the daemon was
+  started from — which matters under systemd, where the inherited cwd is
+  effectively arbitrary. Absolute paths are used as-is, so existing configs keep
+  working unchanged.
+- **Relative `command` resolves too.** A bare command name (`node`, `npx`) stays
+  a `PATH` lookup. A path-shaped `command` (`./venv/bin/python`) resolves against
+  the resolved `cwd`, falling back to the plugins directory when `cwd` is unset.
+  This resolution is deliberate: a child process's working directory does *not*
+  reliably define where a relative program path is looked up, so the daemon
+  makes it absolute before spawning. `args` are never rewritten — they belong to
+  the server and it already resolves them against its own `cwd`.
 - **Glob grants are fail-closed whitelists.** `mcp__hue__*` matches every current
   hue tool; a tool the server adds later is *not* granted until a pattern covers
   it. `mcp__*` grants every MCP tool from every server.

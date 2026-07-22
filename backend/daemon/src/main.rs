@@ -321,7 +321,11 @@ async fn build_server_and_handler(
     // empty (cheap) registry. Built before the autonomy manager so background
     // ticks (heartbeat/dreaming) receive the same registry the chat path uses.
     let mcp_registry = Arc::new(
-        shore_daemon::tools::mcp_registry::McpRegistry::from_config(&loaded.app.mcp).await,
+        shore_daemon::tools::mcp_registry::McpRegistry::from_config(
+            &loaded.app.mcp,
+            &shore_config::plugins_dir(&loaded.dirs.data),
+        )
+        .await,
     );
 
     // Autonomy manager: shared between handler, commands, and per-character ticks.
@@ -397,6 +401,14 @@ fn create_runtime_dirs(loaded: &LoadedConfig) -> Result<(), StartupError> {
     std::fs::create_dir_all(&loaded.dirs.data).map_err(|source| StartupError::CreateDir {
         kind: "data",
         path: loaded.dirs.data.clone(),
+        source,
+    })?;
+    // `<data>/plugins/` is the root relative `[mcp.*]` paths resolve against.
+    // Create it up front so it's discoverable without reading the docs.
+    let plugins = shore_config::plugins_dir(&loaded.dirs.data);
+    std::fs::create_dir_all(&plugins).map_err(|source| StartupError::CreateDir {
+        kind: "plugins",
+        path: plugins,
         source,
     })?;
     std::fs::create_dir_all(&loaded.dirs.cache).map_err(|source| StartupError::CreateDir {
