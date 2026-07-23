@@ -9,6 +9,7 @@ ExecStart= shore-daemon
 Restart= on-failure
 RestartMaxDelaySec= 1min
 RestartSteps= 10
+Environment= RUST_LOG=warn
 
 Environment= SHORE_LLM_SIDECAR_BIN=/usr/local/lib/shore/shore-llm-sidecar
 Environment= SHORE_MATRIX_BIN=/usr/local/lib/shore/shore-matrix
