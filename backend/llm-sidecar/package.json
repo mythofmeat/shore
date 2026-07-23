@@ -14,7 +14,7 @@
     "@anthropic-ai/sdk": "^0.100.1",
     "@google/genai": "^2.13.0",
     "@openrouter/sdk": "^0.12.79",
-    "ai": "^6.0.233",
+    "ai": "^6.0.234",
     "openai": "^6.48.0"
   },
   "devDependencies": {
