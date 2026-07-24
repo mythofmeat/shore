@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Budgets with a `pace_period` report a `pace` allowance for the current
+  sub-window (`remaining / sub-windows left`), enforce their own action, and
+  warn through the existing dedup table under a distinct scope.
+
 ## [0.1.17](https://github.com/mythofmeat/shore-core/compare/shore-ledger-v0.1.16...shore-ledger-v0.1.17) - 2026-07-18
 
 ### Other

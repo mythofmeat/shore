@@ -37,3 +37,13 @@ pub(crate) fn u64_to_i64(v: u64) -> i64 {
 pub(crate) fn u64_to_f64(v: u64) -> f64 {
     v as f64
 }
+
+/// Widen a duration in seconds to `f64` for budget-pace division.
+#[expect(
+    clippy::as_conversions,
+    clippy::cast_precision_loss,
+    reason = "budget windows span at most a month; second counts are ~10^6, far under f64's 2^53 exact-integer ceiling"
+)]
+pub(crate) fn i64_to_f64(v: i64) -> f64 {
+    v as f64
+}

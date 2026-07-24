@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Budget-pace warnings are forwarded with their scope on the `usage_warning`
+  frame.
+
 ## [0.3.2](https://github.com/mythofmeat/shore-core/compare/shore-daemon-v0.3.1...shore-daemon-v0.3.2) - 2026-07-18
 
 ### Fixed

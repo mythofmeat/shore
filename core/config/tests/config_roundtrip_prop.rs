@@ -759,12 +759,21 @@ fn arb_usage_budget_config() -> impl Strategy<Value = UsageBudgetConfig> {
         prop::option::of(arb_budget_weekday()),
         prop::option::of(1_u32..32),
     );
+    // `pace_period` is drawn independently of `period` here on purpose: this
+    // property covers TOML round-tripping, not validation, so an
+    // out-of-order pair still has to survive serialize/deserialize intact.
+    let pace = (
+        prop::option::of(arb_usage_budget_period()),
+        prop::option::of(arb_usage_budget_action()),
+        prop::option::of(prop::collection::vec(arb_fraction(), 0..4)),
+    );
 
-    (base, filters, resets).prop_map(
+    (base, filters, resets, pace).prop_map(
         |(
             (name, period, cost_usd, warn_at, limit),
             (character, provider, api_key, model, call_type, usage_kind),
             (allow_compaction_over_budget, reset_hour, reset_day_of_week, reset_day_of_month),
+            (pace_period, pace_action, pace_warn_at),
         )| UsageBudgetConfig {
             name,
             period,
@@ -781,6 +790,9 @@ fn arb_usage_budget_config() -> impl Strategy<Value = UsageBudgetConfig> {
             reset_hour,
             reset_day_of_week,
             reset_day_of_month,
+            pace_period,
+            pace_action,
+            pace_warn_at,
         },
     )
 }

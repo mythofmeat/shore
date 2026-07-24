@@ -8,6 +8,21 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
 ## [Unreleased]
 
 ### Added
+- **Usage budgets can pace themselves.** A budget that sets `pace_period`
+  (shorter than its own `period`) gets a second, self-adjusting target:
+  budget remaining when the sub-window opened, divided by the sub-windows left
+  in the period. A `$14`/week budget paced daily starts Wednesday at `$2.00`;
+  spend `$1` and Thursday becomes `$2.17`; spend `$4` and Friday drops to
+  `$1.80`. One expensive day after several cheap ones still lands inside the
+  budget, and the next day's number shows what it cost — no hand-tuning limits.
+  The allowance is fixed for the duration of its sub-window, so spending never
+  shrinks its own target. `pace_action` (default `warn`) enforces it
+  independently of the budget's `limit`, and `pace_warn_at` sets its warning
+  thresholds. Sub-windows inherit the budget's `reset_hour` anchor, so they tile
+  the period exactly. `shore usage --budget` prints a continuation line per
+  paced budget; `--json` and the `usage_warning` frame carry the pace under a
+  `pace` object and a `"scope": "pace"` marker. Budgets without `pace_period`
+  are unaffected, down to the wire format.
 - **A plugins directory for MCP servers: `$XDG_DATA_HOME/shore/plugins/`.**
   Created at daemon startup. Relative `cwd` and `command` paths in `[mcp.*]`
   now resolve against it, so `cwd = "hue-mcp"` points at

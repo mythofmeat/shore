@@ -513,6 +513,7 @@ fn arb_server_message() -> BoxedStrategy<ServerMessage> {
             arb_small_string(),
             arb_small_string(),
             arb_small_string(),
+            prop::option::of(arb_ident()),
         )
             .prop_map(
                 |(
@@ -527,6 +528,7 @@ fn arb_server_message() -> BoxedStrategy<ServerMessage> {
                     period_start,
                     reset_at,
                     reset_at_display,
+                    scope,
                 )| {
                     ServerMessage::UsageWarning(UsageWarning {
                         rid,
@@ -540,6 +542,7 @@ fn arb_server_message() -> BoxedStrategy<ServerMessage> {
                         period_start,
                         reset_at,
                         reset_at_display,
+                        scope,
                     })
                 },
             ),

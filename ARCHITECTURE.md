@@ -778,6 +778,17 @@ budget warning threshold, the daemon records that budget/window/threshold and
 emits a request-scoped `usage_warning` frame plus the matching notification
 event, so CLI/TUI clients can surface it without polling `shore usage`.
 
+A budget may also declare a `pace_period` shorter than its own window, adding a
+second limit: spend against an allowance of "budget remaining when this
+sub-window opened, divided by the sub-windows left in the period". Like every
+other budget figure this is derived from the ledger on demand — no allowance is
+stored and nothing rolls over on a timer — and the numerator is frozen at the
+sub-window's start so spending cannot shrink its own target mid-window. Pace
+sub-windows step from the budget's window start, inheriting its reset anchor, so
+they tile the period exactly across DST transitions. The pace enforces its own
+action (advisory `warn` by default) and warns through the same dedup table as
+the cap, discriminated by scope so the two never suppress each other.
+
 Long-running daemon service logs default to a scoped filter:
 `warn,shore_daemon=info,shore_llm=info,shore_ledger=info,shore_swp_server=info`.
 The daemon-supervised Matrix bridge gets its own `RUST_LOG` from

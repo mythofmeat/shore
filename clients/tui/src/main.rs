@@ -28,9 +28,11 @@ use shore_protocol::types::{ContentBlock, Message, Role, StreamMetadata};
 use tracing::{info, instrument, warn};
 use tracing_subscriber::EnvFilter;
 
+#[cfg(test)]
+use app::UsageBudget;
 use app::{
     AltChoice, App, Block, ConnectionStatus, ConversationEntry, EffectiveSamplerSnapshot,
-    InputState, Turn, TurnState, UsageBudget, UsageDisplay,
+    InputState, Turn, TurnState, UsageDisplay, UsageLevel, UsageScope,
 };
 use connection::{ConnCommand, ConnEvent};
 use input::Action;
@@ -2058,12 +2060,20 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 // Monitor is active: fold the warning into the chip (which
                 // escalates its color, and in warn-only mode reveals it)
                 // instead of pushing a notification.
-                app.apply_usage_warning(UsageBudget {
-                    name: w.budget.clone(),
-                    percent_used: w.percent_used,
-                    crossed_warn_at: w.crossed_warn_at.clone(),
-                    over_limit: w.percent_used >= 1.0,
-                });
+                let scope = if w.scope.as_deref() == Some("pace") {
+                    UsageScope::Pace
+                } else {
+                    UsageScope::Cap
+                };
+                app.apply_usage_warning(
+                    &w.budget,
+                    scope,
+                    UsageLevel {
+                        percent_used: w.percent_used,
+                        crossed_warn_at: w.crossed_warn_at.clone(),
+                        over_limit: w.percent_used >= 1.0,
+                    },
+                );
             } else {
                 // Monitor hidden: fall back to the notification so the user is
                 // never left without a signal.
@@ -2271,6 +2281,7 @@ mod redraw_tests {
             period_start: "2026-06-01T00:00:00Z".into(),
             reset_at: "2026-07-01T00:00:00Z".into(),
             reset_at_display: String::new(),
+            scope: None,
         })
     }
 
@@ -2329,6 +2340,7 @@ mod redraw_tests {
             percent_used: 0.82,
             crossed_warn_at: vec![0.8],
             over_limit: false,
+            pace: None,
         }];
 
         handle_conn_event(&mut app, ConnEvent::Disconnected("server gone".into()));
@@ -2362,6 +2374,77 @@ mod redraw_tests {
         assert_eq!(app.usage_budgets.len(), 2);
         // The most-urgent (highest percent) budget is what the chip surfaces.
         assert_eq!(app.most_urgent_budget().unwrap().name, "monthly");
+    }
+
+    #[test]
+    fn budget_pace_outranks_a_cooler_period_cap() {
+        // Only a fifth into the week, but today's allowance is blown: the pace
+        // is the binding constraint, so it's what the chip reports.
+        let mut app = App::default();
+
+        handle_server_message(
+            &mut app,
+            ServerMessage::CommandOutput(CommandOutput {
+                rid: None,
+                name: "usage".into(),
+                data: serde_json::json!({
+                    "mode": "budget",
+                    "budgets": [{
+                        "name": "weekly",
+                        "percent_used": 0.2,
+                        "crossed_warn_at": [],
+                        "over_limit": false,
+                        "pace": {
+                            "percent_used": 1.4,
+                            "crossed_warn_at": [0.8, 1.0],
+                            "over_limit": true
+                        }
+                    }]
+                }),
+            }),
+        );
+
+        let budget = app.most_urgent_budget().expect("one budget cached");
+        let headline = budget.headline();
+        assert!(headline.over_limit, "pace is over its allowance");
+        assert!(budget.in_warning(), "an overspent pace styles as a warning");
+        assert!(
+            (headline.percent_used - 1.4).abs() < f64::EPSILON,
+            "chip reports the pace figure, not the 20% week"
+        );
+    }
+
+    #[test]
+    fn pace_warning_push_does_not_clobber_the_cached_cap() {
+        // Budget and pace warn independently, so folding one push in must
+        // leave the other scope's cached figures alone.
+        let mut app = App {
+            usage_budgets: vec![UsageBudget {
+                name: "weekly".into(),
+                percent_used: 0.3,
+                crossed_warn_at: vec![],
+                over_limit: false,
+                pace: None,
+            }],
+            ..Default::default()
+        };
+
+        app.apply_usage_warning(
+            "weekly",
+            UsageScope::Pace,
+            UsageLevel {
+                percent_used: 1.2,
+                crossed_warn_at: vec![1.0],
+                over_limit: true,
+            },
+        );
+
+        let budget = app.most_urgent_budget().expect("one budget cached");
+        assert!(
+            (budget.percent_used - 0.3).abs() < f64::EPSILON,
+            "the period cap figure survives a pace push"
+        );
+        assert!(budget.pace.as_ref().is_some_and(|p| p.over_limit));
     }
 
     #[test]
