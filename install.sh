@@ -16,7 +16,9 @@ HELPERS=(
     "shore-matrix"
 )
 
+cargo sweep --stamp || true
 cargo build --release --workspace
+cargo sweep --file || true
 
 echo "Installing to $BINDIR..."
 for bin in "${BINARIES[@]}"; do
