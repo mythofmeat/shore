@@ -51,7 +51,11 @@ libc = "0.2"
 tempfile = "3"
 uuid = { version = "1", features = ["v4"] }
 which = "6"
-reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "stream",
+    "rustls-tls",
+] }
 dashmap = "6"
 futures-util = "0.3"
 async-trait = "0.1"
@@ -70,7 +74,11 @@ shore-daemon = { path = "backend/daemon" }
 shore-call-store = { path = "backend/call-store" }
 rusqlite = { version = "0.37", features = ["bundled"] }
 zstd = "0.13"
-rmcp = { version = "1.7", features = ["client", "transport-child-process", "transport-streamable-http-client-reqwest"] }
+rmcp = { version = "1.7", features = [
+    "client",
+    "transport-child-process",
+    "transport-streamable-http-client-reqwest",
+] }
 shore-mcp-client = { path = "backend/mcp" }
 
 [workspace.lints.clippy]
@@ -225,7 +233,7 @@ missing_debug_implementations = "warn"
 unreachable_pub = "warn"
 
 [profile.dev]
-opt-level = 1       # light optimization of our own crates (deps get 3, below)
+opt-level = 1              # light optimization of our own crates (deps get 3, below)
 debug = "line-tables-only"
 
 # Optimize dependencies (not our own crates) in dev builds. The TUI render path
@@ -241,9 +249,9 @@ opt-level = 3
 debug = "line-tables-only"
 
 [profile.release]
-strip = true        # drop symbol tables (~20% smaller, no behavior change)
-lto = "thin"        # most of the LTO size/perf win, far cheaper to link than "fat"
-codegen-units = 1   # smaller and slightly faster runtime
+strip = true      # drop symbol tables (~20% smaller, no behavior change)
+lto = "thin"      # most of the LTO size/perf win, far cheaper to link than "fat"
+codegen-units = 1 # smaller and slightly faster runtime
 
 # shore-tui's own release profile, and the profile every shipped shore-tui is
 # built with: both install scripts and the Arch PKGBUILD use it. `panic` and
