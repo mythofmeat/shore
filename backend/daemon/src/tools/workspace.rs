@@ -1708,10 +1708,18 @@ pub async fn handle_git(
         // No workdir and no workspace root: inherit the daemon's cwd.
     }
 
-    let output = cmd
-        .output()
-        .await
-        .map_err(|e| ToolError::Io(e.to_string()))?;
+    // A bare io error here ("No such file or directory (os error 2)") is about
+    // the program we tried to spawn, never about what the model passed — but it
+    // reads exactly like a bad-argument error, so the model retries variations
+    // and then gives up on the tool. Say whose problem it is.
+    let output = cmd.output().await.map_err(|e| {
+        ToolError::Io(format!(
+            "could not start git: {e}. This is a problem with the host, not with your \
+             arguments — git may not be installed, or the daemon may need a restart. \
+             Other subcommands will fail the same way; tell whoever you are talking to \
+             rather than retrying."
+        ))
+    })?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);

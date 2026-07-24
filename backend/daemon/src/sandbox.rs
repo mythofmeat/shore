@@ -89,11 +89,9 @@ pub fn plan_for(workspace_dir: &str) -> SandboxPlan {
         return unavailable_or_direct(require, "exec sandbox requires a workspace root");
     }
 
-    let helper = match std::env::current_exe() {
+    let helper = match helper_path() {
         Ok(path) => path,
-        Err(err) => {
-            return unavailable_or_direct(require, &format!("current_exe() failed: {err}"));
-        }
+        Err(reason) => return unavailable_or_direct(require, &reason),
     };
 
     let mut prefix_args = vec![
@@ -111,6 +109,52 @@ pub fn plan_for(workspace_dir: &str) -> SandboxPlan {
         helper,
         prefix_args,
     }
+}
+
+/// Marker the kernel appends to `/proc/self/exe` once the binary behind it has
+/// been unlinked.
+#[cfg(target_os = "linux")]
+const DELETED_SUFFIX: &[u8] = b" (deleted)";
+
+/// The daemon binary to re-exec in [`HELPER_ARG`] mode.
+#[cfg(target_os = "linux")]
+fn helper_path() -> Result<std::path::PathBuf, String> {
+    let exe = std::env::current_exe().map_err(|err| format!("current_exe() failed: {err}"))?;
+    resolve_helper(exe)
+}
+
+/// Resolve `exe` (as reported by `current_exe()`) to a binary that still exists.
+///
+/// `current_exe()` reads `/proc/self/exe`, which the kernel renders as
+/// `"<path> (deleted)"` once that binary has been replaced on disk — precisely
+/// what an in-place upgrade does under a running daemon (`install.sh` runs
+/// `install`, which unlinks the destination before writing the new one).
+/// Spawning that literal path fails with `ENOENT`, and since the plan is
+/// recomputed per call, *every* later `git` tool call failed the same way for
+/// the rest of the process's life: the model saw a bare "No such file or
+/// directory (os error 2)" with nothing to act on and abandoned the tool.
+///
+/// So: strip the marker and use the path when it names a real file again — the
+/// freshly installed binary, whose helper mode is the same contract — and
+/// otherwise say what is missing, so `auto` degrades and `on` fails closed with
+/// a reason an operator can act on.
+#[cfg(target_os = "linux")]
+fn resolve_helper(exe: std::path::PathBuf) -> Result<std::path::PathBuf, String> {
+    use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
+
+    if exe.is_file() {
+        return Ok(exe);
+    }
+    if let Some(stripped) = exe.as_os_str().as_bytes().strip_suffix(DELETED_SUFFIX) {
+        let replacement = std::path::PathBuf::from(std::ffi::OsString::from_vec(stripped.to_vec()));
+        if replacement.is_file() {
+            return Ok(replacement);
+        }
+    }
+    Err(format!(
+        "daemon binary {} is gone (replaced or removed since startup); restart shore-daemon",
+        exe.display()
+    ))
 }
 
 /// When the sandbox can't be applied: fail closed under `on` (required), or
@@ -541,6 +585,38 @@ mod tests {
             unavailable_or_direct(false, "no root"),
             SandboxPlan::Direct
         ));
+    }
+
+    /// An in-place upgrade unlinks the running binary, after which
+    /// `/proc/self/exe` reads `"<path> (deleted)"`. The helper must follow that
+    /// back to the newly installed file instead of spawning a path that cannot
+    /// exist — otherwise every `git` call fails with ENOENT until restart.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn deleted_exe_resolves_to_the_replacement_binary() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let exe = dir.path().join("shore-daemon");
+        std::fs::write(&exe, b"replacement").expect("write replacement");
+
+        let deleted = std::path::PathBuf::from(format!("{} (deleted)", exe.display()));
+        assert_eq!(resolve_helper(deleted).expect("resolved"), exe);
+        assert_eq!(resolve_helper(exe.clone()).expect("resolved"), exe);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn missing_exe_has_no_helper() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let gone = dir.path().join("shore-daemon");
+
+        let err = resolve_helper(gone.clone()).expect_err("no helper");
+        assert!(err.contains("is gone"), "{err}");
+
+        let deleted = std::path::PathBuf::from(format!("{} (deleted)", gone.display()));
+        assert!(
+            resolve_helper(deleted).is_err(),
+            "a deleted binary with no replacement has no helper"
+        );
     }
 
     #[cfg(target_os = "linux")]

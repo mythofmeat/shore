@@ -570,6 +570,14 @@ a process is confined by the same settings. The design goal is invisibility:
 local-repo git workloads and cached `cargo`/`npm` builds are unaffected; only
 dangerous or malicious actions are blocked.
 
+The helper is the daemon binary itself, located per call through
+`/proc/self/exe`. Installing over a running daemon unlinks that binary, after
+which the link reads `"<path> (deleted)"` — a path nothing can spawn. The
+resolver follows the marker back to the replacement file at the same path; if
+none is there, `auto` degrades to an unsandboxed spawn with a warning and `on`
+fails the tool call closed, naming the missing binary. Neither mode lets a
+stale `/proc/self/exe` turn into a bare `ENOENT` on every `git` call.
+
 The sandbox and the denylist are complementary, not redundant:
 
 | Mechanism | Protects | Against |
