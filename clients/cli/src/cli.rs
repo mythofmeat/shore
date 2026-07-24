@@ -2686,10 +2686,6 @@ mod tests {
         }
     }
 
-    #[expect(
-        clippy::too_many_lines,
-        reason = "builds every log command variant for snapshot-based debug testing"
-    )]
     fn log_status_debug_samples() -> Vec<CliCommand> {
         vec![
             CliCommand::Log {

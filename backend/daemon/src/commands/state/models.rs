@@ -739,10 +739,6 @@ fn capability_check(
         .map_err(|e| (ErrorCode::InvalidRequest, e.to_string()))
 }
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "maps every sampler key to its SamplerSettings field with validation"
-)]
 fn apply_sampler_value(
     sampler: &mut SamplerSettings,
     key: &str,

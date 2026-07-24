@@ -2437,22 +2437,23 @@ api_key_env = "MY_LEGACY_KEY"
         assert_eq!(opus.api_key_env.as_deref(), Some("MY_LEGACY_KEY"));
     }
 
-    /// `examples/config.toml` is the documented entry point for new
-    /// users. Drift between it and the parser is a real regression, so
-    /// load it through the full two-phase loader and assert the bundled
-    /// example reaches a valid `LoadedConfig`. New commented-out
-    /// snippets in the example file are exercised via the per-section
-    /// tests below.
+    /// A provider-first config (#139) loads end-to-end: `[defaults].model`
+    /// is a canonical `provider:model_id` ref resolved against a
+    /// `[providers.*]` entry, with no static `[chat.*]` catalog at all.
     #[test]
-    fn bundled_example_config_parses() {
-        const EXAMPLE: &str = include_str!("../../../examples/config.toml");
-        let tmp = setup_config_dir(&[("config.toml", EXAMPLE)]);
+    fn provider_first_config_parses() {
+        let tmp = setup_config_dir(&[(
+            "config.toml",
+            r#"
+[defaults]
+model = "anthropic:claude-sonnet-4-6"
+
+[providers.anthropic]
+api_key_env = "ANTHROPIC_API_KEY"
+"#,
+        )]);
         let loaded = load_config(Some(&tmp.path().join("config.toml")))
-            .expect("examples/config.toml must parse end-to-end");
-        // The committed example is provider-first (#139): [defaults].model is a
-        // canonical `provider:model_id` ref and the matching provider is in the
-        // registry, so the default resolves without any static [chat.*] entry.
-        // Both sides being live is what protects users from copy/paste rot.
+            .expect("provider-first config must parse end-to-end");
         assert_eq!(
             loaded.app.defaults.model.as_deref(),
             Some("anthropic:claude-sonnet-4-6")
@@ -2469,14 +2470,12 @@ api_key_env = "MY_LEGACY_KEY"
             .get(provider)
             .expect("default model's provider is registered");
         assert!(entry.enabled, "default model's provider must be enabled");
-        // The example leads with the provider-first model; no static catalog.
+        // Provider-first means no static catalog is needed.
         assert!(loaded.models.chat.is_empty());
     }
 
-    /// The Phase 9 OpenRouter budget/overflow + discovery snippet
-    /// documented in `examples/config.toml` must continue to parse,
-    /// even though it is commented out by default. Inline a copy here
-    /// (uncommented) so an accidental rename of a parser field is
+    /// The Phase 9 OpenRouter budget/overflow + discovery snippet must
+    /// continue to parse, so an accidental rename of a parser field is
     /// caught immediately.
     #[test]
     fn documented_provider_snippet_parses() {

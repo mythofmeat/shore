@@ -53,19 +53,8 @@ notify = "8.2"
 landlock = "0.4"
 seccompiler = "0.5"
 
-# Duplicate of `shore-mcp-client`'s `mcp_stub_server` bin, kept here so the
-# daemon's integration tests can launch it via
-# `CARGO_BIN_EXE_daemon_mcp_stub_server`. The name is deliberately distinct:
-# two bins with one name collide on the same output path in `target/<profile>`.
-# `shore-mcp-client` owns the canonical copy, so this one is excluded from docs.
-[[bin]]
-name = "daemon_mcp_stub_server"
-path = "src/bin/daemon_mcp_stub_server.rs"
-doc = false
-
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }
-shore-swp-client = { workspace = true }
 shore-config = { workspace = true }
 shore-diagnostics = { workspace = true }
 shore-llm = { workspace = true }

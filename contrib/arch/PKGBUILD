@@ -137,9 +137,6 @@ package_shore() {
     "$_repo/target/release/shore" completions zsh \
         > "$pkgdir/usr/share/zsh/site-functions/_shore"
 
-    install -Dm644 "$_repo/examples/client.toml" \
-        "$pkgdir/usr/share/doc/shore/client.toml.example"
-
     _install_licenses
 }
 
@@ -167,11 +164,6 @@ package_shore-daemon() {
         "$_repo/contrib/shore-daemon.service" \
         > "$pkgdir/usr/lib/systemd/user/shore-daemon.service"
     chmod 644 "$pkgdir/usr/lib/systemd/user/shore-daemon.service"
-
-    install -Dm644 "$_repo/examples/config.toml" \
-        "$pkgdir/usr/share/doc/shore/config.toml.example"
-    install -Dm644 "$_repo/examples/models.toml" \
-        "$pkgdir/usr/share/doc/shore/models.toml.example"
 
     _install_licenses
 }
