@@ -164,13 +164,6 @@ if ! (( DRY )); then
     (( behind == 0 )) || die "local main is $behind commit(s) behind origin/main — pull first"
 fi
 
-# --------------------------------------------------------------------------
-# Quality gates
-#
-# The same set CLAUDE.md and README name as the pre-handoff checks, plus the
-# sidecar's own typecheck and tests — it is a shipped binary here, and cargo
-# knows nothing about it.
-# --------------------------------------------------------------------------
 if (( SKIP_CHECKS )); then
     warn "Skipping fmt/clippy/test (--skip-checks)"
 else
@@ -227,17 +220,6 @@ revert_on_failure() {
     local rc=$? f
     if (( rc != 0 && TOUCHED )); then
         warn "Failed — reverting version changes to leave the tree clean."
-        # One path per checkout, deliberately. `git checkout -- a b c` aborts
-        # the whole operation if any single pathspec is unknown to git, and
-        # Cargo.lock is untracked in this repo (blanket *.lock rule) — one
-        # combined call would revert nothing at all.
-        for f in Cargo.toml CHANGELOG.md "$arch_dir/PKGBUILD"; do
-            git checkout -- "$f" 2>/dev/null || true
-        done
-        rm -f CHANGELOG.md.new
-        # Regenerate rather than check out, for the same reason: with the
-        # manifest back at the old version this rewrites the members' versions
-        # in Cargo.lock to match, tracked or not.
         git checkout -- Cargo.lock 2>/dev/null \
             || cargo update --workspace --offline --quiet 2>/dev/null || true
     fi
@@ -245,44 +227,9 @@ revert_on_failure() {
 }
 trap revert_on_failure EXIT
 
-# Promote the CHANGELOG's [Unreleased] section into a dated version heading and
-# open a fresh empty one. Only when it has content: an empty section would
-# stamp a hollow heading that says a release changed nothing.
-stamp_changelog() {
-    local ver="$1" day
-    day="$(date +%F)"
-
-    grep -q '^## \[Unreleased\]' CHANGELOG.md || {
-        warn "no [Unreleased] section in CHANGELOG.md — left unchanged"
-        return 0
-    }
-    if ! awk '
-        /^## \[Unreleased\]/ { inside = 1; next }
-        /^## \[/             { inside = 0 }
-        inside && NF         { found = 1 }
-        END                  { exit !found }
-    ' CHANGELOG.md; then
-        warn "CHANGELOG.md [Unreleased] is empty — left unchanged"
-        return 0
-    fi
-
-    awk -v ver="$ver" -v day="$day" '
-        !stamped && /^## \[Unreleased\]/ {
-            print "## [Unreleased]"
-            print ""
-            print "## [" ver "] - " day
-            stamped = 1
-            next
-        }
-        { print }
-    ' CHANGELOG.md > CHANGELOG.md.new
-    mv CHANGELOG.md.new CHANGELOG.md
-    say "Stamped CHANGELOG.md [Unreleased] as [$ver] - $day"
-}
-
 if (( DRY )); then
     printf '   would set version to %s-%s in Cargo.toml, Cargo.lock, PKGBUILD\n' "$NEW" "$PKGREL"
-    (( REPACK )) || printf '   would stamp CHANGELOG.md [Unreleased] as [%s]\n' "$NEW"
+    (( REPACK )) || printf '   would stamp [Unreleased] as [%s]\n' "$NEW"
 else
     TOUCHED=1
     if ! (( REPACK )); then
@@ -298,7 +245,6 @@ else
         # refreshed or the PKGBUILD's --locked build will refuse to run.
         cargo update --workspace --offline --quiet
 
-        stamp_changelog "$NEW"
     fi
 
     # Keep the literal pkgver/pkgrel in the PKGBUILD in step with Cargo.toml.
@@ -334,7 +280,7 @@ if (( REPACK )); then
     git commit -q -m "chore(release): repack v$NEW-$PKGREL"
 else
     say "Committing and tagging v$NEW..."
-    staged=(Cargo.toml CHANGELOG.md "$arch_dir/PKGBUILD")
+    staged=(Cargo.toml "$arch_dir/PKGBUILD")
     # Only when the repo tracks it: `git add` on an ignored path is an error,
     # and this failing here would strand a built version with no commit.
     git ls-files --error-unmatch Cargo.lock >/dev/null 2>&1 && staged+=(Cargo.lock)
