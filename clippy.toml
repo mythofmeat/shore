@@ -2,13 +2,4 @@ allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 allow-panic-in-tests = true
 
-# Staged ratchet (#199): clippy default 100 -> 80 (current) -> 60 once the 80-cohort is clean.
-too-many-lines-threshold = 80
-
-# The daemon's per-message request-assembly futures legitimately sit around
-# 16-17 KiB — over clippy's 16 KiB `large_futures` default (pedantic, hard under
-# `-D warnings`). Boxing every such `.await` is pointless churn and the size
-# creeps up as config structs grow, so raise the ceiling to 24 KiB. This still
-# catches genuinely runaway futures (the lint's real target) while giving normal
-# request paths headroom.
 future-size-threshold = 24576
