@@ -14,7 +14,6 @@ members = [
     "clients/cli",
     "clients/tui",
     "clients/matrix",
-    "dev/test-harness",
 ]
 default-members = [
     "core/protocol",
@@ -68,7 +67,6 @@ shore-llm = { path = "backend/llm" }
 shore-ledger = { path = "backend/ledger" }
 shore-swp-server = { path = "backend/swp-server" }
 shore-daemon = { path = "backend/daemon" }
-shore-test-harness = { path = "dev/test-harness" }
 shore-call-store = { path = "backend/call-store" }
 rusqlite = { version = "0.37", features = ["bundled"] }
 zstd = "0.13"
