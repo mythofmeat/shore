@@ -912,9 +912,10 @@ mod tests {
         // the sidecar adapter converts the canonical request.
         for i in 0..=pinned_system_idx {
             // Strip cache_control markers before comparison: their placement
-            // is allowed to shift across iterations (e.g. the iter-0
-            // last_msg breakpoint becomes the iter-1 last_stable_assistant
-            // breakpoint). The cache *content* is what must stay stable.
+            // is allowed to shift across iterations (the iter-0 last_msg
+            // breakpoint becomes the iter-1 frozen-boundary breakpoint, since
+            // the next round's trailing assistant turn starts right after it).
+            // The cache *content* is what must stay stable.
             let mut a = iter0[i].clone();
             let mut b = iter1[i].clone();
             strip_cache_control_for_test(&mut a);

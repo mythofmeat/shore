@@ -62,15 +62,17 @@ describe("cache placement (mirrors ts_default_placement)", () => {
     for (const b of sys) expect(b).not.toHaveProperty("_label");
   });
 
-  test("message breakpoints on [last_stable_assistant, last_msg], last block of each", () => {
+  test("message breakpoints on [frozen_boundary, last_msg], last block of each", () => {
     const p = buildAnthropicParams(req({ system, messages, provider_options: { cache_ttl: "1h" } }));
     const m = p.messages as Array<{ content: unknown }>;
-    // idx 0,1,2 unmarked; 3 (last stable assistant) + 4 (last msg) marked on last block.
+    // The trailing assistant turn is idx 3–4 (assistant + its tool_result), so
+    // the frozen boundary is idx 2. Anchors: 2 and 4 (last msg). The trailing
+    // turn itself is deliberately NOT anchored — its bytes change when
+    // `replay_prior_thinking` strips it on the next request.
     expect(blockCC(m[0]?.content).some(Boolean)).toBe(false);
     expect(blockCC(m[1]?.content).some(Boolean)).toBe(false);
-    expect(blockCC(m[2]?.content).some(Boolean)).toBe(false);
-    // msg 3: cc on the LAST block (the tool_use), not the text.
-    expect(blockCC(m[3]?.content)).toEqual([false, true]);
+    expect(blockCC(m[2]?.content)).toEqual([true]);
+    expect(blockCC(m[3]?.content).some(Boolean)).toBe(false);
     // msg 4: cc on the tool_result.
     expect(blockCC(m[4]?.content)).toEqual([true]);
   });
@@ -96,19 +98,24 @@ describe("cache placement (mirrors ts_default_placement)", () => {
         content: [
           { type: "text", text: "working" },
           { type: "tool_use", id: "tu_1", name: "search", input: { q: "x" } },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: "tu_1", content: "ok" },
           { type: "text", text: "" },
         ],
       },
-      { role: "user", content: [{ type: "tool_result", tool_use_id: "tu_1", content: "ok" }] },
     ];
     const p = buildAnthropicParams(
       req({ system, messages: withEmptyTail, provider_options: { cache_ttl: "1h" } }),
     );
     const m = p.messages as Array<{ content: unknown }>;
-    // last stable assistant (idx 1): cc lands on the tool_use, NOT the empty text.
-    expect(blockCC(m[1]?.content)).toEqual([false, true, false]);
-    // last msg (idx 2): tool_result anchored as usual.
-    expect(blockCC(m[2]?.content)).toEqual([true]);
+    // frozen boundary (idx 0): anchored on its only block.
+    expect(blockCC(m[0]?.content)).toEqual([true]);
+    // last msg (idx 2): cc walks back past the empty text onto the tool_result.
+    expect(blockCC(m[2]?.content)).toEqual([true, false]);
   });
 
   test("message with only an empty text block gets no breakpoint", () => {
@@ -135,6 +142,135 @@ describe("cache placement (mirrors ts_default_placement)", () => {
     // system passes through un-anchored because we didn't run placement.
     const sys = p.system as unknown as Rec[];
     expect(sys.every((b) => b["cache_control"] === undefined)).toBe(true);
+  });
+});
+
+// ── frozen-region anchor vs. replay_prior_thinking strips ───────────────────
+
+/**
+ * Reproduces the production regression observed on 2026-07-23 (calls #7207 →
+ * #7208). Under `replay_prior_thinking = "last_turn"` the daemon strips
+ * thinking from the assistant turn that just stopped being the trailing one.
+ * The old `last_stable_assistant` anchor sat *inside* that turn, so its cached
+ * prefix was rewritten on the very next request: both message anchors missed
+ * and the read collapsed to the system prefix alone (7,602 tokens), re-caching
+ * the whole ~18k conversation on every committed turn.
+ *
+ * The strip boundary only ever moves forward, so everything before the trailing
+ * turn is frozen for the life of the conversation. Anchoring there survives.
+ */
+describe("frozen-region anchor survives a last_turn thinking strip", () => {
+  const system = [{ type: "text" as const, text: "base", _label: "system_base" }];
+
+  // Request N — the trailing assistant turn (idx 3–5) still carries thinking.
+  const stateN: SidecarRequest["messages"] = [
+    { role: "user", content: [{ type: "text", text: "q1" }] },
+    { role: "assistant", content: [{ type: "text", text: "a1" }] },
+    { role: "user", content: [{ type: "text", text: "q2" }] },
+    {
+      role: "assistant",
+      content: [
+        { type: "thinking", thinking: "deliberating", signature: "sig3" },
+        { type: "tool_use", id: "tu_1", name: "search", input: { q: "x" } },
+      ] as never,
+    },
+    { role: "user", content: [{ type: "tool_result", tool_use_id: "tu_1", content: "found" }] },
+    { role: "assistant", content: [{ type: "text", text: "a5" }] },
+    { role: "user", content: [{ type: "text", text: "q3" }] },
+  ];
+
+  // Request N+1 — the turn committed, a new turn landed, and `last_turn`
+  // stripped the thinking block from idx 3 now that it is no longer trailing.
+  const stateN1: SidecarRequest["messages"] = [
+    ...stateN.slice(0, 3),
+    {
+      role: "assistant",
+      content: [{ type: "tool_use", id: "tu_1", name: "search", input: { q: "x" } }] as never,
+    },
+    ...stateN.slice(4),
+    {
+      role: "assistant",
+      content: [
+        { type: "thinking", thinking: "new", signature: "sig7" },
+        { type: "text", text: "a7" },
+      ] as never,
+    },
+    { role: "user", content: [{ type: "text", text: "q4" }] },
+  ];
+
+  function anchoredMsgIndices(msgs: SidecarRequest["messages"]): number[] {
+    const p = buildAnthropicParams(
+      req({ system, messages: msgs, provider_options: { cache_ttl: "1h" } }),
+    );
+    return (p.messages as Array<{ content: unknown }>)
+      .map((m, i) => (blockCC(m.content).some(Boolean) ? i : -1))
+      .filter((i) => i >= 0);
+  }
+
+  test("anchors land on the frozen boundary and the last message", () => {
+    // N: trailing turn starts at 3 → frozen boundary 2; last msg 6.
+    expect(anchoredMsgIndices(stateN)).toEqual([2, 6]);
+    // N+1: trailing turn starts at 7 → frozen boundary 6; last msg 8.
+    expect(anchoredMsgIndices(stateN1)).toEqual([6, 8]);
+  });
+
+  test("prefix through the request-N frozen anchor is byte-identical in N+1", () => {
+    const frozen = anchoredMsgIndices(stateN)[0]!;
+    expect(frozen).toBe(2);
+    expect(JSON.stringify(stateN1.slice(0, frozen + 1))).toEqual(
+      JSON.stringify(stateN.slice(0, frozen + 1)),
+    );
+  });
+
+  test("regression: the old last_stable_assistant anchor would NOT have survived", () => {
+    // Old placement anchored idx 5 (last assistant before the final message).
+    // Its prefix spans idx 3, whose thinking block is stripped in N+1 — which
+    // is exactly why the live read collapsed to the system anchor.
+    const oldAnchor = 5;
+    expect(JSON.stringify(stateN1.slice(0, oldAnchor + 1))).not.toEqual(
+      JSON.stringify(stateN.slice(0, oldAnchor + 1)),
+    );
+  });
+
+  test("under `all` (nothing stripped) the last-msg anchor still covers the tail", () => {
+    // With no strip, appending a turn leaves every prior byte intact, so the
+    // last_msg anchor from request N remains a valid prefix of request N+1 —
+    // the frozen anchor costs no coverage in this mode.
+    const appended: SidecarRequest["messages"] = [
+      ...stateN,
+      { role: "assistant", content: [{ type: "text", text: "a7" }] },
+      { role: "user", content: [{ type: "text", text: "q4" }] },
+    ];
+    const lastMsgAnchorN = anchoredMsgIndices(stateN)[1]!;
+    expect(lastMsgAnchorN).toBe(6);
+    expect(JSON.stringify(appended.slice(0, lastMsgAnchorN + 1))).toEqual(
+      JSON.stringify(stateN.slice(0, lastMsgAnchorN + 1)),
+    );
+  });
+
+  test("tool-loop rounds still extend: iter-1 frozen boundary == iter-0 last_msg", () => {
+    // A compaction/tool loop appends `assistant + user(tool_result)` per round.
+    // The appended assistant begins the next trailing turn, so the frozen
+    // boundary lands exactly on the previous round's last_msg — the position
+    // that round already cached. Caching extends round over round rather than
+    // restarting, which is the property `live_compaction_cache.rs` guards.
+    const iter0: SidecarRequest["messages"] = [
+      { role: "user", content: [{ type: "text", text: "q1" }] },
+      { role: "assistant", content: [{ type: "text", text: "a1" }] },
+      { role: "user", content: [{ type: "text", text: "compact now" }] },
+    ];
+    const iter1: SidecarRequest["messages"] = [
+      ...iter0,
+      {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "tu_1", name: "compact", input: {} }] as never,
+      },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "tu_1", content: "done" }] },
+    ];
+    const a0 = anchoredMsgIndices(iter0);
+    const a1 = anchoredMsgIndices(iter1);
+    expect(a0[a0.length - 1]).toBe(2); // iter-0 anchored its last_msg at idx 2
+    expect(a1[0]).toBe(2); // iter-1's frozen boundary is that same position
   });
 });
 

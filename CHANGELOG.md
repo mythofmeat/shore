@@ -35,6 +35,22 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
   keep in view — not clutter to reap.
 
 ### Fixed
+- **`replay_prior_thinking = "last_turn"` no longer re-caches the whole
+  conversation on every turn.** With `last_turn` (or `none`), the daemon strips
+  thinking from the assistant turn that just stopped being the most recent one.
+  The Anthropic breakpoint schedule anchored that same turn, so the strip
+  rewrote the exact bytes the anchor covered — both message breakpoints missed
+  and the only surviving read was the system prefix. Each committed turn then
+  paid a full cache *write* for the entire conversation instead of a cheap read
+  plus a small tail write; on a ~25k-token chat that is roughly an 18k-token
+  write per turn, billed at 2x input under the 1h TTL. Placement now anchors the
+  message immediately *before* the trailing assistant turn: the strip boundary
+  only ever moves forward, so that prefix is frozen for the life of the
+  conversation and keeps reading across the strip. `all` was never affected (it
+  strips nothing) and its cache coverage is unchanged. The claim in
+  CONFIGURATION.md that `last_turn` needed no placement change (#191) was wrong
+  and has been corrected — a cache read resolves only up to a placed
+  breakpoint, not as a free-running longest-prefix match.
 - **Images you attach are now actually sent to every non-Anthropic model**
   (Kimi K3 via opencode-go saw only your text). The daemon does not put
   attachments in a separate `images` field — it inlines them into the wire

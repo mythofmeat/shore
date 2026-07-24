@@ -349,18 +349,61 @@ function lastStableSystemIndex(system: Array<{ _label?: string }>): number {
   return -1;
 }
 
-/** `[last_stable_assistant, last_msg]`, deduped, sorted. */
-function tsMessageBreakpoints(messages: MessageParam[]): number[] {
-  if (messages.length === 0) return [];
-  const lastIdx = messages.length - 1;
-  let stableIdx = -1;
-  for (let i = lastIdx - 1; i >= 0; i--) {
+/** A user message whose content is entirely `tool_result` blocks — a tool-loop
+ * continuation, not a genuine user turn. Mirrors `is_tool_result_only_user` in
+ * the daemon's `content_util.rs`. */
+function isToolResultOnlyUser(msg: MessageParam): boolean {
+  const content = msg.content;
+  if (!Array.isArray(content) || content.length === 0) return false;
+  return content.every((b) => (b as { type?: string }).type === "tool_result");
+}
+
+/** Index at which the most-recent assistant turn begins — the first message of
+ * the trailing assistant run, walking back over assistant messages and the
+ * tool-result-only user messages between them and stopping at the first genuine
+ * user turn. Mirrors `most_recent_assistant_turn_start` in `content_util.rs`,
+ * which is the boundary `replay_prior_thinking` strips against. Returns
+ * `messages.length` when there is no assistant message. */
+function mostRecentAssistantTurnStart(messages: MessageParam[]): number {
+  let lastAssistant = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i]?.role === "assistant") {
-      stableIdx = i;
+      lastAssistant = i;
       break;
     }
   }
-  return [...new Set([stableIdx, lastIdx].filter((i) => i >= 0))].sort((a, b) => a - b);
+  if (lastAssistant < 0) return messages.length;
+  let start = lastAssistant;
+  while (start > 0) {
+    const prev = messages[start - 1];
+    if (prev === undefined) break;
+    if (prev.role === "assistant" || isToolResultOnlyUser(prev)) {
+      start -= 1;
+      continue;
+    }
+    break;
+  }
+  return start;
+}
+
+/** `[frozen_boundary, last_msg]`, deduped, sorted.
+ *
+ * `frozen_boundary` is the message just before the trailing assistant turn.
+ * `replay_prior_thinking` strips thinking from assistant turns *before* that
+ * boundary, and the boundary only ever moves forward as turns are appended, so
+ * `[0, boundary)` is byte-stable for the life of the conversation under every
+ * replay mode. An anchor there survives the strip.
+ *
+ * Anchoring on the trailing turn itself (the old `last_stable_assistant`) does
+ * not: under `last_turn` that turn loses its thinking blocks as soon as another
+ * turn lands, rewriting the very bytes the anchor covers. Both message anchors
+ * then miss and the read collapses to the system prefix alone — a full re-cache
+ * of the whole conversation on every committed turn. */
+function tsMessageBreakpoints(messages: MessageParam[]): number[] {
+  if (messages.length === 0) return [];
+  const lastIdx = messages.length - 1;
+  const frozenIdx = mostRecentAssistantTurnStart(messages) - 1;
+  return [...new Set([frozenIdx, lastIdx].filter((i) => i >= 0))].sort((a, b) => a - b);
 }
 
 function tsDefaultPlacement(

@@ -718,9 +718,10 @@ Be concise — one file per pass. Path must start with memory/.";
     // exactly `assistant + user(tool_result)` to iter-0; iter-1's
     // cache_creation should reflect only those new bytes (and Anthropic's
     // breakpoint at iter-0's last_msg position becoming the new
-    // last_stable_assistant breakpoint). Pre-fix, iter-1 cache_creation
-    // was on the order of `compaction0_write` itself, because the
-    // compact_now_user bytes shifted and the entire prefix re-cached.
+    // frozen-boundary breakpoint — the appended assistant starts the next
+    // trailing turn, so the boundary lands exactly there). Pre-fix, iter-1
+    // cache_creation was on the order of `compaction0_write` itself, because
+    // the compact_now_user bytes shifted and the entire prefix re-cached.
     let iter1_cap = std::cmp::max(compaction0_write / 2, 1024);
     assert!(
         compaction1_write < iter1_cap,
