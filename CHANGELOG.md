@@ -35,6 +35,20 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
   keep in view — not clutter to reap.
 
 ### Fixed
+- **The `git` tool no longer breaks for the rest of the daemon's life after an
+  in-place upgrade.** With the sandbox on (`auto`, the default), each `git` call
+  re-execs the daemon binary in helper mode, and it found that binary through
+  `current_exe()` — which reads `/proc/self/exe`, a link the kernel renders as
+  `"<path> (deleted)"` once the file behind it has been unlinked. Reinstalling
+  over a running daemon does exactly that, so every subsequent `git` call tried
+  to spawn a path that cannot exist and came back as `io: No such file or
+  directory (os error 2)`, with nothing in it to suggest the tool was fine and
+  the host had moved underneath it — characters read it as their own mistake and
+  stopped using the tool. The helper path now follows the marker back to the
+  freshly installed binary; when there is nothing to follow it to, `auto`
+  degrades to an unsandboxed spawn with a warning and `on` fails closed naming
+  the missing binary. A `git` that cannot be started at all now says so as a
+  host problem rather than as an argument error.
 - **Images you attach are now actually sent to every non-Anthropic model**
   (Kimi K3 via opencode-go saw only your text). The daemon does not put
   attachments in a separate `images` field — it inlines them into the wire
