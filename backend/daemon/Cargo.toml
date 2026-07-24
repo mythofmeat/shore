@@ -29,12 +29,20 @@ chrono = "0.4"
 rand = "0.9"
 dashmap = { workspace = true }
 futures = "0.3"
-reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "stream",
+    "rustls-tls",
+] }
 sha2 = "0.10"
 base64 = "0.22.1"
 tempfile = "3"
 shell-words = "1.1"
-image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+image = { version = "0.25", default-features = false, features = [
+    "jpeg",
+    "png",
+    "webp",
+] }
 fast_image_resize = { version = "6", features = ["image"] }
 libc = { workspace = true }
 notify = "8.2"
@@ -61,7 +69,6 @@ shore-swp-client = { workspace = true }
 shore-config = { workspace = true }
 shore-diagnostics = { workspace = true }
 shore-llm = { workspace = true }
-shore-test-harness = { workspace = true }
 wiremock = "0.6"
 async-trait = { workspace = true }
 
