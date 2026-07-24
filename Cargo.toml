@@ -27,9 +27,10 @@ default-members = [
 [workspace.package]
 # One version for the whole suite. Nothing publishes to crates.io anymore —
 # internal crates are consumed by path, and a release is a single `v<version>`
-# git tag used as a marker (no workflow fires on it). Installation is
-# install.sh in the repo root. To release: bump this version, commit, tag
-# `v<version>`, push the tag.
+# git tag used as a marker (no workflow fires on it). Install via install.sh,
+# scripts/install.sh, or the local Arch packages in contrib/arch. To release:
+# `contrib/arch/release.sh`, which bumps this version, builds, tags and
+# publishes; by hand, bump it here, commit, tag `v<version>`, push the tag.
 version = "0.20.0"
 publish = false
 edition = "2021"
@@ -246,16 +247,21 @@ strip = true        # drop symbol tables (~20% smaller, no behavior change)
 lto = "thin"        # most of the LTO size/perf win, far cheaper to link than "fat"
 codegen-units = 1   # smaller and slightly faster runtime
 
-# shore-tui's size-focused profile (was its own repo's [profile.release]).
-# `panic` and `lto` are profile-global in cargo — they can't be set per
-# package — so the tui keeps them via this dedicated profile.
+# shore-tui's own release profile, and the profile every shipped shore-tui is
+# built with: both install scripts and the Arch PKGBUILD use it. `panic` and
+# `lto` are profile-global in cargo — they cannot be set per package — so the
+# only way the tui gets fat LTO and abort-on-panic is a dedicated profile,
+# which also means a second target subtree and a second link of the shared
+# dependency graph. That cost is accepted: this is the binary a user sits in
+# front of, and its render path re-wraps and re-highlights the buffer on every
+# keystroke.
 #
-# Nothing builds with it automatically: the Arch PKGBUILD that passed
-# `--profile tui-release` is gone, and install.sh builds the whole workspace
-# with plain `--release`. Kept for anyone who wants the smaller tui via
-# `cargo build -p shore-tui --profile tui-release`.
+# Maximum optimization, not minimum size. `opt-level = "z"` here was inherited
+# from the days when the tui lived in its own repo and shipped as a small
+# standalone download; optimizing the render path for size was a mistake.
 [profile.tui-release]
 inherits = "release"
-opt-level = "z"
-lto = true
+opt-level = 3
+lto = "fat"
+codegen-units = 1
 panic = "abort"

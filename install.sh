@@ -9,7 +9,6 @@ LIBEXECDIR="$PREFIX/lib/shore"
 BINARIES=(
     "shore"
     "shore-daemon"
-    "shore-tui"
 )
 
 HELPERS=(
@@ -17,13 +16,18 @@ HELPERS=(
 )
 
 cargo sweep --stamp || true
-cargo build --release --workspace
+cargo build --release --workspace --exclude shore-tui
+# shore-tui builds under [profile.tui-release] — fat LTO, abort on panic, both
+# of which are profile-global in cargo and so need an invocation of their own.
+# The Arch PKGBUILD and scripts/install.sh build it the same way.
+cargo build --profile tui-release -p shore-tui
 cargo sweep --file || true
 
 echo "Installing to $BINDIR..."
 for bin in "${BINARIES[@]}"; do
     sudo install -Dm755 target/release/"$bin" "$BINDIR/$bin"
 done
+sudo install -Dm755 target/tui-release/shore-tui "$BINDIR/shore-tui"
 
 echo "Installing to $LIBEXECDIR..."
 for bin in "${HELPERS[@]}"; do

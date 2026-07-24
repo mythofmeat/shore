@@ -29,11 +29,11 @@ Thumbs.db
 *.sock
 *.pid
 
-# makepkg build artifacts
+# makepkg build artifacts. contrib/arch/PKGBUILD builds the working tree in
+# place, so src/ only appears if makepkg was interrupted before `-c` cleaned up.
 **/pkg/
 *.pkg.tar.zst
-contrib/shore/
-contrib/src/
+contrib/arch/src/
 
 # Gitea runner
 .runner

@@ -58,7 +58,13 @@ done
 # ── Build ────────────────────────────────────────────────────────────────
 say "Building workspace binaries (incremental, reuses target/)"
 cargo build --release --manifest-path "$REPO/Cargo.toml" \
-    -p shore-daemon -p shore-cli -p shore-tui -p shore-matrix
+    -p shore-daemon -p shore-cli -p shore-matrix
+
+# shore-tui builds under [profile.tui-release] — fat LTO, abort on panic, both
+# of which are profile-global in cargo and so need an invocation of their own.
+# install.sh and the Arch PKGBUILD build it the same way, so every shore-tui
+# that ships is the same binary.
+cargo build --profile tui-release --manifest-path "$REPO/Cargo.toml" -p shore-tui
 
 say "Building LLM sidecar"
 (cd "$REPO/backend/llm-sidecar" && bun install --frozen-lockfile --silent && bun run build >/dev/null)
@@ -70,9 +76,10 @@ mkdir -p "$SHORE_HOME/bin" "$SHORE_HOME/config" "$SHORE_HOME/data" "$SHORE_HOME/
 # shore-matrix sits next to shore-daemon on purpose: bin/ is off $PATH, and
 # binary presence is what enables in-daemon bridge supervision (the unit's
 # SHORE_MATRIX_BIN points here). Remove it from bin/ to disable the bridge.
-for bin in shore-daemon shore shore-tui shore-matrix; do
+for bin in shore-daemon shore shore-matrix; do
     install -m755 "$REPO/target/release/$bin" "$SHORE_HOME/bin/$bin"
 done
+install -m755 "$REPO/target/tui-release/shore-tui" "$SHORE_HOME/bin/shore-tui"
 install -m755 "$REPO/backend/llm-sidecar/dist/shore-llm-sidecar" "$SHORE_HOME/bin/shore-llm-sidecar"
 
 # The env file is config, not a build product: write once, never clobber.

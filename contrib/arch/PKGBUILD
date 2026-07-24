@@ -1,0 +1,203 @@
+# Maintainer: eshen
+#
+# Local-build packaging for the shore suite: private, rebuilt often, published
+# straight into a local pacman repo by contrib/arch/release.sh.
+#
+# Unlike a conventional PKGBUILD this one has no source=() and never clones
+# into $srcdir — it builds the working tree in place at $_repo. That is
+# deliberate and buys two things:
+#
+#   1. Cargo cache reuse. Cargo's fingerprints record absolute source paths,
+#      so building a fresh clone under $srcdir invalidates every artifact and
+#      forces a cold LTO rebuild of the whole workspace. Building at the same
+#      path a plain `cargo build` uses means makepkg reuses the dev target dir
+#      and is usually near-instant.
+#   2. One target dir instead of two. A $srcdir clone drags along its own
+#      multi-GB target/ next to the dev one, plus a second node_modules/ for
+#      the sidecar.
+#
+# The tradeoff: this package is only as reproducible as the working tree it is
+# built from. release.sh enforces a clean tree on main before calling makepkg,
+# which is what keeps the pkgver honest.
+#
+# The installed layout is install.sh's, with the prefix fixed at /usr:
+#
+#   /usr/bin/{shore,shore-daemon,shore-tui}
+#   /usr/lib/shore/{shore-llm-sidecar,shore-matrix}     — off $PATH on purpose
+#   /usr/lib/systemd/user/shore-{daemon,notify}.service
+#   /usr/share/doc/shore/*.toml.example
+#
+# The two helpers stay out of /usr/bin because the daemon supervises them and
+# resolves them itself (SHORE_LLM_SIDECAR_BIN / SHORE_MATRIX_BIN, then the
+# libexec dirs in core/config/src/binaries.rs). Nothing else — including a
+# character's own workspace command tool — should be able to run them by name.
+
+pkgbase=shore
+pkgname=('shore' 'shore-daemon' 'shore-tui' 'shore-matrix')
+pkgver=0.20.0
+pkgrel=1
+pkgdesc="Persistent AI character engine"
+arch=('x86_64')
+url="https://github.com/mythofmeat/shore"
+license=('MIT' 'Apache-2.0')
+# bun is pacman-managed here, so it is declared honestly. The Rust toolchain
+# is NOT: it is rustup-managed under ~/.cargo/bin, and listing `cargo` would
+# make makepkg install Arch's rust and shadow the rustup toolchain.
+makedepends=('bun')
+options=(!lto !debug strip)
+
+# Working tree to build. $startdir is the directory makepkg was invoked from
+# (this file's directory), so the default resolves to the repo root. Override
+# to package a checkout elsewhere: SHORE_SRC=/path/to/shore makepkg -f
+_repo="${SHORE_SRC:-$(realpath "$startdir/../..")}"
+
+pkgver() {
+    # The workspace version in Cargo.toml is the single source of truth, so a
+    # release edits one file and the package version follows automatically.
+    # release.sh keeps the literal pkgver= above in sync too, so this is a
+    # self-healing no-op rather than a source of surprise diffs.
+    awk -F'"' '/^version = /{print $2; exit}' "$_repo/Cargo.toml"
+}
+
+# Reset the build environment to exactly what a plain `cargo build --release`
+# sees. makepkg exports its own CFLAGS/RUSTFLAGS/LDFLAGS; letting those through
+# would change the fingerprint of every crate — and of the cc-compiled bundled
+# SQLite in rusqlite — so every switch between a dev build and a package build
+# would rebuild the world. Unsetting them keeps one warm cache serving both.
+_setup_env() {
+    unset RUSTFLAGS CARGO_ENCODED_RUSTFLAGS LDFLAGS CFLAGS CXXFLAGS CPPFLAGS
+    export RUSTUP_TOOLCHAIN=stable
+    export CARGO_TARGET_DIR="$_repo/target"
+}
+
+build() {
+    cd "$_repo"
+    _setup_env
+
+    # The four packaged binaries only. dev/test-harness and the stub servers
+    # are workspace members but are not shipped, so compiling them here is pure
+    # cost; check() still exercises the whole workspace.
+    cargo build --release --locked \
+        -p shore-daemon -p shore-cli -p shore-matrix
+
+    # shore-tui builds under its own profile — fat LTO, abort on panic, and
+    # opt-level 3. Both are profile-global in cargo, so a second invocation and
+    # a second target subtree (target/tui-release) is the only way to get them
+    # for one package. Same profile the install scripts use, so the packaged
+    # tui and a hand-installed one are the same binary.
+    cargo build --profile tui-release --locked -p shore-tui
+
+    # The sidecar ships as a bundled JS script with a `#!/usr/bin/env bun`
+    # shebang rather than a ~70MB `bun build --compile` binary (the embedded
+    # runtime dwarfed the ~2MB of actual code). That is why shore-daemon
+    # depends on bun at runtime, not just to build.
+    #
+    # Plain `bun install`, not --frozen-lockfile: bun.lock is not committed, so
+    # a frozen install has nothing to freeze against. node_modules/ and dist/
+    # are gitignored, so building them in the working tree leaves it clean.
+    cd "$_repo/backend/llm-sidecar"
+    bun install --silent
+    bun run build
+}
+
+check() {
+    cd "$_repo"
+    _setup_env
+    cargo test --locked --workspace
+}
+
+_install_licenses() {
+    install -Dm644 "$_repo/LICENSE-MIT" \
+        "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
+    install -Dm644 "$_repo/LICENSE-APACHE-2.0" \
+        "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE-2.0"
+}
+
+package_shore() {
+    pkgdesc="Persistent AI character engine — CLI client"
+    depends=('gcc-libs' 'glibc')
+    optdepends=('shore-daemon: the daemon this client talks to'
+                'libnotify: desktop notifications via `shore notify`')
+
+    install -Dm755 "$_repo/target/release/shore" "$pkgdir/usr/bin/shore"
+
+    install -Dm644 "$_repo/contrib/shore-notify.service" \
+        "$pkgdir/usr/lib/systemd/user/shore-notify.service"
+
+    # Generated from the binary just built rather than committed, so they can
+    # never drift from the CLI's actual argument surface. The fish output
+    # carries a dynamic-completion footer that calls back into `shore`.
+    install -dm755 "$pkgdir/usr/share/fish/vendor_completions.d"
+    install -dm755 "$pkgdir/usr/share/bash-completion/completions"
+    install -dm755 "$pkgdir/usr/share/zsh/site-functions"
+    "$_repo/target/release/shore" completions fish \
+        > "$pkgdir/usr/share/fish/vendor_completions.d/shore.fish"
+    "$_repo/target/release/shore" completions bash \
+        > "$pkgdir/usr/share/bash-completion/completions/shore"
+    "$_repo/target/release/shore" completions zsh \
+        > "$pkgdir/usr/share/zsh/site-functions/_shore"
+
+    install -Dm644 "$_repo/examples/client.toml" \
+        "$pkgdir/usr/share/doc/shore/client.toml.example"
+
+    _install_licenses
+}
+
+package_shore-daemon() {
+    pkgdesc="Persistent AI character engine — daemon"
+    # bun runs the sidecar (see build()); git is shelled out to by the
+    # workspace memory history and the character-facing git tool.
+    depends=('gcc-libs' 'glibc' 'openssl' 'bun' 'git')
+    optdepends=('shore: CLI client'
+                'shore-tui: terminal chat client'
+                'shore-matrix: Matrix bridge')
+
+    install -Dm755 "$_repo/target/release/shore-daemon" \
+        "$pkgdir/usr/bin/shore-daemon"
+    install -Dm755 "$_repo/backend/llm-sidecar/dist/shore-llm-sidecar" \
+        "$pkgdir/usr/lib/shore/shore-llm-sidecar"
+
+    # The checked-in unit points at install.sh's default prefix
+    # (/usr/local/lib/shore). Rewrite it to the packaged libexec dir: without
+    # this the daemon's own fallback order would find a stale
+    # /usr/local/lib/shore left behind by an earlier install.sh run and run
+    # that sidecar instead of the one shipped here.
+    install -dm755 "$pkgdir/usr/lib/systemd/user"
+    sed 's|/usr/local/lib/shore|/usr/lib/shore|g' \
+        "$_repo/contrib/shore-daemon.service" \
+        > "$pkgdir/usr/lib/systemd/user/shore-daemon.service"
+    chmod 644 "$pkgdir/usr/lib/systemd/user/shore-daemon.service"
+
+    install -Dm644 "$_repo/examples/config.toml" \
+        "$pkgdir/usr/share/doc/shore/config.toml.example"
+    install -Dm644 "$_repo/examples/models.toml" \
+        "$pkgdir/usr/share/doc/shore/models.toml.example"
+
+    _install_licenses
+}
+
+package_shore-tui() {
+    pkgdesc="Persistent AI character engine — terminal client"
+    depends=('gcc-libs' 'glibc')
+    optdepends=('wl-clipboard: ctrl+v image paste from clipboard (Wayland)')
+
+    install -Dm755 "$_repo/target/tui-release/shore-tui" "$pkgdir/usr/bin/shore-tui"
+
+    _install_licenses
+}
+
+package_shore-matrix() {
+    pkgdesc="Persistent AI character engine — Matrix bridge"
+    depends=('gcc-libs' 'glibc' 'openssl')
+    optdepends=('continuwuity: embedded Matrix homeserver'
+                'conduwuit: embedded Matrix homeserver (alternative)'
+                'tuwunel: embedded Matrix homeserver (alternative)')
+
+    # Off $PATH like the sidecar: the daemon supervises the bridge and finds it
+    # via SHORE_MATRIX_BIN or the libexec dirs. Installing this package is what
+    # enables bridge supervision; removing it is what disables it.
+    install -Dm755 "$_repo/target/release/shore-matrix" \
+        "$pkgdir/usr/lib/shore/shore-matrix"
+
+    _install_licenses
+}
