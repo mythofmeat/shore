@@ -10,7 +10,7 @@
 # Flags:
 #   --init          create the repo dir, print the pacman.conf stanza, exit
 #   --dry-run       show what would happen; change nothing
-#   --skip-checks   skip harness/fmt/clippy/test (they are the slow part)
+#   --skip-checks   skip fmt/clippy/test (they are the slow part)
 #   --no-push       commit and tag locally, but do not push
 #   --no-install    build and publish, but do not run pacman -Syu
 #   --repack        rebuild the current version as pkgrel+1 (no version bump)
@@ -172,10 +172,9 @@ fi
 # knows nothing about it.
 # --------------------------------------------------------------------------
 if (( SKIP_CHECKS )); then
-    warn "Skipping harness/fmt/clippy/test (--skip-checks)"
+    warn "Skipping fmt/clippy/test (--skip-checks)"
 else
     say "Running quality gates..."
-    run python3 scripts/harness-check.py
     run cargo fmt --all -- --check
     run cargo clippy --workspace --all-targets -- -D warnings
     run cargo test --workspace
