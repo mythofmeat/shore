@@ -968,7 +968,9 @@ unspecified mode runs the default `summary`.
     allowance, current_cost, remaining, percent_used, periods_remaining,
     status, action, warning_thresholds, crossed_warn_at, over_limit }` —
     holding spend against the current sub-window's allowance. The key is
-    **omitted entirely** for unpaced budgets.
+    **omitted entirely** for unpaced budgets. A fully spent budget leaves
+    `allowance` at `0`; the pace then reports `percent_used` as `1.0` and
+    `over_limit` as `true` rather than dividing by zero.
   - `export_tsv = true` → `{ mode: "tsv", data: "…" }`.
   - `export_csv = true` → `{ mode: "csv", data: "…" }`.
   - `by_kind = true` → `{ mode: "summary_by_usage_kind", period, summary: [ {usage_kind, call_count, total_input, total_output, total_cache_read, total_cache_write, total_cost} ] }`.

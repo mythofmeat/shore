@@ -9,8 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- The usage chip reports a budget's pace when it is running hotter than the
-  period cap, and pace warnings no longer clobber cached cap figures.
+- The usage chip reports a budget's pace when it is the more pressing of the
+  two limits — a pace past its own `pace_warn_at` outranks a cooler cap even at
+  a lower percentage — and pace warnings no longer clobber cached cap figures.
 
 ## [0.1.13](https://github.com/mythofmeat/shore-tui/compare/v0.1.12...v0.1.13) - 2026-07-15
 

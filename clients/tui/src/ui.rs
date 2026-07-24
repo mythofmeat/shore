@@ -1011,9 +1011,12 @@ fn usage_chip(budget: &crate::app::UsageBudget) -> (String, Color) {
     let filled = ((level.percent_used.clamp(0.0, 1.0)) * CELLS as f64).round() as usize;
     let bar: String = "█".repeat(filled) + &"░".repeat(CELLS - filled);
     let pct = (level.percent_used * 100.0).round() as i64;
+    // Yellow keys off the budget-wide signal rather than the headline's own
+    // state, so it stays tied to the same union that decides whether the chip
+    // is visible at all in warn-only mode.
     let color = if level.over_limit {
         Color::Red
-    } else if level.in_warning() {
+    } else if budget.in_warning() {
         Color::Yellow
     } else {
         Color::DarkGray
@@ -2557,6 +2560,25 @@ mod scenario_tests {
         assert!(
             warned.contains("82%"),
             "warn mode reveals the chip past a threshold; frame:\n{warned}"
+        );
+
+        // A pace past its own (lower) threshold under a hotter-but-calm cap
+        // still reveals the chip, and shows the pace figure.
+        h.app.usage_budgets = vec![crate::app::UsageBudget {
+            name: "weekly".into(),
+            percent_used: 0.6,
+            crossed_warn_at: vec![],
+            over_limit: false,
+            pace: Some(crate::app::UsageLevel {
+                percent_used: 0.55,
+                crossed_warn_at: vec![0.5],
+                over_limit: false,
+            }),
+        }];
+        let paced = h.render("warn mode, pace crossed");
+        assert!(
+            paced.contains("55%"),
+            "a pace-only warning reveals the chip; frame:\n{paced}"
         );
     }
 

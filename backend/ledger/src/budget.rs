@@ -15,7 +15,7 @@ use tracing::warn;
 use crate::client::CallType;
 use crate::convert::i64_to_f64;
 use crate::ledger::Ledger;
-use crate::query::{usage_totals, QueryFilter};
+use crate::query::{usage_totals, usage_totals_on, QueryFilter};
 
 #[derive(Debug, Clone)]
 struct PeriodWindow {
@@ -544,12 +544,39 @@ fn budget_status(
 ) -> Result<BudgetStatus, rusqlite::Error> {
     let anchors = BudgetAnchors::from_budget(budget);
     let window = period_window(now, budget.period, &config.timezone, Some(&anchors));
-    let totals = usage_totals(ledger, &filter_for_budget(budget, window.start))?;
-    let current_cost = totals.total_cost;
+    let pace_window = budget
+        .pace_period
+        .and_then(|period| pace_window(&window, now, period).map(|w| (period, w)));
+
+    // Both totals are read under one lock. `pace_status` derives spend before
+    // the sub-window by subtracting the second from the first, so a call
+    // committed between two separate reads would land in only one of them and
+    // briefly overstate the allowance. One `with_conn` makes the pair a
+    // consistent snapshot.
+    let (current_cost, pace_cost) = ledger.with_conn(|conn| {
+        let period = usage_totals_on(conn, &filter_for_budget(budget, window.start))?.total_cost;
+        let pace = match pace_window.as_ref() {
+            Some((_, pace)) => {
+                Some(usage_totals_on(conn, &filter_for_budget(budget, pace.start))?.total_cost)
+            }
+            None => None,
+        };
+        Ok((period, pace))
+    })?;
+
     let percent_used = current_cost / budget.cost_usd;
     let (warning_thresholds, crossed_warn_at) = crossed_thresholds(&budget.warn_at, percent_used);
     let over_limit = current_cost >= budget.cost_usd;
-    let pace = pace_status(ledger, budget, &window, current_cost, now)?;
+    let pace = match (pace_window, pace_cost) {
+        (Some((pace_period, sub_window)), Some(cost)) => Some(pace_status(
+            budget,
+            pace_period,
+            &sub_window,
+            current_cost,
+            cost,
+        )),
+        _ => None,
+    };
 
     Ok(BudgetStatus {
         name: budget_name(budget, idx),
@@ -602,32 +629,25 @@ fn level_name(over_limit: bool, crossed: &[f64]) -> &'static str {
 
 /// Build the pace target for the sub-window containing `now`.
 ///
-/// `period_cost` is the budget's spend for the whole current window. Spend
-/// committed *before* this sub-window opened is derived by subtracting the
-/// sub-window's own spend, which saves a third ledger query and — more
-/// importantly — freezes the allowance for the sub-window's duration. Deriving
-/// it from spend-up-to-now instead would let spending eat its own allowance:
-/// a $2.17 Thursday would drop to $2.00 after $1 of spend, reporting $1.00 left
-/// rather than $1.17.
+/// `period_cost` is the budget's spend for the whole current window and
+/// `current_cost` its spend within the sub-window; both come from the same
+/// ledger snapshot in [`budget_status`]. Spend committed *before* this
+/// sub-window opened is derived by subtracting the second from the first, which
+/// saves a third ledger query and — more importantly — freezes the allowance
+/// for the sub-window's duration. Deriving it from spend-up-to-now instead
+/// would let spending eat its own allowance: a $2.17 Thursday would drop to
+/// $2.00 after $1 of spend, reporting $1.00 left rather than $1.17.
 #[expect(
     clippy::float_arithmetic,
     reason = "the pace allowance divides remaining f64 USD by the f64 count of sub-windows left"
 )]
 fn pace_status(
-    ledger: &Ledger,
     budget: &UsageBudgetConfig,
-    window: &PeriodWindow,
+    pace_period: UsageBudgetPeriod,
+    pace: &PaceWindow,
     period_cost: f64,
-    now: DateTime<Utc>,
-) -> Result<Option<PaceStatus>, rusqlite::Error> {
-    let Some(pace_period) = budget.pace_period else {
-        return Ok(None);
-    };
-    let Some(pace) = pace_window(window, now, pace_period) else {
-        return Ok(None);
-    };
-
-    let current_cost = usage_totals(ledger, &filter_for_budget(budget, pace.start))?.total_cost;
+    current_cost: f64,
+) -> PaceStatus {
     let spend_before = (period_cost - current_cost).max(0.0);
     let remaining_budget = (budget.cost_usd - spend_before).max(0.0);
     // A trailing sub-window shorter than a whole period (a month leaves ~3
@@ -636,19 +656,20 @@ fn pace_status(
     let allowance = remaining_budget / pace.periods_remaining.max(1.0);
 
     // `allowance` is zero exactly when the budget is already spent, in which
-    // case the budget's own status is over limit too.
+    // case the budget's own status is over limit too. Such a sub-window is
+    // exhausted by definition — nothing may be spent against it — so it reports
+    // 100% rather than the `$0.00/$0.00  0%  over_limit` a literal ratio of
+    // zeroes would print.
     let percent_used = if allowance > 0.0 {
         current_cost / allowance
-    } else if current_cost > 0.0 {
-        1.0
     } else {
-        0.0
+        1.0
     };
     let (warning_thresholds, crossed_warn_at) =
         crossed_thresholds(budget.pace_warn_at(), percent_used);
     let over_limit = current_cost >= allowance;
 
-    Ok(Some(PaceStatus {
+    PaceStatus {
         period: pace_period,
         window_start: pace.start.to_rfc3339(),
         window_end: pace.end.to_rfc3339(),
@@ -662,7 +683,7 @@ fn pace_status(
         warning_thresholds,
         crossed_warn_at,
         over_limit,
-    }))
+    }
 }
 
 fn filter_for_budget(budget: &UsageBudgetConfig, since: DateTime<Utc>) -> QueryFilter {
@@ -902,26 +923,59 @@ fn pace_step(pace: UsageBudgetPeriod) -> Option<Duration> {
 ///
 /// Stepping happens in wall-clock (naive) space: across a DST transition a
 /// `reset_hour = 6` day-pace stays anchored to 06:00 local rather than sliding
-/// to 05:00 or 07:00.
-#[expect(
-    clippy::float_arithmetic,
-    reason = "sub-windows remaining is a ratio of two second counts and is deliberately fractional"
-)]
+/// to 05:00 or 07:00. Only the final resolution back to instants is
+/// zone-aware.
 fn pace_window(
     window: &PeriodWindow,
     now: DateTime<Utc>,
     pace: UsageBudgetPeriod,
 ) -> Option<PaceWindow> {
     let step = pace_step(pace)?;
+    let now_naive = match window.timezone.as_str() {
+        "utc" => now.naive_utc(),
+        _ => now.with_timezone(&Local).naive_local(),
+    };
+    let bounds = pace_bounds_naive(window, now_naive, step)?;
+
+    Some(PaceWindow {
+        start: resolve_in_zone(bounds.start, &window.timezone),
+        end: resolve_in_zone(bounds.end, &window.timezone),
+        periods_remaining: bounds.periods_remaining,
+    })
+}
+
+/// Wall-clock bounds of the sub-window containing `now_naive`.
+#[derive(Debug, Clone, Copy)]
+struct PaceBounds {
+    start: NaiveDateTime,
+    end: NaiveDateTime,
+    periods_remaining: f64,
+}
+
+/// The DST-relevant half of [`pace_window`], split out so it can be tested
+/// directly.
+///
+/// Stepping in wall-clock space is what holds a `reset_hour = 6` boundary at
+/// 06:00 through a transition: a naive clock has no transitions to slide
+/// across. Pinned twice — `pace_steps_hold_the_wall_clock_hour_across_a_dst_week`
+/// covers this arithmetic in isolation, and `tests/pace_dst.rs` drives the
+/// whole zone-aware path (`period_window_local` and `resolve_in_zone`'s local
+/// arm) under a real `TZ`. That one lives in its own test binary because `TZ`
+/// is process-global.
+#[expect(
+    clippy::float_arithmetic,
+    reason = "sub-windows remaining is a ratio of two second counts and is deliberately fractional"
+)]
+fn pace_bounds_naive(
+    window: &PeriodWindow,
+    now_naive: NaiveDateTime,
+    step: Duration,
+) -> Option<PaceBounds> {
     let step_secs = step.num_seconds();
     if step_secs <= 0 {
         return None;
     }
 
-    let now_naive = match window.timezone.as_str() {
-        "utc" => now.naive_utc(),
-        _ => now.with_timezone(&Local).naive_local(),
-    };
     let elapsed = now_naive
         .signed_duration_since(window.start_naive)
         .num_seconds()
@@ -930,24 +984,23 @@ fn pace_window(
         .checked_div(step_secs)?
         .checked_mul(step_secs)
         .unwrap_or(0);
-    let start_naive = window
+    let start = window
         .start_naive
         .checked_add_signed(Duration::seconds(offset_secs))?;
-    let end_naive = start_naive
+    let end = start
         .checked_add_signed(step)
         .map_or(window.end_naive, |end| end.min(window.end_naive));
 
     let remaining_secs = window
         .end_naive
-        .signed_duration_since(start_naive)
+        .signed_duration_since(start)
         .num_seconds()
         .max(0);
-    let periods_remaining = i64_to_f64(remaining_secs) / i64_to_f64(step_secs);
 
-    Some(PaceWindow {
-        start: resolve_in_zone(start_naive, &window.timezone),
-        end: resolve_in_zone(end_naive, &window.timezone),
-        periods_remaining,
+    Some(PaceBounds {
+        start,
+        end,
+        periods_remaining: i64_to_f64(remaining_secs) / i64_to_f64(step_secs),
     })
 }
 
@@ -1672,6 +1725,110 @@ mod tests {
         let thu = pace_at(&ledger, &config, "2026-05-21T12:00:00+00:00");
         assert_close(thu.allowance, 0.0, "nothing left to allocate");
         assert!(thu.over_limit, "a zero allowance is over limit");
+        // An exhausted allowance reports 100%, not the 0% a literal $0/$0
+        // ratio would give — `status` and `percent_used` must agree.
+        assert_close(thu.percent_used, 1.0, "exhausted allowance reads as full");
+        assert_eq!(thu.status, "over_limit");
+    }
+
+    #[test]
+    fn pace_steps_hold_the_wall_clock_hour_across_a_dst_week() {
+        // The sub-window arithmetic runs in naive space precisely so a
+        // transition inside the budget period can't drag the boundary off the
+        // budget's own reset hour. 2026-03-08 is US spring-forward; a
+        // Wednesday 06:00 weekly window straddles it. Stepping day-by-day must
+        // land on 06:00 every time, including the day that loses an hour.
+        //
+        // This covers the arithmetic in isolation; `tests/pace_dst.rs` drives
+        // the same week through the zone-aware path under a real `TZ`.
+        let start_naive: NaiveDateTime = "2026-03-04T06:00:00".parse().unwrap();
+        let end_naive: NaiveDateTime = "2026-03-11T06:00:00".parse().unwrap();
+        let window = PeriodWindow {
+            start: Utc.from_utc_datetime(&start_naive),
+            end: Utc.from_utc_datetime(&end_naive),
+            start_naive,
+            end_naive,
+            timezone: "local".into(),
+        };
+
+        for (day, expected_start, expected_days_left) in [
+            ("2026-03-07T12:00:00", "2026-03-07T06:00:00", 4.0),
+            // Spring-forward day: 02:00 -> 03:00 locally.
+            ("2026-03-08T12:00:00", "2026-03-08T06:00:00", 3.0),
+            ("2026-03-09T12:00:00", "2026-03-09T06:00:00", 2.0),
+        ] {
+            let bounds =
+                pace_bounds_naive(&window, day.parse().unwrap(), Duration::days(1)).unwrap();
+            assert_eq!(
+                bounds.start.to_string(),
+                expected_start.replace('T', " "),
+                "sub-window on {day} stays anchored to 06:00"
+            );
+            assert_eq!(bounds.start.hour(), 6, "boundary hour never drifts");
+            assert_eq!(bounds.end.hour(), 6, "and neither does the close");
+            assert_close(
+                bounds.periods_remaining,
+                expected_days_left,
+                &format!("days left on {day}"),
+            );
+        }
+    }
+
+    #[test]
+    fn pace_warn_at_falls_back_to_the_budget_warn_at() {
+        // Documented default: a budget that sets no `pace_warn_at` warns its
+        // pace on the same fractions as its cap.
+        let ledger = Ledger::open_in_memory().unwrap();
+        let config = config_with(UsageBudgetConfig {
+            warn_at: vec![0.6, 0.9],
+            pace_warn_at: None,
+            ..weekly_paced_budget(14.0)
+        });
+        // Wednesday's allowance is $2.00; $1.30 is 65% of it.
+        insert_call(&ledger, "2026-05-20T08:00:00+00:00", 1.3, "message");
+
+        let wed = pace_at(&ledger, &config, "2026-05-20T12:00:00+00:00");
+        assert_eq!(
+            wed.warning_thresholds,
+            vec![0.6, 0.9],
+            "the pace inherits the budget's thresholds"
+        );
+        assert_eq!(wed.crossed_warn_at, vec![0.6]);
+        assert_eq!(wed.status, "warning");
+    }
+
+    #[test]
+    fn pace_pause_background_stops_only_background_calls() {
+        // The third pace action: an overspent sub-window sheds heartbeats and
+        // dreaming while the user's own messages keep going.
+        let ledger = Ledger::open_in_memory().unwrap();
+        let config = config_with(UsageBudgetConfig {
+            limit: UsageBudgetAction::Warn,
+            pace_action: Some(UsageBudgetAction::PauseBackground),
+            allow_compaction_over_budget: Some(false),
+            ..weekly_paced_budget(14.0)
+        });
+        // $3 against Wednesday's $2 allowance, well under the $14 week.
+        insert_call(&ledger, "2026-05-20T08:00:00+00:00", 3.0, "message");
+        let now = "2026-05-20T12:00:00+00:00".parse().unwrap();
+
+        let call_of = |call_type| BudgetCallContext {
+            provider: "openrouter",
+            api_key_name: Some("default"),
+            model: "model",
+            call_type,
+            character: "Alice",
+        };
+
+        let err = enforce_budget_for_call(&ledger, &config, call_of(CallType::Heartbeat), now)
+            .expect_err("background calls stop on an overspent pace");
+        assert_eq!(err.scope, BudgetScope::Pace);
+        assert_eq!(err.action, UsageBudgetAction::PauseBackground);
+
+        assert!(
+            enforce_budget_for_call(&ledger, &config, call_of(CallType::Message), now).is_ok(),
+            "foreground messages are untouched"
+        );
     }
 
     #[test]
@@ -1731,6 +1888,42 @@ mod tests {
         .expect_err("pace block stops the call");
         assert_eq!(err.scope, BudgetScope::Pace);
         assert_close(err.cost_limit, 2.0, "blocked against the pace allowance");
+    }
+
+    #[test]
+    fn a_block_pace_under_a_warn_cap_stops_calls_once_the_budget_is_spent() {
+        // The sharp edge documented in CONFIGURATION.md: these two settings
+        // combine into something stronger than either alone. A spent budget
+        // leaves a $0 allowance that every later sub-window is instantly over,
+        // so an advisory cap still ends up hard-blocking through its pace.
+        let ledger = Ledger::open_in_memory().unwrap();
+        let config = config_with(UsageBudgetConfig {
+            limit: UsageBudgetAction::Warn,
+            pace_action: Some(UsageBudgetAction::Block),
+            ..weekly_paced_budget(14.0)
+        });
+        insert_call(&ledger, "2026-05-20T08:00:00+00:00", 20.0, "message");
+
+        let err = enforce_budget_for_call(
+            &ledger,
+            &config,
+            BudgetCallContext {
+                provider: "openrouter",
+                api_key_name: Some("default"),
+                model: "model",
+                call_type: CallType::Message,
+                character: "Alice",
+            },
+            // A fresh sub-window that has spent nothing of its own.
+            "2026-05-22T12:00:00+00:00".parse().unwrap(),
+        )
+        .expect_err("a zero allowance blocks even an unspent sub-window");
+        assert_eq!(
+            err.scope,
+            BudgetScope::Pace,
+            "the advisory cap defers, the pace stops the call"
+        );
+        assert_close(err.cost_limit, 0.0, "nothing left to allocate");
     }
 
     #[test]

@@ -2415,6 +2415,50 @@ mod redraw_tests {
     }
 
     #[test]
+    fn a_warning_pace_outranks_a_hotter_but_calm_cap() {
+        // `warn_at = [0.8]`, `pace_warn_at = [0.5]`: the 60% week has crossed
+        // nothing, the 55% pace has. Ranking on raw percent alone would pick
+        // the cap and silently swallow the pace warning — no yellow chip, and
+        // nothing shown at all in warn-only visibility mode.
+        let mut app = App::default();
+
+        handle_server_message(
+            &mut app,
+            ServerMessage::CommandOutput(CommandOutput {
+                rid: None,
+                name: "usage".into(),
+                data: serde_json::json!({
+                    "mode": "budget",
+                    "budgets": [{
+                        "name": "weekly",
+                        "percent_used": 0.6,
+                        "crossed_warn_at": [],
+                        "over_limit": false,
+                        "pace": {
+                            "percent_used": 0.55,
+                            "crossed_warn_at": [0.5],
+                            "over_limit": false
+                        }
+                    }]
+                }),
+            }),
+        );
+
+        let budget = app.most_urgent_budget().expect("one budget cached");
+        assert!(budget.in_warning(), "the pace warning is not swallowed");
+        let headline = budget.headline();
+        assert_eq!(headline.crossed_warn_at, vec![0.5]);
+        assert!(
+            (headline.percent_used - 0.55).abs() < f64::EPSILON,
+            "the warning limit is the one reported, despite the cooler percent"
+        );
+        assert!(
+            (budget.headline_percent() - 0.55).abs() < f64::EPSILON,
+            "headline_percent agrees with headline"
+        );
+    }
+
+    #[test]
     fn pace_warning_push_does_not_clobber_the_cached_cap() {
         // Budget and pace warn independently, so folding one push in must
         // leave the other scope's cached figures alone.
