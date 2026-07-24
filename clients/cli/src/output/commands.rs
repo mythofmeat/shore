@@ -1946,14 +1946,20 @@ fn format_local_ampm(rfc3339: &str) -> String {
     )
 }
 
-fn print_budget_table(data: &serde_json::Value) {
-    // Time columns match the width of `format_local_ampm`'s output
-    // (`YYYY-MM-DD HH:MM AM` = 19 chars); raw-string fallbacks are ellipsized
-    // to the same width so the divider always spans the table. `Started`
-    // shows when the current window opened (so a user with `reset_hour=10`
-    // can see why the budget total isn't the same as today's summary).
-    const TIME_W: usize = 19;
+/// Time columns match the width of `format_local_ampm`'s output
+/// (`YYYY-MM-DD HH:MM AM` = 19 chars); raw-string fallbacks are ellipsized
+/// to the same width so the divider always spans the table. `Started`
+/// shows when the current window opened (so a user with `reset_hour=10`
+/// can see why the budget total isn't the same as today's summary).
+const TIME_W: usize = 19;
 
+/// Width of a pace row's label so its `Spend` column starts where the budget
+/// row's does: the budget row's name+period fields span `24 + 1 + 6 + 1 = 32`
+/// columns, and the pace row spends 4 on its `└ ` prefix plus 1 on the trailing
+/// separator.
+const PACE_LABEL_W: usize = 27;
+
+fn print_budget_table(data: &serde_json::Value) {
     let budgets = data["budgets"].as_array();
     if budgets.is_none_or(Vec::is_empty) {
         cli_out!("  No usage budgets configured.");
@@ -2001,8 +2007,50 @@ fn print_budget_table(data: &serde_json::Value) {
                 budget["status"].as_str().unwrap_or("ok"),
                 budget["action"].as_str().unwrap_or("warn"),
             );
+            if let Some(row) = pace_row(budget) {
+                cli_out!("{row}");
+            }
         }
     }
+}
+
+/// Continuation line for a budget that configures a pace, or `None` when it
+/// doesn't.
+///
+/// Rendered under its budget rather than as extra columns: the table is already
+/// ~104 wide, and the pace's "spend against today's allowance" is a different
+/// measurement from the period totals above it.
+fn pace_row(budget: &serde_json::Value) -> Option<String> {
+    let pace = &budget["pace"];
+    if !pace.is_object() {
+        return None;
+    }
+
+    let current = pace["current_cost"].as_f64().unwrap_or(0.0);
+    let allowance = pace["allowance"].as_f64().unwrap_or(0.0);
+    #[expect(
+        clippy::float_arithmetic,
+        reason = "pace payload stores used share as f64; CLI scales it for percent display"
+    )]
+    let percent = pace["percent_used"].as_f64().unwrap_or(0.0) * 100.0;
+    let started = pace["window_start"]
+        .as_str()
+        .map(format_local_ampm)
+        .map_or_else(|| "?".into(), |s| ellipsize(&s, TIME_W));
+    let resets = pace["window_end"]
+        .as_str()
+        .map(format_local_ampm)
+        .map_or_else(|| "?".into(), |s| ellipsize(&s, TIME_W));
+
+    Some(format!(
+        "  \u{2514} {:<PACE_LABEL_W$} {:>5.2}/{:<5.2} {:>6.0}%  {:<15} {:<16} {started:<TIME_W$} {resets:<TIME_W$}",
+        format!("{} pace", pace["period"].as_str().unwrap_or("day")),
+        current,
+        allowance,
+        percent,
+        pace["status"].as_str().unwrap_or("ok"),
+        pace["action"].as_str().unwrap_or("warn"),
+    ))
 }
 
 fn print_spike_warnings(data: &serde_json::Value) {
@@ -2933,6 +2981,111 @@ mod tests {
         );
         // Malformed input falls back to the raw string.
         assert_eq!(format_local_ampm("not-a-timestamp"), "not-a-timestamp");
+    }
+
+    /// Visual preview of the budget table with and without a pace. Skipped by
+    /// default; run it to eyeball column alignment after touching either row:
+    ///
+    /// ```sh
+    /// cargo test -p shore-cli render_preview_budget_table \
+    ///   -- --ignored --nocapture --test-threads=1
+    /// ```
+    #[test]
+    #[ignore = "visual preview"]
+    fn render_preview_budget_table() {
+        let data = serde_json::json!({
+            "budgets": [
+                {
+                    "name": "weekly", "period": "week",
+                    "current_cost": 5.0, "cost_limit": 14.0, "percent_used": 0.357,
+                    "status": "ok", "action": "block",
+                    "period_start": "2026-05-20T06:00:00+00:00",
+                    "reset_at": "2026-05-27T06:00:00+00:00",
+                    "pace": {
+                        "period": "day",
+                        "window_start": "2026-05-22T06:00:00+00:00",
+                        "window_end": "2026-05-23T06:00:00+00:00",
+                        "allowance": 1.8, "current_cost": 0.0, "remaining": 1.8,
+                        "percent_used": 0.0, "periods_remaining": 5.0,
+                        "status": "ok", "action": "warn",
+                        "warning_thresholds": [0.8, 1.0], "crossed_warn_at": [],
+                        "over_limit": false
+                    }
+                },
+                {
+                    "name": "background", "period": "day",
+                    "current_cost": 1.9, "cost_limit": 2.0, "percent_used": 0.95,
+                    "status": "warning", "action": "pause_background",
+                    "period_start": "2026-05-22T00:00:00+00:00",
+                    "reset_at": "2026-05-23T00:00:00+00:00"
+                }
+            ]
+        });
+        // `print_budget_table` writes straight to stdout via `cli_out!`, so the
+        // banners go the same way rather than through `println!` (denied here).
+        let mut stdout = io::stdout();
+        let _ignored = stdout.write_all(b"----- budget table -----\n");
+        let _flushed = stdout.flush();
+        print_budget_table(&data);
+        let _ignored_end = stdout.write_all(b"----- end -----\n");
+        let _flushed_end = stdout.flush();
+    }
+
+    #[test]
+    fn pace_row_omitted_without_a_pace() {
+        let budget = serde_json::json!({ "name": "weekly", "period": "week" });
+        assert!(
+            pace_row(&budget).is_none(),
+            "an unpaced budget gets no continuation line"
+        );
+    }
+
+    /// Field names here mirror a real `budget_statuses` payload (shore-ledger's
+    /// `PaceStatus`), since this renderer reads the JSON untyped and would
+    /// silently print zeros if a key were ever renamed on the producer side.
+    #[test]
+    fn pace_row_renders_spend_against_allowance() {
+        let budget = serde_json::json!({
+            "name": "weekly",
+            "period": "week",
+            "current_cost": 5.0,
+            "cost_limit": 14.0,
+            "pace": {
+                "period": "day",
+                "window_start": "2026-05-21T06:00:00+00:00",
+                "window_end": "2026-05-22T06:00:00+00:00",
+                "allowance": 2.166_666_666_666_666_5,
+                "current_cost": 1.0,
+                "remaining": 1.166_666_666_666_666_5,
+                "percent_used": 0.461_538_461_538_461_56,
+                "periods_remaining": 6.0,
+                "status": "ok",
+                "action": "warn",
+                "warning_thresholds": [0.8, 1.0],
+                "crossed_warn_at": [],
+                "over_limit": false
+            }
+        });
+        let row = pace_row(&budget).expect("paced budget renders a row");
+        assert!(row.contains("day pace"), "row names the pace period: {row}");
+        assert!(
+            row.contains("1.00/2.17"),
+            "row shows spend against allowance: {row}"
+        );
+        assert!(row.contains("46%"), "row shows the used share: {row}");
+        assert!(
+            row.contains("2026-05-22"),
+            "row shows the pace sub-window bounds: {row}"
+        );
+        // The pace row sits under the budget row's columns, so the two read
+        // down a single axis. 37 is where `{:<24} {:<6} {:>5.2}` puts the
+        // budget row's spend separator. Counted in chars, not bytes — the
+        // `└` prefix is three bytes wide but occupies one column.
+        assert_eq!(
+            row.chars().position(|c| c == '/'),
+            Some(37),
+            "pace spend column must line up with the budget row's: {row}"
+        );
     }
 
     #[test]

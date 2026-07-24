@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `usage_warning` carries an optional `scope` (`"pace"`), absent for budget-cap
+  warnings so the frame is unchanged for existing clients.
+
 ## [0.12.0](https://github.com/mythofmeat/shore-core/compare/shore-protocol-v0.11.0...shore-protocol-v0.12.0) - 2026-07-04
 
 ### Breaking

@@ -1005,12 +1005,15 @@ fn render_images(
 /// yellow once a warning threshold is crossed, red over limit).
 fn usage_chip(budget: &crate::app::UsageBudget) -> (String, Color) {
     const CELLS: usize = 10;
-    let filled = ((budget.percent_used.clamp(0.0, 1.0)) * CELLS as f64).round() as usize;
+    // Whichever limit binds first — the pace when it's running hotter than the
+    // period cap. See `UsageBudget::headline`.
+    let level = budget.headline();
+    let filled = ((level.percent_used.clamp(0.0, 1.0)) * CELLS as f64).round() as usize;
     let bar: String = "█".repeat(filled) + &"░".repeat(CELLS - filled);
-    let pct = (budget.percent_used * 100.0).round() as i64;
-    let color = if budget.over_limit {
+    let pct = (level.percent_used * 100.0).round() as i64;
+    let color = if level.over_limit {
         Color::Red
-    } else if budget.in_warning() {
+    } else if level.in_warning() {
         Color::Yellow
     } else {
         Color::DarkGray
@@ -2498,6 +2501,7 @@ mod scenario_tests {
             percent_used: 0.82,
             crossed_warn_at: vec![0.8],
             over_limit: false,
+            pace: None,
         }];
 
         // Off (default): no chip.
@@ -2533,6 +2537,7 @@ mod scenario_tests {
             percent_used: 0.23,
             crossed_warn_at: vec![],
             over_limit: false,
+            pace: None,
         }];
         let calm = h.render("warn mode, calm");
         assert!(
@@ -2546,6 +2551,7 @@ mod scenario_tests {
             percent_used: 0.82,
             crossed_warn_at: vec![0.8],
             over_limit: false,
+            pace: None,
         }];
         let warned = h.render("warn mode, crossed");
         assert!(

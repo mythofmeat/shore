@@ -1183,6 +1183,17 @@ cost_usd = 50.00
 reset_day_of_week = "thursday"       # monday..sunday; default monday
 reset_hour = 6
 
+[[usage.budgets]]
+name = "weekly paced"
+period = "week"
+cost_usd = 14.00
+reset_day_of_week = "wednesday"
+reset_hour = 6
+limit = "block"                      # the real cap
+pace_period = "day"                  # must be shorter than `period`
+pace_action = "warn"                 # warn, block, pause_background; default warn
+pace_warn_at = [0.8, 1.0]            # optional; defaults to this budget's warn_at
+
 [usage.spike_warnings]
 enabled = true
 period = "hour"
@@ -1219,6 +1230,54 @@ behavior (midnight, Monday, the 1st).
 A month budget with `reset_day_of_month = 31` resets on the last calendar
 day of months shorter than 31 (Feb 28/29, Apr 30, etc.), so every month
 gets exactly one reset.
+
+### Pacing a budget
+
+A flat cap tells you when you've run out, not whether you're on track. Setting
+`pace_period` adds a spend target for a sub-window of the budget period:
+
+```
+allowance = budget remaining when the sub-window opened
+            ÷ sub-windows left in the period
+```
+
+Underspending raises the next allowance and overspending lowers it, while
+`cost_usd` stays the real cap. With `$14/week` from Wednesday, paced daily:
+
+| Day | Spent before | Remaining | Days left | Today's pace |
+| --- | --- | --- | --- | --- |
+| Wed | $0 | $14 | 7 | $2.00 |
+| Thu | $1 | $13 | 6 | $2.17 |
+| Fri | $5 | $9 | 5 | $1.80 |
+
+One expensive day after several cheap ones still lands inside the budget, and
+the next day's number tells you what it cost you — no need to keep adjusting
+limits by hand.
+
+| Field | Valid values | Default |
+| --- | --- | --- |
+| `pace_period` | `hour`, `day`, `week`, `month` — must rank strictly shorter than `period` | unset (no pacing) |
+| `pace_action` | `warn`, `block`, `pause_background` | `warn` |
+| `pace_warn_at` | fractions of the allowance, all `> 0` | the budget's `warn_at` |
+
+Notes on behavior:
+
+- **The allowance is fixed for the sub-window.** It's computed from spend
+  committed *before* the sub-window opened, so spending during the day doesn't
+  move the day's own target.
+- **The pace has no reset field.** Sub-windows are stepped from the budget's
+  window start, so `reset_hour` anchors both and the sub-windows tile the
+  period exactly. A week budget resetting Wednesday 06:00 gets days running
+  06:00 → 06:00.
+- **A sub-window shorter than a full period gets the whole remainder.** A month
+  paced by week ends with a ~3-day stub; its allowance is what's left, not an
+  inflated `remainder ÷ 0.43`.
+- **`pace_action = "warn"` never blocks.** Exceeding one sub-window is expected
+  — that's the point — so only the budget's own `limit` stops calls. Set
+  `pace_action = "block"` for self-adjusting hard rationing instead.
+- Once the budget is fully spent the allowance is `$0`, never negative.
+- Budget and pace warnings are tracked separately, so both can fire in the same
+  window without one suppressing the other.
 
 When committed spend crosses a `warn_at` threshold, the daemon emits one
 `usage_warning` server frame to the active requester and fires the

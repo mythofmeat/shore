@@ -9,6 +9,7 @@ use std::time::Instant;
 use serde_json::{json, Value};
 use shore_config::app::UsageBudgetPeriod;
 use shore_config::models::Sdk;
+use shore_ledger::budget::BudgetScope;
 use shore_protocol::server_msg::{MessageOrigin, NewMessage, ServerMessage, UsageWarning};
 use shore_protocol::types::{derive_content_from_blocks, ContentBlock, Message, Role};
 use tokio::sync::{broadcast, Mutex};
@@ -267,6 +268,12 @@ fn emit_usage_budget_warnings(ctx: &GenContext, rid: Option<&str>) {
             period_start: warning.period_start,
             reset_at: warning.reset_at,
             reset_at_display: warning.reset_at_display,
+            // Omitted for budget-cap warnings so the frame stays byte-identical
+            // to what pre-pace clients already parse.
+            scope: match warning.scope {
+                BudgetScope::Budget => None,
+                BudgetScope::Pace => Some(BudgetScope::Pace.as_str().to_owned()),
+            },
         };
         if let Err(e) = ctx.direct_tx.try_send(ServerMessage::UsageWarning(frame)) {
             warn!(error = %e, "UsageWarning drop: direct channel unavailable");

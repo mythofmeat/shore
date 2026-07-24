@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `[[usage.budgets]]` accepts `pace_period`, `pace_action`, and `pace_warn_at`,
+  validated so the pace period ranks strictly shorter than the budget period.
+
 ## [0.18.2](https://github.com/mythofmeat/shore-core/compare/shore-config-v0.18.1...shore-config-v0.18.2) - 2026-07-18
 
 ### Fixed

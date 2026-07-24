@@ -543,6 +543,16 @@ warnings come back. `reset_at` is RFC 3339 UTC for machine consumers;
 time (`YYYY-MM-DD HH:MM AM|PM`) — clients that show the reset time should
 prefer it.
 
+An optional `"scope": "pace"` marks a warning about a budget's *pace
+allowance* rather than its period cap (see `pace_period` in
+CONFIGURATION.md). The field is absent for cap warnings, so the frame is
+unchanged for clients built before pacing. On a pace warning every other
+field describes the pace: `cost_limit` is the current allowance,
+`period` is the pace sub-window's period, and `period_start` / `reset_at`
+bound that sub-window. A client that ignores `scope` still renders correct
+numbers — it just can't tell the two limits apart, and a budget with a pace
+can emit one of each.
+
 ### 7.13 `ping`
 
 ```json
@@ -949,6 +959,16 @@ unspecified mode runs the default `summary`.
   `call_type`.
 - **modes** (set the flag to `true`):
   - `budget = true` → `{ mode: "budget", timezone, allow_compaction_over_budget, budgets, spike_warnings }`.
+    Each entry in `budgets` carries `name`, `period`, `period_start`,
+    `period_end`, `reset_at`, `timezone`, `current_cost`, `cost_limit`,
+    `percent_used`, `status` (`"ok"` | `"warning"` | `"over_limit"`),
+    `action`, `warning_thresholds`, `crossed_warn_at`, `over_limit`,
+    `compaction_allowed_over_budget`, and `filters`. A budget configured with
+    `pace_period` adds a `pace` object — `{ period, window_start, window_end,
+    allowance, current_cost, remaining, percent_used, periods_remaining,
+    status, action, warning_thresholds, crossed_warn_at, over_limit }` —
+    holding spend against the current sub-window's allowance. The key is
+    **omitted entirely** for unpaced budgets.
   - `export_tsv = true` → `{ mode: "tsv", data: "…" }`.
   - `export_csv = true` → `{ mode: "csv", data: "…" }`.
   - `by_kind = true` → `{ mode: "summary_by_usage_kind", period, summary: [ {usage_kind, call_count, total_input, total_output, total_cache_read, total_cache_write, total_cost} ] }`.
