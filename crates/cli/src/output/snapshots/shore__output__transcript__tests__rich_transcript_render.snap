@@ -1,0 +1,30 @@
+---
+source: crates/cli/src/output/transcript.rs
+expression: output
+---
+── You ·  ──────────────────────────────────────────────────────────────
+Please patch the config loader.
+  📎 failing config
+
+── Sable ·  ────────────────────────────────────────────────────────────
+ │ ◌ Thinking
+ │   The loader probably rejects an alias. I should verify the schema before
+ │   changing behavior.
+
+I'll inspect the loader and patch it.
+
+ │ → read · crates/common/src/config/app.rs
+ │   path: crates/common/src/config/app.rs
+ │
+ │ ✓ result
+ │   found DefaultsConfig
+
+The fix belongs in the alias migration.
+
+─────────── 1 archived turn above · outside current context ────────────
+
+ │ ✓ result
+ │   apply_patch ok
+
+── Sable ·  ────────────────────────────────────────────────────────────
+Done.

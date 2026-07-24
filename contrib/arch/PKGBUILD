@@ -29,7 +29,7 @@
 #
 # The two helpers stay out of /usr/bin because the daemon supervises them and
 # resolves them itself (SHORE_LLM_SIDECAR_BIN / SHORE_MATRIX_BIN, then the
-# libexec dirs in core/config/src/binaries.rs). Nothing else — including a
+# libexec dirs in crates/common/src/config/binaries.rs). Nothing else — including a
 # character's own workspace command tool — should be able to run them by name.
 
 pkgbase=shore
@@ -74,9 +74,9 @@ build() {
     cd "$_repo"
     _setup_env
 
-    # The four packaged binaries only. dev/test-harness and the stub servers
-    # are workspace members but are not shipped, so compiling them here is pure
-    # cost; check() still exercises the whole workspace.
+    # The packaged crates only. `-p shore-daemon` also builds its
+    # `mcp_stub_server` test bin; package() installs binaries by name, so the
+    # stub is built but never shipped. check() still exercises the workspace.
     cargo build --release --locked \
         -p shore-daemon -p shore-cli -p shore-matrix
 
@@ -95,7 +95,7 @@ build() {
     # Plain `bun install`, not --frozen-lockfile: bun.lock is not committed, so
     # a frozen install has nothing to freeze against. node_modules/ and dist/
     # are gitignored, so building them in the working tree leaves it clean.
-    cd "$_repo/backend/llm-sidecar"
+    cd "$_repo/llm-sidecar"
     bun install --silent
     bun run build
 }
@@ -151,7 +151,7 @@ package_shore-daemon() {
 
     install -Dm755 "$_repo/target/release/shore-daemon" \
         "$pkgdir/usr/bin/shore-daemon"
-    install -Dm755 "$_repo/backend/llm-sidecar/dist/shore-llm-sidecar" \
+    install -Dm755 "$_repo/llm-sidecar/dist/shore-llm-sidecar" \
         "$pkgdir/usr/lib/shore/shore-llm-sidecar"
 
     # The checked-in unit points at install.sh's default prefix
