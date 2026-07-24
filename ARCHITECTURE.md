@@ -573,10 +573,16 @@ dangerous or malicious actions are blocked.
 The helper is the daemon binary itself, located per call through
 `/proc/self/exe`. Installing over a running daemon unlinks that binary, after
 which the link reads `"<path> (deleted)"` — a path nothing can spawn. The
-resolver follows the marker back to the replacement file at the same path; if
-none is there, `auto` degrades to an unsandboxed spawn with a warning and `on`
-fails the tool call closed, naming the missing binary. Neither mode lets a
-stale `/proc/self/exe` turn into a bare `ENOENT` on every `git` call.
+resolver follows the marker back to the replacement file at the same path, which
+must be an executable regular file — a half-copied install is not a helper. If
+none is there, `auto` degrades to an unsandboxed spawn (warned once per distinct
+reason, since the plan is recomputed per call) and `on` fails the tool call
+closed, naming the missing binary. Neither mode lets a stale `/proc/self/exe`
+turn into a bare `ENOENT` on every `git` call.
+
+Degrading is a real loosening — under the default `auto`, a daemon whose binary
+is gone runs `git` with the denylist alone — and is the documented meaning of
+`auto`. Operators who need enforcement or nothing set `sandbox = "on"`.
 
 The sandbox and the denylist are complementary, not redundant:
 

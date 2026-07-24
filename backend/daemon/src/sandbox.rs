@@ -83,13 +83,27 @@ pub fn plan_for(workspace_dir: &str) -> SandboxPlan {
         }
     };
 
+    plan_confined(&pol, require, workspace_dir, helper_path)
+}
+
+/// The confined half of [`plan_for`], once the mode and Landlock probe have
+/// settled into `require`. Split out so the two ways confinement can fall
+/// through — no workspace root, no helper binary — are testable without a
+/// policy global, a kernel probe, or a real `/proc/self/exe`.
+#[cfg(target_os = "linux")]
+fn plan_confined(
+    pol: &SandboxConfig,
+    require: bool,
+    workspace_dir: &str,
+    resolve_helper_path: impl FnOnce() -> Result<std::path::PathBuf, String>,
+) -> SandboxPlan {
     // Without a workspace root there is nothing to confine to. In `auto` we
     // degrade to a direct spawn; in `on` we must fail closed.
     if workspace_dir.is_empty() {
         return unavailable_or_direct(require, "exec sandbox requires a workspace root");
     }
 
-    let helper = match helper_path() {
+    let helper = match resolve_helper_path() {
         Ok(path) => path,
         Err(reason) => return unavailable_or_direct(require, &reason),
     };
@@ -134,27 +148,47 @@ fn helper_path() -> Result<std::path::PathBuf, String> {
 /// the rest of the process's life: the model saw a bare "No such file or
 /// directory (os error 2)" with nothing to act on and abandoned the tool.
 ///
-/// So: strip the marker and use the path when it names a real file again — the
-/// freshly installed binary, whose helper mode is the same contract — and
+/// So: strip the marker and use the path when it names a runnable binary again
+/// — the freshly installed one, whose helper mode is the same contract — and
 /// otherwise say what is missing, so `auto` degrades and `on` fails closed with
 /// a reason an operator can act on.
+///
+/// Two limits are deliberate. The candidate must be an executable regular file,
+/// not merely present: `install` unlinks the destination and then copies into
+/// it, so for a moment the path holds a partial, not-yet-`chmod`ed file that
+/// would `execve` as `ENOEXEC`/`EACCES` — better to degrade than to spawn that.
+/// And identity is the path itself: whatever now sits there is trusted to
+/// honour [`HELPER_ARG`]. That is the same trust the next daemon start already
+/// places in it, and writing there needs the privileges that own the daemon, so
+/// following the marker widens nothing.
 #[cfg(target_os = "linux")]
 fn resolve_helper(exe: std::path::PathBuf) -> Result<std::path::PathBuf, String> {
     use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 
-    if exe.is_file() {
+    if is_executable_file(&exe) {
         return Ok(exe);
     }
     if let Some(stripped) = exe.as_os_str().as_bytes().strip_suffix(DELETED_SUFFIX) {
         let replacement = std::path::PathBuf::from(std::ffi::OsString::from_vec(stripped.to_vec()));
-        if replacement.is_file() {
+        if is_executable_file(&replacement) {
             return Ok(replacement);
         }
     }
     Err(format!(
-        "daemon binary {} is gone (replaced or removed since startup); restart shore-daemon",
+        "daemon binary {} cannot be run (replaced or removed since startup); restart shore-daemon",
         exe.display()
     ))
+}
+
+/// Whether `path` is something `execve` could plausibly accept: a regular file
+/// (following symlinks, as `install`ed binaries often are) carrying an execute
+/// bit.
+#[cfg(target_os = "linux")]
+fn is_executable_file(path: &std::path::Path) -> bool {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    std::fs::metadata(path)
+        .is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
 }
 
 /// When the sandbox can't be applied: fail closed under `on` (required), or
@@ -166,8 +200,28 @@ fn unavailable_or_direct(require: bool, reason: &str) -> SandboxPlan {
             reason: reason.to_owned(),
         }
     } else {
-        tracing::warn!(reason = %reason, "exec sandbox: running unsandboxed (auto fallback)");
+        // The plan is recomputed per call and these reasons persist for the life
+        // of the process — a deleted binary does not come back — so warn once
+        // per distinct reason rather than on every `git` call, the same way
+        // `warn_fallback` does for a Landlock-less kernel.
+        if warn_is_new(reason) {
+            tracing::warn!(reason = %reason, "exec sandbox: running unsandboxed (auto fallback)");
+        }
         SandboxPlan::Direct
+    }
+}
+
+/// Whether this fallback reason has not been warned about yet.
+#[cfg(target_os = "linux")]
+fn warn_is_new(reason: &str) -> bool {
+    static WARNED: OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = OnceLock::new();
+
+    match WARNED.get_or_init(std::sync::Mutex::default).lock() {
+        Ok(mut seen) => seen.insert(reason.to_owned()),
+        // A poisoned lock means another thread panicked mid-warn. Warning twice
+        // beats swallowing the only signal an operator gets that git is running
+        // unsandboxed.
+        Err(_) => true,
     }
 }
 
@@ -591,12 +645,22 @@ mod tests {
     /// `/proc/self/exe` reads `"<path> (deleted)"`. The helper must follow that
     /// back to the newly installed file instead of spawning a path that cannot
     /// exist — otherwise every `git` call fails with ENOENT until restart.
+    /// Write an executable stand-in for the daemon binary.
+    #[cfg(target_os = "linux")]
+    fn write_binary(path: &std::path::Path) {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        std::fs::write(path, b"replacement").expect("write replacement");
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod replacement");
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn deleted_exe_resolves_to_the_replacement_binary() {
         let dir = tempfile::tempdir().expect("tempdir");
         let exe = dir.path().join("shore-daemon");
-        std::fs::write(&exe, b"replacement").expect("write replacement");
+        write_binary(&exe);
 
         let deleted = std::path::PathBuf::from(format!("{} (deleted)", exe.display()));
         assert_eq!(resolve_helper(deleted).expect("resolved"), exe);
@@ -610,12 +674,103 @@ mod tests {
         let gone = dir.path().join("shore-daemon");
 
         let err = resolve_helper(gone.clone()).expect_err("no helper");
-        assert!(err.contains("is gone"), "{err}");
+        assert!(err.contains("cannot be run"), "{err}");
 
         let deleted = std::path::PathBuf::from(format!("{} (deleted)", gone.display()));
         assert!(
             resolve_helper(deleted).is_err(),
             "a deleted binary with no replacement has no helper"
+        );
+    }
+
+    /// `install` unlinks the destination and then copies into it: for an instant
+    /// the path holds a partial file with no execute bit. Spawning that gets
+    /// `ENOEXEC`, not a sandbox — so it must not pass as a helper.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn half_installed_replacement_is_not_a_helper() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let exe = dir.path().join("shore-daemon");
+        std::fs::write(&exe, b"half-written").expect("write partial");
+
+        assert!(
+            resolve_helper(exe.clone()).is_err(),
+            "a non-executable file is not a helper"
+        );
+
+        let deleted = std::path::PathBuf::from(format!("{} (deleted)", exe.display()));
+        assert!(
+            resolve_helper(deleted).is_err(),
+            "nor is it one to fall back to"
+        );
+    }
+
+    /// Losing the helper must not fail the same way in both modes: `on` refuses
+    /// to run git at all, `auto` runs it under the denylist alone.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn helperless_plan_fails_closed_under_on_and_degrades_under_auto() {
+        let pol = SandboxConfig {
+            mode: SandboxMode::On,
+            allow_network: false,
+        };
+        let no_helper = || Err("daemon binary /x cannot be run".to_owned());
+
+        let plan = plan_confined(&pol, true, "/ws", no_helper);
+        let SandboxPlan::Unavailable { reason } = plan else {
+            panic!("`on` must fail closed without a helper, got {plan:?}");
+        };
+        assert!(reason.contains("cannot be run"), "{reason}");
+
+        assert!(
+            matches!(
+                plan_confined(&pol, false, "/ws", no_helper),
+                SandboxPlan::Direct
+            ),
+            "`auto` must degrade to a direct spawn without a helper"
+        );
+        // No workspace to confine to splits the same way.
+        assert!(matches!(
+            plan_confined(&pol, true, "", no_helper),
+            SandboxPlan::Unavailable { .. }
+        ));
+        assert!(matches!(
+            plan_confined(&pol, false, "", no_helper),
+            SandboxPlan::Direct
+        ));
+    }
+
+    /// With a helper, the plan re-execs it in [`HELPER_ARG`] mode and carries
+    /// the policy through as flags the child parses.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn resolved_helper_plans_a_wrapped_spawn() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let exe = dir.path().join("shore-daemon");
+        write_binary(&exe);
+        let pol = SandboxConfig {
+            mode: SandboxMode::On,
+            allow_network: true,
+        };
+
+        let plan = plan_confined(&pol, true, "/ws", || Ok(exe.clone()));
+        let SandboxPlan::Wrapped {
+            helper,
+            prefix_args,
+        } = plan
+        else {
+            panic!("a resolvable helper must plan a wrapped spawn");
+        };
+        assert_eq!(helper, exe);
+        assert_eq!(
+            prefix_args,
+            vec![
+                HELPER_ARG.to_owned(),
+                "--root".to_owned(),
+                "/ws".to_owned(),
+                "--require".to_owned(),
+                "--allow-network".to_owned(),
+            ]
         );
     }
 
