@@ -48,7 +48,9 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
   freshly installed binary; when there is nothing to follow it to, `auto`
   degrades to an unsandboxed spawn with a warning and `on` fails closed naming
   the missing binary. A `git` that cannot be started at all now says so as a
-  host problem rather than as an argument error.
+  host problem rather than as an argument error — and a `workdir` that isn't a
+  directory in your workspace, which fails the spawn with that same ENOENT, is
+  refused up front as the argument error it actually is.
 - **Images you attach are now actually sent to every non-Anthropic model**
   (Kimi K3 via opencode-go saw only your text). The daemon does not put
   attachments in a separate `images` field — it inlines them into the wire

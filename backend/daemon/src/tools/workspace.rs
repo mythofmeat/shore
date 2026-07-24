@@ -1676,11 +1676,23 @@ pub async fn handle_git(
             .await;
     }
 
-    let workdir = input
-        .get("workdir")
-        .and_then(|v| v.as_str())
+    let workdir_rel = input.get("workdir").and_then(|v| v.as_str());
+    let workdir = workdir_rel
         .map(|w| resolve_path(workspace_dir, w))
         .transpose()?;
+
+    // A `workdir` that isn't there makes the *spawn* fail: the child's `chdir`
+    // returns the same ENOENT a missing git binary does, and the spawn-failure
+    // message below tells the model the host is at fault. That message is true
+    // for every other cause and wrong for this one, so catch the one case that
+    // is the model's to fix while it can still be named as such.
+    if let (Some(rel), Some(dir)) = (workdir_rel, workdir.as_deref()) {
+        if !dir.is_dir() {
+            return Err(ToolError::InvalidArgs(format!(
+                "workdir is not an existing directory in your workspace: {rel}"
+            )));
+        }
+    }
 
     // Safety flags first, then the subcommand: a repo the operator imported
     // must not get to run its `.git/hooks/pre-commit` just because the model
@@ -2826,6 +2838,42 @@ mod tests {
         )
         .await;
         assert!(result.is_err());
+    }
+
+    /// A `workdir` that does not exist fails the spawn with the same ENOENT a
+    /// missing git binary gives — and the spawn-failure text tells the model the
+    /// host is broken and to stop retrying. That is the model's own argument, so
+    /// it has to be refused as one, well before the spawn.
+    #[tokio::test]
+    async fn git_rejects_workdir_that_does_not_exist() {
+        // No repo needed: the refusal lands before anything is spawned, so this
+        // holds on a host without git too.
+        let tmp = tempfile::tempdir().unwrap();
+        let ws = tmp.path().join("workspace");
+        tokio::fs::create_dir_all(&ws).await.unwrap();
+        tokio::fs::write(ws.join("note.md"), "tea").await.unwrap();
+        let ws_str = ws.to_string_lossy().to_string();
+
+        for workdir in ["nope", "note.md"] {
+            let err = handle_git(
+                json!({"subcommand": "status", "workdir": workdir}),
+                &ws_str,
+                "test",
+            )
+            .await
+            .expect_err("missing workdir must be rejected");
+
+            assert!(
+                matches!(err, ToolError::InvalidArgs(_)),
+                "{workdir}: {err:?}"
+            );
+            let message = err.to_string();
+            assert!(message.contains(workdir), "{message}");
+            assert!(
+                !message.contains("problem with the host"),
+                "a bad workdir is the model's to fix, not the host's: {message}"
+            );
+        }
     }
 
     #[tokio::test]
