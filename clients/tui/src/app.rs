@@ -115,26 +115,61 @@ fn usage_level_from_json(value: &serde_json::Value) -> Option<UsageLevel> {
 }
 
 impl UsageBudget {
-    /// True once any warning threshold has been crossed (or the budget is
-    /// over limit) — the signal that gates warning styling and the
-    /// "only past a warning level" visibility mode.
+    /// True once any warning threshold has been crossed (or either limit is
+    /// over) — the signal that gates warning styling and the "only past a
+    /// warning level" visibility mode.
+    ///
+    /// The *union* of both limits, deliberately: `warn_at` and `pace_warn_at`
+    /// are configured independently, so a pace past its own threshold is a
+    /// warning even while the period cap is still calm. Narrowing this to the
+    /// headline would let the cap hide a warning the user asked to see.
     pub fn in_warning(&self) -> bool {
-        self.headline().in_warning()
+        self.cap().in_warning() || self.pace.as_ref().is_some_and(UsageLevel::in_warning)
     }
 
-    /// The constraint that binds first: the pace when it is running hotter
-    /// than the period cap, otherwise the cap. This is the figure the usage
-    /// chip renders, extending "show the most pressing constraint" to budgets
-    /// that pace themselves.
-    pub fn headline(&self) -> UsageLevel {
-        let cap = UsageLevel {
+    /// This budget's period cap as a standalone level.
+    fn cap(&self) -> UsageLevel {
+        UsageLevel {
             percent_used: self.percent_used,
             crossed_warn_at: self.crossed_warn_at.clone(),
             over_limit: self.over_limit,
-        };
+        }
+    }
+
+    /// The constraint that binds first: the pace when it is the more pressing
+    /// of the two, otherwise the cap. This is the figure the usage chip
+    /// renders, extending "show the most pressing constraint" to budgets that
+    /// pace themselves.
+    pub fn headline(&self) -> UsageLevel {
         match self.pace.as_ref() {
-            Some(pace) if pace.percent_used > cap.percent_used => pace.clone(),
-            _ => cap,
+            Some(pace) if self.pace_leads(pace) => pace.clone(),
+            _ => self.cap(),
+        }
+    }
+
+    /// [`Self::headline`]'s percentage without the vector clones. The chip's
+    /// "most urgent budget" scan runs this on every frame, once per budget.
+    pub fn headline_percent(&self) -> f64 {
+        match self.pace.as_ref() {
+            Some(pace) if self.pace_leads(pace) => pace.percent_used,
+            _ => self.percent_used,
+        }
+    }
+
+    /// Whether the pace outranks the period cap. Split out so `headline` and
+    /// `headline_percent` cannot drift apart.
+    ///
+    /// A limit past one of *its own* thresholds outranks a limit that isn't,
+    /// whatever the raw percentages: with `warn_at = [0.8]` and
+    /// `pace_warn_at = [0.5]`, a 55% pace is the live warning and a 60% cap is
+    /// not. Percentage only breaks the tie when both — or neither — are
+    /// warning.
+    fn pace_leads(&self, pace: &UsageLevel) -> bool {
+        let cap_warning = self.over_limit || !self.crossed_warn_at.is_empty();
+        match (pace.in_warning(), cap_warning) {
+            (true, false) => true,
+            (false, true) => false,
+            _ => pace.percent_used > self.percent_used,
         }
     }
 }
@@ -1848,11 +1883,9 @@ impl App {
     /// The budget to surface in the usage chip: the one nearest (or past) its
     /// limit, so the most pressing constraint is always what's shown.
     pub fn most_urgent_budget(&self) -> Option<&UsageBudget> {
-        self.usage_budgets.iter().max_by(|a, b| {
-            a.headline()
-                .percent_used
-                .total_cmp(&b.headline().percent_used)
-        })
+        self.usage_budgets
+            .iter()
+            .max_by(|a, b| a.headline_percent().total_cmp(&b.headline_percent()))
     }
 
     /// Replace cached budget statuses from a `usage {budget:true}` reply's

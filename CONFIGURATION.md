@@ -1275,7 +1275,15 @@ Notes on behavior:
 - **`pace_action = "warn"` never blocks.** Exceeding one sub-window is expected
   — that's the point — so only the budget's own `limit` stops calls. Set
   `pace_action = "block"` for self-adjusting hard rationing instead.
-- Once the budget is fully spent the allowance is `$0`, never negative.
+- Once the budget is fully spent the allowance is `$0`, never negative, and a
+  `$0` allowance reads as 100% used and `over_limit`.
+- **A `block` pace under a `warn` cap blocks anyway, once the budget runs out.**
+  These two settings combine into something stronger than either: a spent
+  budget leaves a `$0` allowance, which every sub-window is instantly over, so
+  `limit = "warn"` + `pace_action = "block"` stops *all* calls for the rest of
+  the period — despite the cap being advisory by itself. Pair `block` pacing
+  with a `block` cap, or leave the pace on `warn`, unless that hard stop is
+  what you want.
 - Budget and pace warnings are tracked separately, so both can fire in the same
   window without one suppressing the other.
 
