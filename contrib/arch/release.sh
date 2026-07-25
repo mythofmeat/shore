@@ -8,8 +8,8 @@
 #   ./contrib/arch/release.sh major    # 0.20.1 -> 1.0.0
 #   ./contrib/arch/release.sh 1.2.3    # explicit
 #
-# Does not touch git. The version bump is left in the working tree; commit it
-# however you like.
+# Once the packages are published the version bump is committed, tagged v$new
+# and pushed to origin.
 
 set -euo pipefail
 shopt -s nullglob
@@ -78,6 +78,16 @@ for f in "${built[@]}"; do
 done
 
 repo-add --quiet "$repo_dir/$repo_name.db.tar.gz" "${published[@]}"
+
+# --- commit ------------------------------------------------------------------
+# The packages are out, so this version is real. Cargo.lock is gitignored, so
+# only the two version files are staged. Installing comes after: a pacman
+# failure is a local matter and must not leave the release uncommitted.
+say "Committing and tagging v$new..."
+git add Cargo.toml "$arch_dir/PKGBUILD"
+git commit -q -m "chore(release): v$new"
+git tag -a "v$new" -m "v$new"
+git push -q origin HEAD "v$new"
 
 # --- install -----------------------------------------------------------------
 # Named explicitly rather than a bare -Syu: pacman only upgrades packages that
