@@ -443,6 +443,26 @@ mod tests {
         bin
     }
 
+    /// Install the stub server at `dest` as a plugin's packaged binary.
+    ///
+    /// Links rather than copies. `fs::copy` holds `dest` open for writing, and
+    /// any other test thread that forks during that window hands the child an
+    /// inherited write fd; the exec that follows then fails with ETXTBSY
+    /// ("text file busy") and `from_config` skips the server, which showed up
+    /// as a rare, unexplained empty tool list. Measured on this pattern: 87 of
+    /// 300 spawns hit ETXTBSY while sibling threads forked, 0 of 300 when
+    /// linking. A hard link would do as well but the tempdir is usually a
+    /// different filesystem from `target/`, where linking fails with EXDEV.
+    #[cfg(unix)]
+    fn install_stub_server(dest: &Path) {
+        std::os::unix::fs::symlink(stub_server_bin(), dest).expect("link stub binary");
+    }
+
+    #[cfg(not(unix))]
+    fn install_stub_server(dest: &Path) {
+        let _bytes = std::fs::copy(stub_server_bin(), dest).expect("install stub binary");
+    }
+
     /// End-to-end: a server installed under the plugins directory and
     /// configured purely with relative paths actually spawns and lists tools.
     /// Covers what the string-level tests above cannot — that a relative
@@ -452,20 +472,17 @@ mod tests {
         let plugins = tempfile::tempdir().expect("tempdir");
         let install = plugins.path().join("stub-server");
         std::fs::create_dir_all(&install).expect("create install dir");
-        let _bytes =
-            std::fs::copy(stub_server_bin(), install.join("server")).expect("install stub binary");
+        install_stub_server(&install.join("server"));
 
+        let cfg = McpServerConfig {
+            command: Some("./server".to_owned()),
+            args: vec![],
+            env: BTreeMap::new(),
+            cwd: Some("stub-server".to_owned()),
+            url: None,
+        };
         let mut mcp = BTreeMap::new();
-        let _existing = mcp.insert(
-            "stub".to_owned(),
-            McpServerConfig {
-                command: Some("./server".to_owned()),
-                args: vec![],
-                env: BTreeMap::new(),
-                cwd: Some("stub-server".to_owned()),
-                url: None,
-            },
-        );
+        let _existing = mcp.insert("stub".to_owned(), cfg.clone());
 
         let registry = McpRegistry::from_config(&mcp, plugins.path()).await;
         let names: Vec<String> = registry
@@ -473,6 +490,16 @@ mod tests {
             .iter()
             .map(|d| d["name"].as_str().unwrap().to_owned())
             .collect();
+
+        // `from_config` logs-and-skips a server it cannot reach, so a failure
+        // reaches the assert below as a bare empty list. Reconnect to name the
+        // cause: a genuine break in path resolution repeats the spawn error,
+        // while `None` means the first attempt lost a race the retry then won.
+        if names.is_empty() {
+            let spec = to_spec("stub", &cfg, plugins.path()).expect("spec");
+            let reconnect = McpClient::connect(&spec).await.err();
+            panic!("registry listed no tools; direct connect reported: {reconnect:?}");
+        }
         assert_eq!(names, vec!["mcp__stub__echo"]);
 
         registry.shutdown().await;
