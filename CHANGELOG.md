@@ -46,11 +46,28 @@ to advance the release-plz baseline past trees it couldn't `cargo package`.
   write per turn, billed at 2x input under the 1h TTL. Placement now anchors the
   message immediately *before* the trailing assistant turn: the strip boundary
   only ever moves forward, so that prefix is frozen for the life of the
-  conversation and keeps reading across the strip. `all` was never affected (it
-  strips nothing) and its cache coverage is unchanged. The claim in
-  CONFIGURATION.md that `last_turn` needed no placement change (#191) was wrong
-  and has been corrected — a cache read resolves only up to a placed
-  breakpoint, not as a free-running longest-prefix match.
+  conversation and keeps reading across the strip. The *previous* turn's
+  boundary is anchored too, which is what covers the first turn after a
+  multi-round tool loop: while the loop runs the boundary is pinned at the loop
+  start, then jumps past the whole loop in one step when the loop ends and
+  strips every round's thinking at once, so the newer anchor lands after the
+  rewritten region and misses. Compaction and dreaming loops run well past
+  Anthropic's automatic lookback, so without the older anchor those reads
+  collapsed too. `all` was never affected (it strips nothing) and its cache
+  coverage is unchanged. The claim in CONFIGURATION.md that `last_turn` needed
+  no placement change (#191) was wrong and has been corrected — a cache read
+  resolves only up to a placed breakpoint, not as a free-running longest-prefix
+  match.
+- **An image-only message no longer costs you the cache breakpoint that sits on
+  it.** Caption-less attachments are persisted with no text block at all (so an
+  empty one can't anchor a breakpoint and fail the request), but the placement
+  pass only ever anchored text, `tool_use`, and `tool_result` blocks — an
+  image-only message at the frozen boundary silently dropped its marker,
+  reducing the request to a single anchor on the last message: the exact shape
+  the frozen-boundary schedule exists to avoid. Image blocks now anchor
+  directly (Anthropic accepts `cache_control` on them), and any scheduled
+  position with no eligible block walks back to the nearest message that has
+  one instead of dropping the breakpoint.
 - **Images you attach are now actually sent to every non-Anthropic model**
   (Kimi K3 via opencode-go saw only your text). The daemon does not put
   attachments in a separate `images` field — it inlines them into the wire

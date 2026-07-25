@@ -431,6 +431,50 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    // ── turn-boundary parity with the sidecar ─────────────────────────
+
+    /// The Anthropic cache breakpoint is anchored just *before* the boundary
+    /// this function returns, and the sidecar recomputes that boundary itself
+    /// (`mostRecentAssistantTurnStart` in
+    /// `backend/llm-sidecar/src/llm/providers/anthropic.ts`). If the two drift,
+    /// the anchor lands inside the region `replay_prior_thinking` rewrites,
+    /// both message breakpoints miss, and every committed turn silently
+    /// re-caches the whole conversation — a cost regression with no functional
+    /// symptom, whose only end-to-end guard is an `#[ignore]` live probe.
+    ///
+    /// Both sides therefore assert against one shared fixture. The sidecar half
+    /// is `backend/llm-sidecar/tests/turn_boundary_parity.test.ts`; adding a
+    /// case to the fixture pins both implementations at once.
+    #[test]
+    fn turn_boundary_matches_shared_fixture() {
+        let raw = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../dev/fixtures/turn_boundary_parity.json"
+        ))
+        .expect("shared turn-boundary fixture is readable");
+        let fixture: Value = serde_json::from_str(&raw).expect("fixture parses");
+        let cases = fixture["cases"].as_array().expect("fixture has cases");
+        // Guard against a fixture that parsed but carries nothing: an empty
+        // case list would make this test pass while checking nothing.
+        assert!(
+            cases.len() > 5,
+            "fixture looks truncated: {} cases",
+            cases.len()
+        );
+
+        for case in cases {
+            let name = case["name"].as_str().unwrap_or("<unnamed>");
+            let messages = case["messages"].as_array().expect("case has messages");
+            let expected = usize::try_from(case["expected"].as_u64().expect("case has expected"))
+                .expect("expected index fits usize");
+            assert_eq!(
+                most_recent_assistant_turn_start(messages),
+                expected,
+                "turn boundary mismatch for fixture case {name:?}"
+            );
+        }
+    }
+
     // ── content_block_to_api_json ─────────────────────────────────────
 
     #[test]

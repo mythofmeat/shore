@@ -252,11 +252,38 @@ Cache invalidation accounting is split into two layers:
 | Provider-side Anthropic prompt cache | Cache TTL expiry without a successful keepalive, model/provider/cache setting changes, thinking-mode shape changes, prompt template or tool definition changes, activation of staged prompt-visible edits, edits to already-cached conversation history, and explicit cache breakpoint/debug overrides. | Ordinary workspace writes, markdown memory writes before active-prompt activation, tool-loop bookkeeping, activity stats, image cache warmups, and compaction of only the recent conversation tail when the pinned system prefix is unchanged. |
 | Shore cached `last_request` reuse | Successful chat requests replace it; successful compaction clears it because the conversation tail changed. Heartbeat and keepalive may rebuild it from disk. | Clearing `last_request` must not clear the cache keepalive deadline by itself; the pinned provider-side system prefix may still be worth refreshing. |
 
+The Anthropic breakpoint schedule is owned by the sidecar adapter
+(`backend/llm-sidecar/src/llm/providers/anthropic.ts`) and places at most four
+markers, the provider limit: one system anchor on the last non-`memory_index`
+block, plus three message anchors at `[prev_frozen_boundary, frozen_boundary,
+last_msg]`. The load-bearing rule is that **a message anchor must sit in the
+frozen region** — strictly before the message at which the most-recent assistant
+turn begins. That index is where `replay_prior_thinking` strips against, and it
+only ever advances, so everything before it is byte-stable for the life of the
+conversation. Anchoring the trailing turn itself is the bug fixed in #191: under
+`last_turn` (or `none`) that turn loses its thinking blocks as soon as another
+turn lands, rewriting the very bytes the anchor covered, and the read collapses
+to the system prefix alone. A cache read resolves only up to a *placed*
+breakpoint, not as a free-running longest-prefix match, so the second (older)
+frozen anchor is not redundant: after a multi-round tool loop the boundary jumps
+past the whole loop in one step, and that anchor is the only placed breakpoint
+left on a still-stable prefix. The final user message *is* anchored — it is the
+tail write each request pays for. Two derived constraints: the anchor index is
+computed from a boundary the daemon also computes
+(`most_recent_assistant_turn_start` in `content_util.rs`), so the two
+implementations are pinned against a shared fixture
+(`dev/fixtures/turn_boundary_parity.json`) — silent drift there reintroduces the
+re-cache with nothing failing; and a scheduled index whose message carries no
+`cache_control`-eligible block walks back to the nearest one that does rather
+than dropping the marker (`thinking` blocks reject `cache_control`, empty text
+blocks fail the whole request, and caption-less image messages carry no text
+block at all).
+
 Local regression tests should cover request-shape invariants before live
 provider checks are run. In particular, Anthropic cache-control placement tests
 must account for generated chat histories, tool-loop tails, system anchors, the
-four-breakpoint provider limit, and the rule that the active final user message
-is never itself a message breakpoint. Live cache economics are validated by the
+four-breakpoint provider limit, and the frozen-region rule above. Live cache
+economics are validated by the
 gated `#[ignore]` Rust probes in `dev/test-harness/tests/`
 (`live_cache_regression.rs`, `live_compaction_cache.rs`), which drive a real
 provider through a multi-turn tool loop; the long-running idle keepalive soak

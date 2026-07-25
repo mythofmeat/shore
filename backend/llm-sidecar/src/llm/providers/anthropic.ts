@@ -363,8 +363,24 @@ function isToolResultOnlyUser(msg: MessageParam): boolean {
  * tool-result-only user messages between them and stopping at the first genuine
  * user turn. Mirrors `most_recent_assistant_turn_start` in `content_util.rs`,
  * which is the boundary `replay_prior_thinking` strips against. Returns
- * `messages.length` when there is no assistant message. */
-function mostRecentAssistantTurnStart(messages: MessageParam[]): number {
+ * `messages.length` when there is no assistant message.
+ *
+ * Exported for the cross-language parity test: the two implementations are
+ * checked against the same fixture (`dev/fixtures/turn_boundary_parity.json`),
+ * because if they drift the anchor lands inside the moving region and the
+ * re-cache bug returns silently.
+ *
+ * The daemon computes its boundary on the canonical history; the sidecar
+ * computes this one *after* `convertInlineSystemMessages`, which can make the
+ * two disagree: merging a trailing `role:"system"` turn into a preceding user
+ * message both removes a message and can turn a tool-result-only user into a
+ * "genuine" one (it gains a text block). Every such divergence is conservative
+ * — the merge only ever ends a turn earlier or shortens the array, so the
+ * sidecar's boundary is never *later* than the daemon's and the anchor stays
+ * inside the frozen region. Do not "fix" the two to agree by moving this call
+ * before the conversion: the breakpoint must be placed on the messages that
+ * actually go on the wire. */
+export function mostRecentAssistantTurnStart(messages: MessageParam[]): number {
   let lastAssistant = -1;
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i]?.role === "assistant") {
@@ -386,7 +402,7 @@ function mostRecentAssistantTurnStart(messages: MessageParam[]): number {
   return start;
 }
 
-/** `[frozen_boundary, last_msg]`, deduped, sorted.
+/** `[prev_frozen_boundary, frozen_boundary, last_msg]`, deduped, sorted.
  *
  * `frozen_boundary` is the message just before the trailing assistant turn.
  * `replay_prior_thinking` strips thinking from assistant turns *before* that
@@ -398,12 +414,35 @@ function mostRecentAssistantTurnStart(messages: MessageParam[]): number {
  * not: under `last_turn` that turn loses its thinking blocks as soon as another
  * turn lands, rewriting the very bytes the anchor covers. Both message anchors
  * then miss and the read collapses to the system prefix alone — a full re-cache
- * of the whole conversation on every committed turn. */
+ * of the whole conversation on every committed turn.
+ *
+ * `prev_frozen_boundary` is the same boundary one turn back — the genuine-user
+ * boundary of the turn *before* the trailing one. Under the normal turn cadence
+ * it is exactly the previous request's `frozen_boundary`, so it is redundant.
+ * It earns its slot on the request right after a multi-round tool loop: while
+ * the loop runs, `frozen_boundary` is pinned at the loop start, and when the
+ * loop ends and a new assistant turn lands the boundary jumps *past the whole
+ * loop* in one step — stripping every round's thinking at once. The new
+ * `frozen_boundary` sits after that rewritten region and misses; the still-
+ * stable prefix (before the loop) is only readable because this second anchor
+ * is sitting on it. Compaction and dreaming loops run well past Anthropic's
+ * ~20-block automatic lookback, so without it those reads collapse to the
+ * system prefix. Three message anchors plus the one system anchor is exactly
+ * the four-breakpoint provider limit. */
 function tsMessageBreakpoints(messages: MessageParam[]): number[] {
   if (messages.length === 0) return [];
-  const lastIdx = messages.length - 1;
+  const anchors = [messages.length - 1];
   const frozenIdx = mostRecentAssistantTurnStart(messages) - 1;
-  return [...new Set([frozenIdx, lastIdx].filter((i) => i >= 0))].sort((a, b) => a - b);
+  if (frozenIdx >= 0) {
+    anchors.push(frozenIdx);
+    // `messages[frozenIdx]` is a genuine user turn, so slicing it off leaves
+    // the preceding assistant run intact and the same walk-back finds where
+    // *that* turn began. A return of `frozenIdx` means no assistant message
+    // precedes the boundary (nothing older to anchor).
+    const prevStart = mostRecentAssistantTurnStart(messages.slice(0, frozenIdx));
+    if (prevStart < frozenIdx && prevStart - 1 >= 0) anchors.push(prevStart - 1);
+  }
+  return [...new Set(anchors)].sort((a, b) => a - b);
 }
 
 function tsDefaultPlacement(
@@ -428,30 +467,48 @@ function placeBreakpoints(
     const block = system[idx];
     if (block) block.cache_control = cc;
   }
+  // A scheduled index whose message has no anchorable block walks back to the
+  // nearest older message that does, instead of silently dropping the
+  // breakpoint. Dropping it is what the frozen-boundary anchor exists to
+  // prevent: `messages[frozenIdx]` is always a genuine user message, and the
+  // daemon deliberately persists caption-less image messages with *no* text
+  // block (`handler/task.rs`), so before `image` became anchorable an
+  // image-only boundary silently reduced the schedule to the last message
+  // alone — the exact shape this schedule was written to fix. An assistant
+  // message of only thinking blocks is the remaining un-anchorable case.
+  const placed = new Set<number>();
   for (const pos of msgBp) {
-    const msg = messages[pos];
-    if (msg && Array.isArray(msg.content)) applyMessageBreakpoint(msg.content, cc);
+    for (let i = pos; i >= 0; i--) {
+      if (placed.has(i)) break; // collapsed into an anchor already at/behind i
+      const msg = messages[i];
+      if (!msg || !Array.isArray(msg.content)) continue;
+      if (applyMessageBreakpoint(msg.content, cc)) {
+        placed.add(i);
+        break;
+      }
+    }
   }
 }
 
-/** Apply the breakpoint to the last text/tool_use/tool_result block (thinking
- * blocks reject cache_control). Empty text blocks are skipped as anchors:
- * Anthropic rejects "cache_control cannot be set for empty text blocks" and
- * fails the whole request, so the breakpoint walks back to the previous
- * eligible block (or is dropped if the message has none). */
-function applyMessageBreakpoint(content: ContentBlockParam[], cc: CacheControl): void {
+/** Apply the breakpoint to the last text/image/tool_use/tool_result block and
+ * report whether one was found (thinking blocks reject cache_control). Empty
+ * text blocks are skipped as anchors: Anthropic rejects "cache_control cannot
+ * be set for empty text blocks" and fails the whole request, so the breakpoint
+ * walks back to the previous eligible block. */
+function applyMessageBreakpoint(content: ContentBlockParam[], cc: CacheControl): boolean {
   for (let i = content.length - 1; i >= 0; i--) {
     const b = content[i] as ContentBlockParam & { cache_control?: unknown };
     if (b.type === "text") {
       if (((b as { text?: string }).text ?? "").trim() === "") continue;
       b.cache_control = cc;
-      return;
+      return true;
     }
-    if (b.type === "tool_use" || b.type === "tool_result") {
+    if (b.type === "image" || b.type === "tool_use" || b.type === "tool_result") {
       b.cache_control = cc;
-      return;
+      return true;
     }
   }
+  return false;
 }
 
 // ── system + inline-system handling ─────────────────────────────────────────
