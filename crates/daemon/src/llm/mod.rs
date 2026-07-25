@@ -4,9 +4,9 @@ pub mod credentials;
 pub mod debug_log;
 pub mod discovery;
 pub mod embed;
-pub(crate) mod providers;
 pub mod retry;
 pub mod sanitize;
+pub(crate) mod sidecar;
 pub mod stream;
 pub mod types;
 
@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use tokio::io::{AsyncRead, BufReader};
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 
 use crate::call_store::CallStore;
 use shore_common::config::models::ResolvedModel;
@@ -66,6 +66,38 @@ pub enum LlmError {
     Refusal,
 }
 
+/// Truncate a string for log preview, respecting UTF-8 char boundaries.
+pub(crate) fn body_preview(body: &str, max: usize) -> &str {
+    if body.len() > max {
+        body.get(..body.floor_char_boundary(max)).unwrap_or(body)
+    } else {
+        body
+    }
+}
+
+/// Check an HTTP response status, returning the response on success or
+/// an `HttpStatus` error with the body text on failure.
+pub(crate) async fn check_response(
+    response: reqwest::Response,
+) -> Result<reqwest::Response, LlmError> {
+    let status = response.status();
+    if status.is_success() {
+        return Ok(response);
+    }
+    let status_code = status.as_u16();
+    let body = response.text().await.unwrap_or_default();
+    error!(
+        status = status_code,
+        body_len = body.len(),
+        body_preview = %body_preview(&body, 200),
+        "LLM API returned error status"
+    );
+    Err(LlmError::HttpStatus {
+        status: status_code,
+        body,
+    })
+}
+
 /// HTTP client that calls LLM provider APIs through the sidecar.
 ///
 /// Uses reqwest for connection pooling and TLS session reuse.
@@ -86,7 +118,7 @@ impl LlmClient {
     ///
     /// Bounds connect (DNS/TCP/TLS) at 30s but intentionally sets no
     /// whole-request deadline — non-streaming generates apply their own
-    /// per-call `timeout()` on the `RequestBuilder` (see `providers::NON_STREAMING_TIMEOUT`).
+    /// per-call `timeout()` on the `RequestBuilder` (see `sidecar::NON_STREAMING_TIMEOUT`).
     /// A global request timeout here would fire mid-body-read for any
     /// long generation and surface as the misleading "error decoding
     /// response body".
@@ -360,8 +392,7 @@ impl LlmClient {
             "Sending streaming request to provider"
         );
 
-        let read_half =
-            providers::stream(&self.http_client, &prepared, self.sidecar_socket()).await?;
+        let read_half = sidecar::stream(&prepared, self.sidecar_socket()).await?;
         let reader: Box<dyn AsyncRead + Send + Unpin> = match ctx {
             Some(context) => Box::new(debug_log::TeeReader::new(read_half, context)),
             None => Box::new(read_half),
@@ -380,7 +411,7 @@ impl LlmClient {
         let body = serde_json::to_string(&*prepared).map_err(LlmError::Serialize)?;
         let ctx = debug_log::start(self.call_store.as_ref(), &prepared, &body, call_type);
 
-        let result = providers::generate(&self.http_client, &prepared, self.sidecar_socket()).await;
+        let result = sidecar::generate(&prepared, self.sidecar_socket()).await;
         if let Some(context) = ctx {
             match &result {
                 Ok(resp) => context.finish_response(resp),
@@ -395,7 +426,7 @@ impl LlmClient {
         &self,
         params: &ImageGenerateParams<'_>,
     ) -> Result<ImageGenerateResponse, LlmError> {
-        providers::image_generate(&self.http_client, params, self.sidecar_socket()).await
+        sidecar::image_generate(params, self.sidecar_socket()).await
     }
 }
 
@@ -504,6 +535,20 @@ mod tests {
 
     fn item<T>(items: &[T], index: usize) -> &T {
         items.get(index).expect("expected item")
+    }
+
+    #[test]
+    fn body_preview_handles_multibyte_at_boundary() {
+        // 199 ASCII bytes + "é" (2 bytes) = 201 bytes total.
+        // Slicing at byte 200 lands inside "é" and must not panic.
+        let body = format!("{}{}", "x".repeat(199), "é");
+        assert_eq!(body.len(), 201, "test fixture must straddle the 200-byte cut");
+        let preview = body_preview(&body, 200);
+        assert!(preview.len() <= 200, "preview must not exceed the max");
+        assert!(
+            preview.is_char_boundary(preview.len()),
+            "preview must end on a char boundary"
+        );
     }
 
     /// Helper to build a minimal test ResolvedModel.

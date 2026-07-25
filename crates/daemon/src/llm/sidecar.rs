@@ -1,37 +1,123 @@
-use std::path::Path;
+//! Transport for chat, image, and streaming calls.
+//!
+//! Every provider request goes over a Unix socket to the Bun
+//! `shore-llm-sidecar`, which owns all per-provider SDK code — there is no
+//! Rust-side provider branch. Embeddings are the one exception: they speak a
+//! single OpenAI-compatible shape and go out over plain HTTP from
+//! [`crate::llm::embed`].
+
+use std::{path::Path, time::Duration};
 
 use futures_util::StreamExt;
+use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio::io::{AsyncWriteExt, DuplexStream};
-use tracing::warn;
+use tracing::{debug, warn};
 
 use crate::llm::types::{GenerateResponse, ImageGenerateParams, ImageGenerateResponse, LlmRequest};
-use crate::llm::LlmError;
-
-use super::{check_response, format_reqwest_error, NON_STREAMING_TIMEOUT};
+use crate::llm::{body_preview, check_response, LlmError};
 
 const SIDECAR_ORIGIN: &str = "http://sidecar";
 
+/// Per-request ceiling for non-streaming calls.
+///
+/// Streaming has no whole-request bound (the sidecar reader handles
+/// inter-event timing on its own), but non-streaming buffers the full
+/// body and so needs *some* deadline — set generously to accommodate
+/// compaction/dreaming on slow reasoning models.
+const NON_STREAMING_TIMEOUT: Duration = Duration::from_mins(30);
+
+/// Format a reqwest error with its full source chain so the proximate
+/// cause (e.g. `request timed out`) appears in the log instead of just
+/// the generic top-level `error decoding response body`.
+fn format_reqwest_error(err: &reqwest::Error) -> String {
+    let mut out = err.to_string();
+    let mut src: Option<&dyn std::error::Error> = std::error::Error::source(err);
+    while let Some(s) = src {
+        out.push_str(": ");
+        out.push_str(&s.to_string());
+        src = s.source();
+    }
+    if err.is_timeout() && !out.contains("timed out") {
+        out.push_str(" (request timed out)");
+    }
+    out
+}
+
+/// Build a reqwest client bound to the sidecar's Unix socket.
 #[cfg(unix)]
-fn sidecar_client(socket_path: &Path) -> Result<reqwest::Client, LlmError> {
+fn sidecar_client(socket_path: Option<&Path>) -> Result<reqwest::Client, LlmError> {
+    let Some(path) = socket_path else {
+        return Err(LlmError::Provider {
+            message: "LLM sidecar socket is not configured; stream/generate/image calls require shore-llm-sidecar".into(),
+        });
+    };
     reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(30))
+        .connect_timeout(Duration::from_secs(30))
         .no_proxy()
-        .unix_socket(socket_path)
+        .unix_socket(path)
         .build()
         .map_err(LlmError::Request)
 }
 
 #[cfg(not(unix))]
-fn sidecar_client(_socket_path: &Path) -> Result<reqwest::Client, LlmError> {
+fn sidecar_client(_socket_path: Option<&Path>) -> Result<reqwest::Client, LlmError> {
     Err(LlmError::Provider {
         message: "LLM sidecar transport requires Unix domain sockets".into(),
     })
 }
 
+/// POST `body` to the sidecar at `path` and deserialize the buffered reply.
+async fn post_json<Req, Resp>(
+    socket_path: Option<&Path>,
+    path: &str,
+    body: &Req,
+) -> Result<Resp, LlmError>
+where
+    Req: Serialize + ?Sized,
+    Resp: DeserializeOwned,
+{
+    let client = sidecar_client(socket_path)?;
+    let response = client
+        .post(format!("{SIDECAR_ORIGIN}{path}"))
+        .json(body)
+        .timeout(NON_STREAMING_TIMEOUT)
+        .send()
+        .await?;
+    let checked = check_response(response).await?;
+    let text = checked.text().await?;
+    serde_json::from_str(&text).map_err(|e| LlmError::Provider {
+        message: format!(
+            "sidecar {path} response was not valid JSON: {e}; body preview: {}",
+            body_preview(&text, 200)
+        ),
+    })
+}
+
+/// Send a streaming request.
+///
+/// Returns the read half of a `DuplexStream` that yields NDJSON `StreamEvent`
+/// lines, pumped from the sidecar response body by a background task.
 pub(crate) async fn stream(
     request: &LlmRequest,
-    socket_path: &Path,
+    socket_path: Option<&Path>,
+) -> Result<DuplexStream, LlmError> {
+    debug!(
+        sdk = ?request.sdk,
+        model = %request.model,
+        max_tokens = request.max_tokens,
+        message_count = request.messages.len(),
+        has_tools = request.tools.is_some(),
+        "dispatching streaming LLM request through sidecar"
+    );
+    open_stream(request, socket_path).await.inspect_err(|e| {
+        warn!(sdk = ?request.sdk, model = %request.model, error = %e, "streaming request failed");
+    })
+}
+
+async fn open_stream(
+    request: &LlmRequest,
+    socket_path: Option<&Path>,
 ) -> Result<DuplexStream, LlmError> {
     let client = sidecar_client(socket_path)?;
     let response = client
@@ -65,47 +151,47 @@ pub(crate) async fn stream(
     Ok(reader)
 }
 
+/// Send a non-streaming completion request.
 pub(crate) async fn generate(
     request: &LlmRequest,
-    socket_path: &Path,
+    socket_path: Option<&Path>,
 ) -> Result<GenerateResponse, LlmError> {
-    let client = sidecar_client(socket_path)?;
-    let response = client
-        .post(format!("{SIDECAR_ORIGIN}/v1/generate"))
-        .json(request)
-        .timeout(NON_STREAMING_TIMEOUT)
-        .send()
-        .await?;
-    let checked = check_response(response).await?;
-    let body = checked.text().await?;
-    serde_json::from_str(&body).map_err(|e| LlmError::Provider {
-        message: format!(
-            "sidecar /v1/generate response was not valid JSON: {e}; body preview: {}",
-            super::body_preview(&body, 200)
+    debug!(
+        sdk = ?request.sdk,
+        model = %request.model,
+        max_tokens = request.max_tokens,
+        message_count = request.messages.len(),
+        "dispatching non-streaming LLM request through sidecar"
+    );
+    let result: Result<GenerateResponse, LlmError> =
+        post_json(socket_path, "/v1/generate", request).await;
+    match &result {
+        Ok(resp) => debug!(
+            model = %resp.model,
+            finish_reason = %resp.finish_reason,
+            input_tokens = resp.usage.input_tokens,
+            output_tokens = resp.usage.output_tokens,
+            total_ms = resp.timing.total_ms,
+            "non-streaming request completed"
         ),
-    })
+        Err(e) => {
+            warn!(sdk = ?request.sdk, model = %request.model, error = %e, "non-streaming request failed");
+        }
+    }
+    result
 }
 
+/// Send an image generation request.
 pub(crate) async fn image_generate(
     params: &ImageGenerateParams<'_>,
-    socket_path: &Path,
+    socket_path: Option<&Path>,
 ) -> Result<ImageGenerateResponse, LlmError> {
-    let client = sidecar_client(socket_path)?;
-    let request = SidecarImageRequest::from(params);
-    let response = client
-        .post(format!("{SIDECAR_ORIGIN}/v1/image"))
-        .json(&request)
-        .timeout(NON_STREAMING_TIMEOUT)
-        .send()
-        .await?;
-    let checked = check_response(response).await?;
-    let body = checked.text().await?;
-    serde_json::from_str(&body).map_err(|e| LlmError::Provider {
-        message: format!(
-            "sidecar /v1/image response was not valid JSON: {e}; body preview: {}",
-            super::body_preview(&body, 200)
-        ),
-    })
+    debug!(model = %params.model, "dispatching image generation request through sidecar");
+    post_json(socket_path, "/v1/image", &SidecarImageRequest::from(params))
+        .await
+        .inspect_err(|e| {
+            warn!(model = %params.model, error = %e, "image generation request failed");
+        })
 }
 
 #[derive(Serialize)]
@@ -184,6 +270,20 @@ mod tests {
             forensic_character: None,
             retain_long: false,
             keepalive_interval: None,
+        }
+    }
+
+    fn test_image_params() -> ImageGenerateParams<'static> {
+        ImageGenerateParams {
+            provider_key: "openrouter",
+            model: "image-model",
+            api_key: "sk-test",
+            base_url: Some("https://openrouter.ai/api/v1"),
+            prompt: "draw a test",
+            size: None,
+            quality: None,
+            aspect_ratio: Some("16:9"),
+            image_size: Some("1024x576"),
         }
     }
 
@@ -293,7 +393,7 @@ mod tests {
         .to_string();
         let captured = serve_once(&socket, "200 OK", response_body)?;
 
-        let resp = generate(&test_request(), &socket).await?;
+        let resp = generate(&test_request(), Some(&socket)).await?;
         let (path, body) = captured.await??;
         let parsed: serde_json::Value = serde_json::from_str(&body)?;
 
@@ -316,7 +416,7 @@ mod tests {
         ).to_owned();
         let captured = serve_once(&socket, "200 OK", response_body)?;
 
-        let mut reader = stream(&test_request(), &socket).await?;
+        let mut reader = stream(&test_request(), Some(&socket)).await?;
         let mut body = String::new();
         reader.read_to_string(&mut body).await?;
         let (path, _) = captured.await??;
@@ -339,18 +439,7 @@ mod tests {
         .to_string();
         let captured = serve_once(&socket, "200 OK", response_body)?;
 
-        let params = ImageGenerateParams {
-            provider_key: "openrouter",
-            model: "image-model",
-            api_key: "sk-test",
-            base_url: Some("https://openrouter.ai/api/v1"),
-            prompt: "draw a test",
-            size: None,
-            quality: None,
-            aspect_ratio: Some("16:9"),
-            image_size: Some("1024x576"),
-        };
-        let resp = image_generate(&params, &socket).await?;
+        let resp = image_generate(&test_image_params(), Some(&socket)).await?;
         let (path, body) = captured.await??;
         let parsed: serde_json::Value = serde_json::from_str(&body)?;
 
@@ -370,7 +459,7 @@ mod tests {
         let socket = tmp.path().join("llm.sock");
         let captured = serve_once(&socket, "429 Too Many Requests", "slow down".into())?;
 
-        let Err(err) = generate(&test_request(), &socket).await else {
+        let Err(err) = generate(&test_request(), Some(&socket)).await else {
             return Err(io::Error::other("expected sidecar 429 to fail").into());
         };
         let (path, _) = captured.await??;
@@ -384,6 +473,27 @@ mod tests {
             other => {
                 return Err(io::Error::other(format!("expected HttpStatus, got {other:?}")).into());
             }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn calls_without_a_socket_name_the_sidecar() -> TestResult {
+        let Err(stream_err) = stream(&test_request(), None).await else {
+            return Err(io::Error::other("stream without sidecar unexpectedly succeeded").into());
+        };
+        let Err(generate_err) = generate(&test_request(), None).await else {
+            return Err(io::Error::other("generate without sidecar unexpectedly succeeded").into());
+        };
+        let Err(image_err) = image_generate(&test_image_params(), None).await else {
+            return Err(io::Error::other("image without sidecar unexpectedly succeeded").into());
+        };
+
+        for err in [stream_err, generate_err, image_err] {
+            assert!(
+                err.to_string().contains("shore-llm-sidecar"),
+                "unconfigured-socket error must name the sidecar binary: {err}"
+            );
         }
         Ok(())
     }
