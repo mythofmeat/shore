@@ -15,7 +15,7 @@ members = [
 # scripts/install.sh, or the local Arch packages in contrib/arch. To release:
 # `contrib/arch/release.sh`, which bumps this version, builds, tags and
 # publishes; by hand, bump it here, commit, tag `v<version>`, push the tag.
-version = "0.20.6"
+version = "0.20.7"
 publish = false
 edition = "2021"
 license = "MIT OR Apache-2.0"
