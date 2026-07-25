@@ -74,9 +74,9 @@ build() {
     cd "$_repo"
     _setup_env
 
-    # The packaged crates only. `-p shore-daemon` also builds its
-    # `mcp_stub_server` test bin; package() installs binaries by name, so the
-    # stub is built but never shipped. check() still exercises the workspace.
+    # The packaged crates only. The `mcp_stub_server` test bin is gated behind
+    # shore-daemon's `test-stub` feature, so a release build skips it entirely.
+    # check() still exercises the whole workspace.
     cargo build --release --locked \
         -p shore-daemon -p shore-cli -p shore-matrix
 

@@ -5,9 +5,12 @@
 //!
 //! Not for production use. It exists so the MCP test cases (the stdio test and
 //! the keepalive cache-parity test) can launch a real MCP server process with
-//! zero external runtime. `src/bin/mcp_stub_server.rs` is a one-line bin that
-//! calls [`run`], so it is reachable via `CARGO_BIN_EXE_mcp_stub_server` from
-//! integration tests and via `target/<profile>/mcp_stub_server` from unit tests.
+//! zero external runtime. `tests/support/mcp_stub_server.rs` is a one-line bin
+//! that calls [`run`], so it is reachable via `CARGO_BIN_EXE_mcp_stub_server`
+//! from integration tests and via `target/<profile>/mcp_stub_server` from unit
+//! tests. It is gated behind the `test-stub` feature, which a self-referential
+//! dev-dependency enables for test builds only — so it never lands in a release
+//! build or a `cargo install`.
 
 use std::io::{BufRead as _, Write as _};
 
