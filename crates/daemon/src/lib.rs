@@ -23,7 +23,7 @@
 // Tests divide fixture values freely: truncating division on test data is a
 // threshold computation, not a service correctness hazard (same rationale as
 // the `arithmetic_side_effects` exemption above). Production code stays locked
-// by the `#![deny(...)]` above.
+// by the workspace lints.
 #![cfg_attr(
     test,
     expect(
