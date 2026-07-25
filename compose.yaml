@@ -12,7 +12,7 @@
 #   mkdir -p /tmp/shore-test/{config,data,cache}
 #
 # The daemon self-seeds a default config.toml on first launch (see
-# create_default_config() in core/config/src/lib.rs), so it boots with zero
+# create_default_config() in crates/common/src/config/mod.rs), so it boots with zero
 # setup. To exercise real provider calls, drop a config.toml + .env (API
 # keys) into /tmp/shore-test/config, same as a real deployment would.
 #
@@ -34,7 +34,7 @@ services:
 
     # Host networking, deliberately.
     #
-    # validate_remote_access_policy() (backend/daemon/src/main.rs:893-932)
+    # validate_remote_access_policy() (crates/daemon/src/main.rs:893-932)
     # decides exposure from the bind-address literal alone. Under bridge
     # networking the daemon would have to bind 0.0.0.0 for a published port to
     # reach it, which trips the guard and forces

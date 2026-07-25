@@ -1,0 +1,91 @@
+[package]
+name = "shore-daemon"
+version.workspace = true
+publish.workspace = true
+edition = "2021"
+license.workspace = true
+repository.workspace = true
+description = "Persistent AI character engine daemon — long-running process behind the Silvershore chat protocol."
+
+[features]
+# Gates the MCP stub server bin below. Off by default so `cargo build --release`
+# and `cargo install` skip it; the self-referential dev-dependency below turns it
+# on for test builds only.
+test-stub = []
+
+# Stub MCP server used only by the MCP tests. It has to stay a `[[bin]]` target
+# rather than move into `tests/` proper: `tests/mcp_stdio.rs` reaches it through
+# `CARGO_BIN_EXE_mcp_stub_server`, which Cargo only sets for bin targets. Its
+# source lives under `tests/` so it reads as test support, and
+# `required-features` keeps it out of release builds and `cargo install`.
+# `tests/support/` is not auto-discovered as an integration test — only
+# `tests/*.rs` and `tests/*/main.rs` are.
+[[bin]]
+name = "mcp_stub_server"
+path = "tests/support/mcp_stub_server.rs"
+required-features = ["test-stub"]
+# It carries no unit tests of its own; without this `cargo test` builds and runs
+# an extra empty harness for it. Cargo still builds the bin itself so that
+# `CARGO_BIN_EXE_mcp_stub_server` resolves.
+test = false
+
+[dependencies]
+shore-common = { workspace = true }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+clap = { version = "4", features = ["derive"] }
+uuid = { version = "1", features = ["v4"] }
+chrono = "0.4"
+rand = "0.9"
+dashmap = { workspace = true }
+futures = "0.3"
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "stream",
+    "rustls-tls",
+] }
+sha2 = "0.10"
+base64 = "0.22.1"
+tempfile = "3"
+shell-words = "1.1"
+image = { version = "0.25", default-features = false, features = [
+    "jpeg",
+    "png",
+    "webp",
+] }
+fast_image_resize = { version = "6", features = ["image"] }
+libc = { workspace = true }
+notify = "8.2"
+
+# Absorbed from the former shore-llm / shore-ledger / shore-call-store /
+# shore-mcp-client / shore-swp-server crates.
+async-trait = { workspace = true }
+fs2 = "0.4"
+futures-util = { workspace = true }
+rmcp = { workspace = true }
+rusqlite = { workspace = true }
+zstd = { workspace = true }
+
+# Exec-tool sandbox (Linux only): Landlock for filesystem confinement and
+# seccomp for syscall cuts. Other platforms fall back to denylist-only exec.
+[target.'cfg(target_os = "linux")'.dependencies]
+landlock = "0.4"
+seccompiler = "0.5"
+
+[dev-dependencies]
+# Self-referential dev-dependency, purely to enable `test-stub` while building
+# tests. This is how a bin can be gated off for release yet still built by
+# `cargo test`: dev-dependencies may be cyclic, and the feature it enables
+# satisfies the `required-features` on the `mcp_stub_server` bin above.
+shore-daemon = { path = ".", features = ["test-stub"] }
+tokio = { version = "1", features = ["full", "test-util"] }
+insta = { workspace = true }
+wiremock = "0.6"
+
+[lints]
+workspace = true

@@ -1,0 +1,460 @@
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
+use tokio::net::TcpStream;
+use tracing::{debug, error, trace, warn};
+
+use crate::protocol::client_msg::{ClientHello, ClientMessage};
+use crate::protocol::server_msg::{History, ServerHello, ServerMessage};
+use crate::protocol::{MAX_WIRE_MESSAGE_SIZE, SWP_V1};
+
+use crate::swp_client::error::{ClientError, Result};
+
+/// Address to connect to — a TCP host:port.
+#[derive(Debug, Clone)]
+pub struct ServerAddr(pub String);
+
+/// Internal trait to unify read/write halves across transport types.
+trait AsyncReadWrite: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin {}
+impl<T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin> AsyncReadWrite for T {}
+
+/// A connection to a Shore daemon over the SWP protocol.
+///
+/// Sends and receives JSON-Lines framed messages. The connection is `Send`
+/// so it can be moved across tokio tasks.
+pub struct SWPConnection {
+    reader: BufReader<Box<dyn AsyncReadWrite>>,
+    writer: BufWriter<Box<dyn AsyncReadWrite>>,
+}
+
+impl std::fmt::Debug for SWPConnection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SWPConnection").finish_non_exhaustive()
+    }
+}
+
+impl SWPConnection {
+    /// Open a raw transport to `addr` without performing the handshake.
+    async fn open(addr: &ServerAddr) -> Result<Self> {
+        debug!(addr = %addr.0, "connecting via tcp");
+        let stream = TcpStream::connect(&addr.0).await.map_err(|e| {
+            error!(addr = %addr.0, error = %e, "tcp connect failed");
+            ClientError::Connect(format!("tcp:{}: {e}", addr.0))
+        })?;
+        let (r, w) = stream.into_split();
+        debug!(addr = %addr.0, "tcp connected");
+        Ok(Self {
+            reader: BufReader::new(Box::new(tokio::io::join(r, tokio::io::sink()))),
+            writer: BufWriter::new(Box::new(tokio::io::join(tokio::io::empty(), w))),
+        })
+    }
+
+    /// Connect to the daemon and perform the SWP handshake.
+    ///
+    /// The handshake sequence is:
+    /// 1. Receive `ServerMessage::Hello` from daemon
+    /// 2. Send `ClientMessage::Hello`
+    /// 3. Receive `ServerMessage::History`
+    ///
+    /// Returns the connection along with the server hello and initial history.
+    pub async fn connect<T: Into<String>, N: Into<String>>(
+        addr: &ServerAddr,
+        client_type: T,
+        client_name: N,
+        character: Option<String>,
+    ) -> Result<(Self, ServerHello, History)> {
+        let mut conn = Self::open(addr).await?;
+        let (server_hello, history) = conn
+            .do_handshake(client_type.into(), client_name.into(), character)
+            .await?;
+        Ok((conn, server_hello, history))
+    }
+
+    /// Perform the 3-step SWP handshake on an already-open connection.
+    async fn do_handshake(
+        &mut self,
+        client_type: String,
+        client_name: String,
+        character: Option<String>,
+    ) -> Result<(ServerHello, History)> {
+        debug!(client_type = %client_type, client_name = %client_name, character = ?character, "starting SWP handshake");
+
+        let server_hello = self.recv_server_hello().await?;
+
+        // Step 2: send client hello
+        let hello = ClientMessage::Hello(ClientHello {
+            client_type,
+            client_name,
+            capabilities: vec!["streaming".into()],
+            character,
+        });
+        self.send(&hello).await?;
+        debug!("sent client hello");
+
+        let history = self.recv_history().await?;
+
+        debug!("SWP handshake complete");
+        Ok((server_hello, history))
+    }
+
+    /// Handshake step 1: receive the server hello, skipping any unknown
+    /// frames a newer daemon may emit ahead of the hello (forward-compat,
+    /// see PROTOCOL.md §3).
+    async fn recv_server_hello(&mut self) -> Result<ServerHello> {
+        let server_hello = loop {
+            match self.recv().await? {
+                ServerMessage::Hello(h) => {
+                    if h.v != SWP_V1 {
+                        error!(
+                            server_version = h.v,
+                            expected = SWP_V1,
+                            "protocol version mismatch"
+                        );
+                        return Err(ClientError::Protocol(format!(
+                            "unsupported protocol version: {} (expected {})",
+                            h.v, SWP_V1
+                        )));
+                    }
+                    debug!(
+                        server_name = %h.server_name,
+                        characters = h.characters.len(),
+                        "received server hello"
+                    );
+                    break h;
+                }
+                ServerMessage::Unknown => {
+                    debug!("skipping unknown frame during handshake");
+                }
+                other @ (ServerMessage::History(_)
+                | ServerMessage::Shutdown(_)
+                | ServerMessage::Ping(_)
+                | ServerMessage::CommandOutput(_)
+                | ServerMessage::Error(_)
+                | ServerMessage::StreamStart(_)
+                | ServerMessage::StreamChunk(_)
+                | ServerMessage::StreamEnd(_)
+                | ServerMessage::Phase(_)
+                | ServerMessage::NewMessage(_)
+                | ServerMessage::ToolCall(_)
+                | ServerMessage::ToolResult(_)
+                | ServerMessage::SendImage(_)
+                | ServerMessage::CacheWarning(_)
+                | ServerMessage::ProviderFallbackWarning(_)
+                | ServerMessage::UsageWarning(_)) => {
+                    error!("expected server hello, got unexpected message");
+                    return Err(ClientError::Protocol(format!(
+                        "expected server hello, got: {other:?}"
+                    )));
+                }
+            }
+        };
+        Ok(server_hello)
+    }
+
+    /// Handshake step 3: receive the history, skipping any unknown frames
+    /// (forward-compat, see PROTOCOL.md §3).
+    async fn recv_history(&mut self) -> Result<History> {
+        let history = loop {
+            match self.recv().await? {
+                ServerMessage::History(h) => {
+                    debug!(message_count = h.messages.len(), "received history");
+                    break h;
+                }
+                ServerMessage::Unknown => {
+                    debug!("skipping unknown frame during handshake");
+                }
+                other @ (ServerMessage::Hello(_)
+                | ServerMessage::Shutdown(_)
+                | ServerMessage::Ping(_)
+                | ServerMessage::CommandOutput(_)
+                | ServerMessage::Error(_)
+                | ServerMessage::StreamStart(_)
+                | ServerMessage::StreamChunk(_)
+                | ServerMessage::StreamEnd(_)
+                | ServerMessage::Phase(_)
+                | ServerMessage::NewMessage(_)
+                | ServerMessage::ToolCall(_)
+                | ServerMessage::ToolResult(_)
+                | ServerMessage::SendImage(_)
+                | ServerMessage::CacheWarning(_)
+                | ServerMessage::ProviderFallbackWarning(_)
+                | ServerMessage::UsageWarning(_)) => {
+                    error!("expected history, got unexpected message");
+                    return Err(ClientError::Protocol(format!(
+                        "expected history, got: {other:?}"
+                    )));
+                }
+            }
+        };
+        Ok(history)
+    }
+
+    /// Send a client message as a JSON line.
+    pub async fn send(&mut self, msg: &ClientMessage) -> Result<()> {
+        let line = serde_json::to_string(msg).map_err(|e| {
+            error!(error = %e, "failed to serialize client message");
+            ClientError::Serialize(e)
+        })?;
+        trace!(bytes = line.len(), "sending message");
+        self.writer
+            .write_all(line.as_bytes())
+            .await
+            .map_err(ClientError::Io)?;
+        self.writer
+            .write_all(b"\n")
+            .await
+            .map_err(ClientError::Io)?;
+        self.writer.flush().await.map_err(ClientError::Io)?;
+        Ok(())
+    }
+
+    /// Receive the next server message (one JSON line).
+    ///
+    /// Returns `Err(ClientError::Disconnected)` on EOF.
+    pub async fn recv(&mut self) -> Result<ServerMessage> {
+        let line = read_json_line_bounded(&mut self.reader).await?;
+        let msg: ServerMessage = serde_json::from_str(line.trim()).map_err(|e| {
+            warn!(error = %e, raw_len = line.len(), "failed to deserialize server message");
+            ClientError::Deserialize(e)
+        })?;
+        trace!(bytes = line.len(), "received message");
+        Ok(msg)
+    }
+
+    /// Send a user message. Returns the `rid` used.
+    pub async fn send_message<T: Into<String>>(
+        &mut self,
+        text: T,
+        stream: bool,
+    ) -> Result<Option<String>> {
+        self.send_message_with_images(text, stream, vec![]).await
+    }
+
+    /// Send a user message with image attachments. Returns the `rid` used.
+    pub async fn send_message_with_images<T: Into<String>>(
+        &mut self,
+        text: T,
+        stream: bool,
+        images: Vec<String>,
+    ) -> Result<Option<String>> {
+        self.send_message_full(text, stream, images, None).await
+    }
+
+    /// Send a user message with image attachments and parameter overrides.
+    ///
+    /// Reads each image path, base64-encodes the data, and sends both
+    /// `images` (paths, for legacy daemons) and `image_data` (base64, preferred).
+    pub async fn send_message_full<T: Into<String>>(
+        &mut self,
+        text: T,
+        stream: bool,
+        images: Vec<String>,
+        overrides: Option<crate::protocol::client_msg::MessageOverrides>,
+    ) -> Result<Option<String>> {
+        use crate::protocol::client_msg::{ClientMessageBody, ImageUpload};
+        use base64::Engine;
+
+        let image_data: Vec<ImageUpload> = images
+            .iter()
+            .filter_map(|path| {
+                let bytes = std::fs::read(path).ok()?;
+                let filename = std::path::Path::new(path)
+                    .file_name()
+                    .map_or_else(|| "image".to_owned(), |f| f.to_string_lossy().into_owned());
+                let data = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                Some(ImageUpload {
+                    filename,
+                    data,
+                    mime_type: None,
+                })
+            })
+            .collect();
+
+        let rid = Some(uuid_v4());
+        let msg = ClientMessage::Message(ClientMessageBody {
+            rid: rid.clone(),
+            text: text.into(),
+            stream,
+            images,
+            image_data,
+            absence_seconds: None,
+            overrides,
+        });
+        self.send(&msg).await?;
+        Ok(rid)
+    }
+
+    /// Send a regen request. Returns the `rid` used.
+    pub async fn send_regen(
+        &mut self,
+        stream: bool,
+        guidance: Option<String>,
+    ) -> Result<Option<String>> {
+        use crate::protocol::client_msg::Regen;
+        let rid = Some(uuid_v4());
+        let msg = ClientMessage::Regen(Regen {
+            rid: rid.clone(),
+            stream,
+            guidance,
+        });
+        self.send(&msg).await?;
+        Ok(rid)
+    }
+
+    /// Send a command. Returns the `rid` used.
+    pub async fn send_command<N: Into<String>>(
+        &mut self,
+        name: N,
+        args: serde_json::Value,
+    ) -> Result<Option<String>> {
+        use crate::protocol::client_msg::Command;
+        let rid = Some(uuid_v4());
+        let msg = ClientMessage::Command(Command {
+            rid: rid.clone(),
+            name: name.into(),
+            args,
+        });
+        self.send(&msg).await?;
+        Ok(rid)
+    }
+}
+
+/// Build an `SWPConnection` from an already-connected async stream.
+/// Useful for testing or when the caller manages the transport.
+impl SWPConnection {
+    pub fn from_raw_stream<S>(stream: S) -> Self
+    where
+        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin + 'static,
+    {
+        let (r, w) = tokio::io::split(stream);
+        Self {
+            reader: BufReader::new(Box::new(tokio::io::join(r, tokio::io::sink()))),
+            writer: BufWriter::new(Box::new(tokio::io::join(tokio::io::empty(), w))),
+        }
+    }
+
+    /// Connect using an already-established stream and perform the SWP handshake.
+    ///
+    /// This is useful for testing (with `tokio::io::duplex`) or when the caller
+    /// manages transport setup.
+    pub async fn connect_raw<S, T: Into<String>, N: Into<String>>(
+        stream: S,
+        client_type: T,
+        client_name: N,
+        character: Option<String>,
+    ) -> Result<(Self, ServerHello, History)>
+    where
+        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin + 'static,
+    {
+        let mut conn = Self::from_raw_stream(stream);
+        let (server_hello, history) = conn
+            .do_handshake(client_type.into(), client_name.into(), character)
+            .await?;
+        Ok((conn, server_hello, history))
+    }
+}
+
+async fn read_json_line_bounded<R>(reader: &mut BufReader<R>) -> Result<String>
+where
+    R: tokio::io::AsyncRead + Unpin,
+{
+    let mut bytes: Vec<u8> = Vec::new();
+    loop {
+        let buf = reader.fill_buf().await.map_err(ClientError::Io)?;
+        if buf.is_empty() {
+            if bytes.is_empty() {
+                debug!("EOF on connection — disconnected");
+                return Err(ClientError::Disconnected);
+            }
+            break;
+        }
+
+        let (consume, done) = match buf.iter().position(|&b| b == b'\n') {
+            Some(pos) => match pos.checked_add(1) {
+                Some(consume) => (consume, true),
+                None => {
+                    return Err(ClientError::Protocol(
+                        "server message length exceeds addressable memory".into(),
+                    ));
+                }
+            },
+            None => (buf.len(), false),
+        };
+
+        let Some(total_len) = bytes.len().checked_add(consume) else {
+            return Err(ClientError::Protocol(format!(
+                "server message exceeds maximum size of {MAX_WIRE_MESSAGE_SIZE} bytes"
+            )));
+        };
+
+        if total_len > MAX_WIRE_MESSAGE_SIZE {
+            return Err(ClientError::Protocol(format!(
+                "server message exceeds maximum size of {MAX_WIRE_MESSAGE_SIZE} bytes"
+            )));
+        }
+
+        let Some(chunk) = buf.get(..consume) else {
+            return Err(ClientError::Protocol(
+                "server message framing exceeded read buffer".into(),
+            ));
+        };
+        bytes.extend_from_slice(chunk);
+        reader.consume(consume);
+        if done {
+            break;
+        }
+    }
+
+    String::from_utf8(bytes)
+        .map_err(|e| ClientError::Protocol(format!("server sent invalid UTF-8 framing: {e}")))
+}
+
+/// Generate a unique request ID using timestamp + atomic counter.
+///
+/// The counter ensures uniqueness even when multiple IDs are generated
+/// within the same nanosecond (e.g., concurrent threads).
+fn uuid_v4() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("rid_{nanos:016x}_{seq:04x}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `uuid_v4()` uses only nanosecond timestamps for IDs. Under high
+    /// concurrency (multiple threads calling simultaneously), identical
+    /// nanosecond timestamps produce duplicate IDs.
+    #[test]
+    fn uuid_v4_unique_under_concurrent_calls() {
+        let mut handles = Vec::new();
+
+        // Spawn 8 threads each generating 100 IDs concurrently.
+        for _ in 0..8 {
+            handles.push(std::thread::spawn(move || {
+                let mut local = Vec::with_capacity(100);
+                for _ in 0..100 {
+                    local.push(uuid_v4());
+                }
+                local
+            }));
+        }
+
+        let mut all_ids = std::collections::HashSet::new();
+        for h in handles {
+            for id in h.join().unwrap() {
+                assert!(
+                    all_ids.insert(id.clone()),
+                    "Duplicate request ID generated under concurrency: {id}"
+                );
+            }
+        }
+        assert_eq!(all_ids.len(), 800);
+    }
+}
