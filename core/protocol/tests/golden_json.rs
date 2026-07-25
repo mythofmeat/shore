@@ -556,6 +556,40 @@ fn usage_warning_golden() {
         assert_eq!(w.budget, "daily total");
         assert_eq!(w.period, "day");
         assert_eq!(w.crossed_warn_at, vec![0.8]);
+        // A cap warning omits `scope` entirely, so the frame is unchanged for
+        // clients built before pacing existed.
+        assert_eq!(w.scope, None);
+    }
+    );
+}
+
+// A pace warning reuses the same frame: the cost and window fields describe the
+// pace allowance and its sub-window, with `scope` marking which limit tripped.
+const USAGE_WARNING_PACE_FIXTURE: &str = r#"{
+    "type": "usage_warning",
+    "rid": "msg_02",
+    "budget": "weekly",
+    "message": "Usage budget \"weekly\" day pace reached 100% ($2.50/$2.17); pace resets at 2026-05-22 06:00 AM.",
+    "current_cost": 2.5,
+    "cost_limit": 2.17,
+    "percent_used": 1.15,
+    "crossed_warn_at": [1.0],
+    "period": "day",
+    "period_start": "2026-05-21T06:00:00Z",
+    "reset_at": "2026-05-22T06:00:00Z",
+    "reset_at_display": "2026-05-22 06:00 AM",
+    "scope": "pace"
+}"#;
+
+#[test]
+fn usage_warning_pace_golden() {
+    let msg: ServerMessage = assert_golden(USAGE_WARNING_PACE_FIXTURE);
+    assert_variant!(
+    msg,
+    ServerMessage::UsageWarning(w) => {
+        assert_eq!(w.scope.as_deref(), Some("pace"));
+        assert_eq!(w.budget, "weekly");
+        assert_eq!(w.period, "day", "the pace sub-window period, not the budget's");
     }
     );
 }

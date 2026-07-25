@@ -63,14 +63,114 @@ pub struct UsageBudget {
     pub crossed_warn_at: Vec<f64>,
     /// Whether spend has reached or exceeded the limit.
     pub over_limit: bool,
+    /// Spend against the current pace allowance, when the budget configures a
+    /// pace. Measured over the pace sub-window, not the budget period.
+    pub pace: Option<UsageLevel>,
+}
+
+/// One measured limit: a budget's period cap, or its pace allowance.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct UsageLevel {
+    /// Fraction used, e.g. 0.8 for 80%.
+    pub percent_used: f64,
+    pub crossed_warn_at: Vec<f64>,
+    pub over_limit: bool,
+}
+
+impl UsageLevel {
+    pub fn in_warning(&self) -> bool {
+        self.over_limit || !self.crossed_warn_at.is_empty()
+    }
+}
+
+/// Which limit a `usage_warning` push refers to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UsageScope {
+    Cap,
+    Pace,
+}
+
+/// Read a `UsageLevel` out of a budget payload's `pace` object. Returns `None`
+/// for anything that isn't an object, so a daemon without pacing (or a budget
+/// that configures none) simply reports no pace.
+fn usage_level_from_json(value: &serde_json::Value) -> Option<UsageLevel> {
+    if !value.is_object() {
+        return None;
+    }
+    Some(UsageLevel {
+        percent_used: value
+            .get("percent_used")
+            .and_then(serde_json::Value::as_f64)
+            .unwrap_or(0.0),
+        crossed_warn_at: value
+            .get("crossed_warn_at")
+            .and_then(|v| v.as_array())
+            .map(|a| a.iter().filter_map(serde_json::Value::as_f64).collect())
+            .unwrap_or_default(),
+        over_limit: value
+            .get("over_limit")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false),
+    })
 }
 
 impl UsageBudget {
-    /// True once any warning threshold has been crossed (or the budget is
-    /// over limit) — the signal that gates warning styling and the
-    /// "only past a warning level" visibility mode.
+    /// True once any warning threshold has been crossed (or either limit is
+    /// over) — the signal that gates warning styling and the "only past a
+    /// warning level" visibility mode.
+    ///
+    /// The *union* of both limits, deliberately: `warn_at` and `pace_warn_at`
+    /// are configured independently, so a pace past its own threshold is a
+    /// warning even while the period cap is still calm. Narrowing this to the
+    /// headline would let the cap hide a warning the user asked to see.
     pub fn in_warning(&self) -> bool {
-        self.over_limit || !self.crossed_warn_at.is_empty()
+        self.cap().in_warning() || self.pace.as_ref().is_some_and(UsageLevel::in_warning)
+    }
+
+    /// This budget's period cap as a standalone level.
+    fn cap(&self) -> UsageLevel {
+        UsageLevel {
+            percent_used: self.percent_used,
+            crossed_warn_at: self.crossed_warn_at.clone(),
+            over_limit: self.over_limit,
+        }
+    }
+
+    /// The constraint that binds first: the pace when it is the more pressing
+    /// of the two, otherwise the cap. This is the figure the usage chip
+    /// renders, extending "show the most pressing constraint" to budgets that
+    /// pace themselves.
+    pub fn headline(&self) -> UsageLevel {
+        match self.pace.as_ref() {
+            Some(pace) if self.pace_leads(pace) => pace.clone(),
+            _ => self.cap(),
+        }
+    }
+
+    /// [`Self::headline`]'s percentage without the vector clones. The chip's
+    /// "most urgent budget" scan runs this on every frame, once per budget.
+    pub fn headline_percent(&self) -> f64 {
+        match self.pace.as_ref() {
+            Some(pace) if self.pace_leads(pace) => pace.percent_used,
+            _ => self.percent_used,
+        }
+    }
+
+    /// Whether the pace outranks the period cap. Split out so `headline` and
+    /// `headline_percent` cannot drift apart.
+    ///
+    /// A limit past one of *its own* thresholds outranks a limit that isn't,
+    /// whatever the raw percentages: with `warn_at = [0.8]` and
+    /// `pace_warn_at = [0.5]`, a 55% pace is the live warning and a 60% cap is
+    /// not. Percentage only breaks the tie when both — or neither — are
+    /// warning.
+    fn pace_leads(&self, pace: &UsageLevel) -> bool {
+        let cap_warning = self.over_limit || !self.crossed_warn_at.is_empty();
+        match (pace.in_warning(), cap_warning) {
+            (true, false) => true,
+            (false, true) => false,
+            _ => pace.percent_used > self.percent_used,
+        }
     }
 }
 
@@ -1785,7 +1885,7 @@ impl App {
     pub fn most_urgent_budget(&self) -> Option<&UsageBudget> {
         self.usage_budgets
             .iter()
-            .max_by(|a, b| a.percent_used.total_cmp(&b.percent_used))
+            .max_by(|a, b| a.headline_percent().total_cmp(&b.headline_percent()))
     }
 
     /// Replace cached budget statuses from a `usage {budget:true}` reply's
@@ -1816,6 +1916,7 @@ impl App {
                     .get("over_limit")
                     .and_then(serde_json::Value::as_bool)
                     .unwrap_or(false),
+                pace: b.get("pace").and_then(usage_level_from_json),
             })
             .collect();
     }
@@ -1823,15 +1924,32 @@ impl App {
     /// Fold a `UsageWarning` push into the cached budget set for instant chip
     /// feedback (the next `usage` poll supersedes it with authoritative data).
     /// `over_limit` is inferred from `percent_used` since the push omits it.
-    pub fn apply_usage_warning(&mut self, budget: UsageBudget) {
-        if let Some(existing) = self
-            .usage_budgets
-            .iter_mut()
-            .find(|b| b.name == budget.name)
-        {
-            *existing = budget;
-        } else {
-            self.usage_budgets.push(budget);
+    ///
+    /// Scoped, because a budget and its pace warn independently: a pace push
+    /// must not clobber the cached cap figures, or vice versa.
+    pub fn apply_usage_warning(&mut self, name: &str, scope: UsageScope, level: UsageLevel) {
+        let existing = match self.usage_budgets.iter_mut().find(|b| b.name == name) {
+            Some(existing) => existing,
+            None => {
+                self.usage_budgets.push(UsageBudget {
+                    name: name.to_string(),
+                    ..UsageBudget::default()
+                });
+                // Just pushed, so the last element is the entry we need.
+                let Some(pushed) = self.usage_budgets.last_mut() else {
+                    return;
+                };
+                pushed
+            }
+        };
+
+        match scope {
+            UsageScope::Cap => {
+                existing.percent_used = level.percent_used;
+                existing.crossed_warn_at = level.crossed_warn_at;
+                existing.over_limit = level.over_limit;
+            }
+            UsageScope::Pace => existing.pace = Some(level),
         }
     }
 

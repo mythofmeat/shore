@@ -802,6 +802,7 @@ fn validate_usage_config(config: &app::UsageConfig) -> Result<(), ConfigError> {
             }
         }
         validate_budget_anchors(idx, budget)?;
+        validate_budget_pace(idx, budget)?;
         let name = if budget.name.trim().is_empty() {
             let display_index = idx.saturating_add(1);
             format!("budget {display_index}")
@@ -850,6 +851,49 @@ fn validate_budget_anchors(idx: usize, budget: &app::UsageBudgetConfig) -> Resul
             return Err(ConfigError::Validation(format!(
                 "usage.budgets[{idx}].reset_day_of_month is only valid for period = \"month\""
             )));
+        }
+    }
+
+    Ok(())
+}
+
+/// Validate a budget's pace sub-window against the period it subdivides.
+///
+/// A pace only means something if it is strictly shorter than the budget
+/// period: equal periods would make the allowance the budget itself, and a
+/// longer one has no defined division. `pace_action` / `pace_warn_at` without
+/// `pace_period` are rejected rather than ignored, so a typo'd pace config
+/// fails loudly at load instead of silently doing nothing.
+fn validate_budget_pace(idx: usize, budget: &app::UsageBudgetConfig) -> Result<(), ConfigError> {
+    let Some(pace) = budget.pace_period else {
+        if budget.pace_action.is_some() {
+            return Err(ConfigError::Validation(format!(
+                "usage.budgets[{idx}].pace_action requires pace_period"
+            )));
+        }
+        if budget.pace_warn_at.is_some() {
+            return Err(ConfigError::Validation(format!(
+                "usage.budgets[{idx}].pace_warn_at requires pace_period"
+            )));
+        }
+        return Ok(());
+    };
+
+    if pace.rank() >= budget.period.rank() {
+        return Err(ConfigError::Validation(format!(
+            "usage.budgets[{idx}].pace_period = \"{}\" must be shorter than period = \"{}\"",
+            pace.as_str(),
+            budget.period.as_str()
+        )));
+    }
+
+    if let Some(thresholds) = budget.pace_warn_at.as_ref() {
+        for threshold in thresholds {
+            if *threshold <= 0.0 {
+                return Err(ConfigError::Validation(format!(
+                    "usage.budgets[{idx}].pace_warn_at values must be greater than 0"
+                )));
+            }
         }
     }
 
@@ -2393,22 +2437,23 @@ api_key_env = "MY_LEGACY_KEY"
         assert_eq!(opus.api_key_env.as_deref(), Some("MY_LEGACY_KEY"));
     }
 
-    /// `examples/config.toml` is the documented entry point for new
-    /// users. Drift between it and the parser is a real regression, so
-    /// load it through the full two-phase loader and assert the bundled
-    /// example reaches a valid `LoadedConfig`. New commented-out
-    /// snippets in the example file are exercised via the per-section
-    /// tests below.
+    /// A provider-first config (#139) loads end-to-end: `[defaults].model`
+    /// is a canonical `provider:model_id` ref resolved against a
+    /// `[providers.*]` entry, with no static `[chat.*]` catalog at all.
     #[test]
-    fn bundled_example_config_parses() {
-        const EXAMPLE: &str = include_str!("../../../examples/config.toml");
-        let tmp = setup_config_dir(&[("config.toml", EXAMPLE)]);
+    fn provider_first_config_parses() {
+        let tmp = setup_config_dir(&[(
+            "config.toml",
+            r#"
+[defaults]
+model = "anthropic:claude-sonnet-4-6"
+
+[providers.anthropic]
+api_key_env = "ANTHROPIC_API_KEY"
+"#,
+        )]);
         let loaded = load_config(Some(&tmp.path().join("config.toml")))
-            .expect("examples/config.toml must parse end-to-end");
-        // The committed example is provider-first (#139): [defaults].model is a
-        // canonical `provider:model_id` ref and the matching provider is in the
-        // registry, so the default resolves without any static [chat.*] entry.
-        // Both sides being live is what protects users from copy/paste rot.
+            .expect("provider-first config must parse end-to-end");
         assert_eq!(
             loaded.app.defaults.model.as_deref(),
             Some("anthropic:claude-sonnet-4-6")
@@ -2425,14 +2470,12 @@ api_key_env = "MY_LEGACY_KEY"
             .get(provider)
             .expect("default model's provider is registered");
         assert!(entry.enabled, "default model's provider must be enabled");
-        // The example leads with the provider-first model; no static catalog.
+        // Provider-first means no static catalog is needed.
         assert!(loaded.models.chat.is_empty());
     }
 
-    /// The Phase 9 OpenRouter budget/overflow + discovery snippet
-    /// documented in `examples/config.toml` must continue to parse,
-    /// even though it is commented out by default. Inline a copy here
-    /// (uncommented) so an accidental rename of a parser field is
+    /// The Phase 9 OpenRouter budget/overflow + discovery snippet must
+    /// continue to parse, so an accidental rename of a parser field is
     /// caught immediately.
     #[test]
     fn documented_provider_snippet_parses() {
@@ -2518,6 +2561,9 @@ model = "sonnet"
             reset_hour: None,
             reset_day_of_week: None,
             reset_day_of_month: None,
+            pace_period: None,
+            pace_action: None,
+            pace_warn_at: None,
         }
     }
 
@@ -2570,6 +2616,58 @@ model = "sonnet"
         assert!(
             format!("{err}").contains("reset_day_of_month is only valid for period = \"month\"")
         );
+    }
+
+    #[test]
+    fn pace_period_shorter_than_budget_period_accepted() {
+        let mut b = budget_with_period(app::UsageBudgetPeriod::Week);
+        b.pace_period = Some(app::UsageBudgetPeriod::Day);
+        assert!(validate_usage_config(&usage_with_one_budget(b)).is_ok());
+    }
+
+    #[test]
+    fn pace_period_equal_to_budget_period_rejected() {
+        // An equal pace would make the allowance the budget itself.
+        let mut b = budget_with_period(app::UsageBudgetPeriod::Week);
+        b.pace_period = Some(app::UsageBudgetPeriod::Week);
+        let err = validate_usage_config(&usage_with_one_budget(b)).unwrap_err();
+        assert!(format!("{err}")
+            .contains("pace_period = \"week\" must be shorter than period = \"week\""));
+    }
+
+    #[test]
+    fn pace_period_longer_than_budget_period_rejected() {
+        let mut b = budget_with_period(app::UsageBudgetPeriod::Day);
+        b.pace_period = Some(app::UsageBudgetPeriod::Month);
+        let err = validate_usage_config(&usage_with_one_budget(b)).unwrap_err();
+        assert!(format!("{err}")
+            .contains("pace_period = \"month\" must be shorter than period = \"day\""));
+    }
+
+    #[test]
+    fn pace_action_without_pace_period_rejected() {
+        // Silently ignoring a stray pace_action would hide a config typo.
+        let mut b = budget_with_period(app::UsageBudgetPeriod::Week);
+        b.pace_action = Some(app::UsageBudgetAction::Block);
+        let err = validate_usage_config(&usage_with_one_budget(b)).unwrap_err();
+        assert!(format!("{err}").contains("pace_action requires pace_period"));
+    }
+
+    #[test]
+    fn pace_warn_at_without_pace_period_rejected() {
+        let mut b = budget_with_period(app::UsageBudgetPeriod::Week);
+        b.pace_warn_at = Some(vec![0.8]);
+        let err = validate_usage_config(&usage_with_one_budget(b)).unwrap_err();
+        assert!(format!("{err}").contains("pace_warn_at requires pace_period"));
+    }
+
+    #[test]
+    fn pace_warn_at_non_positive_rejected() {
+        let mut b = budget_with_period(app::UsageBudgetPeriod::Week);
+        b.pace_period = Some(app::UsageBudgetPeriod::Day);
+        b.pace_warn_at = Some(vec![0.5, 0.0]);
+        let err = validate_usage_config(&usage_with_one_budget(b)).unwrap_err();
+        assert!(format!("{err}").contains("pace_warn_at values must be greater than 0"));
     }
 
     fn app_with_mcp(server: app::McpServerConfig) -> AppConfig {

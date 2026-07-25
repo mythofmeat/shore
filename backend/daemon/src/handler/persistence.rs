@@ -7,8 +7,8 @@ use std::sync::{Arc, PoisonError};
 use std::time::Instant;
 
 use serde_json::{json, Value};
-use shore_config::app::UsageBudgetPeriod;
 use shore_config::models::Sdk;
+use shore_ledger::budget::BudgetScope;
 use shore_protocol::server_msg::{MessageOrigin, NewMessage, ServerMessage, UsageWarning};
 use shore_protocol::types::{derive_content_from_blocks, ContentBlock, Message, Role};
 use tokio::sync::{broadcast, Mutex};
@@ -263,10 +263,16 @@ fn emit_usage_budget_warnings(ctx: &GenContext, rid: Option<&str>) {
             cost_limit: warning.cost_limit,
             percent_used: warning.percent_used,
             crossed_warn_at: warning.crossed_warn_at,
-            period: usage_period_name(warning.period).to_owned(),
+            period: warning.period.as_str().to_owned(),
             period_start: warning.period_start,
             reset_at: warning.reset_at,
             reset_at_display: warning.reset_at_display,
+            // Omitted for budget-cap warnings so the frame stays byte-identical
+            // to what pre-pace clients already parse.
+            scope: match warning.scope {
+                BudgetScope::Budget => None,
+                BudgetScope::Pace => Some(BudgetScope::Pace.as_str().to_owned()),
+            },
         };
         if let Err(e) = ctx.direct_tx.try_send(ServerMessage::UsageWarning(frame)) {
             warn!(error = %e, "UsageWarning drop: direct channel unavailable");
@@ -276,15 +282,6 @@ fn emit_usage_budget_warnings(ctx: &GenContext, rid: Option<&str>) {
             "Shore usage warning",
             &message,
         );
-    }
-}
-
-fn usage_period_name(period: UsageBudgetPeriod) -> &'static str {
-    match period {
-        UsageBudgetPeriod::Hour => "hour",
-        UsageBudgetPeriod::Day => "day",
-        UsageBudgetPeriod::Week => "week",
-        UsageBudgetPeriod::Month => "month",
     }
 }
 

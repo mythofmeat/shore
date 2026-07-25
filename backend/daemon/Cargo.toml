@@ -29,12 +29,20 @@ chrono = "0.4"
 rand = "0.9"
 dashmap = { workspace = true }
 futures = "0.3"
-reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "stream",
+    "rustls-tls",
+] }
 sha2 = "0.10"
 base64 = "0.22.1"
 tempfile = "3"
 shell-words = "1.1"
-image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+image = { version = "0.25", default-features = false, features = [
+    "jpeg",
+    "png",
+    "webp",
+] }
 fast_image_resize = { version = "6", features = ["image"] }
 libc = { workspace = true }
 notify = "8.2"
@@ -45,23 +53,11 @@ notify = "8.2"
 landlock = "0.4"
 seccompiler = "0.5"
 
-# Duplicate of `shore-mcp-client`'s `mcp_stub_server` bin, kept here so the
-# daemon's integration tests can launch it via
-# `CARGO_BIN_EXE_daemon_mcp_stub_server`. The name is deliberately distinct:
-# two bins with one name collide on the same output path in `target/<profile>`.
-# `shore-mcp-client` owns the canonical copy, so this one is excluded from docs.
-[[bin]]
-name = "daemon_mcp_stub_server"
-path = "src/bin/daemon_mcp_stub_server.rs"
-doc = false
-
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }
-shore-swp-client = { workspace = true }
 shore-config = { workspace = true }
 shore-diagnostics = { workspace = true }
 shore-llm = { workspace = true }
-shore-test-harness = { workspace = true }
 wiremock = "0.6"
 async-trait = { workspace = true }
 

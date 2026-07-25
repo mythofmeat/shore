@@ -44,13 +44,6 @@
     elided_lifetimes_in_paths,
     unused_qualifications
 )]
-#![cfg_attr(
-    test,
-    expect(
-        clippy::too_many_lines,
-        reason = "unit-test-only long helpers are tracked in #109"
-    )
-)]
 // Tests index into fixtures freely: an out-of-bounds panic in a test is just an
 // assertion failure, so `indexing_slicing` is exempted there (same rationale as
 // the `allow-{unwrap,expect,panic}-in-tests` clippy.toml settings). Production

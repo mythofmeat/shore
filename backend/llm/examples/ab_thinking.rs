@@ -397,10 +397,6 @@ fn heartbeat_conversation(
 
 // ── Output ──────────────────────────────────────────────────────────────
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "formats every block of a GenerateResponse for side-by-side A/B comparison"
-)]
 fn print_result(label: &str, resp: &shore_llm::types::GenerateResponse) -> Vec<String> {
     example_out!("\n{}", "=".repeat(72));
     example_out!("  {label}");
@@ -507,10 +503,6 @@ fn print_result(label: &str, resp: &shore_llm::types::GenerateResponse) -> Vec<S
 }
 
 #[tokio::main]
-#[expect(
-    clippy::too_many_lines,
-    reason = "parses env, resolves two providers, and runs the A/B comparison loop"
-)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let env_path = "/home/eshen/Documents/qifei/config/.env";
     if std::path::Path::new(env_path).exists() {

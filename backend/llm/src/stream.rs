@@ -78,10 +78,6 @@ impl StreamConsumer {
     /// final `StreamResult` once the terminal `Done` event arrives. A terminal
     /// `Error` event becomes `Err(LlmError::StreamErrored)`, carrying the
     /// partial usage the provider had already reported.
-    #[expect(
-        clippy::too_many_lines,
-        reason = "decodes each SSE event variant against the streaming state machine"
-    )]
     async fn handle_event(
         &self,
         st: &mut ConsumeState,

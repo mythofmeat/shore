@@ -1461,10 +1461,6 @@ fn resolve_addr(cli: &Cli) -> Result<ServerAddr, shore_swp_client::ClientError> 
 }
 
 /// Receive and render a streaming response (for send/regen).
-#[expect(
-    clippy::too_many_lines,
-    reason = "receives every streaming server message and renders chunks, tool calls, and nested sub-agent output"
-)]
 async fn recv_streaming_response(
     conn: &mut SWPConnection,
 ) -> Result<(), Box<dyn std::error::Error>> {

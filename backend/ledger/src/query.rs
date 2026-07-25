@@ -115,6 +115,16 @@ pub struct UsageTotals {
 
 /// Sums calls matching the filter without grouping.
 pub fn usage_totals(ledger: &Ledger, filter: &QueryFilter) -> Result<UsageTotals, rusqlite::Error> {
+    ledger.with_conn(|conn| usage_totals_on(conn, filter))
+}
+
+/// [`usage_totals`] against an already-held connection, so a caller running
+/// several totals queries can take the ledger lock once and read them as one
+/// consistent snapshot.
+pub(crate) fn usage_totals_on(
+    conn: &rusqlite::Connection,
+    filter: &QueryFilter,
+) -> Result<UsageTotals, rusqlite::Error> {
     let (where_clause, values) = build_where(filter);
     let sql = format!(
         r"SELECT COUNT(*) as call_count,
@@ -127,17 +137,15 @@ pub fn usage_totals(ledger: &Ledger, filter: &QueryFilter) -> Result<UsageTotals
              {where_clause}",
     );
 
-    ledger.with_conn(|conn| {
-        let mut stmt = conn.prepare(&sql)?;
-        stmt.query_row(params_from_iter(values.iter()), |row| {
-            Ok(UsageTotals {
-                call_count: i64_to_u32(row.get::<_, i64>(0)?),
-                total_input: i64_to_u64(row.get::<_, i64>(1)?),
-                total_output: i64_to_u64(row.get::<_, i64>(2)?),
-                total_cache_read: i64_to_u64(row.get::<_, i64>(3)?),
-                total_cache_write: i64_to_u64(row.get::<_, i64>(4)?),
-                total_cost: row.get::<_, f64>(5)?,
-            })
+    let mut stmt = conn.prepare(&sql)?;
+    stmt.query_row(params_from_iter(values.iter()), |row| {
+        Ok(UsageTotals {
+            call_count: i64_to_u32(row.get::<_, i64>(0)?),
+            total_input: i64_to_u64(row.get::<_, i64>(1)?),
+            total_output: i64_to_u64(row.get::<_, i64>(2)?),
+            total_cache_read: i64_to_u64(row.get::<_, i64>(3)?),
+            total_cache_write: i64_to_u64(row.get::<_, i64>(4)?),
+            total_cost: row.get::<_, f64>(5)?,
         })
     })
 }

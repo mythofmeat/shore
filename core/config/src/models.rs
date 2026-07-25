@@ -837,10 +837,6 @@ impl ModelCatalog {
 /// Provider-level defaults no longer live here — they were rehomed onto
 /// `[providers.<provider>.defaults]` (#137). Scalar keys directly under
 /// `[<category>.<provider>]` are therefore rejected with a migration error.
-#[expect(
-    clippy::too_many_lines,
-    reason = "parses every model sub-table across all providers for a config category"
-)]
 fn parse_category(
     category: &str,
     section: &toml::Table,

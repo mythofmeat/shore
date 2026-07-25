@@ -286,6 +286,12 @@ pub struct UsageWarning {
     /// (which is UTC); the structured `reset_at` stays for machine consumers.
     #[serde(default)]
     pub reset_at_display: String,
+    /// `"pace"` when the warning is about a budget's pace allowance rather than
+    /// its period cap; absent for the cap itself. The cost, period, and window
+    /// fields always describe whichever limit tripped, so a client that ignores
+    /// this still renders correct numbers — it just can't tell the two apart.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
 }
 
 /// All server → client message types, tagged by "type".

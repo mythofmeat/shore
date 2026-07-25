@@ -63,7 +63,19 @@ pub(crate) fn abbreviate_model(model_id: &str) -> &str {
 pub(crate) const MAX_TOOL_OUTPUT: usize = 500;
 
 /// Get terminal width, falling back to 80 columns.
+///
+/// Under `cfg(test)` the terminal is never consulted and the fallback is used
+/// directly. `crossterm::terminal::size()` reads `/dev/tty` rather than stdout,
+/// so redirecting `cargo test` does not detach it: a run in an interactive
+/// shell picks up that shell's width while a piped or CI run gets 80, and every
+/// width-sensitive assertion quietly changes meaning between the two. Pinning
+/// the value keeps the rendering tests hermetic. Tests that care about a
+/// specific width pass one in — the wrapping helpers all take it as an
+/// argument, so nothing needs to override this.
 pub(crate) fn term_width() -> usize {
+    if cfg!(test) {
+        return 80;
+    }
     crossterm::terminal::size().map_or(80, |(w, _)| usize::from(w))
 }
 

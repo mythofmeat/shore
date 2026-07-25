@@ -1263,6 +1263,33 @@ pub enum UsageBudgetPeriod {
     Month,
 }
 
+impl UsageBudgetPeriod {
+    /// Relative length, ascending. Used to check that a budget's pace period
+    /// is strictly shorter than the budget period it subdivides.
+    ///
+    /// This is an ordering over nominal length, not a conversion factor: a
+    /// month is not a fixed number of weeks, which is why pace division uses
+    /// the real window bounds rather than a ratio of these ranks.
+    pub fn rank(self) -> u8 {
+        match self {
+            UsageBudgetPeriod::Hour => 0,
+            UsageBudgetPeriod::Day => 1,
+            UsageBudgetPeriod::Week => 2,
+            UsageBudgetPeriod::Month => 3,
+        }
+    }
+
+    /// Lowercase TOML/wire name, matching the `snake_case` serde rename.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            UsageBudgetPeriod::Hour => "hour",
+            UsageBudgetPeriod::Day => "day",
+            UsageBudgetPeriod::Week => "week",
+            UsageBudgetPeriod::Month => "month",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum UsageBudgetAction {
@@ -1358,6 +1385,40 @@ pub struct UsageBudgetConfig {
     /// month. Defaults to 1.
     #[serde(default)]
     pub reset_day_of_month: Option<u32>,
+
+    /// Sub-window used to pace spend inside `period`. Must be strictly
+    /// shorter than `period`. When set, Shore reports a per-sub-window
+    /// allowance of `remaining budget / sub-windows remaining`, so underspend
+    /// raises the next allowance and overspend lowers it.
+    ///
+    /// Pace sub-windows are stepped from the budget's own window start, so
+    /// `reset_hour` anchors both and the sub-windows always tile the period
+    /// exactly. There is deliberately no separate pace reset field.
+    #[serde(default)]
+    pub pace_period: Option<UsageBudgetPeriod>,
+
+    /// Enforcement action once the pace allowance is reached. Defaults to
+    /// `warn` — exceeding a single sub-window is expected and the budget's own
+    /// `limit` remains the real cap.
+    #[serde(default)]
+    pub pace_action: Option<UsageBudgetAction>,
+
+    /// Fractions of the pace allowance considered warning thresholds.
+    /// Defaults to the budget's `warn_at`.
+    #[serde(default)]
+    pub pace_warn_at: Option<Vec<f64>>,
+}
+
+impl UsageBudgetConfig {
+    /// Effective pace enforcement action; `warn` unless overridden.
+    pub fn pace_action(&self) -> UsageBudgetAction {
+        self.pace_action.unwrap_or(UsageBudgetAction::Warn)
+    }
+
+    /// Effective pace warning thresholds, falling back to the budget's own.
+    pub fn pace_warn_at(&self) -> &[f64] {
+        self.pace_warn_at.as_deref().unwrap_or(&self.warn_at)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
