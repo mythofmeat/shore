@@ -783,7 +783,7 @@ fn parse_command(app: &mut App, input: &str) -> Action {
             let value = parts.next().unwrap_or("toggle");
             if parts.next().is_some() {
                 app.set_status(
-                    "usage: :view [timestamps|thinking|tools|subagent|images|metadata|usage] [on|off|toggle]",
+                    "usage: :view [timestamps|thinking|tools|subagent|images|metadata|usage|budget] [on|off|toggle]",
                 );
                 return Action::Redraw;
             }
@@ -804,6 +804,31 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                 app.set_status(format!("view usage: {}", mode.as_str()));
                 return Action::SavePrefs;
             }
+            // Likewise value-typed: which budget (and which of its limits) the
+            // chip follows.
+            if key == "budget" {
+                let focus = if value.eq_ignore_ascii_case("toggle") {
+                    app.cycle_budget_focus()
+                } else if let Some(focus) = crate::app::BudgetFocus::from_token(value) {
+                    app.set_budget_focus(focus.clone());
+                    focus
+                } else {
+                    app.set_status("usage: :view budget [auto|cap|pace|<budget>|<budget>:pace]");
+                    return Action::Redraw;
+                };
+                app.update_completions();
+                // A name is accepted even when no such budget is known — the
+                // daemon may not have replied yet — but say so, since a typo
+                // otherwise just makes the chip disappear.
+                let unknown = focus.name.is_some() && app.focused_budget().is_none();
+                let token = focus.as_token();
+                app.set_status(if unknown {
+                    format!("view budget: {token} (no such budget reported yet)")
+                } else {
+                    format!("view budget: {token}")
+                });
+                return Action::SavePrefs;
+            }
             let enabled = match value.to_ascii_lowercase().as_str() {
                 "on" | "true" | "yes" | "1" => {
                     app.set_view_option(key, true);
@@ -816,7 +841,7 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                 "toggle" => app.toggle_view_option(key).unwrap_or(false),
                 _ => {
                     app.set_status(
-                        "usage: :view [timestamps|thinking|tools|subagent|images|metadata|usage] [on|off|toggle]",
+                        "usage: :view [timestamps|thinking|tools|subagent|images|metadata|usage|budget] [on|off|toggle]",
                     );
                     return Action::Redraw;
                 }
@@ -1302,6 +1327,41 @@ mod tests {
         // A bogus mode is rejected without changing state.
         parse_command(&mut app, "view usage sometimes");
         assert_eq!(app.usage_display, UsageDisplay::Off);
+    }
+
+    #[test]
+    fn view_budget_command_pins_and_cycles_focus() {
+        use crate::app::{BudgetFocus, UsageBudget};
+        let mut app = App {
+            usage_budgets: vec![UsageBudget {
+                name: "brainwife".into(),
+                ..UsageBudget::default()
+            }],
+            ..App::default()
+        };
+        assert_eq!(app.budget_focus, BudgetFocus::default());
+
+        // Scope pins, the case the pace exists for.
+        parse_command(&mut app, "view budget pace");
+        assert_eq!(app.budget_focus.as_token(), "pace");
+        parse_command(&mut app, "view budget cap");
+        assert_eq!(app.budget_focus.as_token(), "cap");
+
+        // Name and name:scope pins.
+        parse_command(&mut app, "view budget brainwife:pace");
+        assert_eq!(app.budget_focus.as_token(), "brainwife:pace");
+        parse_command(&mut app, "view budget brainwife");
+        assert_eq!(app.budget_focus.as_token(), "brainwife");
+
+        // Back to following the most urgent budget; toggle then cycles on.
+        parse_command(&mut app, "view budget auto");
+        assert_eq!(app.budget_focus, BudgetFocus::default());
+        parse_command(&mut app, "view budget toggle");
+        assert_eq!(app.budget_focus.as_token(), "cap");
+
+        // A bogus scope is rejected without changing state.
+        parse_command(&mut app, "view budget brainwife:yearly");
+        assert_eq!(app.budget_focus.as_token(), "cap");
     }
 
     #[test]

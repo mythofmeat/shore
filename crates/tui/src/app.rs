@@ -83,11 +83,100 @@ impl UsageLevel {
     }
 }
 
-/// Which limit a `usage_warning` push refers to.
+/// Which limit a `usage_warning` push refers to — and, via [`BudgetFocus`],
+/// which limit the usage chip tracks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UsageScope {
     Cap,
     Pace,
+}
+
+impl UsageScope {
+    /// Canonical token used in `:view budget <target>` and prefs.
+    pub fn as_token(self) -> &'static str {
+        match self {
+            UsageScope::Cap => "cap",
+            UsageScope::Pace => "pace",
+        }
+    }
+
+    /// Parse a scope token. `budget` is accepted for `cap` because that is the
+    /// daemon's wire name for the period limit.
+    pub fn from_token(token: &str) -> Option<Self> {
+        match token.to_ascii_lowercase().as_str() {
+            "cap" | "budget" => Some(UsageScope::Cap),
+            "pace" => Some(UsageScope::Pace),
+            _ => None,
+        }
+    }
+}
+
+/// Which budget — and which of its limits — the usage chip follows.
+///
+/// The default tracks whatever is closest to binding, which is the right
+/// answer when nothing paces itself. Once a budget configures a pace, its two
+/// limits answer different questions ("am I on track for the week?" vs "how
+/// much is left today?") and only the user knows which one they steer by, so
+/// the choice is pinnable.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BudgetFocus {
+    /// Budget to follow, matched case-insensitively by name. `None` follows
+    /// whichever configured budget is closest to its limit.
+    pub name: Option<String>,
+    /// Limit within that budget. `None` follows whichever binds first.
+    pub scope: Option<UsageScope>,
+}
+
+impl BudgetFocus {
+    fn scoped(scope: UsageScope) -> Self {
+        Self {
+            name: None,
+            scope: Some(scope),
+        }
+    }
+
+    fn named(name: &str) -> Self {
+        Self {
+            name: Some(name.to_string()),
+            scope: None,
+        }
+    }
+
+    /// Canonical token used in the `:view budget <target>` command and prefs.
+    pub fn as_token(&self) -> String {
+        match (&self.name, self.scope) {
+            (None, None) => "auto".to_string(),
+            (None, Some(scope)) => scope.as_token().to_string(),
+            (Some(name), None) => name.clone(),
+            (Some(name), Some(scope)) => format!("{name}:{}", scope.as_token()),
+        }
+    }
+
+    /// Parse a command/pref token: `auto`, a bare scope, a budget name, or a
+    /// `<name>:<scope>` pair.
+    ///
+    /// `auto`, `cap` and `pace` are reserved, so a budget actually named one of
+    /// them has to be written with an explicit scope (`pace:cap`).
+    pub fn from_token(token: &str) -> Option<Self> {
+        let token = token.trim();
+        if let Some((name, scope)) = token.split_once(':') {
+            let name = name.trim();
+            if name.is_empty() {
+                return None;
+            }
+            return Some(Self {
+                name: Some(name.to_string()),
+                scope: Some(UsageScope::from_token(scope.trim())?),
+            });
+        }
+        match token.to_ascii_lowercase().as_str() {
+            "" => None,
+            "auto" => Some(Self::default()),
+            "cap" | "budget" => Some(Self::scoped(UsageScope::Cap)),
+            "pace" => Some(Self::scoped(UsageScope::Pace)),
+            _ => Some(Self::named(token)),
+        }
+    }
 }
 
 /// Read a `UsageLevel` out of a budget payload's `pace` object. Returns `None`
@@ -170,6 +259,43 @@ impl UsageBudget {
             (true, false) => true,
             (false, true) => false,
             _ => pace.percent_used > self.percent_used,
+        }
+    }
+
+    /// The level this budget reports under `scope`: its period cap, its pace,
+    /// or — with no scope pinned — [`Self::headline`].
+    ///
+    /// A budget that configures no pace falls back to its cap, so pinning
+    /// `pace` never blanks the chip for budgets that don't pace themselves.
+    pub fn level(&self, scope: Option<UsageScope>) -> UsageLevel {
+        match scope {
+            None => self.headline(),
+            Some(UsageScope::Cap) => self.cap(),
+            Some(UsageScope::Pace) => self.pace.clone().unwrap_or_else(|| self.cap()),
+        }
+    }
+
+    /// [`Self::level`]'s percentage without the vector clones, for the
+    /// per-frame scan that ranks budgets.
+    pub fn level_percent(&self, scope: Option<UsageScope>) -> f64 {
+        match scope {
+            None => self.headline_percent(),
+            Some(UsageScope::Cap) => self.percent_used,
+            Some(UsageScope::Pace) => self
+                .pace
+                .as_ref()
+                .map_or(self.percent_used, |pace| pace.percent_used),
+        }
+    }
+
+    /// Whether [`Self::level`] reports the pace rather than the period cap.
+    /// The chip labels those: a pace percentage read as a period percentage is
+    /// badly misleading in either direction.
+    pub fn level_is_pace(&self, scope: Option<UsageScope>) -> bool {
+        match scope {
+            Some(UsageScope::Cap) => false,
+            Some(UsageScope::Pace) => self.pace.is_some(),
+            None => self.pace.as_ref().is_some_and(|pace| self.pace_leads(pace)),
         }
     }
 }
@@ -1051,6 +1177,8 @@ pub struct App {
     pub show_metadata: bool,
     /// When the usage-budget chip is shown on the input border.
     pub usage_display: UsageDisplay,
+    /// Which budget (and which of its limits) that chip follows.
+    pub budget_focus: BudgetFocus,
     pub show_help: bool,
     /// Latest known usage-budget statuses, refreshed by the `usage` query and
     /// `UsageWarning` pushes. Empty until the first reply arrives.
@@ -1126,6 +1254,7 @@ impl Default for App {
             show_timestamps: false,
             show_metadata: true,
             usage_display: UsageDisplay::Off,
+            budget_focus: BudgetFocus::default(),
             show_help: false,
             usage_budgets: Vec::new(),
             pending_images: Vec::new(),
@@ -1847,6 +1976,7 @@ impl App {
         "images",
         "metadata",
         "usage",
+        "budget",
     ];
 
     pub fn is_view_key(key: &str) -> bool {
@@ -1864,6 +1994,9 @@ impl App {
             // Value-typed: "active" means anything other than Off (drives the
             // submenu's on/off marker). The exact mode is shown by the row label.
             "usage" => Some(self.usage_display != UsageDisplay::Off),
+            // Likewise value-typed: "active" means the chip is pinned to a
+            // specific budget or limit rather than following the most urgent.
+            "budget" => Some(self.budget_focus != BudgetFocus::default()),
             _ => None,
         }
     }
@@ -1880,12 +2013,61 @@ impl App {
         self.usage_display
     }
 
-    /// The budget to surface in the usage chip: the one nearest (or past) its
-    /// limit, so the most pressing constraint is always what's shown.
-    pub fn most_urgent_budget(&self) -> Option<&UsageBudget> {
+    /// The budget to surface in the usage chip: the one `:view budget` pinned
+    /// by name, or — unpinned — the one nearest (or past) its limit, so the
+    /// most pressing constraint is what's shown.
+    ///
+    /// A name that matches nothing (a typo, or a budget dropped from the
+    /// config) yields no chip rather than silently falling back to another
+    /// budget's numbers.
+    pub fn focused_budget(&self) -> Option<&UsageBudget> {
+        if let Some(name) = &self.budget_focus.name {
+            return self
+                .usage_budgets
+                .iter()
+                .find(|b| b.name.eq_ignore_ascii_case(name));
+        }
+        let scope = self.budget_focus.scope;
         self.usage_budgets
             .iter()
-            .max_by(|a, b| a.headline_percent().total_cmp(&b.headline_percent()))
+            .max_by(|a, b| a.level_percent(scope).total_cmp(&b.level_percent(scope)))
+    }
+
+    /// Pin the usage chip to a budget/limit (`:view budget <target>` / prefs).
+    pub fn set_budget_focus(&mut self, focus: BudgetFocus) {
+        self.budget_focus = focus;
+    }
+
+    /// Targets the `:view` submenu's Enter cycles through: auto, then each
+    /// limit, then one entry per configured budget once there is more than one
+    /// (with a single budget, pinning it by name says nothing `auto` doesn't).
+    fn budget_focus_cycle(&self) -> Vec<BudgetFocus> {
+        let mut cycle = vec![
+            BudgetFocus::default(),
+            BudgetFocus::scoped(UsageScope::Cap),
+            BudgetFocus::scoped(UsageScope::Pace),
+        ];
+        if self.usage_budgets.len() > 1 {
+            cycle.extend(
+                self.usage_budgets
+                    .iter()
+                    .map(|b| BudgetFocus::named(&b.name)),
+            );
+        }
+        cycle
+    }
+
+    /// Advance to the next focus target (submenu Enter and
+    /// `:view budget toggle`), returning the new one. A focus pinned by name
+    /// that has since dropped out of the cycle restarts it.
+    pub fn cycle_budget_focus(&mut self) -> BudgetFocus {
+        let cycle = self.budget_focus_cycle();
+        let next = cycle
+            .iter()
+            .position(|focus| *focus == self.budget_focus)
+            .map_or(0, |i| (i + 1) % cycle.len());
+        self.budget_focus = cycle[next].clone();
+        self.budget_focus.clone()
     }
 
     /// Replace cached budget statuses from a `usage {budget:true}` reply's
@@ -1981,6 +2163,10 @@ impl App {
         if key == "usage" {
             return Some(self.cycle_usage_display() != UsageDisplay::Off);
         }
+        // Likewise value-typed: cycle targets rather than flipping a boolean.
+        if key == "budget" {
+            return Some(self.cycle_budget_focus() != BudgetFocus::default());
+        }
         let next = !self.view_enabled(key)?;
         self.set_view_option(key, next);
         Some(next)
@@ -1989,6 +2175,9 @@ impl App {
     fn view_row_label(&self, key: &str) -> String {
         if key == "usage" {
             return format!("usage = {}", self.usage_display.as_str());
+        }
+        if key == "budget" {
+            return format!("budget = {}", self.budget_focus.as_token());
         }
         let state = if self.view_enabled(key).unwrap_or(false) {
             "on"
@@ -2259,11 +2448,11 @@ impl App {
                     };
                     if has_second {
                         let value_arg = arg.split_once(' ').map(|x| x.1).unwrap_or("").trim();
-                        self.completion.candidates =
-                            Self::filtered_presets(&["on", "off", "toggle"], value_arg)
-                                .into_iter()
-                                .map(|value| format!("view {head} {value}"))
-                                .collect();
+                        self.completion.candidates = self
+                            .view_value_presets(head, value_arg)
+                            .into_iter()
+                            .map(|value| format!("view {head} {value}"))
+                            .collect();
                     } else {
                         self.completion.candidates = Self::VIEW_KEYS
                             .iter()
@@ -2498,6 +2687,30 @@ impl App {
         };
     }
 
+    /// Values offered for `:view <key> <value>`. Most keys are booleans; the
+    /// two value-typed ones have their own domains, and `budget` additionally
+    /// offers the names the daemon has reported.
+    fn view_value_presets(&self, key: &str, filter: &str) -> Vec<String> {
+        let filter = filter.to_lowercase();
+        match key {
+            "usage" => Self::filtered_presets(&["off", "always", "warn", "toggle"], &filter),
+            "budget" => {
+                let mut candidates =
+                    Self::filtered_presets(&["auto", "cap", "pace", "toggle"], &filter);
+                candidates.extend(
+                    self.usage_budgets
+                        .iter()
+                        .map(|b| b.name.clone())
+                        .filter(|name| {
+                            filter.is_empty() || name.to_lowercase().starts_with(&filter)
+                        }),
+                );
+                candidates
+            }
+            _ => Self::filtered_presets(&["on", "off", "toggle"], &filter),
+        }
+    }
+
     fn filtered_presets(presets: &[&str], filter: &str) -> Vec<String> {
         presets
             .iter()
@@ -2726,6 +2939,9 @@ impl App {
             if key == "usage" {
                 let mode = self.cycle_usage_display();
                 self.set_status(format!("view usage: {}", mode.as_str()));
+            } else if key == "budget" {
+                let focus = self.cycle_budget_focus();
+                self.set_status(format!("view budget: {}", focus.as_token()));
             } else {
                 let enabled = self.toggle_view_option(&key)?;
                 self.set_status(format!(
@@ -3073,5 +3289,104 @@ mod tests {
         let args = app.selected_alt_command_args().unwrap();
         assert_eq!(args["index"], 3);
         assert_eq!(args["ref"], "a1");
+    }
+
+    fn budget(name: &str, cap: f64, pace: Option<f64>) -> UsageBudget {
+        UsageBudget {
+            name: name.into(),
+            percent_used: cap,
+            crossed_warn_at: vec![],
+            over_limit: false,
+            pace: pace.map(|percent_used| UsageLevel {
+                percent_used,
+                crossed_warn_at: vec![],
+                over_limit: false,
+            }),
+        }
+    }
+
+    #[test]
+    fn budget_focus_tokens_round_trip() {
+        for token in ["auto", "cap", "pace", "brainwife", "brainwife:pace"] {
+            let focus = BudgetFocus::from_token(token).expect("parses");
+            assert_eq!(focus.as_token(), token);
+        }
+        // Wire spelling of the period limit normalizes onto `cap`.
+        assert_eq!(BudgetFocus::from_token("budget").unwrap().as_token(), "cap");
+        // Case-insensitive keywords; names keep their case.
+        assert_eq!(BudgetFocus::from_token("PACE").unwrap().as_token(), "pace");
+        assert_eq!(
+            BudgetFocus::from_token("Weekly").unwrap().as_token(),
+            "Weekly"
+        );
+        assert!(BudgetFocus::from_token("").is_none());
+        assert!(BudgetFocus::from_token("weekly:hourly").is_none());
+    }
+
+    #[test]
+    fn focused_budget_honors_scope_and_name_pins() {
+        let mut app = App {
+            usage_budgets: vec![
+                budget("weekly", 0.7, Some(0.2)),
+                budget("monthly", 0.4, None),
+            ],
+            ..App::default()
+        };
+
+        // Auto: the budget closest to binding, at its leading limit.
+        assert_eq!(app.focused_budget().unwrap().name, "weekly");
+        assert_eq!(app.focused_budget().unwrap().level(None).percent_used, 0.7);
+
+        // Pinned to the pace: ranked by pace, and a budget without one falls
+        // back to its cap so it can still be ranked (and still render).
+        app.budget_focus = BudgetFocus::scoped(UsageScope::Pace);
+        assert_eq!(app.focused_budget().unwrap().name, "monthly");
+        assert_eq!(
+            app.focused_budget()
+                .unwrap()
+                .level(app.budget_focus.scope)
+                .percent_used,
+            0.4
+        );
+
+        // Pinned by name: that budget regardless of urgency.
+        app.budget_focus = BudgetFocus::named("weekly");
+        let focused = app.focused_budget().unwrap();
+        assert_eq!(focused.name, "weekly");
+        assert_eq!(focused.level(app.budget_focus.scope).percent_used, 0.7);
+
+        // Name + scope.
+        app.budget_focus = BudgetFocus::from_token("weekly:pace").unwrap();
+        let focused = app.focused_budget().unwrap();
+        assert_eq!(focused.level(app.budget_focus.scope).percent_used, 0.2);
+        assert!(focused.level_is_pace(app.budget_focus.scope));
+
+        // An unmatched name selects nothing.
+        app.budget_focus = BudgetFocus::named("retired");
+        assert!(app.focused_budget().is_none());
+    }
+
+    #[test]
+    fn budget_focus_cycle_covers_scopes_then_names() {
+        let mut app = App {
+            usage_budgets: vec![budget("weekly", 0.7, Some(0.2))],
+            ..App::default()
+        };
+
+        // One budget: naming it adds nothing over `auto`, so the cycle is
+        // just the three scope modes.
+        assert_eq!(app.cycle_budget_focus().as_token(), "cap");
+        assert_eq!(app.cycle_budget_focus().as_token(), "pace");
+        assert_eq!(app.cycle_budget_focus().as_token(), "auto");
+
+        app.usage_budgets.push(budget("monthly", 0.4, None));
+        app.budget_focus = BudgetFocus::scoped(UsageScope::Pace);
+        assert_eq!(app.cycle_budget_focus().as_token(), "weekly");
+        assert_eq!(app.cycle_budget_focus().as_token(), "monthly");
+        assert_eq!(app.cycle_budget_focus().as_token(), "auto");
+
+        // A pin that dropped out of the cycle restarts it rather than sticking.
+        app.budget_focus = BudgetFocus::named("retired");
+        assert_eq!(app.cycle_budget_focus().as_token(), "auto");
     }
 }

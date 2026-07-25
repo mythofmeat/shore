@@ -1003,11 +1003,21 @@ fn render_images(
 /// Build the usage-budget chip shown on the input border: a 10-cell progress
 /// bar plus the percentage, colored by proximity to the limit (grey normal,
 /// yellow once a warning threshold is crossed, red over limit).
-fn usage_chip(budget: &crate::app::UsageBudget) -> (String, Color) {
+fn usage_chip(
+    budget: &crate::app::UsageBudget,
+    focus: &crate::app::BudgetFocus,
+) -> (String, Color) {
     const CELLS: usize = 10;
-    // Whichever limit binds first — the pace when it's running hotter than the
-    // period cap. See `UsageBudget::headline`.
-    let level = budget.headline();
+    // The limit `:view budget` follows — by default whichever binds first, the
+    // pace when it's running hotter than the period cap. See `UsageBudget::level`.
+    let level = budget.level(focus.scope);
+    // Label the pace, since a pace percentage read as a period percentage is
+    // misleading in either direction.
+    let prefix = if budget.level_is_pace(focus.scope) {
+        "pace "
+    } else {
+        ""
+    };
     let filled = ((level.percent_used.clamp(0.0, 1.0)) * CELLS as f64).round() as usize;
     let bar: String = "█".repeat(filled) + &"░".repeat(CELLS - filled);
     let pct = (level.percent_used * 100.0).round() as i64;
@@ -1021,7 +1031,7 @@ fn usage_chip(budget: &crate::app::UsageBudget) -> (String, Color) {
     } else {
         Color::DarkGray
     };
-    (format!("[{bar}] {pct}%"), color)
+    (format!("{prefix}[{bar}] {pct}%"), color)
 }
 
 fn draw_input(frame: &mut Frame, app: &App, area: Rect) {
@@ -1130,14 +1140,14 @@ fn draw_input(frame: &mut Frame, app: &App, area: Rect) {
             Color::Magenta,
         ));
     }
-    if let Some(budget) = app.most_urgent_budget() {
+    if let Some(budget) = app.focused_budget() {
         let show = match app.usage_display {
             crate::app::UsageDisplay::Off => false,
             crate::app::UsageDisplay::Always => true,
             crate::app::UsageDisplay::Warn => budget.in_warning(),
         };
         if show {
-            indicators.push(usage_chip(budget));
+            indicators.push(usage_chip(budget, &app.budget_focus));
         }
     }
     if !indicators.is_empty() {
@@ -2581,6 +2591,55 @@ mod scenario_tests {
         assert!(
             paced.contains("55%"),
             "a pace-only warning reveals the chip; frame:\n{paced}"
+        );
+    }
+
+    #[test]
+    fn usage_chip_follows_the_pinned_budget_focus() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.mode = InputMode::Insert;
+        h.app.usage_display = crate::app::UsageDisplay::Always;
+        h.app.usage_budgets = vec![crate::app::UsageBudget {
+            name: "brainwife".into(),
+            percent_used: 0.71,
+            crossed_warn_at: vec![],
+            over_limit: false,
+            pace: Some(crate::app::UsageLevel {
+                percent_used: 0.24,
+                crossed_warn_at: vec![],
+                over_limit: false,
+            }),
+        }];
+
+        // Auto: the hotter cap wins, unlabelled.
+        let auto = h.render("focus auto");
+        assert!(
+            auto.contains("71%") && !auto.contains("pace"),
+            "auto follows the leading limit; frame:\n{auto}"
+        );
+
+        // Pinned to the pace: the calmer daily figure, labelled as a pace.
+        h.app.budget_focus = crate::app::BudgetFocus {
+            name: None,
+            scope: Some(crate::app::UsageScope::Pace),
+        };
+        let paced = h.render("focus pace");
+        assert!(
+            paced.contains("24%") && paced.contains("pace"),
+            "pinned pace shows the pace figure; frame:\n{paced}"
+        );
+
+        // Pinned by name to a budget the daemon hasn't reported: no chip
+        // rather than another budget's numbers.
+        h.app.budget_focus = crate::app::BudgetFocus {
+            name: Some("gone".into()),
+            scope: None,
+        };
+        let missing = h.render("focus unknown name");
+        assert!(
+            !missing.contains("71%") && !missing.contains("24%"),
+            "an unmatched pin hides the chip; frame:\n{missing}"
         );
     }
 

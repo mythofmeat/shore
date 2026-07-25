@@ -473,6 +473,13 @@ fn load_prefs(app: &mut App) {
                     app::UsageDisplay::Off
                 };
             }
+            if let Some(focus) = v
+                .get("budget_focus")
+                .and_then(|v| v.as_str())
+                .and_then(app::BudgetFocus::from_token)
+            {
+                app.budget_focus = focus;
+            }
         }
     }
 }
@@ -486,6 +493,7 @@ fn save_prefs(app: &App) {
         "show_timestamps": app.show_timestamps,
         "show_metadata": app.show_metadata,
         "usage_display": app.usage_display.as_str(),
+        "budget_focus": app.budget_focus.as_token(),
     });
     let path = prefs_path();
     if let Some(dir) = path.parent() {
@@ -2323,7 +2331,7 @@ mod redraw_tests {
             0,
             "visible monitor should suppress the notification"
         );
-        let budget = app.most_urgent_budget().expect("warning seeds chip state");
+        let budget = app.focused_budget().expect("warning seeds chip state");
         assert_eq!(budget.name, "monthly");
         assert!((budget.percent_used - 0.82).abs() < f64::EPSILON);
         assert!(budget.in_warning(), "crossed threshold flags warning state");
@@ -2373,7 +2381,7 @@ mod redraw_tests {
         assert_eq!(system_entry_count(&app), 0, "background poll is silent");
         assert_eq!(app.usage_budgets.len(), 2);
         // The most-urgent (highest percent) budget is what the chip surfaces.
-        assert_eq!(app.most_urgent_budget().unwrap().name, "monthly");
+        assert_eq!(app.focused_budget().unwrap().name, "monthly");
     }
 
     #[test]
@@ -2404,7 +2412,7 @@ mod redraw_tests {
             }),
         );
 
-        let budget = app.most_urgent_budget().expect("one budget cached");
+        let budget = app.focused_budget().expect("one budget cached");
         let headline = budget.headline();
         assert!(headline.over_limit, "pace is over its allowance");
         assert!(budget.in_warning(), "an overspent pace styles as a warning");
@@ -2444,7 +2452,7 @@ mod redraw_tests {
             }),
         );
 
-        let budget = app.most_urgent_budget().expect("one budget cached");
+        let budget = app.focused_budget().expect("one budget cached");
         assert!(budget.in_warning(), "the pace warning is not swallowed");
         let headline = budget.headline();
         assert_eq!(headline.crossed_warn_at, vec![0.5]);
@@ -2483,7 +2491,7 @@ mod redraw_tests {
             },
         );
 
-        let budget = app.most_urgent_budget().expect("one budget cached");
+        let budget = app.focused_budget().expect("one budget cached");
         assert!(
             (budget.percent_used - 0.3).abs() < f64::EPSILON,
             "the period cap figure survives a pace push"
