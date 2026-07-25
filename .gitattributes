@@ -3,5 +3,5 @@
 # Anthropic prompt cache hashes exact system-block bytes. A Windows checkout
 # or `core.autocrlf=true` flipping LF -> CRLF on a prompt file would silently
 # invalidate the cache key for every running conversation. Lock these to LF.
-backend/daemon/prompts/** text eol=lf
+crates/daemon/prompts/** text eol=lf
 *.md text eol=lf

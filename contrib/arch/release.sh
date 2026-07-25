@@ -40,8 +40,8 @@ esac
 # --- test --------------------------------------------------------------------
 say "Testing..."
 cargo test --workspace
-env -C "$root/backend/llm-sidecar" bun install --silent
-env -C "$root/backend/llm-sidecar" bun test
+env -C "$root/llm-sidecar" bun install --silent
+env -C "$root/llm-sidecar" bun test
 
 # --- bump --------------------------------------------------------------------
 say "Version $old -> $new"

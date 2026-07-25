@@ -1,0 +1,40 @@
+[package]
+name = "shore-common"
+version.workspace = true
+publish.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Wire protocol, configuration, client connection and diagnostics shared by the Silvershore daemon and its clients."
+
+[dependencies]
+base64 = "0.22"
+chrono = { workspace = true }
+dirs = { workspace = true }
+dotenvy = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { version = "1", features = [
+    "net",
+    "io-util",
+    "sync",
+    "rt",
+    "macros",
+    "time",
+] }
+toml = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+which = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+tempfile = { workspace = true }
+tokio = { version = "1", features = ["full"] }
+
+[lints]
+workspace = true

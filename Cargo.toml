@@ -1,26 +1,11 @@
 [workspace]
 resolver = "2"
 members = [
-    "core/protocol",
-    "core/config",
-    "core/swp-client",
-    "backend/diagnostics",
-    "backend/llm",
-    "backend/ledger",
-    "backend/mcp",
-    "backend/call-store",
-    "backend/swp-server",
-    "backend/daemon",
-    "clients/cli",
-    "clients/tui",
-    "clients/matrix",
-]
-default-members = [
-    "core/protocol",
-    "core/config",
-    "core/swp-client",
-    "backend/daemon",
-    "clients/cli",
+    "crates/common",
+    "crates/daemon",
+    "crates/cli",
+    "crates/tui",
+    "crates/matrix",
 ]
 
 [workspace.package]
@@ -63,15 +48,8 @@ insta = { version = "1", features = ["json"] }
 proptest = "1"
 # All internal crates are path-only: nothing publishes to crates.io, so no
 # dep carries a version and no crate can drift against another.
-shore-protocol = { path = "core/protocol" }
-shore-config = { path = "core/config" }
-shore-swp-client = { path = "core/swp-client" }
-shore-diagnostics = { path = "backend/diagnostics" }
-shore-llm = { path = "backend/llm" }
-shore-ledger = { path = "backend/ledger" }
-shore-swp-server = { path = "backend/swp-server" }
-shore-daemon = { path = "backend/daemon" }
-shore-call-store = { path = "backend/call-store" }
+shore-common = { path = "crates/common" }
+shore-daemon = { path = "crates/daemon" }
 rusqlite = { version = "0.37", features = ["bundled"] }
 zstd = "0.13"
 rmcp = { version = "1.7", features = [
@@ -79,14 +57,10 @@ rmcp = { version = "1.7", features = [
     "transport-child-process",
     "transport-streamable-http-client-reqwest",
 ] }
-shore-mcp-client = { path = "backend/mcp" }
 
 [workspace.lints.clippy]
-# Pedantic is enabled workspace-wide as a quality ratchet. priority = -1 lets
-# the individual `allow`s below override the group. Several pedantic lints are
-# high-churn / low-signal on a codebase this size and are widely disabled in
-# serious Rust projects — we allow those rather than annotate thousands of
-# call sites.
+# Pedantic, minus the high-churn/low-signal members. priority = -1 lets the
+# `allow`s below override the group.
 pedantic = { level = "warn", priority = -1 }
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
@@ -94,143 +68,84 @@ must_use_candidate = "allow"
 module_name_repetitions = "allow"
 doc_markdown = "allow"
 
-# Panic-hygiene ratchet. Set to `warn` workspace-wide for visibility; each
-# cleaned crate then escalates these to `deny` via a `#![deny(...)]` at its
-# crate root (Cargo `[lints] workspace = true` can't add per-crate overrides),
-# so cleaned crates can never regress. Tests are exempt via clippy.toml
-# (`allow-{unwrap,expect,panic}-in-tests`); not-yet-cleaned crates stay at warn
-# until they are cleaned and locked.
-unwrap_used = "warn"
-expect_used = "warn"
-panic = "warn"
-unreachable = "warn"
-todo = "warn"
-unimplemented = "warn"
+# Everything below is denied workspace-wide: every crate is clean against these,
+# and a new crate inherits them via `[lints] workspace = true`. Tests are exempt
+# from the panic lints via clippy.toml (allow-{unwrap,expect,panic}-in-tests).
 
-# Tier 2 correctness ratchet (#115): close suppression escape hatches and make
-# ignored must-use results explicit. These stay at workspace `warn` so local
-# development gets signal while CI's `-D warnings` keeps the tree hard-locked.
-allow_attributes = "warn"
-allow_attributes_without_reason = "warn"
-unwrap_in_result = "warn"
-panic_in_result_fn = "warn"
-let_underscore_must_use = "warn"
-as_conversions = "warn"
+# Panic hygiene.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+unreachable = "deny"
+todo = "deny"
+unimplemented = "deny"
+unwrap_in_result = "deny"
+panic_in_result_fn = "deny"
 
-# Indexing/arithmetic/cast ratchet (#149). Same belt-and-suspenders pattern as
-# the panic-hygiene block above: `warn` here so a newly-added or un-locked crate
-# inherits the baseline automatically (CI's `-D warnings` keeps it hard), while
-# each cleaned crate independently escalates these to `deny` via its crate-root
-# `#![deny(...)]` (Cargo `[lints] workspace = true` can't add per-crate
-# overrides). All 10 crates currently deny these, so the workspace entry is a
-# floor for future crates, not a relaxation. `indexing_slicing` (#147) and
-# `arithmetic_side_effects` (#148) panic at runtime; the cast lints silently
-# corrupt values. Daemon tests exempt the index/arith pair at module level via
-# `#![cfg_attr(test, expect(...))]`, which a workspace `warn` does not disturb.
-indexing_slicing = "warn"
-arithmetic_side_effects = "warn"
-cast_possible_truncation = "warn"
-cast_sign_loss = "warn"
-cast_possible_wrap = "warn"
+# Indexing, arithmetic and casts: these panic or silently corrupt at runtime.
+# Float-heavy code (scoring, cosine similarity, pricing, time formatting) carries
+# a reasoned function-level `#[expect]` rather than being rewritten.
+indexing_slicing = "deny"
+arithmetic_side_effects = "deny"
+integer_division = "deny"
+modulo_arithmetic = "deny"
+float_arithmetic = "deny"
+as_conversions = "deny"
+cast_possible_truncation = "deny"
+cast_sign_loss = "deny"
+cast_possible_wrap = "deny"
 
-# Import & literal hygiene ratchet (#154). Same belt-and-suspenders pattern as
-# the blocks above: `warn` here so a newly-added or un-locked crate inherits the
-# baseline automatically (CI's `-D warnings` keeps it hard), while each cleaned
-# crate escalates these to `deny` via its crate-root `#![deny(...)]`. All make
-# provenance/literals greppable; `wildcard_imports` rides in via `pedantic`
-# already but is named explicitly so the deny locks can list it. The cluster's
-# fourth proposed lint, `semicolon_outside_block`, is intentionally omitted: it
-# is mutually exclusive with `semicolon_if_nothing_returned` (enforced via
-# `pedantic` and already clean), and no source form satisfies both on a bare
-# scope block.
-wildcard_imports = "warn"
-unseparated_literal_suffix = "warn"
-single_char_lifetime_names = "warn"
+# String handling. `string_slice` closes a real panic class: `&s[i..j]` panics
+# when an index falls mid-UTF-8-codepoint.
+string_slice = "deny"
+str_to_string = "deny"
 
-# Low-noise Tier 2 lints (#115) that are clean workspace-wide.
-clone_on_ref_ptr = "warn"
-dbg_macro = "warn"
-exit = "warn"
-mem_forget = "warn"
-match_wildcard_for_single_variants = "warn"
-wildcard_enum_match_arm = "warn"
+# Shadowing: a binding can never silently rebind another.
+shadow_same = "deny"
+shadow_reuse = "deny"
+shadow_unrelated = "deny"
+
+# Import and literal hygiene: keeps provenance and literals greppable.
+wildcard_imports = "deny"
+unseparated_literal_suffix = "deny"
+single_char_lifetime_names = "deny"
+
+# Suppressions must be explicit and reasoned; must-use results can't be dropped.
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+let_underscore_must_use = "deny"
+
+# Unsafe and assertions: one unsafe op per block, each with its own SAFETY note.
+undocumented_unsafe_blocks = "deny"
+multiple_unsafe_ops_per_block = "deny"
+missing_assert_message = "deny"
+
+# Control flow and type surface: every `else if` chain ends in a final `else`;
+# generics stay nameable rather than `impl Trait` in argument position.
+else_if_without_else = "deny"
+impl_trait_in_params = "deny"
+
+# Misc correctness and clarity.
+clone_on_ref_ptr = "deny"
+dbg_macro = "deny"
+exit = "deny"
+mem_forget = "deny"
+match_wildcard_for_single_variants = "deny"
+wildcard_enum_match_arm = "deny"
+
+# Not clean in every crate yet; CI's `-D warnings` still makes these hard.
 print_stdout = "warn"
 print_stderr = "warn"
-undocumented_unsafe_blocks = "warn"
-
-# Unsafe-block hardening (#156). `multiple_unsafe_ops_per_block` forces one
-# unsafe op per block so each carries its own `// SAFETY:` justification (pairs
-# with `undocumented_unsafe_blocks`); `missing_assert_message` requires every
-# assert to carry a failure message. Both are near-zero-noise on this tree.
-multiple_unsafe_ops_per_block = "warn"
-missing_assert_message = "warn"
-
-# String-discipline ratchet (#152). Same per-crate-lock pattern as the blocks
-# above: `warn` here so a new crate inherits the baseline (CI's `-D warnings`
-# keeps it hard), while each cleaned crate escalates these to `deny` via its
-# crate-root `#![deny(...)]`. `string_slice` closes a real panic class —
-# `&s[i..j]` panics when an index falls mid-UTF-8-codepoint — so call sites use
-# `.get(..)` / char-boundary-aware slicing or carry a reasoned `#[expect]` when
-# the bounds are provably safe. `str_to_string` is clarity-only: `.to_owned()`
-# states intent (str -> String) more directly than `.to_string()`.
-string_slice = "warn"
-str_to_string = "warn"
-
-# Shadowing ban (#151). Same belt-and-suspenders pattern as the blocks above:
-# `warn` here so new/un-locked crates inherit the baseline, while each cleaned
-# crate escalates to `deny` via its crate-root `#![deny(...)]`. A binding can
-# never silently shadow another, so data flow stays explicit and "I thought
-# this was the other `x`" bugs are impossible. `shadow_unrelated` (rebind to an
-# unrelated value) is the dangerous one; `shadow_reuse` (`let x = x.foo()`) and
-# `shadow_same` (`let x = x`) round out the ban. Tests are cleaned inline, not
-# exempted.
-shadow_same = "warn"
-shadow_reuse = "warn"
-shadow_unrelated = "warn"
-
-# Arithmetic-discipline ratchet (#153). Extends the `arithmetic_side_effects`
-# story (#148): same belt-and-suspenders pattern as the blocks above — `warn`
-# here so new/un-locked crates inherit the baseline, while each cleaned crate
-# escalates to `deny` via its crate-root `#![deny(...)]` (CI's `-D warnings`
-# keeps it hard). `integer_division` forces truncating `/` to be acknowledged,
-# `modulo_arithmetic` flags `%` sign-surprises on negatives, and
-# `float_arithmetic` flags precision/NaN-prone float math. Float-heavy functions
-# (scoring heuristics, cosine similarity, pricing, percent/time formatting) carry
-# a reasoned function-level `#[expect]` rather than being rewritten. Daemon tests
-# exempt `integer_division` at module level via `#![cfg_attr(test, expect(...))]`
-# (truncating division on fixtures is a threshold computation), which a workspace
-# `warn` does not disturb.
-integer_division = "warn"
-modulo_arithmetic = "warn"
-float_arithmetic = "warn"
-
-# Control-flow & type-surface strictness ratchet (#155). Same per-crate-lock
-# pattern as the blocks above: `warn` here so new/un-locked crates inherit the
-# baseline, while each cleaned crate escalates to `deny` via its crate-root
-# `#![deny(...)]`. `else_if_without_else` is the on-theme one — every `else if`
-# chain must end in a final `else`, so the fall-through case is reasoned about
-# rather than left implicit. `impl_trait_in_params` bans `fn f(x: impl Trait)`
-# in favor of an explicit generic, making the type parameter nameable and the
-# signature self-documenting. The cluster's third proposed lint,
-# `pattern_type_mismatch`, is intentionally omitted: it is a `restriction`-group
-# lint (situational by clippy's own guidance, not a recommended default) that
-# fires on idiomatic match-ergonomics patterns (`match &expr { V { field } =>
-# }`); the "fix" forces explicit `*`/`&` dereferences at ~240 sites and works
-# against a deliberate language feature, making call sites less idiomatic rather
-# than more correct.
-else_if_without_else = "warn"
-impl_trait_in_params = "warn"
 
 [workspace.lints.rust]
-# Rustc-side paranoia lints from the Tier 2 ratchet (#115). Crates also deny
-# these at their roots once clean, with documented local `unsafe_code`
-# expectations for the small libc FFI surfaces.
-unsafe_code = "warn"
-elided_lifetimes_in_paths = "warn"
-unused_qualifications = "warn"
-unused_results = "warn"
+unsafe_code = "deny"
+elided_lifetimes_in_paths = "deny"
+unused_qualifications = "deny"
+
+# Not clean in every crate yet; CI's `-D warnings` still makes these hard.
 missing_debug_implementations = "warn"
 unreachable_pub = "warn"
+unused_results = "warn"
 
 [profile.dev]
 opt-level = 1              # light optimization of our own crates (deps get 3, below)
