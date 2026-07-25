@@ -294,6 +294,38 @@ function stripTrailingV1(baseUrl: string): string {
 }
 
 // ── cache_control placement (default schedule, mirrors ts_default) ──────────
+//
+// This adapter owns the Anthropic breakpoint schedule. It places at most four
+// markers, the provider limit: one system anchor on the last non-`memory_index`
+// block, plus three message anchors at
+// `[prev_frozen_boundary, frozen_boundary, last_msg]`.
+//
+// The load-bearing rule is that **a message anchor must sit in the frozen
+// region** — strictly before the message at which the most-recent assistant
+// turn begins. That index is what `replay_prior_thinking` strips against, and
+// it only ever advances, so everything before it is byte-stable for the life of
+// the conversation. Anchoring the trailing turn itself is the bug fixed in
+// #191: under `last_turn` (or `none`) that turn loses its thinking blocks as
+// soon as another turn lands, rewriting the very bytes the anchor covered, and
+// the read collapses to the system prefix alone — a full re-cache of the whole
+// conversation on every committed turn. A cache read resolves only up to a
+// *placed* breakpoint, not as a free-running longest-prefix match, which is
+// also why the second (older) frozen anchor is not redundant: after a
+// multi-round tool loop the boundary jumps past the whole loop in one step, and
+// that anchor is the only placed breakpoint left on a still-stable prefix. The
+// final user message *is* anchored — it is the tail write each request pays for.
+//
+// Two derived constraints, each enforced below:
+//   - The anchor index is computed from a boundary the daemon computes too
+//     (`most_recent_assistant_turn_start` in `content_util.rs`). Silent drift
+//     between them puts the anchor back inside the moving region and
+//     reintroduces the re-cache with nothing failing, so both are pinned
+//     against `dev/fixtures/turn_boundary_parity.json`.
+//   - A scheduled index whose message carries no `cache_control`-eligible block
+//     walks back to the nearest message that has one, rather than dropping the
+//     marker: `thinking` blocks reject `cache_control`, empty text blocks fail
+//     the whole request, and caption-less image messages carry no text block at
+//     all.
 
 type CacheControl = { type: "ephemeral" } | { type: "ephemeral"; ttl: "1h" };
 
