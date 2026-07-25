@@ -320,7 +320,7 @@ function stripTrailingV1(baseUrl: string): string {
 //     (`most_recent_assistant_turn_start` in `content_util.rs`). Silent drift
 //     between them puts the anchor back inside the moving region and
 //     reintroduces the re-cache with nothing failing, so both are pinned
-//     against `dev/fixtures/turn_boundary_parity.json`.
+//     against `backend/fixtures/turn_boundary_parity.json`.
 //   - A scheduled index whose message carries no `cache_control`-eligible block
 //     walks back to the nearest message that has one, rather than dropping the
 //     marker: `thinking` blocks reject `cache_control`, empty text blocks fail
@@ -398,7 +398,7 @@ function isToolResultOnlyUser(msg: MessageParam): boolean {
  * `messages.length` when there is no assistant message.
  *
  * Exported for the cross-language parity test: the two implementations are
- * checked against the same fixture (`dev/fixtures/turn_boundary_parity.json`),
+ * checked against the same fixture (`backend/fixtures/turn_boundary_parity.json`),
  * because if they drift the anchor lands inside the moving region and the
  * re-cache bug returns silently.
  *

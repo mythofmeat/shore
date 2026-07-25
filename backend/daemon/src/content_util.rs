@@ -449,7 +449,7 @@ mod tests {
     fn turn_boundary_matches_shared_fixture() {
         let raw = std::fs::read_to_string(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../dev/fixtures/turn_boundary_parity.json"
+            "/../fixtures/turn_boundary_parity.json"
         ))
         .expect("shared turn-boundary fixture is readable");
         let fixture: Value = serde_json::from_str(&raw).expect("fixture parses");

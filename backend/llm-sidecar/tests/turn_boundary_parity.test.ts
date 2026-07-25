@@ -26,7 +26,7 @@ type Case = {
   messages: SidecarRequest["messages"];
 };
 
-const fixturePath = new URL("../../../dev/fixtures/turn_boundary_parity.json", import.meta.url);
+const fixturePath = new URL("../../fixtures/turn_boundary_parity.json", import.meta.url);
 const fixture = (await Bun.file(fixturePath).json()) as { cases: Case[] };
 
 describe("turn-boundary parity with content_util.rs (shared fixture)", () => {
