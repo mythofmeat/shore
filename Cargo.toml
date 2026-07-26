@@ -9,12 +9,6 @@ members = [
 ]
 
 [workspace.package]
-# One version for the whole suite. Nothing publishes to crates.io anymore —
-# internal crates are consumed by path, and a release is a single `v<version>`
-# git tag used as a marker (no workflow fires on it). Install via install.sh,
-# scripts/install.sh, or the local Arch packages in contrib/arch. To release:
-# `contrib/arch/release.sh`, which bumps this version, builds, tags and
-# publishes; by hand, bump it here, commit, tag `v<version>`, push the tag.
 version = "0.20.7"
 publish = false
 edition = "2021"
@@ -148,41 +142,14 @@ unreachable_pub = "warn"
 unused_results = "warn"
 
 [profile.dev]
-opt-level = 1              # light optimization of our own crates (deps get 3, below)
 debug = "line-tables-only"
-
-# Optimize dependencies (not our own crates) in dev builds. The TUI render path
-# leans on pulldown-cmark and unicode-width every frame; at the default dev
-# opt-level of 0 they run ~10-30x slower, which showed up as the TUI going
-# nearly unresponsive (e.g. re-wrapping the whole input buffer while editing a
-# message). Dependencies compile once and are cached, so this doesn't slow the
-# edit->compile->run loop on our own code.
-[profile.dev.package."*"]
-opt-level = 3
 
 [profile.test]
 debug = "line-tables-only"
 
 [profile.release]
-strip = true      # drop symbol tables (~20% smaller, no behavior change)
-lto = "thin"      # most of the LTO size/perf win, far cheaper to link than "fat"
-codegen-units = 1 # smaller and slightly faster runtime
-
-# shore-tui's own release profile, and the profile every shipped shore-tui is
-# built with: both install scripts and the Arch PKGBUILD use it. `panic` and
-# `lto` are profile-global in cargo — they cannot be set per package — so the
-# only way the tui gets fat LTO and abort-on-panic is a dedicated profile,
-# which also means a second target subtree and a second link of the shared
-# dependency graph. That cost is accepted: this is the binary a user sits in
-# front of, and its render path re-wraps and re-highlights the buffer on every
-# keystroke.
-#
-# Maximum optimization, not minimum size. `opt-level = "z"` here was inherited
-# from the days when the tui lived in its own repo and shipped as a small
-# standalone download; optimizing the render path for size was a mistake.
-[profile.tui-release]
-inherits = "release"
-opt-level = 3
+strip = true
+opt-level = "z"
+# opt-level = 3
 lto = "fat"
 codegen-units = 1
-panic = "abort"
