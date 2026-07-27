@@ -43,10 +43,12 @@ import type {
   SidecarRequest,
   StreamEvent,
   SystemContent,
+  ToolDefinition,
   TurnMessage,
   Usage,
   WireMessage,
 } from "../types.ts";
+import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 
 export class OpenAIProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
@@ -244,19 +246,16 @@ function buildOpenAICall(
   return { client, params };
 }
 
-function toOpenAITools(tools: unknown[] | undefined): ChatCompletionTool[] {
+function toOpenAITools(tools: ToolDefinition[] | undefined): ChatCompletionTool[] {
   if (!tools) return [];
-  return tools.map((raw) => {
-    const t = raw as { name?: string; description?: string; input_schema?: unknown };
-    return {
-      type: "function",
-      function: {
-        name: t.name ?? "",
-        description: t.description ?? "",
-        parameters: (t.input_schema ?? {}) as Record<string, unknown>,
-      },
-    };
-  });
+  return tools.map((t) => ({
+    type: "function",
+    function: {
+      name: t.name,
+      description: t.description,
+      parameters: t.input_schema ?? EMPTY_TOOL_SCHEMA,
+    },
+  }));
 }
 
 // ── message conversion ──────────────────────────────────────────────────────

@@ -46,10 +46,12 @@ import type {
   SidecarRequest,
   StreamEvent,
   SystemContent,
+  ToolDefinition,
   TurnMessage,
   Usage,
   WireMessage,
 } from "../types.ts";
+import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 
 export class OpenRouterProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
@@ -252,19 +254,16 @@ export function buildCall(
   return { client, chatRequest };
 }
 
-function toTools(tools: unknown[] | undefined): ChatFunctionTool[] {
+function toTools(tools: ToolDefinition[] | undefined): ChatFunctionTool[] {
   if (!tools) return [];
-  return tools.map((raw) => {
-    const t = raw as { name?: string; description?: string; input_schema?: unknown };
-    return {
-      type: "function",
-      function: {
-        name: t.name ?? "",
-        description: t.description ?? "",
-        parameters: (t.input_schema ?? {}) as Record<string, unknown>,
-      },
-    } as ChatFunctionTool;
-  });
+  return tools.map((t) => ({
+    type: "function",
+    function: {
+      name: t.name,
+      description: t.description,
+      parameters: t.input_schema ?? EMPTY_TOOL_SCHEMA,
+    },
+  } as ChatFunctionTool));
 }
 
 // ── message conversion ────────────────────────────────────────────────────────

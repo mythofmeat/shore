@@ -1173,7 +1173,11 @@ fn build_librarian_prompt(
     prompt
 }
 
-fn build_librarian_tool_defs(character: &str, display_name: &str, dry_run: bool) -> Vec<Value> {
+fn build_librarian_tool_defs(
+    character: &str,
+    display_name: &str,
+    dry_run: bool,
+) -> Vec<crate::llm::types::ToolDefinition> {
     // The librarian uses its own fixed tool set, independent of the character's
     // `[tools]` allowlist. Express it directly as an allowlist so
     // `render_tool_defs` yields exactly these (in registry order).
@@ -3321,8 +3325,7 @@ mod tests {
         let names = |dry_run: bool| -> Vec<String> {
             build_librarian_tool_defs("alice", "Alice", dry_run)
                 .iter()
-                .filter_map(|def| def.get("name").and_then(Value::as_str))
-                .map(str::to_owned)
+                .map(|def| def.name.clone())
                 .collect()
         };
         let live = names(false);

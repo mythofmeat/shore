@@ -20,7 +20,7 @@ use std::process::ExitCode;
 
 use serde_json::json;
 use shore_common::config::models::Sdk;
-use shore_daemon::llm::types::LlmRequest;
+use shore_daemon::llm::types::{LlmRequest, ToolDefinition};
 use shore_daemon::llm::LlmClient;
 
 macro_rules! example_out {
@@ -221,17 +221,17 @@ async fn main() -> ExitCode {
         base_url: Some(target.base_url.to_owned()),
         messages: replay_messages(),
         system: Some(json!("You are a concise live API smoke-test assistant.")),
-        tools: Some(vec![json!({
-            "name": "lookup_fact",
-            "description": "Looks up one short fact for a live smoke test.",
-            "input_schema": {
+        tools: Some(vec![ToolDefinition::new(
+            "lookup_fact",
+            "Looks up one short fact for a live smoke test.",
+            json!({
                 "type": "object",
                 "properties": {
                     "topic": {"type": "string"}
                 },
                 "required": ["topic"]
-            }
-        })]),
+            }),
+        )]),
         max_tokens: 96,
         temperature: Some(0.0),
         top_p: None,

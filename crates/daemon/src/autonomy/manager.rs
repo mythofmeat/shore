@@ -4357,7 +4357,11 @@ mod tests {
     fn wrap_up_nudge_preserves_existing_message_prefix() {
         let mut request = empty_request();
         request.system = Some(json!([{"type": "text", "text": "stable system"}]));
-        request.tools = Some(vec![json!({"name": "read", "input_schema": {}})]);
+        request.tools = Some(vec![crate::llm::types::ToolDefinition::new(
+            "read",
+            "",
+            json!({"type": "object"}),
+        )]);
         request.messages = vec![
             json!({"role": "user", "content": "cached user"}),
             json!({"role": "assistant", "content": "cached assistant"}),
@@ -4443,9 +4447,13 @@ mod tests {
     fn heartbeat_must_not_mutate_tools_array() {
         // Simulate what execute_heartbeat_tick does: clone last_request,
         // then check if tools are modified.
-        let original_tools: Vec<Value> = vec![
-            json!({"name": "read", "input_schema": {}}),
-            json!({"name": "search_chat_logs", "input_schema": {}}),
+        let original_tools = vec![
+            crate::llm::types::ToolDefinition::new("read", "", json!({"type": "object"})),
+            crate::llm::types::ToolDefinition::new(
+                "search_chat_logs",
+                "",
+                json!({"type": "object"}),
+            ),
         ];
 
         let request = LlmRequest {
@@ -4668,7 +4676,7 @@ api_key_env = "{api_key_env}"
             .as_ref()
             .expect("tools present")
             .iter()
-            .filter_map(|t| t.get("name").and_then(Value::as_str))
+            .map(|t| t.name.as_str())
             .collect();
         assert!(
             tool_names.contains(&"mcp__hue__on"),
@@ -4856,7 +4864,11 @@ api_key_env = "{api_key_env}"
             base_url: None,
             messages: vec![json!({"role": "user", "content": "hi"})],
             system: Some(json!([{"type": "text", "text": "sys"}])),
-            tools: Some(vec![json!({"name": "read", "input_schema": {}})]),
+            tools: Some(vec![crate::llm::types::ToolDefinition::new(
+                "read",
+                "",
+                json!({"type": "object"}),
+            )]),
             max_tokens: 4096,
             temperature: None,
             top_p: None,
@@ -5574,8 +5586,8 @@ api_key_env = "{heartbeat_env}"
         original.model = "claude-sonnet-4-6".into();
         original.system = Some(json!([{"type": "text", "text": "you are a character"}]));
         original.tools = Some(vec![
-            json!({"name": "memory", "description": "x", "input_schema": {}}),
-            json!({"name": "schedule", "description": "y", "input_schema": {}}),
+            crate::llm::types::ToolDefinition::new("memory", "x", json!({"type": "object"})),
+            crate::llm::types::ToolDefinition::new("schedule", "y", json!({"type": "object"})),
         ]);
         original
             .messages

@@ -34,10 +34,12 @@ import type {
   SidecarRequest,
   StreamEvent,
   SystemContent,
+  ToolDefinition,
   TurnMessage,
   Usage,
   WireMessage,
 } from "../types.ts";
+import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 import { turnToOpenAI } from "./openai.ts";
 
 export const ZAI_BASE_URL = "https://api.z.ai/api/paas/v4";
@@ -334,19 +336,16 @@ export function zaiGenerateResponse(
   };
 }
 
-function toZaiTools(tools: unknown[] | undefined): ChatCompletionTool[] {
+function toZaiTools(tools: ToolDefinition[] | undefined): ChatCompletionTool[] {
   if (!tools) return [];
-  return tools.map((raw) => {
-    const t = raw as { name?: string; description?: string; input_schema?: unknown };
-    return {
-      type: "function",
-      function: {
-        name: t.name ?? "",
-        description: t.description ?? "",
-        parameters: (t.input_schema ?? {}) as Record<string, unknown>,
-      },
-    };
-  });
+  return tools.map((t) => ({
+    type: "function",
+    function: {
+      name: t.name,
+      description: t.description,
+      parameters: t.input_schema ?? EMPTY_TOOL_SCHEMA,
+    },
+  }));
 }
 
 function normalizeTurn(turn: WireMessage): TurnMessage {

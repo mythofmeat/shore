@@ -42,10 +42,12 @@ import type {
   SidecarRequest,
   StreamEvent,
   SystemContent,
+  ToolDefinition,
   TurnMessage,
   Usage,
   WireMessage,
 } from "../types.ts";
+import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 
 export class VercelProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
@@ -195,16 +197,15 @@ export function buildProviderOptions(req: SidecarRequest): ProviderOptionsValue 
   return { [key]: inner } as ProviderOptionsValue;
 }
 
-function buildTools(tools: unknown[] | undefined): ToolSet | undefined {
+function buildTools(tools: ToolDefinition[] | undefined): ToolSet | undefined {
   if (!tools || tools.length === 0) return undefined;
   const out: Record<string, Tool> = {};
-  for (const raw of tools) {
-    const t = raw as { name?: string; description?: string; input_schema?: unknown };
+  for (const t of tools) {
     // No `execute`: the Rust daemon owns the tool loop, so the SDK surfaces the
     // tool-call and stops (finishReason "tool-calls").
-    out[t.name ?? ""] = tool({
-      description: t.description ?? "",
-      inputSchema: jsonSchema((t.input_schema ?? {}) as Record<string, unknown>),
+    out[t.name] = tool({
+      description: t.description,
+      inputSchema: jsonSchema(t.input_schema ?? EMPTY_TOOL_SCHEMA),
     });
   }
   return out;

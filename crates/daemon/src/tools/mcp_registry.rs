@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::mcp::{McpClient, McpServerSpec, Transport};
-use serde_json::{json, Value};
+use serde_json::Value;
 use shore_common::config::app::{tool_pattern_matches, McpServerConfig};
 
 use super::ToolError;
@@ -34,13 +34,13 @@ pub(crate) struct McpToolDef {
 }
 
 impl McpToolDef {
-    /// Render to the outbound LLM `tools` array shape.
-    pub(crate) fn to_tool_json(&self) -> Value {
-        json!({
-            "name": self.full_name,
-            "description": self.description,
-            "input_schema": self.input_schema,
-        })
+    /// Render to the sidecar's provider-neutral tool shape.
+    pub(crate) fn to_tool_def(&self) -> crate::llm::types::ToolDefinition {
+        crate::llm::types::ToolDefinition::new(
+            self.full_name.clone(),
+            self.description.clone(),
+            self.input_schema.clone(),
+        )
     }
 }
 
@@ -123,7 +123,10 @@ impl McpRegistry {
     /// Tool defs whose full name matches any allowlist `patterns` (exact or
     /// `mcp__server__*` glob), in pinned sorted order. Shaped for the outbound
     /// LLM `tools` array.
-    pub(crate) fn tool_defs_filtered(&self, patterns: &[String]) -> Vec<Value> {
+    pub(crate) fn tool_defs_filtered(
+        &self,
+        patterns: &[String],
+    ) -> Vec<crate::llm::types::ToolDefinition> {
         self.tools
             .iter()
             .filter(|t| {
@@ -131,7 +134,7 @@ impl McpRegistry {
                     .iter()
                     .any(|p| tool_pattern_matches(p, &t.full_name))
             })
-            .map(McpToolDef::to_tool_json)
+            .map(McpToolDef::to_tool_def)
             .collect()
     }
 
@@ -242,7 +245,7 @@ impl McpToolDef {
         Self {
             full_name: format!("mcp__{server}__{tool}"),
             description: format!("{tool} tool"),
-            input_schema: json!({"type": "object"}),
+            input_schema: serde_json::json!({"type": "object"}),
             server: server.to_owned(),
             tool: tool.to_owned(),
         }
@@ -266,6 +269,7 @@ impl McpRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     fn registry() -> McpRegistry {
         McpRegistry::from_tools_for_test(vec![
@@ -281,7 +285,7 @@ mod tests {
         let names: Vec<String> = r
             .tool_defs_filtered(&["mcp__hue__*".to_owned()])
             .iter()
-            .map(|d| d["name"].as_str().unwrap().to_owned())
+            .map(|d| d.name.clone())
             .collect();
         // Sorted by full name (off < on); the nanoleaf tool is excluded.
         assert_eq!(names, vec!["mcp__hue__off", "mcp__hue__on"]);
@@ -488,7 +492,7 @@ mod tests {
         let names: Vec<String> = registry
             .tool_defs_filtered(&["mcp__*".to_owned()])
             .iter()
-            .map(|d| d["name"].as_str().unwrap().to_owned())
+            .map(|d| d.name.clone())
             .collect();
 
         // `from_config` logs-and-skips a server it cannot reach, so a failure

@@ -53,6 +53,32 @@ export type SystemContent =
   | Array<{ type: "text"; text: string; cache_control?: unknown; _label?: string }>;
 
 /**
+ * One tool offered to the model, mirroring Rust `ToolDefinition`
+ * (`crates/daemon/src/llm/types.rs`).
+ *
+ * The field names are Anthropic's spelling because that is what the daemon has
+ * always emitted, but this is a provider-*neutral* shape: each adapter maps it
+ * to its own wire format. Do not pass it to a provider unchanged outside the
+ * Anthropic adapter.
+ *
+ * Order is significant — it is part of Anthropic's cache prefix — so adapters
+ * must forward the array in the order received.
+ */
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  /** JSON Schema for the tool's arguments; always an object schema. */
+  input_schema: Record<string, unknown>;
+}
+
+/** The parameters-schema fallback for a tool that arrives without one.
+ *
+ * Anthropic previously defaulted to `{type:"object"}` here while the other five
+ * adapters defaulted to `{}` — which OpenAI and Gemini reject as a function
+ * parameters schema. One default, valid everywhere. */
+export const EMPTY_TOOL_SCHEMA: Record<string, unknown> = { type: "object" };
+
+/**
  * Per-provider knobs, mirroring Rust `ProviderOptions`
  * (`crates/daemon/src/llm/types.rs`). The two must change together.
  *
@@ -102,8 +128,8 @@ export interface SidecarRequest {
   /** Conversation, already assembled into canonical blocks by the daemon. */
   messages: WireMessage[];
   system?: SystemContent;
-  /** Provider-native tool definitions (already shaped by the daemon). */
-  tools?: unknown[];
+  /** Tool surface in offer order. See {@link ToolDefinition}. */
+  tools?: ToolDefinition[];
   max_tokens: number;
   temperature?: number;
   top_p?: number;

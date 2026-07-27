@@ -513,7 +513,7 @@ mod tests {
     fn chat_shape_request(
         sdk: Sdk,
         system: Option<serde_json::Value>,
-        tools: Option<Vec<serde_json::Value>>,
+        tools: Option<Vec<crate::llm::types::ToolDefinition>>,
         messages: Vec<serde_json::Value>,
     ) -> LlmRequest {
         LlmRequest {
@@ -561,11 +561,11 @@ mod tests {
         let chat_request = chat_shape_request(
             Sdk::Anthropic,
             Some(json!("cached system")),
-            Some(vec![json!({
-                "name": "read",
-                "description": "chat tool — compaction inherits it to preserve the cache prefix hash",
-                "input_schema": { "type": "object" }
-            })]),
+            Some(vec![crate::llm::types::ToolDefinition::new(
+                "read",
+                "chat tool — compaction inherits it to preserve the cache prefix hash",
+                json!({ "type": "object" }),
+            )]),
             vec![
                 json!({"role": "user", "content": "cached user"}),
                 json!({"role": "assistant", "content": "cached assistant"}),
@@ -596,7 +596,7 @@ mod tests {
             .as_ref()
             .expect("chat tools must pass through so the cache prefix hash matches");
         assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0]["name"], "read");
+        assert_eq!(tools[0].name, "read");
         assert_eq!(request.rid, None);
         assert_eq!(request.forensic_character.as_deref(), Some("alice"));
         assert_eq!(request.system, Some(json!("cached system")));
@@ -643,11 +643,11 @@ mod tests {
             "alice".to_owned(),
         );
 
-        let chat_tools = vec![json!({
-            "name": "read",
-            "description": "exact-byte tool definition",
-            "input_schema": { "type": "object", "properties": {} }
-        })];
+        let chat_tools = vec![crate::llm::types::ToolDefinition::new(
+            "read",
+            "exact-byte tool definition",
+            json!({ "type": "object", "properties": {} }),
+        )];
         let chat_messages = vec![
             json!({"role": "user", "content": "cached user 1"}),
             json!({"role": "assistant", "content": "cached assistant 1"}),

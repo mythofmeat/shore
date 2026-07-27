@@ -11,6 +11,7 @@ pub mod workspace;
 
 use crate::autonomy::manager::AutonomyManager;
 use crate::llm::embed::Embedder;
+use crate::llm::types::ToolDefinition;
 use crate::llm::LlmClient;
 use crate::memory::compaction_impls::ImageGenConfig;
 use serde_json::Value;
@@ -211,22 +212,51 @@ pub fn render_tool_defs(
     tools_cfg: &shore_common::config::app::ToolsConfig,
     char_name: &str,
     user_name: &str,
-) -> Vec<Value> {
-    use std::collections::HashMap;
-    let mut vars: HashMap<String, String> = HashMap::new();
-    let _ignored = vars.insert("char".into(), char_name.to_owned());
-    _ = vars.insert("character_name".into(), char_name.to_owned());
-    _ = vars.insert("user".into(), user_name.to_owned());
+) -> Vec<ToolDefinition> {
+    let vars = template_vars(char_name, user_name);
     available_tools(tools_cfg)
         .iter()
         .map(|t| {
-            serde_json::json!({
-                "name": t.name,
-                "description": crate::engine::prompt::render_template(t.description, &vars),
-                "input_schema": t.parameters.clone(),
-            })
+            ToolDefinition::new(
+                t.name,
+                crate::engine::prompt::render_template(t.description, &vars),
+                t.parameters.clone(),
+            )
         })
         .collect()
+}
+
+/// The `{{char}}` / `{{user}}` substitutions every tool description is rendered
+/// against — the same pipeline the system prompt uses, so a placeholder in a
+/// description cannot ship literally to the model.
+pub(crate) fn template_vars(
+    char_name: &str,
+    user_name: &str,
+) -> std::collections::HashMap<String, String> {
+    let mut vars = std::collections::HashMap::new();
+    let _ignored = vars.insert("char".to_owned(), char_name.to_owned());
+    _ = vars.insert("character_name".to_owned(), char_name.to_owned());
+    _ = vars.insert("user".to_owned(), user_name.to_owned());
+    vars
+}
+
+/// Concatenate the tool surface in offer order: static tools, then `ask_<name>`
+/// delegation, then MCP.
+///
+/// Anthropic caches on a prefix match, so the order the tools are offered in is
+/// part of the cache key: appending a newly-enabled sub-agent in the middle
+/// would invalidate every downstream block. Each group is internally stable
+/// (registry order, config `BTreeMap` order, and the registry's pinned sort),
+/// and this is the one place the groups are sequenced.
+pub fn assemble_tool_surface(
+    static_defs: Vec<ToolDefinition>,
+    subagent_defs: Vec<ToolDefinition>,
+    mcp_defs: &[ToolDefinition],
+) -> Vec<ToolDefinition> {
+    let mut defs = static_defs;
+    defs.extend(subagent_defs);
+    defs.extend_from_slice(mcp_defs);
+    defs
 }
 
 /// Returns tool definitions offered for the `enabled_tools` allowlist. Tools
@@ -373,20 +403,16 @@ pub fn subagent_tool_defs(
     enabled: &[String],
     char_name: &str,
     user_name: &str,
-) -> Vec<Value> {
-    use std::collections::HashMap;
-    let mut vars: HashMap<String, String> = HashMap::new();
-    let _ = vars.insert("char".into(), char_name.to_owned());
-    let _ = vars.insert("character_name".into(), char_name.to_owned());
-    let _ = vars.insert("user".into(), user_name.to_owned());
+) -> Vec<ToolDefinition> {
+    let vars = template_vars(char_name, user_name);
     subagents
         .iter()
         .filter(|(name, _)| enabled.iter().any(|e| e == *name))
         .map(|(name, spec)| {
-            serde_json::json!({
-                "name": format!("ask_{name}"),
-                "description": crate::engine::prompt::render_template(&spec.description, &vars),
-                "input_schema": {
+            ToolDefinition::new(
+                format!("ask_{name}"),
+                crate::engine::prompt::render_template(&spec.description, &vars),
+                serde_json::json!({
                     "type": "object",
                     "properties": {
                         "query": {
@@ -395,8 +421,8 @@ pub fn subagent_tool_defs(
                         }
                     },
                     "required": ["query"],
-                },
-            })
+                }),
+            )
         })
         .collect()
 }
@@ -427,9 +453,9 @@ mod tests {
         let defs = render_tool_defs(&cfg, "qifei", "ren");
         let heatmap = defs
             .iter()
-            .find(|d| d["name"] == "activity_heatmap")
+            .find(|d| d.name == "activity_heatmap")
             .expect("activity_heatmap present");
-        let desc = heatmap["description"].as_str().unwrap();
+        let desc = &heatmap.description;
         assert!(
             !desc.contains("{{user}}"),
             "{{{{user}}}} must be substituted, got: {desc}"
@@ -446,11 +472,11 @@ mod tests {
         let cfg = all_enabled();
         let defs = render_tool_defs(&cfg, "qifei", "ren");
         for def in &defs {
-            let desc = def["description"].as_str().unwrap();
+            let desc = &def.description;
             assert!(
                 !desc.contains("{{char}}") && !desc.contains("{{user}}"),
                 "tool {} has unsubstituted placeholder: {desc}",
-                def["name"]
+                def.name
             );
         }
     }
@@ -708,16 +734,44 @@ mod tests {
         let defs = subagent_tool_defs(&sample_subagents(), &enabled, "qifei", "ren");
         assert_eq!(defs.len(), 1);
         let def = &defs[0];
-        assert_eq!(def["name"], "ask_music");
+        assert_eq!(def.name, "ask_music");
         // {{char}} substituted, not shipped literal.
-        let desc = def["description"].as_str().unwrap();
+        let desc = &def.description;
         assert!(
             desc.contains("qifei") && !desc.contains("{{char}}"),
             "{desc}"
         );
         // Single required `query` string param.
-        assert_eq!(def["input_schema"]["properties"]["query"]["type"], "string");
-        assert_eq!(def["input_schema"]["required"][0], "query");
+        assert_eq!(def.input_schema["properties"]["query"]["type"], "string");
+        assert_eq!(def.input_schema["required"][0], "query");
+    }
+
+    #[test]
+    fn assemble_tool_surface_pins_group_order() {
+        // Anthropic caches on a prefix match, so the offer order is part of the
+        // cache key: static tools, then `ask_<name>`, then MCP. Enabling a
+        // sub-agent must extend the surface, never splice into it — inserting
+        // before the static block would invalidate every downstream tool.
+        let def = |n: &str| ToolDefinition::new(n, "", serde_json::json!({"type": "object"}));
+
+        let without = assemble_tool_surface(
+            vec![def("read"), def("edit")],
+            vec![],
+            &[def("mcp__hue__on")],
+        );
+        let with = assemble_tool_surface(
+            vec![def("read"), def("edit")],
+            vec![def("ask_music")],
+            &[def("mcp__hue__on")],
+        );
+
+        let names = |defs: &[ToolDefinition]| -> Vec<String> {
+            defs.iter().map(|d| d.name.clone()).collect()
+        };
+        assert_eq!(names(&without), ["read", "edit", "mcp__hue__on"]);
+        assert_eq!(names(&with), ["read", "edit", "ask_music", "mcp__hue__on"]);
+        // The static prefix is byte-identical either way; only the tail moves.
+        assert_eq!(without[..2], with[..2]);
     }
 
     #[tokio::test]

@@ -97,6 +97,43 @@ impl ProviderOptions {
     }
 }
 
+/// One tool offered to the model, in the sidecar's provider-neutral shape.
+///
+/// The field names match Anthropic's spelling because that is what the daemon
+/// has always emitted, but this is *not* an Anthropic tool: each adapter in
+/// `llm-sidecar/src/llm/providers/` maps it to its own wire format (OpenAI's
+/// `{type:"function", function:{…, parameters}}`, Gemini's
+/// `functionDeclarations`, and so on). The mirror type is `ToolDefinition` in
+/// `llm-sidecar/src/llm/types.ts`.
+///
+/// Until this was typed, `tools` was `Vec<serde_json::Value>` here and
+/// `unknown[]` there, so all six adapters re-asserted the shape with an
+/// unchecked cast and had drifted on what a missing `input_schema` defaults to.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolDefinition {
+    /// Name the model calls. Unique across the whole offered surface.
+    pub name: String,
+    /// Model-facing description, with `{{char}}`/`{{user}}` already rendered.
+    pub description: String,
+    /// JSON Schema for the tool's arguments. Always an object schema — adapters
+    /// forward it verbatim, and an empty `{}` is rejected by some providers.
+    pub input_schema: serde_json::Value,
+}
+
+impl ToolDefinition {
+    pub fn new<N, D>(name: N, description: D, input_schema: serde_json::Value) -> Self
+    where
+        N: Into<String>,
+        D: Into<String>,
+    {
+        Self {
+            name: name.into(),
+            description: description.into(),
+            input_schema,
+        }
+    }
+}
+
 /// Request body for the daemon's llm module's POST /v1/stream and POST /v1/generate endpoints.
 ///
 /// The daemon sends fully-resolved config per-request because the daemon's llm module is
@@ -134,9 +171,13 @@ pub struct LlmRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<serde_json::Value>,
 
-    /// Tool definitions.
+    /// Tool surface offered for this request, in offer order.
+    ///
+    /// Order is part of Anthropic's cache prefix, so it must be stable across
+    /// turns; the daemon fixes it in `tools::assemble_tool_surface` and adapters
+    /// forward it unchanged.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tools: Option<Vec<serde_json::Value>>,
+    pub tools: Option<Vec<ToolDefinition>>,
 
     /// Maximum tokens to generate.
     pub max_tokens: u32,

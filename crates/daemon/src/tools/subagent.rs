@@ -491,9 +491,9 @@ fn subagent_tool_subset(
     allowed: &[String],
     vars: &HashMap<String, String>,
     mcp: Option<&super::mcp_registry::McpRegistry>,
-) -> Vec<Value> {
+) -> Vec<crate::llm::types::ToolDefinition> {
     let registry = super::all_tools();
-    let mut defs: Vec<Value> = allowed
+    let mut defs: Vec<crate::llm::types::ToolDefinition> = allowed
         .iter()
         .filter_map(|name| {
             let def = registry.iter().find(|t| t.name == name).or_else(|| {
@@ -504,11 +504,11 @@ fn subagent_tool_subset(
                 }
                 None
             })?;
-            Some(json!({
-                "name": def.name,
-                "description": crate::engine::prompt::render_template(def.description, vars),
-                "input_schema": def.parameters.clone(),
-            }))
+            Some(crate::llm::types::ToolDefinition::new(
+                def.name,
+                crate::engine::prompt::render_template(def.description, vars),
+                def.parameters.clone(),
+            ))
         })
         .collect();
     // Expand `mcp__server__*` grants against the live registry. Appended after
@@ -518,7 +518,7 @@ fn subagent_tool_subset(
             mcp_reg
                 .names_matching(allowed)
                 .iter()
-                .map(|t| t.to_tool_json()),
+                .map(|t| t.to_tool_def()),
         );
     }
     defs
@@ -609,7 +609,7 @@ mod tests {
             "search".to_owned(),
         ];
         let defs = subagent_tool_subset(&allowed, &vars, None);
-        let names: Vec<&str> = defs.iter().map(|d| d["name"].as_str().unwrap()).collect();
+        let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
         assert_eq!(names, vec!["read", "search"]);
     }
 
@@ -624,7 +624,7 @@ mod tests {
         ]);
         let allowed = vec!["read".to_owned(), "mcp__hue__*".to_owned()];
         let defs = subagent_tool_subset(&allowed, &vars, Some(&registry));
-        let names: Vec<&str> = defs.iter().map(|d| d["name"].as_str().unwrap()).collect();
+        let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
         assert!(names.contains(&"read"));
         assert!(names.contains(&"mcp__hue__on"));
         // The unmatched server's tool is not offered.
@@ -638,7 +638,7 @@ mod tests {
         let vars = template_vars("qifei", "ren");
         let allowed = vec!["ask_music".to_owned(), "read".to_owned()];
         let defs = subagent_tool_subset(&allowed, &vars, None);
-        let names: Vec<&str> = defs.iter().map(|d| d["name"].as_str().unwrap()).collect();
+        let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
         assert_eq!(names, vec!["read"]);
     }
 

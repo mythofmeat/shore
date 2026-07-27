@@ -12,6 +12,7 @@
 use serde_json::json;
 use shore_common::config::models::{ResolvedModel, Sdk};
 use shore_daemon::llm::types::ContentBlock;
+use shore_daemon::llm::types::ToolDefinition;
 use shore_daemon::llm::LlmClient;
 
 macro_rules! example_out {
@@ -58,11 +59,24 @@ fn make_model(effort: &str) -> ResolvedModel {
 
 // ── Tool definitions (production-style copies) ──────────────────────────
 
-fn all_tool_defs() -> Vec<serde_json::Value> {
+fn all_tool_defs() -> Vec<ToolDefinition> {
     let mut defs = memory_image_tool_defs();
     defs.extend(web_misc_tool_defs());
     defs.extend(scratchpad_tool_defs());
-    defs
+    defs.iter().map(tool_def_from_json).collect()
+}
+
+/// Lift one of the `json!` literals below into the typed wire shape.
+///
+/// The literals stay JSON because they read better that way. A missing field
+/// would be an authoring slip in this file rather than a runtime condition, so
+/// it degrades to empty and the example still runs.
+fn tool_def_from_json(v: &serde_json::Value) -> ToolDefinition {
+    ToolDefinition::new(
+        v["name"].as_str().unwrap_or_default(),
+        v["description"].as_str().unwrap_or_default(),
+        v["input_schema"].clone(),
+    )
 }
 
 fn memory_image_tool_defs() -> Vec<serde_json::Value> {
@@ -283,7 +297,7 @@ Your thoughts and tool use are logged, so you can pick up where you left off nex
 fn simple_conversation() -> (
     serde_json::Value,
     Vec<serde_json::Value>,
-    Option<Vec<serde_json::Value>>,
+    Option<Vec<ToolDefinition>>,
 ) {
     let system = json!([{
         "type": "text",
@@ -299,7 +313,7 @@ fn simple_conversation() -> (
 fn realistic_conversation() -> (
     serde_json::Value,
     Vec<serde_json::Value>,
-    Option<Vec<serde_json::Value>>,
+    Option<Vec<ToolDefinition>>,
 ) {
     let system = json!([
         { "type": "text", "text": "You are Qifei, an AI character with a rich inner life. You have a warm, thoughtful personality. You remember things, form opinions, and have preferences." },
@@ -324,7 +338,7 @@ fn heartbeat_conversation(
 ) -> (
     serde_json::Value,
     Vec<serde_json::Value>,
-    Option<Vec<serde_json::Value>>,
+    Option<Vec<ToolDefinition>>,
 ) {
     let system = json!([
         {

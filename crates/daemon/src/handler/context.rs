@@ -39,12 +39,11 @@ pub(crate) struct PrepareChatContextParams<'ctx> {
     /// True for OpenAI/Z.ai (which echo `reasoning_content`), false for
     /// Anthropic and for any caller that doesn't need them.
     pub include_unsigned_thinking: bool,
-    /// Pre-filtered MCP tool defs to append after the static + sub-agent tool
-    /// surface. The caller builds these from the live registry (filtered by
-    /// `enabled_tools`); pass `&[]` when no registry is wired (background
-    /// rebuilds). Appended last so the tool ordering — and cache prefix — stays
-    /// stable.
-    pub mcp_tool_defs: &'ctx [Value],
+    /// Pre-filtered MCP tool defs, already in the registry's pinned sort. The
+    /// caller builds these from the live registry (filtered by `enabled_tools`);
+    /// pass `&[]` when no registry is wired (background rebuilds).
+    /// `tools::assemble_tool_surface` decides where they land.
+    pub mcp_tool_defs: &'ctx [crate::llm::types::ToolDefinition],
 }
 
 /// Output of [`prepare_chat_context`]: the three pieces every chat-shaped
@@ -54,7 +53,7 @@ pub(crate) struct PrepareChatContextParams<'ctx> {
 pub(crate) struct PreparedChatContext {
     pub llm_messages: Vec<Value>,
     pub system: Option<Value>,
-    pub tool_defs: Option<Vec<Value>>,
+    pub tool_defs: Option<Vec<crate::llm::types::ToolDefinition>>,
     pub prompt: AssembledPrompt,
 }
 
@@ -149,20 +148,17 @@ pub(crate) fn prepare_chat_context(params: PrepareChatContextParams<'_>) -> Prep
     );
 
     let tool_defs = if tools_available {
-        let mut defs = crate::tools::render_tool_defs(&config.app.tools, character, &display_name);
-        // Append `ask_<name>` delegation tools (only for enabled sub-agents)
-        // after the static surface so the tool ordering — and thus the cache
-        // prefix — stays stable.
-        defs.extend(crate::tools::subagent_tool_defs(
-            &config.app.subagents,
-            &config.app.tools.enabled_subagents,
-            character,
-            &display_name,
-        ));
-        // MCP tools land last (caller pre-filtered + pre-sorted), preserving a
-        // stable prefix for cache reuse.
-        defs.extend(mcp_tool_defs.iter().cloned());
-        Some(defs)
+        // Offer order is cache-load-bearing; `assemble_tool_surface` owns it.
+        Some(crate::tools::assemble_tool_surface(
+            crate::tools::render_tool_defs(&config.app.tools, character, &display_name),
+            crate::tools::subagent_tool_defs(
+                &config.app.subagents,
+                &config.app.tools.enabled_subagents,
+                character,
+                &display_name,
+            ),
+            mcp_tool_defs,
+        ))
     } else {
         None
     };

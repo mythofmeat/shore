@@ -196,7 +196,7 @@ impl LlmClient {
         model: &ResolvedModel,
         messages: Vec<serde_json::Value>,
         system: Option<serde_json::Value>,
-        tools: Option<Vec<serde_json::Value>>,
+        tools: Option<Vec<types::ToolDefinition>>,
         provider_options: Option<types::ProviderOptions>,
     ) -> Result<LlmRequest, LlmError> {
         let api_key_env = model
@@ -242,7 +242,7 @@ impl LlmClient {
         registry: &shore_common::config::providers::ProviderRegistry,
         messages: Vec<serde_json::Value>,
         system: Option<serde_json::Value>,
-        tools: Option<Vec<serde_json::Value>>,
+        tools: Option<Vec<types::ToolDefinition>>,
         provider_options: Option<types::ProviderOptions>,
     ) -> Result<LlmRequest, LlmError> {
         let candidates = credentials::resolve_key_candidates(&model.provider_key, registry, model);
@@ -290,7 +290,7 @@ impl LlmClient {
         api_key: String,
         messages: Vec<serde_json::Value>,
         system: Option<serde_json::Value>,
-        tools: Option<Vec<serde_json::Value>>,
+        tools: Option<Vec<types::ToolDefinition>>,
         provider_options: Option<types::ProviderOptions>,
     ) -> LlmRequest {
         let normalized_options =

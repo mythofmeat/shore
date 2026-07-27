@@ -497,7 +497,7 @@ impl LedgerClient {
         model: &ResolvedModel,
         messages: Vec<serde_json::Value>,
         system: Option<serde_json::Value>,
-        tools: Option<Vec<serde_json::Value>>,
+        tools: Option<Vec<crate::llm::types::ToolDefinition>>,
         provider_options: Option<crate::llm::types::ProviderOptions>,
     ) -> Result<LlmRequest, LlmError> {
         LlmClient::build_request(model, messages, system, tools, provider_options)
@@ -509,7 +509,7 @@ impl LedgerClient {
         registry: &ProviderRegistry,
         messages: Vec<serde_json::Value>,
         system: Option<serde_json::Value>,
-        tools: Option<Vec<serde_json::Value>>,
+        tools: Option<Vec<crate::llm::types::ToolDefinition>>,
         provider_options: Option<crate::llm::types::ProviderOptions>,
     ) -> Result<LlmRequest, LlmError> {
         LlmClient::build_request_with_provider_keys(

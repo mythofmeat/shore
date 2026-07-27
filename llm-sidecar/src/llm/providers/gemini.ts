@@ -33,9 +33,11 @@ import type {
   SidecarRequest,
   StreamEvent,
   SystemContent,
+  ToolDefinition,
   Usage,
   WireMessage,
 } from "../types.ts";
+import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 
 type GeminiSchema = NonNullable<FunctionDeclaration["parameters"]>;
 
@@ -332,17 +334,13 @@ function translateSystem(system: SystemContent | undefined): Content | undefined
   return parts.length > 0 ? { parts } : undefined;
 }
 
-function translateTools(tools: unknown[] | undefined): Tool[] | undefined {
+function translateTools(tools: ToolDefinition[] | undefined): Tool[] | undefined {
   if (tools === undefined || tools.length === 0) return undefined;
-  const declarations: FunctionDeclaration[] = tools.map((raw) => {
-    const t = raw as { name?: string; description?: string; input_schema?: unknown };
-    const declaration: FunctionDeclaration = {
-      name: t.name ?? "",
-      description: t.description ?? "",
-    };
-    declaration.parameters = (t.input_schema ?? {}) as GeminiSchema;
-    return declaration;
-  });
+  const declarations: FunctionDeclaration[] = tools.map((t) => ({
+    name: t.name,
+    description: t.description,
+    parameters: (t.input_schema ?? EMPTY_TOOL_SCHEMA) as GeminiSchema,
+  }));
   return [{ functionDeclarations: declarations }];
 }
 
