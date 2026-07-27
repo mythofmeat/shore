@@ -533,11 +533,7 @@ fn arb_retrieval_binary_mode() -> impl Strategy<Value = RetrievalBinaryMode> {
 
 fn arb_thinking_replay() -> impl Strategy<Value = shore_common::config::app::ThinkingReplay> {
     use shore_common::config::app::ThinkingReplay;
-    prop_oneof![
-        Just(ThinkingReplay::All),
-        Just(ThinkingReplay::LastTurn),
-        Just(ThinkingReplay::None),
-    ]
+    prop_oneof![Just(ThinkingReplay::All), Just(ThinkingReplay::None)]
 }
 
 fn arb_memory_config() -> impl Strategy<Value = MemoryConfig> {

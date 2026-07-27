@@ -302,25 +302,21 @@ function stripTrailingV1(baseUrl: string): string {
 //
 // The load-bearing rule is that **a message anchor must sit in the frozen
 // region** — strictly before the message at which the most-recent assistant
-// turn begins. That index is what `replay_prior_thinking` strips against, and
-// it only ever advances, so everything before it is byte-stable for the life of
-// the conversation. Anchoring the trailing turn itself is the bug fixed in
-// #191: under `last_turn` (or `none`) that turn loses its thinking blocks as
-// soon as another turn lands, rewriting the very bytes the anchor covered, and
-// the read collapses to the system prefix alone — a full re-cache of the whole
-// conversation on every committed turn. A cache read resolves only up to a
+// turn begins. That boundary only ever advances, so everything before it is
+// byte-stable for the life of the conversation. Anchoring the trailing turn
+// itself is the bug fixed in #191: under `none` that turn loses the thinking a
+// tool loop appended to it as soon as the next turn rebuilds from disk,
+// rewriting the very bytes the anchor covered, and the read collapses to the
+// system prefix alone. (The retired `last_turn` mode did this on *every* turn,
+// tool loop or not, which is why it was removed — see `ThinkingReplay` in
+// `crates/common/src/config/app.rs`.) A cache read resolves only up to a
 // *placed* breakpoint, not as a free-running longest-prefix match, which is
 // also why the second (older) frozen anchor is not redundant: after a
 // multi-round tool loop the boundary jumps past the whole loop in one step, and
 // that anchor is the only placed breakpoint left on a still-stable prefix. The
 // final user message *is* anchored — it is the tail write each request pays for.
 //
-// Two derived constraints, each enforced below:
-//   - The anchor index is computed from a boundary the daemon computes too
-//     (`most_recent_assistant_turn_start` in `content_util.rs`). Silent drift
-//     between them puts the anchor back inside the moving region and
-//     reintroduces the re-cache with nothing failing, so both are pinned
-//     against `crates/daemon/tests/fixtures/turn_boundary_parity.json`.
+// One derived constraint, enforced below:
 //   - A scheduled index whose message carries no `cache_control`-eligible block
 //     walks back to the nearest message that has one, rather than dropping the
 //     marker: `thinking` blocks reject `cache_control`, empty text blocks fail
@@ -393,26 +389,20 @@ function isToolResultOnlyUser(msg: MessageParam): boolean {
 /** Index at which the most-recent assistant turn begins — the first message of
  * the trailing assistant run, walking back over assistant messages and the
  * tool-result-only user messages between them and stopping at the first genuine
- * user turn. Mirrors `most_recent_assistant_turn_start` in `content_util.rs`,
- * which is the boundary `replay_prior_thinking` strips against. Returns
- * `messages.length` when there is no assistant message.
+ * user turn. Returns `messages.length` when there is no assistant message.
  *
- * Exported for the cross-language parity test: the two implementations are
- * checked against the same fixture
- * (`crates/daemon/tests/fixtures/turn_boundary_parity.json`),
- * because if they drift the anchor lands inside the moving region and the
- * re-cache bug returns silently.
+ * Exported for its test, which pins it against
+ * `crates/daemon/tests/fixtures/turn_boundary_parity.json`. That fixture was
+ * shared with a Rust implementation while `replay_prior_thinking = last_turn`
+ * needed the same boundary daemon-side; the mode is gone and this is now the
+ * only implementation, but the cases still pin the walk-back rules.
  *
- * The daemon computes its boundary on the canonical history; the sidecar
- * computes this one *after* `convertInlineSystemMessages`, which can make the
- * two disagree: merging a trailing `role:"system"` turn into a preceding user
- * message both removes a message and can turn a tool-result-only user into a
- * "genuine" one (it gains a text block). Every such divergence is conservative
- * — the merge only ever ends a turn earlier or shortens the array, so the
- * sidecar's boundary is never *later* than the daemon's and the anchor stays
- * inside the frozen region. Do not "fix" the two to agree by moving this call
- * before the conversion: the breakpoint must be placed on the messages that
- * actually go on the wire. */
+ * Note this runs *after* `convertInlineSystemMessages`: merging a trailing
+ * `role:"system"` turn into a preceding user message both removes a message and
+ * can turn a tool-result-only user into a "genuine" one (it gains a text
+ * block). That only ever ends a turn earlier or shortens the array, so the
+ * boundary stays conservative. Do not move this call before the conversion: the
+ * breakpoint must be placed on the messages that actually go on the wire. */
 export function mostRecentAssistantTurnStart(messages: MessageParam[]): number {
   let lastAssistant = -1;
   for (let i = messages.length - 1; i >= 0; i--) {

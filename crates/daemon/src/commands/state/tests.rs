@@ -1186,8 +1186,8 @@ fn set_model_setting_replay_prior_thinking_rejects_unknown_value() {
     let (_engine, mut ctx, _rx) = make_ctx_with_models(&tmp, sample_models());
     ctx.active_model = Some("gpt-4o".into());
 
-    // "yes" is not a tri-state value (the CLI coerces bool-words client-side;
-    // the daemon only accepts all/last_turn/none or a literal bool).
+    // "yes" is not a replay value (the CLI coerces bool-words client-side;
+    // the daemon only accepts all/none or a literal bool).
     let err = set_model_setting(
         &mut ctx,
         &json!({"key": "replay_prior_thinking", "value": "yes"}),
@@ -1197,7 +1197,7 @@ fn set_model_setting_replay_prior_thinking_rejects_unknown_value() {
         err.0,
         shore_common::protocol::error::ErrorCode::InvalidRequest
     );
-    assert!(err.1.contains("last_turn"), "got: {}", err.1);
+    assert!(err.1.contains("\"all\""), "got: {}", err.1);
 }
 
 #[test]
@@ -1235,12 +1235,14 @@ fn set_model_setting_replay_prior_thinking_accepts_tristate_and_legacy_bool() {
     for (input, expected) in [
         (json!("all"), shore_common::config::app::ThinkingReplay::All),
         (
-            json!("last_turn"),
-            shore_common::config::app::ThinkingReplay::LastTurn,
-        ),
-        (
             json!("none"),
             shore_common::config::app::ThinkingReplay::None,
+        ),
+        // Retired third mode: still parses, folded into `all`, so a config
+        // carrying it doesn't stop the daemon from starting.
+        (
+            json!("last_turn"),
+            shore_common::config::app::ThinkingReplay::All,
         ),
         // Legacy bool back-compat: true → all, false → none.
         (json!(true), shore_common::config::app::ThinkingReplay::All),

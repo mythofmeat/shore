@@ -140,12 +140,10 @@ fn update_last_request_with_response(
 ///
 /// The replay policy is applied **only to the appended messages**. Everything
 /// at a lower index already went out on the wire and is covered by a live
-/// provider-side cache entry; under `last_turn`, re-stripping it here rewrites
-/// the previously-trailing assistant turn and kills the entry anchored just
-/// past it. The keepalive ping then has no readable anchor left but the system
-/// prefix and pays a full cache write on every ping — the entire conversation
-/// body, once the conversation is short enough that no older frozen-boundary
-/// anchor exists to fall back on.
+/// provider-side cache entry, so re-stripping it here would rewrite bytes the
+/// provider already cached and kill every entry anchored at or past them. The
+/// keepalive ping, whose only job is to read those entries, would then pay a
+/// full cache write on every fire.
 ///
 /// The next *chat* turn is unaffected: it rebuilds from disk through
 /// `prepare_chat_context`, which applies the policy across the full history.
@@ -515,11 +513,11 @@ mod tests {
     #[test]
     fn last_request_keeps_thinking_on_already_sent_turns() {
         // The keepalive ping clones `last_request` and must stay byte-identical
-        // to the request the provider cached. Under `last_turn` this used to
-        // strip `a1` — a message that had already gone out on the wire while it
-        // was the trailing turn — killing the cache entry anchored just past it.
-        // With no older frozen boundary to fall back on (a short conversation),
-        // the ping then re-wrote the whole conversation on every fire.
+        // to the request the provider cached, so the replay policy applies only
+        // to what this response appended. `a1` already went out on the wire
+        // carrying its thinking (the model was on `all` at the time, or the
+        // turn was mid-tool-loop); re-stripping it here would kill the cache
+        // entry anchored just past it and the ping would pay a full write.
         let sent = vec![
             json!({"role": "user", "content": [{"type": "text", "text": "q1"}]}),
             json!({"role": "assistant", "content": [
@@ -543,7 +541,7 @@ mod tests {
         let full = last_request_with_response(
             &request,
             &response,
-            shore_common::config::app::ThinkingReplay::LastTurn,
+            shore_common::config::app::ThinkingReplay::None,
             "anthropic",
         );
 
@@ -555,8 +553,8 @@ mod tests {
         );
         assert_eq!(
             thinking_blocks(&full.messages[3]),
-            1,
-            "new turn keeps its own"
+            0,
+            "the appended response follows the replay policy"
         );
     }
 

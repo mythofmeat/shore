@@ -795,8 +795,8 @@ impl Default for DreamingConfig {
 
 serde_default!(default_replay_prior_thinking -> ThinkingReplay { ThinkingReplay::All });
 
-/// Tri-state control for replaying prior-turn extended-thinking blocks in
-/// outgoing requests (#191).
+/// Control for replaying prior-turn extended-thinking blocks in outgoing
+/// requests (#191).
 ///
 /// Back-compat: prior releases stored a bool, so deserialization accepts one —
 /// `true` → [`ThinkingReplay::All`], `false` → [`ThinkingReplay::None`] — and
@@ -807,32 +807,36 @@ serde_default!(default_replay_prior_thinking -> ThinkingReplay { ThinkingReplay:
 pub enum ThinkingReplay {
     /// Replay every prior turn's thinking (legacy `true`).
     All,
-    /// Keep only the most-recent assistant turn's thinking; strip older turns.
-    /// A middle ground: keeps the in-context cue that stops Claude from
-    /// imitating a no-thinking last turn, while shedding the bulk of the
-    /// token cost that `All` carries forever.
-    LastTurn,
     /// Strip all prior-turn thinking (legacy `false`).
     None,
 }
 
 impl ThinkingReplay {
-    /// Parse a wire string (`all` | `last_turn` | `none`), tolerating the
-    /// legacy stringy bools `true`/`false`. Returns `None` for anything else.
+    /// Parse a wire string (`all` | `none`), tolerating the legacy stringy
+    /// bools `true`/`false`. Returns `None` for anything else.
+    ///
+    /// `last_turn` is a retired third mode that kept only the most-recent
+    /// assistant turn's thinking. It is still accepted and mapped to `All`,
+    /// because rejecting it would stop the daemon from starting on any config
+    /// that still carries it. It was removed because it is the only mode that
+    /// rewrites bytes it has already sent: deleting the trailing turn's
+    /// thinking one turn later invalidates every cache breakpoint at or past
+    /// that turn, so each request re-wrote an entire exchange that `All` reads
+    /// for free. Anthropic keeps prior-turn thinking in context on Opus 4.5+
+    /// and Sonnet 4.6+ and reports "no negative effect on model performance"
+    /// for doing so, so the mode also bought nothing.
     pub fn parse_wire(s: &str) -> Option<Self> {
         match s {
-            "all" | "true" => Some(Self::All),
-            "last_turn" => Some(Self::LastTurn),
+            "all" | "true" | "last_turn" => Some(Self::All),
             "none" | "false" => Some(Self::None),
             _ => None,
         }
     }
 
-    /// Canonical wire string (`all` | `last_turn` | `none`).
+    /// Canonical wire string (`all` | `none`).
     pub fn as_wire(self) -> &'static str {
         match self {
             Self::All => "all",
-            Self::LastTurn => "last_turn",
             Self::None => "none",
         }
     }
@@ -855,7 +859,7 @@ impl<'de> Deserialize<'de> for ThinkingReplay {
             BoolOrStr::Bool(false) => Ok(Self::None),
             BoolOrStr::Str(s) => Self::parse_wire(&s).ok_or_else(|| {
                 serde::de::Error::custom(format!(
-                    "invalid replay_prior_thinking {s:?}; expected \"all\", \"last_turn\", \"none\" (or legacy true/false)"
+                    "invalid replay_prior_thinking {s:?}; expected \"all\", \"none\" (or legacy true/false)"
                 ))
             }),
         }
@@ -865,16 +869,20 @@ impl<'de> Deserialize<'de> for ThinkingReplay {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ThinkingConfig {
-    /// Replay extended-thinking blocks from prior turns in outgoing requests.
-    /// Tri-state (#191):
+    /// Replay extended-thinking blocks from prior turns in outgoing requests:
     ///
     /// - `all` (default; legacy `true`): keep every prior turn's thinking.
-    /// - `last_turn`: keep only the most-recent assistant turn's thinking and
-    ///   strip older turns — recovers most of the token savings of `none`
-    ///   while keeping the model reasoning.
-    /// - `none` (legacy `false`): strip all prior-turn thinking. Only safe with
-    ///   providers that don't depend on prior-turn thinking (e.g. Anthropic
-    ///   Claude 4.x).
+    ///   Anthropic's recommended setting — Opus 4.5+ and Sonnet 4.6+ keep prior
+    ///   turns in context and bill them as input, and preserving them "has no
+    ///   negative effect on model performance". Also the only setting that
+    ///   never rewrites already-sent bytes, so the prompt cache stays whole.
+    /// - `none` (legacy `false`): strip all prior-turn thinking. Cheaper per
+    ///   request, and still cache-stable because every completed turn is
+    ///   stripped in every request. Costs the model whatever it would have
+    ///   drawn from its own prior reasoning.
+    ///
+    /// A third mode, `last_turn`, was removed; configs carrying it are read as
+    /// `all` (see [`ThinkingReplay::parse_wire`]).
     ///
     /// DeepSeek V3.1+ and Moonshot Kimi-thinking reject requests that omit
     /// prior `reasoning_content` while in thinking mode, so the

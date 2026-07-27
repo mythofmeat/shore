@@ -1171,7 +1171,8 @@ fn parse_setting_value_str(key: &str, raw: &str) -> serde_json::Value {
     use serde_json::Value;
     let trimmed = raw.trim();
     match key {
-        // Tri-state `replay_prior_thinking` (`all`/`last_turn`/`none`) and the
+        // `replay_prior_thinking` (`all`/`none`, plus the retired `last_turn`,
+        // which passes through for the daemon to fold into `all`) and the
         // boolean vendor knobs share a coercion: the bool words collapse to a
         // JSON bool (the daemon maps the legacy form), anything else passes
         // through as a string so the daemon validates it.

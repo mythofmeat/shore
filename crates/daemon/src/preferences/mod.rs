@@ -106,9 +106,8 @@ pub struct SamplerSettings {
     /// it OFF while minimax-m3/glm-5.1 want it ON — so there is no
     /// opinionated default and no auto-promotion in either direction. The
     /// DeepSeek/Kimi reasoning-replay floor (`requires_reasoning_replay`) is
-    /// orthogonal and still enforced regardless of this setting. Tri-state
-    /// (`all` | `last_turn` | `none`); legacy bool configs still deserialize
-    /// (#191).
+    /// orthogonal and still enforced regardless of this setting.
+    /// `all` | `none`; legacy bool configs still deserialize (#191).
     pub replay_prior_thinking: Option<shore_common::config::app::ThinkingReplay>,
 
     /// Maximum tool-loop iterations per turn. `None` means **unlimited** (the

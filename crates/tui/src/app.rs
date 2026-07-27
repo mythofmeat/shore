@@ -2574,7 +2574,7 @@ impl App {
             }
             "setting:replay_prior_thinking" => {
                 self.completion.candidates =
-                    Self::filtered_presets(&["all", "last_turn", "none", "reset"], &filter);
+                    Self::filtered_presets(&["all", "none", "reset"], &filter);
             }
             "setting:gemini_web_search"
             | "setting:zai_clear_thinking"

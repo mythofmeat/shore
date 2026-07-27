@@ -949,9 +949,10 @@ fn parse_bool_value(value: &Value, name: &str) -> Result<Option<bool>, (ErrorCod
     })
 }
 
-/// Parse the tri-state `replay_prior_thinking` value (#191): `null` clears the
-/// override; the string form (`all` | `last_turn` | `none`) and the legacy
-/// bool (`true` → all, `false` → none) are both accepted.
+/// Parse the `replay_prior_thinking` value (#191): `null` clears the
+/// override; the string form (`all` | `none`) and the legacy bool (`true` →
+/// all, `false` → none) are both accepted. The retired `last_turn` is still
+/// parsed, as `all`.
 fn parse_thinking_replay_value(
     value: &Value,
 ) -> Result<Option<shore_common::config::app::ThinkingReplay>, (ErrorCode, String)> {
@@ -969,15 +970,13 @@ fn parse_thinking_replay_value(
     let s = value.as_str().ok_or_else(|| {
         (
             ErrorCode::InvalidRequest,
-            format!(
-                "replay_prior_thinking must be \"all\", \"last_turn\", or \"none\"; got {value}"
-            ),
+            format!("replay_prior_thinking must be \"all\" or \"none\"; got {value}"),
         )
     })?;
     ThinkingReplay::parse_wire(s).map(Some).ok_or_else(|| {
         (
             ErrorCode::InvalidRequest,
-            format!("replay_prior_thinking must be \"all\", \"last_turn\", or \"none\"; got {s:?}"),
+            format!("replay_prior_thinking must be \"all\" or \"none\"; got {s:?}"),
         )
     })
 }

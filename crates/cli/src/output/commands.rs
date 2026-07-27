@@ -2900,7 +2900,7 @@ mod tests {
                 "max_output_tokens": 8192,
                 "cache_ttl": "1h",
                 "sdk": "anthropic",
-                "replay_prior_thinking": "last_turn",
+                "replay_prior_thinking": "none",
             },
             "scopes": {
                 "reasoning_effort": "character_model",
