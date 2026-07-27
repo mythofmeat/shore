@@ -136,10 +136,7 @@ fn arb_model_config_fields() -> impl Strategy<Value = ModelConfigFields> {
         prop::option::of(arb_toml_value()),
     );
     let provider_specific = (
-        prop::option::of(arb_nonempty_text()),
-        prop::option::of(arb_nonempty_text()),
         prop::option::of(0_u32..3),
-        prop::option::of(any::<bool>()),
         prop::option::of(any::<bool>()),
         prop::option::of(any::<bool>()),
     );
@@ -148,14 +145,7 @@ fn arb_model_config_fields() -> impl Strategy<Value = ModelConfigFields> {
         |(
             (sdk, api_key_env, base_url, max_context_tokens, max_output_tokens, temperature, top_p),
             (reasoning_effort, budget_tokens, cache_ttl, cache_keepalive, openrouter_provider),
-            (
-                vertex_project,
-                vertex_location,
-                gemini_generation,
-                gemini_web_search,
-                zai_clear_thinking,
-                zai_subscription,
-            ),
+            (gemini_generation, zai_clear_thinking, zai_subscription),
         )| ModelConfigFields {
             sdk,
             api_key_env,
@@ -169,10 +159,7 @@ fn arb_model_config_fields() -> impl Strategy<Value = ModelConfigFields> {
             cache_ttl,
             cache_keepalive,
             openrouter_provider,
-            vertex_project,
-            vertex_location,
             gemini_generation,
-            gemini_web_search,
             zai_clear_thinking,
             zai_subscription,
         },

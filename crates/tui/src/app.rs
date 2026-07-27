@@ -951,10 +951,7 @@ pub struct EffectiveSamplerSnapshot {
     pub replay_prior_thinking: EffectiveSamplerField,
     pub max_tool_iterations: EffectiveSamplerField,
     pub openrouter_provider: EffectiveSamplerField,
-    pub vertex_project: EffectiveSamplerField,
-    pub vertex_location: EffectiveSamplerField,
     pub gemini_generation: EffectiveSamplerField,
-    pub gemini_web_search: EffectiveSamplerField,
     pub zai_clear_thinking: EffectiveSamplerField,
     pub zai_subscription: EffectiveSamplerField,
     /// Per-key capability label from the daemon's matrix
@@ -994,10 +991,7 @@ impl EffectiveSamplerSnapshot {
             replay_prior_thinking: Self::field(sampler, scopes, "replay_prior_thinking"),
             max_tool_iterations: Self::field(sampler, scopes, "max_tool_iterations"),
             openrouter_provider: Self::field(sampler, scopes, "openrouter_provider"),
-            vertex_project: Self::field(sampler, scopes, "vertex_project"),
-            vertex_location: Self::field(sampler, scopes, "vertex_location"),
             gemini_generation: Self::field(sampler, scopes, "gemini_generation"),
-            gemini_web_search: Self::field(sampler, scopes, "gemini_web_search"),
             zai_clear_thinking: Self::field(sampler, scopes, "zai_clear_thinking"),
             zai_subscription: Self::field(sampler, scopes, "zai_subscription"),
             applicability: data
@@ -1072,10 +1066,7 @@ impl EffectiveSamplerSnapshot {
             "replay_prior_thinking" => Some(&self.replay_prior_thinking),
             "max_tool_iterations" => Some(&self.max_tool_iterations),
             "openrouter_provider" => Some(&self.openrouter_provider),
-            "vertex_project" => Some(&self.vertex_project),
-            "vertex_location" => Some(&self.vertex_location),
             "gemini_generation" => Some(&self.gemini_generation),
-            "gemini_web_search" => Some(&self.gemini_web_search),
             "zai_clear_thinking" => Some(&self.zai_clear_thinking),
             "zai_subscription" => Some(&self.zai_subscription),
             _ => None,
@@ -1941,10 +1932,7 @@ impl App {
         "replay_prior_thinking",
         "max_tool_iterations",
         "openrouter_provider",
-        "vertex_project",
-        "vertex_location",
         "gemini_generation",
-        "gemini_web_search",
         "zai_clear_thinking",
         "zai_subscription",
     ];
@@ -2576,9 +2564,7 @@ impl App {
                 self.completion.candidates =
                     Self::filtered_presets(&["all", "none", "reset"], &filter);
             }
-            "setting:gemini_web_search"
-            | "setting:zai_clear_thinking"
-            | "setting:zai_subscription" => {
+            "setting:zai_clear_thinking" | "setting:zai_subscription" => {
                 self.completion.candidates =
                     Self::filtered_presets(&["true", "false", "reset"], &filter);
             }
@@ -2589,9 +2575,7 @@ impl App {
                 }
                 self.completion.candidates = candidates;
             }
-            "setting:openrouter_provider"
-            | "setting:vertex_project"
-            | "setting:vertex_location" => {
+            "setting:openrouter_provider" => {
                 // Free-form values — offer only `reset` plus whatever the user
                 // is typing as a custom entry.
                 let mut candidates = Self::filtered_presets(&["reset"], &filter);
@@ -3007,8 +2991,8 @@ mod tests {
                 // and the tool-iteration cap as always-applicable.
                 "cache_keepalive": "honored",
                 "max_tool_iterations": "always",
-                // `vertex_project` deliberately omitted — "no opinion" must
-                // still be shown.
+                // `openrouter_provider` deliberately omitted — "no opinion"
+                // must still be shown.
             },
         }))
         .expect("snapshot");
@@ -3027,7 +3011,7 @@ mod tests {
 
         assert!(visible.contains(&"temperature"));
         assert!(visible.contains(&"sdk")); // "always"
-        assert!(visible.contains(&"vertex_project")); // no opinion → shown
+        assert!(visible.contains(&"openrouter_provider")); // no opinion → shown
         assert!(visible.contains(&"cache_keepalive")); // honored everywhere
         assert!(visible.contains(&"max_tool_iterations")); // "always"
         assert!(!visible.contains(&"budget_tokens")); // ignored → hidden

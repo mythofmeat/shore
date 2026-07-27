@@ -182,10 +182,7 @@ pub enum Field {
     CacheTtl,
     CacheKeepalive,
     OpenrouterProvider,
-    VertexProject,
-    VertexLocation,
     GeminiGeneration,
-    GeminiWebSearch,
     ZaiClearThinking,
     ZaiSubscription,
     ReplayPriorThinking,
@@ -205,10 +202,7 @@ impl Field {
             Field::CacheTtl => "cache_ttl",
             Field::CacheKeepalive => "cache_keepalive",
             Field::OpenrouterProvider => "openrouter_provider",
-            Field::VertexProject => "vertex_project",
-            Field::VertexLocation => "vertex_location",
             Field::GeminiGeneration => "gemini_generation",
-            Field::GeminiWebSearch => "gemini_web_search",
             Field::ZaiClearThinking => "zai_clear_thinking",
             Field::ZaiSubscription => "zai_subscription",
             Field::ReplayPriorThinking => "replay_prior_thinking",
@@ -232,10 +226,7 @@ impl Field {
             "cache_ttl" => Field::CacheTtl,
             "cache_keepalive" => Field::CacheKeepalive,
             "openrouter_provider" => Field::OpenrouterProvider,
-            "vertex_project" => Field::VertexProject,
-            "vertex_location" => Field::VertexLocation,
             "gemini_generation" => Field::GeminiGeneration,
-            "gemini_web_search" => Field::GeminiWebSearch,
             "zai_clear_thinking" => Field::ZaiClearThinking,
             "zai_subscription" => Field::ZaiSubscription,
             "replay_prior_thinking" => Field::ReplayPriorThinking,
@@ -475,10 +466,7 @@ pub fn applicability(sdk: &Sdk, model_id: &str, field: Field) -> Applicability {
 
         Field::OpenrouterProvider => vendor_field(sdk, &Sdk::Openrouter),
 
-        Field::VertexProject
-        | Field::VertexLocation
-        | Field::GeminiGeneration
-        | Field::GeminiWebSearch => vendor_field(sdk, &Sdk::Gemini),
+        Field::GeminiGeneration => vendor_field(sdk, &Sdk::Gemini),
 
         Field::ZaiClearThinking | Field::ZaiSubscription => vendor_field(sdk, &Sdk::Zai),
 
@@ -722,10 +710,7 @@ mod tests {
             Field::CacheTtl,
             Field::CacheKeepalive,
             Field::OpenrouterProvider,
-            Field::VertexProject,
-            Field::VertexLocation,
             Field::GeminiGeneration,
-            Field::GeminiWebSearch,
             Field::ZaiClearThinking,
             Field::ZaiSubscription,
             Field::ReplayPriorThinking,
@@ -1011,7 +996,7 @@ mod tests {
             Applicability::Ignored
         );
         assert_eq!(
-            applicability(&Sdk::Gemini, "x", Field::VertexProject),
+            applicability(&Sdk::Gemini, "x", Field::GeminiGeneration),
             Applicability::Honored
         );
         assert_eq!(

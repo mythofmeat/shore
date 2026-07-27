@@ -205,12 +205,13 @@ async fn main() -> ExitCode {
         return ExitCode::from(2);
     };
 
-    let provider_options = target
-        .reasoning_effort
-        .map(|effort| shore_daemon::llm::types::ProviderOptions {
-            reasoning_effort: Some(effort.to_owned()),
-            ..Default::default()
-        });
+    let provider_options =
+        target
+            .reasoning_effort
+            .map(|effort| shore_daemon::llm::types::ProviderOptions {
+                reasoning_effort: Some(effort.to_owned()),
+                ..Default::default()
+            });
 
     let request = LlmRequest {
         sdk: Sdk::Openai,

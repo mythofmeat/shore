@@ -519,7 +519,11 @@ mod tests {
         // 199 ASCII bytes + "é" (2 bytes) = 201 bytes total.
         // Slicing at byte 200 lands inside "é" and must not panic.
         let body = format!("{}{}", "x".repeat(199), "é");
-        assert_eq!(body.len(), 201, "test fixture must straddle the 200-byte cut");
+        assert_eq!(
+            body.len(),
+            201,
+            "test fixture must straddle the 200-byte cut"
+        );
         let preview = body_preview(&body, 200);
         assert!(preview.len() <= 200, "preview must not exceed the max");
         assert!(
@@ -548,10 +552,7 @@ mod tests {
             cache_ttl: None,
             cache_keepalive: None,
             openrouter_provider: None,
-            vertex_project: None,
-            vertex_location: None,
             gemini_generation: None,
-            gemini_web_search: None,
             zai_clear_thinking: None,
             zai_subscription: None,
             replay_prior_thinking: None,

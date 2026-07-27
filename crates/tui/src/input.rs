@@ -1176,14 +1176,13 @@ fn parse_setting_value_str(key: &str, raw: &str) -> serde_json::Value {
         // boolean vendor knobs share a coercion: the bool words collapse to a
         // JSON bool (the daemon maps the legacy form), anything else passes
         // through as a string so the daemon validates it.
-        "replay_prior_thinking"
-        | "gemini_web_search"
-        | "zai_clear_thinking"
-        | "zai_subscription" => match trimmed.to_ascii_lowercase().as_str() {
-            "true" | "yes" | "on" => Value::Bool(true),
-            "false" | "no" | "off" => Value::Bool(false),
-            _ => Value::String(trimmed.to_string()),
-        },
+        "replay_prior_thinking" | "zai_clear_thinking" | "zai_subscription" => {
+            match trimmed.to_ascii_lowercase().as_str() {
+                "true" | "yes" | "on" => Value::Bool(true),
+                "false" | "no" | "off" => Value::Bool(false),
+                _ => Value::String(trimmed.to_string()),
+            }
+        }
         "temperature" | "top_p" => trimmed
             .parse::<f64>()
             .ok()
@@ -1209,7 +1208,7 @@ fn parse_setting_value_str(key: &str, raw: &str) -> serde_json::Value {
         // otherwise, so the daemon reports a clear type error.
         "openrouter_provider" => serde_json::from_str::<Value>(trimmed)
             .unwrap_or_else(|_| Value::String(trimmed.to_string())),
-        // `vertex_project` / `vertex_location` and any unknown key: raw string.
+        // Any unknown key: raw string.
         _ => Value::String(trimmed.to_string()),
     }
 }
@@ -1239,10 +1238,6 @@ mod tests {
             json!(false)
         );
         assert_eq!(
-            parse_setting_value_str("gemini_web_search", "on"),
-            json!(true)
-        );
-        assert_eq!(
             parse_setting_value_str("zai_subscription", "yes"),
             json!(true)
         );
@@ -1263,12 +1258,6 @@ mod tests {
         assert_eq!(
             parse_setting_value_str("cache_keepalive", "off"),
             json!("off")
-        );
-
-        // Free-form string knobs stay strings.
-        assert_eq!(
-            parse_setting_value_str("vertex_project", "my-proj"),
-            json!("my-proj")
         );
 
         // openrouter_provider accepts a JSON routing object, else a string.

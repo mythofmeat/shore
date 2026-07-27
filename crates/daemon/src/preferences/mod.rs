@@ -124,10 +124,7 @@ pub struct SamplerSettings {
     // a model only ever sees the knobs its resolved sdk honors.
     /// OpenRouter provider routing object (`{ order, allow_fallbacks, ... }`).
     pub openrouter_provider: Option<toml::Value>,
-    pub vertex_project: Option<String>,
-    pub vertex_location: Option<String>,
     pub gemini_generation: Option<u32>,
-    pub gemini_web_search: Option<bool>,
     /// Z.AI `thinking.clear_thinking` toggle.
     pub zai_clear_thinking: Option<bool>,
     pub zai_subscription: Option<bool>,
@@ -156,10 +153,7 @@ impl SamplerSettings {
         merge!(replay_prior_thinking);
         merge!(max_tool_iterations);
         merge!(openrouter_provider);
-        merge!(vertex_project);
-        merge!(vertex_location);
         merge!(gemini_generation);
-        merge!(gemini_web_search);
         merge!(zai_clear_thinking);
         merge!(zai_subscription);
     }
@@ -177,10 +171,7 @@ impl SamplerSettings {
             && self.replay_prior_thinking.is_none()
             && self.max_tool_iterations.is_none()
             && self.openrouter_provider.is_none()
-            && self.vertex_project.is_none()
-            && self.vertex_location.is_none()
             && self.gemini_generation.is_none()
-            && self.gemini_web_search.is_none()
             && self.zai_clear_thinking.is_none()
             && self.zai_subscription.is_none()
     }
@@ -199,10 +190,7 @@ impl SamplerSettings {
             replay_prior_thinking: model.replay_prior_thinking,
             max_tool_iterations: model.max_tool_iterations,
             openrouter_provider: model.openrouter_provider.clone(),
-            vertex_project: model.vertex_project.clone(),
-            vertex_location: model.vertex_location.clone(),
             gemini_generation: model.gemini_generation,
-            gemini_web_search: model.gemini_web_search,
             zai_clear_thinking: model.zai_clear_thinking,
             zai_subscription: model.zai_subscription,
         }
@@ -496,10 +484,7 @@ pub struct SamplerScopes {
     pub replay_prior_thinking: Option<PreferenceScope>,
     pub max_tool_iterations: Option<PreferenceScope>,
     pub openrouter_provider: Option<PreferenceScope>,
-    pub vertex_project: Option<PreferenceScope>,
-    pub vertex_location: Option<PreferenceScope>,
     pub gemini_generation: Option<PreferenceScope>,
-    pub gemini_web_search: Option<PreferenceScope>,
     pub zai_clear_thinking: Option<PreferenceScope>,
     pub zai_subscription: Option<PreferenceScope>,
 }
@@ -531,10 +516,7 @@ pub fn resolve_sampler_scopes(
         note!(replay_prior_thinking);
         note!(max_tool_iterations);
         note!(openrouter_provider);
-        note!(vertex_project);
-        note!(vertex_location);
         note!(gemini_generation);
-        note!(gemini_web_search);
         note!(zai_clear_thinking);
         note!(zai_subscription);
     };
@@ -803,17 +785,8 @@ pub fn apply_sampler_overlay(
     if let Some(ref v) = overlay.openrouter_provider {
         patched.openrouter_provider = Some(v.clone());
     }
-    if let Some(ref v) = overlay.vertex_project {
-        patched.vertex_project = Some(v.clone());
-    }
-    if let Some(ref v) = overlay.vertex_location {
-        patched.vertex_location = Some(v.clone());
-    }
     if let Some(g) = overlay.gemini_generation {
         patched.gemini_generation = Some(g);
-    }
-    if let Some(w) = overlay.gemini_web_search {
-        patched.gemini_web_search = Some(w);
     }
     if let Some(c) = overlay.zai_clear_thinking {
         patched.zai_clear_thinking = Some(c);

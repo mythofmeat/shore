@@ -66,7 +66,11 @@ impl ProviderOptions {
 
     /// `Some(self)` unless every field is unset.
     pub fn into_non_empty(self) -> Option<Self> {
-        if self.is_empty() { None } else { Some(self) }
+        if self.is_empty() {
+            None
+        } else {
+            Some(self)
+        }
     }
 
     /// Whether this request asks for reasoning at all.

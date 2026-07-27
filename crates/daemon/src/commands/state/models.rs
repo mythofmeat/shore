@@ -33,10 +33,7 @@ const SAMPLER_KEYS: &[&str] = &[
     // Vendor knobs (per-model). The capability matrix gates which of these a
     // given model's resolved sdk actually honors — see `capability_check`.
     "openrouter_provider",
-    "vertex_project",
-    "vertex_location",
     "gemini_generation",
-    "gemini_web_search",
     "zai_clear_thinking",
     "zai_subscription",
 ];
@@ -895,21 +892,12 @@ fn apply_vendor_sampler_value(
                 })?)
             };
         }
-        "vertex_project" => {
-            sampler.vertex_project = parse_string_value(value, "vertex_project")?;
-        }
-        "vertex_location" => {
-            sampler.vertex_location = parse_string_value(value, "vertex_location")?;
-        }
         "gemini_generation" => {
             sampler.gemini_generation = if value.is_null() {
                 None
             } else {
                 Some(parse_u32_value(value, "gemini_generation")?)
             };
-        }
-        "gemini_web_search" => {
-            sampler.gemini_web_search = parse_bool_value(value, "gemini_web_search")?;
         }
         "zai_clear_thinking" => {
             sampler.zai_clear_thinking = parse_bool_value(value, "zai_clear_thinking")?;
@@ -920,19 +908,6 @@ fn apply_vendor_sampler_value(
         _ => return Err(invalid(format!("unknown setting key: {key}"))),
     }
     Ok(())
-}
-
-/// Parse an optional string setting value. `null` clears the field.
-fn parse_string_value(value: &Value, name: &str) -> Result<Option<String>, (ErrorCode, String)> {
-    if value.is_null() {
-        return Ok(None);
-    }
-    value.as_str().map(|s| Some(s.to_owned())).ok_or_else(|| {
-        (
-            ErrorCode::InvalidRequest,
-            format!("{name} must be a string, got {value}"),
-        )
-    })
 }
 
 /// Parse an optional boolean setting value. `null` clears the field
@@ -1053,10 +1028,7 @@ pub fn model_settings(ctx: &CommandContext, args: &Value) -> CommandResult {
             "replay_prior_thinking": scopes.replay_prior_thinking.map(scope_str),
             "max_tool_iterations": scopes.max_tool_iterations.map(scope_str),
             "openrouter_provider": scopes.openrouter_provider.map(scope_str),
-            "vertex_project": scopes.vertex_project.map(scope_str),
-            "vertex_location": scopes.vertex_location.map(scope_str),
             "gemini_generation": scopes.gemini_generation.map(scope_str),
-            "gemini_web_search": scopes.gemini_web_search.map(scope_str),
             "zai_clear_thinking": scopes.zai_clear_thinking.map(scope_str),
             "zai_subscription": scopes.zai_subscription.map(scope_str),
         },

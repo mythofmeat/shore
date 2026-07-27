@@ -260,10 +260,7 @@ pub struct ModelConfigFields {
     pub cache_ttl: Option<String>,
     pub cache_keepalive: Option<CacheKeepaliveSetting>,
     pub openrouter_provider: Option<toml::Value>,
-    pub vertex_project: Option<String>,
-    pub vertex_location: Option<String>,
     pub gemini_generation: Option<u32>,
-    pub gemini_web_search: Option<bool>,
     pub zai_clear_thinking: Option<bool>,
     pub zai_subscription: Option<bool>,
 }
@@ -290,10 +287,7 @@ impl ModelConfigFields {
         merge_opt!(cache_ttl);
         merge_opt!(cache_keepalive);
         merge_opt!(openrouter_provider);
-        merge_opt!(vertex_project);
-        merge_opt!(vertex_location);
         merge_opt!(gemini_generation);
-        merge_opt!(gemini_web_search);
         merge_opt!(zai_clear_thinking);
         merge_opt!(zai_subscription);
     }
@@ -320,10 +314,7 @@ impl ModelConfigFields {
             cache_ttl: or_opt!(cache_ttl),
             cache_keepalive: or_opt!(cache_keepalive),
             openrouter_provider: or_opt!(openrouter_provider),
-            vertex_project: or_opt!(vertex_project),
-            vertex_location: or_opt!(vertex_location),
             gemini_generation: or_opt!(gemini_generation),
-            gemini_web_search: or_opt!(gemini_web_search),
             zai_clear_thinking: or_opt!(zai_clear_thinking),
             zai_subscription: or_opt!(zai_subscription),
         }
@@ -386,10 +377,7 @@ pub struct ResolvedModel {
     /// (Anthropic → `55m`, others → `off`) in [`ResolvedModel::from_parts`].
     pub cache_keepalive: Option<CacheKeepaliveSetting>,
     pub openrouter_provider: Option<toml::Value>,
-    pub vertex_project: Option<String>,
-    pub vertex_location: Option<String>,
     pub gemini_generation: Option<u32>,
-    pub gemini_web_search: Option<bool>,
     pub zai_clear_thinking: Option<bool>,
     pub zai_subscription: Option<bool>,
     /// Per-model override for preserving prior-turn extended-thinking blocks
@@ -507,10 +495,7 @@ impl ResolvedModel {
             cache_ttl,
             cache_keepalive: fields.cache_keepalive,
             openrouter_provider: fields.openrouter_provider,
-            vertex_project: fields.vertex_project,
-            vertex_location: fields.vertex_location,
             gemini_generation: fields.gemini_generation,
-            gemini_web_search: fields.gemini_web_search,
             zai_clear_thinking: fields.zai_clear_thinking,
             zai_subscription: fields.zai_subscription,
             // The static catalog has no `replay_prior_thinking` field; the
@@ -556,19 +541,16 @@ fn strip_rejected_sampler<T: PartialEq>(
 
 /// Warn (but keep) every present field the resolved sdk silently ignores
 /// (#138) — harmless on the wire, but a likely misconfiguration worth
-/// surfacing (e.g. `cache_ttl` on a non-Anthropic sdk, `vertex_*` off Gemini).
+/// surfacing (e.g. `cache_ttl` on a non-Anthropic sdk).
 fn warn_ignored_fields(sdk: &Sdk, model_id: &str, fields: &ModelConfigFields) {
     use capabilities::Field;
-    let checks: [(Field, bool); 8] = [
+    let checks: [(Field, bool); 5] = [
         (Field::CacheTtl, fields.cache_ttl.is_some()),
         (
             Field::OpenrouterProvider,
             fields.openrouter_provider.is_some(),
         ),
-        (Field::VertexProject, fields.vertex_project.is_some()),
-        (Field::VertexLocation, fields.vertex_location.is_some()),
         (Field::GeminiGeneration, fields.gemini_generation.is_some()),
-        (Field::GeminiWebSearch, fields.gemini_web_search.is_some()),
         (Field::ZaiClearThinking, fields.zai_clear_thinking.is_some()),
         (Field::ZaiSubscription, fields.zai_subscription.is_some()),
     ];
