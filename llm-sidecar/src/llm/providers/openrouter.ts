@@ -15,10 +15,10 @@
  *
  * Reasoning handling:
  * - Inbound reasoning is SURFACED as `thinking` events (display/persistence).
- * - `reasoning_details` round-trips OPAQUELY: we serialize the response's
- *   `reasoningDetails` into the thinking block's signature carrier
- *   (`thinking_signature` event), and on the next turn we replay it verbatim
- *   from the incoming thinking block. We NEVER reconstruct reasoning from
+ * - `reasoning_details` round-trips OPAQUELY: the response's `reasoningDetails`
+ *   goes back to the daemon as its own `reasoning_details` event, rides the
+ *   thinking block's `reasoning_details` field, and is replayed verbatim on the
+ *   next turn. We NEVER reconstruct reasoning from
  *   thinking text — that wrong-shape reconstruction was the Rust deepseek/kimi
  *   400/hang bug. Preserving reasoning is a proven non-critical continuity win
  *   via OpenRouter (it does not crash-gate tool loops), so when the daemon does
@@ -76,8 +76,8 @@ export class OpenRouterProvider implements SidecarProvider {
 
     if (typeof message?.reasoning === "string" && message.reasoning.length > 0) {
       const block: ContentBlock = { type: "thinking", thinking: message.reasoning };
-      const sig = encodeReasoningDetails(message.reasoningDetails);
-      if (sig) block.signature = sig;
+      const details = message.reasoningDetails;
+      if (Array.isArray(details) && details.length > 0) block.reasoning_details = details;
       content_blocks.push(block);
     }
     const text = typeof message?.content === "string" ? message.content : "";
@@ -132,15 +132,16 @@ export async function* openRouterStreamEvents(
   let finishReason: string | undefined;
   let usage: Usage = emptyUsage();
 
-  // Emit the accumulated reasoning_details signature exactly once, while the
-  // thinking block is still open (before any text/tool_use flushes it). An
-  // orphan signature (no preceding thinking) would be discarded, so we gate on
-  // having actually surfaced thinking.
+  // Emit the accumulated reasoning_details exactly once, while the thinking
+  // block is still open (before any text/tool_use flushes it). An orphan
+  // carrier (no preceding thinking) would be discarded, so we gate on having
+  // actually surfaced thinking.
   function* flushSignature(): Iterable<StreamEvent> {
     if (sigEmitted || !sawThinking) return;
     sigEmitted = true;
-    const sig = encodeReasoningDetails(reasoningDetails);
-    if (sig) yield { type: "thinking_signature", signature: sig };
+    if (reasoningDetails.length > 0) {
+      yield { type: "reasoning_details", details: reasoningDetails };
+    }
   }
 
   for await (const chunk of chunks) {
@@ -326,8 +327,10 @@ export function turnToOpenRouter(turn: TurnMessage): ChatMessages[] {
         function: { name: tu.name, arguments: JSON.stringify(tu.input ?? {}) },
       }));
     }
-    const replay = decodeReasoningDetails(thinking?.signature);
-    if (replay) msg.reasoningDetails = replay;
+    const replay = thinking?.reasoning_details;
+    if (Array.isArray(replay) && replay.length > 0) {
+      msg.reasoningDetails = replay as ReasoningDetailUnion[];
+    }
     return [{ ...msg, role: "assistant" }];
   }
 
@@ -374,28 +377,6 @@ function imagesToParts(images: ImageRef[] | undefined): ImagePart[] {
     out.push(imageUrlPart(resolved));
   }
   return out;
-}
-
-// ── reasoning_details opaque carrier ──────────────────────────────────────────
-
-/** Marker so an OpenRouter reasoning blob is never mistaken for a real Anthropic
- * signature (and vice-versa). Provider provenance should already prevent
- * cross-provider replay; this is belt-and-suspenders. */
-const REASONING_SIG_PREFIX = "orrd:";
-
-function encodeReasoningDetails(details: ReasoningDetailUnion[] | null | undefined): string | undefined {
-  if (!Array.isArray(details) || details.length === 0) return undefined;
-  return REASONING_SIG_PREFIX + JSON.stringify(details);
-}
-
-function decodeReasoningDetails(signature: string | undefined): ReasoningDetailUnion[] | undefined {
-  if (typeof signature !== "string" || !signature.startsWith(REASONING_SIG_PREFIX)) return undefined;
-  try {
-    const parsed = JSON.parse(signature.slice(REASONING_SIG_PREFIX.length));
-    return Array.isArray(parsed) && parsed.length > 0 ? (parsed as ReasoningDetailUnion[]) : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

@@ -4,7 +4,7 @@
 use serde_json::{json, Value};
 use shore_common::config::app::ThinkingReplay;
 use shore_common::config::models::Sdk;
-use shore_common::protocol::types::ContentBlock;
+use shore_common::protocol::types::{ContentBlock, ThinkingSignature};
 
 /// Convert a `ContentBlock` to its LLM API JSON representation, filtering
 /// out blocks the API would reject (unsigned thinking blocks, empty text).
@@ -24,10 +24,15 @@ pub fn content_block_to_api_json(block: &ContentBlock) -> Option<Value> {
             thinking,
             signature,
         } => {
-            // Require signature — Anthropic API rejects unsigned thinking blocks.
-            signature
-                .as_ref()
-                .map(|sig| json!({ "type": "thinking", "thinking": thinking, "signature": sig }))
+            // Require a carrier — Anthropic rejects unsigned thinking blocks,
+            // and for the other providers an uncarried block replays nothing.
+            signature.as_ref().map(|sig| {
+                let mut v = json!({ "type": "thinking", "thinking": thinking });
+                if let Some(obj) = v.as_object_mut() {
+                    insert_reasoning_carrier(obj, sig);
+                }
+                v
+            })
         }
         ContentBlock::RedactedThinking { data } => Some(json!({
             "type": "redacted_thinking", "data": data,
@@ -71,7 +76,7 @@ pub fn content_block_to_json(block: &ContentBlock) -> Value {
             let mut thinking_json = json!({"type": "thinking", "thinking": thinking});
             if let Some(sig) = signature {
                 if let Some(obj) = thinking_json.as_object_mut() {
-                    let _ignored = obj.insert("signature".into(), json!(sig));
+                    insert_reasoning_carrier(obj, sig);
                 }
             }
             thinking_json
@@ -96,6 +101,32 @@ pub fn content_block_to_json(block: &ContentBlock) -> Value {
     }
 }
 
+/// Write a thinking block's replay payload under the field its provider
+/// actually reads.
+///
+/// All three carriers are stored on one `signature` slot behind a string
+/// prefix, because the conversation store only has Anthropic's block shape.
+/// That is a storage detail: on the wire each one gets its real name, so no
+/// adapter has to sniff a prefix to find its own.
+fn insert_reasoning_carrier(obj: &mut serde_json::Map<String, Value>, sig: &ThinkingSignature) {
+    match sig {
+        ThinkingSignature::Opaque(s) => {
+            let _ignored = obj.insert("signature".into(), json!(s));
+        }
+        ThinkingSignature::OpenrouterDetails(details) => {
+            // Stored JSON-encoded; parse so the adapter gets back the array it
+            // sent. An unparseable carrier is corrupt — omit it rather than
+            // replay something the provider will reject.
+            if let Ok(parsed) = serde_json::from_str::<Value>(details) {
+                let _ignored = obj.insert("reasoning_details".into(), parsed);
+            }
+        }
+        ThinkingSignature::ZaiReasoning(text) => {
+            let _ignored = obj.insert("reasoning_content".into(), json!(text));
+        }
+    }
+}
+
 /// Convert a `ContentBlock` to the provider-neutral request JSON Shore passes
 /// into `the daemon's llm module` for a specific SDK.
 ///
@@ -103,6 +134,10 @@ pub fn content_block_to_json(block: &ContentBlock) -> Value {
 /// stricter API projection. OpenAI-compatible providers and Z.AI receive the
 /// full internal block so their provider adapters can project unsigned
 /// reasoning into `reasoning` / `reasoning_content`.
+///
+/// Either way a thinking block's replay payload is named for the provider that
+/// reads it (see [`insert_reasoning_carrier`]) — the `orrd:`/`zair:` prefixes
+/// are a storage encoding and never reach an adapter.
 pub fn content_block_to_request_json_for_sdk(block: &ContentBlock, sdk: &Sdk) -> Option<Value> {
     if matches!(sdk, Sdk::Openai | Sdk::Zai) {
         // Drop empty text blocks here too: they carry nothing and only invite
@@ -153,13 +188,6 @@ pub fn dispatch_result_to_output(result: Result<Value, crate::tools::ToolError>)
     }
 }
 
-/// Signature carriers that are bound to a specific non-Anthropic wire shape.
-/// `orrd:` is the OpenRouter `reasoning_details` blob minted on the
-/// [`Sdk::Openrouter`] path; `zair:` is the Z.AI Preserved-Thinking carrier.
-/// Neither is an Anthropic signature, so neither survives a hop onto the
-/// Anthropic wire shape no matter which upstream serves it.
-const FOREIGN_SIGNATURE_CARRIERS: [&str; 2] = ["orrd:", "zair:"];
-
 /// Whether `block` can be safely replayed to `active_provider`/`active_model`.
 ///
 /// Providers mint opaque, **model-bound** data inside `thinking` blocks
@@ -202,19 +230,15 @@ pub fn thinking_block_portable_to(
     }
 
     // Carrier backstop, checked before provenance so it holds even for legacy
-    // messages: a signature stamped with a non-Anthropic carrier is only ever
-    // replayable to the exact model that minted it. Provenance-free histories
-    // would otherwise sail straight onto the Anthropic wire.
+    // messages: a non-Anthropic carrier is only ever replayable to the exact
+    // model that minted it, and provenance-free histories would otherwise sail
+    // straight onto the Anthropic wire.
     if let ContentBlock::Thinking {
         signature: Some(sig),
         ..
     } = block
     {
-        if FOREIGN_SIGNATURE_CARRIERS
-            .iter()
-            .any(|prefix| sig.starts_with(prefix))
-            && minting_model.is_none_or(|m| m != active_model)
-        {
+        if sig.is_foreign_carrier() && minting_model.is_none_or(|m| m != active_model) {
             return false;
         }
     }
@@ -399,6 +423,46 @@ pub fn build_tool_result_json(tool_use_id: &str, content: &str, is_error: bool) 
 mod tests {
     use super::*;
     use serde_json::json;
+
+    // ── reasoning carrier projection ──────────────────────────────────
+
+    #[test]
+    fn each_carrier_goes_out_under_its_own_field_name() {
+        // The three carriers share one storage slot but are three different
+        // provider fields. Sending one under another's name is a 400, and the
+        // prefix must never leave the daemon.
+        let block = |sig: &str| ContentBlock::Thinking {
+            thinking: "t".into(),
+            signature: Some(sig.into()),
+        };
+
+        let anthropic = content_block_to_api_json(&block("sig_abc")).expect("kept");
+        assert_eq!(anthropic["signature"], json!("sig_abc"));
+        assert!(anthropic.get("reasoning_details").is_none());
+
+        // Parsed back into the array OpenRouter sent, not left JSON-in-a-string.
+        let openrouter = content_block_to_api_json(&block(r#"orrd:[{"index":0}]"#)).expect("kept");
+        assert_eq!(openrouter["reasoning_details"], json!([{"index": 0}]));
+        assert!(openrouter.get("signature").is_none());
+
+        let zai = content_block_to_api_json(&block("zair:step 1")).expect("kept");
+        assert_eq!(zai["reasoning_content"], json!("step 1"));
+        assert!(zai.get("signature").is_none());
+    }
+
+    #[test]
+    fn a_corrupt_openrouter_carrier_is_omitted_not_replayed() {
+        // Unparseable JSON means the stored carrier is damaged. Replaying it
+        // would be a guaranteed provider rejection; dropping it costs only
+        // reasoning continuity for that turn.
+        let block = ContentBlock::Thinking {
+            thinking: "t".into(),
+            signature: Some("orrd:{not json".into()),
+        };
+        let out = content_block_to_api_json(&block).expect("block itself is kept");
+        assert!(out.get("reasoning_details").is_none());
+        assert!(out.get("signature").is_none());
+    }
 
     // ── content_block_to_api_json ─────────────────────────────────────
 

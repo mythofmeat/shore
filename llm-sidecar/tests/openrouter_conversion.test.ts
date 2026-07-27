@@ -2,7 +2,8 @@
  * OpenRouter message-conversion tests. Pin `turnToOpenRouter`: canonical blocks →
  * OpenRouter chat messages. Load-bearing invariants: thinking TEXT is never sent
  * back as a reasoning field (the Rust deepseek/kimi 400/hang bug), and prior
- * `reasoning_details` round-trip ONLY via the opaque `orrd:` signature carrier.
+ * `reasoning_details` round-trip ONLY via the block's own `reasoning_details`
+ * field — never reconstructed, never read from another provider's carrier.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -30,25 +31,25 @@ describe("turnToOpenRouter", () => {
       type: "function",
       function: { name: "search", arguments: '{"q":"x"}' },
     });
-    // thinking text must NOT be replayed as reasoning, and with no orrd
-    // signature there is nothing to round-trip.
+    // thinking text must NOT be replayed as reasoning, and with no
+    // reasoning_details there is nothing to round-trip.
     expect(m).not.toHaveProperty("reasoning");
     expect(m).not.toHaveProperty("reasoningDetails");
   });
 
-  test("thinking block with orrd signature → replays reasoning_details verbatim", () => {
+  test("thinking block with reasoning_details → replays them verbatim", () => {
     const details = [{ type: "reasoning.text", text: "prior", id: "r1", format: "unknown" }];
     const [m] = conv({
       role: "assistant",
       content: [
-        { type: "thinking", thinking: "prior", signature: `orrd:${JSON.stringify(details)}` },
+        { type: "thinking", thinking: "prior", reasoning_details: details },
         { type: "tool_use", id: "tu_2", name: "f", input: {} },
       ],
     });
     expect(m?.reasoningDetails).toEqual(details);
   });
 
-  test("thinking block with a non-orrd (e.g. Anthropic) signature → no replay", () => {
+  test("thinking block carrying only an Anthropic signature → no replay", () => {
     const [m] = conv({
       role: "assistant",
       content: [

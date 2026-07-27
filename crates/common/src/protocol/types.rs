@@ -26,6 +26,109 @@ impl PartialEq for ImageRef {
     }
 }
 
+/// The opaque payload a provider attaches to a thinking block so the *next*
+/// request can replay that reasoning.
+///
+/// Three unrelated things ride this slot, because Anthropic's block shape is
+/// the only one the conversation store has and the other providers' equivalents
+/// have nowhere else to go:
+///
+/// - [`Self::Opaque`] — a real signature (Anthropic, and Gemini's
+///   `thoughtSignature`). Bytes we never inspect, replayed verbatim.
+/// - [`Self::OpenrouterDetails`] — OpenRouter's `reasoning_details` array,
+///   JSON-encoded.
+/// - [`Self::ZaiReasoning`] — Z.AI's `reasoning_content`, verbatim text.
+///
+/// All three are **model-bound**: replaying one to anything but its minter is
+/// an HTTP 400. Only `Opaque` is ever a valid Anthropic `signature`, which is
+/// why [`Self::is_foreign_carrier`] exists.
+///
+/// # Serialization
+///
+/// Serializes as a single prefixed string (`orrd:…`, `zair:…`, or the bare
+/// signature) because that is the format already written to every stored
+/// conversation. The prefix is this enum's wire encoding and nothing else
+/// should parse it — that is the point of the type. Prefix collision is
+/// possible in principle (a real signature beginning `orrd:`); it has never
+/// been observed, and treating one as a carrier fails closed by refusing to
+/// replay rather than sending an invalid block.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ThinkingSignature {
+    /// Verbatim provider signature — Anthropic, or Gemini's `thoughtSignature`.
+    Opaque(String),
+    /// OpenRouter `reasoning_details`, JSON-encoded.
+    OpenrouterDetails(String),
+    /// Z.AI Preserved-Thinking `reasoning_content`, verbatim.
+    ZaiReasoning(String),
+}
+
+impl ThinkingSignature {
+    const OPENROUTER_PREFIX: &'static str = "orrd:";
+    const ZAI_PREFIX: &'static str = "zair:";
+
+    /// Parse the stored prefixed form.
+    pub fn from_wire(s: &str) -> Self {
+        if let Some(rest) = s.strip_prefix(Self::OPENROUTER_PREFIX) {
+            Self::OpenrouterDetails(rest.to_owned())
+        } else if let Some(rest) = s.strip_prefix(Self::ZAI_PREFIX) {
+            Self::ZaiReasoning(rest.to_owned())
+        } else {
+            Self::Opaque(s.to_owned())
+        }
+    }
+
+    /// The stored prefixed form.
+    pub fn to_wire(&self) -> String {
+        match self {
+            Self::Opaque(s) => s.clone(),
+            Self::OpenrouterDetails(s) => format!("{}{s}", Self::OPENROUTER_PREFIX),
+            Self::ZaiReasoning(s) => format!("{}{s}", Self::ZAI_PREFIX),
+        }
+    }
+
+    /// The verbatim signature, if this is one. `None` for the non-Anthropic
+    /// carriers, which must never be sent as a `signature`.
+    pub fn as_opaque(&self) -> Option<&str> {
+        match self {
+            Self::Opaque(s) => Some(s),
+            Self::OpenrouterDetails(_) | Self::ZaiReasoning(_) => None,
+        }
+    }
+
+    /// True for a carrier bound to a specific non-Anthropic wire shape. Such a
+    /// block cannot cross onto the Anthropic shape no matter which upstream
+    /// serves it, so replay is refused regardless of recorded provenance.
+    pub fn is_foreign_carrier(&self) -> bool {
+        self.as_opaque().is_none()
+    }
+}
+
+/// Parsing, not wrapping: a stored string that carries a prefix becomes the
+/// carrier variant it names, so no conversion path can mis-tag one as `Opaque`.
+impl From<&str> for ThinkingSignature {
+    fn from(s: &str) -> Self {
+        Self::from_wire(s)
+    }
+}
+
+impl From<String> for ThinkingSignature {
+    fn from(s: String) -> Self {
+        Self::from_wire(&s)
+    }
+}
+
+impl Serialize for ThinkingSignature {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_wire())
+    }
+}
+
+impl<'de> Deserialize<'de> for ThinkingSignature {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(Self::from_wire(&String::deserialize(deserializer)?))
+    }
+}
+
 /// A structured content block within a message.
 ///
 /// Messages can contain a sequence of content blocks representing text,
@@ -40,7 +143,7 @@ pub enum ContentBlock {
     Thinking {
         thinking: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        signature: Option<String>,
+        signature: Option<ThinkingSignature>,
     },
     ToolUse {
         id: String,
@@ -354,6 +457,60 @@ mod tests {
 
     fn field<'val>(value: &'val serde_json::Value, key: &str) -> &'val serde_json::Value {
         value.get(key).expect("expected JSON field")
+    }
+
+    #[test]
+    fn thinking_signature_storage_format_is_unchanged() {
+        // Every stored conversation already holds these as prefixed strings.
+        // The enum is an in-memory shape, not a format change — if this test
+        // fails, existing histories stop round-tripping.
+        let cases = [
+            (ThinkingSignature::Opaque("sig_abc".into()), "\"sig_abc\""),
+            (
+                ThinkingSignature::OpenrouterDetails(r#"[{"index":0}]"#.into()),
+                r#""orrd:[{\"index\":0}]""#,
+            ),
+            (
+                ThinkingSignature::ZaiReasoning("step 1".into()),
+                "\"zair:step 1\"",
+            ),
+        ];
+        for (sig, expected_json) in cases {
+            let json = serde_json::to_string(&sig).expect("serialize");
+            assert_eq!(json, expected_json);
+            let back: ThinkingSignature = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(back, sig);
+        }
+    }
+
+    #[test]
+    fn carrier_prefixes_classify_on_load() {
+        assert!(ThinkingSignature::from_wire("sig_abc").as_opaque() == Some("sig_abc"));
+        assert_eq!(
+            ThinkingSignature::from_wire("orrd:[]"),
+            ThinkingSignature::OpenrouterDetails("[]".into())
+        );
+        assert_eq!(
+            ThinkingSignature::from_wire("zair:hmm"),
+            ThinkingSignature::ZaiReasoning("hmm".into())
+        );
+
+        // Only a real signature may be sent as one; the carriers must not.
+        assert!(!ThinkingSignature::from_wire("sig_abc").is_foreign_carrier());
+        assert!(ThinkingSignature::from_wire("orrd:[]").is_foreign_carrier());
+        assert!(ThinkingSignature::from_wire("zair:hmm").is_foreign_carrier());
+    }
+
+    #[test]
+    fn a_signature_shaped_like_a_carrier_fails_closed() {
+        // The prefix is the wire encoding, so a genuine Anthropic signature
+        // beginning `orrd:` would be read back as a carrier. Never observed,
+        // and the consequence is refusing to replay a valid block rather than
+        // sending an invalid one — which is the direction to fail in.
+        let collided = ThinkingSignature::Opaque("orrd:not-really".into());
+        let round_tripped = ThinkingSignature::from_wire(&collided.to_wire());
+        assert_ne!(round_tripped, collided);
+        assert!(round_tripped.is_foreign_carrier());
     }
 
     fn item<T>(items: &[T], index: usize) -> &T {

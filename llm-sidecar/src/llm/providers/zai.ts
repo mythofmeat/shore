@@ -7,13 +7,14 @@
  *
  * Reasoning handling (Preserved Thinking, `clear_thinking: false`):
  * - Inbound `reasoning_content` is surfaced as `thinking` events AND stashed
- *   verbatim on the thinking block's opaque `signature` carrier (`zair:` prefix),
- *   so it round-trips byte-exact even if the display text is later normalized.
+ *   verbatim on the thinking block's own `reasoning_content` field, so it
+ *   round-trips byte-exact even if the display text is later normalized.
  * - On the next turn, when Preserved Thinking is on, assistant turns replay that
- *   carrier as outbound `reasoning_content`. Z.ai's documented contract requires
+ *   field as outbound `reasoning_content`. Z.ai's documented contract requires
  *   the complete, unmodified prior reasoning_content be fed back, so we replay
- *   ONLY from our own `zair:` signature — never from display text, never from a
- *   foreign provider's signature. Cross-provider replay is additionally gated
+ *   ONLY from that field — never from display text, and never from another
+ *   provider's carrier, which now cannot be mistaken for ours because it
+ *   arrives under a different name. Cross-provider replay is additionally gated
  *   daemon-side by `provider_key`.
  * - When `clear_thinking` is true/omitted (Z.ai default, stateless), we never
  *   replay; the model re-thinks fresh each turn.
@@ -145,7 +146,7 @@ export function buildZaiMessages(req: SidecarRequest): ChatCompletionMessagePara
 /**
  * Turn → Z.ai message(s). Identical to the OpenAI conversion EXCEPT that, under
  * Preserved Thinking, assistant turns replay the prior `reasoning_content`
- * verbatim from the thinking block's `zair:` signature carrier. We reuse
+ * verbatim from the thinking block's `reasoning_content` field. We reuse
  * `turnToOpenAI` for the message shell with thinking blocks filtered out —
  * `turnToOpenAI` would replay their (possibly mutated) *text* as
  * `reasoning_content`, but Z.ai's documented contract wants the verbatim
@@ -161,27 +162,11 @@ function turnToZai(turn: TurnMessage, preserveThinking: boolean): ChatCompletion
   const thinking = turn.content.find(
     (b): b is Extract<ContentBlock, { type: "thinking" }> => b.type === "thinking",
   );
-  const reasoning = decodeZaiReasoning(thinking?.signature);
-  if (reasoning) {
+  const reasoning = thinking?.reasoning_content;
+  if (reasoning !== undefined && reasoning.length > 0) {
     (msgs[0] as unknown as Record<string, unknown>).reasoning_content = reasoning;
   }
   return msgs;
-}
-
-// Opaque carrier marking Z.ai `reasoning_content` for verbatim replay. The
-// prefix is provenance belt-and-suspenders (the daemon already gates replay by
-// `provider_key`); decode accepts only our own prefix, so a foreign provider's
-// signature (e.g. OpenRouter `orrd:`) is never replayed as Z.ai reasoning.
-const ZAI_REASONING_PREFIX = "zair:";
-
-function encodeZaiReasoning(reasoning: string): string | undefined {
-  return reasoning.length > 0 ? ZAI_REASONING_PREFIX + reasoning : undefined;
-}
-
-function decodeZaiReasoning(signature: string | undefined): string | undefined {
-  if (typeof signature !== "string" || !signature.startsWith(ZAI_REASONING_PREFIX)) return undefined;
-  const reasoning = signature.slice(ZAI_REASONING_PREFIX.length);
-  return reasoning.length > 0 ? reasoning : undefined;
 }
 
 export async function* zaiStreamEvents(
@@ -213,12 +198,13 @@ export async function* zaiStreamEvents(
 
   // Emit the verbatim reasoning carrier exactly once, while the thinking block is
   // still open (before any text/tool_use closes it). Gated on having surfaced
-  // thinking so an orphan signature is never emitted.
+  // thinking so an orphan carrier is never emitted.
   const flushSignature = function* (): Iterable<StreamEvent> {
     if (sigEmitted || !sawThinking) return;
     sigEmitted = true;
-    const sig = encodeZaiReasoning(reasoningAccum);
-    if (sig) yield { type: "thinking_signature", signature: sig };
+    if (reasoningAccum.length > 0) {
+      yield { type: "reasoning_content", reasoning: reasoningAccum };
+    }
   };
 
   for await (const chunk of chunks) {
@@ -299,10 +285,11 @@ export function zaiGenerateResponse(
   const contentBlocks: ContentBlock[] = [];
 
   if (typeof message?.reasoning_content === "string" && message.reasoning_content.length > 0) {
-    const block: ContentBlock = { type: "thinking", thinking: message.reasoning_content };
-    const sig = encodeZaiReasoning(message.reasoning_content);
-    if (sig) block.signature = sig;
-    contentBlocks.push(block);
+    contentBlocks.push({
+      type: "thinking",
+      thinking: message.reasoning_content,
+      reasoning_content: message.reasoning_content,
+    });
   }
 
   const text = typeof message?.content === "string" ? message.content : "";

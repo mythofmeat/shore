@@ -138,7 +138,7 @@ describe("request construction", () => {
           {
             role: "assistant",
             content: [
-              { type: "thinking", thinking: "chain", signature: "zair:chain" },
+              { type: "thinking", thinking: "chain", reasoning_content: "chain" },
               { type: "text", text: "answer" },
             ],
           },
@@ -148,9 +148,9 @@ describe("request construction", () => {
     expect(messages[0]).not.toHaveProperty("reasoning_content");
   });
 
-  test("never replays a thinking block that lacks the zair: carrier", () => {
-    // No signature carrier (e.g. display-only thinking text) → not replayed, so
-    // we never feed Z.ai unverified/mutated reasoning_content.
+  test("never replays a thinking block that lacks the reasoning carrier", () => {
+    // No carrier (e.g. display-only thinking text) → not replayed, so we never
+    // feed Z.ai unverified/mutated reasoning_content.
     const messages = buildZaiMessages(
       req({
         system: [{ type: "text", text: "You are helpful." }],
@@ -174,7 +174,7 @@ describe("request construction", () => {
     expect(messages[1]).not.toHaveProperty("reasoning");
   });
 
-  test("replays prior reasoning_content verbatim from the zair: carrier under Preserved Thinking", () => {
+  test("replays prior reasoning_content verbatim from the carrier under Preserved Thinking", () => {
     const messages = buildZaiMessages(
       req({
         provider_options: { zai_clear_thinking: false },
@@ -182,7 +182,7 @@ describe("request construction", () => {
           {
             role: "assistant",
             content: [
-              { type: "thinking", thinking: "step 1\nstep 2", signature: "zair:step 1\nstep 2" },
+              { type: "thinking", thinking: "step 1\nstep 2", reasoning_content: "step 1\nstep 2" },
               { type: "text", text: "answer" },
             ],
           },
@@ -206,7 +206,7 @@ describe("request construction", () => {
             {
               role: "assistant",
               content: [
-                { type: "thinking", thinking: "chain", signature: "zair:chain" },
+                { type: "thinking", thinking: "chain", reasoning_content: "chain" },
                 { type: "text", text: "answer" },
               ],
             },
@@ -222,7 +222,7 @@ describe("request construction", () => {
     expect(stateless({})[0]).not.toHaveProperty("reasoning_content");
   });
 
-  test("never replays a foreign provider's signature as Z.ai reasoning", () => {
+  test("never replays a foreign provider's carrier as Z.ai reasoning", () => {
     const messages = buildZaiMessages(
       req({
         provider_options: { zai_clear_thinking: false },
@@ -230,7 +230,7 @@ describe("request construction", () => {
           {
             role: "assistant",
             content: [
-              { type: "thinking", thinking: "or chain", signature: 'orrd:[{"text":"or chain"}]' },
+              { type: "thinking", thinking: "or chain", reasoning_details: [{ text: "or chain" }] },
               { type: "text", text: "answer" },
             ],
           },
@@ -306,7 +306,7 @@ test("maps Z.ai stream chunks to StreamEvents", async () => {
   expect(events[0]).toEqual({ type: "start", model: "glm-5.1-plus" });
   expect(events[1]).toEqual({ type: "thinking", text: "think" });
   // Reasoning carrier flushed while the thinking block is still open, before text.
-  expect(events[2]).toEqual({ type: "thinking_signature", signature: "zair:think" });
+  expect(events[2]).toEqual({ type: "reasoning_content", reasoning: "think" });
   expect(events[3]).toEqual({ type: "text", text: "Hello " });
   expect(events[4]).toEqual({ type: "text", text: "world" });
   expect(events[5]).toEqual({
@@ -368,7 +368,7 @@ test("maps Z.ai non-streaming responses to GenerateResponse", () => {
   expect(zaiGenerateResponse("glm-5.1", response, 77)).toEqual({
     content: "hello",
     content_blocks: [
-      { type: "thinking", thinking: "think", signature: "zair:think" },
+      { type: "thinking", thinking: "think", reasoning_content: "think" },
       { type: "text", text: "hello" },
       { type: "tool_use", id: "call_1", name: "lookup", input: { id: 7 } },
     ],

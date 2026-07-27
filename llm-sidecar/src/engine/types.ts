@@ -23,7 +23,16 @@ export interface ImageRef {
 
 export type ContentBlock =
   | { type: "text"; text: string }
-  | { type: "thinking"; thinking: string; signature?: string; details?: unknown }
+  | {
+      type: "thinking";
+      thinking: string;
+      /** Verbatim provider signature (Anthropic, Gemini `thoughtSignature`). */
+      signature?: string;
+      /** OpenRouter `reasoning_details`, replayed verbatim. */
+      reasoning_details?: unknown[];
+      /** Z.AI Preserved-Thinking `reasoning_content`, replayed verbatim. */
+      reasoning_content?: string;
+    }
   | { type: "tool_use"; id: string; name: string; input: unknown }
   | { type: "redacted_thinking"; data: string }
   | { type: "tool_result"; tool_use_id: string; content: string; is_error?: boolean }

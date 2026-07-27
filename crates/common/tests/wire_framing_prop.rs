@@ -92,7 +92,10 @@ fn arb_content_block() -> BoxedStrategy<ContentBlock> {
         (arb_small_string(), prop::option::of(arb_small_string())).prop_map(
             |(thinking, signature)| ContentBlock::Thinking {
                 thinking,
-                signature,
+                // Through `from_wire`, so a generated string that happens to
+                // start with a carrier prefix produces the carrier variant it
+                // names — the same value the store would have loaded.
+                signature: signature.map(Into::into),
             },
         ),
         (arb_ident(), arb_ident(), arb_json())

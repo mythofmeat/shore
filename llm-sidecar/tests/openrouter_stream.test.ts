@@ -39,15 +39,12 @@ describe("openRouterStreamEvents", () => {
 
     const out = await collect(openRouterStreamEvents("deepseek/deepseek-v4-pro", gen(chunks), fakeClock()));
 
-    expect(types(out)).toEqual(["start", "thinking", "thinking_signature", "text", "tool_use", "done"]);
+    expect(types(out)).toEqual(["start", "thinking", "reasoning_details", "text", "tool_use", "done"]);
     expect(out[1]).toEqual({ type: "thinking", text: "thinking..." });
 
-    const sig = out[2];
-    expect(sig?.type).toBe("thinking_signature");
-    if (sig?.type === "thinking_signature") {
-      expect(sig.signature.startsWith("orrd:")).toBe(true);
-      expect(JSON.parse(sig.signature.slice("orrd:".length))).toEqual(details);
-    }
+    // Its own event, carrying the array as-is — not a prefixed string on the
+    // signature slot.
+    expect(out[2]).toEqual({ type: "reasoning_details", details });
 
     expect(out[4]).toEqual({ type: "tool_use", id: "tc_1", name: "search", input: { q: "x" } });
 
@@ -62,7 +59,7 @@ describe("openRouterStreamEvents", () => {
     }
   });
 
-  test("tool-only turn (no text): signature still precedes tool_use", async () => {
+  test("tool-only turn (no text): the carrier still precedes tool_use", async () => {
     const chunks = [
       { choices: [{ index: 0, delta: { reasoning: "r" }, finishReason: null }] },
       { choices: [{ index: 0, delta: { reasoningDetails: [{ type: "reasoning.text", text: "r", id: "r1" }] }, finishReason: null }] },
@@ -70,10 +67,10 @@ describe("openRouterStreamEvents", () => {
       { choices: [{ index: 0, delta: {}, finishReason: "tool_calls" }] },
     ];
     const out = await collect(openRouterStreamEvents("z-ai/glm-5.1", gen(chunks), fakeClock()));
-    expect(types(out)).toEqual(["start", "thinking", "thinking_signature", "tool_use", "done"]);
+    expect(types(out)).toEqual(["start", "thinking", "reasoning_details", "tool_use", "done"]);
   });
 
-  test("no thinking → no orphan signature", async () => {
+  test("no thinking → no orphan carrier", async () => {
     const chunks = [{ choices: [{ index: 0, delta: { content: "hi" }, finishReason: "stop" }] }];
     const out = await collect(openRouterStreamEvents("openai/gpt-5.1", gen(chunks), fakeClock()));
     expect(types(out)).toEqual(["start", "text", "done"]);

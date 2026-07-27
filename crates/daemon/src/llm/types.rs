@@ -334,8 +334,21 @@ pub enum StreamEvent {
     Thinking {
         text: String,
     },
+    /// A verbatim provider signature (Anthropic, Gemini `thoughtSignature`).
     ThinkingSignature {
         signature: String,
+    },
+    /// OpenRouter's `reasoning_details` for the thinking block being streamed.
+    ///
+    /// A sibling of `thinking_signature` rather than a flavor of it: it is not
+    /// a signature, and conflating the two is what put a `orrd:`-prefixed
+    /// string in the signature slot for every adapter to sniff for.
+    ReasoningDetails {
+        details: serde_json::Value,
+    },
+    /// Z.AI's Preserved-Thinking `reasoning_content`, verbatim.
+    ReasoningContent {
+        reasoning: String,
     },
     RedactedThinking {
         data: String,

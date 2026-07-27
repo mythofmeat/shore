@@ -4,7 +4,7 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
 use tokio::sync::mpsc;
 use tracing::{debug, info};
 
-use shore_common::protocol::types::ContentBlock;
+use shore_common::protocol::types::{ContentBlock, ThinkingSignature};
 
 use super::types::{StreamEvent, StreamResult, Timing, ToolUseEvent, Usage};
 use super::LlmError;
@@ -136,9 +136,21 @@ impl StreamConsumer {
                     .await;
             }
 
+            // All three carriers land on the same slot on the thinking block —
+            // that is the storage shape — but they arrive as distinct events so
+            // nothing has to infer which one it got from a string prefix.
             StreamEvent::ThinkingSignature { signature } => {
-                // Buffer the signature to attach when the thinking block is flushed.
-                st.pending_signature = Some(signature);
+                st.pending_signature = Some(ThinkingSignature::Opaque(signature));
+            }
+
+            StreamEvent::ReasoningDetails { details } => {
+                st.pending_signature = Some(ThinkingSignature::OpenrouterDetails(
+                    serde_json::to_string(&details).unwrap_or_default(),
+                ));
+            }
+
+            StreamEvent::ReasoningContent { reasoning } => {
+                st.pending_signature = Some(ThinkingSignature::ZaiReasoning(reasoning));
             }
 
             StreamEvent::RedactedThinking { data } => {
@@ -214,7 +226,7 @@ struct ConsumeState {
     /// Pending thinking not yet flushed into `content_blocks`.
     thinking_buf: String,
     /// Signature buffered until the current thinking block is flushed.
-    pending_signature: Option<String>,
+    pending_signature: Option<ThinkingSignature>,
     /// Whether a `start` event has been seen.
     started: bool,
 }
@@ -637,7 +649,7 @@ mod tests {
                 signature,
             } => {
                 assert_eq!(thinking, "Let me reason...");
-                assert_eq!(signature.as_deref(), Some("sig_test_abc"));
+                assert_eq!(signature.as_ref().and_then(ThinkingSignature::as_opaque), Some("sig_test_abc"));
             }
 
         );
@@ -681,7 +693,7 @@ mod tests {
                 signature,
             } => {
                 assert_eq!(thinking, "Visible thinking");
-                assert_eq!(signature.as_deref(), Some("sig_1"));
+                assert_eq!(signature.as_ref().and_then(ThinkingSignature::as_opaque), Some("sig_1"));
             }
 
         );

@@ -164,7 +164,12 @@ export type StreamEvent =
   | { type: "start"; model: string }
   | { type: "text"; text: string }
   | { type: "thinking"; text: string }
+  // Three unrelated payloads used to share `thinking_signature` behind a string
+  // prefix (`orrd:`, `zair:`), so every adapter sniffed for its own. They are
+  // siblings now: only the first is actually a signature.
   | { type: "thinking_signature"; signature: string }
+  | { type: "reasoning_details"; details: unknown[] }
+  | { type: "reasoning_content"; reasoning: string }
   | { type: "redacted_thinking"; data: string }
   | { type: "tool_use"; id: string; name: string; input: unknown }
   | {
