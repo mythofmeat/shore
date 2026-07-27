@@ -262,16 +262,43 @@ pub fn maybe_strip_prior_thinking(
     replay: ThinkingReplay,
     provider_key: &str,
 ) {
+    maybe_strip_prior_thinking_from(messages, 0, replay, provider_key);
+}
+
+/// Like [`maybe_strip_prior_thinking`], but only rewrite messages at index
+/// `from` or later. The turn boundary is still computed over the *whole*
+/// slice — only the write range is clamped.
+///
+/// This exists for callers that extend an already-sent request: the messages
+/// before `from` went out on the wire and are part of a live provider-side
+/// cache entry, so rewriting them (which `LastTurn` does the moment a newer
+/// assistant turn lands) silently kills that entry. Every reuse path built on
+/// `AutonomyState::last_request` — the keepalive ping above all, whose whole
+/// job is to *read* that entry — then misses at the boundary and pays a full
+/// cache write instead. See `build_keepalive_ping` in `autonomy/manager.rs`,
+/// which requires the ping to stay byte-identical to the cached request.
+///
+/// The clamp changes no outcome for `None` (the sent prefix was already fully
+/// stripped when it was built) and none for `All` (a no-op either way). Under
+/// `LastTurn` it is the whole point: the previously-trailing turn keeps the
+/// thinking it was cached with.
+pub fn maybe_strip_prior_thinking_from(
+    messages: &mut [Value],
+    from: usize,
+    replay: ThinkingReplay,
+    provider_key: &str,
+) {
     // Provider floor: these models hard-require prior `reasoning_content`, so
     // never strip for them — full replay always wins over the user setting.
     if crate::llm::requires_reasoning_replay(provider_key) {
         return;
     }
-    match replay {
-        ThinkingReplay::All => {}
-        ThinkingReplay::LastTurn => strip_thinking_from_assistant_history_except_last(messages),
-        ThinkingReplay::None => strip_thinking_from_assistant_history(messages),
-    }
+    let until = match replay {
+        ThinkingReplay::All => return,
+        ThinkingReplay::LastTurn => most_recent_assistant_turn_start(messages),
+        ThinkingReplay::None => messages.len(),
+    };
+    strip_thinking_range(messages, from, until);
 }
 
 /// Remove `thinking` and `redacted_thinking` blocks from every assistant
@@ -288,9 +315,8 @@ pub fn maybe_strip_prior_thinking(
 /// and by the tool-loop continuation paths). Non-conforming entries are
 /// left untouched.
 pub fn strip_thinking_from_assistant_history(messages: &mut [Value]) {
-    for msg in messages.iter_mut() {
-        strip_thinking_from_message(msg);
-    }
+    let len = messages.len();
+    strip_thinking_range(messages, 0, len);
 }
 
 /// Like [`strip_thinking_from_assistant_history`], but keep the thinking on the
@@ -309,10 +335,15 @@ pub fn strip_thinking_from_assistant_history(messages: &mut [Value]) {
 /// assistant message of it. If there is no assistant message, this is a no-op.
 pub fn strip_thinking_from_assistant_history_except_last(messages: &mut [Value]) {
     let keep_from = most_recent_assistant_turn_start(messages);
-    for (idx, msg) in messages.iter_mut().enumerate() {
-        if idx < keep_from {
-            strip_thinking_from_message(msg);
-        }
+    strip_thinking_range(messages, 0, keep_from);
+}
+
+/// Strip thinking from the assistant messages in `messages[from..until]`.
+/// Single implementation behind every strip entry point in this module, so the
+/// range semantics can't drift between them.
+fn strip_thinking_range(messages: &mut [Value], from: usize, until: usize) {
+    for msg in messages.iter_mut().take(until).skip(from) {
+        strip_thinking_from_message(msg);
     }
 }
 
@@ -973,6 +1004,75 @@ mod tests {
         let mut none = base();
         maybe_strip_prior_thinking(&mut none, ThinkingReplay::None, "anthropic");
         assert_eq!(thinking_count(&none[1]) + thinking_count(&none[3]), 0);
+    }
+
+    // ── maybe_strip_prior_thinking_from (cache-prefix clamp) ──────────
+
+    /// The request as sent (`[q1, a1(thinking), q2]`) plus this turn's
+    /// response `a2` — the shape `last_request_with_response` builds.
+    fn sent_plus_response() -> Vec<Value> {
+        vec![
+            user_text("q1"),
+            asst_thinking("a1"),
+            user_text("q2"),
+            asst_thinking("a2"),
+        ]
+    }
+
+    #[test]
+    fn strip_from_keeps_already_sent_thinking_under_last_turn() {
+        // The load-bearing case. `a1` was on the wire while it was the
+        // trailing turn, so it is inside the provider-side cache entry the
+        // keepalive ping reads. Stripping it here (what the unclamped call
+        // did) rewrites those bytes and the ping's anchor dies — in a short
+        // conversation there is no older frozen boundary to fall back to, so
+        // the whole conversation is re-written on every ping.
+        let mut msgs = sent_plus_response();
+        maybe_strip_prior_thinking_from(&mut msgs, 3, ThinkingReplay::LastTurn, "anthropic");
+        assert_eq!(thinking_count(&msgs[1]), 1, "sent bytes must not change");
+        assert_eq!(thinking_count(&msgs[3]), 1, "trailing turn keeps thinking");
+
+        // Unclamped, the same input loses `a1` — the behaviour being fixed.
+        let mut unclamped = sent_plus_response();
+        maybe_strip_prior_thinking(&mut unclamped, ThinkingReplay::LastTurn, "anthropic");
+        assert_eq!(thinking_count(&unclamped[1]), 0);
+    }
+
+    #[test]
+    fn strip_from_still_strips_the_appended_turn_under_none() {
+        // `None` strips everything, including the response just appended. The
+        // sent prefix was already stripped when it was built, so clamping
+        // costs nothing — but the appended turn must still be stripped.
+        let mut msgs = sent_plus_response();
+        maybe_strip_prior_thinking_from(&mut msgs, 3, ThinkingReplay::None, "anthropic");
+        assert_eq!(thinking_count(&msgs[3]), 0, "appended turn stripped");
+    }
+
+    #[test]
+    fn strip_from_boundary_spans_a_whole_appended_tool_loop() {
+        // The appended region can be a multi-round tool loop. Its rounds are
+        // one turn (tool-result-only user messages don't end it), so
+        // `LastTurn` keeps all of their thinking and touches nothing before
+        // `from`.
+        let mut msgs = vec![
+            user_text("q1"),
+            asst_thinking("a1"),
+            user_text("q2"),
+            asst_thinking("loop1"),
+            json!({"role": "user", "content": [{"type": "tool_result", "content": "r"}]}),
+            asst_thinking("loop2"),
+        ];
+        maybe_strip_prior_thinking_from(&mut msgs, 3, ThinkingReplay::LastTurn, "anthropic");
+        assert_eq!(thinking_count(&msgs[1]), 1, "sent bytes untouched");
+        assert_eq!(thinking_count(&msgs[3]), 1, "loop round 1 kept");
+        assert_eq!(thinking_count(&msgs[5]), 1, "loop round 2 kept");
+    }
+
+    #[test]
+    fn strip_from_respects_provider_floor() {
+        let mut msgs = sent_plus_response();
+        maybe_strip_prior_thinking_from(&mut msgs, 3, ThinkingReplay::None, "deepseek");
+        assert_eq!(thinking_count(&msgs[3]), 1, "floor forces full replay");
     }
 
     #[test]

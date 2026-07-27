@@ -54,12 +54,10 @@ pub(super) async fn persist_and_notify(
         // Include the assistant response in last_request so the
         // heartbeat system sees a complete conversation ending on an
         // assistant turn — not the user turn that triggered this call.
-        // The turn has just ended (finish_reason != tool_use), so from the
-        // perspective of any future request this entire message list is
-        // history: strip thinking blocks across all assistant messages
-        // here to keep the next-turn cache prefix consistent with what
-        // `build_llm_messages` will emit. Skip the strip only when the
-        // user has explicitly opted to preserve prior-turn thinking.
+        // The replay policy applies to the appended response only: the
+        // messages already sent are the bytes the provider cached, and
+        // rewriting them here is what used to make every keepalive ping
+        // miss (see `update_last_request_with_response`).
         update_last_request_with_response(
             ctx,
             request,
@@ -127,14 +125,46 @@ fn update_last_request_with_response(
     provider_key: &str,
     char_name: &str,
 ) {
-    let mut full_request = request.clone();
-    append_response_messages_to_request(&mut full_request, completed_messages, &request.sdk);
-    crate::content_util::maybe_strip_prior_thinking(
-        &mut full_request.messages,
+    let full_request = last_request_with_response(
+        request,
+        completed_messages,
         replay_prior_thinking,
         provider_key,
     );
     ctx.autonomy.notify_last_request(char_name, full_request);
+}
+
+/// The request-as-sent plus this turn's response messages — the body every
+/// `last_request` reuse path (keepalive ping, heartbeat, dreaming, compaction)
+/// clones and extends.
+///
+/// The replay policy is applied **only to the appended messages**. Everything
+/// at a lower index already went out on the wire and is covered by a live
+/// provider-side cache entry; under `last_turn`, re-stripping it here rewrites
+/// the previously-trailing assistant turn and kills the entry anchored just
+/// past it. The keepalive ping then has no readable anchor left but the system
+/// prefix and pays a full cache write on every ping — the entire conversation
+/// body, once the conversation is short enough that no older frozen-boundary
+/// anchor exists to fall back on.
+///
+/// The next *chat* turn is unaffected: it rebuilds from disk through
+/// `prepare_chat_context`, which applies the policy across the full history.
+fn last_request_with_response(
+    request: &crate::llm::types::LlmRequest,
+    completed_messages: &[CompletedResponseMessage],
+    replay_prior_thinking: shore_common::config::app::ThinkingReplay,
+    provider_key: &str,
+) -> crate::llm::types::LlmRequest {
+    let mut full_request = request.clone();
+    let sent_len = full_request.messages.len();
+    append_response_messages_to_request(&mut full_request, completed_messages, &request.sdk);
+    crate::content_util::maybe_strip_prior_thinking_from(
+        &mut full_request.messages,
+        sent_len,
+        replay_prior_thinking,
+        provider_key,
+    );
+    full_request
 }
 
 /// Apply generated messages to the engine, handling regeneration
@@ -452,6 +482,82 @@ mod tests {
         let msg = message_from_response(msgs.remove(0), "anthropic", "claude-opus-4-6");
         assert_eq!(msg.provider_key.as_deref(), Some("anthropic"));
         assert_eq!(msg.model.as_deref(), Some("claude-opus-4-6"));
+    }
+
+    fn request_with_sent_messages(messages: Vec<Value>) -> crate::llm::types::LlmRequest {
+        crate::llm::types::LlmRequest {
+            sdk: Sdk::Anthropic,
+            model: "claude-opus-5".to_owned(),
+            api_key: "k".to_owned(),
+            api_key_name: None,
+            base_url: None,
+            messages,
+            system: None,
+            tools: None,
+            max_tokens: 1024,
+            temperature: None,
+            top_p: None,
+            provider_options: None,
+            provider_key: None,
+            rid: None,
+            forensic_character: None,
+            retain_long: false,
+            keepalive_interval: None,
+        }
+    }
+
+    fn thinking_blocks(msg: &Value) -> usize {
+        msg["content"].as_array().map_or(0, |blocks| {
+            blocks.iter().filter(|b| b["type"] == "thinking").count()
+        })
+    }
+
+    #[test]
+    fn last_request_keeps_thinking_on_already_sent_turns() {
+        // The keepalive ping clones `last_request` and must stay byte-identical
+        // to the request the provider cached. Under `last_turn` this used to
+        // strip `a1` — a message that had already gone out on the wire while it
+        // was the trailing turn — killing the cache entry anchored just past it.
+        // With no older frozen boundary to fall back on (a short conversation),
+        // the ping then re-wrote the whole conversation on every fire.
+        let sent = vec![
+            json!({"role": "user", "content": [{"type": "text", "text": "q1"}]}),
+            json!({"role": "assistant", "content": [
+                {"type": "thinking", "thinking": "t1", "signature": "s1"},
+                {"type": "text", "text": "a1"},
+            ]}),
+            json!({"role": "user", "content": [{"type": "text", "text": "q2"}]}),
+        ];
+        let request = request_with_sent_messages(sent);
+        let response = vec![CompletedResponseMessage {
+            role: Role::Assistant,
+            content_blocks: vec![
+                ContentBlock::Thinking {
+                    thinking: "t2".into(),
+                    signature: Some("s2".into()),
+                },
+                ContentBlock::Text { text: "a2".into() },
+            ],
+        }];
+
+        let full = last_request_with_response(
+            &request,
+            &response,
+            shore_common::config::app::ThinkingReplay::LastTurn,
+            "anthropic",
+        );
+
+        assert_eq!(full.messages.len(), 4);
+        assert_eq!(
+            thinking_blocks(&full.messages[1]),
+            1,
+            "already-sent turn must keep the thinking it was cached with"
+        );
+        assert_eq!(
+            thinking_blocks(&full.messages[3]),
+            1,
+            "new turn keeps its own"
+        );
     }
 
     #[test]
