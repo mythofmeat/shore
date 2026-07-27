@@ -369,7 +369,11 @@ impl LlmClient {
             "Sending streaming request to provider"
         );
 
-        let read_half = sidecar::stream(&prepared, self.sidecar_socket()).await?;
+        // Forensics labels ride the outbound body, not `body` above: the debug
+        // log records the LLM request proper, and these labels never reach a
+        // provider — the sidecar strips them before the SDK call.
+        let forensics = cache_forensics::context(request, call_type);
+        let read_half = sidecar::stream(&prepared, forensics, self.sidecar_socket()).await?;
         let reader: Box<dyn AsyncRead + Send + Unpin> = match ctx {
             Some(context) => Box::new(debug_log::TeeReader::new(read_half, context)),
             None => Box::new(read_half),

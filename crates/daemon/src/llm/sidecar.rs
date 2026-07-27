@@ -14,6 +14,7 @@ use serde::Serialize;
 use tokio::io::{AsyncWriteExt, DuplexStream};
 use tracing::{debug, warn};
 
+use crate::llm::cache_forensics::ForensicsContext;
 use crate::llm::types::{GenerateResponse, ImageGenerateParams, ImageGenerateResponse, LlmRequest};
 use crate::llm::{body_preview, check_response, LlmError};
 
@@ -100,6 +101,7 @@ where
 /// lines, pumped from the sidecar response body by a background task.
 pub(crate) async fn stream(
     request: &LlmRequest,
+    forensics: Option<ForensicsContext<'_>>,
     socket_path: Option<&Path>,
 ) -> Result<DuplexStream, LlmError> {
     debug!(
@@ -110,19 +112,36 @@ pub(crate) async fn stream(
         has_tools = request.tools.is_some(),
         "dispatching streaming LLM request through sidecar"
     );
-    open_stream(request, socket_path).await.inspect_err(|e| {
+    open_stream(request, forensics, socket_path)
+        .await
+        .inspect_err(|e| {
         warn!(sdk = ?request.sdk, model = %request.model, error = %e, "streaming request failed");
     })
 }
 
+/// The outbound body: the request plus the per-call forensics labels.
+///
+/// Flattened over a *borrowed* request so attaching labels costs no clone of
+/// the message history. `forensics` is absent when the feature is off, and the
+/// sidecar writes nothing without it — the daemon's `[advanced].cache_forensics`
+/// stays the single switch.
+#[derive(Serialize)]
+struct OutboundRequest<'req> {
+    #[serde(flatten)]
+    request: &'req LlmRequest,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    forensics: Option<ForensicsContext<'req>>,
+}
+
 async fn open_stream(
     request: &LlmRequest,
+    forensics: Option<ForensicsContext<'_>>,
     socket_path: Option<&Path>,
 ) -> Result<DuplexStream, LlmError> {
     let client = sidecar_client(socket_path)?;
     let response = client
         .post(format!("{SIDECAR_ORIGIN}/v1/stream"))
-        .json(request)
+        .json(&OutboundRequest { request, forensics })
         .send()
         .await?;
     let checked = check_response(response).await?;
@@ -416,7 +435,7 @@ mod tests {
         ).to_owned();
         let captured = serve_once(&socket, "200 OK", response_body)?;
 
-        let mut reader = stream(&test_request(), Some(&socket)).await?;
+        let mut reader = stream(&test_request(), None, Some(&socket)).await?;
         let mut body = String::new();
         reader.read_to_string(&mut body).await?;
         let (path, _) = captured.await??;
@@ -479,7 +498,7 @@ mod tests {
 
     #[tokio::test]
     async fn calls_without_a_socket_name_the_sidecar() -> TestResult {
-        let Err(stream_err) = stream(&test_request(), None).await else {
+        let Err(stream_err) = stream(&test_request(), None, None).await else {
             return Err(io::Error::other("stream without sidecar unexpectedly succeeded").into());
         };
         let Err(generate_err) = generate(&test_request(), None).await else {

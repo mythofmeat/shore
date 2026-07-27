@@ -18,6 +18,7 @@
  */
 
 import type { ContentBlock, ImageRef } from "../engine/types.ts";
+import type { ForensicsContext } from "./forensics.ts";
 
 // ─────────────────────────────────────────────────────────────────────────
 // CONTRACT — mirrors crates/daemon/src/llm/types.rs (the Rust↔sidecar wire)
@@ -116,7 +117,9 @@ export interface ProviderOptions {
 /**
  * The request the sidecar receives — the serialized Rust `LlmRequest` minus its
  * `#[serde(skip)]` transient fields (`api_key_name`, `rid`, `forensic_character`,
- * `retain_long`), which stay Rust-side.
+ * `retain_long`), which stay Rust-side. When cache forensics is on, `rid` and
+ * `forensic_character` do cross, inside `forensics`, so the sidecar can label
+ * the rows it writes.
  */
 export interface SidecarRequest {
   sdk: Sdk;
@@ -137,6 +140,9 @@ export interface SidecarRequest {
   provider_options?: ProviderOptions;
   /** models.toml provider key (e.g. "openrouter", "deepseek", "zai"). */
   provider_key?: string;
+  /** Present only when the daemon has cache forensics enabled. Its presence is
+   * the switch; see `llm/forensics.ts`. Stripped before any provider call. */
+  forensics?: ForensicsContext;
 }
 
 /** Token usage — mirrors Rust `Usage` (snake_case, cache fields default 0). */

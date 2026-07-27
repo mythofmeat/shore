@@ -314,8 +314,6 @@ pub(crate) fn record_call(
     record: RecordCall<'_>,
 ) {
     let ts = Utc::now().to_rfc3339();
-    let has_cache_metrics =
-        record.usage.cache_read_tokens > 0 || record.usage.cache_creation_tokens > 0;
     let (cache_state, cache_anomaly) = track_cache_state(cache_trackers, &record, &ts);
 
     let row = build_call_row(pricing, &record, ts, cache_state, cache_anomaly);
@@ -328,22 +326,6 @@ pub(crate) fn record_call(
         usage,
         ..
     } = record;
-
-    // Cache forensics: log response-side data for ALL cache events.
-    // Uses call_id=0 since we don't have the request-side correlation ID
-    // here — but character + call_type + timestamp provide enough context.
-    if has_cache_metrics && crate::llm::cache_forensics::is_enabled() {
-        crate::llm::cache_forensics::log_response(crate::llm::cache_forensics::ResponseLog {
-            call_id: 0, // no request-side correlation for streaming path
-            model,
-            character,
-            call_type: call_type.as_str(),
-            input_tokens: usage.input_tokens,
-            output_tokens: usage.output_tokens,
-            cache_read_tokens: usage.cache_read_tokens,
-            cache_creation_tokens: usage.cache_creation_tokens,
-        });
-    }
 
     info!(
         provider,
@@ -559,14 +541,14 @@ impl LedgerClient {
         let resp = match self.inner.generate(request, Some(call_type.as_str())).await {
             Ok(r) => r,
             Err(e) => {
-                // Log the failure to the forensic log so keepalive and other
-                // errors are diagnosable from disk, not just journald.
-                crate::llm::cache_forensics::log_error(
-                    0,
-                    &request.model,
+                // A dispatch that never opened has no ledger row and no cache
+                // event, so this structured record is the only durable trace.
+                error!(
+                    model = request.model,
                     character,
-                    call_type.as_str(),
-                    &e.to_string(),
+                    call_type = call_type.as_str(),
+                    error = %e,
+                    "LLM dispatch failed before the call opened"
                 );
                 return Err(e);
             }
@@ -790,12 +772,12 @@ impl LedgerClient {
         {
             Ok(r) => r,
             Err(e) => {
-                crate::llm::cache_forensics::log_error(
-                    0,
-                    &request.model,
+                error!(
+                    model = request.model,
                     character,
-                    call_type.as_str(),
-                    &e.to_string(),
+                    call_type = call_type.as_str(),
+                    error = %e,
+                    "LLM stream dispatch failed before the call opened"
                 );
                 return Err(e);
             }

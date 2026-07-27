@@ -1,0 +1,150 @@
+/**
+ * The forensic log went unwritten for months because nothing asserted it wrote.
+ * These pin the two properties that made it useless: that a row appears at all,
+ * and that it carries the breakpoint placement (the only thing in the row the
+ * daemon cannot determine for itself).
+ */
+
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { buildAnthropicPlan } from "../src/llm/providers/anthropic.ts";
+import { recordCacheCall, type CachePlacement } from "../src/llm/forensics.ts";
+import type { SidecarRequest } from "../src/llm/types.ts";
+
+let dir: string;
+
+beforeEach(() => {
+  dir = mkdtempSync(join(tmpdir(), "shore-forensics-"));
+});
+afterEach(() => {
+  rmSync(dir, { recursive: true, force: true });
+});
+
+function rows(): Array<Record<string, unknown>> {
+  const raw = readFileSync(join(dir, "cache_forensics.jsonl"), "utf8");
+  return raw
+    .split("\n")
+    .filter((l) => l.length > 0)
+    .map((l) => JSON.parse(l) as Record<string, unknown>);
+}
+
+const USAGE = {
+  input_tokens: 12,
+  output_tokens: 3,
+  cache_read_tokens: 10_313,
+  cache_creation_tokens: 0,
+};
+
+const PLACEMENT: CachePlacement = {
+  msg_breakpoints: [4, 6, 8],
+  sys_breakpoints: [2],
+  msg_count: 9,
+  sys_blocks: 3,
+  cache_enabled: true,
+  has_existing_markers: false,
+};
+
+describe("cache forensics rows", () => {
+  test("a row carries placement, usage, and the daemon's labels", () => {
+    recordCacheCall(
+      { dir, character: "poppy", call_type: "keepalive", rid: "r-1" },
+      "claude-opus-5",
+      PLACEMENT,
+      USAGE,
+      "done",
+    );
+
+    const [row] = rows();
+    expect(row).toMatchObject({
+      character: "poppy",
+      call_type: "keepalive",
+      rid: "r-1",
+      model: "claude-opus-5",
+      outcome: "done",
+      // The reason this log exists: which breakpoints were actually placed.
+      msg_breakpoints: [4, 6, 8],
+      sys_breakpoints: [2],
+      cache_read_tokens: 10_313,
+      cache_creation_tokens: 0,
+    });
+    // Placement and usage in one row — there is no call_id because there is
+    // nothing left to correlate.
+    expect(row).not.toHaveProperty("call_id");
+  });
+
+  test("no forensics context → nothing is written", () => {
+    recordCacheCall(undefined, "claude-opus-5", PLACEMENT, USAGE, "done");
+    expect(() => rows()).toThrow(); // file never created
+  });
+
+  test("rows append rather than overwrite", () => {
+    const ctx = { dir, character: "poppy", call_type: "message" };
+    recordCacheCall(ctx, "claude-opus-5", PLACEMENT, USAGE, "done");
+    recordCacheCall(ctx, "claude-opus-5", PLACEMENT, USAGE, "error");
+    expect(rows().map((r) => r["outcome"])).toEqual(["done", "error"]);
+  });
+
+  test("an unwritable directory does not throw into the call path", () => {
+    // Diagnostics must never fail a call that otherwise succeeded.
+    expect(() =>
+      recordCacheCall(
+        { dir: join(dir, "does", "not", "exist"), character: "p", call_type: "message" },
+        "claude-opus-5",
+        PLACEMENT,
+        USAGE,
+        "done",
+      ),
+    ).not.toThrow();
+  });
+});
+
+describe("placement reported matches placement applied", () => {
+  function req(messages: SidecarRequest["messages"]): SidecarRequest {
+    return {
+      sdk: "anthropic",
+      model: "claude-opus-4-8",
+      api_key: "k",
+      messages,
+      system: [{ type: "text", text: "you are a character" }],
+      max_tokens: 64,
+      provider_options: { cache_ttl: "1h" },
+    } as SidecarRequest;
+  }
+
+  test("reported indices are the ones carrying cache_control", () => {
+    const { params, placement } = buildAnthropicPlan(
+      req([
+        { role: "user", content: "one" },
+        { role: "assistant", content: "two" },
+        { role: "user", content: "three" },
+        { role: "assistant", content: "four" },
+        { role: "user", content: "five" },
+      ]),
+    );
+
+    expect(placement.cache_enabled).toBe(true);
+    expect(placement.msg_breakpoints.length).toBeGreaterThan(0);
+
+    // A reported index that is not actually marked would make the log lie in
+    // exactly the direction that costs money to discover.
+    const marked = params.messages
+      .map((m, i) => ({ i, blocks: Array.isArray(m.content) ? m.content : [] }))
+      .filter(({ blocks }) =>
+        blocks.some((b) => (b as { cache_control?: unknown }).cache_control !== undefined),
+      )
+      .map(({ i }) => i);
+    expect(marked).toEqual(placement.msg_breakpoints);
+    expect(placement.msg_count).toBe(params.messages.length);
+  });
+
+  test("no cache_ttl → nothing placed and the row says so", () => {
+    const noCache = { ...req([{ role: "user", content: "hi" }]), provider_options: {} };
+    const { placement } = buildAnthropicPlan(noCache);
+    expect(placement.cache_enabled).toBe(false);
+    expect(placement.msg_breakpoints).toEqual([]);
+    expect(placement.sys_breakpoints).toEqual([]);
+  });
+});

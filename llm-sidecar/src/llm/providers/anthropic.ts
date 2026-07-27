@@ -51,20 +51,29 @@ import type {
   WireMessage,
 } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA, streamErrorEvent } from "../types.ts";
+import { recordCacheCall, type CachePlacement } from "../forensics.ts";
 
 export class AnthropicProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
-    const { client, params } = buildAnthropicCall(req);
+    const { client, params, placement } = buildAnthropicCall(req);
     const stream = (await client.messages.create(
       { ...params, stream: true } as MessageCreateParamsStreaming,
       signal ? { signal } : undefined,
     )) as AsyncIterable<RawMessageStreamEvent>;
-    yield* anthropicStreamEvents(req.model, stream);
+    // Record on the terminal event — `done` and `error` both carry the usage
+    // the provider billed, and a stream that died mid-flight has already paid
+    // for any cache write reported in `message_start`.
+    for await (const event of anthropicStreamEvents(req.model, stream)) {
+      if (event.type === "done" || event.type === "error") {
+        recordCacheCall(req.forensics, req.model, placement, event.usage, event.type);
+      }
+      yield event;
+    }
   }
 
   async generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {
     const startedAt = Date.now();
-    const { client, params } = buildAnthropicCall(req);
+    const { client, params, placement } = buildAnthropicCall(req);
     const message = (await client.messages.create(
       params as Parameters<typeof client.messages.create>[0],
       signal ? { signal } : undefined,
@@ -86,11 +95,13 @@ export class AnthropicProvider implements SidecarProvider {
     }
 
     const total = Date.now() - startedAt;
+    const usage = anthropicUsage(message.usage);
+    recordCacheCall(req.forensics, req.model, placement, usage, "generate");
     return {
       content: textAccum,
       content_blocks,
       finish_reason: message.stop_reason ?? "end_turn",
-      usage: anthropicUsage(message.usage),
+      usage,
       timing: { total_ms: total, time_to_first_token_ms: total },
       model: req.model,
     };
@@ -219,21 +230,29 @@ type AnthropicParams = MessageCreateParams & {
   provider?: unknown;
 };
 
-function buildAnthropicCall(req: SidecarRequest): { client: Anthropic; params: AnthropicParams } {
+function buildAnthropicCall(
+  req: SidecarRequest,
+): { client: Anthropic; params: AnthropicParams; placement: CachePlacement } {
   const client = new Anthropic({
     apiKey: req.api_key,
     maxRetries: 0,
     ...(req.base_url ? { baseURL: stripTrailingV1(req.base_url) } : {}),
   });
-  return { client, params: buildAnthropicParams(req) };
+  const { params, placement } = buildAnthropicPlan(req);
+  return { client, params, placement };
 }
 
 /**
- * Pure request-body builder. Exported for the parity test, which asserts the
- * cache-breakpoint placement, thinking config, and provider routing without
- * hitting the network.
+ * Pure request-body builder that also reports what it decided about caching.
+ *
+ * Placement is computed exactly once and both returned views come from it —
+ * a second implementation for reporting would be free to drift from the one
+ * that actually runs, which is the whole reason the forensic log matters.
  */
-export function buildAnthropicParams(req: SidecarRequest): AnthropicParams {
+export function buildAnthropicPlan(req: SidecarRequest): {
+  params: AnthropicParams;
+  placement: CachePlacement;
+} {
   const opts = req.provider_options ?? {};
   const cacheTtl = opts.cache_ttl ?? "";
   const cacheEnabled = cacheTtl !== "";
@@ -243,6 +262,8 @@ export function buildAnthropicParams(req: SidecarRequest): AnthropicParams {
 
   let messages: MessageParam[];
   let system: TextBlockParam[];
+  let msgBreakpoints: number[] = [];
+  let sysBreakpoints: number[] = [];
   if (cacheEnabled && !hasExistingMarkers) {
     const cc = makeCacheControl(cacheTtl);
     const msgs = normalizeMessages(converted); // strip cc, string → block array
@@ -254,6 +275,8 @@ export function buildAnthropicParams(req: SidecarRequest): AnthropicParams {
     for (const b of sys) delete (b as { _label?: string })._label;
     messages = msgs;
     system = sys;
+    msgBreakpoints = msgBp;
+    sysBreakpoints = sysBp;
   } else {
     messages = converted.map(toMessageParam);
     system = systemToBlocks(req.system); // strips _label; no cache_control
@@ -286,7 +309,26 @@ export function buildAnthropicParams(req: SidecarRequest): AnthropicParams {
     params.provider = provider;
   }
 
-  return params;
+  return {
+    params,
+    placement: {
+      msg_breakpoints: msgBreakpoints,
+      sys_breakpoints: sysBreakpoints,
+      msg_count: messages.length,
+      sys_blocks: system.length,
+      cache_enabled: cacheEnabled,
+      has_existing_markers: hasExistingMarkers,
+    },
+  };
+}
+
+/**
+ * Pure request-body builder. Exported for the parity test, which asserts the
+ * cache-breakpoint placement, thinking config, and provider routing without
+ * hitting the network.
+ */
+export function buildAnthropicParams(req: SidecarRequest): AnthropicParams {
+  return buildAnthropicPlan(req).params;
 }
 
 /** The SDK appends `/v1/messages`; Shore config writes base as `…/api/v1`, so
