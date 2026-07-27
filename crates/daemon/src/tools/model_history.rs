@@ -139,6 +139,7 @@ mod tests {
             ttft_ms: 10,
             finish_reason: "end_turn".to_owned(),
             thinking_enabled: false,
+            reasoning_effort: None,
             cache_state: None,
             cache_anomaly: None,
             input_cost: None,

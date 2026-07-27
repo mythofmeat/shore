@@ -426,7 +426,7 @@ pub fn query_anomalies(
 // ── TSV export ───────────────────────────────────────────────────────────────
 
 const TSV_HEADER: &str = "ts\tcharacter\tprovider\tapi_key_name\tmodel\tcall_type\t\
-    input_tokens\toutput_tokens\tcache_read_tokens\tcache_write_tokens\tcache_ttl\t\
+    input_tokens\toutput_tokens\tcache_read_tokens\tcache_write_tokens\tcache_ttl\treasoning_effort\t\
     total_ms\tttft_ms\tfinish_reason\tthinking_enabled\t\
     cache_state\tcache_anomaly\t\
     input_cost\toutput_cost\tcache_read_cost\tcache_write_cost\tcost_source\ttotal_cost";
@@ -444,7 +444,7 @@ fn opt_f64(v: Option<f64>) -> String {
 
 fn row_to_tsv(r: &CallRow) -> String {
     format!(
-        "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+        "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
         r.ts,
         r.character,
         r.provider,
@@ -456,6 +456,7 @@ fn row_to_tsv(r: &CallRow) -> String {
         r.cache_read_tokens,
         r.cache_write_tokens,
         opt_str(r.cache_ttl.as_ref()),
+        opt_str(r.reasoning_effort.as_ref()),
         r.total_ms,
         r.ttft_ms,
         r.finish_reason,
@@ -656,6 +657,7 @@ mod tests {
             cache_read_tokens: 80,
             cache_write_tokens: 20,
             cache_ttl: None,
+            reasoning_effort: None,
             total_ms: 1500,
             ttft_ms: 200,
             finish_reason: "tool_use".into(),
@@ -833,6 +835,7 @@ mod tests {
             cache_read_tokens: 0,
             cache_write_tokens: 500,
             cache_ttl: None,
+            reasoning_effort: None,
             total_ms: 1500,
             ttft_ms: 200,
             finish_reason: "end_turn".into(),
@@ -900,6 +903,7 @@ mod tests {
             cache_read_tokens: 80,
             cache_write_tokens: 20,
             cache_ttl: None,
+            reasoning_effort: None,
             total_ms: 1500,
             ttft_ms: 200,
             finish_reason: "end_turn".into(),
@@ -951,6 +955,7 @@ mod tests {
             cache_read_tokens: 80,
             cache_write_tokens: 20,
             cache_ttl: None,
+            reasoning_effort: None,
             total_ms: 1000,
             ttft_ms: 100,
             finish_reason: "end_turn".into(),

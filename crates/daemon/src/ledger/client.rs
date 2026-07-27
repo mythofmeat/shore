@@ -84,6 +84,33 @@ pub(crate) struct RecordCall<'ctx> {
     pub(crate) finish_reason: &'ctx str,
     pub(crate) thinking_enabled: bool,
     pub(crate) cache_ttl: Option<String>,
+    pub(crate) reasoning_effort: Option<String>,
+}
+
+/// The effort this call actually ran at, as recorded on the ledger row.
+///
+/// Effort is part of the Anthropic prompt-cache key — changing it invalidates
+/// every message-level breakpoint (tools and system may survive) — so the
+/// ledger keeps it to distinguish a configuration change from a cache bug.
+///
+/// `reasoning_effort = "off"` never reaches `provider_options` under that name:
+/// `build_request` translates it to `thinking_enabled: false` so the OpenRouter
+/// adapter can send `reasoning: {effort: "none"}` while other adapters just omit
+/// reasoning. Reconstruct it here, because "off" is a distinct cache-relevant
+/// setting and must not be confused with a provider that has no effort surface
+/// at all (`None`).
+fn resolved_reasoning_effort(provider_options: Option<&serde_json::Value>) -> Option<String> {
+    let opts = provider_options?;
+    if let Some(effort) = opts.get("reasoning_effort").and_then(|v| v.as_str()) {
+        return Some(effort.to_owned());
+    }
+    match opts
+        .get("thinking_enabled")
+        .and_then(serde_json::Value::as_bool)
+    {
+        Some(false) => Some("off".to_owned()),
+        _ => None,
+    }
 }
 
 /// Run the warm/cold cache state machine for calls that report cache metrics,
@@ -281,6 +308,7 @@ fn build_call_row(
         cache_read_tokens: record.usage.cache_read_tokens,
         cache_write_tokens: record.usage.cache_creation_tokens,
         cache_ttl: record.cache_ttl.clone(),
+        reasoning_effort: record.reasoning_effort.clone(),
         total_ms: record.timing.total_ms,
         ttft_ms: record.timing.time_to_first_token_ms,
         finish_reason: record.finish_reason.to_owned(),
@@ -582,6 +610,7 @@ impl LedgerClient {
             .and_then(|opts| opts.get("cache_ttl"))
             .and_then(|v| v.as_str())
             .map(String::from);
+        let reasoning_effort = resolved_reasoning_effort(request.provider_options.as_ref());
 
         record_call(
             &self.ledger,
@@ -598,6 +627,7 @@ impl LedgerClient {
                 finish_reason: &resp.finish_reason,
                 thinking_enabled,
                 cache_ttl,
+                reasoning_effort,
             },
         );
 
@@ -799,6 +829,7 @@ impl LedgerClient {
             .and_then(|opts| opts.get("cache_ttl"))
             .and_then(|v| v.as_str())
             .map(String::from);
+        let reasoning_effort = resolved_reasoning_effort(request.provider_options.as_ref());
 
         Ok(LedgerStream::new(
             reader,
@@ -810,6 +841,7 @@ impl LedgerClient {
                 character: character.to_owned(),
                 thinking_enabled,
                 cache_ttl,
+                reasoning_effort,
             },
             Arc::clone(&self.ledger),
             Arc::clone(&self.pricing),
@@ -1011,6 +1043,29 @@ mod tests {
     }
 
     #[test]
+    fn resolved_effort_reads_the_wire_options() {
+        use serde_json::json;
+        let effort = |v: serde_json::Value| resolved_reasoning_effort(Some(&v));
+
+        assert_eq!(
+            effort(json!({"reasoning_effort": "high"})).as_deref(),
+            Some("high")
+        );
+        // `off` is rewritten by `build_request` into `thinking_enabled: false`
+        // with no `reasoning_effort` key — reconstruct it rather than record a
+        // null, since "explicitly off" and "provider has no effort surface"
+        // read a cache miss very differently.
+        assert_eq!(
+            effort(json!({"thinking_enabled": false})).as_deref(),
+            Some("off")
+        );
+        // Thinking on with no named effort is the provider default, not "off".
+        assert_eq!(effort(json!({"thinking_enabled": true})), None);
+        assert_eq!(effort(json!({"cache_ttl": "1h"})), None);
+        assert_eq!(resolved_reasoning_effort(None), None);
+    }
+
+    #[test]
     fn record_inserts_row() {
         let (ledger, pricing, trackers) = test_parts();
         record_call(
@@ -1037,6 +1092,7 @@ mod tests {
                 finish_reason: "end_turn",
                 thinking_enabled: false,
                 cache_ttl: None,
+                reasoning_effort: None,
             },
         );
         let rows = ledger.recent(1).unwrap();
@@ -1073,6 +1129,7 @@ mod tests {
                 finish_reason: "end_turn",
                 thinking_enabled: false,
                 cache_ttl: None,
+                reasoning_effort: None,
             },
         );
         let rows = ledger.recent(1).unwrap();
@@ -1113,6 +1170,7 @@ mod tests {
                 finish_reason: "end_turn",
                 thinking_enabled: false,
                 cache_ttl: None,
+                reasoning_effort: None,
             },
         );
         let rows = ledger.recent(1).unwrap();
@@ -1154,6 +1212,7 @@ mod tests {
                 finish_reason: "end_turn",
                 thinking_enabled: true,
                 cache_ttl: None,
+                reasoning_effort: None,
             },
         );
         let map = trackers.lock();
@@ -1188,6 +1247,7 @@ mod tests {
                 finish_reason: "end_turn",
                 thinking_enabled: false,
                 cache_ttl: None,
+                reasoning_effort: None,
             },
         );
         record_call(
@@ -1214,6 +1274,7 @@ mod tests {
                 finish_reason: "end_turn",
                 thinking_enabled: false,
                 cache_ttl: None,
+                reasoning_effort: None,
             },
         );
 
@@ -1255,6 +1316,7 @@ mod tests {
                 finish_reason: "stop",
                 thinking_enabled: false,
                 cache_ttl: None,
+                reasoning_effort: None,
             },
         );
         let rows = ledger.recent(1).unwrap();
@@ -1293,6 +1355,7 @@ mod tests {
                 finish_reason: "stop",
                 thinking_enabled: false,
                 cache_ttl: None,
+                reasoning_effort: None,
             },
         );
         let rows = ledger.recent(1).unwrap();
@@ -1336,6 +1399,7 @@ mod tests {
                     finish_reason: "end_turn",
                     thinking_enabled: true,
                     cache_ttl: None,
+                    reasoning_effort: None,
                 },
             );
         };
@@ -1404,6 +1468,7 @@ mod tests {
                 finish_reason: "end_turn",
                 thinking_enabled: true,
                 cache_ttl: None,
+                reasoning_effort: None,
             },
         );
         let rows = ledger.recent(1).unwrap();
@@ -1438,6 +1503,7 @@ mod tests {
                 },
                 finish_reason: "end_turn",
                 thinking_enabled: false,
+                reasoning_effort: None,
                 cache_ttl: Some("5m".to_owned()),
             },
         );

@@ -20,6 +20,7 @@ pub(crate) struct CallMeta {
     pub(crate) character: String,
     pub(crate) thinking_enabled: bool,
     pub(crate) cache_ttl: Option<String>,
+    pub(crate) reasoning_effort: Option<String>,
 }
 
 pub struct LedgerStream {
@@ -107,6 +108,7 @@ impl LedgerStream {
                 finish_reason,
                 thinking_enabled: self.meta.thinking_enabled,
                 cache_ttl: self.meta.cache_ttl.clone(),
+                reasoning_effort: self.meta.reasoning_effort.clone(),
             },
         );
     }
@@ -198,6 +200,7 @@ mod tests {
                 character: "aria".into(),
                 thinking_enabled: true,
                 cache_ttl: None,
+                reasoning_effort: None,
             },
             Arc::clone(&ledger),
             pricing,
@@ -253,6 +256,7 @@ mod tests {
                 character: "aria".into(),
                 thinking_enabled: true,
                 cache_ttl: None,
+                reasoning_effort: None,
             },
             Arc::clone(&ledger),
             pricing,
@@ -304,6 +308,7 @@ mod tests {
                 character: "aria".into(),
                 thinking_enabled: true,
                 cache_ttl: None,
+                reasoning_effort: None,
             },
             Arc::clone(&ledger),
             pricing,
@@ -340,6 +345,7 @@ mod tests {
                     character: "qifei".into(),
                     thinking_enabled: true,
                     cache_ttl: Some("1h".into()),
+                    reasoning_effort: None,
                 },
                 Arc::clone(&ledger),
                 Arc::clone(&pricing),
@@ -375,6 +381,7 @@ mod tests {
                 character: "aria".into(),
                 thinking_enabled: true,
                 cache_ttl: None,
+                reasoning_effort: None,
             },
             Arc::clone(&ledger),
             pricing,

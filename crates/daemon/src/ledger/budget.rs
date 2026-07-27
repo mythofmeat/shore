@@ -1157,6 +1157,7 @@ mod tests {
                 cache_read_tokens: 0,
                 cache_write_tokens: 0,
                 cache_ttl: None,
+                reasoning_effort: None,
                 total_ms: Timing::default().total_ms,
                 ttft_ms: Timing::default().time_to_first_token_ms,
                 finish_reason: "end_turn".into(),

@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS calls (
     cache_read_tokens   INTEGER NOT NULL,
     cache_write_tokens  INTEGER NOT NULL,
     cache_ttl           TEXT    DEFAULT '1h',
+    reasoning_effort    TEXT,
     total_ms            INTEGER NOT NULL,
     ttft_ms             INTEGER NOT NULL,
     finish_reason       TEXT    NOT NULL,
@@ -78,6 +79,14 @@ pub struct CallRow {
     pub cache_read_tokens: u64,
     pub cache_write_tokens: u64,
     pub cache_ttl: Option<String>,
+    /// Resolved effort for this call, or `"off"` when thinking was
+    /// explicitly disabled. `None` for providers with no effort surface.
+    ///
+    /// Recorded because it participates in the Anthropic prompt-cache key:
+    /// changing it invalidates every message-level breakpoint, so a row with a
+    /// different effort than its predecessor explains a cache miss that would
+    /// otherwise look like a bug.
+    pub reasoning_effort: Option<String>,
     pub total_ms: u32,
     pub ttft_ms: u32,
     pub finish_reason: String,
@@ -165,6 +174,10 @@ impl Ledger {
             CREATE INDEX IF NOT EXISTS idx_usage_budget_warnings_window
                 ON usage_budget_warnings (budget_name, period_start);",
         )?;
+        // v6: resolved reasoning effort. Part of the Anthropic prompt-cache
+        // key, so a change between rows explains an otherwise-inexplicable
+        // message-level cache miss. Null on pre-v6 rows — unknown, not "off".
+        add_if_missing("ALTER TABLE calls ADD COLUMN reasoning_effort TEXT")?;
 
         Ok(())
     }
@@ -177,17 +190,17 @@ impl Ledger {
                 r"INSERT INTO calls (
                     ts, character, provider, api_key_name, model, call_type,
                     input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-                    cache_ttl,
+                    cache_ttl, reasoning_effort,
                     total_ms, ttft_ms, finish_reason, thinking_enabled,
                     cache_state, cache_anomaly,
                     input_cost, output_cost, cache_read_cost, cache_write_cost, cost_source, total_cost
                 ) VALUES (
                     ?1, ?2, ?3, ?4, ?5, ?6,
                     ?7, ?8, ?9, ?10,
-                    ?11,
-                    ?12, ?13, ?14, ?15,
-                    ?16, ?17,
-                    ?18, ?19, ?20, ?21, ?22, ?23
+                    ?11, ?12,
+                    ?13, ?14, ?15, ?16,
+                    ?17, ?18,
+                    ?19, ?20, ?21, ?22, ?23, ?24
                 )",
                 params![
                     row.ts,
@@ -201,6 +214,7 @@ impl Ledger {
                     u64_to_i64(row.cache_read_tokens),
                     u64_to_i64(row.cache_write_tokens),
                     row.cache_ttl,
+                    row.reasoning_effort,
                     row.total_ms,
                     row.ttft_ms,
                     row.finish_reason,
@@ -295,6 +309,7 @@ pub(crate) fn row_from_sqlite(row: &rusqlite::Row<'_>) -> SqlResult<CallRow> {
         cache_read_tokens: i64_to_u64(row.get::<_, i64>("cache_read_tokens")?),
         cache_write_tokens: i64_to_u64(row.get::<_, i64>("cache_write_tokens")?),
         cache_ttl: row.get("cache_ttl")?,
+        reasoning_effort: row.get("reasoning_effort")?,
         total_ms: i64_to_u32(row.get::<_, i64>("total_ms")?),
         ttft_ms: i64_to_u32(row.get::<_, i64>("ttft_ms")?),
         finish_reason: row.get("finish_reason")?,
@@ -338,6 +353,7 @@ mod tests {
             cache_read_tokens: 80,
             cache_write_tokens: 20,
             cache_ttl: None,
+            reasoning_effort: None,
             total_ms: 1500,
             ttft_ms: 200,
             finish_reason: "end_turn".into(),
@@ -487,6 +503,10 @@ mod tests {
         // have no friendly key name.
         assert_eq!(row.cache_ttl.as_deref(), Some("1h"));
         assert!(row.api_key_name.is_none());
+        // The effort a pre-v6 row ran at is unrecoverable, so it stays null.
+        // It must NOT default to a value — "unknown" and "off" are different
+        // answers when reading a cache miss off an old row.
+        assert!(row.reasoning_effort.is_none());
         assert_eq!(row.cost_source.as_deref(), Some("pricing_catalog"));
         assert_eq!(row.cache_anomaly.as_deref(), Some("unexpected_read"));
 
