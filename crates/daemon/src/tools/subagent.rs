@@ -524,22 +524,12 @@ fn subagent_tool_subset(
     defs
 }
 
-/// True when the request enables reasoning via either provider knob. Mirrors
-/// `handler::generation::thinking_enabled_from_request` (kept local to avoid a
-/// cross-module `pub` widening).
+/// True when the request enables reasoning via either provider knob.
 fn thinking_enabled(request: &LlmRequest) -> bool {
-    let Some(opts) = request.provider_options.as_ref() else {
-        return false;
-    };
-    if opts.get("thinking_enabled") == Some(&Value::Bool(false)) {
-        return false;
-    }
-    let budget_on = opts
-        .get("budget_tokens")
-        .and_then(Value::as_u64)
-        .is_some_and(|b| b > 0);
-    let effort_on = opts.get("reasoning_effort").is_some_and(|v| !v.is_null());
-    budget_on || effort_on
+    request
+        .provider_options
+        .as_ref()
+        .is_some_and(crate::llm::types::ProviderOptions::thinking_enabled)
 }
 
 /// Tool context for a sub-agent's nested loop: delegates everything to the

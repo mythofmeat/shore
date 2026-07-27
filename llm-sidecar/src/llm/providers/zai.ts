@@ -71,7 +71,7 @@ export class ZaiProvider implements SidecarProvider {
 
 export function resolveZaiBaseUrl(req: SidecarRequest): string {
   if (req.base_url) return trimTrailingSlash(req.base_url);
-  return providerBool(req, "zai_subscription") ? ZAI_CODING_BASE_URL : ZAI_BASE_URL;
+  return req.provider_options?.zai_subscription === true ? ZAI_CODING_BASE_URL : ZAI_BASE_URL;
 }
 
 export function buildZaiCall(
@@ -96,12 +96,12 @@ export function buildZaiParams(
   // top-level field) selects Preserved Thinking. `clear_thinking` is only sent
   // when the operator set it explicitly and only matters while thinking is on, so
   // we omit it under `disabled` and otherwise let Z.ai's default (true) apply.
-  const thinkingDisabled = req.provider_options?.["thinking_enabled"] === false;
+  const thinkingDisabled = req.provider_options?.thinking_enabled === false;
   const thinking: ZaiChatCompletionCreateParams["thinking"] = thinkingDisabled
     ? { type: "disabled" }
     : { type: "enabled" };
   if (!thinkingDisabled) {
-    const clearThinking = req.provider_options?.["zai_clear_thinking"];
+    const clearThinking = req.provider_options?.zai_clear_thinking;
     if (typeof clearThinking === "boolean") thinking.clear_thinking = clearThinking;
   }
 
@@ -132,8 +132,8 @@ export function buildZaiMessages(req: SidecarRequest): ChatCompletionMessagePara
   // clears prior reasoning and replay would be rejected (and disabled thinking
   // takes no reasoning_content at all).
   const preserveThinking =
-    req.provider_options?.["thinking_enabled"] !== false &&
-    req.provider_options?.["zai_clear_thinking"] === false;
+    req.provider_options?.thinking_enabled !== false &&
+    req.provider_options?.zai_clear_thinking === false;
   for (const turn of req.messages) {
     messages.push(...turnToZai(normalizeTurn(turn), preserveThinking));
   }
@@ -360,10 +360,6 @@ function systemToText(system: SystemContent | undefined): string {
   if (system === undefined) return "";
   if (typeof system === "string") return system;
   return system.map((b) => b.text).join("\n\n");
-}
-
-function providerBool(req: SidecarRequest, key: string): boolean {
-  return req.provider_options?.[key] === true;
 }
 
 function trimTrailingSlash(url: string): string {

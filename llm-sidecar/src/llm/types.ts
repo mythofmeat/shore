@@ -53,6 +53,41 @@ export type SystemContent =
   | Array<{ type: "text"; text: string; cache_control?: unknown; _label?: string }>;
 
 /**
+ * Per-provider knobs, mirroring Rust `ProviderOptions`
+ * (`crates/daemon/src/llm/types.rs`). The two must change together.
+ *
+ * This was `Record<string, unknown>` on both sides until it accumulated three
+ * keys the daemon wrote and no adapter read. Every field below has a reader in
+ * this directory; adding one without a reader is now a type error at the
+ * daemon's build, not a silent no-op at runtime.
+ *
+ * Absent knobs are omitted by the daemon rather than sent as null, so
+ * `undefined` unambiguously means "not configured".
+ */
+export interface ProviderOptions {
+  /** Named effort (`low`/`medium`/`high`/`max`/`adaptive`) or a provider-specific
+   * string. Never `"off"` — the daemon rewrites that to `thinking_enabled: false`. */
+  reasoning_effort?: string;
+  /** Only ever `false`, meaning "explicitly disable reasoning". Adapters that can
+   * turn thinking off on an always-on model act on it; the rest omit reasoning. */
+  thinking_enabled?: boolean;
+  /** Explicit thinking-token budget. */
+  budget_tokens?: number;
+  /** Prompt-cache TTL (`"5m"` / `"1h"`). Anthropic-only. */
+  cache_ttl?: string;
+  /** OpenRouter routing preferences, passed through verbatim as `provider`.
+   * Genuinely opaque: OpenRouter's schema, authored by the user in models.toml. */
+  openrouter_provider?: unknown;
+  /** Manual Gemini generation override; absent means detect from the model id. */
+  gemini_generation?: number;
+  /** Z.ai `clear_thinking`. `false` is load-bearing — it enables the
+   * Preserved-Thinking replay path — so this is a tri-state, not a flag. */
+  zai_clear_thinking?: boolean;
+  /** Route to Z.ai's coding-subscription base URL instead of the pay-go one. */
+  zai_subscription?: boolean;
+}
+
+/**
  * The request the sidecar receives — the serialized Rust `LlmRequest` minus its
  * `#[serde(skip)]` transient fields (`api_key_name`, `rid`, `forensic_character`,
  * `retain_long`), which stay Rust-side.
@@ -72,8 +107,8 @@ export interface SidecarRequest {
   max_tokens: number;
   temperature?: number;
   top_p?: number;
-  /** cache_ttl, thinking config, budget_tokens, etc. */
-  provider_options?: Record<string, unknown>;
+  /** Per-provider knobs. See {@link ProviderOptions}. */
+  provider_options?: ProviderOptions;
   /** models.toml provider key (e.g. "openrouter", "deepseek", "zai"). */
   provider_key?: string;
 }

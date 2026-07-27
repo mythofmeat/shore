@@ -197,7 +197,7 @@ impl LlmClient {
         messages: Vec<serde_json::Value>,
         system: Option<serde_json::Value>,
         tools: Option<Vec<serde_json::Value>>,
-        provider_options: Option<serde_json::Value>,
+        provider_options: Option<types::ProviderOptions>,
     ) -> Result<LlmRequest, LlmError> {
         let api_key_env = model
             .api_key_env
@@ -243,7 +243,7 @@ impl LlmClient {
         messages: Vec<serde_json::Value>,
         system: Option<serde_json::Value>,
         tools: Option<Vec<serde_json::Value>>,
-        provider_options: Option<serde_json::Value>,
+        provider_options: Option<types::ProviderOptions>,
     ) -> Result<LlmRequest, LlmError> {
         let candidates = credentials::resolve_key_candidates(&model.provider_key, registry, model);
 
@@ -291,61 +291,10 @@ impl LlmClient {
         messages: Vec<serde_json::Value>,
         system: Option<serde_json::Value>,
         tools: Option<Vec<serde_json::Value>>,
-        provider_options: Option<serde_json::Value>,
+        provider_options: Option<types::ProviderOptions>,
     ) -> LlmRequest {
-        // Build provider_options from V1-style fields if not explicitly provided.
-        let opts = provider_options.unwrap_or_else(|| {
-            let mut map = serde_json::Map::new();
-            // `reasoning_effort = "off"` is the explicit-disable sentinel: emit
-            // it as `thinking_enabled = false` (NOT a reasoning_effort value),
-            // so the OpenRouter adapter sends `reasoning: { effort: "none" }`
-            // (turning thinking off even on always-on reasoning models) while
-            // every other adapter simply ignores the key and omits reasoning —
-            // matching prior behavior. A real effort passes through unchanged.
-            if let Some(ref effort) = model.reasoning_effort {
-                if effort == "off" {
-                    let _ignored = map.insert("thinking_enabled".into(), serde_json::json!(false));
-                } else {
-                    let _ignored = map.insert("reasoning_effort".into(), serde_json::json!(effort));
-                }
-            }
-            if let Some(budget) = model.budget_tokens {
-                let _ignored = map.insert("budget_tokens".into(), serde_json::json!(budget));
-            }
-            if let Some(ref ttl) = model.cache_ttl {
-                let _ignored = map.insert("cache_ttl".into(), serde_json::json!(ttl));
-            }
-            if let Some(ref or_provider) = model.openrouter_provider {
-                if let Ok(val) = serde_json::to_value(or_provider) {
-                    let _ignored = map.insert("openrouter_provider".into(), val);
-                }
-            }
-            if let Some(ref project) = model.vertex_project {
-                let _ignored = map.insert("vertex_project".into(), serde_json::json!(project));
-            }
-            if let Some(ref location) = model.vertex_location {
-                let _ignored = map.insert("vertex_location".into(), serde_json::json!(location));
-            }
-            if let Some(gen) = model.gemini_generation {
-                let _ignored = map.insert("gemini_generation".into(), serde_json::json!(gen));
-            }
-            if let Some(ws) = model.gemini_web_search {
-                let _ignored = map.insert("gemini_web_search".into(), serde_json::json!(ws));
-            }
-            if let Some(ct) = model.zai_clear_thinking {
-                let _ignored = map.insert("zai_clear_thinking".into(), serde_json::json!(ct));
-            }
-            if let Some(sub) = model.zai_subscription {
-                let _ignored = map.insert("zai_subscription".into(), serde_json::json!(sub));
-            }
-            if map.is_empty() {
-                serde_json::Value::Null
-            } else {
-                serde_json::Value::Object(map)
-            }
-        });
-
-        let normalized_options = if opts.is_null() { None } else { Some(opts) };
+        let normalized_options =
+            provider_options.map_or_else(|| Self::provider_options_for(model), Some);
 
         LlmRequest {
             sdk: model.sdk.clone(),
@@ -368,6 +317,34 @@ impl LlmClient {
                 .cache_keepalive
                 .and_then(shore_common::config::models::CacheKeepaliveSetting::interval),
         }
+    }
+
+    /// Derive the sidecar's provider knobs from a resolved model profile.
+    ///
+    /// Returns `None` when the model sets none of them, so the key is omitted
+    /// from the request rather than sent as an empty object.
+    fn provider_options_for(model: &ResolvedModel) -> Option<types::ProviderOptions> {
+        // `reasoning_effort = "off"` is the explicit-disable sentinel: it maps to
+        // `thinking_enabled = false` rather than an effort value, so the
+        // OpenRouter adapter can send `reasoning: { effort: "none" }` (turning
+        // thinking off even on always-on reasoning models) while every other
+        // adapter just omits reasoning. A real effort passes through unchanged.
+        let disabled = model.reasoning_effort.as_deref() == Some("off");
+
+        types::ProviderOptions {
+            reasoning_effort: model.reasoning_effort.clone().filter(|_| !disabled),
+            thinking_enabled: disabled.then_some(false),
+            budget_tokens: model.budget_tokens,
+            cache_ttl: model.cache_ttl.clone(),
+            openrouter_provider: model
+                .openrouter_provider
+                .as_ref()
+                .and_then(|v| serde_json::to_value(v).ok()),
+            gemini_generation: model.gemini_generation,
+            zai_clear_thinking: model.zai_clear_thinking,
+            zai_subscription: model.zai_subscription,
+        }
+        .into_non_empty()
     }
 
     /// Send a streaming completion request to the LLM provider.
@@ -658,21 +635,15 @@ mod tests {
         model.reasoning_effort = Some("off".into());
         let req = LlmClient::build_request(&model, vec![], None, None, None).unwrap();
         let opts = req.provider_options.expect("provider_options present");
-        assert_eq!(
-            opts.get("thinking_enabled"),
-            Some(&serde_json::json!(false))
-        );
-        assert!(opts.get("reasoning_effort").is_none());
+        assert_eq!(opts.thinking_enabled, Some(false));
+        assert_eq!(opts.reasoning_effort, None);
 
         // A real effort passes through unchanged.
         model.reasoning_effort = Some("high".into());
         let req_high = LlmClient::build_request(&model, vec![], None, None, None).unwrap();
         let opts_high = req_high.provider_options.expect("provider_options present");
-        assert_eq!(
-            opts_high.get("reasoning_effort"),
-            Some(&serde_json::json!("high"))
-        );
-        assert!(opts_high.get("thinking_enabled").is_none());
+        assert_eq!(opts_high.reasoning_effort.as_deref(), Some("high"));
+        assert_eq!(opts_high.thinking_enabled, None);
 
         std::env::remove_var("TEST_API_KEY_164");
     }

@@ -229,10 +229,10 @@ export function buildCall(
   // reasoning OFF even for always-on reasoning models (GLM/Kimi/DeepSeek), where
   // simply omitting effort would leave them reasoning by default. `"none"` is a
   // first-class value of the SDK's effort enum, so this rides the typed path.
-  if (req.provider_options?.["thinking_enabled"] === false) {
+  if (req.provider_options?.thinking_enabled === false) {
     chatRequest.reasoning = { effort: "none" as NonNullable<ChatRequest["reasoning"]>["effort"] };
   } else {
-    const effortRaw = req.provider_options?.["reasoning_effort"];
+    const effortRaw = req.provider_options?.reasoning_effort;
     if (typeof effortRaw === "string") {
       // foldEffort only ever returns an in-domain OpenRouter value (minimal/low/medium/high/xhigh/max).
       const effort = foldEffort("openrouter", effortRaw, req.model);
@@ -244,7 +244,7 @@ export function buildCall(
 
   // Provider routing is config-owned (the daemon sets openrouter_provider); pass
   // it through verbatim, never inferred from base_url.
-  const routing = req.provider_options?.["openrouter_provider"];
+  const routing = req.provider_options?.openrouter_provider;
   if (routing && typeof routing === "object") {
     chatRequest.provider = routing as ChatRequest["provider"];
   }

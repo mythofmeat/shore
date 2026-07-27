@@ -8,24 +8,10 @@ use tracing::{debug, error, instrument, warn};
 /// Used by both the primary stream call and the tool-loop re-entry to
 /// tag ledger rows and SSE metadata consistently.
 pub(super) fn thinking_enabled_from_request(request: &crate::llm::types::LlmRequest) -> bool {
-    thinking_enabled_from_provider_options(request.provider_options.as_ref())
-}
-
-fn thinking_enabled_from_provider_options(opts_opt: Option<&serde_json::Value>) -> bool {
-    let Some(opts) = opts_opt else {
-        return false;
-    };
-    // An explicit disable (`reasoning_effort = "off"` → `thinking_enabled =
-    // false`, issue #164) means no reasoning regardless of any other key.
-    if opts.get("thinking_enabled") == Some(&serde_json::Value::Bool(false)) {
-        return false;
-    }
-    let budget_on = opts
-        .get("budget_tokens")
-        .and_then(serde_json::Value::as_u64)
-        .is_some_and(|b| b > 0);
-    let effort_on = opts.get("reasoning_effort").is_some_and(|v| !v.is_null());
-    budget_on || effort_on
+    request
+        .provider_options
+        .as_ref()
+        .is_some_and(crate::llm::types::ProviderOptions::thinking_enabled)
 }
 
 use crate::convert::elapsed_ms_u64;
@@ -276,70 +262,4 @@ pub(super) async fn run_tool_phase(
         "run_tool_phase complete"
     );
     Ok(tool_loop_result)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::thinking_enabled_from_provider_options;
-    use serde_json::json;
-
-    #[test]
-    fn thinking_enabled_none_provider_options() {
-        assert!(!thinking_enabled_from_provider_options(None));
-    }
-
-    #[test]
-    fn thinking_enabled_empty_object() {
-        let v = json!({});
-        assert!(!thinking_enabled_from_provider_options(Some(&v)));
-    }
-
-    #[test]
-    fn thinking_enabled_budget_zero() {
-        let v = json!({ "budget_tokens": 0 });
-        assert!(!thinking_enabled_from_provider_options(Some(&v)));
-    }
-
-    #[test]
-    fn thinking_enabled_budget_positive() {
-        let v = json!({ "budget_tokens": 4096 });
-        assert!(thinking_enabled_from_provider_options(Some(&v)));
-    }
-
-    #[test]
-    fn thinking_enabled_reasoning_effort_string() {
-        let v = json!({ "reasoning_effort": "high" });
-        assert!(thinking_enabled_from_provider_options(Some(&v)));
-    }
-
-    #[test]
-    fn thinking_enabled_reasoning_effort_null_ignored() {
-        let v = json!({ "reasoning_effort": null });
-        assert!(!thinking_enabled_from_provider_options(Some(&v)));
-    }
-
-    #[test]
-    fn thinking_enabled_both_knobs_set() {
-        let v = json!({ "budget_tokens": 2048, "reasoning_effort": "medium" });
-        assert!(thinking_enabled_from_provider_options(Some(&v)));
-    }
-
-    #[test]
-    fn thinking_enabled_unrelated_keys_only() {
-        let v = json!({ "cache_ttl": "1h", "vertex_project": "x" });
-        assert!(!thinking_enabled_from_provider_options(Some(&v)));
-    }
-
-    #[test]
-    fn thinking_enabled_explicit_disable_wins() {
-        // Issue #164: an explicit `thinking_enabled = false` (from
-        // `reasoning_effort = "off"`) means no reasoning for accounting,
-        // even if some other knob is present.
-        let disabled = json!({ "thinking_enabled": false });
-        assert!(!thinking_enabled_from_provider_options(Some(&disabled)));
-        let disabled_with_budget = json!({ "thinking_enabled": false, "budget_tokens": 4096 });
-        assert!(!thinking_enabled_from_provider_options(Some(
-            &disabled_with_budget
-        )));
-    }
 }

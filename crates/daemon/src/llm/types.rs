@@ -2,6 +2,97 @@ use serde::{Deserialize, Serialize};
 use shore_common::config::models::Sdk;
 pub use shore_common::protocol::types::ContentBlock;
 
+/// Per-provider knobs the sidecar's adapters consume.
+///
+/// Every field here has at least one reader in `llm-sidecar/src/llm/providers/`;
+/// the mirror type is `ProviderOptions` in `llm-sidecar/src/llm/types.ts` and the
+/// two must be changed together. This was an untyped `serde_json::Value` bag
+/// until it accumulated three keys the daemon wrote and no adapter read
+/// (`vertex_project`, `vertex_location`, `gemini_web_search`) — the type exists
+/// so that failure mode is a compile error rather than a silent no-op.
+///
+/// Field names are the wire names. `skip_serializing_if` keeps absent knobs off
+/// the wire entirely, so an adapter cannot distinguish "unset" from "not sent".
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct ProviderOptions {
+    /// Named effort (`low`/`medium`/`high`/`max`/`adaptive`) or a provider-specific
+    /// string. The `off` sentinel never reaches here — it is rewritten to
+    /// `thinking_enabled: false` in `LlmClient::build_request_with_resolved_key`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+
+    /// Only ever `Some(false)`, meaning "explicitly disable reasoning". Adapters
+    /// that can turn thinking off on an always-on model (OpenRouter's
+    /// `reasoning: { effort: "none" }`) act on it; the rest omit reasoning.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_enabled: Option<bool>,
+
+    /// Explicit thinking-token budget. Mutually exclusive with named effort on
+    /// the Anthropic path; the adapter decides precedence.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub budget_tokens: Option<u32>,
+
+    /// Prompt-cache TTL (`"5m"` / `"1h"`). Anthropic-only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<String>,
+
+    /// OpenRouter routing preferences, passed through verbatim as the `provider`
+    /// field. Genuinely opaque — it is OpenRouter's schema, authored by the user
+    /// in `models.toml`, and Shore does not interpret it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub openrouter_provider: Option<serde_json::Value>,
+
+    /// Manual Gemini generation override; `0`/absent means detect from the model
+    /// id. Gates whether the adapter sends `thinkingLevel` or `thinkingBudget`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gemini_generation: Option<u32>,
+
+    /// Z.ai `clear_thinking`. `false` is load-bearing (it is what enables the
+    /// Preserved-Thinking replay path), so it is a tri-state, not a flag.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub zai_clear_thinking: Option<bool>,
+
+    /// Route to Z.ai's coding-subscription base URL instead of the pay-go one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub zai_subscription: Option<bool>,
+}
+
+impl ProviderOptions {
+    /// True when no knob is set. Callers collapse an empty bag to `None` so the
+    /// key is omitted from the request rather than sent as `{}`.
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// `Some(self)` unless every field is unset.
+    pub fn into_non_empty(self) -> Option<Self> {
+        if self.is_empty() { None } else { Some(self) }
+    }
+
+    /// Whether this request asks for reasoning at all.
+    ///
+    /// An explicit `thinking_enabled: false` wins over any other knob; otherwise
+    /// either a positive budget or a non-empty effort turns it on.
+    pub fn thinking_enabled(&self) -> bool {
+        if self.thinking_enabled == Some(false) {
+            return false;
+        }
+        self.budget_tokens.is_some_and(|b| b > 0) || self.reasoning_effort.is_some()
+    }
+
+    /// The effort recorded on ledger rows.
+    ///
+    /// `reasoning_effort = "off"` is rewritten to `thinking_enabled: false`
+    /// before it reaches the wire, so reconstruct the `"off"` label here rather
+    /// than leaving the column empty for explicitly-disabled models.
+    pub fn resolved_reasoning_effort(&self) -> Option<String> {
+        if let Some(effort) = self.reasoning_effort.as_ref() {
+            return Some(effort.clone());
+        }
+        (self.thinking_enabled == Some(false)).then(|| "off".to_owned())
+    }
+}
+
 /// Request body for the daemon's llm module's POST /v1/stream and POST /v1/generate endpoints.
 ///
 /// The daemon sends fully-resolved config per-request because the daemon's llm module is
@@ -54,9 +145,10 @@ pub struct LlmRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub top_p: Option<f64>,
 
-    /// Provider-specific options (cache_ttl, thinking, budget_tokens, etc.).
+    /// Per-provider knobs. `None` and an all-unset [`ProviderOptions`] are the
+    /// same thing on the wire; construct via [`ProviderOptions::into_non_empty`].
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub provider_options: Option<serde_json::Value>,
+    pub provider_options: Option<ProviderOptions>,
 
     /// Provider key from models.toml (e.g. "openrouter", "deepseek", "xai").
     /// Distinct from `provider` (SDK protocol). Used for provider-specific behavior.
@@ -365,6 +457,92 @@ mod tests {
             };
             $body
         }};
+    }
+
+    #[test]
+    fn thinking_disabled_when_no_knob_is_set() {
+        assert!(!ProviderOptions::default().thinking_enabled());
+    }
+
+    #[test]
+    fn thinking_follows_budget_and_effort() {
+        let zero_budget = ProviderOptions {
+            budget_tokens: Some(0),
+            ..Default::default()
+        };
+        assert!(!zero_budget.thinking_enabled());
+
+        let budget = ProviderOptions {
+            budget_tokens: Some(4096),
+            ..Default::default()
+        };
+        assert!(budget.thinking_enabled());
+
+        let effort = ProviderOptions {
+            reasoning_effort: Some("high".into()),
+            ..Default::default()
+        };
+        assert!(effort.thinking_enabled());
+    }
+
+    #[test]
+    fn explicit_disable_beats_every_other_knob() {
+        // `reasoning_effort = "off"` arrives here as `thinking_enabled: false`.
+        // It must win even when a budget is also set, or accounting tags the
+        // call as a thinking call and the cache tracker's warm/cold baseline
+        // is fed a reasoning flag the provider never saw.
+        let disabled = ProviderOptions {
+            thinking_enabled: Some(false),
+            budget_tokens: Some(4096),
+            ..Default::default()
+        };
+        assert!(!disabled.thinking_enabled());
+    }
+
+    #[test]
+    fn unrelated_knobs_do_not_imply_thinking() {
+        let cache_only = ProviderOptions {
+            cache_ttl: Some("1h".into()),
+            ..Default::default()
+        };
+        assert!(!cache_only.thinking_enabled());
+    }
+
+    #[test]
+    fn resolved_effort_distinguishes_off_from_absent() {
+        let high = ProviderOptions {
+            reasoning_effort: Some("high".into()),
+            ..Default::default()
+        };
+        assert_eq!(high.resolved_reasoning_effort().as_deref(), Some("high"));
+
+        // "explicitly off" and "provider has no effort surface" read a cache
+        // miss very differently, so they must not collapse to the same row.
+        let off = ProviderOptions {
+            thinking_enabled: Some(false),
+            ..Default::default()
+        };
+        assert_eq!(off.resolved_reasoning_effort().as_deref(), Some("off"));
+
+        assert_eq!(ProviderOptions::default().resolved_reasoning_effort(), None);
+    }
+
+    #[test]
+    fn empty_options_stay_off_the_wire() {
+        assert_eq!(ProviderOptions::default().into_non_empty(), None);
+
+        let set = ProviderOptions {
+            cache_ttl: Some("5m".into()),
+            ..Default::default()
+        };
+        assert!(set.clone().into_non_empty().is_some());
+
+        // Absent knobs must not serialize, or an adapter cannot tell "unset"
+        // from "sent as null".
+        let json = serde_json::to_value(&set).expect("serialize");
+        let obj = json.as_object().expect("object");
+        assert_eq!(obj.len(), 1);
+        assert_eq!(obj.get("cache_ttl"), Some(&serde_json::json!("5m")));
     }
 
     fn field<'val>(value: &'val serde_json::Value, key: &str) -> &'val serde_json::Value {

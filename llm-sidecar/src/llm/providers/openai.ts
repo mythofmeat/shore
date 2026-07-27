@@ -232,7 +232,7 @@ function buildOpenAICall(
 
   // reasoning_effort comes via provider_options (the daemon only sets it for
   // models that accept it). Map to the OpenAI-valid set; unknown → omit.
-  const effortRaw = req.provider_options?.["reasoning_effort"];
+  const effortRaw = req.provider_options?.reasoning_effort;
   if (typeof effortRaw === "string") {
     // foldEffort only ever returns an in-domain OpenAI value (minimal/low/medium/high/xhigh/max).
     const effort = foldEffort("openai", effortRaw, req.model);

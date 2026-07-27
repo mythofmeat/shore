@@ -442,12 +442,10 @@ async fn build_generation_request(
             request.top_p = Some(p);
         }
         if let Some(budget) = ov.thinking_budget {
-            let opts = request
+            request
                 .provider_options
-                .get_or_insert_with(|| Value::Object(serde_json::Map::new()));
-            if let Some(map) = opts.as_object_mut() {
-                let _ignored = map.insert("budget_tokens".into(), serde_json::json!(budget));
-            }
+                .get_or_insert_default()
+                .budget_tokens = Some(budget);
         }
     }
 

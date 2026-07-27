@@ -41,6 +41,7 @@ import type { ContentBlock, ImageRef } from "../../engine/types.ts";
 import { resolveImage } from "../images.ts";
 import type {
   GenerateResponse,
+  ProviderOptions,
   SidecarProvider,
   SidecarRequest,
   StreamEvent,
@@ -233,7 +234,7 @@ function buildAnthropicCall(req: SidecarRequest): { client: Anthropic; params: A
  */
 export function buildAnthropicParams(req: SidecarRequest): AnthropicParams {
   const opts = req.provider_options ?? {};
-  const cacheTtl = typeof opts["cache_ttl"] === "string" ? (opts["cache_ttl"] as string) : "";
+  const cacheTtl = opts.cache_ttl ?? "";
   const cacheEnabled = cacheTtl !== "";
 
   const converted = convertInlineSystemMessages(req.messages, req.model);
@@ -275,7 +276,7 @@ export function buildAnthropicParams(req: SidecarRequest): AnthropicParams {
   if (outputConfig) params.output_config = outputConfig;
 
   // OpenRouter provider routing comes from config, not a base_url heuristic.
-  const orProvider = opts["openrouter_provider"];
+  const orProvider = opts.openrouter_provider;
   if (orProvider && typeof orProvider === "object") {
     const provider: Record<string, unknown> = { ...(orProvider as Record<string, unknown>) };
     if ("order" in provider && !("allow_fallbacks" in provider)) {
@@ -685,21 +686,24 @@ type ThinkingParam =
   | { type: "adaptive"; display: "summarized" }
   | { type: "enabled"; budget_tokens: number };
 
-/** Port of `build_thinking_params`: returns the thinking + output_config the
- * target model accepts. `display:"summarized"` on adaptive is REQUIRED (Opus
- * 4.7/4.8 default `omitted`, which returns empty thinking text). */
+/** Returns the thinking + output_config the target model accepts.
+ * `display:"summarized"` on adaptive is REQUIRED (Opus 4.7/4.8 default
+ * `omitted`, which returns empty thinking text). */
 export function buildThinkingParams(
-  opts: Record<string, unknown>,
+  opts: ProviderOptions,
   model: string,
   maxTokens: number,
 ): { thinking?: ThinkingParam; outputConfig?: { effort: NamedEffort } } {
-  const effort = typeof opts["reasoning_effort"] === "string" ? (opts["reasoning_effort"] as string) : undefined;
+  const effort = opts.reasoning_effort;
   const namedEffort = isEffortValue(effort) ? effort : undefined;
   const wantsAdaptive = effort === "adaptive" || namedEffort !== undefined;
 
-  const thinkingFlag = opts["thinking"] === true;
-  const budget = typeof opts["budget_tokens"] === "number" ? (opts["budget_tokens"] as number) : undefined;
-  const wantsEnabled = thinkingFlag || budget !== undefined;
+  // `budget_tokens` is the only way to ask for thinking without naming an
+  // effort. There is no separate boolean knob — the daemon expresses "off" as
+  // `thinking_enabled: false`, which never reaches an Anthropic-family model
+  // that has thinking on by default.
+  const budget = opts.budget_tokens;
+  const wantsEnabled = budget !== undefined;
 
   if (!wantsAdaptive && !wantsEnabled) return {};
 

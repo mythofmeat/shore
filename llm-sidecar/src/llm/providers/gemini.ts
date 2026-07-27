@@ -350,25 +350,24 @@ function buildThinkingConfig(req: SidecarRequest): ThinkingConfig | undefined {
   const opts = req.provider_options;
   if (opts === undefined) return undefined;
 
-  const manualGeneration = numberOpt(opts["gemini_generation"]);
+  const manualGeneration = opts.gemini_generation;
   const generation = manualGeneration !== undefined && manualGeneration > 0
     ? manualGeneration
     : detectGeminiGeneration(req.model);
 
-  const budget = numberOpt(opts["budget_tokens"]);
+  const budget = opts.budget_tokens;
   if (budget !== undefined) return { thinkingBudget: budget };
 
-  const effort = opts["reasoning_effort"];
-  if (typeof effort === "string" && effort.length > 0) {
-    if (generation >= 3) {
-      const level = thinkingLevel(effort);
-      return level !== undefined ? { thinkingLevel: level } : { thinkingBudget: -1 };
-    }
-    return { thinkingBudget: -1 };
-  }
+  // `reasoning_effort` is always a string on the wire (Rust `Option<String>`);
+  // an empty one means unset, same as absent.
+  const effort = opts.reasoning_effort;
+  if (effort === undefined || effort.length === 0) return undefined;
 
-  const numericEffort = numberOpt(effort);
-  return numericEffort !== undefined ? { thinkingBudget: numericEffort } : undefined;
+  if (generation >= 3) {
+    const level = thinkingLevel(effort);
+    return level !== undefined ? { thinkingLevel: level } : { thinkingBudget: -1 };
+  }
+  return { thinkingBudget: -1 };
 }
 
 export function detectGeminiGeneration(model: string): number {
@@ -457,10 +456,6 @@ function emptyUsage(): Usage {
     cache_read_tokens: 0,
     cache_creation_tokens: 0,
   };
-}
-
-function numberOpt(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function toRecord(value: unknown): Record<string, unknown> {

@@ -528,10 +528,12 @@ mod tests {
             max_tokens: 42,
             temperature: Some(0.9),
             top_p: Some(0.8),
-            provider_options: Some(json!({
-                "cache_ttl": "1h",
-                "chat_only": true
-            })),
+            provider_options: Some(crate::llm::types::ProviderOptions {
+                cache_ttl: Some("1h".to_owned()),
+                // Set only on the chat request: compaction must not inherit it.
+                zai_subscription: Some(true),
+                ..Default::default()
+            }),
             provider_key: Some("anthropic".to_owned()),
             rid: Some("rid-chat".to_owned()),
             forensic_character: Some("chat-forensics".to_owned()),
@@ -613,8 +615,8 @@ mod tests {
         assert_eq!(request.messages[3]["content"], "compaction system");
 
         let provider_options = request.provider_options.expect("provider options");
-        assert_eq!(provider_options["reasoning_effort"], "medium");
-        assert!(provider_options.get("chat_only").is_none());
+        assert_eq!(provider_options.reasoning_effort.as_deref(), Some("medium"));
+        assert_eq!(provider_options.zai_subscription, None);
     }
 
     /// Regression pin: every byte that contributes to Anthropic's cache-prefix

@@ -175,14 +175,14 @@ export function buildProviderOptions(req: SidecarRequest): ProviderOptionsValue 
 
   // `thinking_enabled === false` (from `reasoning_effort = "off"`) is a hard
   // disable and wins over any effort/budget.
-  if (opts["thinking_enabled"] === false) {
+  if (opts.thinking_enabled === false) {
     inner["thinking"] = { type: "disabled" };
   } else if (req.sdk === "deepseek") {
-    const effort = opts["reasoning_effort"];
+    const effort = opts.reasoning_effort;
     if (typeof effort === "string" && effort !== "off") inner["reasoningEffort"] = effort;
   } else {
     // moonshot: a positive budget enables thinking with that budget.
-    const budget = opts["budget_tokens"];
+    const budget = opts.budget_tokens;
     if (typeof budget === "number" && budget > 0) {
       inner["thinking"] = { type: "enabled", budgetTokens: budget };
     }

@@ -87,32 +87,6 @@ pub(crate) struct RecordCall<'ctx> {
     pub(crate) reasoning_effort: Option<String>,
 }
 
-/// The effort this call actually ran at, as recorded on the ledger row.
-///
-/// Effort is part of the Anthropic prompt-cache key — changing it invalidates
-/// every message-level breakpoint (tools and system may survive) — so the
-/// ledger keeps it to distinguish a configuration change from a cache bug.
-///
-/// `reasoning_effort = "off"` never reaches `provider_options` under that name:
-/// `build_request` translates it to `thinking_enabled: false` so the OpenRouter
-/// adapter can send `reasoning: {effort: "none"}` while other adapters just omit
-/// reasoning. Reconstruct it here, because "off" is a distinct cache-relevant
-/// setting and must not be confused with a provider that has no effort surface
-/// at all (`None`).
-fn resolved_reasoning_effort(provider_options: Option<&serde_json::Value>) -> Option<String> {
-    let opts = provider_options?;
-    if let Some(effort) = opts.get("reasoning_effort").and_then(|v| v.as_str()) {
-        return Some(effort.to_owned());
-    }
-    match opts
-        .get("thinking_enabled")
-        .and_then(serde_json::Value::as_bool)
-    {
-        Some(false) => Some("off".to_owned()),
-        _ => None,
-    }
-}
-
 /// Run the warm/cold cache state machine for calls that report cache metrics,
 /// emitting a forensics anomaly notification on divergence. Returns the
 /// `(cache_state, cache_anomaly)` strings to persist on the call row.
@@ -524,7 +498,7 @@ impl LedgerClient {
         messages: Vec<serde_json::Value>,
         system: Option<serde_json::Value>,
         tools: Option<Vec<serde_json::Value>>,
-        provider_options: Option<serde_json::Value>,
+        provider_options: Option<crate::llm::types::ProviderOptions>,
     ) -> Result<LlmRequest, LlmError> {
         LlmClient::build_request(model, messages, system, tools, provider_options)
     }
@@ -536,7 +510,7 @@ impl LedgerClient {
         messages: Vec<serde_json::Value>,
         system: Option<serde_json::Value>,
         tools: Option<Vec<serde_json::Value>>,
-        provider_options: Option<serde_json::Value>,
+        provider_options: Option<crate::llm::types::ProviderOptions>,
     ) -> Result<LlmRequest, LlmError> {
         LlmClient::build_request_with_provider_keys(
             model,
@@ -607,10 +581,14 @@ impl LedgerClient {
         let cache_ttl = request
             .provider_options
             .as_ref()
-            .and_then(|opts| opts.get("cache_ttl"))
-            .and_then(|v| v.as_str())
-            .map(String::from);
-        let reasoning_effort = resolved_reasoning_effort(request.provider_options.as_ref());
+            .and_then(|opts| opts.cache_ttl.clone());
+        // Effort is part of the Anthropic prompt-cache key: changing it
+        // invalidates every message-level breakpoint, so the row keeps it to
+        // tell a config change apart from a cache bug.
+        let reasoning_effort = request
+            .provider_options
+            .as_ref()
+            .and_then(crate::llm::types::ProviderOptions::resolved_reasoning_effort);
 
         record_call(
             &self.ledger,
@@ -826,10 +804,14 @@ impl LedgerClient {
         let cache_ttl = request
             .provider_options
             .as_ref()
-            .and_then(|opts| opts.get("cache_ttl"))
-            .and_then(|v| v.as_str())
-            .map(String::from);
-        let reasoning_effort = resolved_reasoning_effort(request.provider_options.as_ref());
+            .and_then(|opts| opts.cache_ttl.clone());
+        // Effort is part of the Anthropic prompt-cache key: changing it
+        // invalidates every message-level breakpoint, so the row keeps it to
+        // tell a config change apart from a cache bug.
+        let reasoning_effort = request
+            .provider_options
+            .as_ref()
+            .and_then(crate::llm::types::ProviderOptions::resolved_reasoning_effort);
 
         Ok(LedgerStream::new(
             reader,
@@ -1040,29 +1022,6 @@ mod tests {
 
     fn first_item<T>(items: &[T]) -> &T {
         items.first().expect("expected at least one item")
-    }
-
-    #[test]
-    fn resolved_effort_reads_the_wire_options() {
-        use serde_json::json;
-        let effort = |v: serde_json::Value| resolved_reasoning_effort(Some(&v));
-
-        assert_eq!(
-            effort(json!({"reasoning_effort": "high"})).as_deref(),
-            Some("high")
-        );
-        // `off` is rewritten by `build_request` into `thinking_enabled: false`
-        // with no `reasoning_effort` key — reconstruct it rather than record a
-        // null, since "explicitly off" and "provider has no effort surface"
-        // read a cache miss very differently.
-        assert_eq!(
-            effort(json!({"thinking_enabled": false})).as_deref(),
-            Some("off")
-        );
-        // Thinking on with no named effort is the provider default, not "off".
-        assert_eq!(effort(json!({"thinking_enabled": true})), None);
-        assert_eq!(effort(json!({"cache_ttl": "1h"})), None);
-        assert_eq!(resolved_reasoning_effort(None), None);
     }
 
     #[test]
