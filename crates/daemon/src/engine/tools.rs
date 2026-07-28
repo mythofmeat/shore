@@ -138,6 +138,66 @@ pub async fn run_tool_loop(
     })
 }
 
+/// Run tools for a loop the sidecar is driving.
+///
+/// The inverse of [`run_tool_loop`]: instead of deciding *when* to call a tool,
+/// this waits to be asked and answers. Everything a tool needs — the context,
+/// the event sender, the growing intermediate messages — stays borrowed here at
+/// its natural lifetime, which is why the registry hands over a channel rather
+/// than trying to hold any of it (see `crate::tool_rpc`).
+///
+/// Execution goes through the same [`execute_tool_use`] the daemon-driven loop
+/// uses, so the SWP events, per-tool truncation, diagnostics, and the
+/// generated-image side channel behave identically no matter which side is
+/// driving. Returns when the sidecar's loop ends and the sender is dropped.
+pub async fn serve_tool_calls(
+    calls: &mut mpsc::Receiver<crate::tool_rpc::ToolCall>,
+    direct_tx: &mpsc::Sender<ServerMessage>,
+    request_rid: Option<&str>,
+    ctx: &dyn ToolContext,
+    tools_cfg: &shore_common::config::app::ToolsConfig,
+    diag: &Arc<Mutex<Diagnostics>>,
+    intermediate_messages: &mut Vec<Message>,
+) {
+    while let Some(call) = calls.recv().await {
+        let tool_use = ToolUseEvent {
+            id: call.request.tool_id.clone(),
+            name: call.request.name.clone(),
+            input: call.request.input.clone(),
+        };
+        let outcome = execute_tool_use(
+            &tool_use,
+            direct_tx,
+            request_rid,
+            ctx,
+            tools_cfg,
+            diag,
+            intermediate_messages.as_mut_slice(),
+        )
+        .await;
+
+        // `execute_tool_use` only ever produces a tool result; anything else
+        // would be a bug here rather than something the model should be told
+        // about, so it is reported as a failed tool rather than crashing a turn.
+        let response = match &outcome.content_block {
+            ContentBlock::ToolResult {
+                content, is_error, ..
+            } => crate::tool_rpc::ToolCallResponse {
+                output: content.clone(),
+                is_error: *is_error,
+            },
+            ContentBlock::Text { .. }
+            | ContentBlock::Thinking { .. }
+            | ContentBlock::RedactedThinking { .. }
+            | ContentBlock::ToolUse { .. } => crate::tool_rpc::ToolCallResponse {
+                output: "tool dispatch produced a non-result block".to_owned(),
+                is_error: true,
+            },
+        };
+        call.respond(response);
+    }
+}
+
 /// Drives the shared tool loop for the chat path (and sub-agents).
 struct ChatDriver<'src> {
     client: &'src LedgerClient,
@@ -549,6 +609,8 @@ mod tests {
     use crate::llm::types::{Timing, Usage};
     use crate::llm::LlmClient;
     use crate::test_support::TestToolContext;
+    use crate::tool_rpc::{ToolCall, ToolCallRequest, ToolCallResponse};
+    use serde_json::json;
     use tokio::sync::mpsc;
 
     fn test_ledger_client(tmp: &tempfile::TempDir) -> LedgerClient {
@@ -557,6 +619,94 @@ mod tests {
 
     fn test_diag() -> Arc<Mutex<Diagnostics>> {
         Arc::new(Mutex::new(Diagnostics::default()))
+    }
+
+    /// A tool call as it would arrive from the sidecar, plus the reply channel.
+    fn sidecar_call(
+        name: &str,
+        input: Value,
+    ) -> (ToolCall, tokio::sync::oneshot::Receiver<ToolCallResponse>) {
+        ToolCall::for_test(ToolCallRequest {
+            rid: "rid_1".into(),
+            tool_id: "tu_1".into(),
+            name: name.into(),
+            input,
+        })
+    }
+
+    #[tokio::test]
+    async fn serving_a_sidecar_loop_runs_the_tool_and_answers() {
+        let ctx = TestToolContext::new();
+        let (direct_tx, mut events) = mpsc::channel(32);
+        let diag = test_diag();
+        let mut intermediate = Vec::new();
+        let (calls_tx, mut calls_rx) = mpsc::channel(4);
+
+        let (call, reply) = sidecar_call("read", json!({"path": "nope.txt"}));
+        calls_tx.send(call).await.expect("queue the call");
+        drop(calls_tx); // the loop ended; serve_tool_calls should return
+
+        serve_tool_calls(
+            &mut calls_rx,
+            &direct_tx,
+            Some("rid_1"),
+            &ctx,
+            &tools_cfg(0),
+            &diag,
+            &mut intermediate,
+        )
+        .await;
+
+        let answer = reply.await.expect("the call is answered");
+        // A missing file is a *tool* failure the model is told about, not a
+        // transport failure — the distinction the protocol is built around.
+        assert!(answer.is_error, "a failing tool reports is_error");
+        assert!(!answer.output.is_empty());
+
+        // The same client-facing events the daemon-driven loop emits.
+        let mut kinds = Vec::new();
+        while let Ok(event) = events.try_recv() {
+            if matches!(event, ServerMessage::ToolCall(_)) {
+                kinds.push("tool_call");
+            }
+            if matches!(event, ServerMessage::ToolResult(_)) {
+                kinds.push("tool_result");
+            }
+        }
+        assert!(kinds.contains(&"tool_call"), "{kinds:?}");
+        assert!(kinds.contains(&"tool_result"), "{kinds:?}");
+
+        // And it was recorded for the diagnostics pane, as before.
+        let calls = diag
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .tool_calls
+            .len();
+        assert_eq!(calls, 1);
+    }
+
+    #[tokio::test]
+    async fn serving_returns_when_the_sidecar_loop_ends() {
+        // The sender dropping is how a finished or cancelled turn tells this
+        // task to stop; without that it would hold the borrow forever.
+        let ctx = TestToolContext::new();
+        let (direct_tx, _events) = mpsc::channel(4);
+        let diag = test_diag();
+        let mut intermediate = Vec::new();
+        let (calls_tx, mut calls_rx) = mpsc::channel(4);
+        drop(calls_tx);
+
+        serve_tool_calls(
+            &mut calls_rx,
+            &direct_tx,
+            None,
+            &ctx,
+            &tools_cfg(0),
+            &diag,
+            &mut intermediate,
+        )
+        .await;
+        assert!(intermediate.is_empty());
     }
 
     /// A `ToolsConfig` whose global result cap is `max` and which carries no
@@ -589,6 +739,8 @@ mod tests {
             rid: None,
             forensic_character: None,
             retain_long: false,
+            tool_rpc: None,
+            max_tool_iterations: None,
             keepalive_interval: None,
         }
     }

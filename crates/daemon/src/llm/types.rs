@@ -135,6 +135,21 @@ impl ToolDefinition {
     }
 }
 
+/// Where the sidecar calls back to run a tool, when it drives the loop.
+///
+/// The sidecar decides which tools to run; the daemon runs them, because the
+/// executors hold the filesystem, the memory store, MCP, and sub-agents. Its
+/// presence on a request is the switch between the two loop owners. The mirror
+/// type is `ToolRpc` in `llm-sidecar/src/llm/types.ts`; the protocol is in
+/// `crate::tool_rpc`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolRpc {
+    /// Unix socket the daemon serves tool calls on.
+    pub socket_path: String,
+    /// Identifies this in-flight loop to the daemon's registry.
+    pub rid: String,
+}
+
 /// Where a `thinking` block's replay payload rides on the wire.
 ///
 /// One stored `ThinkingSignature` projects to exactly one of these fields, named
@@ -487,6 +502,17 @@ pub struct LlmRequest {
     /// Resolved per-model cache-keepalive interval (`cache_keepalive` in
     /// `[models.*]`): `Some(interval)` to ping the prompt cache every
     /// `interval` while idle, `None` when keepalive is off for this model.
+    /// Set when the sidecar drives the tool loop for this request. See
+    /// [`ToolRpc`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_rpc: Option<ToolRpc>,
+
+    /// Dispatch rounds a sidecar-driven loop may run. `None` is unlimited, so
+    /// the model ending cleanly is the only exit. Mirrors the cap the daemon's
+    /// own loop enforces.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tool_iterations: Option<u32>,
+
     /// Transient daemon-side scheduling hint — carries no wire meaning and is
     /// never sent to providers; the autonomy manager reads it off the cached
     /// `last_request` to drive the standalone keepalive subsystem.
@@ -514,6 +540,8 @@ impl std::fmt::Debug for LlmRequest {
             .field("rid", &self.rid)
             .field("forensic_character", &self.forensic_character)
             .field("retain_long", &self.retain_long)
+            .field("tool_rpc", &self.tool_rpc)
+            .field("max_tool_iterations", &self.max_tool_iterations)
             .field("keepalive_interval", &self.keepalive_interval)
             .finish()
     }
@@ -923,6 +951,8 @@ mod tests {
             rid: None,
             forensic_character: None,
             retain_long: false,
+            tool_rpc: None,
+            max_tool_iterations: None,
             keepalive_interval: None,
         };
         let json = serde_json::to_value(&req).unwrap();
@@ -958,6 +988,8 @@ mod tests {
             rid: None,
             forensic_character: None,
             retain_long: false,
+            tool_rpc: None,
+            max_tool_iterations: None,
             keepalive_interval: None,
         };
         let debug = format!("{req:?}");
@@ -1011,6 +1043,8 @@ mod tests {
             rid: None,
             forensic_character: None,
             retain_long: false,
+            tool_rpc: None,
+            max_tool_iterations: None,
             keepalive_interval: None,
         };
         let prefix = req.messages.clone();

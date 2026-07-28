@@ -549,6 +549,8 @@ mod tests {
             rid: Some("rid-chat".to_owned()),
             forensic_character: Some("chat-forensics".to_owned()),
             retain_long: false,
+            tool_rpc: None,
+            max_tool_iterations: None,
             keepalive_interval: None,
         }
     }

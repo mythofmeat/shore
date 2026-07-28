@@ -97,6 +97,14 @@ pub struct ToolCall {
 }
 
 impl ToolCall {
+    /// Build a call and its reply channel directly, for tests that drive a
+    /// servicing task without a socket in the way.
+    #[cfg(test)]
+    pub fn for_test(request: ToolCallRequest) -> (Self, oneshot::Receiver<ToolCallResponse>) {
+        let (reply, rx) = oneshot::channel();
+        (Self { request, reply }, rx)
+    }
+
     /// Answer the call. Dropping a [`ToolCall`] without answering it is also
     /// valid — the caller sees the loop having gone away, same as a cancel.
     pub fn respond(self, response: ToolCallResponse) {

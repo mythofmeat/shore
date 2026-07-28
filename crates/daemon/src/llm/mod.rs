@@ -320,6 +320,8 @@ impl LlmClient {
             rid: None,
             forensic_character: None,
             retain_long: false,
+            tool_rpc: None,
+            max_tool_iterations: None,
             keepalive_interval: model
                 .cache_keepalive
                 .and_then(shore_common::config::models::CacheKeepaliveSetting::interval),
@@ -914,6 +916,8 @@ sdk = "openai"
             rid: None,
             forensic_character: None,
             retain_long: false,
+            tool_rpc: None,
+            max_tool_iterations: None,
             keepalive_interval: None,
         }
     }
