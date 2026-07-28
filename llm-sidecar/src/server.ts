@@ -3,6 +3,7 @@ import { chmodSync, existsSync, lstatSync, unlinkSync } from "node:fs";
 import { generateImage } from "./llm/image_generate.ts";
 import { GeminiProvider } from "./llm/providers/gemini.ts";
 import { AnthropicProvider } from "./llm/providers/anthropic.ts";
+import { anthropicToolLoopEvents } from "./llm/providers/anthropic_loop.ts";
 import { OpenAIProvider } from "./llm/providers/openai.ts";
 import { OpenRouterProvider } from "./llm/providers/openrouter.ts";
 import { VercelProvider } from "./llm/providers/vercel.ts";
@@ -105,9 +106,18 @@ export function createSidecarHandler(
     if (url.pathname === "/v1/stream") {
       const parsed = await readJson<SidecarRequest>(request);
       if (!parsed.ok) return parsed.response;
-      const provider = providers[parsed.value.sdk];
-      if (!provider) return textError(501, `unsupported sdk: ${parsed.value.sdk}`);
-      return streamResponse(provider, parsed.value, request.signal, heartbeatMs);
+      const req = parsed.value;
+      const provider = providers[req.sdk];
+      if (!provider) return textError(501, `unsupported sdk: ${req.sdk}`);
+      // `tool_rpc` is the switch: with it, this side drives the tool loop and
+      // calls back to run each tool. Anthropic only — the SDK tool runner this
+      // is built on has no equivalent elsewhere, so every other dialect keeps
+      // the daemon's loop, which still serves compaction and dreaming anyway.
+      const source =
+        req.tool_rpc !== undefined && req.sdk === "anthropic"
+          ? (signal: AbortSignal) => anthropicToolLoopEvents(req, signal)
+          : (signal: AbortSignal) => provider.stream(req, signal);
+      return streamResponse(source, request.signal, heartbeatMs);
     }
 
     if (url.pathname === "/v1/generate") {
@@ -155,8 +165,7 @@ export function serveSidecar(socketPath: string): ReturnType<typeof Bun.serve> {
 }
 
 async function streamResponse(
-  provider: SidecarProvider,
-  req: SidecarRequest,
+  source: (signal: AbortSignal) => AsyncIterable<StreamEvent>,
   requestSignal: AbortSignal,
   heartbeatMs: number,
 ): Promise<Response> {
@@ -165,7 +174,7 @@ async function streamResponse(
   if (requestSignal.aborted) abortUpstream();
   requestSignal.addEventListener("abort", abortUpstream, { once: true });
 
-  const iterator = provider.stream(req, abort.signal)[Symbol.asyncIterator]();
+  const iterator = source(abort.signal)[Symbol.asyncIterator]();
   let first: IteratorResult<StreamEvent>;
   try {
     first = await iterator.next();

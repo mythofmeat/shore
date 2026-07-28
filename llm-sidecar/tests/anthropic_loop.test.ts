@@ -364,6 +364,24 @@ describe("driving a tool loop", () => {
     expect(events.map((e) => e.type)).not.toContain("done");
   });
 
+  test("an aborted transport stops the loop", async () => {
+    // The signal the sidecar's HTTP layer passes in feeds the controller that
+    // owns the model calls, the tool socket, and the runner — so a client that
+    // hangs up stops the whole loop, not just its next call.
+    const anthropic = fakeAnthropic([
+      { kind: "tool", id: "tu_1", name: "read", input: {} },
+      { kind: "text", text: "done" },
+    ]);
+    const daemon = fakeToolDaemon("ok");
+    stops.push(anthropic.stop, daemon.stop);
+
+    const events = await collect(
+      anthropicToolLoopEvents(request(anthropic, daemon.path), AbortSignal.abort()),
+    );
+    expect(events.at(-1)?.type).toBe("error");
+    expect(anthropic.requests).toHaveLength(0);
+  });
+
   test("the initial request is the same one the non-loop path would send", async () => {
     // The loop changes who drives, not what the first call looks like.
     const anthropic = fakeAnthropic([{ kind: "text", text: "hi" }]);

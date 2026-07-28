@@ -70,6 +70,7 @@ function addUsage(total: Usage, message: BetaMessage): Usage {
  */
 export async function* anthropicToolLoopEvents(
   req: SidecarRequest,
+  signal?: AbortSignal,
   now: () => number = Date.now,
 ): AsyncIterable<StreamEvent> {
   const rpc = req.tool_rpc;
@@ -94,7 +95,12 @@ export async function* anthropicToolLoopEvents(
   // A tool the daemon could not even attempt is not something to tell the model
   // about; it ends the turn. Aborting is the only way to do that from inside a
   // tool — see `llm/tool_rpc.ts`.
+  // One controller drives everything the loop owns: the model calls, the tool
+  // socket, and the runner itself. The transport's signal feeds into it, so a
+  // client that hangs up stops the whole loop rather than only its next call.
   const abort = new AbortController();
+  if (signal?.aborted) abort.abort();
+  signal?.addEventListener("abort", () => abort.abort(), { once: true });
   let unreachable: ToolRpcUnreachable | undefined;
   const tools = daemonTools(req.tools ?? [], rpc, (error) => {
     unreachable ??= error;
