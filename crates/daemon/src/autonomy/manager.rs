@@ -1484,36 +1484,56 @@ async fn execute_cache_keepalive_ping(character: &str, ctx: &TickContext) {
             usage,
             fallback_events,
         } => {
-            // Ping actually sent and succeeded — confirm to the keepalive so it
-            // schedules the next ping one interval out. Uses `on_ping_succeeded`
-            // (NOT `on_cache_warmed`) so the global idle ceiling keeps counting
-            // from the last real message, not from this ping.
-            s.cache_keepalive.on_ping_succeeded(Instant::now());
+            // A ping that read nothing but paid a write did not refresh a warm
+            // cache — it recreated the prefix. The HTTP call "succeeded", but the
+            // keepalive failed at its only job. The predicate matches the
+            // ledger's `cold_keepalive` contract exactly (read 0 AND a write):
+            // read 0 with no write means caching was off / a non-cached
+            // fallback, which is not a cold *write* and must not warn.
+            let cold = ping_landed_cold(&usage);
+            if cold {
+                // Disarm rather than reschedule. A cold read is positive proof
+                // the prefix this keepalive existed to protect is already gone,
+                // and a ping cannot rebuild it: when the provider refuses the
+                // response it bills the cache write without persisting it, so
+                // the next ping starts exactly as cold and pays again. Observed
+                // in the ledger as twelve consecutive `cold_keepalive` rows at
+                // full write price — including two byte-identical pings nine
+                // seconds apart that both read 0 — until a real message landed
+                // and the write finally stuck.
+                //
+                // `on_cache_invalidated` (not `on_ping_failed`) because this is
+                // knowledge, not a transient error: retry backoff would buy
+                // another guaranteed full write. Pinging resumes when a real
+                // call re-warms a prefix worth keeping.
+                s.cache_keepalive.on_cache_invalidated();
+                warn!(
+                    character,
+                    cache_write_tokens = usage.cache_creation_tokens,
+                    "Cache keepalive ping landed cold (read 0) — paid a cache write instead of refreshing a warm prefix; disarming until a real call re-warms"
+                );
+            } else {
+                // Ping actually refreshed a warm prefix — confirm to the
+                // keepalive so it schedules the next ping one interval out. Uses
+                // `on_ping_succeeded` (NOT `on_cache_warmed`) so the global idle
+                // ceiling keeps counting from the last real message, not from
+                // this ping.
+                s.cache_keepalive.on_ping_succeeded(Instant::now());
+            }
             push_provider_fallback_events(
                 &mut s,
                 HeartbeatEventKind::DormantPing,
                 &fallback_events,
             );
-            // A ping that read nothing but paid a write did not refresh a warm
-            // cache — it recreated the prefix. The HTTP call "succeeded", but the
-            // keepalive failed at its only job, so surface it loudly instead of
-            // burying a `cache_read: 0` inside a success line. The predicate
-            // matches the ledger's `cold_keepalive` contract exactly (read 0 AND
-            // a write): read 0 with no write means caching was off / a non-cached
-            // fallback, which is not a cold *write* and must not warn.
-            let cold = usage.cache_read_tokens == 0 && usage.cache_creation_tokens > 0;
-            if cold {
-                warn!(
-                    character,
-                    cache_write_tokens = usage.cache_creation_tokens,
-                    "Cache keepalive ping landed cold (read 0) — paid a cache write instead of refreshing a warm prefix"
-                );
-            }
             s.heartbeat_log.push(
                 HeartbeatEventKind::DormantPing,
                 format!(
                     "Cache refresh ping ({}cache_read: {}, input: {})",
-                    if cold { "COLD — wrote cache; " } else { "" },
+                    if cold {
+                        "COLD — wrote cache, disarmed; "
+                    } else {
+                        ""
+                    },
                     usage.cache_read_tokens,
                     usage.input_tokens
                 ),
@@ -3355,6 +3375,16 @@ struct DormantPingUsage {
     cache_creation_tokens: u64,
 }
 
+/// Whether a ping that came back `200 OK` actually failed at its only job.
+///
+/// Read 0 *and* paid a write means the prefix was already gone and this ping
+/// recreated it at full price rather than refreshing it. Read 0 with no write
+/// means caching was off or a non-cached fallback answered — not a cold write,
+/// and must not be treated as one.
+fn ping_landed_cold(usage: &DormantPingUsage) -> bool {
+    usage.cache_read_tokens == 0 && usage.cache_creation_tokens > 0
+}
+
 enum DormantPingOutcome {
     Success {
         usage: DormantPingUsage,
@@ -4273,6 +4303,67 @@ mod tests {
             action,
             CacheKeepaliveAction::Ping,
             "Failed ping must retry after short backoff"
+        );
+    }
+
+    #[test]
+    fn cold_ping_is_only_a_read_of_zero_that_paid_a_write() {
+        let cold = DormantPingUsage {
+            input_tokens: 2,
+            cache_read_tokens: 0,
+            cache_creation_tokens: 14144,
+        };
+        assert!(ping_landed_cold(&cold));
+
+        // Read 0 with no write: caching off, or a non-cached fallback answered.
+        // Nothing was paid for and nothing was lost, so this must not disarm.
+        let uncached = DormantPingUsage {
+            input_tokens: 2,
+            cache_read_tokens: 0,
+            cache_creation_tokens: 0,
+        };
+        assert!(!ping_landed_cold(&uncached));
+
+        // A healthy ping reads the prefix. A small trailing write is normal —
+        // the appended user turn sits past the last breakpoint.
+        let warm = DormantPingUsage {
+            input_tokens: 2,
+            cache_read_tokens: 14205,
+            cache_creation_tokens: 188,
+        };
+        assert!(!ping_landed_cold(&warm));
+    }
+
+    #[test]
+    fn cold_ping_disarms_instead_of_rescheduling() {
+        // The keepalive used to reschedule on any 200, so a prefix that was
+        // already gone got recreated at full write price once an interval for
+        // the whole max_idle window. A cold read proves the prefix is gone and
+        // a ping cannot rebuild it, so pinging stops until a real call warms
+        // one — no retry backoff, which would only buy another full write.
+        let now = Instant::now();
+        let mut ka = due_keepalive(now);
+        assert_eq!(ka.tick(now), CacheKeepaliveAction::Ping);
+
+        ka.on_cache_invalidated();
+
+        assert_eq!(
+            ka.tick(now + Duration::from_secs(31)),
+            CacheKeepaliveAction::None,
+            "a cold ping must not retry on the short backoff"
+        );
+        assert_eq!(
+            ka.tick(now + Duration::from_mins(55)),
+            CacheKeepaliveAction::None,
+            "nor an interval later — pinging a cold prefix only pays again"
+        );
+
+        // A real call re-warms; only then does pinging resume.
+        ka.on_cache_warmed("test-model", now + Duration::from_hours(1));
+        assert_eq!(
+            ka.tick(now + Duration::from_mins(115)),
+            CacheKeepaliveAction::Ping,
+            "a real warm must re-arm the schedule"
         );
     }
 
