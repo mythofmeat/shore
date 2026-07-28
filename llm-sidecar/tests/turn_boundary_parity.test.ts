@@ -1,18 +1,20 @@
 /**
- * Cross-language parity for the most-recent-assistant-turn boundary.
+ * Regression cases for the most-recent-assistant-turn boundary.
  *
- * `mostRecentAssistantTurnStart` (sidecar) must track
- * `most_recent_assistant_turn_start` (`crates/daemon/src/content_util.rs`) —
- * the boundary `replay_prior_thinking` strips against. The Anthropic cache
- * breakpoint is anchored just *before* that boundary, so if the two drift the
- * anchor lands inside the region the strip rewrites, both message breakpoints
- * miss, and every committed turn re-caches the whole conversation with nothing
- * failing. The only end-to-end guard is an `#[ignore]` live provider probe, so
- * both sides assert against one shared fixture instead.
+ * The Anthropic cache breakpoint is anchored just *before* this boundary, so an
+ * anchor that lands inside the region `replay_prior_thinking` rewrites makes
+ * both message breakpoints miss, and every committed turn re-caches the whole
+ * conversation with nothing failing. The only end-to-end guard is an `#[ignore]`
+ * live provider probe, which is why these cases are pinned here.
  *
- * The Rust half is `content_util.rs::tests::turn_boundary_matches_shared_fixture`.
- * Adding a case to the fixture pins both implementations at once; if only one
- * side ends up green, they have diverged.
+ * This *was* a cross-language parity test: the daemon had its own
+ * `most_recent_assistant_turn_start` in `content_util.rs`, and both sides
+ * asserted against this one fixture because two implementations of one rule
+ * cannot be trusted to agree. That function no longer exists — the replay
+ * decision moved here wholesale — so there is one implementation now and
+ * nothing left to hold parity with. The fixture stays because the cases are
+ * worth keeping; it still lives under `crates/daemon/tests/fixtures/` only
+ * because moving it is churn.
  */
 
 import { describe, expect, test } from "bun:test";

@@ -798,6 +798,7 @@ impl GenerateResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     macro_rules! assert_variant {
         ($value:expr, $pattern:pat => $body:expr $(,)?) => {{
@@ -1244,6 +1245,186 @@ mod tests {
                 assert_eq!(data, "opaque_encrypted_data");
             }
 
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Cross-language shape parity
+    // -----------------------------------------------------------------------
+
+    /// Every wire type, every enum variant, and every optional field in both
+    /// its present and absent form.
+    ///
+    /// Serialized by serde from the real types, so the emitted JSON *is* the
+    /// bytes the sidecar receives — a renamed field, a changed tag, or a new
+    /// option shows up here without anyone remembering to write it down.
+    /// Anthropic signature / Gemini `thoughtSignature`.
+    fn carrier_signature() -> ReasoningCarrier {
+        ReasoningCarrier {
+            signature: Some("sig_abc".into()),
+            ..Default::default()
+        }
+    }
+
+    /// OpenRouter `reasoning_details`.
+    fn carrier_openrouter() -> ReasoningCarrier {
+        ReasoningCarrier {
+            reasoning_details: Some(json!([{"type": "reasoning.text", "text": "r"}])),
+            ..Default::default()
+        }
+    }
+
+    /// Z.AI Preserved-Thinking `reasoning_content`.
+    fn carrier_zai() -> ReasoningCarrier {
+        ReasoningCarrier {
+            reasoning_content: Some("preserved".into()),
+            ..Default::default()
+        }
+    }
+
+    fn wire_shape_census() -> serde_json::Value {
+        json!({
+            "wire_role": [WireRole::User, WireRole::Assistant, WireRole::System],
+            "thinking_replay": [ThinkingReplay::All, ThinkingReplay::None],
+            "system_block": SystemBlock::new("You are a character.", "character"),
+            "tool_definition": ToolDefinition::new(
+                "read",
+                "Read a file.",
+                json!({"type": "object", "properties": {}}),
+            ),
+            "provider_options": {
+                // Absent knobs are omitted, not sent as null: `undefined`
+                // unambiguously means "not configured" on the far side.
+                "empty": ProviderOptions::default(),
+                "full": ProviderOptions {
+                    reasoning_effort: Some("high".into()),
+                    thinking_enabled: Some(false),
+                    budget_tokens: Some(4096),
+                    cache_ttl: Some("1h".into()),
+                    openrouter_provider: Some(json!({"order": ["anthropic"]})),
+                    gemini_generation: Some(3),
+                    zai_clear_thinking: Some(false),
+                    zai_subscription: Some(true),
+                },
+            },
+            "reasoning_carrier": {
+                "empty": ReasoningCarrier::default(),
+                "signature": carrier_signature(),
+                "openrouter": carrier_openrouter(),
+                "zai": carrier_zai(),
+            },
+            "wire_block": wire_block_census(),
+            "wire_message": {
+                "bare": WireMessage::text(WireRole::User, "hi"),
+                "with_provenance": WireMessage::text(WireRole::Assistant, "hello")
+                    .minted_by(Some("anthropic".into()), Some("claude-opus-4-8".into())),
+            },
+        })
+    }
+
+    /// Every [`WireBlock`] variant, split out only to keep the census readable.
+    fn wire_block_census() -> serde_json::Value {
+        json!({
+                "text": WireBlock::Text { text: "hello".into() },
+                "image": WireBlock::Image {
+                    source: ImageSource::Base64 {
+                        media_type: "image/png".into(),
+                        data: "iVBORw0KGgo=".into(),
+                    },
+                },
+                // The carrier is `#[serde(flatten)]`: its fields sit alongside
+                // `thinking`, they are not nested under a `carrier` key.
+                "thinking_uncarried": WireBlock::Thinking {
+                    thinking: "private chain".into(),
+                    carrier: ReasoningCarrier::default(),
+                },
+                "thinking_signature": WireBlock::Thinking {
+                    thinking: "t".into(),
+                    carrier: carrier_signature(),
+                },
+                "thinking_openrouter": WireBlock::Thinking {
+                    thinking: "t".into(),
+                    carrier: carrier_openrouter(),
+                },
+                "thinking_zai": WireBlock::Thinking {
+                    thinking: "t".into(),
+                    carrier: carrier_zai(),
+                },
+                "redacted_thinking": WireBlock::RedactedThinking {
+                    data: "opaque".into(),
+                },
+                "tool_use": WireBlock::ToolUse {
+                    id: "tu_1".into(),
+                    name: "read".into(),
+                    input: json!({"path": "/tmp/x"}),
+                },
+                "tool_result_text": WireBlock::ToolResult {
+                    tool_use_id: "tu_1".into(),
+                    content: ToolResultContent::Text("ok".into()),
+                    is_error: false,
+                },
+                // Anthropic's block-shaped tool result, used by the
+                // generated-image replay path. The mirror typed this `string`
+                // for as long as it existed.
+                "tool_result_blocks": WireBlock::ToolResult {
+                    tool_use_id: "tu_2".into(),
+                    content: ToolResultContent::Blocks(vec![
+                        WireBlock::Text { text: "a cat".into() },
+                        WireBlock::Image {
+                            source: ImageSource::Base64 {
+                                media_type: "image/png".into(),
+                                data: "iVBORw0KGgo=".into(),
+                            },
+                        },
+                    ]),
+                    is_error: false,
+                },
+                // `is_error` is skipped when false, so it appears only here.
+                "tool_result_error": WireBlock::ToolResult {
+                    tool_use_id: "tu_3".into(),
+                    content: ToolResultContent::Text("boom".into()),
+                    is_error: true,
+                },
+        })
+    }
+
+    /// Pins the serialized shape of every type the sidecar hand-mirrors.
+    ///
+    /// The mirrors are six TypeScript interfaces whose doc comments say "the two
+    /// must change together" and which nothing checked. Drift here is
+    /// asymmetric: the sidecar's side is pinned by the vendor SDK types it feeds,
+    /// with a compiler behind it, so it is the Rust half that goes quietly stale
+    /// — or did, until this.
+    ///
+    /// The fixture is *generated*, not hand-written, which is the whole point: a
+    /// hand-written one would still say what the types used to look like. Adding
+    /// a field here fails this test until the fixture is regenerated, and the
+    /// regenerated fixture then fails
+    /// `llm-sidecar/tests/wire_parity.test.ts` until the mirror is updated too.
+    ///
+    /// Regenerate with `SHORE_REGENERATE_FIXTURES=1 cargo test -p shore-daemon
+    /// wire_shape_matches_shared_fixture`, then read the diff: it is exactly
+    /// what the sidecar will now receive.
+    #[test]
+    fn wire_shape_matches_shared_fixture() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/wire_parity.json"
+        );
+        let census = wire_shape_census();
+        let rendered = format!("{}\n", serde_json::to_string_pretty(&census).unwrap());
+
+        if std::env::var_os("SHORE_REGENERATE_FIXTURES").is_some() {
+            std::fs::write(path, &rendered).unwrap();
+            return;
+        }
+
+        let on_disk = std::fs::read_to_string(path).unwrap_or_default();
+        assert_eq!(
+            rendered, on_disk,
+            "wire shape changed. The sidecar mirrors these types by hand; \
+             regenerate with SHORE_REGENERATE_FIXTURES=1 and update \
+             llm-sidecar/src/llm/types.ts to match."
         );
     }
 }
