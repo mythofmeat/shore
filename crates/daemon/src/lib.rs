@@ -60,5 +60,6 @@ pub mod sandbox;
 pub mod swp_server;
 mod sync;
 pub mod templates;
+pub mod tool_rpc;
 pub mod tools;
 pub mod transcript_capture;
