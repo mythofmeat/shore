@@ -43,6 +43,28 @@ export interface ToolCallRequest {
   input: unknown;
 }
 
+/**
+ * An assistant turn this side appended, for the daemon to persist.
+ *
+ * Once the loop runs here, this side is the only one that knows where a turn
+ * ended: the daemon receives the whole loop as one flat stream whose terminal
+ * event carries no per-turn blocks. It rides the tool socket rather than the
+ * stream so it lands on the same channel as the tool calls it precedes — the
+ * daemon's generated-image handling attaches to the turn that requested the
+ * tool, so that turn has to be recorded first, and two transports could not
+ * guarantee it.
+ */
+export interface TurnRequest {
+  rid: string;
+  content_blocks: unknown[];
+}
+
+/** What the daemon is being asked to do. Tagged, because confusing the two
+ * would persist an assistant turn as a tool result. */
+export type DaemonRequest =
+  | ({ kind: "tool" } & ToolCallRequest)
+  | ({ kind: "turn" } & TurnRequest);
+
 /** A tool that ran. `is_error` means it failed, not that the call failed. */
 export interface ToolCallResponse {
   output: string;
@@ -76,7 +98,7 @@ export class ToolRpcUnreachable extends Error {
  */
 export async function callDaemonTool(
   socketPath: string,
-  request: ToolCallRequest,
+  request: DaemonRequest,
   signal?: AbortSignal | null,
 ): Promise<ToolCallOutcome> {
   if (signal?.aborted) {
@@ -143,6 +165,25 @@ export async function callDaemonTool(
 }
 
 /**
+ * Tell the daemon about an assistant turn this side appended.
+ *
+ * Sent before the turn's tools run, on the same channel, so the daemon has the
+ * turn recorded by the time it dispatches them.
+ */
+export async function reportTurn(
+  rpc: ToolRpc,
+  contentBlocks: unknown[],
+  signal?: AbortSignal | null,
+): Promise<void> {
+  const outcome = await callDaemonTool(
+    rpc.socket_path,
+    { kind: "turn", rid: rpc.rid, content_blocks: contentBlocks },
+    signal,
+  );
+  if (isTransportError(outcome)) throw new ToolRpcUnreachable(outcome.error);
+}
+
+/**
  * Turn the daemon's tool surface into tools the runner can execute.
  *
  * The schemas arrive from the daemon at runtime, so the const-generic inference
@@ -171,6 +212,7 @@ export function daemonTools(
         const outcome = await callDaemonTool(
           rpc.socket_path,
           {
+            kind: "tool",
             rid: rpc.rid,
             // The runner hands back the tool_use that triggered this run; its
             // id is what the daemon echoes into the result block.

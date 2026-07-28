@@ -1350,12 +1350,24 @@ mod tests {
             // The tool-call protocol is hand-written on both sides, so it is
             // pinned here for the same reason the wire types are.
             "tool_rpc": {
-                "request": crate::tool_rpc::ToolCallRequest {
-                    rid: "rid_1".into(),
-                    tool_id: "tu_1".into(),
-                    name: "read".into(),
-                    input: json!({"path": "/tmp/x"}),
-                },
+                // Tagged: confusing a turn for a tool result would persist an
+                // assistant turn as tool output.
+                "request_tool": crate::tool_rpc::SidecarRequest::Tool(
+                    crate::tool_rpc::ToolCallRequest {
+                        rid: "rid_1".into(),
+                        tool_id: "tu_1".into(),
+                        name: "read".into(),
+                        input: json!({"path": "/tmp/x"}),
+                    },
+                ),
+                "request_turn": crate::tool_rpc::SidecarRequest::Turn(
+                    crate::tool_rpc::TurnRequest {
+                        rid: "rid_1".into(),
+                        content_blocks: vec![ContentBlock::Text {
+                            text: "let me look".into(),
+                        }],
+                    },
+                ),
                 // A tool that ran, and a call that never reached a loop. The
                 // outcome is untagged, so these two shapes are the only thing
                 // distinguishing them on the wire.

@@ -33,6 +33,7 @@ import type {
   ToolCallError,
   ToolCallRequest,
   ToolCallResponse,
+  TurnRequest,
 } from "../src/llm/tool_rpc.ts";
 import {
   systemToText,
@@ -53,7 +54,8 @@ import {
  */
 interface WireFixture {
   tool_rpc: {
-    request: ToolCallRequest;
+    request_tool: { kind: "tool" } & ToolCallRequest;
+    request_turn: { kind: "turn" } & TurnRequest;
     outcome_ran: ToolCallResponse;
     outcome_failed: ToolCallResponse;
     outcome_unreachable: ToolCallError;
@@ -160,12 +162,25 @@ describe("the tool-call protocol", () => {
   // Hand-written on both sides — the daemon parses what this side writes and
   // this side parses what the daemon answers, with nothing in between to catch
   // a rename. Same reason the wire types are pinned.
-  test("a call carries exactly the fields the daemon reads", () => {
-    assertKeys<ToolCallRequest>(
-      wire.tool_rpc.request,
-      ["rid", "tool_id", "name", "input"],
+  test("a tool call carries exactly the fields the daemon reads", () => {
+    assertKeys<{ kind: string } & ToolCallRequest>(
+      wire.tool_rpc.request_tool,
+      ["kind", "rid", "tool_id", "name", "input"],
       "ToolCallRequest",
     );
+    expect(wire.tool_rpc.request_tool.kind).toBe("tool");
+  });
+
+  test("a reported turn is a different request, not a tool result", () => {
+    // Untagged, a turn and a tool call would be told apart only by field
+    // presence — and persisting one as the other would record an assistant
+    // turn as tool output.
+    assertKeys<{ kind: string } & TurnRequest>(
+      wire.tool_rpc.request_turn,
+      ["kind", "rid", "content_blocks"],
+      "TurnRequest",
+    );
+    expect(wire.tool_rpc.request_turn.kind).toBe("turn");
   });
 
   test("a tool that ran, whether or not it succeeded", () => {

@@ -268,9 +268,30 @@ describe("driving a tool loop", () => {
     expect(done.usage.output_tokens).toBe(14);
     expect(done.usage.cache_read_tokens).toBe(8);
 
-    // The tool actually ran, in the daemon, with the loop's rid.
-    expect(daemon.calls).toHaveLength(1);
-    expect(daemon.calls[0]).toMatchObject({ rid: "rid_1", tool_id: "tu_1", name: "read" });
+    // The tool actually ran, in the daemon, with the loop's rid — and the
+    // assistant turn that asked for it was reported first, on the same channel,
+    // so the daemon has it recorded before dispatching.
+    expect(daemon.calls.map((c) => c["kind"])).toEqual(["turn", "tool"]);
+    expect(daemon.calls[1]).toMatchObject({ rid: "rid_1", tool_id: "tu_1", name: "read" });
+  });
+
+  test("the turn reported to the daemon carries the blocks it produced", async () => {
+    // The daemon persists what a loop produced, and once the loop runs here it
+    // is the only side that knows where each turn ended — the whole loop
+    // reaches the daemon as one flat stream carrying no per-turn blocks.
+    const anthropic = fakeAnthropic([
+      { kind: "tool", id: "tu_1", name: "read", input: {} },
+      { kind: "text", text: "done" },
+    ]);
+    const daemon = fakeToolDaemon("ok");
+    stops.push(anthropic.stop, daemon.stop);
+
+    await collect(anthropicToolLoopEvents(request(anthropic, daemon.path)));
+
+    const turn = daemon.calls.find((c) => c["kind"] === "turn") as {
+      content_blocks: Array<{ type: string }>;
+    };
+    expect(turn.content_blocks.map((b) => b.type)).toEqual(["tool_use"]);
   });
 
   test("the assistant turn is appended exactly once", async () => {

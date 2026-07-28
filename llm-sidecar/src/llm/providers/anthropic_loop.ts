@@ -40,7 +40,7 @@ import type {
   BetaTextBlockParam,
 } from "@anthropic-ai/sdk/resources/beta/messages";
 
-import { daemonTools, type ToolRpcUnreachable } from "../tool_rpc.ts";
+import { daemonTools, reportTurn, type ToolRpcUnreachable } from "../tool_rpc.ts";
 import type { SidecarRequest, StreamEvent, SystemContent, Usage } from "../types.ts";
 import {
   anthropicContentEvents,
@@ -142,6 +142,12 @@ export async function* anthropicToolLoopEvents(
       // runner notice: with messages taken over it would spend another request
       // first. See the module doc.
       if (message.stop_reason !== "tool_use") break;
+
+      // The daemon persists the turns a loop produced, and this side is now the
+      // only one that knows where each ended. Reported before the tools it
+      // asked for run, on the same channel, so the daemon has it recorded by
+      // the time they dispatch.
+      await reportTurn(rpc, message.content, abort.signal);
 
       // Appending the assistant turn is now this side's job, and re-placing the
       // breakpoints over the grown conversation is the point of doing so.

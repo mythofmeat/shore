@@ -55,13 +55,24 @@
     }
   },
   "tool_rpc": {
-    "request": {
+    "request_tool": {
+      "kind": "tool",
       "rid": "rid_1",
       "tool_id": "tu_1",
       "name": "read",
       "input": {
         "path": "/tmp/x"
       }
+    },
+    "request_turn": {
+      "kind": "turn",
+      "rid": "rid_1",
+      "content_blocks": [
+        {
+          "type": "text",
+          "text": "let me look"
+        }
+      ]
     },
     "outcome_ran": {
       "output": "file body",

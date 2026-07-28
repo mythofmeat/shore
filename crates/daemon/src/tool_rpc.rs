@@ -60,6 +60,46 @@ pub struct ToolCallRequest {
     pub input: serde_json::Value,
 }
 
+/// An assistant turn the sidecar appended to the conversation.
+///
+/// The daemon persists the turns a loop produced, and once the sidecar drives
+/// the loop it is the only side that knows where one turn ended and the next
+/// began: the whole loop reaches the daemon as a single flat stream whose
+/// terminal event carries no per-turn blocks.
+///
+/// This rides the *tool socket* rather than the event stream so it arrives on
+/// the same channel as the tool calls it precedes. That is not a detail — the
+/// generated-image side channel attaches its image to the assistant turn that
+/// requested it, so that turn has to be recorded before its tools dispatch, and
+/// two transports could not guarantee it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TurnRequest {
+    pub rid: String,
+    /// The assistant turn's content, in the daemon's stored block shape.
+    pub content_blocks: Vec<shore_common::protocol::types::ContentBlock>,
+}
+
+/// What the sidecar is asking for. Tagged, because the two are answered
+/// differently and confusing them would persist a turn as a tool result.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SidecarRequest {
+    /// Run this tool and tell me what it produced.
+    Tool(ToolCallRequest),
+    /// Record this assistant turn; nothing to compute.
+    Turn(TurnRequest),
+}
+
+impl SidecarRequest {
+    /// Which in-flight loop this belongs to.
+    pub fn rid(&self) -> &str {
+        match self {
+            Self::Tool(request) => &request.rid,
+            Self::Turn(request) => &request.rid,
+        }
+    }
+}
+
 /// What running it produced.
 ///
 /// A failed tool is a normal outcome, not a transport error: the model is told
@@ -89,10 +129,10 @@ pub enum ToolCallOutcome {
     Err(ToolCallError),
 }
 
-/// A call plus the channel its answer goes back on.
+/// A request plus the channel its answer goes back on.
 #[derive(Debug)]
 pub struct ToolCall {
-    pub request: ToolCallRequest,
+    pub request: SidecarRequest,
     reply: oneshot::Sender<ToolCallResponse>,
 }
 
@@ -100,7 +140,7 @@ impl ToolCall {
     /// Build a call and its reply channel directly, for tests that drive a
     /// servicing task without a socket in the way.
     #[cfg(test)]
-    pub fn for_test(request: ToolCallRequest) -> (Self, oneshot::Receiver<ToolCallResponse>) {
+    pub fn for_test(request: SidecarRequest) -> (Self, oneshot::Receiver<ToolCallResponse>) {
         let (reply, rx) = oneshot::channel();
         (Self { request, reply }, rx)
     }
@@ -169,14 +209,14 @@ impl ToolRpcRegistry {
     }
 
     /// Route one call to its loop and wait for the answer.
-    async fn dispatch(&self, request: ToolCallRequest) -> ToolCallOutcome {
-        let Some(sender) = self.loops.get(&request.rid).map(|entry| entry.clone()) else {
+    async fn dispatch(&self, request: SidecarRequest) -> ToolCallOutcome {
+        let Some(sender) = self.loops.get(request.rid()).map(|entry| entry.clone()) else {
             return ToolCallOutcome::Err(ToolCallError {
-                error: format!("no in-flight loop for rid {}", request.rid),
+                error: format!("no in-flight loop for rid {}", request.rid()),
             });
         };
 
-        let rid = request.rid.clone();
+        let rid = request.rid().to_owned();
         let (reply_tx, reply_rx) = oneshot::channel();
         let call = ToolCall {
             request,
@@ -245,9 +285,9 @@ async fn handle_connection(stream: UnixStream, registry: &ToolRpcRegistry) -> st
         return Ok(());
     }
 
-    let outcome = match serde_json::from_str::<ToolCallRequest>(line.trim_end()) {
+    let outcome = match serde_json::from_str::<SidecarRequest>(line.trim_end()) {
         Ok(request) => {
-            debug!(rid = %request.rid, tool = %request.name, "Tool RPC: dispatching");
+            debug!(rid = %request.rid(), "Tool RPC: dispatching");
             registry.dispatch(request).await
         }
         Err(e) => ToolCallOutcome::Err(ToolCallError {
@@ -269,7 +309,7 @@ async fn handle_connection(stream: UnixStream, registry: &ToolRpcRegistry) -> st
 
 /// Make one tool call over the socket. Used by tests and by anything on this
 /// side that needs to speak the protocol; the sidecar has its own client.
-pub async fn call(socket: &Path, request: &ToolCallRequest) -> std::io::Result<ToolCallOutcome> {
+pub async fn call(socket: &Path, request: &SidecarRequest) -> std::io::Result<ToolCallOutcome> {
     let stream = UnixStream::connect(socket).await?;
     let mut reader = BufReader::new(stream);
     let mut body = serde_json::to_string(request).map_err(std::io::Error::other)?;
@@ -306,13 +346,13 @@ mod tests {
     use serde_json::json;
     use std::sync::Arc;
 
-    fn request(rid: &str, name: &str) -> ToolCallRequest {
-        ToolCallRequest {
+    fn request(rid: &str, name: &str) -> SidecarRequest {
+        SidecarRequest::Tool(ToolCallRequest {
             rid: rid.to_owned(),
             tool_id: "tu_1".to_owned(),
             name: name.to_owned(),
             input: json!({"path": "/tmp/x"}),
-        }
+        })
     }
 
     /// A bound socket plus a running server, torn down with the temp dir.
@@ -336,7 +376,7 @@ mod tests {
     }
 
     /// Make one call, failing the test rather than propagating.
-    async fn call_ok(socket: &Path, request: &ToolCallRequest) -> ToolCallOutcome {
+    async fn call_ok(socket: &Path, request: &SidecarRequest) -> ToolCallOutcome {
         call(socket, request).await.expect("tool socket round trip")
     }
 
@@ -348,7 +388,10 @@ mod tests {
         // The loop side: take one call, run it, answer.
         let loop_task = tokio::spawn(async move {
             let call = calls.recv().await.expect("a call should arrive");
-            let name = call.request.name.clone();
+            let SidecarRequest::Tool(request) = &call.request else {
+                panic!("expected a tool request")
+            };
+            let name = request.name.clone();
             call.respond(ToolCallResponse {
                 output: format!("ran {name}"),
                 is_error: false,

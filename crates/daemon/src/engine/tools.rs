@@ -160,42 +160,89 @@ pub async fn serve_tool_calls(
     intermediate_messages: &mut Vec<Message>,
 ) {
     while let Some(call) = calls.recv().await {
-        let tool_use = ToolUseEvent {
-            id: call.request.tool_id.clone(),
-            name: call.request.name.clone(),
-            input: call.request.input.clone(),
-        };
-        let outcome = execute_tool_use(
-            &tool_use,
-            direct_tx,
-            request_rid,
-            ctx,
-            tools_cfg,
-            diag,
-            intermediate_messages.as_mut_slice(),
-        )
-        .await;
-
-        // `execute_tool_use` only ever produces a tool result; anything else
-        // would be a bug here rather than something the model should be told
-        // about, so it is reported as a failed tool rather than crashing a turn.
-        let response = match &outcome.content_block {
-            ContentBlock::ToolResult {
-                content, is_error, ..
-            } => crate::tool_rpc::ToolCallResponse {
-                output: content.clone(),
-                is_error: *is_error,
-            },
-            ContentBlock::Text { .. }
-            | ContentBlock::Thinking { .. }
-            | ContentBlock::RedactedThinking { .. }
-            | ContentBlock::ToolUse { .. } => crate::tool_rpc::ToolCallResponse {
-                output: "tool dispatch produced a non-result block".to_owned(),
-                is_error: true,
-            },
+        let response = match &call.request {
+            crate::tool_rpc::SidecarRequest::Turn(turn) => {
+                // Recorded before the tools it asked for run, which is why this
+                // shares a channel with them: `attach_generated_image` hangs the
+                // image off the turn that requested it, and that turn has to be
+                // the last message by then.
+                record_assistant_turn(intermediate_messages, turn.content_blocks.clone());
+                crate::tool_rpc::ToolCallResponse {
+                    output: String::new(),
+                    is_error: false,
+                }
+            }
+            crate::tool_rpc::SidecarRequest::Tool(request) => {
+                let tool_use = ToolUseEvent {
+                    id: request.tool_id.clone(),
+                    name: request.name.clone(),
+                    input: request.input.clone(),
+                };
+                let outcome = execute_tool_use(
+                    &tool_use,
+                    direct_tx,
+                    request_rid,
+                    ctx,
+                    tools_cfg,
+                    diag,
+                    intermediate_messages.as_mut_slice(),
+                )
+                .await;
+                let response = tool_response_from(&outcome.content_block);
+                record_tool_result_message(
+                    intermediate_messages,
+                    std::slice::from_ref(&outcome.content_block),
+                );
+                response
+            }
         };
         call.respond(response);
     }
+}
+
+/// Project a dispatched block onto the socket's answer shape.
+fn tool_response_from(block: &ContentBlock) -> crate::tool_rpc::ToolCallResponse {
+    // `execute_tool_use` only ever produces a tool result; anything else would
+    // be a bug here rather than something the model should be told about, so it
+    // is reported as a failed tool rather than crashing a turn.
+    match block {
+        ContentBlock::ToolResult {
+            content, is_error, ..
+        } => crate::tool_rpc::ToolCallResponse {
+            output: content.clone(),
+            is_error: *is_error,
+        },
+        ContentBlock::Text { .. }
+        | ContentBlock::Thinking { .. }
+        | ContentBlock::RedactedThinking { .. }
+        | ContentBlock::ToolUse { .. } => crate::tool_rpc::ToolCallResponse {
+            output: "tool dispatch produced a non-result block".to_owned(),
+            is_error: true,
+        },
+    }
+}
+
+/// Record an assistant turn a sidecar-driven loop produced.
+///
+/// The daemon-driven loop builds this itself in `append_assistant_tool_use_turn`
+/// from the stream result it already has; when the sidecar drives, the blocks
+/// arrive over the socket instead. Provenance is left unset — the request the
+/// loop ran on carries it, and the persistence layer stamps it there.
+fn record_assistant_turn(intermediate_messages: &mut Vec<Message>, blocks: Vec<ContentBlock>) {
+    intermediate_messages.push(Message {
+        msg_id: format!("m_{}", uuid::Uuid::new_v4()),
+        origin: None,
+        role: Role::Assistant,
+        content: derive_content_from_blocks(&blocks),
+        images: vec![],
+        content_blocks: blocks,
+        alt_index: None,
+        alt_count: None,
+        alternatives: vec![],
+        timestamp: chrono::Local::now().to_rfc3339(),
+        provider_key: None,
+        model: None,
+    });
 }
 
 /// Drives the shared tool loop for the chat path (and sub-agents).
@@ -609,7 +656,9 @@ mod tests {
     use crate::llm::types::{Timing, Usage};
     use crate::llm::LlmClient;
     use crate::test_support::TestToolContext;
-    use crate::tool_rpc::{ToolCall, ToolCallRequest, ToolCallResponse};
+    use crate::tool_rpc::{
+        SidecarRequest, ToolCall, ToolCallRequest, ToolCallResponse, TurnRequest,
+    };
     use serde_json::json;
     use tokio::sync::mpsc;
 
@@ -626,12 +675,12 @@ mod tests {
         name: &str,
         input: Value,
     ) -> (ToolCall, tokio::sync::oneshot::Receiver<ToolCallResponse>) {
-        ToolCall::for_test(ToolCallRequest {
+        ToolCall::for_test(SidecarRequest::Tool(ToolCallRequest {
             rid: "rid_1".into(),
             tool_id: "tu_1".into(),
             name: name.into(),
             input,
-        })
+        }))
     }
 
     #[tokio::test]
@@ -683,6 +732,55 @@ mod tests {
             .tool_calls
             .len();
         assert_eq!(calls, 1);
+    }
+
+    #[tokio::test]
+    async fn a_reported_turn_is_recorded_before_the_tools_it_asked_for() {
+        // Why turns ride the tool socket rather than the event stream: the
+        // generated-image side channel hangs its image off the assistant turn
+        // that requested it, so that turn must already be the last message when
+        // its tools dispatch. One channel makes that ordering structural.
+        let ctx = TestToolContext::new();
+        let (direct_tx, _events) = mpsc::channel(32);
+        let diag = test_diag();
+        let mut intermediate = Vec::new();
+        let (calls_tx, mut calls_rx) = mpsc::channel(4);
+
+        let (turn, turn_reply) = ToolCall::for_test(SidecarRequest::Turn(TurnRequest {
+            rid: "rid_1".into(),
+            content_blocks: vec![
+                ContentBlock::Text {
+                    text: "let me look".into(),
+                },
+                ContentBlock::ToolUse {
+                    id: "tu_1".into(),
+                    name: "read".into(),
+                    input: json!({"path": "nope.txt"}),
+                },
+            ],
+        }));
+        calls_tx.send(turn).await.expect("queue the turn");
+        let (call, _reply) = sidecar_call("read", json!({"path": "nope.txt"}));
+        calls_tx.send(call).await.expect("queue the call");
+        drop(calls_tx);
+
+        serve_tool_calls(
+            &mut calls_rx,
+            &direct_tx,
+            Some("rid_1"),
+            &ctx,
+            &tools_cfg(0),
+            &diag,
+            &mut intermediate,
+        )
+        .await;
+
+        assert!(!turn_reply.await.expect("the turn is acknowledged").is_error);
+        // Assistant turn first, then the user turn carrying its tool result —
+        // the same order the daemon-driven loop persists.
+        let roles: Vec<Role> = intermediate.iter().map(|m| m.role.clone()).collect();
+        assert_eq!(roles, vec![Role::Assistant, Role::User], "{roles:?}");
+        assert_eq!(intermediate[0].content, "let me look");
     }
 
     #[tokio::test]

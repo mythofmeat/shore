@@ -101,6 +101,7 @@ describe("the call itself", () => {
   test("a request reaches the daemon and its answer comes back", async () => {
     const daemon = fakeDaemon({ kind: "answer", body: { output: "file body", is_error: false } });
     const outcome = await callDaemonTool(daemon.path, {
+      kind: "tool",
       rid: "rid_1",
       tool_id: "tu_1",
       name: "read",
@@ -109,7 +110,7 @@ describe("the call itself", () => {
 
     expect(outcome).toEqual({ output: "file body", is_error: false });
     expect(daemon.seen).toEqual([
-      { rid: "rid_1", tool_id: "tu_1", name: "read", input: { path: "/tmp/x" } },
+      { kind: "tool", rid: "rid_1", tool_id: "tu_1", name: "read", input: { path: "/tmp/x" } },
     ]);
     daemon.stop();
   });
@@ -117,6 +118,7 @@ describe("the call itself", () => {
   test("an unreachable socket rejects rather than hanging", async () => {
     await expect(
       callDaemonTool("/nonexistent/shore-tools.sock", {
+        kind: "tool",
         rid: "rid_1",
         tool_id: "tu_1",
         name: "read",
@@ -128,7 +130,7 @@ describe("the call itself", () => {
   test("a daemon that closes without answering rejects", async () => {
     const daemon = fakeDaemon({ kind: "close" });
     await expect(
-      callDaemonTool(daemon.path, { rid: "rid_1", tool_id: "tu_1", name: "read", input: {} }),
+      callDaemonTool(daemon.path, { kind: "tool", rid: "rid_1", tool_id: "tu_1", name: "read", input: {} }),
     ).rejects.toBeInstanceOf(ToolRpcUnreachable);
     daemon.stop();
   });
@@ -136,7 +138,7 @@ describe("the call itself", () => {
   test("a non-JSON answer rejects rather than surfacing as a tool result", async () => {
     const daemon = fakeDaemon({ kind: "raw", body: "not json at all\n" });
     await expect(
-      callDaemonTool(daemon.path, { rid: "rid_1", tool_id: "tu_1", name: "read", input: {} }),
+      callDaemonTool(daemon.path, { kind: "tool", rid: "rid_1", tool_id: "tu_1", name: "read", input: {} }),
     ).rejects.toBeInstanceOf(ToolRpcUnreachable);
     daemon.stop();
   });
@@ -146,7 +148,7 @@ describe("the call itself", () => {
     await expect(
       callDaemonTool(
         daemon.path,
-        { rid: "rid_1", tool_id: "tu_1", name: "read", input: {} },
+        { kind: "tool", rid: "rid_1", tool_id: "tu_1", name: "read", input: {} },
         AbortSignal.abort(),
       ),
     ).rejects.toBeInstanceOf(ToolRpcUnreachable);
@@ -161,7 +163,7 @@ describe("the call itself", () => {
     const controller = new AbortController();
     const pending = callDaemonTool(
       daemon.path,
-      { rid: "rid_1", tool_id: "tu_1", name: "read", input: {} },
+      { kind: "tool", rid: "rid_1", tool_id: "tu_1", name: "read", input: {} },
       controller.signal,
     );
     await Bun.sleep(10);
