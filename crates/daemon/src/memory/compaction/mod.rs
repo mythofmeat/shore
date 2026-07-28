@@ -1154,6 +1154,7 @@ impl IdleTimer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::llm::types::SystemBlock;
     use chrono::Local;
     use serde_json::json;
     use std::future::Future;
@@ -1261,7 +1262,7 @@ mod tests {
             api_key_name: None,
             base_url: None,
             messages: llm_messages,
-            system: Some(serde_json::json!("mock chat system")),
+            system: vec![SystemBlock::new("mock chat system", "system")],
             tools: Some(Vec::new()),
             max_tokens: 1024,
             temperature: None,
@@ -2752,7 +2753,7 @@ mod tests {
                 WireMessage::text(WireRole::User, "hi"),
                 WireMessage::text(WireRole::Assistant, "hello"),
             ],
-            system: Some(json!("sys")),
+            system: vec![SystemBlock::new("sys", "system")],
             tools: None,
             max_tokens: 1024,
             temperature: None,

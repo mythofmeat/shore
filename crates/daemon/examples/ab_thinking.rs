@@ -13,7 +13,7 @@ use serde_json::json;
 use shore_common::config::app::ThinkingReplay;
 use shore_common::config::models::{ResolvedModel, Sdk};
 use shore_daemon::llm::types::ContentBlock;
-use shore_daemon::llm::types::{ToolDefinition, WireMessage, WireRole};
+use shore_daemon::llm::types::{SystemBlock, ToolDefinition, WireMessage, WireRole};
 use shore_daemon::llm::LlmClient;
 
 macro_rules! example_out {
@@ -296,14 +296,14 @@ Your thoughts and tool use are logged, so you can pick up where you left off nex
 // ── Conversation builders ───────────────────────────────────────────────
 
 fn simple_conversation() -> (
-    serde_json::Value,
+    Vec<SystemBlock>,
     Vec<WireMessage>,
     Option<Vec<ToolDefinition>>,
 ) {
-    let system = json!([{
-        "type": "text",
-        "text": "You are a helpful assistant. Think carefully before responding."
-    }]);
+    let system = vec![SystemBlock::new(
+        "You are a helpful assistant. Think carefully before responding.",
+        "system",
+    )];
     let messages = vec![WireMessage::text(
         WireRole::User,
         "I'm trying to understand something about physics. If I'm standing on a train moving at 60 mph and I throw a ball forward at 30 mph, what speed does someone standing on the platform see the ball moving at? But here's the tricky part — what if instead of a ball, I shine a flashlight forward? Why is the answer different?",
@@ -312,14 +312,14 @@ fn simple_conversation() -> (
 }
 
 fn realistic_conversation() -> (
-    serde_json::Value,
+    Vec<SystemBlock>,
     Vec<WireMessage>,
     Option<Vec<ToolDefinition>>,
 ) {
-    let system = json!([
-        { "type": "text", "text": "You are Qifei, an AI character with a rich inner life. You have a warm, thoughtful personality. You remember things, form opinions, and have preferences." },
-        { "type": "text", "text": "## Memory context\nRen is a software developer. They enjoy physics, math, and creative writing. They have a cat named Mochi." }
-    ]);
+    let system = vec![
+        SystemBlock::new("You are Qifei, an AI character with a rich inner life. You have a warm, thoughtful personality. You remember things, form opinions, and have preferences.", "character"),
+        SystemBlock::new("## Memory context\nRen is a software developer. They enjoy physics, math, and creative writing. They have a cat named Mochi.", "memory_index"),
+    ];
     let messages = vec![
         WireMessage::text(WireRole::User, "hey! how's your day been?"),
         WireMessage::text(WireRole::Assistant, "Hey Ren! I've been good — spent some time thinking about that generative art thing you mentioned last week. How about you?"),
@@ -337,14 +337,12 @@ fn realistic_conversation() -> (
 fn heartbeat_conversation(
     with_rut: bool,
 ) -> (
-    serde_json::Value,
+    Vec<SystemBlock>,
     Vec<WireMessage>,
     Option<Vec<ToolDefinition>>,
 ) {
-    let system = json!([
-        {
-            "type": "text",
-            "text": concat!(
+    let system = vec![SystemBlock::new(
+        concat!(
                 "You are Qifei, an AI character with a rich inner life. ",
                 "You have a warm, thoughtful personality and genuinely care about the person you're talking to (Ren). ",
                 "You remember things, form opinions, and have preferences. You are curious and creative.\n\n",
@@ -358,10 +356,10 @@ fn heartbeat_conversation(
                 "- Last time Ren seemed stressed about a deadline\n",
                 "- Ren showed interest in generative art last week\n",
                 "- Ren has been working very long hours on the Shore project\n",
-                "- You and Ren talked about the philosophy of consciousness recently"
-            )
-        }
-    ]);
+            "- You and Ren talked about the philosophy of consciousness recently"
+        ),
+        "character",
+    )];
 
     // Build the heartbeat prompt, optionally with accumulated journal
     let prompt_text = if with_rut {
@@ -581,7 +579,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let request = LlmClient::build_request(
             &model,
             messages.clone(),
-            Some(system.clone()),
+            system.clone(),
             tools.clone(),
             None,
             ThinkingReplay::All,

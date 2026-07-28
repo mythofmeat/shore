@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Duration, Local, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use shore_common::config::app::DreamingConfig;
 use shore_common::config::cron::CronSchedule;
 use shore_common::config::{
@@ -14,7 +14,7 @@ use shore_common::config::{
 
 use crate::ledger::{CallType, LedgerClient};
 use crate::llm::types::{
-    GenerateResponse, LlmRequest, ToolResultContent, WireBlock, WireMessage, WireRole,
+    GenerateResponse, LlmRequest, SystemBlock, ToolResultContent, WireBlock, WireMessage, WireRole,
 };
 use tokio::fs;
 use tracing::{debug, info, warn};
@@ -1121,9 +1121,12 @@ fn build_librarian_request(
     //   change.
     let uses_anthropic_cache = resolved.sdk.uses_anthropic_prompt_cache();
     let system_arg = if uses_anthropic_cache {
-        None
+        Vec::new()
     } else {
-        Some(json!(&system))
+        vec![SystemBlock::new(
+            system.clone(),
+            SystemBlock::SYNTHETIC_LABEL,
+        )]
     };
     let mut request = LedgerClient::build_request_with_provider_keys(
         &resolved,

@@ -327,11 +327,7 @@ export function mergeConsecutiveRoles(contents: Content[]): void {
 }
 
 function translateSystem(system: SystemContent | undefined): Content | undefined {
-  if (system === undefined) return undefined;
-  if (typeof system === "string") {
-    return system ? { parts: [{ text: system }] } : undefined;
-  }
-  const parts = system.map((b) => ({ text: b.text }));
+  const parts = (system ?? []).map((b) => ({ text: b.text }));
   return parts.length > 0 ? { parts } : undefined;
 }
 

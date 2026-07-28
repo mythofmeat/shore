@@ -16,8 +16,8 @@
  *      rejects role:system in messages[]). Always-wrap today, behind a
  *      `systemMessageStrategy` seam; opus-4.8 native system messages are a
  *      tracked post-parity follow-up.
- *   4. trivial plumbing: strip `_label`, pass `provider_options.openrouter_provider`
- *      into `body.provider`, strip a trailing `/v1` from base_url.
+ *   4. trivial plumbing: pass `provider_options.openrouter_provider` into
+ *      `body.provider`, strip a trailing `/v1` from base_url.
  *
  * The SDK handles everything else: SSE, thinking/signature verbatim round-trip,
  * tool_use accumulation, retries, errors. Cache-forensics stays Rust-side.
@@ -268,19 +268,20 @@ export function buildAnthropicPlan(req: SidecarRequest): {
   if (cacheEnabled && !hasExistingMarkers) {
     const cc = makeCacheControl(cacheTtl);
     const msgs = normalizeMessages(converted); // strip cc, string → block array
-    // Keep `_label` through placement (the anchor skips memory_index by label),
-    // then strip it afterward — mirrors Rust's normalize → place → strip order.
-    const sys = systemToLabeledBlocks(req.system);
-    const { msgBp, sysBp } = tsDefaultPlacement(msgs, sys);
+    // Placement reads the labels (the system anchor skips `memory_index`), so
+    // it runs over the labelled blocks and emits provider blocks at the end.
+    // The label cannot leak to the provider now: it is not on `TextBlockParam`.
+    const labelled = req.system ?? [];
+    const sys = systemToBlocks(labelled);
+    const { msgBp, sysBp } = tsDefaultPlacement(msgs, labelled);
     placeBreakpoints(msgs, sys, cc, msgBp, sysBp);
-    for (const b of sys) delete (b as { _label?: string })._label;
     messages = msgs;
     system = sys;
     msgBreakpoints = msgBp;
     sysBreakpoints = sysBp;
   } else {
     messages = converted.map(toMessageParam);
-    system = systemToBlocks(req.system); // strips _label; no cache_control
+    system = systemToBlocks(req.system); // no cache_control
   }
 
   const { thinking, outputConfig } = buildThinkingParams(opts, req.model, req.max_tokens);
@@ -392,24 +393,13 @@ function normalizeMessages(messages: WireMessage[]): MessageParam[] {
   });
 }
 
-/** System → text blocks PRESERVING `_label` (placement reads it; stripped after). */
-function systemToLabeledBlocks(
-  system: SystemContent | undefined,
-): Array<TextBlockParam & { _label?: string }> {
-  if (system === undefined) return [];
-  if (typeof system === "string") return system ? [{ type: "text", text: system }] : [];
-  return system.map((b) => ({
-    type: "text" as const,
-    text: b.text,
-    ...(b._label !== undefined ? { _label: b._label } : {}),
-  }));
-}
-
-/** Last system block whose `_label` is NOT `"memory_index"` (memory_index
- * churns on dreaming/compaction). Returns -1 if none. */
-function lastStableSystemIndex(system: Array<{ _label?: string }>): number {
+/** Last system block whose label is NOT `"memory_index"` — that block is
+ * rewritten by every dreaming and compaction pass, so anchoring the system
+ * breakpoint on it would throw the system prefix away each time. Returns -1
+ * when there is no stable block. */
+function lastStableSystemIndex(system: SystemContent): number {
   for (let i = system.length - 1; i >= 0; i--) {
-    if (system[i]?._label !== "memory_index") return i;
+    if (system[i]?.label !== "memory_index") return i;
   }
   return -1;
 }
@@ -507,7 +497,7 @@ function tsMessageBreakpoints(messages: MessageParam[]): number[] {
 
 function tsDefaultPlacement(
   messages: MessageParam[],
-  system: Array<TextBlockParam & { _label?: string }>,
+  system: SystemContent,
 ): { msgBp: number[]; sysBp: number[] } {
   const sysIdx = lastStableSystemIndex(system);
   return {
@@ -583,13 +573,10 @@ export function wrapInlineSystemInstruction(text: string): string {
   return `<system_instruction>${text}</system_instruction>`;
 }
 
-/** Convert system → Anthropic text blocks, dropping internal `_label`. */
+/** Convert system → Anthropic text blocks. The label stays behind: it is not a
+ * field on `TextBlockParam`, so it can no longer leak to the provider. */
 function systemToBlocks(system: SystemContent | undefined): TextBlockParam[] {
-  if (system === undefined) return [];
-  if (typeof system === "string") {
-    return system ? [{ type: "text", text: system }] : [];
-  }
-  return system.map((b) => ({ type: "text", text: b.text }));
+  return (system ?? []).map((b) => ({ type: "text", text: b.text }));
 }
 
 /**

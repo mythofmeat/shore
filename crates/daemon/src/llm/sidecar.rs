@@ -279,7 +279,7 @@ mod tests {
             api_key_name: None,
             base_url: None,
             messages: vec![WireMessage::text(WireRole::User, "hi")],
-            system: None,
+            system: Vec::new(),
             tools: None,
             max_tokens: 128,
             temperature: None,

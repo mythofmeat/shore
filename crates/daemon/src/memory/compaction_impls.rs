@@ -464,6 +464,7 @@ impl ConversationManager for RealConversationManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::llm::types::SystemBlock;
     use crate::llm::types::{WireBlock, WireRole};
 
     /// Text of a single-text-block turn, for assertions.
@@ -521,7 +522,7 @@ mod tests {
     /// in-memory `last_request` would carry).
     fn chat_shape_request(
         sdk: Sdk,
-        system: Option<serde_json::Value>,
+        system: Vec<SystemBlock>,
         tools: Option<Vec<crate::llm::types::ToolDefinition>>,
         messages: Vec<WireMessage>,
     ) -> LlmRequest {
@@ -570,7 +571,7 @@ mod tests {
         );
         let chat_request = chat_shape_request(
             Sdk::Anthropic,
-            Some(json!("cached system")),
+            vec![SystemBlock::new("cached system", "system")],
             Some(vec![crate::llm::types::ToolDefinition::new(
                 "read",
                 "chat tool — compaction inherits it to preserve the cache prefix hash",
@@ -609,7 +610,10 @@ mod tests {
         assert_eq!(tools[0].name, "read");
         assert_eq!(request.rid, None);
         assert_eq!(request.forensic_character.as_deref(), Some("alice"));
-        assert_eq!(request.system, Some(json!("cached system")));
+        assert_eq!(
+            request.system,
+            vec![SystemBlock::new("cached system", "system")]
+        );
         // The compaction prompt rides inline as a `role:"system"` entry at
         // a fixed slot right after compact_now_user. Adapters that natively
         // accept inline system messages emit it as `role:"system"`; the
@@ -663,7 +667,7 @@ mod tests {
             WireMessage::text(WireRole::Assistant, "cached assistant 1"),
             WireMessage::text(WireRole::User, "cached user 2"),
         ];
-        let chat_system = Some(json!("chat system prompt"));
+        let chat_system = vec![SystemBlock::new("chat system prompt", "system")];
 
         let chat_request = chat_shape_request(
             Sdk::Anthropic,
@@ -739,7 +743,7 @@ mod tests {
 
         let chat_request = chat_shape_request(
             Sdk::Openai,
-            Some(json!("chat system prompt")),
+            vec![SystemBlock::new("chat system prompt", "system")],
             None,
             vec![WireMessage::text(WireRole::User, "hi")],
         );
@@ -756,7 +760,10 @@ mod tests {
 
         assert_eq!(request.sdk, Sdk::Openai);
         // Chat's system block passes through verbatim, regardless of SDK.
-        assert_eq!(request.system, Some(json!("chat system prompt")));
+        assert_eq!(
+            request.system,
+            vec![SystemBlock::new("chat system prompt", "system")]
+        );
         // The compaction instruction rides inline as a `role:"system"`
         // entry at a fixed slot; the sidecar adapter handles OpenAI-family
         // provider-specific wrapping at dispatch time.

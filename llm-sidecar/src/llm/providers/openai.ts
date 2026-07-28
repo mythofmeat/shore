@@ -42,13 +42,12 @@ import type {
   SidecarProvider,
   SidecarRequest,
   StreamEvent,
-  SystemContent,
   ToolDefinition,
   TurnMessage,
   Usage,
   WireMessage,
 } from "../types.ts";
-import { toolResultText, toTurn } from "../types.ts";
+import { systemToText, toolResultText, toTurn } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
 
@@ -263,13 +262,6 @@ function toOpenAITools(tools: ToolDefinition[] | undefined): ChatCompletionTool[
 // ── message conversion ──────────────────────────────────────────────────────
 
 /** Canonical wire turn → the converter's turn shape (string content → block). */
-function systemToText(system: SystemContent | undefined): string {
-  if (system === undefined) return "";
-  if (typeof system === "string") return system;
-  // Join structured blocks; `_label`/`cache_control` are internal, dropped.
-  return system.map((b) => b.text).join("\n\n");
-}
-
 /**
  * Convert one canonical turn into OpenAI chat-completion message(s). Exported
  * for the conversion regression test: assistant thinking blocks map to

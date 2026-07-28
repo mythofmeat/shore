@@ -34,13 +34,12 @@ import type {
   SidecarProvider,
   SidecarRequest,
   StreamEvent,
-  SystemContent,
   ToolDefinition,
   TurnMessage,
   Usage,
   WireMessage,
 } from "../types.ts";
-import { toTurn } from "../types.ts";
+import { systemToText, toTurn } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
 import { turnToOpenAI } from "./openai.ts";
@@ -335,12 +334,6 @@ function toZaiTools(tools: ToolDefinition[] | undefined): ChatCompletionTool[] {
       parameters: t.input_schema ?? EMPTY_TOOL_SCHEMA,
     },
   }));
-}
-
-function systemToText(system: SystemContent | undefined): string {
-  if (system === undefined) return "";
-  if (typeof system === "string") return system;
-  return system.map((b) => b.text).join("\n\n");
 }
 
 function trimTrailingSlash(url: string): string {

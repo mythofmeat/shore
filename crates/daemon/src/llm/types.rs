@@ -288,6 +288,44 @@ impl WireBlock {
     }
 }
 
+/// One labelled block of system prompt.
+///
+/// The label is **cache-load-bearing**, not decoration: the Anthropic adapter
+/// anchors the system breakpoint on the last block that is not `memory_index`,
+/// because that one block churns on every dreaming and compaction pass and
+/// anchoring on it would invalidate the system prefix each time.
+///
+/// This crossed the seam as `Option<serde_json::Value>` holding an
+/// Anthropic-shaped `TextBlockParam` with the label smuggled in under `_label`,
+/// which the adapter then had to remember to `delete` before sending — a leak
+/// one missed line away, on a field no provider has ever heard of. It also
+/// carried a shape fork the type could not express: a one-block system prompt
+/// serialized as a bare string, silently dropping the label.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SystemBlock {
+    pub text: String,
+    /// Provenance of this block (`system`, `character`, `user`,
+    /// `tools_guidance`, `memory_index`). Never sent to a provider.
+    pub label: String,
+}
+
+impl SystemBlock {
+    pub fn new<T, L>(text: T, label: L) -> Self
+    where
+        T: Into<String>,
+        L: Into<String>,
+    {
+        Self {
+            text: text.into(),
+            label: label.into(),
+        }
+    }
+
+    /// The label the daemon stamps on a system prompt it assembled itself
+    /// (sub-agents, the dreaming librarian) rather than from prompt files.
+    pub const SYNTHETIC_LABEL: &'static str = "system";
+}
+
 /// Which side of the conversation a [`WireMessage`] came from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -383,9 +421,9 @@ pub struct LlmRequest {
     /// will accept — see [`WireMessage`].
     pub messages: Vec<WireMessage>,
 
-    /// System prompt blocks.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub system: Option<serde_json::Value>,
+    /// System prompt blocks, in order. Empty means no system prompt.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub system: Vec<SystemBlock>,
 
     /// Tool surface offered for this request, in offer order.
     ///
@@ -873,7 +911,7 @@ mod tests {
             api_key_name: None,
             base_url: None,
             messages: vec![WireMessage::text(WireRole::User, "Hello")],
-            system: None,
+            system: Vec::new(),
             tools: None,
             max_tokens: 4096,
             temperature: Some(0.7),
@@ -908,7 +946,7 @@ mod tests {
             api_key_name: Some("default".into()),
             base_url: None,
             messages: vec![],
-            system: None,
+            system: Vec::new(),
             tools: None,
             max_tokens: 4096,
             temperature: None,
@@ -961,7 +999,7 @@ mod tests {
                 WireMessage::text(WireRole::User, "cached user"),
                 WireMessage::text(WireRole::Assistant, "cached assistant"),
             ],
-            system: None,
+            system: Vec::new(),
             tools: None,
             max_tokens: 4096,
             temperature: None,

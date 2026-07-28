@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
-use serde_json::{json, Value};
+use serde_json::json;
 use shore_common::config::character_data_dir;
 use shore_common::config::models::Sdk;
 use shore_common::config::LoadedConfig;
@@ -20,7 +20,7 @@ use crate::handler::images::{embed_image_data, ingest_images};
 use crate::handler::key_fallback::stream_with_credential_fallback;
 use crate::handler::persistence::persist_and_notify;
 use crate::handler::resize::warm_image_cache;
-use crate::llm::types::{ToolResultContent, WireBlock, WireMessage, WireRole};
+use crate::llm::types::{SystemBlock, ToolResultContent, WireBlock, WireMessage, WireRole};
 
 use super::{GenContext, GenerationParams, PrepareChatContextParams, PreparedChatContext};
 
@@ -883,7 +883,7 @@ pub(crate) fn build_llm_messages(
     max_image_size: u64,
     cache_dir: &Path,
     assistant_image_mode: AssistantImageMode,
-) -> (Vec<WireMessage>, Option<Value>) {
+) -> (Vec<WireMessage>, Vec<SystemBlock>) {
     let mut llm_messages: Vec<WireMessage> = Vec::new();
     // `tool_result` blocks owed by a preceding assistant turn whose images
     // rendered as synthetic `generate_image` tool calls. The API requires a
@@ -931,20 +931,15 @@ pub(crate) fn build_llm_messages(
         llm_messages.push(WireMessage::new(WireRole::User, pending_tool_results));
     }
 
-    let system = if prompt_result.system.is_empty() {
-        None
-    } else if prompt_result.system.len() == 1 {
-        prompt_result
-            .system
-            .first()
-            .map(|block| json!(block.content))
-    } else {
-        Some(json!(prompt_result
-            .system
-            .iter()
-            .map(|b| { json!({"type": "text", "text": b.content, "_label": b.label}) })
-            .collect::<Vec<_>>()))
-    };
+    // Every block keeps its label. This used to fork on count — one block
+    // serialized as a bare string, dropping the label with it — so a
+    // single-block system prompt silently lost the anchor placement the label
+    // exists to drive.
+    let system: Vec<SystemBlock> = prompt_result
+        .system
+        .iter()
+        .map(|b| SystemBlock::new(b.content.clone(), b.label.clone()))
+        .collect();
 
     (llm_messages, system)
 }
@@ -953,6 +948,7 @@ pub(crate) fn build_llm_messages(
 mod build_llm_messages_tests {
     use super::*;
     use crate::engine::prompt::{AssembledPrompt, PromptMessage};
+    use serde_json::Value;
 
     fn pm(role: Role, content_blocks: Vec<ContentBlock>) -> PromptMessage {
         PromptMessage {

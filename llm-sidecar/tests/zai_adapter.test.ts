@@ -157,7 +157,7 @@ describe("request construction", () => {
     // feed Z.ai unverified/mutated reasoning_content.
     const messages = buildZaiMessages(
       req({
-        system: [{ type: "text", text: "You are helpful." }],
+        system: [{ text: "You are helpful.", label: "system" }],
         provider_options: { zai_clear_thinking: false },
         messages: [
           {

@@ -22,8 +22,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::ledger::{CallType, LedgerClient};
 use crate::llm::stream::StreamConsumer;
-use crate::llm::types::{LlmRequest, WireMessage, WireRole};
-use serde_json::{json, Value};
+use crate::llm::types::{LlmRequest, SystemBlock, WireMessage, WireRole};
+use serde_json::Value;
 use shore_common::config::app::SubagentConfig;
 use shore_common::config::models::ResolvedModel;
 use shore_common::config::LoadedConfig;
@@ -241,9 +241,12 @@ fn build_request(
     // across iterations); everyone else takes it top-level.
     let uses_anthropic_cache = resolved.sdk.uses_anthropic_prompt_cache();
     let system_arg = if uses_anthropic_cache {
-        None
+        Vec::new()
     } else {
-        Some(json!(system_text))
+        vec![SystemBlock::new(
+            system_text.clone(),
+            SystemBlock::SYNTHETIC_LABEL,
+        )]
     };
     let mut request = LedgerClient::build_request_with_provider_keys(
         resolved,
@@ -600,6 +603,7 @@ impl ToolContext for SubagentGuardContext<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn tool_subset_keeps_known_skips_unknown() {

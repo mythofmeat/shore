@@ -37,8 +37,8 @@ function blockCC(content: unknown): boolean[] {
 
 describe("cache placement (mirrors ts_default_placement)", () => {
   const system = [
-    { type: "text" as const, text: "base", _label: "system_base" },
-    { type: "text" as const, text: "mem", _label: "memory_index" },
+    { text: "base", label: "system_base" },
+    { text: "mem", label: "memory_index" },
   ];
   const messages: SidecarRequest["messages"] = [
     { role: "user", content: [{ type: "text", text: "hi" }] },
@@ -54,13 +54,43 @@ describe("cache placement (mirrors ts_default_placement)", () => {
     { role: "user", content: [{ type: "tool_result", tool_use_id: "tu_1", content: "found" }] },
   ];
 
-  test("system anchor lands on last non-memory_index block; _label stripped", () => {
+  test("system anchor lands on last non-memory_index block; no label on the wire", () => {
     const p = buildAnthropicParams(req({ system, messages, provider_options: { cache_ttl: "1h" } }));
     const sys = p.system as unknown as Rec[];
     expect(sys[0]?.["cache_control"]).toEqual({ type: "ephemeral", ttl: "1h" });
     expect(sys[1]?.["cache_control"]).toBeUndefined(); // memory_index NOT anchored
-    // _label never reaches the wire
-    for (const b of sys) expect(b).not.toHaveProperty("_label");
+    // The label is not a field on the provider block, so it cannot reach the
+    // wire. It used to ride as `_label` and be deleted by hand before sending.
+    for (const b of sys) {
+      expect(b).not.toHaveProperty("_label");
+      expect(b).not.toHaveProperty("label");
+    }
+  });
+
+  test("a single-block system prompt keeps its label and still anchors", () => {
+    // The daemon used to serialize a one-block system prompt as a bare string,
+    // which dropped the label with it — so the anchor rule could not see
+    // whether that block was `memory_index` and the wire shape changed with
+    // the block count. Both cases below are now representable and distinct.
+    const anchored = buildAnthropicParams(
+      req({
+        system: [{ text: "you are a character", label: "character" }],
+        messages,
+        provider_options: { cache_ttl: "1h" },
+      }),
+    ).system as unknown as Rec[];
+    expect(anchored[0]?.["cache_control"]).toEqual({ type: "ephemeral", ttl: "1h" });
+
+    // A lone memory_index block has no stable anchor — it is rewritten every
+    // dreaming pass, so anchoring it would throw the prefix away each time.
+    const churning = buildAnthropicParams(
+      req({
+        system: [{ text: "mem", label: "memory_index" }],
+        messages,
+        provider_options: { cache_ttl: "1h" },
+      }),
+    ).system as unknown as Rec[];
+    expect(churning[0]?.["cache_control"]).toBeUndefined();
   });
 
   test("message breakpoints on [prev_frozen, frozen_boundary, last_msg], last block of each", () => {
@@ -249,7 +279,7 @@ describe("cache placement (mirrors ts_default_placement)", () => {
  * turn is frozen for the life of the conversation. Anchoring there survives.
  */
 describe("frozen-region anchor survives a last_turn thinking strip", () => {
-  const system = [{ type: "text" as const, text: "base", _label: "system_base" }];
+  const system = [{ text: "base", label: "system_base" }];
 
   // Request N — the trailing assistant turn (idx 3–5) still carries thinking.
   const stateN: SidecarRequest["messages"] = [

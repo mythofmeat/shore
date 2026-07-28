@@ -3480,6 +3480,7 @@ async fn execute_dormant_ping(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::llm::types::SystemBlock;
     use std::panic::{catch_unwind, AssertUnwindSafe};
 
     use shore_common::config::app::HeartbeatConfig;
@@ -3535,7 +3536,7 @@ mod tests {
             api_key_name: None,
             base_url: None,
             messages: vec![],
-            system: None,
+            system: Vec::new(),
             tools: None,
             max_tokens: 1024,
             temperature: None,
@@ -4333,7 +4334,7 @@ mod tests {
     #[test]
     fn wrap_up_nudge_preserves_existing_message_prefix() {
         let mut request = empty_request();
-        request.system = Some(json!([{"type": "text", "text": "stable system"}]));
+        request.system = vec![SystemBlock::new("stable system", "system")];
         request.tools = Some(vec![crate::llm::types::ToolDefinition::new(
             "read",
             "",
@@ -4440,7 +4441,7 @@ mod tests {
             api_key_name: None,
             base_url: None,
             messages: vec![WireMessage::text(WireRole::User, "hello")],
-            system: Some(json!([{"type": "text", "text": "system prompt"}])),
+            system: vec![SystemBlock::new("system prompt", "system")],
             tools: Some(original_tools.clone()),
             max_tokens: 4096,
             temperature: None,
@@ -4838,7 +4839,7 @@ api_key_env = "{api_key_env}"
             api_key_name: None,
             base_url: None,
             messages: vec![WireMessage::text(WireRole::User, "hi")],
-            system: Some(json!([{"type": "text", "text": "sys"}])),
+            system: vec![SystemBlock::new("sys", "system")],
             tools: Some(vec![crate::llm::types::ToolDefinition::new(
                 "read",
                 "",
@@ -5560,7 +5561,7 @@ api_key_env = "{heartbeat_env}"
     fn keepalive_ping_preserves_cache_prefix() {
         let mut original = empty_request();
         original.model = "claude-sonnet-4-6".into();
-        original.system = Some(json!([{"type": "text", "text": "you are a character"}]));
+        original.system = vec![SystemBlock::new("you are a character", "system")];
         original.tools = Some(vec![
             crate::llm::types::ToolDefinition::new("memory", "x", json!({"type": "object"})),
             crate::llm::types::ToolDefinition::new("schedule", "y", json!({"type": "object"})),

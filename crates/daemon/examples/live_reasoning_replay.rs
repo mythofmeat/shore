@@ -22,8 +22,8 @@ use serde_json::json;
 use shore_common::config::app::ThinkingReplay;
 use shore_common::config::models::Sdk;
 use shore_daemon::llm::types::{
-    LlmRequest, ReasoningCarrier, ToolDefinition, ToolResultContent, WireBlock, WireMessage,
-    WireRole,
+    LlmRequest, ReasoningCarrier, SystemBlock, ToolDefinition, ToolResultContent, WireBlock,
+    WireMessage, WireRole,
 };
 use shore_daemon::llm::LlmClient;
 
@@ -223,7 +223,10 @@ async fn main() -> ExitCode {
         api_key_name: Some("default".into()),
         base_url: Some(target.base_url.to_owned()),
         messages: replay_messages(),
-        system: Some(json!("You are a concise live API smoke-test assistant.")),
+        system: vec![SystemBlock::new(
+            "You are a concise live API smoke-test assistant.",
+            "system",
+        )],
         tools: Some(vec![ToolDefinition::new(
             "lookup_fact",
             "Looks up one short fact for a live smoke test.",

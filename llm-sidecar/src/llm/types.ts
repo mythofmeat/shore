@@ -84,11 +84,36 @@ export function toolResultText(content: string | ContentBlock[]): string {
     .join("\n\n");
 }
 
-/** System prompt: structured text blocks (Anthropic keeps them separate;
- * OpenAI gets them joined) or a bare string. */
-export type SystemContent =
-  | string
-  | Array<{ type: "text"; text: string; cache_control?: unknown; _label?: string }>;
+/**
+ * One labelled block of system prompt, mirroring Rust `SystemBlock`
+ * (`crates/daemon/src/llm/types.rs`). The two must change together.
+ *
+ * `label` is cache-load-bearing: the Anthropic adapter anchors the system
+ * breakpoint on the last block that is NOT `memory_index`, because that block
+ * churns on every dreaming and compaction pass.
+ *
+ * This arrived as `string | Array<{type, text, cache_control?, _label?}>` — an
+ * Anthropic `TextBlockParam` with the label smuggled in under an underscore,
+ * which the adapter had to `delete` before sending or leak a field no provider
+ * knows. It also had a shape fork the daemon could not express in a type: a
+ * one-block system prompt serialized as a bare string, dropping its label.
+ */
+export interface SystemBlock {
+  text: string;
+  /** `system` | `character` | `user` | `tools_guidance` | `memory_index`.
+   * Never sent to a provider. */
+  label: string;
+}
+
+/** The system prompt in order. Empty means none. */
+export type SystemContent = SystemBlock[];
+
+/** System blocks joined for the dialects that take one system string. Four
+ * adapters each had a private copy of this. */
+export function systemToText(system: SystemContent | undefined): string {
+  if (system === undefined) return "";
+  return system.map((b) => b.text).join("\n\n");
+}
 
 /**
  * One tool offered to the model, mirroring Rust `ToolDefinition`

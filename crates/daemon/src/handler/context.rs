@@ -14,7 +14,6 @@
 
 use std::path::Path;
 
-use serde_json::Value;
 use tracing::warn;
 
 use crate::ledger::LedgerClient;
@@ -48,7 +47,7 @@ pub(crate) struct PrepareChatContextParams<'ctx> {
 /// request.
 pub(crate) struct PreparedChatContext {
     pub llm_messages: Vec<crate::llm::types::WireMessage>,
-    pub system: Option<Value>,
+    pub system: Vec<crate::llm::types::SystemBlock>,
     pub tool_defs: Option<Vec<crate::llm::types::ToolDefinition>>,
     pub prompt: AssembledPrompt,
 }

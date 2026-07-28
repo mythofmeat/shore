@@ -536,7 +536,7 @@ mod tests {
             api_key_name: None,
             base_url: Some(base_url.to_owned()),
             messages,
-            system: None,
+            system: Vec::new(),
             tools: None,
             max_tokens: 4096,
             temperature: None,

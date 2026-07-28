@@ -196,7 +196,7 @@ impl LlmClient {
     pub fn build_request(
         model: &ResolvedModel,
         messages: Vec<WireMessage>,
-        system: Option<serde_json::Value>,
+        system: Vec<types::SystemBlock>,
         tools: Option<Vec<types::ToolDefinition>>,
         provider_options: Option<types::ProviderOptions>,
         replay: ThinkingReplay,
@@ -244,7 +244,7 @@ impl LlmClient {
         model: &ResolvedModel,
         registry: &shore_common::config::providers::ProviderRegistry,
         messages: Vec<WireMessage>,
-        system: Option<serde_json::Value>,
+        system: Vec<types::SystemBlock>,
         tools: Option<Vec<types::ToolDefinition>>,
         provider_options: Option<types::ProviderOptions>,
         replay: ThinkingReplay,
@@ -294,7 +294,7 @@ impl LlmClient {
         model: &ResolvedModel,
         api_key: String,
         messages: Vec<WireMessage>,
-        system: Option<serde_json::Value>,
+        system: Vec<types::SystemBlock>,
         tools: Option<Vec<types::ToolDefinition>>,
         provider_options: Option<types::ProviderOptions>,
         replay: ThinkingReplay,
@@ -580,7 +580,7 @@ mod tests {
         let req = LlmClient::build_request(
             &model,
             vec![WireMessage::text(WireRole::User, "Hi")],
-            None,
+            Vec::new(),
             None,
             None,
             ThinkingReplay::All,
@@ -614,7 +614,7 @@ mod tests {
         let req = LlmClient::build_request(
             &model,
             vec![WireMessage::text(WireRole::User, "Hi")],
-            None,
+            Vec::new(),
             None,
             None,
             ThinkingReplay::All,
@@ -624,13 +624,15 @@ mod tests {
 
         // `Off` and unset both resolve to no interval (keepalive disabled).
         model.cache_keepalive = Some(CacheKeepaliveSetting::Off);
-        let off = LlmClient::build_request(&model, vec![], None, None, None, ThinkingReplay::All)
-            .unwrap();
+        let off =
+            LlmClient::build_request(&model, vec![], Vec::new(), None, None, ThinkingReplay::All)
+                .unwrap();
         assert_eq!(off.keepalive_interval, None);
 
         model.cache_keepalive = None;
-        let unset = LlmClient::build_request(&model, vec![], None, None, None, ThinkingReplay::All)
-            .unwrap();
+        let unset =
+            LlmClient::build_request(&model, vec![], Vec::new(), None, None, ThinkingReplay::All)
+                .unwrap();
         assert_eq!(unset.keepalive_interval, None);
 
         std::env::remove_var("TEST_API_KEY_KA");
@@ -646,8 +648,9 @@ mod tests {
         model.api_key_env = Some("TEST_API_KEY_164".into());
 
         model.reasoning_effort = Some("off".into());
-        let req = LlmClient::build_request(&model, vec![], None, None, None, ThinkingReplay::All)
-            .unwrap();
+        let req =
+            LlmClient::build_request(&model, vec![], Vec::new(), None, None, ThinkingReplay::All)
+                .unwrap();
         let opts = req.provider_options.expect("provider_options present");
         assert_eq!(opts.thinking_enabled, Some(false));
         assert_eq!(opts.reasoning_effort, None);
@@ -655,7 +658,7 @@ mod tests {
         // A real effort passes through unchanged.
         model.reasoning_effort = Some("high".into());
         let req_high =
-            LlmClient::build_request(&model, vec![], None, None, None, ThinkingReplay::All)
+            LlmClient::build_request(&model, vec![], Vec::new(), None, None, ThinkingReplay::All)
                 .unwrap();
         let opts_high = req_high.provider_options.expect("provider_options present");
         assert_eq!(opts_high.reasoning_effort.as_deref(), Some("high"));
@@ -670,8 +673,9 @@ mod tests {
 
         let model = test_model("test", "anthropic", Sdk::Anthropic);
 
-        let req = LlmClient::build_request(&model, vec![], None, None, None, ThinkingReplay::All)
-            .unwrap();
+        let req =
+            LlmClient::build_request(&model, vec![], Vec::new(), None, None, ThinkingReplay::All)
+                .unwrap();
 
         assert_eq!(req.api_key, "sk-ant-test");
         assert_eq!(req.max_tokens, 4096);
@@ -718,7 +722,7 @@ env = "FALLBACK_KEY_017"
             &model,
             &registry,
             vec![],
-            None,
+            Vec::new(),
             None,
             None,
             ThinkingReplay::All,
@@ -757,7 +761,7 @@ base_url = "https://openrouter.ai/api/v1"
             &model,
             &registry,
             vec![],
-            None,
+            Vec::new(),
             None,
             None,
             ThinkingReplay::All,
@@ -791,7 +795,7 @@ sdk = "openai"
             &model,
             &registry,
             vec![],
-            None,
+            Vec::new(),
             None,
             None,
             ThinkingReplay::All,
@@ -810,8 +814,9 @@ sdk = "openai"
         let mut model = test_model("test", "anthropic", Sdk::Anthropic);
         model.api_key_env = Some("NONEXISTENT_KEY_015".into());
 
-        let err = LlmClient::build_request(&model, vec![], None, None, None, ThinkingReplay::All)
-            .unwrap_err();
+        let err =
+            LlmClient::build_request(&model, vec![], Vec::new(), None, None, ThinkingReplay::All)
+                .unwrap_err();
         let LlmError::MissingApiKey { var } = err else {
             panic!("Expected MissingApiKey");
         };
@@ -898,7 +903,7 @@ sdk = "openai"
             api_key_name: None,
             base_url: None,
             messages,
-            system: None,
+            system: Vec::new(),
             tools: None,
             max_tokens: 4096,
             temperature: None,

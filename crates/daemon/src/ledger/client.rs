@@ -478,7 +478,7 @@ impl LedgerClient {
     pub fn build_request(
         model: &ResolvedModel,
         messages: Vec<crate::llm::types::WireMessage>,
-        system: Option<serde_json::Value>,
+        system: Vec<crate::llm::types::SystemBlock>,
         tools: Option<Vec<crate::llm::types::ToolDefinition>>,
         provider_options: Option<crate::llm::types::ProviderOptions>,
         replay: shore_common::config::app::ThinkingReplay,
@@ -491,7 +491,7 @@ impl LedgerClient {
         model: &ResolvedModel,
         registry: &ProviderRegistry,
         messages: Vec<crate::llm::types::WireMessage>,
-        system: Option<serde_json::Value>,
+        system: Vec<crate::llm::types::SystemBlock>,
         tools: Option<Vec<crate::llm::types::ToolDefinition>>,
         provider_options: Option<crate::llm::types::ProviderOptions>,
         replay: shore_common::config::app::ThinkingReplay,

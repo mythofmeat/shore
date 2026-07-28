@@ -64,8 +64,8 @@ describe("request construction", () => {
       req({
         model: "gemini-3-flash-preview",
         system: [
-          { type: "text", text: "base" },
-          { type: "text", text: "style" },
+          { text: "base", label: "system" },
+          { text: "style", label: "character" },
         ],
         tools: [
           {

@@ -108,7 +108,7 @@ describe("placement reported matches placement applied", () => {
       model: "claude-opus-4-8",
       api_key: "k",
       messages,
-      system: [{ type: "text", text: "you are a character" }],
+      system: [{ text: "you are a character", label: "system" }],
       max_tokens: 64,
       provider_options: { cache_ttl: "1h" },
     } as SidecarRequest;

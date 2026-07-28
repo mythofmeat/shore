@@ -462,7 +462,7 @@ mod tests {
             api_key_name: None,
             base_url: None,
             messages,
-            system: None,
+            system: Vec::new(),
             tools: None,
             max_tokens: 1024,
             temperature: None,
