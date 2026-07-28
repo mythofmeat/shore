@@ -11,7 +11,7 @@ pub use models::{
 };
 pub use status::{
     call_log, diagnostics, heartbeat_log, heartbeat_set_active, heartbeat_set_dormant,
-    heartbeat_tick_now, status, transcript,
+    heartbeat_tick_now, keepalive_ping_now, status, transcript,
 };
 
 #[cfg(test)]

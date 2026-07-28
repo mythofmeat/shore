@@ -247,6 +247,56 @@ pub fn heartbeat_tick_now(engine: &ConversationEngine, ctx: &CommandContext) -> 
     }
 }
 
+/// Send a keepalive ping now and report whether it actually kept anything warm.
+///
+/// The keepalive's only job is to read a cached prefix. Whether it did was
+/// previously observable only by waiting for the scheduler and reading the
+/// ledger after the fact, which is a slow way to learn that a change to the
+/// request body broke the cache — and an expensive one, since every cold ping
+/// pays a full write.
+pub async fn keepalive_ping_now(
+    engine: &ConversationEngine,
+    ctx: &CommandContext,
+) -> CommandResult {
+    let char_name = engine.character_name();
+    match ctx.autonomy.keepalive_ping_now(char_name).await {
+        crate::autonomy::manager::KeepalivePing::Sent {
+            from_cached_request,
+            cold,
+            usage,
+        } => Ok(json!({
+            "status": if cold { "cold" } else { "warm" },
+            "character": char_name,
+            // Which body was pinged. A rebuilt request that reads cold may just
+            // mean there was nothing cached yet; a *cached* one that reads cold
+            // means the prefix it was protecting is gone.
+            "source": if from_cached_request { "cached_last_request" } else { "rebuilt_from_disk" },
+            "input_tokens": usage.input_tokens,
+            "cache_read_tokens": usage.cache_read_tokens,
+            "cache_creation_tokens": usage.cache_creation_tokens,
+            "note": if cold {
+                "Read 0 and paid a write: this ping recreated the prefix at full \
+                 price rather than refreshing it. The autonomous keepalive treats \
+                 this as proof the prefix is gone and disarms."
+            } else if usage.cache_read_tokens == 0 {
+                "Read 0 with no write — caching is off for this model, or a \
+                 non-cached fallback answered. Not a cold write."
+            } else {
+                "Read the cached prefix, which is what the keepalive exists to do."
+            },
+        })),
+        crate::autonomy::manager::KeepalivePing::Failed(why) => Err((
+            ErrorCode::InternalError,
+            format!("keepalive ping failed: {why}"),
+        )),
+        crate::autonomy::manager::KeepalivePing::Skipped(why) => Ok(json!({
+            "status": "skipped",
+            "character": char_name,
+            "reason": why,
+        })),
+    }
+}
+
 fn count_arg(args: &Value, default: usize) -> usize {
     args.get("count")
         .and_then(Value::as_u64)

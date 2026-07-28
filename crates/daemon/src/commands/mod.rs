@@ -117,6 +117,7 @@ pub async fn dispatch(
         "call_log" => state::call_log(engine, ctx, &cmd.args),
         "transcript" => state::transcript(engine, ctx, &cmd.args),
         "heartbeat_tick_now" => state::heartbeat_tick_now(engine, ctx),
+        "keepalive_ping_now" => state::keepalive_ping_now(engine, ctx).await,
         "heartbeat_set_dormant" => state::heartbeat_set_dormant(engine, ctx),
         "heartbeat_set_active" => state::heartbeat_set_active(engine, ctx),
         "usage" => usage::usage(ctx, &cmd.args).await,

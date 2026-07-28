@@ -100,10 +100,12 @@ interface Run {
   stored: StoredMessage[];
   /** Message arrays as they were sent to the provider, per call. */
   sent: Array<Array<{ role: string; content: Block[] }>>;
+  /** Command replies, in the order the commands were sent. */
+  replies: Array<Record<string, unknown>>;
 }
 
 /** Boot a daemon + sidecar against a scripted fake Anthropic, send `turns` prompts. */
-async function run(script: Turn[], prompts: string[]): Promise<Run> {
+async function run(script: Turn[], prompts: string[], commands: string[] = []): Promise<Run> {
   const root = `/tmp/shore-e2e-${Math.random().toString(36).slice(2, 8)}`;
   const [CONFIG, DATA, CACHE, RUNTIME] = [
     `${root}/config`,
@@ -117,8 +119,30 @@ async function run(script: Turn[], prompts: string[]): Promise<Run> {
   const anthropic = Bun.serve({
     port: 0,
     async fetch(req) {
-      const body = (await req.json()) as { messages?: Array<{ role: string; content: Block[] }> };
+      const body = (await req.json()) as {
+        messages?: Array<{ role: string; content: Block[] }>;
+        stream?: boolean;
+      };
       sent.push(body.messages ?? []);
+      // The keepalive ping is non-streaming (`/v1/generate`), so it needs a
+      // plain message back rather than SSE frames.
+      if (!body.stream) {
+        return Response.json({
+          id: "msg_ping",
+          type: "message",
+          role: "assistant",
+          model: "claude-opus-4-8",
+          content: [{ type: "text", text: "." }],
+          stop_reason: "end_turn",
+          stop_sequence: null,
+          usage: {
+            input_tokens: 5,
+            output_tokens: 1,
+            cache_read_input_tokens: 100,
+            cache_creation_input_tokens: 0,
+          },
+        });
+      }
       return new Response(sse(script[next++] ?? { kind: "text", text: "(exhausted)" }), {
         headers: { "content-type": "text/event-stream" },
       });
@@ -177,6 +201,7 @@ async function run(script: Turn[], prompts: string[]): Promise<Run> {
 
     let buf = "";
     let done = false;
+    const replies: Array<Record<string, unknown>> = [];
     const conn = await Bun.connect({
       hostname: "127.0.0.1",
       port,
@@ -191,7 +216,14 @@ async function run(script: Turn[], prompts: string[]): Promise<Run> {
             try {
               const m = JSON.parse(line) as Record<string, unknown>;
               if (m["type"] === "stream_end" && m["is_final"] !== false) done = true;
-              if (m["type"] === "error") done = true;
+              if (m["type"] === "command_output") {
+                replies.push(m);
+                done = true;
+              }
+              if (m["type"] === "error") {
+                replies.push(m);
+                done = true;
+              }
             } catch {
               /* partial frame */
             }
@@ -217,6 +249,13 @@ async function run(script: Turn[], prompts: string[]): Promise<Run> {
       while (!done && Date.now() < d) await sleep(200);
       await sleep(1200);
     }
+
+    for (const [n, name] of commands.entries()) {
+      done = false;
+      conn.write(`${JSON.stringify({ type: "command", rid: `c${n}`, name, args: {} })}\n`);
+      const d = Date.now() + 30000;
+      while (!done && Date.now() < d) await sleep(200);
+    }
     conn.end();
 
     const text = await Bun.file(`${DATA}/${CHAR}/active.jsonl`).text();
@@ -224,7 +263,7 @@ async function run(script: Turn[], prompts: string[]): Promise<Run> {
       .split("\n")
       .filter((l) => l.trim())
       .map((l) => JSON.parse(l) as StoredMessage);
-    return { stored, sent };
+    return { stored, sent, replies };
   } finally {
     stop();
   }
@@ -307,6 +346,43 @@ describe.skipIf(!ready)("delegated tool loop, end to end", () => {
       expect(blocksOf(last!)[0]?.text).toBe("All done.");
     },
     90_000,
+  );
+
+  test(
+    "the keepalive ping replays the conversation the loop actually sent",
+    async () => {
+      // `last_request` is what the keepalive, heartbeat, dreaming and
+      // compaction all clone, and it has to stay byte-identical to what went
+      // out or the ping's cache anchors miss and it rewrites the whole prefix
+      // at full price (756a308f). The sidecar grows the conversation during a
+      // loop and the daemon's copy of the request does not, so the daemon is
+      // told what was appended and applies it.
+      const { sent, replies } = await run(TWO_THEN_ONE, ["roll some dice"], ["keepalive_ping_now"]);
+
+      const lastTurn = sent[2]; // the loop's final request
+      const ping = sent.at(-1); // the keepalive
+      expect(lastTurn).toBeDefined();
+      expect(ping).toBeDefined();
+
+      // The ping is the loop's final request, unchanged, plus the terminal
+      // assistant reply that request produced, plus the ping's own trailing
+      // user turn. Any divergence in the shared prefix means it is pinging
+      // bytes that were never cached.
+      const shape = (ms: Array<{ role: string; content: Block[] }>) =>
+        ms.map((m) => `${m.role}:${(m.content ?? []).map((b) => b.type).join("+")}`);
+      expect(shape(ping!).slice(0, lastTurn!.length)).toEqual(shape(lastTurn!));
+      expect(shape(ping!).slice(lastTurn!.length)).toEqual(["assistant:text", "user:text"]);
+
+      // Specifically: the tool exchanges are in there. Rebuilt without them —
+      // which is what the daemon sent before it was told what the loop
+      // appended — the prefix diverges at the first tool round.
+      expect(shape(ping!)).toContain("assistant:text+tool_use+tool_use");
+      expect(shape(ping!)).toContain("user:tool_result+tool_result");
+
+      const reply = replies.at(-1) as { data?: { status?: string } } | undefined;
+      expect(reply?.data?.status).toBe("warm");
+    },
+    120_000,
   );
 
   test(

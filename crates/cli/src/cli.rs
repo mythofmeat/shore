@@ -666,6 +666,9 @@ pub(crate) enum DebugCommand {
     /// Force heartbeat into active state (reverts naturally via abandonment guard)
     #[command(name = "heartbeat_status_active")]
     StatusActive,
+    /// Send a cache-keepalive ping now and report whether it read the cache
+    #[command(name = "keepalive_ping_now")]
+    KeepalivePingNow,
 }
 
 /// Generate and print shell completions to stdout.
@@ -837,6 +840,7 @@ pub(crate) fn to_swp_command(cmd: &CliCommand) -> Option<(&'static str, serde_js
             DebugCommand::TickNow => Some(("heartbeat_tick_now", json!({}))),
             DebugCommand::StatusDormant => Some(("heartbeat_set_dormant", json!({}))),
             DebugCommand::StatusActive => Some(("heartbeat_set_active", json!({}))),
+            DebugCommand::KeepalivePingNow => Some(("keepalive_ping_now", json!({}))),
         },
 
         CliCommand::Model { .. } => model_to_swp(cmd),
@@ -2084,6 +2088,27 @@ mod tests {
         let (name, args) = to_swp_command(&cmd).unwrap();
         assert_eq!(name, "diagnostics");
         assert_eq!(arg(&args, "count"), 15);
+    }
+
+    #[test]
+    fn debug_keepalive_ping_now_maps_to_command() {
+        let cmd = CliCommand::Debug {
+            subcommand: DebugCommand::KeepalivePingNow,
+        };
+        let (name, args) = to_swp_command(&cmd).unwrap();
+        assert_eq!(name, "keepalive_ping_now");
+        assert_eq!(args, serde_json::json!({}));
+    }
+
+    #[test]
+    fn parse_debug_keepalive_ping_now() {
+        let cli = parse(&["debug", "keepalive_ping_now"]);
+        assert!(matches!(
+            cli.command,
+            CliCommand::Debug {
+                subcommand: DebugCommand::KeepalivePingNow
+            }
+        ));
     }
 
     #[test]

@@ -520,6 +520,46 @@ impl AutonomyManager {
         self.mcp_registry = Some(registry);
     }
 
+    /// Send a keepalive ping right now, the way the scheduler would.
+    ///
+    /// Drives [`execute_dormant_ping`] itself rather than reproducing it, so
+    /// what this reports is what the autonomous keepalive does — cached
+    /// `last_request` when there is one, rebuild-from-disk when there is not.
+    /// A parallel implementation would be a second thing to keep in step with
+    /// the first, which is the failure this whole subsystem keeps hitting.
+    ///
+    /// The point is the usage: a ping that reads nothing and pays a write did
+    /// not keep anything warm, and until now that was only observable by
+    /// waiting for the scheduler and reading the ledger afterwards.
+    ///
+    /// Does **not** touch the keepalive clock. Firing this must not disarm the
+    /// real schedule or move its deadline, or measuring would change what is
+    /// being measured.
+    pub async fn keepalive_ping_now(&self, character: &str) -> KeepalivePing {
+        let Some(state) = self.states.get(character).map(|s| Arc::clone(s.value())) else {
+            return KeepalivePing::Skipped(format!("no autonomy state for '{character}'"));
+        };
+        let had_cached = lock_state(&state).last_request.is_some();
+        let outcome = execute_dormant_ping(
+            character,
+            &state,
+            &self.data_dir,
+            self.llm_client.as_ref(),
+            self.loaded_config.as_deref(),
+            &self.mcp_registry.clone().unwrap_or_default(),
+        )
+        .await;
+        match outcome {
+            DormantPingOutcome::Success { usage, .. } => KeepalivePing::Sent {
+                from_cached_request: had_cached,
+                cold: ping_landed_cold(&usage),
+                usage,
+            },
+            DormantPingOutcome::Failed(why) => KeepalivePing::Failed(why),
+            DormantPingOutcome::Skipped(why) => KeepalivePing::Skipped(why),
+        }
+    }
+
     /// Test/diagnostic seam: rebuild the keepalive request **from disk**
     /// (bypassing any cached `last_request`) and send the ping. This exercises
     /// exactly the cold-cache rebuild path the autonomous keepalive uses — the
@@ -3369,10 +3409,11 @@ fn append_wrap_up_nudge(request: &mut LlmRequest) {
     clippy::struct_field_names,
     reason = "these are token counts; the `_tokens` suffix mirrors the upstream usage struct"
 )]
-struct DormantPingUsage {
-    input_tokens: u64,
-    cache_read_tokens: u64,
-    cache_creation_tokens: u64,
+#[derive(Debug, Clone, Copy)]
+pub struct DormantPingUsage {
+    pub input_tokens: u64,
+    pub cache_read_tokens: u64,
+    pub cache_creation_tokens: u64,
 }
 
 /// Whether a ping that came back `200 OK` actually failed at its only job.
@@ -3383,6 +3424,25 @@ struct DormantPingUsage {
 /// and must not be treated as one.
 fn ping_landed_cold(usage: &DormantPingUsage) -> bool {
     usage.cache_read_tokens == 0 && usage.cache_creation_tokens > 0
+}
+
+/// What an on-demand keepalive ping did, for the `keepalive_ping_now` command.
+///
+/// `cold` is the answer the command exists to give: read nothing, paid a
+/// write. The prefix the keepalive was protecting was already gone, so the
+/// ping recreated it at full price instead of refreshing it.
+#[derive(Debug)]
+pub enum KeepalivePing {
+    Sent {
+        /// True when a cached `last_request` was pinged, false when it had to
+        /// be rebuilt from disk. The two produce different bytes if anything
+        /// has drifted, which is exactly what a cold read would be telling you.
+        from_cached_request: bool,
+        cold: bool,
+        usage: DormantPingUsage,
+    },
+    Failed(String),
+    Skipped(String),
 }
 
 enum DormantPingOutcome {
