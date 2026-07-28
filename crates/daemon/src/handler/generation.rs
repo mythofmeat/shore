@@ -302,6 +302,41 @@ pub(super) async fn stream_with_sidecar_tool_loop(
 
     let (streamed, ()) = tokio::join!(streaming, serving);
     let result = streamed?;
+
+    // The sidecar grew the conversation; this request did not. Every
+    // `last_request` reuse path — keepalive ping, heartbeat, dreaming,
+    // compaction — clones this body and is required to stay byte-identical to
+    // what actually went out (756a308f). Left as sent, it would replay a
+    // conversation missing every tool exchange, so the ping's anchors miss and
+    // it rewrites the whole thing.
+    //
+    // The daemon-driven loop kept this true by appending as it went
+    // (`append_assistant_tool_use_turn`). Here the sidecar reported what it
+    // appended, and those messages are applied once the streaming future has
+    // released its borrow.
+    let minted_model = (!result.model.is_empty()).then(|| result.model.clone());
+    for message in &intermediate_messages {
+        request.messages.push(
+            crate::llm::types::WireMessage::new(
+                match message.role {
+                    shore_common::protocol::types::Role::Assistant => {
+                        crate::llm::types::WireRole::Assistant
+                    }
+                    shore_common::protocol::types::Role::User
+                    | shore_common::protocol::types::Role::System => {
+                        crate::llm::types::WireRole::User
+                    }
+                },
+                message
+                    .content_blocks
+                    .iter()
+                    .map(crate::llm::types::WireBlock::from_content_block)
+                    .collect(),
+            )
+            .minted_by(request.provider_key.clone(), minted_model.clone()),
+        );
+    }
+
     debug!(
         character = char_name,
         intermediate_messages = intermediate_messages.len(),

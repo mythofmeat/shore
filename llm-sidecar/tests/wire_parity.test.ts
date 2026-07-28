@@ -33,7 +33,7 @@ import type {
   ToolCallError,
   ToolCallRequest,
   ToolCallResponse,
-  TurnRequest,
+  MessagesRequest,
 } from "../src/llm/tool_rpc.ts";
 import {
   systemToText,
@@ -55,7 +55,7 @@ import {
 interface WireFixture {
   tool_rpc: {
     request_tool: { kind: "tool" } & ToolCallRequest;
-    request_turn: { kind: "turn" } & TurnRequest;
+    request_messages: { kind: "messages" } & MessagesRequest;
     outcome_ran: ToolCallResponse;
     outcome_failed: ToolCallResponse;
     outcome_unreachable: ToolCallError;
@@ -171,16 +171,29 @@ describe("the tool-call protocol", () => {
     expect(wire.tool_rpc.request_tool.kind).toBe("tool");
   });
 
-  test("a reported turn is a different request, not a tool result", () => {
-    // Untagged, a turn and a tool call would be told apart only by field
-    // presence — and persisting one as the other would record an assistant
-    // turn as tool output.
-    assertKeys<{ kind: string } & TurnRequest>(
-      wire.tool_rpc.request_turn,
-      ["kind", "rid", "content_blocks"],
-      "TurnRequest",
+  test("reported messages are a different request, not a tool result", () => {
+    // Untagged, a message report and a tool call would be told apart only by
+    // field presence — and persisting one as the other would record an
+    // assistant turn as tool output.
+    assertKeys<{ kind: string } & MessagesRequest>(
+      wire.tool_rpc.request_messages,
+      ["kind", "rid", "messages"],
+      "MessagesRequest",
     );
-    expect(wire.tool_rpc.request_turn.kind).toBe("turn");
+    expect(wire.tool_rpc.request_messages.kind).toBe("messages");
+    // Each message carries its own role: the daemon stores what it is told
+    // rather than inferring a turn's role from where it arrived.
+    for (const message of wire.tool_rpc.request_messages.messages) {
+      assertKeys<MessagesRequest["messages"][number]>(
+        message,
+        ["role", "content_blocks"],
+        "ReportedMessage",
+      );
+    }
+    expect(wire.tool_rpc.request_messages.messages.map((m) => m.role)).toEqual([
+      "assistant",
+      "user",
+    ]);
   });
 
   test("a tool that ran, whether or not it succeeded", () => {

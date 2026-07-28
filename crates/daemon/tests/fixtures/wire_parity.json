@@ -64,13 +64,29 @@
         "path": "/tmp/x"
       }
     },
-    "request_turn": {
-      "kind": "turn",
+    "request_messages": {
+      "kind": "messages",
       "rid": "rid_1",
-      "content_blocks": [
+      "messages": [
         {
-          "type": "text",
-          "text": "let me look"
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "let me look"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content_blocks": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "tu_1",
+              "content": "ok",
+              "is_error": false
+            }
+          ]
         }
       ]
     },

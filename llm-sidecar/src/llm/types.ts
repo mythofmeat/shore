@@ -268,6 +268,11 @@ export type StreamEvent =
       type: "done";
       content: string;
       finish_reason: string;
+      // The terminal turn's blocks, when this side drove a tool loop. The
+      // daemon accumulates blocks across the whole stream and cannot tell one
+      // turn from the next, so a loop has to say which blocks are the response.
+      // Absent on single-turn streams, where the accumulator is already right.
+      content_blocks?: unknown[];
       usage: Usage;
       timing: Timing;
     }

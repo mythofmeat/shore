@@ -680,6 +680,16 @@ pub enum StreamEvent {
     Done {
         content: String,
         finish_reason: String,
+        /// The terminal turn's blocks, when the sidecar drove a tool loop.
+        ///
+        /// The accumulator below sees every turn of a loop in one flat stream
+        /// and has no way to tell where one ended, so a loop that left it to
+        /// accumulate would persist a final message replaying the whole loop —
+        /// every intermediate turn's `tool_use` blocks again, ids and all.
+        /// Absent on single-turn streams, where the accumulator is already the
+        /// whole response.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        content_blocks: Option<Vec<ContentBlock>>,
         usage: Usage,
         timing: Timing,
     },
@@ -1138,6 +1148,7 @@ mod tests {
                 finish_reason,
                 usage,
                 timing,
+                ..
             } => {
                 assert_eq!(content, "Hello there");
                 assert_eq!(finish_reason, "end_turn");
@@ -1360,12 +1371,27 @@ mod tests {
                         input: json!({"path": "/tmp/x"}),
                     },
                 ),
-                "request_turn": crate::tool_rpc::SidecarRequest::Turn(
-                    crate::tool_rpc::TurnRequest {
+                // Both message shapes a loop reports: the assistant turn that
+                // asked for tools, and the round's results as one message.
+                "request_messages": crate::tool_rpc::SidecarRequest::Messages(
+                    crate::tool_rpc::MessagesRequest {
                         rid: "rid_1".into(),
-                        content_blocks: vec![ContentBlock::Text {
-                            text: "let me look".into(),
-                        }],
+                        messages: vec![
+                            crate::tool_rpc::ReportedMessage {
+                                role: shore_common::protocol::types::Role::Assistant,
+                                content_blocks: vec![ContentBlock::Text {
+                                    text: "let me look".into(),
+                                }],
+                            },
+                            crate::tool_rpc::ReportedMessage {
+                                role: shore_common::protocol::types::Role::User,
+                                content_blocks: vec![ContentBlock::ToolResult {
+                                    tool_use_id: "tu_1".into(),
+                                    content: "ok".into(),
+                                    is_error: false,
+                                }],
+                            },
+                        ],
                     },
                 ),
                 // A tool that ran, and a call that never reached a loop. The

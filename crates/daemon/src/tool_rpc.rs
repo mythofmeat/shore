@@ -60,12 +60,27 @@ pub struct ToolCallRequest {
     pub input: serde_json::Value,
 }
 
-/// An assistant turn the sidecar appended to the conversation.
+/// One message the sidecar appended, in the daemon's stored shape.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ReportedMessage {
+    pub role: shore_common::protocol::types::Role,
+    pub content_blocks: Vec<shore_common::protocol::types::ContentBlock>,
+}
+
+/// Messages the sidecar appended to the conversation.
 ///
-/// The daemon persists the turns a loop produced, and once the sidecar drives
-/// the loop it is the only side that knows where one turn ended and the next
-/// began: the whole loop reaches the daemon as a single flat stream whose
-/// terminal event carries no per-turn blocks.
+/// Once the sidecar drives the loop it is the only side that knows what the
+/// conversation became: the whole loop reaches the daemon as a single flat
+/// stream whose terminal event carries no per-turn structure. Inferring it from
+/// the tool calls alone loses both the grouping (which results belonged to one
+/// round) and the order, since a round's tools run concurrently and finish in a
+/// race.
+///
+/// So the daemon is told rather than left to infer. It writes these down
+/// verbatim *and* appends them to the request it holds — which is what keeps
+/// `last_request` equal to what actually went out. See 756a308f: the keepalive
+/// ping clones that body and must stay byte-identical to it or its anchors
+/// miss and it rewrites the whole conversation.
 ///
 /// This rides the *tool socket* rather than the event stream so it arrives on
 /// the same channel as the tool calls it precedes. That is not a detail — the
@@ -73,10 +88,9 @@ pub struct ToolCallRequest {
 /// requested it, so that turn has to be recorded before its tools dispatch, and
 /// two transports could not guarantee it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct TurnRequest {
+pub struct MessagesRequest {
     pub rid: String,
-    /// The assistant turn's content, in the daemon's stored block shape.
-    pub content_blocks: Vec<shore_common::protocol::types::ContentBlock>,
+    pub messages: Vec<ReportedMessage>,
 }
 
 /// What the sidecar is asking for. Tagged, because the two are answered
@@ -86,8 +100,8 @@ pub struct TurnRequest {
 pub enum SidecarRequest {
     /// Run this tool and tell me what it produced.
     Tool(ToolCallRequest),
-    /// Record this assistant turn; nothing to compute.
-    Turn(TurnRequest),
+    /// Record these messages; nothing to compute.
+    Messages(MessagesRequest),
 }
 
 impl SidecarRequest {
@@ -95,7 +109,7 @@ impl SidecarRequest {
     pub fn rid(&self) -> &str {
         match self {
             Self::Tool(request) => &request.rid,
-            Self::Turn(request) => &request.rid,
+            Self::Messages(request) => &request.rid,
         }
     }
 }

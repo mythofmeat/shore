@@ -40,7 +40,12 @@ import type {
   BetaTextBlockParam,
 } from "@anthropic-ai/sdk/resources/beta/messages";
 
-import { daemonTools, reportTurn, type ToolRpcUnreachable } from "../tool_rpc.ts";
+import {
+  daemonTools,
+  reportMessages,
+  type ReportedMessage,
+  type ToolRpcUnreachable,
+} from "../tool_rpc.ts";
 import type { SidecarRequest, StreamEvent, SystemContent, Usage } from "../types.ts";
 import {
   anthropicContentEvents,
@@ -102,10 +107,42 @@ export async function* anthropicToolLoopEvents(
   if (signal?.aborted) abort.abort();
   signal?.addEventListener("abort", () => abort.abort(), { once: true });
   let unreachable: ToolRpcUnreachable | undefined;
-  const tools = daemonTools(req.tools ?? [], rpc, (error) => {
-    unreachable ??= error;
-    abort.abort();
-  });
+
+  // A round's tools run concurrently, so results arrive in a race. They are
+  // collected here and emitted in the order the model asked for them, because
+  // completion order must not decide what the daemon stores.
+  const results = new Map<string, { output: string; is_error: boolean }>();
+  let pendingToolIds: string[] = [];
+
+  const tools = daemonTools(
+    req.tools ?? [],
+    rpc,
+    (error) => {
+      unreachable ??= error;
+      abort.abort();
+    },
+    (toolId, output, isError) => results.set(toolId, { output, is_error: isError }),
+  );
+
+  /**
+   * The finished round's results as one message, in the order the model asked.
+   *
+   * Empty until a round's tools have run. Drains, so a round is reported once.
+   */
+  const drainResults = (): ReportedMessage[] => {
+    if (pendingToolIds.length === 0) return [];
+    const blocks = pendingToolIds.map((id) => {
+      const r = results.get(id);
+      return {
+        type: "tool_result",
+        tool_use_id: id,
+        content: r?.output ?? "",
+        is_error: r?.is_error ?? false,
+      };
+    });
+    pendingToolIds = [];
+    return [{ role: "user", content_blocks: blocks }];
+  };
 
   const runner = client.beta.messages.toolRunner({
     ...params,
@@ -127,6 +164,8 @@ export async function* anthropicToolLoopEvents(
   };
   let text = "";
   let finishReason = "end_turn";
+  /** The last turn's blocks — what the daemon should persist as this response. */
+  let terminalBlocks: unknown[] = [];
 
   try {
     for await (const stream of runner) {
@@ -143,6 +182,9 @@ export async function* anthropicToolLoopEvents(
       const message = await stream.finalMessage();
       usage = addUsage(usage, message);
       finishReason = message.stop_reason ?? "end_turn";
+      // The daemon persists this one from the `done` event rather than from its
+      // own stream accumulator, which cannot tell one turn from the next.
+      terminalBlocks = message.content;
 
       // The model stopped asking for tools. Break here rather than letting the
       // runner notice: with messages taken over it would spend another request
@@ -153,7 +195,17 @@ export async function* anthropicToolLoopEvents(
       // only one that knows where each ended. Reported before the tools it
       // asked for run, on the same channel, so the daemon has it recorded by
       // the time they dispatch.
-      await reportTurn(rpc, message.content, abort.signal);
+      // One report, in conversation order: the previous round's results (their
+      // tools ran while the runner was producing this turn), then this turn.
+      // Sent before this turn's tools dispatch, so the daemon has it recorded
+      // in time for `attach_generated_image`.
+      const prior = drainResults();
+      pendingToolIds = message.content.flatMap((b) => (b.type === "tool_use" ? [b.id] : []));
+      await reportMessages(
+        rpc,
+        [...prior, { role: "assistant", content_blocks: message.content }],
+        abort.signal,
+      );
 
       // Appending the assistant turn is now this side's job, and re-placing the
       // breakpoints over the grown conversation is the point of doing so.
@@ -174,6 +226,9 @@ export async function* anthropicToolLoopEvents(
         return { ...prev, messages, system };
       });
     }
+    // The last round's results: after a terminal turn, and after an
+    // iteration cap, whose final round ran its tools with no turn following.
+    await reportMessages(rpc, drainResults(), abort.signal);
   } catch (error) {
     // An unreachable daemon surfaces as an abort; report the real cause.
     const cause = unreachable ?? error;
@@ -209,6 +264,10 @@ export async function* anthropicToolLoopEvents(
     type: "done",
     content: text,
     finish_reason: finishReason,
+    // Only the terminal turn. The daemon's stream accumulator sees every turn's
+    // blocks in one flat stream and cannot tell where one ended, so it would
+    // otherwise persist a final message replaying the whole loop.
+    content_blocks: terminalBlocks,
     usage,
     timing: {
       total_ms: total,

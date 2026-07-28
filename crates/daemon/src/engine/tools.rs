@@ -161,12 +161,19 @@ pub async fn serve_tool_calls(
 ) {
     while let Some(call) = calls.recv().await {
         let response = match &call.request {
-            crate::tool_rpc::SidecarRequest::Turn(turn) => {
-                // Recorded before the tools it asked for run, which is why this
-                // shares a channel with them: `attach_generated_image` hangs the
-                // image off the turn that requested it, and that turn has to be
-                // the last message by then.
-                record_assistant_turn(intermediate_messages, turn.content_blocks.clone());
+            crate::tool_rpc::SidecarRequest::Messages(report) => {
+                // Written down as given. The sidecar decided the grouping and
+                // the order; inferring either from the tool calls is what this
+                // replaced. An assistant turn arrives before the tools it asked
+                // for, which is why this shares a channel with them:
+                // `attach_generated_image` hangs the image off that turn.
+                for reported in &report.messages {
+                    record_reported_message(
+                        intermediate_messages,
+                        reported.role.clone(),
+                        reported.content_blocks.clone(),
+                    );
+                }
                 crate::tool_rpc::ToolCallResponse {
                     output: String::new(),
                     is_error: false,
@@ -188,12 +195,12 @@ pub async fn serve_tool_calls(
                     intermediate_messages.as_mut_slice(),
                 )
                 .await;
-                let response = tool_response_from(&outcome.content_block);
-                record_tool_result_message(
-                    intermediate_messages,
-                    std::slice::from_ref(&outcome.content_block),
-                );
-                response
+                // The result is *not* recorded here. A round's tools run
+                // concurrently, so recording each as it lands would store one
+                // message per tool in whatever order they finished. The sidecar
+                // sends the round's results together, in ask order, once the
+                // round completes.
+                tool_response_from(&outcome.content_block)
             }
         };
         call.respond(response);
@@ -228,11 +235,16 @@ fn tool_response_from(block: &ContentBlock) -> crate::tool_rpc::ToolCallResponse
 /// from the stream result it already has; when the sidecar drives, the blocks
 /// arrive over the socket instead. Provenance is left unset — the request the
 /// loop ran on carries it, and the persistence layer stamps it there.
-fn record_assistant_turn(intermediate_messages: &mut Vec<Message>, blocks: Vec<ContentBlock>) {
+/// Store a message exactly as the sidecar reported it.
+fn record_reported_message(
+    intermediate_messages: &mut Vec<Message>,
+    role: Role,
+    blocks: Vec<ContentBlock>,
+) {
     intermediate_messages.push(Message {
         msg_id: format!("m_{}", uuid::Uuid::new_v4()),
         origin: None,
-        role: Role::Assistant,
+        role,
         content: derive_content_from_blocks(&blocks),
         images: vec![],
         content_blocks: blocks,
@@ -498,8 +510,17 @@ async fn attach_generated_image(
         caption: caption.clone(),
         data: None,
     };
-    if let Some(last) = intermediate_messages.last_mut() {
-        last.images.push(image_ref);
+    // The assistant turn that asked for this tool, not simply the last message.
+    // Only assistant messages render their images (`handler::task`), so an
+    // image parked on a `tool_result` turn is dropped with no error — and once
+    // a round's results are stored as one user message, the last message is a
+    // user turn more often than not.
+    if let Some(turn) = intermediate_messages
+        .iter_mut()
+        .rev()
+        .find(|message| message.role == Role::Assistant)
+    {
+        turn.images.push(image_ref);
     }
     let _ignored = direct_tx
         .send(ServerMessage::SendImage(SendImage {
@@ -657,7 +678,8 @@ mod tests {
     use crate::llm::LlmClient;
     use crate::test_support::TestToolContext;
     use crate::tool_rpc::{
-        SidecarRequest, ToolCall, ToolCallRequest, ToolCallResponse, TurnRequest,
+        MessagesRequest, ReportedMessage, SidecarRequest, ToolCall, ToolCallRequest,
+        ToolCallResponse,
     };
     use serde_json::json;
     use tokio::sync::mpsc;
@@ -746,18 +768,21 @@ mod tests {
         let mut intermediate = Vec::new();
         let (calls_tx, mut calls_rx) = mpsc::channel(4);
 
-        let (turn, turn_reply) = ToolCall::for_test(SidecarRequest::Turn(TurnRequest {
+        let (turn, turn_reply) = ToolCall::for_test(SidecarRequest::Messages(MessagesRequest {
             rid: "rid_1".into(),
-            content_blocks: vec![
-                ContentBlock::Text {
-                    text: "let me look".into(),
-                },
-                ContentBlock::ToolUse {
-                    id: "tu_1".into(),
-                    name: "read".into(),
-                    input: json!({"path": "nope.txt"}),
-                },
-            ],
+            messages: vec![ReportedMessage {
+                role: Role::Assistant,
+                content_blocks: vec![
+                    ContentBlock::Text {
+                        text: "let me look".into(),
+                    },
+                    ContentBlock::ToolUse {
+                        id: "tu_1".into(),
+                        name: "read".into(),
+                        input: json!({"path": "nope.txt"}),
+                    },
+                ],
+            }],
         }));
         calls_tx.send(turn).await.expect("queue the turn");
         let (call, _reply) = sidecar_call("read", json!({"path": "nope.txt"}));
@@ -776,10 +801,12 @@ mod tests {
         .await;
 
         assert!(!turn_reply.await.expect("the turn is acknowledged").is_error);
-        // Assistant turn first, then the user turn carrying its tool result —
-        // the same order the daemon-driven loop persists.
+        // Only what was reported. Running a tool records nothing on its own:
+        // a round's tools finish in a race, so recording each as it lands would
+        // store one message per tool in completion order. The sidecar sends the
+        // round's results together once the round is done.
         let roles: Vec<Role> = intermediate.iter().map(|m| m.role.clone()).collect();
-        assert_eq!(roles, vec![Role::Assistant, Role::User], "{roles:?}");
+        assert_eq!(roles, vec![Role::Assistant], "{roles:?}");
         assert_eq!(intermediate[0].content, "let me look");
     }
 

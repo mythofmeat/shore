@@ -43,27 +43,41 @@ export interface ToolCallRequest {
   input: unknown;
 }
 
-/**
- * An assistant turn this side appended, for the daemon to persist.
- *
- * Once the loop runs here, this side is the only one that knows where a turn
- * ended: the daemon receives the whole loop as one flat stream whose terminal
- * event carries no per-turn blocks. It rides the tool socket rather than the
- * stream so it lands on the same channel as the tool calls it precedes — the
- * daemon's generated-image handling attaches to the turn that requested the
- * tool, so that turn has to be recorded first, and two transports could not
- * guarantee it.
- */
-export interface TurnRequest {
-  rid: string;
+/** One message this side appended, in the daemon's stored shape. */
+export interface ReportedMessage {
+  role: "assistant" | "user";
   content_blocks: unknown[];
+}
+
+/**
+ * Messages this side appended to the conversation, for the daemon to persist.
+ *
+ * Once the loop runs here, this side is the only one that knows what the
+ * conversation became: the daemon receives the whole loop as one flat stream
+ * whose terminal event carries no per-turn structure. Reconstructing it from
+ * the tool calls alone loses the grouping — which tool results belonged to the
+ * same round — and the order, since a round's tools run concurrently.
+ *
+ * So the daemon is told, rather than left to infer. It writes these down
+ * verbatim and appends them to the request it holds, which is what keeps
+ * `last_request` equal to what actually went out (see 756a308f — the keepalive
+ * ping clones that body and must stay byte-identical to it).
+ *
+ * This rides the tool socket rather than the stream so it lands on the same
+ * channel as the tool calls it precedes: the daemon's generated-image handling
+ * attaches to the assistant turn that requested the tool, so that turn has to
+ * be recorded first, and two transports could not guarantee it.
+ */
+export interface MessagesRequest {
+  rid: string;
+  messages: ReportedMessage[];
 }
 
 /** What the daemon is being asked to do. Tagged, because confusing the two
  * would persist an assistant turn as a tool result. */
 export type DaemonRequest =
   | ({ kind: "tool" } & ToolCallRequest)
-  | ({ kind: "turn" } & TurnRequest);
+  | ({ kind: "messages" } & MessagesRequest);
 
 /** A tool that ran. `is_error` means it failed, not that the call failed. */
 export interface ToolCallResponse {
@@ -165,19 +179,21 @@ export async function callDaemonTool(
 }
 
 /**
- * Tell the daemon about an assistant turn this side appended.
+ * Tell the daemon about messages this side appended.
  *
- * Sent before the turn's tools run, on the same channel, so the daemon has the
- * turn recorded by the time it dispatches them.
+ * An assistant turn is sent before its tools run, on the same channel, so the
+ * daemon has it recorded by the time they dispatch. A round's tool results are
+ * sent as one message once the round completes.
  */
-export async function reportTurn(
+export async function reportMessages(
   rpc: ToolRpc,
-  contentBlocks: unknown[],
+  messages: ReportedMessage[],
   signal?: AbortSignal | null,
 ): Promise<void> {
+  if (messages.length === 0) return;
   const outcome = await callDaemonTool(
     rpc.socket_path,
-    { kind: "turn", rid: rpc.rid, content_blocks: contentBlocks },
+    { kind: "messages", rid: rpc.rid, messages },
     signal,
   );
   if (isTransportError(outcome)) throw new ToolRpcUnreachable(outcome.error);
@@ -198,6 +214,11 @@ export function daemonTools(
   definitions: readonly ToolDefinition[],
   rpc: ToolRpc,
   onUnreachable: (error: ToolRpcUnreachable) => void,
+  // Results are recorded as they land so the caller can emit a round's
+  // `tool_result` blocks in the order the model asked for them. The runner runs
+  // a round's tools concurrently, so completion order is a race and must not
+  // decide what gets stored.
+  record: (toolId: string, output: string, isError: boolean) => void = () => {},
 ): BetaRunnableTool[] {
   return definitions.map((definition) =>
     betaTool({
@@ -233,6 +254,7 @@ export function daemonTools(
           onUnreachable(error);
           throw error;
         }
+        record(context?.toolUse.id ?? "", outcome.output, outcome.is_error);
         // A failed tool keeps the daemon's own text: ToolError carries content
         // verbatim, where a plain Error would be reformatted as "Error: …".
         if (outcome.is_error) throw new ToolError(outcome.output);

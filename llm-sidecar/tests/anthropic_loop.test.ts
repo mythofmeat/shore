@@ -194,11 +194,26 @@ function fakeToolDaemon(output: string) {
   Bun.spawnSync(["mkdir", "-p", dir]);
   const path = `${dir}/tools.sock`;
   const calls: Array<Record<string, unknown>> = [];
-  const server = Bun.listen<undefined>({
+  const server = Bun.listen<{ buf: string }>({
     unix: path,
     socket: {
+      // Buffered per connection, like the real daemon's `BufReader::lines`. A
+      // request can arrive split across reads, and parsing a partial chunk
+      // throws — leaving the caller waiting for a reply that never comes,
+      // because nothing in the tool RPC has a timeout. Buffering in a shared
+      // variable is not enough either: a loop opens one connection per call and
+      // they can overlap, so the partial reads interleave.
+      open(socket) {
+        socket.data = { buf: "" };
+      },
       data(socket, chunk) {
-        calls.push(JSON.parse(new TextDecoder().decode(chunk).trim()) as Record<string, unknown>);
+        socket.data.buf += new TextDecoder().decode(chunk);
+        const nl = socket.data.buf.indexOf("\n");
+        if (nl < 0) return;
+        const line = socket.data.buf.slice(0, nl).trim();
+        socket.data.buf = "";
+        if (!line) return;
+        calls.push(JSON.parse(line) as Record<string, unknown>);
         socket.write(`${JSON.stringify({ output, is_error: false })}\n`);
         socket.end();
       },
@@ -270,15 +285,16 @@ describe("driving a tool loop", () => {
 
     // The tool actually ran, in the daemon, with the loop's rid — and the
     // assistant turn that asked for it was reported first, on the same channel,
-    // so the daemon has it recorded before dispatching.
-    expect(daemon.calls.map((c) => c["kind"])).toEqual(["turn", "tool"]);
+    // so the daemon has it recorded before dispatching. The round's results
+    // follow once it completes, as one message rather than one per tool.
+    expect(daemon.calls.map((c) => c["kind"])).toEqual(["messages", "tool", "messages"]);
     expect(daemon.calls[1]).toMatchObject({ rid: "rid_1", tool_id: "tu_1", name: "read" });
   });
 
-  test("the turn reported to the daemon carries the blocks it produced", async () => {
+  test("the messages reported to the daemon carry the blocks they produced", async () => {
     // The daemon persists what a loop produced, and once the loop runs here it
-    // is the only side that knows where each turn ended — the whole loop
-    // reaches the daemon as one flat stream carrying no per-turn blocks.
+    // is the only side that knows what the conversation became — the whole loop
+    // reaches the daemon as one flat stream carrying no per-turn structure.
     const anthropic = fakeAnthropic([
       { kind: "tool", id: "tu_1", name: "read", input: {} },
       { kind: "text", text: "done" },
@@ -288,10 +304,15 @@ describe("driving a tool loop", () => {
 
     await collect(anthropicToolLoopEvents(request(anthropic, daemon.path)));
 
-    const turn = daemon.calls.find((c) => c["kind"] === "turn") as {
-      content_blocks: Array<{ type: string }>;
-    };
-    expect(turn.content_blocks.map((b) => b.type)).toEqual(["tool_use"]);
+    const reports = daemon.calls.filter((c) => c["kind"] === "messages") as Array<{
+      messages: Array<{ role: string; content_blocks: Array<{ type: string }> }>;
+    }>;
+    // The assistant turn that asked for the tool, then the round's results.
+    expect(reports).toHaveLength(2);
+    expect(reports[0]!.messages.map((m) => m.role)).toEqual(["assistant"]);
+    expect(reports[0]!.messages[0]!.content_blocks.map((b) => b.type)).toEqual(["tool_use"]);
+    expect(reports[1]!.messages.map((m) => m.role)).toEqual(["user"]);
+    expect(reports[1]!.messages[0]!.content_blocks.map((b) => b.type)).toEqual(["tool_result"]);
   });
 
   test("the assistant turn is appended exactly once", async () => {

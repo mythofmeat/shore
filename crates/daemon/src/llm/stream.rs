@@ -178,11 +178,22 @@ impl StreamConsumer {
             StreamEvent::Done {
                 content,
                 finish_reason,
+                content_blocks,
                 usage,
                 timing,
             } => {
                 // StreamEnd is emitted by the caller — see emit_stream_end.
-                return Ok(Some(st.finish(content, finish_reason, usage, timing)));
+                let mut result = st.finish(content, finish_reason, usage, timing);
+                // A tool loop driven by the sidecar names its terminal turn's
+                // blocks, because this accumulator has been collecting every
+                // turn of that loop and cannot tell them apart. Applied after
+                // `finish`, which flushes its own pending text and thinking —
+                // those are already in the reported blocks, so overriding
+                // first would leave the trailing text in twice.
+                if let Some(blocks) = content_blocks {
+                    result.content_blocks = blocks;
+                }
+                return Ok(Some(result));
             }
 
             // Keepalive — no payload, nothing to relay or accumulate. Reading
