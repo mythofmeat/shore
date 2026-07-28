@@ -28,7 +28,7 @@ use super::{AutonomyStatus, HeartbeatEventKind, HeartbeatLog};
 use crate::cache_keepalive::{CacheKeepalive, CacheKeepaliveAction, KeepaliveSnapshot};
 use crate::characters::CharacterRegistry;
 use crate::ledger::{CallType, CredentialFallbackEvent, LedgerClient};
-use crate::llm::types::LlmRequest;
+use crate::llm::types::{LlmRequest, ToolResultContent, WireBlock, WireMessage, WireRole};
 use crate::memory::compaction_impls::resolve_image_gen_config;
 use crate::memory::retrieval::resolve_embedder;
 use crate::notifications::{NotificationEvent, NotificationService};
@@ -2303,12 +2303,6 @@ fn rebuild_request_from_disk(
         resolved: &resolved,
         messages,
         has_prior_context,
-        // Must mirror the live chat path: a rebuild reconstructs the
-        // request chat would have produced, so the unsigned-thinking
-        // shape has to match too. Otherwise the heartbeat-rebuilt cache
-        // prefix diverges from the chat-warmed prefix on OpenAI/Z.AI
-        // SDKs, invalidating the cache the next chat call would have hit.
-        include_unsigned_thinking: resolved.sdk.echoes_unsigned_thinking(),
         mcp_tool_defs: &mcp_tool_defs,
     });
 
@@ -2319,6 +2313,7 @@ fn rebuild_request_from_disk(
         system,
         tool_defs,
         None,
+        resolved.resolved_replay_prior_thinking(&config.app),
     ) {
         Ok(req) => {
             info!(
@@ -2422,6 +2417,7 @@ fn apply_heartbeat_model_override(
         request.system.clone(),
         request.tools.clone(),
         None,
+        resolved.resolved_replay_prior_thinking(&config.app),
     ) {
         Ok(mut new_req) => {
             info!(
@@ -2795,7 +2791,7 @@ async fn run_heartbeat_tool_loop(
                 dispatch_heartbeat_tools(character, state, iteration, &tool_uses, tool_ctx).await;
             request
                 .messages
-                .push(json!({ "role": "user", "content": tool_results }));
+                .push(WireMessage::new(WireRole::User, tool_results));
             generated_images.extend(images);
             captured
         } else {
@@ -2902,27 +2898,20 @@ fn log_heartbeat_response(
     }
 }
 
-/// Build the assistant message from the response's content blocks (filtering
-/// unsigned thinking) and push it onto the ephemeral heartbeat history. Every
-/// successful generate() must land in the history before any exit path,
-/// keeping later tool-loop requests well formed. Uses content_block_to_api_json
-/// (Anthropic path) — heartbeat always uses Anthropic models; ZAI would need
-/// content_block_to_json.
+/// Build the assistant message from the response's content blocks and push it
+/// onto the ephemeral heartbeat history. Every successful generate() must land
+/// in the history before any exit path, keeping later tool-loop requests well
+/// formed.
+///
+/// This used to project the blocks through the Anthropic filter, with a comment
+/// noting that Z.AI would need the other one — a provider assumption compiled
+/// into the heartbeat. The adapter now makes that call, so the assumption is
+/// gone rather than documented.
 fn push_heartbeat_assistant_message(
     request: &mut LlmRequest,
     resp: &crate::llm::types::GenerateResponse,
 ) {
-    let assistant_content: Vec<Value> = resp
-        .content_blocks
-        .iter()
-        .filter_map(crate::content_util::content_block_to_api_json)
-        .collect();
-    if !assistant_content.is_empty() {
-        request.messages.push(json!({
-            "role": "assistant",
-            "content": assistant_content,
-        }));
-    }
+    request.push_assistant_turn(resp);
 }
 
 /// Dispatch every tool call from one heartbeat iteration and collect the
@@ -2935,11 +2924,11 @@ async fn dispatch_heartbeat_tools(
     tool_uses: &[(String, String, Value)],
     tool_ctx: &Arc<HeartbeatToolContext>,
 ) -> (
-    Vec<Value>,
+    Vec<WireBlock>,
     Vec<crate::transcript_capture::CapturedTool>,
     Vec<ImageRef>,
 ) {
-    let mut tool_results: Vec<Value> = Vec::new();
+    let mut tool_results: Vec<WireBlock> = Vec::new();
     let mut captured: Vec<crate::transcript_capture::CapturedTool> = Vec::new();
     let mut images: Vec<ImageRef> = Vec::new();
 
@@ -2991,11 +2980,11 @@ async fn dispatch_heartbeat_tools(
             "Heartbeat: tool result"
         );
 
-        tool_results.push(crate::content_util::build_tool_result_json(
-            id,
-            &output_str,
+        tool_results.push(WireBlock::ToolResult {
+            tool_use_id: id.clone(),
+            content: ToolResultContent::Text(output_str.clone()),
             is_error,
-        ));
+        });
         captured.push(crate::transcript_capture::CapturedTool {
             name: name.clone(),
             input: input.clone(),
@@ -3341,27 +3330,15 @@ where you left off. Then either send a final <sendMessage> or respond HEARTBEAT_
 /// pushes a fresh user message when the request happens to end on an assistant
 /// turn or is otherwise empty.
 fn append_wrap_up_nudge(request: &mut LlmRequest) {
-    let block = json!({"type": "text", "text": WRAP_UP_NUDGE_TEXT});
     if let Some(last) = request.messages.last_mut() {
-        if last.get("role").and_then(|r| r.as_str()) == Some("user") {
-            match last.get_mut("content") {
-                Some(Value::Array(arr)) => {
-                    arr.push(block);
-                    return;
-                }
-                Some(Value::String(existing)) => {
-                    let combined = format!("{existing}\n\n{WRAP_UP_NUDGE_TEXT}");
-                    last["content"] = json!(combined);
-                    return;
-                }
-                _ => {}
-            }
+        if last.role == WireRole::User {
+            last.content.push(WireBlock::text(WRAP_UP_NUDGE_TEXT));
+            return;
         }
     }
-    request.messages.push(json!({
-        "role": "user",
-        "content": WRAP_UP_NUDGE_TEXT,
-    }));
+    request
+        .messages
+        .push(WireMessage::text(WireRole::User, WRAP_UP_NUDGE_TEXT));
 }
 
 // ---------------------------------------------------------------------------
@@ -3405,10 +3382,7 @@ fn build_keepalive_ping(req: &LlmRequest, character: &str) -> LlmRequest {
     ping.max_tokens = 1;
     ping.rid = None;
     ping.forensic_character = Some(character.to_owned());
-    ping.messages.push(serde_json::json!({
-        "role": "user",
-        "content": "."
-    }));
+    ping.messages.push(WireMessage::text(WireRole::User, "."));
     ping
 }
 
@@ -3568,6 +3542,7 @@ mod tests {
             top_p: None,
             provider_options: None,
             provider_key: None,
+            replay_prior_thinking: shore_common::config::app::ThinkingReplay::All,
             rid: None,
             forensic_character: None,
             retain_long: false,
@@ -3575,53 +3550,55 @@ mod tests {
         }
     }
 
+    fn nudge_text(block: &WireBlock) -> &str {
+        let WireBlock::Text { text } = block else {
+            panic!("expected a text block, got {block:?}")
+        };
+        text
+    }
+
     #[test]
     fn wrap_up_nudge_folds_into_trailing_tool_results() {
         let mut req = empty_request();
-        req.messages.push(json!({
-            "role": "user",
-            "content": [
-                {"type": "tool_result", "tool_use_id": "tu_1", "content": "ok"}
-            ],
-        }));
+        req.messages.push(WireMessage::new(
+            WireRole::User,
+            vec![WireBlock::ToolResult {
+                tool_use_id: "tu_1".to_owned(),
+                content: ToolResultContent::Text("ok".to_owned()),
+                is_error: false,
+            }],
+        ));
         append_wrap_up_nudge(&mut req);
         assert_eq!(
             req.messages.len(),
             1,
             "must not introduce a second user turn"
         );
-        let content = req.messages[0]["content"]
-            .as_array()
-            .expect("array content");
-        assert_eq!(content.len(), 2);
-        assert_eq!(content[1]["type"], "text");
-        assert!(content[1]["text"].as_str().unwrap().contains("MEMORY.md"));
+        assert_eq!(req.messages[0].content.len(), 2);
+        assert!(nudge_text(&req.messages[0].content[1]).contains("MEMORY.md"));
     }
 
     #[test]
-    fn wrap_up_nudge_folds_into_string_user_content() {
+    fn wrap_up_nudge_folds_into_a_text_user_turn() {
         let mut req = empty_request();
-        req.messages.push(json!({"role": "user", "content": "hi"}));
+        req.messages.push(WireMessage::text(WireRole::User, "hi"));
         append_wrap_up_nudge(&mut req);
         assert_eq!(req.messages.len(), 1);
-        let s = req.messages[0]["content"].as_str().expect("string content");
-        assert!(s.starts_with("hi"));
-        assert!(s.contains("MEMORY.md"));
+        assert_eq!(req.messages[0].content.len(), 2);
+        assert_eq!(nudge_text(&req.messages[0].content[0]), "hi");
+        assert!(nudge_text(&req.messages[0].content[1]).contains("MEMORY.md"));
     }
 
     #[test]
     fn wrap_up_nudge_pushes_after_assistant_turn() {
         let mut req = empty_request();
-        req.messages.push(json!({"role": "user", "content": "hi"}));
+        req.messages.push(WireMessage::text(WireRole::User, "hi"));
         req.messages
-            .push(json!({"role": "assistant", "content": "bye"}));
+            .push(WireMessage::text(WireRole::Assistant, "bye"));
         append_wrap_up_nudge(&mut req);
         assert_eq!(req.messages.len(), 3);
-        assert_eq!(req.messages[2]["role"], "user");
-        assert!(req.messages[2]["content"]
-            .as_str()
-            .unwrap()
-            .contains("MEMORY.md"));
+        assert_eq!(req.messages[2].role, WireRole::User);
+        assert!(nudge_text(&req.messages[2].content[0]).contains("MEMORY.md"));
     }
 
     #[test]
@@ -3629,7 +3606,7 @@ mod tests {
         let mut req = empty_request();
         append_wrap_up_nudge(&mut req);
         assert_eq!(req.messages.len(), 1);
-        assert_eq!(req.messages[0]["role"], "user");
+        assert_eq!(req.messages[0].role, WireRole::User);
     }
 
     // -- ensure_state ---------------------------------------------------------
@@ -4363,8 +4340,8 @@ mod tests {
             json!({"type": "object"}),
         )]);
         request.messages = vec![
-            json!({"role": "user", "content": "cached user"}),
-            json!({"role": "assistant", "content": "cached assistant"}),
+            WireMessage::text(WireRole::User, "cached user"),
+            WireMessage::text(WireRole::Assistant, "cached assistant"),
         ];
         let original_messages = request.messages.clone();
         let original_system = request.system.clone();
@@ -4462,7 +4439,7 @@ mod tests {
             api_key: "key".into(),
             api_key_name: None,
             base_url: None,
-            messages: vec![json!({"role": "user", "content": "hello"})],
+            messages: vec![WireMessage::text(WireRole::User, "hello")],
             system: Some(json!([{"type": "text", "text": "system prompt"}])),
             tools: Some(original_tools.clone()),
             max_tokens: 4096,
@@ -4470,6 +4447,7 @@ mod tests {
             top_p: None,
             provider_options: None,
             provider_key: None,
+            replay_prior_thinking: shore_common::config::app::ThinkingReplay::All,
             rid: None,
             forensic_character: None,
             retain_long: false,
@@ -4566,23 +4544,30 @@ api_key_env = "{api_key_env}"
         let assistant = request
             .messages
             .iter()
-            .find(|msg| msg.get("role").and_then(Value::as_str) == Some("assistant"))
+            .find(|msg| msg.role == WireRole::Assistant)
             .expect("rebuilt request should include assistant history");
-        let blocks = assistant
-            .get("content")
-            .and_then(Value::as_array)
-            .expect("assistant content should be structured");
 
-        assert!(
-            blocks
-                .iter()
-                .all(|block| block.get("type").and_then(Value::as_str) != Some("thinking")),
-            "heartbeat rebuild must honor replay_prior_thinking=false"
+        // The rebuild no longer strips: it reports the policy and the adapter
+        // applies it. What has to hold here is that the policy survives the
+        // rebuild — a heartbeat that reported `All` where chat reported `None`
+        // would render a different prefix and miss the cache chat warmed.
+        assert_eq!(
+            request.replay_prior_thinking,
+            shore_common::config::app::ThinkingReplay::None,
+            "rebuild must carry the configured replay policy"
         );
         assert!(
-            blocks
+            assistant
+                .content
                 .iter()
-                .any(|block| block.get("type").and_then(Value::as_str) == Some("text")),
+                .any(|block| matches!(block, WireBlock::Thinking { .. })),
+            "the rebuild ships stored thinking; the adapter decides what goes on the wire"
+        );
+        assert!(
+            assistant
+                .content
+                .iter()
+                .any(|block| matches!(block, WireBlock::Text { .. })),
             "non-thinking assistant content must remain"
         );
 
@@ -4734,10 +4719,7 @@ api_key_env = "{api_key_env}"
             "rebuilt request should carry the synthetic idle anchor turn, got: {serialized}"
         );
         assert!(
-            request
-                .messages
-                .iter()
-                .any(|m| m.get("role").and_then(Value::as_str) == Some("user")),
+            request.messages.iter().any(|m| m.role == WireRole::User),
             "anchor must be a user turn for the heartbeat prompt to attach to"
         );
 
@@ -4793,14 +4775,10 @@ api_key_env = "{api_key_env}"
             &crate::tools::mcp_registry::McpRegistry::default(),
         )
         .expect("heartbeat should rebuild over an autonomous tail");
-        let roles: Vec<&str> = request
-            .messages
-            .iter()
-            .filter_map(|m| m.get("role").and_then(Value::as_str))
-            .collect();
+        let roles: Vec<WireRole> = request.messages.iter().map(|m| m.role).collect();
         assert_eq!(
             roles.first(),
-            Some(&"user"),
+            Some(&WireRole::User),
             "request must start with the synthetic user anchor, got roles: {roles:?}"
         );
         let serialized = serde_json::to_string(&request.messages).unwrap();
@@ -4843,10 +4821,7 @@ api_key_env = "{api_key_env}"
         )
         .expect("empty active with no segments should still rebuild via the anchor");
         assert!(
-            request
-                .messages
-                .iter()
-                .any(|m| m.get("role").and_then(Value::as_str) == Some("user")),
+            request.messages.iter().any(|m| m.role == WireRole::User),
             "rebuilt request must start from a synthetic user anchor turn"
         );
 
@@ -4862,7 +4837,7 @@ api_key_env = "{api_key_env}"
             api_key: "chat-key".into(),
             api_key_name: None,
             base_url: None,
-            messages: vec![json!({"role": "user", "content": "hi"})],
+            messages: vec![WireMessage::text(WireRole::User, "hi")],
             system: Some(json!([{"type": "text", "text": "sys"}])),
             tools: Some(vec![crate::llm::types::ToolDefinition::new(
                 "read",
@@ -4874,6 +4849,7 @@ api_key_env = "{api_key_env}"
             top_p: None,
             provider_options: None,
             provider_key: None,
+            replay_prior_thinking: shore_common::config::app::ThinkingReplay::All,
             rid: None,
             forensic_character: None,
             retain_long: false,
@@ -5591,10 +5567,10 @@ api_key_env = "{heartbeat_env}"
         ]);
         original
             .messages
-            .push(json!({"role": "user", "content": "hello"}));
+            .push(WireMessage::text(WireRole::User, "hello"));
         original
             .messages
-            .push(json!({"role": "assistant", "content": "hi back"}));
+            .push(WireMessage::text(WireRole::Assistant, "hi back"));
 
         let ping = build_keepalive_ping(&original, "alice");
 
@@ -5621,7 +5597,7 @@ api_key_env = "{heartbeat_env}"
             "ping appends exactly one user turn"
         );
         let last = ping.messages.last().unwrap();
-        assert_eq!(last["role"], "user", "ping must end with a user turn");
+        assert_eq!(last.role, WireRole::User, "ping must end with a user turn");
         assert_eq!(ping.rid, None, "ping must not reuse the cached request ID");
         assert_eq!(
             ping.forensic_character.as_deref(),

@@ -16,6 +16,7 @@ function req(sdk: "deepseek" | "moonshot", provider_options?: Record<string, unk
     api_key: "sk-test",
     messages: [],
     max_tokens: 1024,
+    replay_prior_thinking: "all",
     ...(provider_options ? { provider_options } : {}),
   };
 }

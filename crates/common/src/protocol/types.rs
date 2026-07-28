@@ -485,7 +485,10 @@ mod tests {
 
     #[test]
     fn carrier_prefixes_classify_on_load() {
-        assert!(ThinkingSignature::from_wire("sig_abc").as_opaque() == Some("sig_abc"));
+        assert_eq!(
+            ThinkingSignature::from_wire("sig_abc").as_opaque(),
+            Some("sig_abc")
+        );
         assert_eq!(
             ThinkingSignature::from_wire("orrd:[]"),
             ThinkingSignature::OpenrouterDetails("[]".into())

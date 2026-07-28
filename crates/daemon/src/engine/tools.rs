@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::Value;
 use tokio::sync::mpsc;
 use tracing::{debug, info, instrument, warn};
 
@@ -9,7 +9,7 @@ use crate::convert::elapsed_ms_u64;
 use crate::ledger::{CallType, LedgerClient};
 use crate::llm::retry::{should_retry_error, RetryDecision, RetryPolicy};
 use crate::llm::stream::StreamConsumer;
-use crate::llm::types::{LlmRequest, StreamResult, ToolUseEvent};
+use crate::llm::types::{LlmRequest, StreamResult, ToolUseEvent, WireBlock, WireMessage, WireRole};
 use crate::llm::LlmError;
 use crate::tools::{self as tool_system, ToolContext};
 use shore_common::diagnostics::{self as diagnostics, Diagnostics};
@@ -142,7 +142,6 @@ pub async fn run_tool_loop(
         append_assistant_tool_use_turn(request, &mut intermediate_messages, &result);
 
         // Execute each tool and collect results.
-        let mut tool_results: Vec<Value> = Vec::new();
         let mut tool_result_blocks: Vec<ContentBlock> = Vec::new();
 
         for tool_use in &result.tool_uses {
@@ -156,16 +155,10 @@ pub async fn run_tool_loop(
                 intermediate_messages.as_mut_slice(),
             )
             .await;
-            tool_results.push(outcome.llm_payload);
             tool_result_blocks.push(outcome.content_block);
         }
 
-        append_user_tool_result_turn(
-            request,
-            &mut intermediate_messages,
-            tool_results,
-            tool_result_blocks,
-        );
+        append_user_tool_result_turn(request, &mut intermediate_messages, tool_result_blocks);
 
         result = stream_tool_loop_continuation(
             client,
@@ -196,17 +189,6 @@ fn append_assistant_tool_use_turn(
     result: &StreamResult,
 ) {
     let assistant_blocks = assistant_blocks_from_result(result);
-    let assistant_content: Vec<Value> = assistant_blocks
-        .iter()
-        .filter_map(|block| {
-            crate::content_util::content_block_to_request_json_for_sdk(block, &request.sdk)
-        })
-        .collect();
-
-    request.messages.push(json!({
-        "role": "assistant",
-        "content": assistant_content,
-    }));
 
     // Model provenance mirrors the final-response path: prefer what the
     // provider reported for this iteration, fall back to what we requested.
@@ -215,6 +197,22 @@ fn append_assistant_tool_use_turn(
     } else {
         result.model.clone()
     };
+    let minted_model = (!minting_model.is_empty()).then(|| minting_model.clone());
+
+    // The active model minted these blocks this instant, so they are trivially
+    // replayable — but the turn still carries its provenance, because that is
+    // what the adapter reads and a mid-loop model switch must not look like a
+    // same-model turn.
+    request.messages.push(
+        WireMessage::new(
+            WireRole::Assistant,
+            assistant_blocks
+                .iter()
+                .map(WireBlock::from_content_block)
+                .collect(),
+        )
+        .minted_by(request.provider_key.clone(), minted_model.clone()),
+    );
     intermediate_messages.push(Message {
         msg_id: format!("m_{}", uuid::Uuid::new_v4()),
         origin: None,
@@ -227,7 +225,7 @@ fn append_assistant_tool_use_turn(
         alternatives: vec![],
         timestamp: chrono::Local::now().to_rfc3339(),
         provider_key: request.provider_key.clone(),
-        model: (!minting_model.is_empty()).then_some(minting_model),
+        model: minted_model,
     });
 }
 
@@ -252,8 +250,14 @@ fn assistant_blocks_from_result(result: &StreamResult) -> Vec<ContentBlock> {
     blocks
 }
 
+/// A dispatched tool's result, in the one form that feeds both the persisted
+/// message and the next request turn.
+///
+/// This used to carry the result twice — a `ContentBlock` for storage and a
+/// hand-built `tool_result` JSON value for the wire — which is the same
+/// dual-representation the seam produced everywhere else. The wire form is now
+/// derived from the block.
 struct ToolDispatchOutcome {
-    llm_payload: Value,
     content_block: ContentBlock,
 }
 
@@ -313,11 +317,6 @@ async fn execute_tool_use(
     emit_tool_result(tool_use, direct_tx, request_rid, &output_str, is_error).await;
 
     ToolDispatchOutcome {
-        llm_payload: crate::content_util::build_tool_result_json(
-            &tool_use.id,
-            &output_str,
-            is_error,
-        ),
         content_block: ContentBlock::ToolResult {
             tool_use_id: tool_use.id.clone(),
             content: output_str,
@@ -410,13 +409,15 @@ async fn emit_tool_result(
 fn append_user_tool_result_turn(
     request: &mut LlmRequest,
     intermediate_messages: &mut Vec<Message>,
-    tool_results: Vec<Value>,
     tool_result_blocks: Vec<ContentBlock>,
 ) {
-    let mut user_message = serde_json::Map::new();
-    let _ignored = user_message.insert("role".into(), Value::String("user".into()));
-    _ = user_message.insert("content".into(), Value::Array(tool_results));
-    request.messages.push(Value::Object(user_message));
+    request.messages.push(WireMessage::new(
+        WireRole::User,
+        tool_result_blocks
+            .iter()
+            .map(WireBlock::from_content_block)
+            .collect(),
+    ));
 
     intermediate_messages.push(Message {
         msg_id: format!("m_{}", uuid::Uuid::new_v4()),
@@ -527,7 +528,7 @@ mod tests {
 
     /// Build a test LlmRequest. The sidecar mock handles transport; base_url
     /// remains present to keep the request shape close to configured models.
-    fn test_request(base_url: &str, messages: Vec<Value>) -> LlmRequest {
+    fn test_request(base_url: &str, messages: Vec<WireMessage>) -> LlmRequest {
         LlmRequest {
             sdk: shore_common::config::models::Sdk::Anthropic,
             model: "test".into(),
@@ -542,6 +543,7 @@ mod tests {
             top_p: None,
             provider_options: None,
             provider_key: None,
+            replay_prior_thinking: shore_common::config::app::ThinkingReplay::All,
             rid: None,
             forensic_character: None,
             retain_long: false,

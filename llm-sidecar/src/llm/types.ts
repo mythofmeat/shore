@@ -2,7 +2,7 @@
  * Sidecar IPC contract + internal adapter types.
  *
  * The CONTRACT section mirrors the Rust wire types 1:1 (see
- * `crates/daemon/src/llm/types.rs` and `docs/LLM_SIDECAR_IPC.md`). The Rust daemon
+ * `crates/daemon/src/llm/types.rs`, which is the authority). The Rust daemon
  * serializes an `LlmRequest` to `SidecarRequest`; the sidecar streams
  * `StreamEvent` NDJSON back, which `StreamConsumer` (`crates/daemon/src/llm/stream.rs`)
  * already knows how to parse. Field names are snake_case to match serde.
@@ -15,6 +15,10 @@
  * because our on-disk format stores blocks this way and Anthropic is the picky
  * one about block ordering. The `thinking` block's `signature` is opaque bytes
  * replayed verbatim — never inspected, regenerated, or normalized.
+ *
+ * The daemon sends the conversation UNFILTERED. Deciding what each provider
+ * accepts — carrier-less thinking, cross-model replay, the prior-thinking
+ * strip — happens in `llm/replay.ts`, on this side of the seam.
  */
 
 import type { ContentBlock, ImageRef } from "../engine/types.ts";
@@ -39,12 +43,45 @@ export type Sdk =
   | "deepseek"
   | "moonshot";
 
-/** One conversation turn as the daemon stores it: canonical Anthropic-shape
- * blocks (or a bare string for legacy/simple turns). The sidecar's per-SDK
- * adapter converts these to that provider's wire shape. */
+/**
+ * One conversation turn, mirroring Rust `WireMessage`
+ * (`crates/daemon/src/llm/types.rs`). The two must change together.
+ *
+ * `content` is **unfiltered**: it carries every block the daemon stores,
+ * including thinking with no carrier and thinking minted by a different model.
+ * Deciding what a given provider accepts is this side's job — see
+ * `llm/replay.ts`. Until that moved, the daemon filtered before sending and
+ * this type was `ContentBlock[] | string` describing bytes it could not check.
+ */
 export interface WireMessage {
   role: "user" | "assistant" | "system";
-  content: ContentBlock[] | string;
+  content: ContentBlock[];
+  /** Provider key that minted any thinking in `content`. Absent for turns the
+   * daemon authored, and for history persisted before provenance was tracked. */
+  provider_key?: string;
+  /** Model id that minted it. Provider alone is too coarse — one aggregator key
+   * fronts many model families. */
+  model?: string;
+}
+
+/** How much prior-turn thinking to replay. Mirrors Rust `ThinkingReplay`. */
+export type ThinkingReplay = "all" | "none";
+
+/**
+ * A tool result as text.
+ *
+ * Anthropic accepts blocks in a `tool_result` and the daemon uses that for
+ * generated-image replay; every other dialect carries tool output as a plain
+ * string on a `role:"tool"` message. Flattening to the text blocks is the only
+ * lossless-as-possible option there — an image cannot ride in an OpenAI tool
+ * message at all, so the caption is what survives.
+ */
+export function toolResultText(content: string | ContentBlock[]): string {
+  if (typeof content === "string") return content;
+  return content
+    .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
+    .map((b) => b.text)
+    .join("\n\n");
 }
 
 /** System prompt: structured text blocks (Anthropic keeps them separate;
@@ -140,6 +177,9 @@ export interface SidecarRequest {
   provider_options?: ProviderOptions;
   /** models.toml provider key (e.g. "openrouter", "deepseek", "zai"). */
   provider_key?: string;
+  /** How much prior-turn thinking to replay. Applied here, not by the daemon —
+   * see `llm/replay.ts`. */
+  replay_prior_thinking: ThinkingReplay;
   /** Present only when the daemon has cache forensics enabled. Its presence is
    * the switch; see `llm/forensics.ts`. Stripped before any provider call. */
   forensics?: ForensicsContext;
@@ -285,6 +325,19 @@ export interface TurnMessage {
   content: ContentBlock[];
   /** Images to prepend to the turn's content when building the request. */
   images?: ImageRef[];
+}
+
+/**
+ * A wire turn as the adapters' converter shape.
+ *
+ * Four adapters each carried a private copy of this, and every copy existed
+ * only to widen a bare-string `content` into a text block. `WireMessage.content`
+ * is now always blocks, so the conversion is a projection — kept as one function
+ * because the two types are still distinct (`TurnMessage` has the legacy
+ * `images` field the daemon never populates).
+ */
+export function toTurn(turn: WireMessage): TurnMessage {
+  return { role: turn.role, content: turn.content };
 }
 
 export interface ThinkingConfig {

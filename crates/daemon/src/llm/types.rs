@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use shore_common::config::app::ThinkingReplay;
 use shore_common::config::models::Sdk;
 pub use shore_common::protocol::types::ContentBlock;
 
@@ -134,6 +135,220 @@ impl ToolDefinition {
     }
 }
 
+/// Where a `thinking` block's replay payload rides on the wire.
+///
+/// One stored `ThinkingSignature` projects to exactly one of these fields, named
+/// for the provider that reads it, so no adapter has to sniff a prefix to find
+/// its own. The storage-side `orrd:`/`zair:` encoding never leaves the daemon.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ReasoningCarrier {
+    /// Anthropic signature / Gemini `thoughtSignature`, replayed verbatim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature: Option<String>,
+    /// OpenRouter `reasoning_details`, replayed verbatim as the array it sent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_details: Option<serde_json::Value>,
+    /// Z.AI Preserved-Thinking `reasoning_content`, replayed verbatim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
+}
+
+impl ReasoningCarrier {
+    /// Project a stored signature onto the field its provider actually reads.
+    ///
+    /// An unparseable OpenRouter carrier yields an empty carrier: it is corrupt,
+    /// and replaying something the provider will reject fails the whole request.
+    pub fn from_signature(sig: &shore_common::protocol::types::ThinkingSignature) -> Self {
+        use shore_common::protocol::types::ThinkingSignature as Sig;
+        match sig {
+            Sig::Opaque(s) => Self {
+                signature: Some(s.clone()),
+                ..Self::default()
+            },
+            Sig::OpenrouterDetails(details) => Self {
+                reasoning_details: serde_json::from_str(details).ok(),
+                ..Self::default()
+            },
+            Sig::ZaiReasoning(text) => Self {
+                reasoning_content: Some(text.clone()),
+                ..Self::default()
+            },
+        }
+    }
+
+    /// True when no carrier survived projection — the block replays nothing and
+    /// Anthropic rejects it outright, so the adapter drops it.
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// Image bytes inlined into a message.
+///
+/// Images are read and resized against the daemon's cache directory, so they are
+/// encoded before crossing the seam; the sidecar never touches the filesystem.
+/// Single-variant because base64 is the only form the daemon sends today.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ImageSource {
+    Base64 { media_type: String, data: String },
+}
+
+/// One block of message content as it crosses the seam.
+///
+/// Deliberately *unfiltered*: every block the conversation store holds is sent,
+/// including thinking blocks with no carrier and thinking minted by a different
+/// model. Deciding what a given provider will accept is the adapter's job — see
+/// [`WireMessage`].
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum WireBlock {
+    Text {
+        text: String,
+    },
+    Image {
+        source: ImageSource,
+    },
+    Thinking {
+        thinking: String,
+        #[serde(flatten)]
+        carrier: ReasoningCarrier,
+    },
+    RedactedThinking {
+        data: String,
+    },
+    ToolUse {
+        id: String,
+        name: String,
+        input: serde_json::Value,
+    },
+    ToolResult {
+        tool_use_id: String,
+        content: ToolResultContent,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        is_error: bool,
+    },
+}
+
+/// A tool result is usually text, but the generated-image replay path
+/// ([`crate::handler::AssistantImageMode::ToolPair`]) returns an image block
+/// plus its caption. The sidecar's mirror declared this `string` for as long as
+/// it existed, which was simply wrong for that path — nothing checked it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ToolResultContent {
+    Text(String),
+    Blocks(Vec<WireBlock>),
+}
+
+impl From<String> for ToolResultContent {
+    fn from(s: String) -> Self {
+        Self::Text(s)
+    }
+}
+
+impl WireBlock {
+    /// The daemon's stored block, projected onto the wire.
+    pub fn from_content_block(block: &ContentBlock) -> Self {
+        match block {
+            ContentBlock::Text { text } => Self::Text { text: text.clone() },
+            ContentBlock::Thinking {
+                thinking,
+                signature,
+            } => Self::Thinking {
+                thinking: thinking.clone(),
+                carrier: signature
+                    .as_ref()
+                    .map(ReasoningCarrier::from_signature)
+                    .unwrap_or_default(),
+            },
+            ContentBlock::RedactedThinking { data } => {
+                Self::RedactedThinking { data: data.clone() }
+            }
+            ContentBlock::ToolUse { id, name, input } => Self::ToolUse {
+                id: id.clone(),
+                name: name.clone(),
+                input: input.clone(),
+            },
+            ContentBlock::ToolResult {
+                tool_use_id,
+                content,
+                is_error,
+            } => Self::ToolResult {
+                tool_use_id: tool_use_id.clone(),
+                content: ToolResultContent::Text(content.clone()),
+                is_error: *is_error,
+            },
+        }
+    }
+
+    /// Convenience for the many call sites that build a one-off text turn.
+    pub fn text<T: Into<String>>(text: T) -> Self {
+        Self::Text { text: text.into() }
+    }
+}
+
+/// Which side of the conversation a [`WireMessage`] came from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WireRole {
+    User,
+    Assistant,
+    System,
+}
+
+/// One conversation turn as it crosses the seam.
+///
+/// This was `serde_json::Value`, with the daemon projecting each block to
+/// provider-shaped JSON before sending. That put three genuinely provider-side
+/// decisions on the side that cannot see the provider: which SDKs accept
+/// carrier-less thinking, whether thinking minted by another model is safe to
+/// replay, and how much prior thinking to strip. The sidecar declared a
+/// `WireMessage` type for the same bytes and had no way to check it against
+/// anything. Both sides now name the same type, and the adapter makes those
+/// three calls itself.
+///
+/// `provider_key`/`model` are the provenance those decisions need: a thinking
+/// block's opaque payload is only replayable to the model that minted it, and
+/// provider alone is too coarse because one aggregator key fronts many families.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct WireMessage {
+    pub role: WireRole,
+    pub content: Vec<WireBlock>,
+    /// Provider key that minted any thinking in `content`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_key: Option<String>,
+    /// Model id that minted it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+}
+
+impl WireMessage {
+    /// A turn with no thinking provenance — a synthesized prompt, a tool-result
+    /// continuation, or any turn the daemon authored rather than a model.
+    pub fn new(role: WireRole, content: Vec<WireBlock>) -> Self {
+        Self {
+            role,
+            content,
+            provider_key: None,
+            model: None,
+        }
+    }
+
+    /// A single-text-block turn.
+    pub fn text<T: Into<String>>(role: WireRole, text: T) -> Self {
+        Self::new(role, vec![WireBlock::text(text)])
+    }
+
+    /// Attach the provenance of the model that produced this turn.
+    #[must_use]
+    pub fn minted_by(mut self, provider_key: Option<String>, model: Option<String>) -> Self {
+        self.provider_key = provider_key;
+        self.model = model;
+        self
+    }
+}
+
 /// Request body for the daemon's llm module's POST /v1/stream and POST /v1/generate endpoints.
 ///
 /// The daemon sends fully-resolved config per-request because the daemon's llm module is
@@ -164,8 +379,9 @@ pub struct LlmRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
 
-    /// Conversation messages in LLM-native format.
-    pub messages: Vec<serde_json::Value>,
+    /// Conversation messages, unfiltered. The adapter decides what its provider
+    /// will accept — see [`WireMessage`].
+    pub messages: Vec<WireMessage>,
 
     /// System prompt blocks.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -199,6 +415,15 @@ pub struct LlmRequest {
     /// Distinct from `provider` (SDK protocol). Used for provider-specific behavior.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_key: Option<String>,
+
+    /// How much prior-turn thinking to replay (`all` | `none`).
+    ///
+    /// Applied by the adapter, not here: the strip is a provider-wire decision
+    /// (some providers hard-require replay and override the setting outright),
+    /// and applying it at send time is what makes the keepalive ping and the
+    /// chat request project identically by construction rather than by
+    /// discipline.
+    pub replay_prior_thinking: ThinkingReplay,
 
     /// Optional request ID for distributed tracing (sent as X-Request-ID header).
     #[serde(skip)]
@@ -247,6 +472,7 @@ impl std::fmt::Debug for LlmRequest {
             .field("top_p", &self.top_p)
             .field("provider_options", &self.provider_options)
             .field("provider_key", &self.provider_key)
+            .field("replay_prior_thinking", &self.replay_prior_thinking)
             .field("rid", &self.rid)
             .field("forensic_character", &self.forensic_character)
             .field("retain_long", &self.retain_long)
@@ -282,10 +508,37 @@ impl LlmRequest {
     /// (compaction) and #84 (dreaming + heartbeat) each fixed one
     /// caller; removing the field eliminates the bug class.
     pub fn push_inline_system<C: Into<String>>(&mut self, content: C) {
-        self.messages.push(serde_json::json!({
-            "role": "system",
-            "content": content.into(),
-        }));
+        self.messages
+            .push(WireMessage::text(WireRole::System, content));
+    }
+
+    /// Append a completed assistant turn, stamped with the provenance of the
+    /// model that produced it.
+    ///
+    /// Every tool loop in the daemon — chat, heartbeat, compaction, dreaming —
+    /// needs this between iterations, and each had its own copy. They had
+    /// already drifted: the heartbeat's lacked the `content` fallback, so a
+    /// response that arrived as plain text with no blocks vanished from its
+    /// history. One implementation, so a fifth loop cannot drift again.
+    ///
+    /// A turn with neither blocks nor text is not appended: the API rejects an
+    /// empty content array, which would fail every later call in the loop.
+    pub fn push_assistant_turn(&mut self, resp: &GenerateResponse) {
+        let content: Vec<WireBlock> = if resp.content_blocks.is_empty() {
+            if resp.content.trim().is_empty() {
+                return;
+            }
+            vec![WireBlock::text(resp.content.clone())]
+        } else {
+            resp.content_blocks
+                .iter()
+                .map(WireBlock::from_content_block)
+                .collect()
+        };
+        self.messages.push(
+            WireMessage::new(WireRole::Assistant, content)
+                .minted_by(self.provider_key.clone(), Some(self.model.clone())),
+        );
     }
 }
 
@@ -619,7 +872,7 @@ mod tests {
             api_key: "sk-test".into(),
             api_key_name: None,
             base_url: None,
-            messages: vec![serde_json::json!({"role": "user", "content": "Hello"})],
+            messages: vec![WireMessage::text(WireRole::User, "Hello")],
             system: None,
             tools: None,
             max_tokens: 4096,
@@ -627,6 +880,7 @@ mod tests {
             top_p: None,
             provider_options: None,
             provider_key: None,
+            replay_prior_thinking: ThinkingReplay::All,
             rid: None,
             forensic_character: None,
             retain_long: false,
@@ -661,6 +915,7 @@ mod tests {
             top_p: None,
             provider_options: None,
             provider_key: None,
+            replay_prior_thinking: ThinkingReplay::All,
             rid: None,
             forensic_character: None,
             retain_long: false,
@@ -703,8 +958,8 @@ mod tests {
             api_key_name: None,
             base_url: None,
             messages: vec![
-                serde_json::json!({"role": "user", "content": "cached user"}),
-                serde_json::json!({"role": "assistant", "content": "cached assistant"}),
+                WireMessage::text(WireRole::User, "cached user"),
+                WireMessage::text(WireRole::Assistant, "cached assistant"),
             ],
             system: None,
             tools: None,
@@ -713,6 +968,7 @@ mod tests {
             top_p: None,
             provider_options: None,
             provider_key: None,
+            replay_prior_thinking: ThinkingReplay::All,
             rid: None,
             forensic_character: None,
             retain_long: false,
@@ -727,8 +983,8 @@ mod tests {
         assert_eq!(req.messages.get(..prefix.len()), Some(prefix.as_slice()));
         assert_eq!(req.messages.len(), prefix.len().saturating_add(1));
         let last = req.messages.last().unwrap();
-        assert_eq!(field(last, "role"), "system");
-        assert_eq!(field(last, "content"), "be brief");
+        assert_eq!(last.role, WireRole::System);
+        assert_eq!(last.content, vec![WireBlock::text("be brief")]);
     }
 
     #[test]

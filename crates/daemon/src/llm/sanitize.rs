@@ -1,7 +1,7 @@
 //! Defensive sanitization of tool_use / tool_result pairing in outbound LLM
 //! requests. See `sanitize_tool_pairs` for details.
 
-use serde_json::Value;
+use crate::llm::types::{WireBlock, WireMessage, WireRole};
 
 /// Strip orphan `tool_use` and `tool_result` blocks from a conversation.
 ///
@@ -19,37 +19,28 @@ use serde_json::Value;
 /// User and assistant messages whose content arrays empty out as a result
 /// of stripping are dropped entirely. Non-tool blocks (`text`, `image`,
 /// `thinking`, etc.) are preserved verbatim.
-pub fn sanitize_tool_pairs(messages: &[Value]) -> Option<Vec<Value>> {
+pub fn sanitize_tool_pairs(messages: &[WireMessage]) -> Option<Vec<WireMessage>> {
     // First pass: collect every tool_use id and every tool_result tool_use_id.
-    let mut tool_use_ids = std::collections::HashSet::<String>::default();
-    let mut tool_result_ids = std::collections::HashSet::<String>::default();
+    let mut tool_use_ids = std::collections::HashSet::<&str>::default();
+    let mut tool_result_ids = std::collections::HashSet::<&str>::default();
 
     for msg in messages {
-        let Some(blocks) = msg.get("content").and_then(|c| c.as_array()) else {
-            continue;
-        };
-        let role = msg.get("role").and_then(|r| r.as_str()).unwrap_or("");
-        for block in blocks {
-            let ty = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
-            match (role, ty) {
-                ("assistant", "tool_use") => {
-                    if let Some(id) = block.get("id").and_then(|i| i.as_str()) {
-                        let _ignored = tool_use_ids.insert(id.to_owned());
-                    }
+        for block in &msg.content {
+            match (msg.role, block) {
+                (WireRole::Assistant, WireBlock::ToolUse { id, .. }) => {
+                    let _ignored = tool_use_ids.insert(id.as_str());
                 }
-                ("user", "tool_result") => {
-                    if let Some(id) = block.get("tool_use_id").and_then(|i| i.as_str()) {
-                        let _ignored = tool_result_ids.insert(id.to_owned());
-                    }
+                (WireRole::User, WireBlock::ToolResult { tool_use_id, .. }) => {
+                    let _ignored = tool_result_ids.insert(tool_use_id.as_str());
                 }
                 _ => {}
             }
         }
     }
 
-    let orphan_tool_uses: std::collections::HashSet<&String> =
+    let orphan_tool_uses: std::collections::HashSet<&&str> =
         tool_use_ids.difference(&tool_result_ids).collect();
-    let orphan_tool_results: std::collections::HashSet<&String> =
+    let orphan_tool_results: std::collections::HashSet<&&str> =
         tool_result_ids.difference(&tool_use_ids).collect();
 
     if orphan_tool_uses.is_empty() && orphan_tool_results.is_empty() {
@@ -57,44 +48,34 @@ pub fn sanitize_tool_pairs(messages: &[Value]) -> Option<Vec<Value>> {
     }
 
     // Second pass: rebuild messages with orphans stripped.
-    let mut out: Vec<Value> = Vec::with_capacity(messages.len());
+    let mut out: Vec<WireMessage> = Vec::with_capacity(messages.len());
     for msg in messages {
-        let role = msg.get("role").and_then(|r| r.as_str()).unwrap_or("");
-        let Some(blocks) = msg.get("content").and_then(|c| c.as_array()) else {
-            // String content or no content — pass through.
-            out.push(msg.clone());
-            continue;
-        };
-
-        let mut kept: Vec<Value> = Vec::with_capacity(blocks.len());
-        for block in blocks {
-            let ty = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
-            let drop = match (role, ty) {
-                ("assistant", "tool_use") => block
-                    .get("id")
-                    .and_then(|i| i.as_str())
-                    .is_some_and(|id| orphan_tool_uses.contains(&id.to_owned())),
-                ("user", "tool_result") => block
-                    .get("tool_use_id")
-                    .and_then(|i| i.as_str())
-                    .is_some_and(|id| orphan_tool_results.contains(&id.to_owned())),
-                _ => false,
-            };
-            if !drop {
-                kept.push(block.clone());
-            }
-        }
+        let kept: Vec<WireBlock> = msg
+            .content
+            .iter()
+            .filter(|block| match (msg.role, block) {
+                (WireRole::Assistant, WireBlock::ToolUse { id, .. }) => {
+                    !orphan_tool_uses.contains(&id.as_str())
+                }
+                (WireRole::User, WireBlock::ToolResult { tool_use_id, .. }) => {
+                    !orphan_tool_results.contains(&tool_use_id.as_str())
+                }
+                _ => true,
+            })
+            .cloned()
+            .collect();
 
         if kept.is_empty() {
             // Whole message emptied out — drop it.
             continue;
         }
 
-        let mut new_msg = msg.clone();
-        if let Some(obj) = new_msg.as_object_mut() {
-            let _ignored = obj.insert("content".into(), Value::Array(kept));
-        }
-        out.push(new_msg);
+        out.push(WireMessage {
+            role: msg.role,
+            content: kept,
+            provider_key: msg.provider_key.clone(),
+            model: msg.model.clone(),
+        });
     }
 
     Some(out)
@@ -103,48 +84,60 @@ pub fn sanitize_tool_pairs(messages: &[Value]) -> Option<Vec<Value>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
-
-    fn field<'val>(value: &'val Value, key: &str) -> &'val Value {
-        value.get(key).expect("expected JSON field")
-    }
+    use crate::llm::types::ToolResultContent;
 
     fn item<T>(items: &[T], index: usize) -> &T {
         items.get(index).expect("expected item")
     }
 
-    fn content_blocks(value: &Value) -> &[Value] {
-        field(value, "content")
-            .as_array()
-            .expect("expected content blocks")
+    fn content_blocks(msg: &WireMessage) -> &[WireBlock] {
+        &msg.content
     }
 
-    fn assistant_text(text: &str) -> Value {
-        json!({
-            "role": "assistant",
-            "content": [{"type": "text", "text": text}],
-        })
+    fn block_text(block: &WireBlock) -> &str {
+        let WireBlock::Text { text } = block else {
+            panic!("expected a text block, got {block:?}")
+        };
+        text
     }
 
-    fn assistant_tool_use(id: &str, name: &str) -> Value {
-        json!({
-            "role": "assistant",
-            "content": [{"type": "tool_use", "id": id, "name": name, "input": {}}],
-        })
+    fn tool_result_id(block: &WireBlock) -> &str {
+        let WireBlock::ToolResult { tool_use_id, .. } = block else {
+            panic!("expected a tool_result block, got {block:?}")
+        };
+        tool_use_id
     }
 
-    fn user_tool_result(id: &str, content: &str) -> Value {
-        json!({
-            "role": "user",
-            "content": [{"type": "tool_result", "tool_use_id": id, "content": content}],
-        })
+    fn assistant_text(text: &str) -> WireMessage {
+        WireMessage::text(WireRole::Assistant, text)
     }
 
-    fn user_text(text: &str) -> Value {
-        json!({
-            "role": "user",
-            "content": [{"type": "text", "text": text}],
-        })
+    fn tool_use_block(id: &str, name: &str) -> WireBlock {
+        WireBlock::ToolUse {
+            id: id.to_owned(),
+            name: name.to_owned(),
+            input: serde_json::json!({}),
+        }
+    }
+
+    fn tool_result_block(id: &str, content: &str) -> WireBlock {
+        WireBlock::ToolResult {
+            tool_use_id: id.to_owned(),
+            content: ToolResultContent::Text(content.to_owned()),
+            is_error: false,
+        }
+    }
+
+    fn assistant_tool_use(id: &str, name: &str) -> WireMessage {
+        WireMessage::new(WireRole::Assistant, vec![tool_use_block(id, name)])
+    }
+
+    fn user_tool_result(id: &str, content: &str) -> WireMessage {
+        WireMessage::new(WireRole::User, vec![tool_result_block(id, content)])
+    }
+
+    fn user_text(text: &str) -> WireMessage {
+        WireMessage::text(WireRole::User, text)
     }
 
     #[test]
@@ -180,14 +173,8 @@ mod tests {
         ];
         let cleaned = sanitize_tool_pairs(&msgs).expect("should detect orphan");
         assert_eq!(cleaned.len(), 2);
-        assert_eq!(
-            field(item(content_blocks(item(&cleaned, 0)), 0), "text"),
-            "hi"
-        );
-        assert_eq!(
-            field(item(content_blocks(item(&cleaned, 1)), 0), "text"),
-            "ok"
-        );
+        assert_eq!(block_text(item(content_blocks(item(&cleaned, 0)), 0)), "hi");
+        assert_eq!(block_text(item(content_blocks(item(&cleaned, 1)), 0)), "ok");
     }
 
     #[test]
@@ -201,68 +188,62 @@ mod tests {
         ];
         let cleaned = sanitize_tool_pairs(&msgs).expect("should detect orphan");
         assert_eq!(cleaned.len(), 2);
+        assert_eq!(block_text(item(content_blocks(item(&cleaned, 0)), 0)), "hi");
         assert_eq!(
-            field(item(content_blocks(item(&cleaned, 0)), 0), "text"),
-            "hi"
-        );
-        assert_eq!(
-            field(item(content_blocks(item(&cleaned, 1)), 0), "text"),
+            block_text(item(content_blocks(item(&cleaned, 1)), 0)),
             "never mind"
         );
     }
 
     #[test]
     fn user_msg_with_text_and_orphan_keeps_text() {
-        let msg = json!({
-            "role": "user",
-            "content": [
-                {"type": "tool_result", "tool_use_id": "orphan", "content": "stale"},
-                {"type": "text", "text": "actual question"},
+        let msgs = vec![WireMessage::new(
+            WireRole::User,
+            vec![
+                tool_result_block("orphan", "stale"),
+                WireBlock::text("actual question"),
             ],
-        });
-        let msgs = vec![msg];
+        )];
         let cleaned = sanitize_tool_pairs(&msgs).expect("orphan present");
         assert_eq!(cleaned.len(), 1);
         let blocks = content_blocks(item(&cleaned, 0));
         assert_eq!(blocks.len(), 1);
-        assert_eq!(field(item(blocks, 0), "type"), "text");
-        assert_eq!(field(item(blocks, 0), "text"), "actual question");
+        assert_eq!(block_text(item(blocks, 0)), "actual question");
     }
 
     #[test]
     fn assistant_msg_with_text_and_orphan_tool_use_keeps_text() {
-        let msg = json!({
-            "role": "assistant",
-            "content": [
-                {"type": "text", "text": "let me check"},
-                {"type": "tool_use", "id": "orphan", "name": "search", "input": {}},
+        let msgs = vec![WireMessage::new(
+            WireRole::Assistant,
+            vec![
+                WireBlock::text("let me check"),
+                tool_use_block("orphan", "search"),
             ],
-        });
-        let msgs = vec![msg];
+        )];
         let cleaned = sanitize_tool_pairs(&msgs).expect("orphan present");
         assert_eq!(cleaned.len(), 1);
         let blocks = content_blocks(item(&cleaned, 0));
         assert_eq!(blocks.len(), 1);
-        assert_eq!(field(item(blocks, 0), "type"), "text");
+        assert_eq!(block_text(item(blocks, 0)), "let me check");
     }
 
     #[test]
     fn user_msg_with_valid_and_orphan_tool_results_keeps_valid() {
         let msgs = vec![
             assistant_tool_use("real_id", "search"),
-            json!({
-                "role": "user",
-                "content": [
-                    {"type": "tool_result", "tool_use_id": "real_id", "content": "good"},
-                    {"type": "tool_result", "tool_use_id": "orphan_id", "content": "stale"},
+            WireMessage::new(
+                WireRole::User,
+                vec![
+                    tool_result_block("real_id", "good"),
+                    tool_result_block("orphan_id", "stale"),
                 ],
-            }),
+            ),
         ];
         let cleaned = sanitize_tool_pairs(&msgs).expect("orphan present");
         assert_eq!(cleaned.len(), 2);
         let user_blocks = content_blocks(item(&cleaned, 1));
         assert_eq!(user_blocks.len(), 1);
-        assert_eq!(field(item(user_blocks, 0), "tool_use_id"), "real_id");
+        assert_eq!(tool_result_id(item(user_blocks, 0)), "real_id");
     }
 
     #[test]
@@ -279,18 +260,21 @@ mod tests {
     }
 
     #[test]
-    fn string_content_messages_pass_through() {
-        // OpenAI-style string content — must not be treated as orphan candidates.
+    fn plain_text_turns_pass_through() {
+        // Turns carrying no tool blocks are never orphan candidates. This used
+        // to also cover a bare-string `content` shape; `WireMessage` has no
+        // such shape, so that case is now unrepresentable rather than handled.
         let msgs = vec![
-            json!({"role": "user", "content": "hi"}),
-            json!({"role": "assistant", "content": "hello"}),
+            user_text("hi"),
+            assistant_text("hello"),
             user_tool_result("orphan", "stale"),
         ];
         let cleaned = sanitize_tool_pairs(&msgs).expect("orphan present");
-        // String-content messages pass through; only the orphan-only user
-        // message is dropped.
-        assert_eq!(cleaned.len(), 2);
-        assert_eq!(field(item(&cleaned, 0), "content"), "hi");
-        assert_eq!(field(item(&cleaned, 1), "content"), "hello");
+        assert_eq!(cleaned.len(), 2, "only the orphan-only turn is dropped");
+        assert_eq!(block_text(item(content_blocks(item(&cleaned, 0)), 0)), "hi");
+        assert_eq!(
+            block_text(item(content_blocks(item(&cleaned, 1)), 0)),
+            "hello"
+        );
     }
 }

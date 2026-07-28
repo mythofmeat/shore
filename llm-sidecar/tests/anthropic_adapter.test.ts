@@ -22,6 +22,7 @@ function req(over: Partial<SidecarRequest>): SidecarRequest {
     api_key: "k",
     messages: [],
     max_tokens: 8192,
+    replay_prior_thinking: "all",
     ...over,
   };
 }
@@ -40,7 +41,7 @@ describe("cache placement (mirrors ts_default_placement)", () => {
     { type: "text" as const, text: "mem", _label: "memory_index" },
   ];
   const messages: SidecarRequest["messages"] = [
-    { role: "user", content: "hi" },
+    { role: "user", content: [{ type: "text", text: "hi" }] },
     { role: "assistant", content: [{ type: "text", text: "hello" }] },
     { role: "user", content: [{ type: "text", text: "again" }] },
     {
@@ -107,13 +108,12 @@ describe("cache placement (mirrors ts_default_placement)", () => {
     }
   });
 
-  test("empty trailing text block is skipped as anchor; breakpoint walks back", () => {
-    // A message whose trailing block is empty text — e.g. a tool_result turn
-    // that also carried an empty text block. Anchoring cc on the empty text
-    // block makes Anthropic reject the whole request with "cache_control cannot
-    // be set for empty text blocks". `applyMessageBreakpoint` is role-agnostic,
-    // so the same walk-back covers an assistant message that streamed a
-    // tool_use after an empty text block.
+  test("an empty trailing text block never reaches placement", () => {
+    // Anchoring cc on an empty text block makes Anthropic reject the whole
+    // request with "cache_control cannot be set for empty text blocks". The
+    // block is now removed before placement runs (see `llm/replay.ts`), so the
+    // anchor lands on the tool_result and the empty block is simply not there.
+    // `applyMessageBreakpoint` still skips empty text as a backstop.
     const withEmptyTail: SidecarRequest["messages"] = [
       { role: "user", content: [{ type: "text", text: "go" }] },
       {
@@ -137,11 +137,42 @@ describe("cache placement (mirrors ts_default_placement)", () => {
     const m = p.messages as Array<{ content: unknown }>;
     // frozen boundary (idx 0): anchored on its only block.
     expect(blockCC(m[0]?.content)).toEqual([true]);
-    // last msg (idx 2): cc walks back past the empty text onto the tool_result.
-    expect(blockCC(m[2]?.content)).toEqual([true, false]);
+    // last msg (idx 2): the empty text block is gone; cc rides the tool_result.
+    expect(blockCC(m[2]?.content)).toEqual([true]);
   });
 
-  test("message with only an empty text block gets no breakpoint; schedule collapses back", () => {
+  test("a turn with no anchorable block walks back to the previous one", () => {
+    // An assistant turn of only thinking blocks is the remaining un-anchorable
+    // case — `thinking` rejects `cache_control` and, unlike empty text, the
+    // block is legitimate and must ship. The breakpoint has to walk back rather
+    // than be dropped: a dropped breakpoint is a silent cache-cost regression.
+    const thinkingTail: SidecarRequest["messages"] = [
+      { role: "user", content: [{ type: "text", text: "q1" }] },
+      { role: "assistant", content: [{ type: "text", text: "a1" }] },
+      { role: "user", content: [{ type: "text", text: "q2" }] },
+      {
+        role: "assistant",
+        provider_key: "anthropic",
+        model: "anthropic/claude-opus-4.8",
+        content: [{ type: "thinking", thinking: "hmm", signature: "sig" }],
+      },
+    ];
+    const p = buildAnthropicParams(
+      req({
+        system,
+        messages: thinkingTail,
+        provider_key: "anthropic",
+        provider_options: { cache_ttl: "1h" },
+      }),
+    );
+    const m = p.messages as Array<{ content: unknown }>;
+    expect(blockCC(m[3]?.content).some(Boolean)).toBe(false);
+    expect(blockCC(m[2]?.content)).toEqual([true]);
+  });
+
+  test("a turn of only empty text is dropped, not sent empty", () => {
+    // Shipping it with an empty content array fails the request outright, and
+    // shipping the empty block fails it the moment a breakpoint lands there.
     const onlyEmpty: SidecarRequest["messages"] = [
       { role: "user", content: [{ type: "text", text: "hi" }] },
       { role: "assistant", content: [{ type: "text", text: "  " }] },
@@ -150,10 +181,7 @@ describe("cache placement (mirrors ts_default_placement)", () => {
       req({ system, messages: onlyEmpty, provider_options: { cache_ttl: "1h" } }),
     );
     const m = p.messages as Array<{ content: unknown }>;
-    // No eligible anchor → no cache_control on that message (request stays valid).
-    expect(blockCC(m[1]?.content).some(Boolean)).toBe(false);
-    // ...and the breakpoint is not silently dropped: it walks back to the
-    // nearest anchorable message, which here is also the frozen boundary.
+    expect(m).toHaveLength(1);
     expect(blockCC(m[0]?.content)).toEqual([true]);
   });
 
@@ -519,7 +547,7 @@ describe("inline system messages", () => {
     const p = buildAnthropicParams(
       req({
         messages: [
-          { role: "user", content: "hey" },
+          { role: "user", content: [{ type: "text", text: "hey" }] },
           { role: "system", content: [{ type: "text", text: "be brief" }] },
         ],
       }),

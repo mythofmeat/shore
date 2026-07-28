@@ -4,9 +4,10 @@
 //! and legacy filesystem paths), and wire-embedding of image data.
 
 use base64::Engine as _;
-use serde_json::{json, Value};
 use shore_common::protocol::types::{ContentBlock, ImageRef, Message};
 use tracing::{info, warn};
+
+use crate::llm::types::WireBlock;
 
 /// Detect MIME type from file extension.
 pub(crate) fn media_type_for_path(path: &str) -> Option<&'static str> {
@@ -105,73 +106,34 @@ fn attachment_file_name(filename: &str, declared_mime: Option<&str>, bytes: &[u8
     }
 }
 
-/// Build a `content` value for an LLM message.
+/// Build the content blocks for an LLM message: image blocks (base64-encoded,
+/// resized if over `max_image_size`) followed by a text block.
 ///
-/// If `images` is non-empty, returns a JSON array containing image blocks
-/// (base64-encoded, resized if over `max_image_size`) followed by a text block.
-/// Otherwise returns a plain string. Pass `0` for `max_image_size` to disable resizing.
+/// Pass `0` for `max_image_size` to disable resizing.
+///
+/// An image-only message (empty text) gets no text block — Anthropic rejects
+/// `{"type":"text","text":""}` with "text content blocks must be non-empty",
+/// failing the whole request. A message whose images all failed to encode and
+/// which has no text yields no blocks at all, and the caller drops the turn.
 pub(crate) fn build_content(
     text: &str,
     images: &[ImageRef],
     max_image_size: u64,
     cache_dir: &std::path::Path,
-) -> Value {
-    if images.is_empty() {
-        return json!(text);
-    }
-
-    let mut blocks: Vec<Value> = Vec::with_capacity(images.len().saturating_add(1));
+) -> Vec<WireBlock> {
+    let mut blocks: Vec<WireBlock> = Vec::with_capacity(images.len().saturating_add(1));
 
     for img in images {
-        let Some(media_type) = media_type_for_path(&img.path) else {
-            warn!(path = %img.path, "Skipping image with unsupported extension");
-            continue;
-        };
-        match std::fs::read(&img.path) {
-            Ok(bytes) => {
-                let (final_bytes, final_media_type) = if let Some((resized, mt)) =
-                    super::resize::cached_resize(
-                        &img.path,
-                        &bytes,
-                        media_type,
-                        max_image_size,
-                        cache_dir,
-                    ) {
-                    (resized, mt)
-                } else {
-                    (bytes, media_type)
-                };
-                let encoded = base64::engine::general_purpose::STANDARD.encode(&final_bytes);
-                blocks.push(json!({
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": final_media_type,
-                        "data": encoded,
-                    }
-                }));
-            }
-            Err(e) => {
-                warn!(path = %img.path, error = %e, "Failed to read image file");
-            }
+        if let Some(source) = encode_image_block(img, max_image_size, cache_dir) {
+            blocks.push(WireBlock::Image { source });
         }
     }
 
-    // Only append a text block when there is actual text. An image-only
-    // message (empty text) must not carry a blank `{"type":"text","text":""}`
-    // block — Anthropic rejects it with "text content blocks must be
-    // non-empty", failing the whole request.
     if !text.trim().is_empty() {
-        blocks.push(json!({ "type": "text", "text": text }));
+        blocks.push(WireBlock::text(text));
     }
 
-    // If every image failed to encode and there was no text, fall back to the
-    // string-content shape rather than emitting an empty content array (which
-    // the API also rejects).
-    if blocks.is_empty() {
-        return json!(text);
-    }
-    json!(blocks)
+    blocks
 }
 
 /// Ingest incoming images to durable attachments/ directory.
@@ -390,13 +352,20 @@ pub(crate) fn image_data_for_path(path: &str) -> Option<String> {
     }
 }
 
-/// Encode a single image to a JSON block for the LLM API, resizing if needed.
+/// Encode a single image for the LLM API, resizing if needed.
+///
+/// Returns `None` — and says why — for an unsupported extension or an
+/// unreadable file. The daemon owns this because it owns the resize cache; only
+/// the encoded bytes cross the seam.
 pub(crate) fn encode_image_block(
     img: &ImageRef,
     max_image_size: u64,
     cache_dir: &std::path::Path,
-) -> Option<Value> {
-    let media_type = media_type_for_path(&img.path)?;
+) -> Option<crate::llm::types::ImageSource> {
+    let Some(media_type) = media_type_for_path(&img.path) else {
+        warn!(path = %img.path, "Skipping image with unsupported extension");
+        return None;
+    };
     match std::fs::read(&img.path) {
         Ok(bytes) => {
             let (final_bytes, final_media_type) = if let Some((resized, mt)) =
@@ -412,14 +381,10 @@ pub(crate) fn encode_image_block(
                 (bytes, media_type)
             };
             let encoded = base64::engine::general_purpose::STANDARD.encode(&final_bytes);
-            Some(json!({
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": final_media_type,
-                    "data": encoded,
-                }
-            }))
+            Some(crate::llm::types::ImageSource::Base64 {
+                media_type: final_media_type.to_owned(),
+                data: encoded,
+            })
         }
         Err(e) => {
             warn!(path = %img.path, error = %e, "Failed to read image file for LLM");
@@ -430,6 +395,17 @@ pub(crate) fn encode_image_block(
 
 #[cfg(test)]
 mod tests {
+    /// `(media_type, base64 data)` of an image block, for assertions.
+    fn image_parts(block: &WireBlock) -> (&str, &str) {
+        let WireBlock::Image {
+            source: crate::llm::types::ImageSource::Base64 { media_type, data },
+        } = block
+        else {
+            panic!("expected an image block, got {block:?}")
+        };
+        (media_type, data)
+    }
+
     use super::*;
     use base64::engine::general_purpose::STANDARD;
     use shore_common::protocol::client_msg::ImageUpload;
@@ -831,17 +807,12 @@ mod tests {
         }];
 
         // Call build_content with a 2MB limit.
-        let result = build_content("describe this", &images, 2_000_000, tmp.path());
-        let blocks = result.as_array().expect("Should be a JSON array");
+        let blocks = build_content("describe this", &images, 2_000_000, tmp.path());
         assert_eq!(blocks.len(), 2, "image block + text block");
 
         // Image block should be resized JPEG.
-        assert_eq!(blocks[0]["type"], "image");
-        assert_eq!(blocks[0]["source"]["type"], "base64");
-        assert_eq!(blocks[0]["source"]["media_type"], "image/jpeg");
-
-        // Decode the base64 and verify the raw bytes are under 2MB.
-        let b64_data = blocks[0]["source"]["data"].as_str().unwrap();
+        let (media_type, b64_data) = image_parts(&blocks[0]);
+        assert_eq!(media_type, "image/jpeg");
         let decoded = STANDARD.decode(b64_data).unwrap();
         assert!(
             decoded.len() < 2_000_000,
@@ -873,14 +844,13 @@ mod tests {
             data: None,
         }];
 
-        let result = build_content("test", &images, 2_000_000, tmp.path());
-        let blocks = result.as_array().unwrap();
+        let blocks = build_content("test", &images, 2_000_000, tmp.path());
 
         // Should still be image/jpeg (not re-encoded).
-        assert_eq!(blocks[0]["source"]["media_type"], "image/jpeg");
+        let (media_type, b64_data) = image_parts(&blocks[0]);
+        assert_eq!(media_type, "image/jpeg");
 
         // Base64 should decode to the exact original bytes (no resize).
-        let b64_data = blocks[0]["source"]["data"].as_str().unwrap();
         let decoded = STANDARD.decode(b64_data).unwrap();
         assert_eq!(
             decoded.len(),
@@ -912,13 +882,11 @@ mod tests {
             data: None,
         }];
 
-        let result = build_content("describe", &images, 2_000_000, tmp.path());
-        let blocks = result.as_array().unwrap();
+        let blocks = build_content("describe", &images, 2_000_000, tmp.path());
 
         // Should be converted to JPEG.
-        assert_eq!(blocks[0]["source"]["media_type"], "image/jpeg");
-
-        let b64_data = blocks[0]["source"]["data"].as_str().unwrap();
+        let (media_type, b64_data) = image_parts(&blocks[0]);
+        assert_eq!(media_type, "image/jpeg");
         let decoded = STANDARD.decode(b64_data).unwrap();
         assert!(
             decoded.len() < 2_000_000,

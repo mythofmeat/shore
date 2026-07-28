@@ -10,9 +10,10 @@
 //!   --runs <N>            (default: 1, or unlimited for --heartbeat)
 
 use serde_json::json;
+use shore_common::config::app::ThinkingReplay;
 use shore_common::config::models::{ResolvedModel, Sdk};
 use shore_daemon::llm::types::ContentBlock;
-use shore_daemon::llm::types::ToolDefinition;
+use shore_daemon::llm::types::{ToolDefinition, WireMessage, WireRole};
 use shore_daemon::llm::LlmClient;
 
 macro_rules! example_out {
@@ -296,23 +297,23 @@ Your thoughts and tool use are logged, so you can pick up where you left off nex
 
 fn simple_conversation() -> (
     serde_json::Value,
-    Vec<serde_json::Value>,
+    Vec<WireMessage>,
     Option<Vec<ToolDefinition>>,
 ) {
     let system = json!([{
         "type": "text",
         "text": "You are a helpful assistant. Think carefully before responding."
     }]);
-    let messages = vec![json!({
-        "role": "user",
-        "content": "I'm trying to understand something about physics. If I'm standing on a train moving at 60 mph and I throw a ball forward at 30 mph, what speed does someone standing on the platform see the ball moving at? But here's the tricky part — what if instead of a ball, I shine a flashlight forward? Why is the answer different?"
-    })];
+    let messages = vec![WireMessage::text(
+        WireRole::User,
+        "I'm trying to understand something about physics. If I'm standing on a train moving at 60 mph and I throw a ball forward at 30 mph, what speed does someone standing on the platform see the ball moving at? But here's the tricky part — what if instead of a ball, I shine a flashlight forward? Why is the answer different?",
+    )];
     (system, messages, None)
 }
 
 fn realistic_conversation() -> (
     serde_json::Value,
-    Vec<serde_json::Value>,
+    Vec<WireMessage>,
     Option<Vec<ToolDefinition>>,
 ) {
     let system = json!([
@@ -320,11 +321,11 @@ fn realistic_conversation() -> (
         { "type": "text", "text": "## Memory context\nRen is a software developer. They enjoy physics, math, and creative writing. They have a cat named Mochi." }
     ]);
     let messages = vec![
-        json!({"role": "user", "content": "hey! how's your day been?"}),
-        json!({"role": "assistant", "content": [{"type": "text", "text": "Hey Ren! I've been good — spent some time thinking about that generative art thing you mentioned last week. How about you?"}]}),
-        json!({"role": "user", "content": "yeah, finally pushed the fix. it was a cache invalidation bug. anyway — do you think consciousness requires a physical substrate?"}),
-        json!({"role": "assistant", "content": [{"type": "text", "text": "Cache invalidation — the other hard problem!\n\nHonestly? I think consciousness is more about the *pattern* than the *stuff*. But I'm genuinely uncertain."}]}),
-        json!({"role": "user", "content": "bit of both honestly. i read this paper about integrated information theory. what do you make of IIT specifically?"}),
+        WireMessage::text(WireRole::User, "hey! how's your day been?"),
+        WireMessage::text(WireRole::Assistant, "Hey Ren! I've been good — spent some time thinking about that generative art thing you mentioned last week. How about you?"),
+        WireMessage::text(WireRole::User, "yeah, finally pushed the fix. it was a cache invalidation bug. anyway — do you think consciousness requires a physical substrate?"),
+        WireMessage::text(WireRole::Assistant, "Cache invalidation — the other hard problem!\n\nHonestly? I think consciousness is more about the *pattern* than the *stuff*. But I'm genuinely uncertain."),
+        WireMessage::text(WireRole::User, "bit of both honestly. i read this paper about integrated information theory. what do you make of IIT specifically?"),
     ];
     (system, messages, Some(all_tool_defs()))
 }
@@ -337,7 +338,7 @@ fn heartbeat_conversation(
     with_rut: bool,
 ) -> (
     serde_json::Value,
-    Vec<serde_json::Value>,
+    Vec<WireMessage>,
     Option<Vec<ToolDefinition>>,
 ) {
     let system = json!([
@@ -398,9 +399,9 @@ fn heartbeat_conversation(
     };
 
     let messages = vec![
-        json!({"role": "user", "content": "hey qi, just checking in before bed. got the cache bug fixed finally. talk tomorrow?"}),
-        json!({"role": "assistant", "content": [{"type": "text", "text": "Nice work on the fix! Yeah, get some rest — you've been pushing hard. Talk tomorrow. Sleep well, Ren. 💙"}]}),
-        json!({"role": "system", "content": prompt_text}),
+        WireMessage::text(WireRole::User, "hey qi, just checking in before bed. got the cache bug fixed finally. talk tomorrow?"),
+        WireMessage::text(WireRole::Assistant, "Nice work on the fix! Yeah, get some rest — you've been pushing hard. Talk tomorrow. Sleep well, Ren. 💙"),
+        WireMessage::text(WireRole::System, prompt_text),
     ];
 
     (system, messages, Some(all_tool_defs()))
@@ -583,6 +584,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some(system.clone()),
             tools.clone(),
             None,
+            ThinkingReplay::All,
         )?;
 
         if run == 1 {

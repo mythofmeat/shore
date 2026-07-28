@@ -48,7 +48,9 @@ import type {
   Usage,
   WireMessage,
 } from "../types.ts";
+import { toolResultText, toTurn } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA } from "../types.ts";
+import { replayableMessages } from "../replay.ts";
 
 export class OpenAIProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
@@ -218,7 +220,7 @@ function buildOpenAICall(
   const messages: ChatCompletionMessageParam[] = [];
   const systemText = systemToText(req.system);
   if (systemText) messages.push({ role: "system", content: systemText });
-  for (const turn of req.messages) messages.push(...turnToOpenAI(normalizeTurn(turn)));
+  for (const turn of replayableMessages(req)) messages.push(...turnToOpenAI(toTurn(turn)));
 
   const tools = toOpenAITools(req.tools);
 
@@ -261,13 +263,6 @@ function toOpenAITools(tools: ToolDefinition[] | undefined): ChatCompletionTool[
 // ── message conversion ──────────────────────────────────────────────────────
 
 /** Canonical wire turn → the converter's turn shape (string content → block). */
-function normalizeTurn(turn: WireMessage): TurnMessage {
-  if (typeof turn.content === "string") {
-    return { role: turn.role, content: [{ type: "text", text: turn.content }] };
-  }
-  return { role: turn.role, content: turn.content };
-}
-
 function systemToText(system: SystemContent | undefined): string {
   if (system === undefined) return "";
   if (typeof system === "string") return system;
@@ -336,7 +331,7 @@ export function turnToOpenAI(turn: TurnMessage): ChatCompletionMessageParam[] {
       const toolMsg: ChatCompletionToolMessageParam = {
         role: "tool",
         tool_call_id: b.tool_use_id,
-        content: b.content,
+        content: toolResultText(b.content),
       };
       out.push(toolMsg);
     } else if (b.type === "text") {

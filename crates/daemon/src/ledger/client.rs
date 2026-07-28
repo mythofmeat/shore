@@ -477,22 +477,24 @@ impl LedgerClient {
     /// hit `MissingApiKey` on non-streaming paths.
     pub fn build_request(
         model: &ResolvedModel,
-        messages: Vec<serde_json::Value>,
+        messages: Vec<crate::llm::types::WireMessage>,
         system: Option<serde_json::Value>,
         tools: Option<Vec<crate::llm::types::ToolDefinition>>,
         provider_options: Option<crate::llm::types::ProviderOptions>,
+        replay: shore_common::config::app::ThinkingReplay,
     ) -> Result<LlmRequest, LlmError> {
-        LlmClient::build_request(model, messages, system, tools, provider_options)
+        LlmClient::build_request(model, messages, system, tools, provider_options, replay)
     }
 
     /// Passthrough to `LlmClient::build_request_with_provider_keys`.
     pub fn build_request_with_provider_keys(
         model: &ResolvedModel,
         registry: &ProviderRegistry,
-        messages: Vec<serde_json::Value>,
+        messages: Vec<crate::llm::types::WireMessage>,
         system: Option<serde_json::Value>,
         tools: Option<Vec<crate::llm::types::ToolDefinition>>,
         provider_options: Option<crate::llm::types::ProviderOptions>,
+        replay: shore_common::config::app::ThinkingReplay,
     ) -> Result<LlmRequest, LlmError> {
         LlmClient::build_request_with_provider_keys(
             model,
@@ -501,6 +503,7 @@ impl LedgerClient {
             system,
             tools,
             provider_options,
+            replay,
         )
     }
 

@@ -13,7 +13,9 @@ use shore_common::config::{
 };
 
 use crate::ledger::{CallType, LedgerClient};
-use crate::llm::types::{GenerateResponse, LlmRequest};
+use crate::llm::types::{
+    GenerateResponse, LlmRequest, ToolResultContent, WireBlock, WireMessage, WireRole,
+};
 use tokio::fs;
 use tracing::{debug, info, warn};
 
@@ -1022,6 +1024,7 @@ fn librarian_base_from_cached(
         cached.system.clone(),
         cached.tools.clone(),
         None,
+        resolved.resolved_replay_prior_thinking(&loaded_config.app),
     )
     .map_err(|e| DreamingError::Llm(e.to_string()))
 }
@@ -1083,7 +1086,7 @@ fn build_librarian_request(
         // their cache as before.
         request
             .messages
-            .push(json!({"role": "user", "content": user_prompt}));
+            .push(WireMessage::text(WireRole::User, user_prompt));
         request.push_inline_system(system);
         // Dreaming runs at most a few times per day; route the payload
         // log to the long-retention tier so weeks-old memory-evolution
@@ -1125,10 +1128,11 @@ fn build_librarian_request(
     let mut request = LedgerClient::build_request_with_provider_keys(
         &resolved,
         &loaded_config.providers,
-        vec![json!({"role": "user", "content": user_prompt})],
+        vec![WireMessage::text(WireRole::User, user_prompt)],
         system_arg,
         Some(tools),
         None,
+        resolved.resolved_replay_prior_thinking(&loaded_config.app),
     )
     .map_err(|e| DreamingError::Llm(e.to_string()))?;
     if uses_anthropic_cache {
@@ -1292,7 +1296,7 @@ async fn run_librarian_loop(
             .await
             .map_err(|e| DreamingError::Llm(e.to_string()))?;
         remember_final_report(&mut loop_result, &resp);
-        push_assistant_response(request, &resp);
+        request.push_assistant_turn(&resp);
 
         // Provider may have changed under config fallback; read it back from the
         // request the call actually ran on.
@@ -1332,7 +1336,7 @@ async fn run_librarian_loop(
         );
         request
             .messages
-            .push(json!({"role": "user", "content": tool_results}));
+            .push(WireMessage::new(WireRole::User, tool_results));
 
         iteration = iteration.saturating_add(1);
     }
@@ -1356,8 +1360,8 @@ async fn dispatch_librarian_tools(
     dry_run: bool,
     tool_uses: Vec<(String, String, Value)>,
     loop_result: &mut LibrarianLoopResult,
-) -> (Vec<Value>, Vec<crate::transcript_capture::CapturedTool>) {
-    let mut tool_results = Vec::new();
+) -> (Vec<WireBlock>, Vec<crate::transcript_capture::CapturedTool>) {
+    let mut tool_results: Vec<WireBlock> = Vec::new();
     let mut captured: Vec<crate::transcript_capture::CapturedTool> = Vec::new();
     for (id, name, input) in tool_uses {
         loop_result.tools_used.push(name.clone());
@@ -1391,9 +1395,11 @@ async fn dispatch_librarian_tools(
             output: output.clone(),
             is_error,
         });
-        tool_results.push(crate::content_util::build_tool_result_json(
-            &id, &output, is_error,
-        ));
+        tool_results.push(WireBlock::ToolResult {
+            tool_use_id: id,
+            content: ToolResultContent::Text(output),
+            is_error,
+        });
     }
     (tool_results, captured)
 }
@@ -1430,28 +1436,6 @@ fn remember_final_report(loop_result: &mut LibrarianLoopResult, resp: &GenerateR
     let text = resp.extract_text();
     if !text.trim().is_empty() {
         loop_result.final_report = Some(text.trim().to_owned());
-    }
-}
-
-fn push_assistant_response(request: &mut LlmRequest, resp: &GenerateResponse) {
-    let assistant_content: Vec<Value> = resp
-        .content_blocks
-        .iter()
-        .filter_map(|block| {
-            crate::content_util::content_block_to_request_json_for_sdk(block, &request.sdk)
-        })
-        .collect();
-
-    if !assistant_content.is_empty() {
-        request
-            .messages
-            .push(json!({"role": "assistant", "content": assistant_content}));
-    } else if !resp.content.trim().is_empty() {
-        request
-            .messages
-            .push(json!({"role": "assistant", "content": resp.content}));
-    } else {
-        // Empty assistant turn: nothing to append.
     }
 }
 

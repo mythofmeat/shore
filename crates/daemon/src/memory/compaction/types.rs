@@ -158,7 +158,7 @@ pub trait CompactionLlm: Send + Sync {
     fn build_initial_request(
         &self,
         system: &str,
-        compact_now_user: serde_json::Value,
+        compact_now_user: crate::llm::types::WireMessage,
         chat_request: LlmRequest,
     ) -> Result<LlmRequest, CompactionError>;
 

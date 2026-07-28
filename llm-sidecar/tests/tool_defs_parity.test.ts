@@ -30,7 +30,7 @@ function req(overrides: Partial<SidecarRequest> = {}): SidecarRequest {
     sdk: "anthropic",
     model: "claude-opus-4-8",
     api_key: "k",
-    messages: [{ role: "user", content: "hi" }],
+    messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
     max_tokens: 64,
     tools: TOOLS,
     ...overrides,

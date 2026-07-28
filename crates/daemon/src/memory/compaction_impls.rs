@@ -14,7 +14,7 @@ use uuid::Uuid;
 use crate::engine::segments::{CompactionManifest, SegmentEntry};
 use crate::ledger::{CallType, LedgerClient};
 use crate::llm::credentials::{read_candidate_env, resolve_key_candidates_for};
-use crate::llm::types::{GenerateResponse, LlmRequest};
+use crate::llm::types::{GenerateResponse, LlmRequest, WireMessage};
 use shore_common::config::models::{hardcoded_provider_defaults, ImageGenSettings, ResolvedModel};
 use shore_common::config::providers::ProviderRegistry;
 
@@ -183,11 +183,7 @@ pub const COMPACTION_TAIL_ENTRY_COUNT: usize = 2;
 /// The compaction instruction is pushed inline as `{"role":"system",...}`
 /// — see [`COMPACTION_TAIL_ENTRY_COUNT`] for why this is the only safe
 /// shape across the compaction tool loop.
-fn append_compaction_tail(
-    request: &mut LlmRequest,
-    user_prompt: serde_json::Value,
-    system_prompt: &str,
-) {
+fn append_compaction_tail(request: &mut LlmRequest, user_prompt: WireMessage, system_prompt: &str) {
     request.messages.push(user_prompt);
     request.push_inline_system(system_prompt);
 }
@@ -229,7 +225,7 @@ impl RealCompactionLlm {
     fn build_compaction_request(
         &self,
         system: &str,
-        compact_now_user: serde_json::Value,
+        compact_now_user: WireMessage,
         chat_request: LlmRequest,
     ) -> Result<LlmRequest, CompactionError> {
         // Compaction is, semantically, chat with one extra system message
@@ -256,6 +252,10 @@ impl RealCompactionLlm {
             chat_request.system,
             chat_request.tools,
             None,
+            // Chat's exact replay policy: the messages come through verbatim,
+            // so a different policy here would render a different prefix and
+            // give up the cache this rebuild exists to reuse.
+            chat_request.replay_prior_thinking,
         )
         .map_err(|e| CompactionError::Llm(e.to_string()))?;
         append_compaction_tail(&mut request, compact_now_user, system);
@@ -274,7 +274,7 @@ impl CompactionLlm for RealCompactionLlm {
     fn build_initial_request(
         &self,
         system: &str,
-        compact_now_user: serde_json::Value,
+        compact_now_user: WireMessage,
         chat_request: LlmRequest,
     ) -> Result<LlmRequest, CompactionError> {
         let chat_msg_count = chat_request.messages.len();
@@ -464,6 +464,15 @@ impl ConversationManager for RealConversationManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::llm::types::{WireBlock, WireRole};
+
+    /// Text of a single-text-block turn, for assertions.
+    fn turn_text(msg: &WireMessage) -> &str {
+        let [WireBlock::Text { text }] = msg.content.as_slice() else {
+            panic!("expected a single text block, got {:?}", msg.content)
+        };
+        text
+    }
     use serde_json::json;
     use shore_common::config::models::{ModelConfigFields, Sdk};
     use tempfile::TempDir;
@@ -514,7 +523,7 @@ mod tests {
         sdk: Sdk,
         system: Option<serde_json::Value>,
         tools: Option<Vec<crate::llm::types::ToolDefinition>>,
-        messages: Vec<serde_json::Value>,
+        messages: Vec<WireMessage>,
     ) -> LlmRequest {
         LlmRequest {
             sdk,
@@ -535,6 +544,7 @@ mod tests {
                 ..Default::default()
             }),
             provider_key: Some("anthropic".to_owned()),
+            replay_prior_thinking: shore_common::config::app::ThinkingReplay::All,
             rid: Some("rid-chat".to_owned()),
             forensic_character: Some("chat-forensics".to_owned()),
             retain_long: false,
@@ -567,15 +577,15 @@ mod tests {
                 json!({ "type": "object" }),
             )]),
             vec![
-                json!({"role": "user", "content": "cached user"}),
-                json!({"role": "assistant", "content": "cached assistant"}),
+                WireMessage::text(WireRole::User, "cached user"),
+                WireMessage::text(WireRole::Assistant, "cached assistant"),
             ],
         );
 
         let request = llm
             .build_compaction_request(
                 "compaction system",
-                json!({"role": "user", "content": "compact now"}),
+                WireMessage::text(WireRole::User, "compact now"),
                 chat_request,
             )
             .unwrap();
@@ -608,11 +618,11 @@ mod tests {
         // which is what keeps the compact_now_user byte-stable and the
         // Anthropic cache prefix valid (see COMPACTION_TAIL_ENTRY_COUNT).
         assert_eq!(request.messages.len(), 4);
-        assert_eq!(request.messages[0]["content"], "cached user");
-        assert_eq!(request.messages[1]["content"], "cached assistant");
-        assert_eq!(request.messages[2]["content"], "compact now");
-        assert_eq!(request.messages[3]["role"], "system");
-        assert_eq!(request.messages[3]["content"], "compaction system");
+        assert_eq!(turn_text(&request.messages[0]), "cached user");
+        assert_eq!(turn_text(&request.messages[1]), "cached assistant");
+        assert_eq!(turn_text(&request.messages[2]), "compact now");
+        assert_eq!(request.messages[3].role, WireRole::System);
+        assert_eq!(turn_text(&request.messages[3]), "compaction system");
 
         let provider_options = request.provider_options.expect("provider options");
         assert_eq!(provider_options.reasoning_effort.as_deref(), Some("medium"));
@@ -649,9 +659,9 @@ mod tests {
             json!({ "type": "object", "properties": {} }),
         )];
         let chat_messages = vec![
-            json!({"role": "user", "content": "cached user 1"}),
-            json!({"role": "assistant", "content": "cached assistant 1"}),
-            json!({"role": "user", "content": "cached user 2"}),
+            WireMessage::text(WireRole::User, "cached user 1"),
+            WireMessage::text(WireRole::Assistant, "cached assistant 1"),
+            WireMessage::text(WireRole::User, "cached user 2"),
         ];
         let chat_system = Some(json!("chat system prompt"));
 
@@ -665,7 +675,7 @@ mod tests {
         let request = llm
             .build_compaction_request(
                 "compaction system prompt",
-                json!({"role": "user", "content": "compact now"}),
+                WireMessage::text(WireRole::User, "compact now"),
                 chat_request,
             )
             .unwrap();
@@ -695,11 +705,11 @@ mod tests {
         // what keeps the cache prefix byte-stable across compaction rounds.
         assert_eq!(request.messages.len(), chat_messages.len() + 2);
         let tail_user = &request.messages[chat_messages.len()];
-        assert_eq!(tail_user["role"], "user");
-        assert_eq!(tail_user["content"], "compact now");
+        assert_eq!(tail_user.role, WireRole::User);
+        assert_eq!(turn_text(tail_user), "compact now");
         let tail_system = &request.messages[chat_messages.len() + 1];
-        assert_eq!(tail_system["role"], "system");
-        assert_eq!(tail_system["content"], "compaction system prompt");
+        assert_eq!(tail_system.role, WireRole::System);
+        assert_eq!(turn_text(tail_system), "compaction system prompt");
     }
 
     /// The unified compaction path must work for non-Anthropic SDKs too:
@@ -731,13 +741,13 @@ mod tests {
             Sdk::Openai,
             Some(json!("chat system prompt")),
             None,
-            vec![json!({"role": "user", "content": "hi"})],
+            vec![WireMessage::text(WireRole::User, "hi")],
         );
 
         let request = llm
             .build_compaction_request(
                 "compaction system",
-                json!({"role": "user", "content": "compact now"}),
+                WireMessage::text(WireRole::User, "compact now"),
                 chat_request,
             )
             .unwrap();
@@ -751,10 +761,10 @@ mod tests {
         // entry at a fixed slot; the sidecar adapter handles OpenAI-family
         // provider-specific wrapping at dispatch time.
         assert_eq!(request.messages.len(), 3);
-        assert_eq!(request.messages[0]["content"], "hi");
-        assert_eq!(request.messages[1]["content"], "compact now");
-        assert_eq!(request.messages[2]["role"], "system");
-        assert_eq!(request.messages[2]["content"], "compaction system");
+        assert_eq!(turn_text(&request.messages[0]), "hi");
+        assert_eq!(turn_text(&request.messages[1]), "compact now");
+        assert_eq!(request.messages[2].role, WireRole::System);
+        assert_eq!(turn_text(&request.messages[2]), "compaction system");
     }
 
     // -- RealConversationManager: archive_and_retain --------------------------

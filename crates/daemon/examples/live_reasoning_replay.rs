@@ -19,8 +19,12 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use serde_json::json;
+use shore_common::config::app::ThinkingReplay;
 use shore_common::config::models::Sdk;
-use shore_daemon::llm::types::{LlmRequest, ToolDefinition};
+use shore_daemon::llm::types::{
+    LlmRequest, ReasoningCarrier, ToolDefinition, ToolResultContent, WireBlock, WireMessage,
+    WireRole,
+};
 use shore_daemon::llm::LlmClient;
 
 macro_rules! example_out {
@@ -143,37 +147,36 @@ fn opencode_auth_key(provider: &str) -> Option<String> {
 
 /// The fixed thinking → tool_use → tool_result conversation replayed at the
 /// provider to exercise prior-turn reasoning handling.
-fn replay_messages() -> Vec<serde_json::Value> {
+fn replay_messages() -> Vec<WireMessage> {
     vec![
-        json!({
-            "role": "user",
-            "content": "Use the tool result and answer in one short sentence."
-        }),
-        json!({
-            "role": "assistant",
-            "content": [
-                {
-                    "type": "thinking",
-                    "thinking": "I need the lookup result before answering."
+        WireMessage::text(
+            WireRole::User,
+            "Use the tool result and answer in one short sentence.",
+        ),
+        WireMessage::new(
+            WireRole::Assistant,
+            vec![
+                WireBlock::Thinking {
+                    thinking: "I need the lookup result before answering.".to_owned(),
+                    carrier: ReasoningCarrier::default(),
                 },
-                {
-                    "type": "tool_use",
-                    "id": "call_live_reasoning_1",
-                    "name": "lookup_fact",
-                    "input": {"topic": "live smoke test"}
-                }
-            ]
-        }),
-        json!({
-            "role": "user",
-            "content": [
-                {
-                    "type": "tool_result",
-                    "tool_use_id": "call_live_reasoning_1",
-                    "content": "The lookup result is: live reasoning replay succeeded."
-                }
-            ]
-        }),
+                WireBlock::ToolUse {
+                    id: "call_live_reasoning_1".to_owned(),
+                    name: "lookup_fact".to_owned(),
+                    input: json!({"topic": "live smoke test"}),
+                },
+            ],
+        ),
+        WireMessage::new(
+            WireRole::User,
+            vec![WireBlock::ToolResult {
+                tool_use_id: "call_live_reasoning_1".to_owned(),
+                content: ToolResultContent::Text(
+                    "The lookup result is: live reasoning replay succeeded.".to_owned(),
+                ),
+                is_error: false,
+            }],
+        ),
     ]
 }
 
@@ -237,6 +240,7 @@ async fn main() -> ExitCode {
         top_p: None,
         provider_options,
         provider_key: Some(target.provider_key.to_owned()),
+        replay_prior_thinking: ThinkingReplay::All,
         rid: Some(format!("live-reasoning-replay-{name}")),
         forensic_character: None,
         retain_long: false,

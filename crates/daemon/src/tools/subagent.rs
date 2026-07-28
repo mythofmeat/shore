@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::ledger::{CallType, LedgerClient};
 use crate::llm::stream::StreamConsumer;
-use crate::llm::types::LlmRequest;
+use crate::llm::types::{LlmRequest, WireMessage, WireRole};
 use serde_json::{json, Value};
 use shore_common::config::app::SubagentConfig;
 use shore_common::config::models::ResolvedModel;
@@ -248,10 +248,11 @@ fn build_request(
     let mut request = LedgerClient::build_request_with_provider_keys(
         resolved,
         &config.providers,
-        vec![json!({ "role": "user", "content": query })],
+        vec![WireMessage::text(WireRole::User, query)],
         system_arg,
         Some(tools),
         None,
+        resolved.resolved_replay_prior_thinking(&config.app),
     )
     .map_err(|e| ToolError::Http(e.to_string()))?;
     if uses_anthropic_cache {

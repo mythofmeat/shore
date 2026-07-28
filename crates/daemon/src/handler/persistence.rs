@@ -7,7 +7,6 @@ use std::sync::{Arc, PoisonError};
 use std::time::Instant;
 
 use crate::ledger::budget::BudgetScope;
-use serde_json::{json, Value};
 use shore_common::config::models::Sdk;
 use shore_common::protocol::server_msg::{MessageOrigin, NewMessage, ServerMessage, UsageWarning};
 use shore_common::protocol::types::{derive_content_from_blocks, ContentBlock, Message, Role};
@@ -16,6 +15,7 @@ use tracing::{info, instrument, warn};
 
 use crate::convert::elapsed_ms_u32;
 use crate::engine::messages::{MessageStore, PendingAlt};
+use crate::llm::types::{WireBlock, WireMessage, WireRole};
 use crate::notifications::NotificationEvent;
 
 use super::GenContext;
@@ -41,7 +41,6 @@ pub(super) async fn persist_and_notify(
     request: &crate::llm::types::LlmRequest,
     tool_intermediate_messages: Vec<Message>,
     wall_clock_start: Instant,
-    replay_prior_thinking: shore_common::config::app::ThinkingReplay,
     regen_alt: Option<PendingAlt>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     record_completion_diagnostics(ctx, result, request, resolved);
@@ -54,18 +53,7 @@ pub(super) async fn persist_and_notify(
         // Include the assistant response in last_request so the
         // heartbeat system sees a complete conversation ending on an
         // assistant turn — not the user turn that triggered this call.
-        // The replay policy applies to the appended response only: the
-        // messages already sent are the bytes the provider cached, and
-        // rewriting them here is what used to make every keepalive ping
-        // miss (see `update_last_request_with_response`).
-        update_last_request_with_response(
-            ctx,
-            request,
-            &completed_messages,
-            replay_prior_thinking,
-            &resolved.provider_key,
-            char_name,
-        );
+        update_last_request_with_response(ctx, request, &completed_messages, char_name);
         let notify_content = notify_content_from_response_messages(&completed_messages);
         let mut generated_messages = tool_intermediate_messages;
         // The provider that actually minted this turn (matching the diagnostics
@@ -121,47 +109,30 @@ fn update_last_request_with_response(
     ctx: &GenContext,
     request: &crate::llm::types::LlmRequest,
     completed_messages: &[CompletedResponseMessage],
-    replay_prior_thinking: shore_common::config::app::ThinkingReplay,
-    provider_key: &str,
     char_name: &str,
 ) {
-    let full_request = last_request_with_response(
-        request,
-        completed_messages,
-        replay_prior_thinking,
-        provider_key,
+    ctx.autonomy.notify_last_request(
+        char_name,
+        last_request_with_response(request, completed_messages),
     );
-    ctx.autonomy.notify_last_request(char_name, full_request);
 }
 
 /// The request-as-sent plus this turn's response messages — the body every
 /// `last_request` reuse path (keepalive ping, heartbeat, dreaming, compaction)
 /// clones and extends.
 ///
-/// The replay policy is applied **only to the appended messages**. Everything
-/// at a lower index already went out on the wire and is covered by a live
-/// provider-side cache entry, so re-stripping it here would rewrite bytes the
-/// provider already cached and kill every entry anchored at or past them. The
-/// keepalive ping, whose only job is to read those entries, would then pay a
-/// full cache write on every fire.
-///
-/// The next *chat* turn is unaffected: it rebuilds from disk through
-/// `prepare_chat_context`, which applies the policy across the full history.
+/// Nothing is filtered here. This used to apply the prior-thinking replay
+/// policy to the appended messages only, with a careful index clamp so it could
+/// never rewrite bytes that had already gone out and were covered by a live
+/// cache entry — rewriting those is what made every keepalive ping miss. The
+/// policy is now applied by the adapter at send time, so the same history
+/// always produces the same wire bytes and there is nothing left to clamp.
 fn last_request_with_response(
     request: &crate::llm::types::LlmRequest,
     completed_messages: &[CompletedResponseMessage],
-    replay_prior_thinking: shore_common::config::app::ThinkingReplay,
-    provider_key: &str,
 ) -> crate::llm::types::LlmRequest {
     let mut full_request = request.clone();
-    let sent_len = full_request.messages.len();
-    append_response_messages_to_request(&mut full_request, completed_messages, &request.sdk);
-    crate::content_util::maybe_strip_prior_thinking_from(
-        &mut full_request.messages,
-        sent_len,
-        replay_prior_thinking,
-        provider_key,
-    );
+    append_response_messages_to_request(&mut full_request, completed_messages);
     full_request
 }
 
@@ -385,34 +356,35 @@ fn content_blocks_for_result(result: &crate::llm::types::StreamResult) -> Vec<Co
 fn append_response_messages_to_request(
     request: &mut crate::llm::types::LlmRequest,
     response_messages: &[CompletedResponseMessage],
-    sdk: &Sdk,
 ) {
+    let provider_key = request.provider_key.clone();
+    let model = Some(request.model.clone());
     for message in response_messages {
-        let api_content: Vec<Value> = message
-            .content_blocks
-            .iter()
-            .filter_map(|block| {
-                crate::content_util::content_block_to_request_json_for_sdk(block, sdk)
-            })
-            .collect();
-        // Skip turns that filtered down to nothing (e.g. an empty-text-only
-        // response): an empty content array is rejected by the API and would
-        // poison the cached last-request the heartbeat replays.
-        if api_content.is_empty() {
+        // Skip turns that carry nothing (e.g. an empty-text-only response): an
+        // empty content array is rejected by the API and would poison the
+        // cached last-request the heartbeat replays.
+        if message.content_blocks.is_empty() {
             continue;
         }
-        request.messages.push(json!({
-            "role": request_role(&message.role),
-            "content": api_content,
-        }));
+        request.messages.push(
+            WireMessage::new(
+                request_role(&message.role),
+                message
+                    .content_blocks
+                    .iter()
+                    .map(WireBlock::from_content_block)
+                    .collect(),
+            )
+            .minted_by(provider_key.clone(), model.clone()),
+        );
     }
 }
 
-fn request_role(role: &Role) -> &'static str {
+fn request_role(role: &Role) -> WireRole {
     match role {
-        Role::User => "user",
-        Role::Assistant => "assistant",
-        Role::System => "system",
+        Role::User => WireRole::User,
+        Role::Assistant => WireRole::Assistant,
+        Role::System => WireRole::System,
     }
 }
 
@@ -482,7 +454,7 @@ mod tests {
         assert_eq!(msg.model.as_deref(), Some("claude-opus-4-6"));
     }
 
-    fn request_with_sent_messages(messages: Vec<Value>) -> crate::llm::types::LlmRequest {
+    fn request_with_sent_messages(messages: Vec<WireMessage>) -> crate::llm::types::LlmRequest {
         crate::llm::types::LlmRequest {
             sdk: Sdk::Anthropic,
             model: "claude-opus-5".to_owned(),
@@ -497,6 +469,7 @@ mod tests {
             top_p: None,
             provider_options: None,
             provider_key: None,
+            replay_prior_thinking: shore_common::config::app::ThinkingReplay::None,
             rid: None,
             forensic_character: None,
             retain_long: false,
@@ -504,29 +477,34 @@ mod tests {
         }
     }
 
-    fn thinking_blocks(msg: &Value) -> usize {
-        msg["content"].as_array().map_or(0, |blocks| {
-            blocks.iter().filter(|b| b["type"] == "thinking").count()
-        })
-    }
-
     #[test]
-    fn last_request_keeps_thinking_on_already_sent_turns() {
+    fn last_request_appends_without_touching_the_sent_prefix() {
         // The keepalive ping clones `last_request` and must stay byte-identical
-        // to the request the provider cached, so the replay policy applies only
-        // to what this response appended. `a1` already went out on the wire
-        // carrying its thinking (the model was on `all` at the time, or the
-        // turn was mid-tool-loop); re-stripping it here would kill the cache
-        // entry anchored just past it and the ping would pay a full write.
+        // to the request the provider cached. This function is the only thing
+        // that writes `last_request`, so its whole contract is: append, never
+        // rewrite. Note `replay_prior_thinking: None` on the request — the
+        // strip is the adapter's job now, and it must not happen here even when
+        // the policy says to strip, because `a1` already went out on the wire
+        // carrying its thinking and rewriting it kills the cache entry anchored
+        // past it.
         let sent = vec![
-            json!({"role": "user", "content": [{"type": "text", "text": "q1"}]}),
-            json!({"role": "assistant", "content": [
-                {"type": "thinking", "thinking": "t1", "signature": "s1"},
-                {"type": "text", "text": "a1"},
-            ]}),
-            json!({"role": "user", "content": [{"type": "text", "text": "q2"}]}),
+            WireMessage::text(WireRole::User, "q1"),
+            WireMessage::new(
+                WireRole::Assistant,
+                vec![
+                    WireBlock::Thinking {
+                        thinking: "t1".to_owned(),
+                        carrier: crate::llm::types::ReasoningCarrier {
+                            signature: Some("s1".to_owned()),
+                            ..Default::default()
+                        },
+                    },
+                    WireBlock::text("a1"),
+                ],
+            ),
+            WireMessage::text(WireRole::User, "q2"),
         ];
-        let request = request_with_sent_messages(sent);
+        let request = request_with_sent_messages(sent.clone());
         let response = vec![CompletedResponseMessage {
             role: Role::Assistant,
             content_blocks: vec![
@@ -538,23 +516,18 @@ mod tests {
             ],
         }];
 
-        let full = last_request_with_response(
-            &request,
-            &response,
-            shore_common::config::app::ThinkingReplay::None,
-            "anthropic",
-        );
+        let full = last_request_with_response(&request, &response);
 
         assert_eq!(full.messages.len(), 4);
         assert_eq!(
-            thinking_blocks(&full.messages[1]),
-            1,
-            "already-sent turn must keep the thinking it was cached with"
+            full.messages[..3],
+            sent[..],
+            "every already-sent message must survive byte-identical"
         );
         assert_eq!(
-            thinking_blocks(&full.messages[3]),
-            0,
-            "the appended response follows the replay policy"
+            full.messages[3].content.len(),
+            2,
+            "the appended turn keeps its thinking; the adapter decides what ships"
         );
     }
 

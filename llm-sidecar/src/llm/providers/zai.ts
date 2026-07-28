@@ -40,7 +40,9 @@ import type {
   Usage,
   WireMessage,
 } from "../types.ts";
+import { toTurn } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA } from "../types.ts";
+import { replayableMessages } from "../replay.ts";
 import { turnToOpenAI } from "./openai.ts";
 
 export const ZAI_BASE_URL = "https://api.z.ai/api/paas/v4";
@@ -137,8 +139,8 @@ export function buildZaiMessages(req: SidecarRequest): ChatCompletionMessagePara
   const preserveThinking =
     req.provider_options?.thinking_enabled !== false &&
     req.provider_options?.zai_clear_thinking === false;
-  for (const turn of req.messages) {
-    messages.push(...turnToZai(normalizeTurn(turn), preserveThinking));
+  for (const turn of replayableMessages(req)) {
+    messages.push(...turnToZai(toTurn(turn), preserveThinking));
   }
   return messages;
 }
@@ -333,13 +335,6 @@ function toZaiTools(tools: ToolDefinition[] | undefined): ChatCompletionTool[] {
       parameters: t.input_schema ?? EMPTY_TOOL_SCHEMA,
     },
   }));
-}
-
-function normalizeTurn(turn: WireMessage): TurnMessage {
-  if (typeof turn.content === "string") {
-    return { role: turn.role, content: [{ type: "text", text: turn.content }] };
-  }
-  return { role: turn.role, content: turn.content };
 }
 
 function systemToText(system: SystemContent | undefined): string {

@@ -38,6 +38,7 @@ import type {
   WireMessage,
 } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA } from "../types.ts";
+import { replayableMessages } from "../replay.ts";
 
 type GeminiSchema = NonNullable<FunctionDeclaration["parameters"]>;
 
@@ -91,7 +92,7 @@ export function buildGeminiParams(
   const config = buildGeminiConfig(req, signal);
   return {
     model: req.model,
-    contents: translateMessages(req.messages),
+    contents: translateMessages(replayableMessages(req)),
     config,
   };
 }

@@ -51,7 +51,9 @@ import type {
   Usage,
   WireMessage,
 } from "../types.ts";
+import { toolResultText, toTurn } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA } from "../types.ts";
+import { replayableMessages } from "../replay.ts";
 
 export class OpenRouterProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
@@ -273,15 +275,8 @@ function buildMessages(req: SidecarRequest): ChatMessages[] {
   const messages: ChatMessages[] = [];
   const systemText = systemToText(req.system);
   if (systemText) messages.push({ role: "system", content: systemText });
-  for (const turn of req.messages) messages.push(...turnToOpenRouter(normalizeTurn(turn)));
+  for (const turn of replayableMessages(req)) messages.push(...turnToOpenRouter(toTurn(turn)));
   return messages;
-}
-
-function normalizeTurn(turn: WireMessage): TurnMessage {
-  if (typeof turn.content === "string") {
-    return { role: turn.role, content: [{ type: "text", text: turn.content }] };
-  }
-  return { role: turn.role, content: turn.content };
 }
 
 function systemToText(system: SystemContent | undefined): string {
@@ -339,7 +334,11 @@ export function turnToOpenRouter(turn: TurnMessage): ChatMessages[] {
   const out: ChatMessages[] = [];
   for (const b of turn.content) {
     if (b.type === "tool_result") {
-      const toolMsg: ChatToolMessage = { role: "tool", toolCallId: b.tool_use_id, content: b.content };
+      const toolMsg: ChatToolMessage = {
+        role: "tool",
+        toolCallId: b.tool_use_id,
+        content: toolResultText(b.content),
+      };
       out.push(toolMsg);
     }
   }

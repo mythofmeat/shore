@@ -23,8 +23,12 @@ function req(over: Partial<SidecarRequest> = {}): SidecarRequest {
     sdk: "zai",
     model: "glm-5.1",
     api_key: "k",
+    // The daemon always sends this; the replay filter compares a turn's
+    // provenance against it to decide what is safe to replay.
+    provider_key: "zai",
     messages: [],
     max_tokens: 4096,
+    replay_prior_thinking: "all",
     ...over,
   };
 }
@@ -181,6 +185,10 @@ describe("request construction", () => {
         messages: [
           {
             role: "assistant",
+            // Provenance is load-bearing: a `reasoning_content` carrier is only
+            // replayable to the exact model that minted it.
+            provider_key: "zai",
+            model: "glm-5.1",
             content: [
               { type: "thinking", thinking: "step 1\nstep 2", reasoning_content: "step 1\nstep 2" },
               { type: "text", text: "answer" },
@@ -245,9 +253,9 @@ describe("request construction", () => {
     const messages = buildZaiMessages(
       req({
         messages: [
-          { role: "user", content: "first" },
-          { role: "system", content: "behave" },
-          { role: "user", content: "second" },
+          { role: "user", content: [{ type: "text", text: "first" }] },
+          { role: "system", content: [{ type: "text", text: "behave" }] },
+          { role: "user", content: [{ type: "text", text: "second" }] },
         ],
       }),
     );

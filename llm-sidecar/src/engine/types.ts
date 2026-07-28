@@ -35,7 +35,15 @@ export type ContentBlock =
     }
   | { type: "tool_use"; id: string; name: string; input: unknown }
   | { type: "redacted_thinking"; data: string }
-  | { type: "tool_result"; tool_use_id: string; content: string; is_error?: boolean }
+  | {
+      type: "tool_result";
+      tool_use_id: string;
+      /** Usually text. The daemon's generated-image replay path returns blocks
+       * (an image plus its caption); this was typed `string` for as long as it
+       * existed, which was simply wrong for that path. */
+       content: string | ContentBlock[];
+      is_error?: boolean;
+    }
   // Image blocks are not stored in Rust `ContentBlock`; the daemon synthesizes
   // them from a message's `images` and inlines them into the wire `content`
   // array (see `encode_image_block`), so the adapter must accept them here.

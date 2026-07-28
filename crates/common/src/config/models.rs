@@ -398,6 +398,20 @@ pub struct ResolvedModel {
 }
 
 impl ResolvedModel {
+    /// Prior-thinking replay for this model: the per-model preference overlay
+    /// when set, otherwise the global `[memory.thinking]` default.
+    ///
+    /// The one place the two-level fallback is resolved. Every request-build
+    /// path reads it here so a caller cannot silently ship the global default
+    /// to a model that overrode it.
+    pub fn resolved_replay_prior_thinking(
+        &self,
+        app: &crate::config::app::AppConfig,
+    ) -> crate::config::app::ThinkingReplay {
+        self.replay_prior_thinking
+            .unwrap_or(app.memory.thinking.replay_prior_thinking)
+    }
+
     /// Build a `ResolvedModel` from metadata + merged config fields.
     ///
     /// `sdk_fallback` is used if `fields.sdk` is `None`.

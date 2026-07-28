@@ -862,10 +862,21 @@ fn media_type_for_path_unsupported() {
     assert_eq!(media_type_for_path("noext"), None);
 }
 
+/// Serialize rendered blocks so these assertions read the wire bytes.
+fn wire_blocks(blocks: &[crate::llm::types::WireBlock]) -> Vec<serde_json::Value> {
+    blocks
+        .iter()
+        .map(|b| serde_json::to_value(b).expect("WireBlock serializes"))
+        .collect()
+}
+
 #[test]
 fn build_content_text_only() {
     let result = build_content("hello", &[], 0, std::path::Path::new("/tmp"));
-    assert_eq!(result, serde_json::json!("hello"));
+    assert_eq!(
+        wire_blocks(&result),
+        vec![serde_json::json!({"type": "text", "text": "hello"})]
+    );
 }
 
 #[test]
@@ -880,8 +891,7 @@ fn build_content_with_image() {
         data: None,
     }];
 
-    let result = build_content("describe this", &images, 0, tmp.path());
-    let blocks = result.as_array().expect("Should be a JSON array");
+    let blocks = wire_blocks(&build_content("describe this", &images, 0, tmp.path()));
     assert_eq!(blocks.len(), 2);
 
     assert_eq!(blocks[0]["type"], "image");
@@ -909,8 +919,7 @@ fn build_content_image_only_omits_blank_text_block() {
         data: None,
     }];
 
-    let result = build_content("", &images, 0, tmp.path());
-    let blocks = result.as_array().expect("Should be a JSON array");
+    let blocks = wire_blocks(&build_content("", &images, 0, tmp.path()));
     assert_eq!(blocks.len(), 1, "image-only message carries only the image");
     assert_eq!(blocks[0]["type"], "image");
 }
@@ -931,8 +940,7 @@ fn build_content_skips_unsupported_and_missing() {
         },
     ];
 
-    let result = build_content("text", &images, 0, tmp.path());
-    let blocks = result.as_array().expect("Should be a JSON array");
+    let blocks = wire_blocks(&build_content("text", &images, 0, tmp.path()));
     assert_eq!(blocks.len(), 1);
     assert_eq!(blocks[0]["type"], "text");
 }

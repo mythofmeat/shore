@@ -18,6 +18,7 @@ function req(provider_options?: Record<string, unknown>): SidecarRequest {
     api_key: "sk-test",
     messages: [],
     max_tokens: 1024,
+    replay_prior_thinking: "all",
     ...(provider_options ? { provider_options } : {}),
   };
 }

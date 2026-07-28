@@ -8,11 +8,11 @@ pub use parser::{
 };
 pub use types::*;
 
-use crate::llm::types::GenerateResponse;
+use crate::llm::types::{GenerateResponse, ToolResultContent, WireBlock, WireMessage, WireRole};
 use crate::memory::markdown_store::MarkdownMemoryStore;
 use crate::tools::{self as tool_system, ToolContext};
 use dashmap::DashMap;
-use serde_json::{json, Value};
+use serde_json::Value;
 use shore_common::config::character_data_dir;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, OnceLock};
@@ -143,7 +143,7 @@ fn build_compact_llm_request(
 ) -> Result<crate::llm::types::LlmRequest, CompactionError> {
     let system = CompactionManager::build_system(system_template, char_name, user_name);
     let final_msg = CompactionManager::build_final_message(prompt_template, char_name, user_name);
-    let compact_now_user = json!({"role": "user", "content": final_msg});
+    let compact_now_user = WireMessage::text(WireRole::User, final_msg);
     llm.build_initial_request(&system, compact_now_user, chat_request)
 }
 
@@ -842,25 +842,7 @@ pub(crate) fn push_assistant_response(
     request: &mut crate::llm::types::LlmRequest,
     resp: &GenerateResponse,
 ) {
-    let assistant_content: Vec<Value> = resp
-        .content_blocks
-        .iter()
-        .filter_map(|block| {
-            crate::content_util::content_block_to_request_json_for_sdk(block, &request.sdk)
-        })
-        .collect();
-
-    if !assistant_content.is_empty() {
-        request
-            .messages
-            .push(json!({"role": "assistant", "content": assistant_content}));
-    } else if !resp.content.trim().is_empty() {
-        request
-            .messages
-            .push(json!({"role": "assistant", "content": resp.content.clone()}));
-    } else {
-        // Empty assistant turn: nothing to append.
-    }
+    request.push_assistant_turn(resp);
 }
 
 /// Drive the compaction tool loop: alternately `generate()` and dispatch tool
@@ -893,13 +875,15 @@ async fn run_compaction_tool_loop(
             let (output, is_error) =
                 dispatch_compaction_tool(&name, &input, tool_ctx, workspace_dir, &mut loop_state)
                     .await;
-            tool_results.push(crate::content_util::build_tool_result_json(
-                &id, &output, is_error,
-            ));
+            tool_results.push(WireBlock::ToolResult {
+                tool_use_id: id,
+                content: ToolResultContent::Text(output),
+                is_error,
+            });
         }
         request
             .messages
-            .push(json!({"role": "user", "content": tool_results}));
+            .push(WireMessage::new(WireRole::User, tool_results));
 
         // `None` = unlimited: keep going until the model ends cleanly above.
         if let Some(max) = max_tool_iterations {
@@ -1171,6 +1155,7 @@ impl IdleTimer {
 mod tests {
     use super::*;
     use chrono::Local;
+    use serde_json::json;
     use std::future::Future;
     use std::pin::Pin;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -1258,9 +1243,16 @@ mod tests {
     /// in unit tests, we just hand the compaction code a representative
     /// stub so it has the chat prefix to extend.
     fn make_chat_request(messages: &[ConversationMessage]) -> LlmRequest {
-        let llm_messages: Vec<Value> = messages
+        let llm_messages: Vec<WireMessage> = messages
             .iter()
-            .map(|m| serde_json::json!({"role": m.role, "content": m.content}))
+            .map(|m| {
+                let role = match m.role.as_str() {
+                    "assistant" => WireRole::Assistant,
+                    "system" => WireRole::System,
+                    _ => WireRole::User,
+                };
+                WireMessage::text(role, m.content.clone())
+            })
             .collect();
         LlmRequest {
             sdk: shore_common::config::models::Sdk::Anthropic,
@@ -1276,6 +1268,7 @@ mod tests {
             top_p: None,
             provider_options: None,
             provider_key: None,
+            replay_prior_thinking: shore_common::config::app::ThinkingReplay::All,
             rid: None,
             forensic_character: None,
             retain_long: false,
@@ -1387,7 +1380,7 @@ mod tests {
         fn build_initial_request(
             &self,
             system: &str,
-            compact_now_user: Value,
+            compact_now_user: WireMessage,
             chat_request: LlmRequest,
         ) -> Result<LlmRequest, CompactionError> {
             // Tests now always pass a chat-shape request — there's no
@@ -1408,10 +1401,13 @@ mod tests {
                 .captured_last_user_text
                 .lock()
                 .map_err(|_| CompactionError::Llm("scripted LLM state mutex poisoned".into()))? =
-                compact_now_user
-                    .get("content")
-                    .and_then(|c| c.as_str())
-                    .map(str::to_owned);
+                compact_now_user.content.first().and_then(|b| {
+                    if let WireBlock::Text { text } = b {
+                        Some(text.clone())
+                    } else {
+                        None
+                    }
+                });
             let mut combined = chat_request.messages.clone();
             combined.push(compact_now_user);
             let mut request = LlmRequest {
@@ -1428,6 +1424,7 @@ mod tests {
                 top_p: chat_request.top_p,
                 provider_options: chat_request.provider_options,
                 provider_key: chat_request.provider_key,
+                replay_prior_thinking: chat_request.replay_prior_thinking,
                 rid: None,
                 forensic_character: None,
                 retain_long: true,
@@ -2752,8 +2749,8 @@ mod tests {
             api_key_name: None,
             base_url: None,
             messages: vec![
-                json!({"role": "user", "content": "hi"}),
-                json!({"role": "assistant", "content": "hello"}),
+                WireMessage::text(WireRole::User, "hi"),
+                WireMessage::text(WireRole::Assistant, "hello"),
             ],
             system: Some(json!("sys")),
             tools: None,
@@ -2762,6 +2759,7 @@ mod tests {
             top_p: None,
             provider_options: None,
             provider_key: None,
+            replay_prior_thinking: shore_common::config::app::ThinkingReplay::All,
             rid: None,
             forensic_character: None,
             retain_long: false,

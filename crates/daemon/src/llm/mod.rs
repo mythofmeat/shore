@@ -18,8 +18,9 @@ use tokio::io::{AsyncRead, BufReader};
 use tracing::{debug, error, warn};
 
 use crate::call_store::CallStore;
+use shore_common::config::app::ThinkingReplay;
 use shore_common::config::models::ResolvedModel;
-use types::{ImageGenerateParams, ImageGenerateResponse, LlmRequest};
+use types::{ImageGenerateParams, ImageGenerateResponse, LlmRequest, WireMessage};
 
 /// The reader returned by `LlmClient::stream_raw`.
 ///
@@ -194,10 +195,11 @@ impl LlmClient {
     /// the registry or operate without one (e.g. examples and unit tests).
     pub fn build_request(
         model: &ResolvedModel,
-        messages: Vec<serde_json::Value>,
+        messages: Vec<WireMessage>,
         system: Option<serde_json::Value>,
         tools: Option<Vec<types::ToolDefinition>>,
         provider_options: Option<types::ProviderOptions>,
+        replay: ThinkingReplay,
     ) -> Result<LlmRequest, LlmError> {
         let api_key_env = model
             .api_key_env
@@ -215,6 +217,7 @@ impl LlmClient {
             system,
             tools,
             provider_options,
+            replay,
         );
         req.api_key_name = Some("default".into());
         Ok(req)
@@ -240,10 +243,11 @@ impl LlmClient {
     pub fn build_request_with_provider_keys(
         model: &ResolvedModel,
         registry: &shore_common::config::providers::ProviderRegistry,
-        messages: Vec<serde_json::Value>,
+        messages: Vec<WireMessage>,
         system: Option<serde_json::Value>,
         tools: Option<Vec<types::ToolDefinition>>,
         provider_options: Option<types::ProviderOptions>,
+        replay: ThinkingReplay,
     ) -> Result<LlmRequest, LlmError> {
         let candidates = credentials::resolve_key_candidates(&model.provider_key, registry, model);
 
@@ -268,6 +272,7 @@ impl LlmClient {
                     system,
                     tools,
                     provider_options,
+                    replay,
                 );
                 req.api_key_name = Some(cand.name.clone());
                 return Ok(req);
@@ -288,10 +293,11 @@ impl LlmClient {
     pub fn build_request_with_resolved_key(
         model: &ResolvedModel,
         api_key: String,
-        messages: Vec<serde_json::Value>,
+        messages: Vec<WireMessage>,
         system: Option<serde_json::Value>,
         tools: Option<Vec<types::ToolDefinition>>,
         provider_options: Option<types::ProviderOptions>,
+        replay: ThinkingReplay,
     ) -> LlmRequest {
         let normalized_options =
             provider_options.map_or_else(|| Self::provider_options_for(model), Some);
@@ -310,6 +316,7 @@ impl LlmClient {
             top_p: model.top_p,
             provider_options: normalized_options,
             provider_key: Some(model.provider_key.clone()),
+            replay_prior_thinking: replay,
             rid: None,
             forensic_character: None,
             retain_long: false,
@@ -508,11 +515,8 @@ pub fn requires_reasoning_replay(provider_key: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::llm::types::{ToolResultContent, WireBlock, WireRole};
     use shore_common::config::models::{ResolvedModel, Sdk};
-
-    fn field<'val>(value: &'val serde_json::Value, key: &str) -> &'val serde_json::Value {
-        value.get(key).expect("expected JSON field")
-    }
 
     fn item<T>(items: &[T], index: usize) -> &T {
         items.get(index).expect("expected item")
@@ -575,10 +579,11 @@ mod tests {
 
         let req = LlmClient::build_request(
             &model,
-            vec![serde_json::json!({"role": "user", "content": "Hi"})],
+            vec![WireMessage::text(WireRole::User, "Hi")],
             None,
             None,
             None,
+            ThinkingReplay::All,
         )
         .unwrap();
 
@@ -608,21 +613,24 @@ mod tests {
         model.cache_keepalive = Some(CacheKeepaliveSetting::Every(cadence));
         let req = LlmClient::build_request(
             &model,
-            vec![serde_json::json!({"role": "user", "content": "Hi"})],
+            vec![WireMessage::text(WireRole::User, "Hi")],
             None,
             None,
             None,
+            ThinkingReplay::All,
         )
         .unwrap();
         assert_eq!(req.keepalive_interval, Some(cadence.as_duration()));
 
         // `Off` and unset both resolve to no interval (keepalive disabled).
         model.cache_keepalive = Some(CacheKeepaliveSetting::Off);
-        let off = LlmClient::build_request(&model, vec![], None, None, None).unwrap();
+        let off = LlmClient::build_request(&model, vec![], None, None, None, ThinkingReplay::All)
+            .unwrap();
         assert_eq!(off.keepalive_interval, None);
 
         model.cache_keepalive = None;
-        let unset = LlmClient::build_request(&model, vec![], None, None, None).unwrap();
+        let unset = LlmClient::build_request(&model, vec![], None, None, None, ThinkingReplay::All)
+            .unwrap();
         assert_eq!(unset.keepalive_interval, None);
 
         std::env::remove_var("TEST_API_KEY_KA");
@@ -638,14 +646,17 @@ mod tests {
         model.api_key_env = Some("TEST_API_KEY_164".into());
 
         model.reasoning_effort = Some("off".into());
-        let req = LlmClient::build_request(&model, vec![], None, None, None).unwrap();
+        let req = LlmClient::build_request(&model, vec![], None, None, None, ThinkingReplay::All)
+            .unwrap();
         let opts = req.provider_options.expect("provider_options present");
         assert_eq!(opts.thinking_enabled, Some(false));
         assert_eq!(opts.reasoning_effort, None);
 
         // A real effort passes through unchanged.
         model.reasoning_effort = Some("high".into());
-        let req_high = LlmClient::build_request(&model, vec![], None, None, None).unwrap();
+        let req_high =
+            LlmClient::build_request(&model, vec![], None, None, None, ThinkingReplay::All)
+                .unwrap();
         let opts_high = req_high.provider_options.expect("provider_options present");
         assert_eq!(opts_high.reasoning_effort.as_deref(), Some("high"));
         assert_eq!(opts_high.thinking_enabled, None);
@@ -659,7 +670,8 @@ mod tests {
 
         let model = test_model("test", "anthropic", Sdk::Anthropic);
 
-        let req = LlmClient::build_request(&model, vec![], None, None, None).unwrap();
+        let req = LlmClient::build_request(&model, vec![], None, None, None, ThinkingReplay::All)
+            .unwrap();
 
         assert_eq!(req.api_key, "sk-ant-test");
         assert_eq!(req.max_tokens, 4096);
@@ -709,6 +721,7 @@ env = "FALLBACK_KEY_017"
             None,
             None,
             None,
+            ThinkingReplay::All,
         )
         .unwrap();
         assert_eq!(req.api_key, "sk-fallback");
@@ -747,6 +760,7 @@ base_url = "https://openrouter.ai/api/v1"
             None,
             None,
             None,
+            ThinkingReplay::All,
         )
         .unwrap();
         assert_eq!(req.api_key, "sk-legacy");
@@ -780,6 +794,7 @@ sdk = "openai"
             None,
             None,
             None,
+            ThinkingReplay::All,
         )
         .unwrap_err();
         let LlmError::MissingApiKey { var } = err else {
@@ -795,7 +810,8 @@ sdk = "openai"
         let mut model = test_model("test", "anthropic", Sdk::Anthropic);
         model.api_key_env = Some("NONEXISTENT_KEY_015".into());
 
-        let err = LlmClient::build_request(&model, vec![], None, None, None).unwrap_err();
+        let err = LlmClient::build_request(&model, vec![], None, None, None, ThinkingReplay::All)
+            .unwrap_err();
         let LlmError::MissingApiKey { var } = err else {
             panic!("Expected MissingApiKey");
         };
@@ -874,7 +890,7 @@ sdk = "openai"
         assert_clone_send::<LlmClient>();
     }
 
-    fn req_with_messages(messages: Vec<serde_json::Value>) -> LlmRequest {
+    fn req_with_messages(messages: Vec<WireMessage>) -> LlmRequest {
         LlmRequest {
             sdk: Sdk::Anthropic,
             model: "m".into(),
@@ -889,6 +905,7 @@ sdk = "openai"
             top_p: None,
             provider_options: None,
             provider_key: Some("anthropic".into()),
+            replay_prior_thinking: ThinkingReplay::All,
             rid: None,
             forensic_character: None,
             retain_long: false,
@@ -900,10 +917,7 @@ sdk = "openai"
     fn preprocess_clean_messages_is_borrowed() {
         // No orphan tool_use/tool_result pairs → nothing to rewrite, so
         // preprocess_request returns the input by reference (zero alloc).
-        let req = req_with_messages(vec![serde_json::json!({
-            "role": "user",
-            "content": "hi"
-        })]);
+        let req = req_with_messages(vec![WireMessage::text(WireRole::User, "hi")]);
         let out = preprocess_request(&req);
         assert!(matches!(out, Cow::Borrowed(_)));
         assert_eq!(out.messages.len(), 1);
@@ -914,18 +928,20 @@ sdk = "openai"
         // A tool_result with no matching tool_use is an orphan; sanitize
         // drops it and preprocess_request returns an owned, cleaned copy.
         let req = req_with_messages(vec![
-            serde_json::json!({"role": "user", "content": "hi"}),
-            serde_json::json!({
-                "role": "user",
-                "content": [
-                    {"type": "tool_result", "tool_use_id": "orphan", "content": "stale"}
-                ]
-            }),
+            WireMessage::text(WireRole::User, "hi"),
+            WireMessage::new(
+                WireRole::User,
+                vec![WireBlock::ToolResult {
+                    tool_use_id: "orphan".to_owned(),
+                    content: ToolResultContent::Text("stale".to_owned()),
+                    is_error: false,
+                }],
+            ),
         ]);
         let out = preprocess_request(&req);
         assert!(matches!(out, Cow::Owned(_)));
         // The orphan-only message is dropped entirely.
         assert_eq!(out.messages.len(), 1);
-        assert_eq!(field(item(&out.messages, 0), "content"), "hi");
+        assert_eq!(item(&out.messages, 0).content, vec![WireBlock::text("hi")]);
     }
 }

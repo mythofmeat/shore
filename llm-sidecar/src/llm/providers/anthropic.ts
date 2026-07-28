@@ -52,6 +52,7 @@ import type {
 } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA, streamErrorEvent } from "../types.ts";
 import { recordCacheCall, type CachePlacement } from "../forensics.ts";
+import { replayableMessages } from "../replay.ts";
 
 export class AnthropicProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
@@ -257,7 +258,7 @@ export function buildAnthropicPlan(req: SidecarRequest): {
   const cacheTtl = opts.cache_ttl ?? "";
   const cacheEnabled = cacheTtl !== "";
 
-  const converted = convertInlineSystemMessages(req.messages, req.model);
+  const converted = convertInlineSystemMessages(replayableMessages(req), req.model);
   const hasExistingMarkers = messagesHaveCacheControl(converted);
 
   let messages: MessageParam[];
@@ -375,14 +376,9 @@ function makeCacheControl(ttl: string): CacheControl {
 }
 
 function messagesHaveCacheControl(messages: WireMessage[]): boolean {
-  for (const m of messages) {
-    if (Array.isArray(m.content)) {
-      for (const b of m.content) {
-        if ((b as { cache_control?: unknown }).cache_control !== undefined) return true;
-      }
-    }
-  }
-  return false;
+  return messages.some((m) =>
+    m.content.some((b) => (b as { cache_control?: unknown }).cache_control !== undefined),
+  );
 }
 
 /** Strip pre-existing cache_control and convert string content → block arrays
@@ -390,10 +386,7 @@ function messagesHaveCacheControl(messages: WireMessage[]): boolean {
  * `normalize_for_caching`. */
 function normalizeMessages(messages: WireMessage[]): MessageParam[] {
   return messages.map((m): MessageParam => {
-    const blocks =
-      typeof m.content === "string"
-        ? [{ type: "text" as const, text: m.content }]
-        : m.content.map(toContentBlockParam);
+    const blocks = m.content.map(toContentBlockParam);
     for (const b of blocks) delete (b as { cache_control?: unknown }).cache_control;
     return { role: m.role as "user" | "assistant", content: blocks };
   });
@@ -618,25 +611,18 @@ export function convertInlineSystemMessages(
       out.push(turn);
       continue;
     }
-    const text =
-      typeof turn.content === "string"
-        ? turn.content
-        : turn.content
-            .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
-            .map((b) => b.text)
-            .join("");
+    const text = turn.content
+      .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
+      .map((b) => b.text)
+      .join("");
     const wrapped = wrapInlineSystemInstruction(text);
 
     const prev = out[out.length - 1];
     if (prev && prev.role === "user") {
-      if (typeof prev.content === "string") {
-        prev.content = `${prev.content}\n\n${wrapped}`;
-      } else {
-        prev.content = [...prev.content, { type: "text", text: wrapped }];
-      }
+      prev.content = [...prev.content, { type: "text", text: wrapped }];
       continue;
     }
-    out.push({ role: "user", content: wrapped });
+    out.push({ role: "user", content: [{ type: "text", text: wrapped }] });
   }
   return out;
 }
@@ -644,9 +630,7 @@ export function convertInlineSystemMessages(
 // ── message + tool conversion ───────────────────────────────────────────────
 
 function toMessageParam(m: WireMessage): MessageParam {
-  const role = m.role as "user" | "assistant";
-  if (typeof m.content === "string") return { role, content: m.content };
-  return { role, content: m.content.map(toContentBlockParam) };
+  return { role: m.role as "user" | "assistant", content: m.content.map(toContentBlockParam) };
 }
 
 function toContentBlockParam(b: ContentBlock): ContentBlockParam {
@@ -660,7 +644,14 @@ function toContentBlockParam(b: ContentBlock): ContentBlockParam {
     case "tool_use":
       return { type: "tool_use", id: b.id, name: b.name, input: (b.input ?? {}) as Record<string, unknown> };
     case "tool_result": {
-      const out: ToolResultBlockParam = { type: "tool_result", tool_use_id: b.tool_use_id, content: b.content };
+      // Block-shaped results come from the daemon's generated-image replay
+      // (an image plus its caption); Anthropic accepts text and image blocks
+      // there, which is exactly what that path produces.
+      const content: NonNullable<ToolResultBlockParam["content"]> =
+        typeof b.content === "string"
+          ? b.content
+          : (b.content.map(toContentBlockParam) as NonNullable<ToolResultBlockParam["content"]>);
+      const out: ToolResultBlockParam = { type: "tool_result", tool_use_id: b.tool_use_id, content };
       if (b.is_error) out.is_error = true;
       return out;
     }

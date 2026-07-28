@@ -15,8 +15,9 @@ function sidecarReq(over: Partial<SidecarRequest> = {}): SidecarRequest {
     sdk: "openai",
     model: "openai/gpt-test",
     api_key: "sk-test",
-    messages: [{ role: "user", content: "hi" }],
+    messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
     max_tokens: 128,
+    replay_prior_thinking: "all",
     ...over,
   };
 }

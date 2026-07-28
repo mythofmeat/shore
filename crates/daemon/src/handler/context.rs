@@ -35,10 +35,6 @@ pub(crate) struct PrepareChatContextParams<'ctx> {
     pub resolved: &'ctx shore_common::config::models::ResolvedModel,
     pub messages: &'ctx [Message],
     pub has_prior_context: bool,
-    /// Whether to emit unsigned `thinking` blocks back to the provider.
-    /// True for OpenAI/Z.ai (which echo `reasoning_content`), false for
-    /// Anthropic and for any caller that doesn't need them.
-    pub include_unsigned_thinking: bool,
     /// Pre-filtered MCP tool defs, already in the registry's pinned sort. The
     /// caller builds these from the live registry (filtered by `enabled_tools`);
     /// pass `&[]` when no registry is wired (background rebuilds).
@@ -51,7 +47,7 @@ pub(crate) struct PrepareChatContextParams<'ctx> {
 /// additional work (e.g., image cache warming) before building the
 /// request.
 pub(crate) struct PreparedChatContext {
-    pub llm_messages: Vec<Value>,
+    pub llm_messages: Vec<crate::llm::types::WireMessage>,
     pub system: Option<Value>,
     pub tool_defs: Option<Vec<crate::llm::types::ToolDefinition>>,
     pub prompt: AssembledPrompt,
@@ -68,18 +64,6 @@ pub(crate) struct PreparedChatContext {
 /// The returned `prompt` is the [`AssembledPrompt`] that produced
 /// `llm_messages` and `system`; callers can use its `.messages` field
 /// directly for things like image cache warming.
-/// How much prior-turn thinking to replay for `resolved`. The per-model
-/// override (preferences overlay) falls back to the global
-/// `[memory.thinking]` default; the effect is model-dependent — see #129.
-fn resolved_replay(
-    resolved: &shore_common::config::models::ResolvedModel,
-    config: &LoadedConfig,
-) -> shore_common::config::app::ThinkingReplay {
-    resolved
-        .replay_prior_thinking
-        .unwrap_or(config.app.memory.thinking.replay_prior_thinking)
-}
-
 pub(crate) fn prepare_chat_context(params: PrepareChatContextParams<'_>) -> PreparedChatContext {
     let PrepareChatContextParams {
         character,
@@ -88,7 +72,6 @@ pub(crate) fn prepare_chat_context(params: PrepareChatContextParams<'_>) -> Prep
         resolved,
         messages,
         has_prior_context,
-        include_unsigned_thinking,
         mcp_tool_defs,
     } = params;
 
@@ -132,19 +115,11 @@ pub(crate) fn prepare_chat_context(params: PrepareChatContextParams<'_>) -> Prep
     });
 
     let tools_available = config.app.tools.any_enabled() || !mcp_tool_defs.is_empty();
-    let (mut llm_messages, system) = super::build_llm_messages(
+    let (llm_messages, system) = super::build_llm_messages(
         &prompt,
-        include_unsigned_thinking,
         config.app.advanced.max_image_size,
         &config.dirs.cache,
-        &resolved.provider_key,
-        &resolved.model_id,
         super::AssistantImageMode::for_request(&resolved.sdk, tools_available),
-    );
-    crate::content_util::maybe_strip_prior_thinking(
-        &mut llm_messages,
-        resolved_replay(resolved, config),
-        &resolved.provider_key,
     );
 
     let tool_defs = if tools_available {
@@ -206,7 +181,6 @@ pub(crate) fn build_chat_shape_request_from_disk(
         resolved,
         messages,
         has_prior_context,
-        include_unsigned_thinking: resolved.sdk.echoes_unsigned_thinking(),
         // Background disk rebuild: MCP tools are not wired on this path yet.
         mcp_tool_defs: &[],
     });
@@ -218,5 +192,6 @@ pub(crate) fn build_chat_shape_request_from_disk(
         system,
         tool_defs,
         None,
+        resolved.resolved_replay_prior_thinking(&config.app),
     )
 }

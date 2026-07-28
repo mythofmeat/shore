@@ -259,6 +259,7 @@ impl<'img> From<&'img ImageGenerateParams<'img>> for SidecarImageRequest<'img> {
 )]
 mod tests {
     use super::*;
+    use crate::llm::types::{WireMessage, WireRole};
     use std::io;
 
     use serde_json::json;
@@ -277,7 +278,7 @@ mod tests {
             api_key: "sk-test".into(),
             api_key_name: None,
             base_url: None,
-            messages: vec![json!({"role": "user", "content": "hi"})],
+            messages: vec![WireMessage::text(WireRole::User, "hi")],
             system: None,
             tools: None,
             max_tokens: 128,
@@ -285,6 +286,7 @@ mod tests {
             top_p: None,
             provider_options: None,
             provider_key: Some("openai".into()),
+            replay_prior_thinking: shore_common::config::app::ThinkingReplay::All,
             rid: None,
             forensic_character: None,
             retain_long: false,

@@ -20,6 +20,7 @@ use crate::handler::images::{embed_image_data, ingest_images};
 use crate::handler::key_fallback::stream_with_credential_fallback;
 use crate::handler::persistence::persist_and_notify;
 use crate::handler::resize::warm_image_cache;
+use crate::llm::types::{ToolResultContent, WireBlock, WireMessage, WireRole};
 
 use super::{GenContext, GenerationParams, PrepareChatContextParams, PreparedChatContext};
 
@@ -171,16 +172,6 @@ pub(super) async fn handle_generation(
         &request,
         tool_intermediate_messages,
         wall_clock_start,
-        // Per-model override (preferences overlay) falls back to the global
-        // `[memory.thinking]` default. The effect is model-dependent — see #129.
-        resolved.replay_prior_thinking.unwrap_or(
-            params
-                .effective_config
-                .app
-                .memory
-                .thinking
-                .replay_prior_thinking,
-        ),
         regen_alt,
     )
     .await?;
@@ -398,7 +389,6 @@ async fn build_generation_request(
     };
 
     let character_data_dir = character_data_dir(data_dir, char_name);
-    let include_unsigned_thinking = resolved.sdk.echoes_unsigned_thinking();
     // Filter the live MCP surface by the character's `enabled_tools` allowlist
     // (exact names or `mcp__server__*` globs); appended last for a stable prefix.
     let mcp_tool_defs = mcp_registry.tool_defs_filtered(&effective_config.app.tools.enabled_tools);
@@ -414,7 +404,6 @@ async fn build_generation_request(
         resolved,
         messages: &messages,
         has_prior_context,
-        include_unsigned_thinking,
         mcp_tool_defs: &mcp_tool_defs,
     });
 
@@ -432,6 +421,7 @@ async fn build_generation_request(
         system,
         tool_defs,
         None,
+        resolved.resolved_replay_prior_thinking(&effective_config.app),
     );
 
     if let Some(ref ov) = body.overrides {
@@ -722,10 +712,10 @@ impl AssistantImageMode {
 struct AssistantImageRender {
     /// Blocks appended to the assistant turn itself (`tool_use` or text
     /// stand-ins).
-    assistant_blocks: Vec<Value>,
+    assistant_blocks: Vec<WireBlock>,
     /// `tool_result` blocks owed to the turn immediately after the assistant
     /// message (empty in [`AssistantImageMode::TextStandin`]).
-    tool_results: Vec<Value>,
+    tool_results: Vec<WireBlock>,
 }
 
 fn render_assistant_images(
@@ -751,39 +741,35 @@ fn render_assistant_images(
             .map(str::trim)
             .filter(|c| !c.is_empty());
         match encoded {
-            Some(image_block) => {
+            Some(source) => {
                 let id = synthetic_tool_use_id(&img.path, index);
-                render.assistant_blocks.push(json!({
-                    "type": "tool_use",
-                    "id": id,
-                    "name": "generate_image",
+                render.assistant_blocks.push(WireBlock::ToolUse {
+                    id: id.clone(),
+                    name: "generate_image".to_owned(),
                     // The generation prompt isn't persisted, so the input
                     // carries only what is: the caption.
-                    "input": match caption {
+                    input: match caption {
                         Some(c) => json!({ "caption": c }),
                         None => json!({}),
                     },
-                }));
-                let mut result_content = vec![image_block];
+                });
+                let mut result_content = vec![WireBlock::Image { source }];
                 if let Some(c) = caption {
-                    result_content.push(json!({ "type": "text", "text": c }));
+                    result_content.push(WireBlock::text(c));
                 }
-                render.tool_results.push(json!({
-                    "type": "tool_result",
-                    "tool_use_id": id,
-                    "content": result_content,
-                }));
+                render.tool_results.push(WireBlock::ToolResult {
+                    tool_use_id: id,
+                    content: ToolResultContent::Blocks(result_content),
+                    is_error: false,
+                });
             }
             // TextStandin mode — or the image failed to encode (missing/
             // unreadable file), where emitting the `tool_use` anyway would
             // leave it dangling without a result and fail the request.
             None => {
-                render.assistant_blocks.push(json!({
-                    "type": "text",
-                    "text": match caption {
-                        Some(c) => format!("[sent an image: {c}]"),
-                        None => "[sent an image]".to_owned(),
-                    },
+                render.assistant_blocks.push(WireBlock::text(match caption {
+                    Some(c) => format!("[sent an image: {c}]"),
+                    None => "[sent an image]".to_owned(),
                 }));
             }
         }
@@ -809,48 +795,35 @@ fn synthetic_tool_use_id(path: &str, index: usize) -> String {
     format!("toolu_gen_{index}_{safe}")
 }
 
-/// Convert `content` — a plain string or an array of blocks, the only two
-/// shapes this file constructs — into block-array form. A blank string
-/// contributes no block.
-fn content_to_blocks(content: Value) -> Vec<Value> {
-    match content {
-        Value::String(s) => {
-            if s.trim().is_empty() {
-                vec![]
-            } else {
-                vec![json!({ "type": "text", "text": s })]
-            }
-        }
-        Value::Array(blocks) => blocks,
-        // Never constructed here; spelled out because wildcard enum arms are
-        // denied workspace-wide.
-        other @ (Value::Null | Value::Bool(_) | Value::Number(_) | Value::Object(_)) => {
-            vec![other]
-        }
-    }
-}
-
-/// Render one prompt message's wire `content`, plus the `tool_result` blocks
-/// it owes the following turn (generated-image replay — see
+/// Render one prompt message's wire content blocks, plus the `tool_result`
+/// blocks it owes the following turn (generated-image replay — see
 /// [`AssistantImageMode`]).
 ///
-/// Returns `None` for a message that rendered to nothing — an empty string or
-/// an empty content array. This happens for a degenerate persisted turn that
-/// carries no usable content (e.g. an assistant turn that ended a tool loop
-/// without emitting any final text). Anthropic rejects such a turn with
-/// "messages: text content blocks must be non-empty", failing the *entire*
-/// request, so any conversation whose window contains one could no longer
-/// generate. Mirrors the empty-turn skip in
+/// Returns `None` for a message that rendered to nothing. This happens for a
+/// degenerate persisted turn that carries no usable content (e.g. an assistant
+/// turn that ended a tool loop without emitting any final text). Anthropic
+/// rejects such a turn with "messages: text content blocks must be non-empty",
+/// failing the *entire* request, so any conversation whose window contains one
+/// could no longer generate. Mirrors the empty-turn skip in
 /// `append_response_messages_to_request`.
+///
+/// What this deliberately does *not* do is decide which blocks a provider will
+/// accept. Carrier-less thinking, thinking minted by another model, and prior
+/// turns' thinking under a `none` replay setting all ship from here and are
+/// filtered by the adapter, which is the only side that knows the provider.
+///
+/// Whitespace-only blocks are skipped here too, but not as a wire decision:
+/// this side has to know whether the stored blocks render to anything in order
+/// to choose between them and the derived `content` string, and only this side
+/// has that string. The *guarantee* that no empty text block reaches a provider
+/// is the adapter's, because the tool-loop and `last_request` append paths never
+/// come through here.
 fn render_message_content(
     m: &prompt::PromptMessage,
-    include_unsigned_thinking: bool,
     max_image_size: u64,
     cache_dir: &Path,
-    active_provider_key: &str,
-    active_model_id: &str,
     assistant_image_mode: AssistantImageMode,
-) -> Option<(Value, Vec<Value>)> {
+) -> Option<(Vec<WireBlock>, Vec<WireBlock>)> {
     // Images on assistant turns can't ship as raw `image` blocks (see
     // `AssistantImageMode`); render them separately and keep them out of
     // the shared content paths below.
@@ -862,72 +835,39 @@ fn render_message_content(
     } else {
         &m.images
     };
+
     let mut content = if m.content_blocks.is_empty() {
         super::build_content(&m.content, turn_images, max_image_size, cache_dir)
     } else {
-        let mut blocks: Vec<Value> = Vec::new();
-
+        let mut blocks: Vec<WireBlock> = Vec::new();
         for img in turn_images {
-            if let Some(block) = super::images::encode_image_block(img, max_image_size, cache_dir) {
-                blocks.push(block);
+            if let Some(source) = super::images::encode_image_block(img, max_image_size, cache_dir)
+            {
+                blocks.push(WireBlock::Image { source });
             }
         }
+        blocks.extend(
+            m.content_blocks
+                .iter()
+                .filter(|b| !matches!(b, ContentBlock::Text { text } if text.trim().is_empty()))
+                .map(WireBlock::from_content_block),
+        );
 
-        // Drop opaque thinking data (signatures, redacted blobs) that a
-        // different model minted — replaying it to the active model
-        // hard-fails the request. Provider alone is too coarse: an
-        // aggregator fronts every model family behind one provider_key.
-        let minting = m.provider_key.as_deref();
-        let minting_model = m.model.as_deref();
-        let portable = m.content_blocks.iter().filter(|b| {
-            crate::content_util::thinking_block_portable_to(
-                b,
-                minting,
-                minting_model,
-                active_provider_key,
-                active_model_id,
-            )
-        });
-        if include_unsigned_thinking {
-            blocks.extend(portable.filter_map(|b| {
-                // Drop empty text blocks even on the unsigned path
-                // (they can't anchor a cache breakpoint).
-                if matches!(b, ContentBlock::Text { text } if text.trim().is_empty()) {
-                    None
-                } else {
-                    Some(crate::content_util::content_block_to_json(b))
-                }
-            }));
-        } else {
-            blocks.extend(portable.filter_map(crate::content_util::content_block_to_api_json));
-        }
-
-        // If every block was dropped (e.g. a message whose only content
-        // was an empty text block), fall back to the string-content
-        // path so we never emit an empty content array, which the API
-        // also rejects.
+        // A turn whose only stored block was empty text renders to nothing;
+        // fall back to the derived `content` string so a turn with text in it
+        // is not silently dropped.
         if blocks.is_empty() {
             super::build_content(&m.content, turn_images, max_image_size, cache_dir)
         } else {
-            json!(blocks)
+            blocks
         }
     };
 
     if let Some(render) = &image_render {
-        let mut blocks = content_to_blocks(content);
-        blocks.extend(render.assistant_blocks.iter().cloned());
-        content = json!(blocks);
+        content.extend(render.assistant_blocks.iter().cloned());
     }
 
-    // `content` is only ever a string (build_content) or an array of
-    // blocks here; the other JSON shapes never occur but are spelled
-    // out because wildcard enum arms are denied workspace-wide.
-    let is_empty = match &content {
-        Value::String(s) => s.trim().is_empty(),
-        Value::Array(a) => a.is_empty(),
-        Value::Null | Value::Bool(_) | Value::Number(_) | Value::Object(_) => false,
-    };
-    if is_empty {
+    if content.is_empty() {
         return None;
     }
 
@@ -937,61 +877,58 @@ fn render_message_content(
     ))
 }
 
-/// Convert assembled prompt messages into LLM API JSON format.
+/// Convert assembled prompt messages into the wire message list.
 pub(crate) fn build_llm_messages(
     prompt_result: &prompt::AssembledPrompt,
-    include_unsigned_thinking: bool,
     max_image_size: u64,
     cache_dir: &Path,
-    active_provider_key: &str,
-    active_model_id: &str,
     assistant_image_mode: AssistantImageMode,
-) -> (Vec<Value>, Option<Value>) {
-    let mut llm_messages: Vec<Value> = Vec::new();
+) -> (Vec<WireMessage>, Option<Value>) {
+    let mut llm_messages: Vec<WireMessage> = Vec::new();
     // `tool_result` blocks owed by a preceding assistant turn whose images
     // rendered as synthetic `generate_image` tool calls. The API requires a
     // tool_use's result in the turn immediately after it, so these merge into
     // the front of the next emitted user message — or a user turn of their
     // own when the next emitted message isn't one (or nothing follows).
-    let mut pending_tool_results: Vec<Value> = Vec::new();
+    let mut pending_tool_results: Vec<WireBlock> = Vec::new();
 
     for m in &prompt_result.messages {
         let role = match m.role {
-            Role::User => "user",
-            Role::Assistant => "assistant",
-            Role::System => "system",
+            Role::User => WireRole::User,
+            Role::Assistant => WireRole::Assistant,
+            Role::System => WireRole::System,
         };
-        let Some((mut content, owed_tool_results)) = render_message_content(
-            m,
-            include_unsigned_thinking,
-            max_image_size,
-            cache_dir,
-            active_provider_key,
-            active_model_id,
-            assistant_image_mode,
-        ) else {
+        let Some((rendered, owed_tool_results)) =
+            render_message_content(m, max_image_size, cache_dir, assistant_image_mode)
+        else {
             // Dropped empty turn; owed tool_results (if any) survive to the
             // next emitted message.
             continue;
         };
 
-        if !pending_tool_results.is_empty() {
-            let owed = std::mem::take(&mut pending_tool_results);
+        let content = if pending_tool_results.is_empty() {
+            rendered
+        } else {
+            let mut owed = std::mem::take(&mut pending_tool_results);
             if m.role == Role::User {
-                let mut blocks = owed;
-                blocks.extend(content_to_blocks(content));
-                content = json!(blocks);
+                owed.extend(rendered);
+                owed
             } else {
-                llm_messages.push(json!({ "role": "user", "content": owed }));
+                llm_messages.push(WireMessage::new(WireRole::User, owed));
+                rendered
             }
-        }
+        };
 
-        llm_messages.push(json!({ "role": role, "content": content }));
+        // Provenance travels with the turn so the adapter can decide whether
+        // this turn's thinking is replayable to the active model.
+        llm_messages.push(
+            WireMessage::new(role, content).minted_by(m.provider_key.clone(), m.model.clone()),
+        );
         pending_tool_results.extend(owed_tool_results);
     }
 
     if !pending_tool_results.is_empty() {
-        llm_messages.push(json!({ "role": "user", "content": pending_tool_results }));
+        llm_messages.push(WireMessage::new(WireRole::User, pending_tool_results));
     }
 
     let system = if prompt_result.system.is_empty() {
@@ -1056,21 +993,18 @@ mod build_llm_messages_tests {
         path.to_string_lossy().into_owned()
     }
 
+    /// Render and serialize, so the assertions below read the bytes that
+    /// actually cross the seam rather than the in-memory shape.
     fn build_with_mode(messages: Vec<PromptMessage>, mode: AssistantImageMode) -> Vec<Value> {
         let prompt = AssembledPrompt {
             system: vec![],
             messages,
         };
-        let (llm_messages, _) = build_llm_messages(
-            &prompt,
-            false,
-            1024,
-            Path::new("/tmp"),
-            "anthropic",
-            "claude-x",
-            mode,
-        );
+        let (llm_messages, _) = build_llm_messages(&prompt, 1024, Path::new("/tmp"), mode);
         llm_messages
+            .iter()
+            .map(|m| serde_json::to_value(m).expect("WireMessage serializes"))
+            .collect()
     }
 
     fn build(messages: Vec<PromptMessage>) -> Vec<Value> {
@@ -1113,7 +1047,10 @@ mod build_llm_messages_tests {
         let mut msg = pm(Role::User, vec![ContentBlock::Text { text: "  ".into() }]);
         msg.content = "fallback".into();
         let msgs = build(vec![msg]);
-        assert_eq!(msgs[0]["content"], json!("fallback"));
+        assert_eq!(
+            msgs[0]["content"],
+            json!([{"type": "text", "text": "fallback"}])
+        );
     }
 
     #[test]

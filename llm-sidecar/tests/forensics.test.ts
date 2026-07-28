@@ -117,11 +117,11 @@ describe("placement reported matches placement applied", () => {
   test("reported indices are the ones carrying cache_control", () => {
     const { params, placement } = buildAnthropicPlan(
       req([
-        { role: "user", content: "one" },
-        { role: "assistant", content: "two" },
-        { role: "user", content: "three" },
-        { role: "assistant", content: "four" },
-        { role: "user", content: "five" },
+        { role: "user", content: [{ type: "text", text: "one" }] },
+        { role: "assistant", content: [{ type: "text", text: "two" }] },
+        { role: "user", content: [{ type: "text", text: "three" }] },
+        { role: "assistant", content: [{ type: "text", text: "four" }] },
+        { role: "user", content: [{ type: "text", text: "five" }] },
       ]),
     );
 
@@ -141,7 +141,7 @@ describe("placement reported matches placement applied", () => {
   });
 
   test("no cache_ttl → nothing placed and the row says so", () => {
-    const noCache = { ...req([{ role: "user", content: "hi" }]), provider_options: {} };
+    const noCache = { ...req([{ role: "user", content: [{ type: "text", text: "hi" }] }]), provider_options: {} };
     const { placement } = buildAnthropicPlan(noCache);
     expect(placement.cache_enabled).toBe(false);
     expect(placement.msg_breakpoints).toEqual([]);

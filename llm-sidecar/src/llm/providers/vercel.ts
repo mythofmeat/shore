@@ -47,7 +47,9 @@ import type {
   Usage,
   WireMessage,
 } from "../types.ts";
+import { toolResultText, toTurn } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA } from "../types.ts";
+import { replayableMessages } from "../replay.ts";
 
 export class VercelProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
@@ -224,21 +226,14 @@ function buildMessages(req: SidecarRequest): ModelMessage[] {
   // causality (a result pointing at a later call is rejected), not just
   // existence anywhere in the transcript.
   const toolNames = new Map<string, string>();
-  for (const turn of req.messages) {
-    const norm = normalizeTurn(turn);
+  for (const turn of replayableMessages(req)) {
+    const norm = toTurn(turn);
     messages.push(...turnToVercel(norm, toolNames));
     for (const b of norm.content) {
       if (b.type === "tool_use") toolNames.set(b.id, b.name);
     }
   }
   return messages;
-}
-
-function normalizeTurn(turn: WireMessage): TurnMessage {
-  if (typeof turn.content === "string") {
-    return { role: turn.role, content: [{ type: "text", text: turn.content }] };
-  }
-  return { role: turn.role, content: turn.content };
 }
 
 function systemToText(system: SystemContent | undefined): string {
@@ -304,7 +299,7 @@ export function turnToVercel(turn: TurnMessage, toolNames: Map<string, string>):
         type: "tool-result" as const,
         toolCallId: b.tool_use_id,
         toolName,
-        output: { type: "text" as const, value: b.content },
+        output: { type: "text" as const, value: toolResultText(b.content) },
       };
     });
   if (toolParts.length > 0) out.push({ role: "tool", content: toolParts });

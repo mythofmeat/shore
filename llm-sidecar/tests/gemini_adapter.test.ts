@@ -25,6 +25,7 @@ function req(over: Partial<SidecarRequest> = {}): SidecarRequest {
     api_key: "k",
     messages: [],
     max_tokens: 4096,
+    replay_prior_thinking: "all",
     ...over,
   };
 }
