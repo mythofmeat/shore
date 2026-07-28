@@ -205,6 +205,116 @@ fn build_tool_context(
     }
 }
 
+/// Whether this request can hand its tool loop to the sidecar.
+///
+/// Anthropic only: the loop is built on the SDK's tool runner, which has no
+/// equivalent in the other dialects, so they keep the daemon's loop. A daemon
+/// with no tool socket serving also stays daemon-side, which is what makes the
+/// socket's absence a graceful degradation rather than a failure.
+pub(super) fn can_delegate_tool_loop(
+    ctx: &GenContext,
+    effective_config: &LoadedConfig,
+    resolved: &shore_common::config::models::ResolvedModel,
+) -> bool {
+    resolved.sdk == shore_common::config::models::Sdk::Anthropic
+        && effective_config.app.tools.any_enabled()
+        && ctx.llm_client.inner().tool_rpc().is_some()
+}
+
+/// Stream a turn whose tool loop runs in the sidecar.
+///
+/// Unlike the daemon-driven path there is no separate tool phase: the single
+/// call *is* the whole loop, and it comes back having already run every tool.
+/// Those tools ran here, over the socket, concurrently with the stream — which
+/// is why this joins two futures rather than awaiting in sequence.
+///
+/// The registration guard moves into the streaming future so it drops the
+/// moment the stream ends. That is what closes the channel and lets the serving
+/// task return; holding it in this scope instead would deadlock the join.
+#[instrument(skip(ctx, effective_config, request), fields(char = char_name))]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "generation-pipeline stage; params are distinct threaded values"
+)]
+pub(super) async fn stream_with_sidecar_tool_loop(
+    ctx: &GenContext,
+    data_dir: &std::path::Path,
+    char_name: &str,
+    effective_config: &LoadedConfig,
+    request: &mut crate::llm::types::LlmRequest,
+    resolved: &shore_common::config::models::ResolvedModel,
+    regen: bool,
+    conversation: &[shore_common::protocol::types::Message],
+) -> Result<
+    (
+        crate::llm::types::StreamResult,
+        Vec<shore_common::protocol::types::Message>,
+    ),
+    Box<dyn std::error::Error + Send + Sync>,
+> {
+    let Some((shared_registry, socket_path)) = ctx.llm_client.inner().tool_rpc() else {
+        return Err("tool RPC is not available".into());
+    };
+    let registry = std::sync::Arc::clone(shared_registry);
+
+    // The loop is addressed by the request id the sidecar echoes back, so one
+    // is minted here when the request has none.
+    let rid = request
+        .rid
+        .clone()
+        .unwrap_or_else(|| format!("r_{}", uuid::Uuid::new_v4()));
+    request.rid = Some(rid.clone());
+    request.tool_rpc = Some(crate::llm::types::ToolRpc {
+        socket_path: socket_path.to_string_lossy().into_owned(),
+        rid: rid.clone(),
+    });
+    request.max_tool_iterations = resolved.max_tool_iterations;
+
+    let tool_ctx = build_tool_context(ctx, data_dir, char_name, effective_config, conversation);
+    let thinking_enabled = thinking_enabled_from_request(request);
+    let (mut calls, registration) = registry.register(rid.clone(), TOOL_CALL_QUEUE_DEPTH);
+
+    let mut intermediate_messages: Vec<shore_common::protocol::types::Message> = Vec::new();
+    let streaming = async {
+        let result = crate::handler::key_fallback::stream_with_credential_fallback(
+            ctx,
+            request,
+            resolved,
+            effective_config,
+            regen,
+            char_name,
+            thinking_enabled,
+        )
+        .await;
+        // Ends the serving task below; see the doc comment.
+        drop(registration);
+        result
+    };
+    let serving = tools::serve_tool_calls(
+        &mut calls,
+        &ctx.direct_tx,
+        Some(rid.as_str()),
+        &tool_ctx,
+        &effective_config.app.tools,
+        &ctx.diagnostics,
+        &mut intermediate_messages,
+    );
+
+    let (streamed, ()) = tokio::join!(streaming, serving);
+    let result = streamed?;
+    debug!(
+        character = char_name,
+        intermediate_messages = intermediate_messages.len(),
+        "sidecar-driven tool loop complete"
+    );
+    Ok((result, intermediate_messages))
+}
+
+/// How many tool calls may queue for one loop before the socket backpressures.
+/// A model can request several tools in one turn; they run one at a time here,
+/// matching what the daemon-driven loop did.
+const TOOL_CALL_QUEUE_DEPTH: usize = 8;
+
 /// Phase 11: Set up tool context and run the tool loop.
 #[instrument(skip(ctx, effective_config, request, result), fields(char = char_name))]
 #[expect(

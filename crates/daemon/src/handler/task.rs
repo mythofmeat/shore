@@ -15,7 +15,10 @@ use crate::convert::u64_to_usize;
 use crate::engine::messages::PendingAlt;
 use crate::engine::prompt;
 use crate::engine::ConversationEngine;
-use crate::handler::generation::{run_tool_phase, thinking_enabled_from_request};
+use crate::handler::generation::{
+    can_delegate_tool_loop, run_tool_phase, stream_with_sidecar_tool_loop,
+    thinking_enabled_from_request,
+};
 use crate::handler::images::{embed_image_data, ingest_images};
 use crate::handler::key_fallback::stream_with_credential_fallback;
 use crate::handler::persistence::persist_and_notify;
@@ -465,6 +468,23 @@ async fn run_generation_stream(
         messages = request.messages.len(),
         "Sending streaming request to LLM"
     );
+
+    // When the sidecar can drive the loop, it owns the whole turn — including
+    // the first call — so this returns having already run every tool, and there
+    // is no separate tool phase below.
+    if can_delegate_tool_loop(ctx, effective_config, resolved) {
+        return stream_with_sidecar_tool_loop(
+            ctx,
+            data_dir,
+            char_name,
+            effective_config,
+            request,
+            resolved,
+            regen,
+            conversation,
+        )
+        .await;
+    }
 
     let thinking_enabled = thinking_enabled_from_request(request);
 
