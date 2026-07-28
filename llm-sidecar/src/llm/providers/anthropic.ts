@@ -124,29 +124,37 @@ type AccumState =
  * `StreamConsumer` attaches it), `redacted_thinking` verbatim, ONE consolidated
  * `tool_use` per block, then `done`.
  */
-export async function* anthropicStreamEvents(
-  model: string,
+/** What one turn accumulated, for the caller to fold into a `done` event. */
+export interface TurnAccumulator {
+  text: string;
+  stopReason: string;
+  usage: Usage;
+}
+
+export function newTurnAccumulator(): TurnAccumulator {
+  return { text: "", stopReason: "end_turn", usage: emptyUsage() };
+}
+
+/**
+ * Map one turn's raw events to Shore events, without the surrounding `start`
+ * and `done`.
+ *
+ * Split out because a tool loop emits many turns inside a single Shore stream:
+ * one `start` at the front, one `done` at the end, and this in between for each
+ * model call. Errors propagate — a caller that wants the partial usage should
+ * catch and use `acc.usage`, which already holds the cache write the provider
+ * reports before any output.
+ */
+export async function* anthropicContentEvents(
   events: AsyncIterable<RawMessageStreamEvent>,
-  now: () => number = Date.now,
+  acc: TurnAccumulator,
 ): AsyncIterable<StreamEvent> {
-  const startedAt = now();
-  let firstTokenAt = 0;
-  const markFirst = () => {
-    if (firstTokenAt === 0) firstTokenAt = now();
-  };
-
-  yield { type: "start", model };
-
   const accum = new Map<number, AccumState>();
-  let textAccum = "";
-  let stopReason = "end_turn";
-  let usage: Usage = emptyUsage();
-
-  try {
+  {
     for await (const event of events) {
     switch (event.type) {
       case "message_start": {
-        usage = anthropicUsage(event.message.usage);
+        acc.usage = anthropicUsage(event.message.usage);
         break;
       }
       case "content_block_start": {
@@ -159,7 +167,6 @@ export async function* anthropicStreamEvents(
           accum.set(event.index, { kind: "tool_use", id: blk.id, name: blk.name, partialJson: "" });
         } else if (blk.type === "redacted_thinking") {
           accum.set(event.index, { kind: "redacted_thinking" });
-          markFirst();
           yield { type: "redacted_thinking", data: blk.data };
         }
         break;
@@ -169,11 +176,9 @@ export async function* anthropicStreamEvents(
         if (!state) break;
         const d = event.delta;
         if (d.type === "text_delta" && state.kind === "text") {
-          markFirst();
-          textAccum += d.text;
+          acc.text += d.text;
           yield { type: "text", text: d.text };
         } else if (d.type === "thinking_delta" && state.kind === "thinking") {
-          markFirst();
           yield { type: "thinking", text: d.thinking };
         } else if (d.type === "signature_delta" && state.kind === "thinking") {
           state.signature += d.signature;
@@ -187,35 +192,58 @@ export async function* anthropicStreamEvents(
         if (state?.kind === "thinking" && state.signature) {
           yield { type: "thinking_signature", signature: state.signature };
         } else if (state?.kind === "tool_use") {
-          markFirst();
           yield { type: "tool_use", id: state.id, name: state.name, input: parseArgs(state.partialJson) };
         }
         break;
       }
       case "message_delta": {
-        if (event.delta.stop_reason) stopReason = event.delta.stop_reason;
-        usage = mergeAnthropicUsage(usage, event.usage);
+        if (event.delta.stop_reason) acc.stopReason = event.delta.stop_reason;
+        acc.usage = mergeAnthropicUsage(acc.usage, event.usage);
         break;
       }
       case "message_stop":
         break;
     }
     }
+  }
+}
+
+/** True for every event that counts as output arriving — a signature is
+ * bookkeeping attached to thinking already emitted, not new output. */
+export const marksFirstToken = (event: StreamEvent): boolean =>
+  event.type !== "thinking_signature";
+
+export async function* anthropicStreamEvents(
+  model: string,
+  events: AsyncIterable<RawMessageStreamEvent>,
+  now: () => number = Date.now,
+): AsyncIterable<StreamEvent> {
+  const startedAt = now();
+  let firstTokenAt = 0;
+  const acc = newTurnAccumulator();
+
+  yield { type: "start", model };
+
+  try {
+    for await (const event of anthropicContentEvents(events, acc)) {
+      if (firstTokenAt === 0 && marksFirstToken(event)) firstTokenAt = now();
+      yield event;
+    }
   } catch (err) {
-    // The Anthropic stream failed mid-flight. `usage` already holds the
+    // The Anthropic stream failed mid-flight. `acc.usage` already holds the
     // cache write reported in `message_start` (which the provider bills
     // before any output), so surface it instead of letting the failure drop
     // the cost to zero. The daemon records this then still retries.
-    yield streamErrorEvent(err, usage, startedAt, firstTokenAt, now);
+    yield streamErrorEvent(err, acc.usage, startedAt, firstTokenAt, now);
     return;
   }
 
   const total = now() - startedAt;
   yield {
     type: "done",
-    content: textAccum,
-    finish_reason: stopReason,
-    usage,
+    content: acc.text,
+    finish_reason: acc.stopReason,
+    usage: acc.usage,
     timing: {
       total_ms: total,
       time_to_first_token_ms: firstTokenAt === 0 ? total : firstTokenAt - startedAt,
@@ -545,6 +573,45 @@ function placeBreakpoints(
  * text blocks are skipped as anchors: Anthropic rejects "cache_control cannot
  * be set for empty text blocks" and fails the whole request, so the breakpoint
  * walks back to the previous eligible block. */
+/**
+ * Re-place the cache breakpoints over a conversation that has grown.
+ *
+ * The schedule anchors partly on the *last* message, so inside a tool loop the
+ * breakpoints have to move as assistant turns and tool results are appended.
+ * Leaving them where the first request put them means every continuation
+ * re-sends the loop's accumulated tail uncached.
+ *
+ * Existing markers are stripped first: the schedule places up to four, which is
+ * also the per-request maximum, so re-placing without stripping would overflow
+ * it within two turns. Both arrays are mutated in place — the caller owns them.
+ *
+ * A no-op when caching is off, which keeps a cache-disabled loop byte-identical
+ * to one that never went through here.
+ */
+export function placeContinuationBreakpoints(
+  messages: MessageParam[],
+  system: TextBlockParam[],
+  labelled: SystemContent,
+  cacheTtl: string,
+): { msgBp: number[]; sysBp: number[] } {
+  if (cacheTtl === "") return { msgBp: [], sysBp: [] };
+
+  for (const message of messages) {
+    if (!Array.isArray(message.content)) continue;
+    for (const block of message.content) {
+      delete (block as { cache_control?: unknown }).cache_control;
+    }
+  }
+  for (const block of system) {
+    delete (block as { cache_control?: unknown }).cache_control;
+  }
+
+  const cc = makeCacheControl(cacheTtl);
+  const { msgBp, sysBp } = tsDefaultPlacement(messages, labelled);
+  placeBreakpoints(messages, system, cc, msgBp, sysBp);
+  return { msgBp, sysBp };
+}
+
 function applyMessageBreakpoint(content: ContentBlockParam[], cc: CacheControl): boolean {
   for (let i = content.length - 1; i >= 0; i--) {
     const b = content[i] as ContentBlockParam & { cache_control?: unknown };

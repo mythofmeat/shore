@@ -225,6 +225,10 @@ export interface SidecarRequest {
   forensics?: ForensicsContext;
   /** Present when this side drives the tool loop. See {@link ToolRpc}. */
   tool_rpc?: ToolRpc;
+  /** Dispatch rounds the loop may run. Absent means unlimited — the model
+   * ending cleanly is then the only exit. Mirrors the daemon's resolved
+   * per-model `max_tool_iterations`. */
+  max_tool_iterations?: number;
 }
 
 /** Token usage — mirrors Rust `Usage` (snake_case, cache fields default 0). */
