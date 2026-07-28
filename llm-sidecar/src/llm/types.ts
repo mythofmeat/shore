@@ -177,6 +177,21 @@ export interface ProviderOptions {
 }
 
 /**
+ * Where to call back when the sidecar drives the tool loop.
+ *
+ * The sidecar decides which tools to run; the daemon runs them, because the
+ * executors hold the filesystem, the memory store, MCP, and sub-agents. Its
+ * presence is the switch — a request without it is one the daemon is looping
+ * over itself. See `llm/tool_rpc.ts` and `crates/daemon/src/tool_rpc.rs`.
+ */
+export interface ToolRpc {
+  /** Unix socket the daemon serves tool calls on. */
+  socket_path: string;
+  /** Identifies this in-flight loop to the daemon's registry. */
+  rid: string;
+}
+
+/**
  * The request the sidecar receives — the serialized Rust `LlmRequest` minus its
  * `#[serde(skip)]` transient fields (`api_key_name`, `rid`, `forensic_character`,
  * `retain_long`), which stay Rust-side. When cache forensics is on, `rid` and
@@ -208,6 +223,8 @@ export interface SidecarRequest {
   /** Present only when the daemon has cache forensics enabled. Its presence is
    * the switch; see `llm/forensics.ts`. Stripped before any provider call. */
   forensics?: ForensicsContext;
+  /** Present when this side drives the tool loop. See {@link ToolRpc}. */
+  tool_rpc?: ToolRpc;
 }
 
 /** Token usage — mirrors Rust `Usage` (snake_case, cache fields default 0). */

@@ -54,6 +54,27 @@
       "reasoning_content": "preserved"
     }
   },
+  "tool_rpc": {
+    "request": {
+      "rid": "rid_1",
+      "tool_id": "tu_1",
+      "name": "read",
+      "input": {
+        "path": "/tmp/x"
+      }
+    },
+    "outcome_ran": {
+      "output": "file body",
+      "is_error": false
+    },
+    "outcome_failed": {
+      "output": "no such file",
+      "is_error": true
+    },
+    "outcome_unreachable": {
+      "error": "no in-flight loop for rid rid_1"
+    }
+  },
   "wire_block": {
     "text": {
       "type": "text",

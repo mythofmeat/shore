@@ -1313,6 +1313,36 @@ mod tests {
                 "openrouter": carrier_openrouter(),
                 "zai": carrier_zai(),
             },
+            // The tool-call protocol is hand-written on both sides, so it is
+            // pinned here for the same reason the wire types are.
+            "tool_rpc": {
+                "request": crate::tool_rpc::ToolCallRequest {
+                    rid: "rid_1".into(),
+                    tool_id: "tu_1".into(),
+                    name: "read".into(),
+                    input: json!({"path": "/tmp/x"}),
+                },
+                // A tool that ran, and a call that never reached a loop. The
+                // outcome is untagged, so these two shapes are the only thing
+                // distinguishing them on the wire.
+                "outcome_ran": crate::tool_rpc::ToolCallOutcome::Ok(
+                    crate::tool_rpc::ToolCallResponse {
+                        output: "file body".into(),
+                        is_error: false,
+                    },
+                ),
+                "outcome_failed": crate::tool_rpc::ToolCallOutcome::Ok(
+                    crate::tool_rpc::ToolCallResponse {
+                        output: "no such file".into(),
+                        is_error: true,
+                    },
+                ),
+                "outcome_unreachable": crate::tool_rpc::ToolCallOutcome::Err(
+                    crate::tool_rpc::ToolCallError {
+                        error: "no in-flight loop for rid rid_1".into(),
+                    },
+                ),
+            },
             "wire_block": wire_block_census(),
             "wire_message": {
                 "bare": WireMessage::text(WireRole::User, "hi"),

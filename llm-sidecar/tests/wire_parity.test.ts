@@ -29,6 +29,11 @@ import { describe, expect, test } from "bun:test";
 import type { ContentBlock } from "../src/engine/types.ts";
 import { replayableMessages } from "../src/llm/replay.ts";
 import { buildAnthropicParams } from "../src/llm/providers/anthropic.ts";
+import type {
+  ToolCallError,
+  ToolCallRequest,
+  ToolCallResponse,
+} from "../src/llm/tool_rpc.ts";
 import {
   systemToText,
   toolResultText,
@@ -47,6 +52,12 @@ import {
  * that feed it to real code stop compiling.
  */
 interface WireFixture {
+  tool_rpc: {
+    request: ToolCallRequest;
+    outcome_ran: ToolCallResponse;
+    outcome_failed: ToolCallResponse;
+    outcome_unreachable: ToolCallError;
+  };
   wire_role: Array<WireMessage["role"]>;
   thinking_replay: Array<SidecarRequest["replay_prior_thinking"]>;
   system_block: SystemBlock;
@@ -142,6 +153,46 @@ describe("scalar mirrors carry exactly the declared fields", () => {
   test("an unset knob is omitted, never sent as null", () => {
     // What lets `undefined` mean "not configured" without ambiguity.
     expect(wire.provider_options.empty).toEqual({});
+  });
+});
+
+describe("the tool-call protocol", () => {
+  // Hand-written on both sides — the daemon parses what this side writes and
+  // this side parses what the daemon answers, with nothing in between to catch
+  // a rename. Same reason the wire types are pinned.
+  test("a call carries exactly the fields the daemon reads", () => {
+    assertKeys<ToolCallRequest>(
+      wire.tool_rpc.request,
+      ["rid", "tool_id", "name", "input"],
+      "ToolCallRequest",
+    );
+  });
+
+  test("a tool that ran, whether or not it succeeded", () => {
+    assertKeys<ToolCallResponse>(
+      wire.tool_rpc.outcome_ran,
+      ["output", "is_error"],
+      "ToolCallResponse",
+    );
+    assertKeys<ToolCallResponse>(
+      wire.tool_rpc.outcome_failed,
+      ["output", "is_error"],
+      "ToolCallResponse (failed)",
+    );
+    expect(wire.tool_rpc.outcome_failed.is_error).toBe(true);
+  });
+
+  test("a call that never reached a loop is a different shape entirely", () => {
+    // The outcome is untagged, so these two shapes are the only thing telling
+    // "your tool failed" from "the daemon could not attempt it" — and this side
+    // discriminates on the presence of `error`.
+    assertKeys<ToolCallError>(
+      wire.tool_rpc.outcome_unreachable,
+      ["error"],
+      "ToolCallError",
+    );
+    expect("error" in wire.tool_rpc.outcome_ran).toBe(false);
+    expect("output" in wire.tool_rpc.outcome_unreachable).toBe(false);
   });
 });
 
