@@ -112,6 +112,10 @@ pub struct LlmClient {
     /// If set, every call's request/response is recorded to the observability
     /// store as a compressed row. See the `debug_log` module.
     call_store: Option<Arc<CallStore>>,
+    /// In-flight loops the sidecar may call back into to run tools. `None`
+    /// means no loop can be handed over, so every request keeps the daemon's
+    /// own tool loop. See `crate::tool_rpc`.
+    tool_rpc: Option<Arc<crate::tool_rpc::ToolRpcRegistry>>,
 }
 
 impl LlmClient {
@@ -139,6 +143,7 @@ impl LlmClient {
         Ok(Self {
             http_client,
             sidecar_socket: None,
+            tool_rpc: None,
             call_store: None,
         })
     }
@@ -169,6 +174,20 @@ impl LlmClient {
     /// Current sidecar socket path, if sidecar routing is enabled.
     pub fn sidecar_socket(&self) -> Option<&Path> {
         self.sidecar_socket.as_deref()
+    }
+
+    /// Announce that tool calls can be served back for sidecar-driven loops.
+    pub fn set_tool_rpc(&mut self, registry: Arc<crate::tool_rpc::ToolRpcRegistry>) {
+        self.tool_rpc = Some(registry);
+    }
+
+    /// The registry a loop registers itself with before handing control over,
+    /// and the socket the sidecar reaches it on. `None` until the tool socket
+    /// is serving, which is what keeps a daemon without one on its own loop.
+    pub fn tool_rpc(&self) -> Option<(&Arc<crate::tool_rpc::ToolRpcRegistry>, PathBuf)> {
+        let registry = self.tool_rpc.as_ref()?;
+        let socket = crate::tool_rpc::socket_path_for(self.sidecar_socket()?);
+        Some((registry, socket))
     }
 
     /// Borrow the shared `reqwest::Client` so other modules (e.g.

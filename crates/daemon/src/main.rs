@@ -267,7 +267,7 @@ async fn build_server_and_handler(
     )));
     server.set_handshake_provider(build_handshake_provider(Arc::clone(&char_registry)));
 
-    let (llm_client, llm_sidecar_socket) = build_llm_client(loaded)?;
+    let (llm_client, llm_sidecar_socket) = build_llm_client(loaded).await?;
 
     spawn_call_store_rotation(&llm_client);
 
@@ -539,7 +539,7 @@ fn spawn_call_store_rotation(client: &LedgerClient) {
     });
 }
 
-fn build_llm_client(
+async fn build_llm_client(
     loaded: &LoadedConfig,
 ) -> Result<(LedgerClient, Option<PathBuf>), Box<dyn std::error::Error>> {
     let mut raw_llm_client = LlmClient::try_new()?;
@@ -571,6 +571,29 @@ fn build_llm_client(
             socket = %socket_path.display(),
             "LLM sidecar transport enabled"
         );
+
+        // The reverse direction: a sidecar-driven tool loop calls back here to
+        // run each tool, because the executors live on this side. Failing to
+        // bind is not fatal — without it no loop registers, so every request
+        // keeps the daemon's own tool loop.
+        let tool_socket = shore_daemon::tool_rpc::socket_path_for(socket_path);
+        match shore_daemon::tool_rpc::bind(&tool_socket).await {
+            Ok(listener) => {
+                let registry = Arc::new(shore_daemon::tool_rpc::ToolRpcRegistry::new());
+                raw_llm_client.set_tool_rpc(Arc::clone(&registry));
+                drop(tokio::spawn(shore_daemon::tool_rpc::serve(
+                    listener, registry,
+                )));
+                info!(socket = %tool_socket.display(), "Tool RPC transport enabled");
+            }
+            Err(e) => {
+                warn!(
+                    socket = %tool_socket.display(),
+                    error = %e,
+                    "Tool RPC socket unavailable; tool loops stay daemon-side"
+                );
+            }
+        }
     }
 
     let cache_forensics_path = loaded.dirs.cache.join("cache_forensics.jsonl");
