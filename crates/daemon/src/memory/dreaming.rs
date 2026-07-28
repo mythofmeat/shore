@@ -12,6 +12,7 @@ use shore_common::config::{
     USER_FILE,
 };
 
+use crate::engine::tool_loop;
 use crate::ledger::{CallType, LedgerClient};
 use crate::llm::types::{
     GenerateResponse, LlmRequest, SystemBlock, ToolResultContent, WireBlock, WireMessage, WireRole,
@@ -1278,78 +1279,124 @@ async fn run_librarian_loop(
     max_tool_iterations: Option<u32>,
     dry_run: bool,
 ) -> Result<LibrarianLoopResult, DreamingError> {
-    let mut loop_result = LibrarianLoopResult::default();
+    let mut driver = LibrarianDriver {
+        client,
+        loaded_config,
+        tool_ctx,
+        character,
+        dry_run,
+        iteration: 0,
+        result: LibrarianLoopResult::default(),
+    };
 
-    let mut iteration: u32 = 0;
-    loop {
-        // `None` = unlimited; the only exit below is the model ending cleanly.
-        if let Some(max) = max_tool_iterations {
-            if iteration >= max {
-                break;
-            }
-        }
-        let (resp, _fallback_events) = client
-            .generate_with_config_fallback(
-                request,
-                loaded_config,
-                CallType::Dreaming,
-                character,
-                false,
-            )
-            .await
-            .map_err(|e| DreamingError::Llm(e.to_string()))?;
-        remember_final_report(&mut loop_result, &resp);
-        request.push_assistant_turn(&resp);
+    // `StopAfterDispatch`: the sweep's output is what the librarian wrote and
+    // its final report, both accumulated here — a capped run has nothing to
+    // spend another call on. See `tool_loop::CapBehavior`.
+    let outcome = tool_loop::run(
+        &mut driver,
+        request,
+        None,
+        max_tool_iterations,
+        tool_loop::CapBehavior::StopAfterDispatch,
+    )
+    .await?;
 
-        // Provider may have changed under config fallback; read it back from the
-        // request the call actually ran on.
-        let provider = request.provider_key.clone();
-        let tool_uses = crate::content_util::extract_tool_uses(&resp.content_blocks);
-        if tool_uses.is_empty() || resp.finish_reason != "tool_use" {
-            record_dreaming_transcript(
-                client,
-                character,
-                dry_run,
-                iteration,
-                provider.as_deref(),
-                &resp,
-                &[],
-            );
-            return Ok(loop_result);
-        }
-
-        loop_result.tool_rounds = loop_result.tool_rounds.saturating_add(1);
-        let (tool_results, captured) = dispatch_librarian_tools(
-            tool_ctx,
-            character,
-            iteration,
-            dry_run,
-            tool_uses,
-            &mut loop_result,
-        )
-        .await;
+    // The turn that ended the loop called no tools, so no dispatch recorded it.
+    // A capped run has no such turn — it stops on one whose transcript is
+    // already written.
+    if outcome.stop == tool_loop::LoopStop::ModelDone {
         record_dreaming_transcript(
             client,
             character,
             dry_run,
-            iteration,
-            provider.as_deref(),
-            &resp,
-            &captured,
+            driver.iteration,
+            request.provider_key.as_deref(),
+            &outcome.last_turn,
+            &[],
         );
-        request
-            .messages
-            .push(WireMessage::new(WireRole::User, tool_results));
-
-        iteration = iteration.saturating_add(1);
+    } else {
+        warn!(
+            character,
+            max = ?max_tool_iterations,
+            "Dreaming: librarian tool loop hit configured cap"
+        );
     }
 
-    warn!(
-        character,
-        max = ?max_tool_iterations,
-        "Dreaming: librarian tool loop hit configured cap"
-    );
-    Ok(loop_result)
+    Ok(driver.result)
+}
+
+/// Drives the shared tool loop for one librarian sweep.
+struct LibrarianDriver<'src> {
+    client: &'src LedgerClient,
+    loaded_config: &'src LoadedConfig,
+    tool_ctx: &'src dyn ToolContext,
+    character: &'src str,
+    dry_run: bool,
+    iteration: u32,
+    result: LibrarianLoopResult,
+}
+
+#[async_trait::async_trait]
+impl tool_loop::ToolLoopDriver for LibrarianDriver<'_> {
+    type Turn = GenerateResponse;
+    type Error = DreamingError;
+
+    fn finish_reason(turn: &Self::Turn) -> &str {
+        &turn.finish_reason
+    }
+
+    fn tool_uses(turn: &Self::Turn) -> Vec<crate::llm::types::ToolUseEvent> {
+        tool_loop::tool_uses_in(&turn.content_blocks)
+    }
+
+    async fn call_model(&mut self, request: &mut LlmRequest) -> Result<Self::Turn, Self::Error> {
+        let (resp, _fallback_events) = self
+            .client
+            .generate_with_config_fallback(
+                request,
+                self.loaded_config,
+                CallType::Dreaming,
+                self.character,
+                false,
+            )
+            .await
+            .map_err(|e| DreamingError::Llm(e.to_string()))?;
+        remember_final_report(&mut self.result, &resp);
+        request.push_assistant_turn(&resp);
+        Ok(resp)
+    }
+
+    async fn dispatch(
+        &mut self,
+        request: &mut LlmRequest,
+        turn: &Self::Turn,
+        uses: Vec<crate::llm::types::ToolUseEvent>,
+    ) -> Vec<WireBlock> {
+        self.result.tool_rounds = self.result.tool_rounds.saturating_add(1);
+        // Provider may have changed under config fallback; read it back from
+        // the request the call actually ran on.
+        let provider = request.provider_key.clone();
+        let (tool_results, captured) = dispatch_librarian_tools(
+            self.tool_ctx,
+            self.character,
+            self.iteration,
+            self.dry_run,
+            uses,
+            &mut self.result,
+        )
+        .await;
+        record_dreaming_transcript(
+            self.client,
+            self.character,
+            self.dry_run,
+            self.iteration,
+            provider.as_deref(),
+            turn,
+            &captured,
+        );
+        self.iteration = self.iteration.saturating_add(1);
+        tool_results
+    }
 }
 
 /// Dispatch every tool call from one librarian iteration: build the
@@ -1361,12 +1408,12 @@ async fn dispatch_librarian_tools(
     character: &str,
     iteration: u32,
     dry_run: bool,
-    tool_uses: Vec<(String, String, Value)>,
+    tool_uses: Vec<crate::llm::types::ToolUseEvent>,
     loop_result: &mut LibrarianLoopResult,
 ) -> (Vec<WireBlock>, Vec<crate::transcript_capture::CapturedTool>) {
     let mut tool_results: Vec<WireBlock> = Vec::new();
     let mut captured: Vec<crate::transcript_capture::CapturedTool> = Vec::new();
-    for (id, name, input) in tool_uses {
+    for crate::llm::types::ToolUseEvent { id, name, input } in tool_uses {
         loop_result.tools_used.push(name.clone());
         record_librarian_tool_intent(loop_result, &name, &input);
         debug!(

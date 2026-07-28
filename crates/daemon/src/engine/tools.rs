@@ -6,6 +6,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, info, instrument, warn};
 
 use crate::convert::elapsed_ms_u64;
+use crate::engine::tool_loop;
 use crate::ledger::{CallType, LedgerClient};
 use crate::llm::retry::{should_retry_error, RetryDecision, RetryPolicy};
 use crate::llm::stream::StreamConsumer;
@@ -87,7 +88,7 @@ pub async fn run_tool_loop(
     client: &LedgerClient,
     direct_tx: &mpsc::Sender<ServerMessage>,
     request: &mut LlmRequest,
-    mut result: StreamResult,
+    result: StreamResult,
     ctx: &dyn ToolContext,
     max_tool_iterations: Option<u32>,
     tools_cfg: &shore_common::config::app::ToolsConfig,
@@ -96,26 +97,94 @@ pub async fn run_tool_loop(
     thinking_enabled: bool,
     retry: ToolLoopRetry,
 ) -> Result<ToolLoopResult, ToolLoopError> {
-    let consumer = StreamConsumer::new(direct_tx.clone(), request.rid.clone());
-    let mut intermediate_messages: Vec<Message> = Vec::new();
+    let mut driver = ChatDriver {
+        client,
+        consumer: StreamConsumer::new(direct_tx.clone(), request.rid.clone()),
+        direct_tx,
+        ctx,
+        tools_cfg,
+        diag,
+        character,
+        thinking_enabled,
+        retry,
+        max_tool_iterations,
+        iteration: 0,
+        intermediate_messages: Vec::new(),
+    };
 
-    let mut iteration: u32 = 0;
-    loop {
-        if result.finish_reason != "tool_use" || result.tool_uses.is_empty() {
-            return Ok(ToolLoopResult {
-                result,
-                intermediate_messages,
-            });
-        }
+    // `CloseWithFinalTurn`: this loop's return value is the reply the user
+    // reads, so a capped run still spends a call letting the model answer with
+    // the last tool results in hand. The background passes choose otherwise —
+    // see `tool_loop::CapBehavior`.
+    let outcome = tool_loop::run(
+        &mut driver,
+        request,
+        Some(result),
+        max_tool_iterations,
+        tool_loop::CapBehavior::CloseWithFinalTurn,
+    )
+    .await?;
 
-        // Enforce the resolved per-model cap. `None` = unlimited, so the only
-        // exit is the model ending cleanly (handled above) or an LLM error.
-        if let Some(max) = max_tool_iterations {
-            if iteration >= max {
-                break;
-            }
-        }
+    if outcome.stop == tool_loop::LoopStop::CapReached {
+        warn!(
+            max = ?max_tool_iterations,
+            "Tool loop hit max iterations, returning last result"
+        );
+    }
 
+    Ok(ToolLoopResult {
+        result: outcome.last_turn,
+        intermediate_messages: driver.intermediate_messages,
+    })
+}
+
+/// Drives the shared tool loop for the chat path (and sub-agents).
+struct ChatDriver<'src> {
+    client: &'src LedgerClient,
+    consumer: StreamConsumer,
+    direct_tx: &'src mpsc::Sender<ServerMessage>,
+    ctx: &'src dyn ToolContext,
+    tools_cfg: &'src shore_common::config::app::ToolsConfig,
+    diag: &'src Arc<Mutex<Diagnostics>>,
+    character: &'src str,
+    thinking_enabled: bool,
+    retry: ToolLoopRetry,
+    max_tool_iterations: Option<u32>,
+    iteration: u32,
+    intermediate_messages: Vec<Message>,
+}
+
+#[async_trait::async_trait]
+impl tool_loop::ToolLoopDriver for ChatDriver<'_> {
+    type Turn = StreamResult;
+    type Error = ToolLoopError;
+
+    fn finish_reason(turn: &Self::Turn) -> &str {
+        &turn.finish_reason
+    }
+
+    fn tool_uses(turn: &Self::Turn) -> Vec<ToolUseEvent> {
+        turn.tool_uses.clone()
+    }
+
+    async fn call_model(&mut self, request: &mut LlmRequest) -> Result<Self::Turn, Self::Error> {
+        stream_tool_loop_continuation(
+            self.client,
+            &self.consumer,
+            request,
+            self.character,
+            self.thinking_enabled,
+            self.retry,
+        )
+        .await
+    }
+
+    async fn dispatch(
+        &mut self,
+        request: &mut LlmRequest,
+        turn: &Self::Turn,
+        uses: Vec<ToolUseEvent>,
+    ) -> Vec<WireBlock> {
         // Emit StreamEnd for the prior LLM phase now that we've decided to
         // continue with tool execution. Intermediate phases are emitted
         // immediately (clients need the boundary to render tool calls); only
@@ -123,64 +192,43 @@ pub async fn run_tool_loop(
         // is_final=false so aggregating clients (collect_stream) know to keep
         // reading past this boundary.
         crate::llm::stream::emit_stream_end(
-            direct_tx,
+            self.direct_tx,
             request.rid.clone(),
-            &result,
+            turn,
             false,
             None,
             None,
         )
         .await;
 
+        self.iteration = self.iteration.saturating_add(1);
         info!(
-            iteration = iteration.saturating_add(1),
-            max = ?max_tool_iterations,
-            tool_count = result.tool_uses.len(),
+            iteration = self.iteration,
+            max = ?self.max_tool_iterations,
+            tool_count = uses.len(),
             "Tool loop iteration"
         );
 
-        append_assistant_tool_use_turn(request, &mut intermediate_messages, &result);
+        append_assistant_tool_use_turn(request, &mut self.intermediate_messages, turn);
 
-        // Execute each tool and collect results.
-        let mut tool_result_blocks: Vec<ContentBlock> = Vec::new();
-
-        for tool_use in &result.tool_uses {
+        let mut blocks: Vec<ContentBlock> = Vec::with_capacity(uses.len());
+        for tool_use in &uses {
             let outcome = execute_tool_use(
                 tool_use,
-                direct_tx,
+                self.direct_tx,
                 request.rid.as_deref(),
-                ctx,
-                tools_cfg,
-                diag,
-                intermediate_messages.as_mut_slice(),
+                self.ctx,
+                self.tools_cfg,
+                self.diag,
+                self.intermediate_messages.as_mut_slice(),
             )
             .await;
-            tool_result_blocks.push(outcome.content_block);
+            blocks.push(outcome.content_block);
         }
 
-        append_user_tool_result_turn(request, &mut intermediate_messages, tool_result_blocks);
-
-        result = stream_tool_loop_continuation(
-            client,
-            &consumer,
-            request,
-            character,
-            thinking_enabled,
-            retry,
-        )
-        .await?;
-
-        iteration = iteration.saturating_add(1);
+        record_tool_result_message(&mut self.intermediate_messages, &blocks);
+        blocks.iter().map(WireBlock::from_content_block).collect()
     }
-
-    warn!(
-        max = ?max_tool_iterations,
-        "Tool loop hit max iterations, returning last result"
-    );
-    Ok(ToolLoopResult {
-        result,
-        intermediate_messages,
-    })
 }
 
 fn append_assistant_tool_use_turn(
@@ -406,19 +454,13 @@ async fn emit_tool_result(
     );
 }
 
-fn append_user_tool_result_turn(
-    request: &mut LlmRequest,
-    intermediate_messages: &mut Vec<Message>,
-    tool_result_blocks: Vec<ContentBlock>,
-) {
-    request.messages.push(WireMessage::new(
-        WireRole::User,
-        tool_result_blocks
-            .iter()
-            .map(WireBlock::from_content_block)
-            .collect(),
-    ));
-
+/// Record the persisted `Message` for a round of tool results.
+///
+/// The matching wire turn is appended by `tool_loop::run`, which owns it
+/// because that push is identical for every caller. This half is not: only the
+/// chat path persists its intermediate turns.
+fn record_tool_result_message(intermediate_messages: &mut Vec<Message>, blocks: &[ContentBlock]) {
+    let tool_result_blocks = blocks.to_vec();
     intermediate_messages.push(Message {
         msg_id: format!("m_{}", uuid::Uuid::new_v4()),
         origin: None,

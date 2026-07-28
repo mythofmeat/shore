@@ -8,6 +8,7 @@ pub use parser::{
 };
 pub use types::*;
 
+use crate::engine::tool_loop;
 use crate::llm::types::{GenerateResponse, ToolResultContent, WireBlock, WireMessage, WireRole};
 use crate::memory::markdown_store::MarkdownMemoryStore;
 use crate::tools::{self as tool_system, ToolContext};
@@ -856,45 +857,86 @@ async fn run_compaction_tool_loop(
     max_tool_iterations: Option<u32>,
     dry_run: bool,
 ) -> Result<ToolLoopState, CompactionError> {
-    let mut loop_state = ToolLoopState::new(dry_run);
+    let mut driver = CompactionDriver {
+        llm,
+        tool_ctx,
+        workspace_dir,
+        state: ToolLoopState::new(dry_run),
+    };
 
-    loop {
-        let resp = llm.generate(request).await?;
+    // `StopAfterDispatch`: a compaction's output is the writes it accumulated,
+    // not a closing message, so a capped pass has nothing to spend another call
+    // on. The chat path chooses otherwise — see `tool_loop::CapBehavior`.
+    let outcome = tool_loop::run(
+        &mut driver,
+        request,
+        None,
+        max_tool_iterations,
+        tool_loop::CapBehavior::StopAfterDispatch,
+    )
+    .await?;
+
+    let mut state = driver.state;
+    state.max_rounds_hit = outcome.stop == tool_loop::LoopStop::CapReached;
+    Ok(state)
+}
+
+/// Drives the shared tool loop for a compaction pass.
+struct CompactionDriver<'src> {
+    llm: &'src dyn CompactionLlm,
+    tool_ctx: &'src dyn ToolContext,
+    workspace_dir: &'src str,
+    state: ToolLoopState,
+}
+
+#[async_trait::async_trait]
+impl tool_loop::ToolLoopDriver for CompactionDriver<'_> {
+    type Turn = GenerateResponse;
+    type Error = CompactionError;
+
+    fn finish_reason(turn: &Self::Turn) -> &str {
+        &turn.finish_reason
+    }
+
+    fn tool_uses(turn: &Self::Turn) -> Vec<crate::llm::types::ToolUseEvent> {
+        tool_loop::tool_uses_in(&turn.content_blocks)
+    }
+
+    async fn call_model(
+        &mut self,
+        request: &mut crate::llm::types::LlmRequest,
+    ) -> Result<Self::Turn, Self::Error> {
+        let resp = self.llm.generate(request).await?;
         push_assistant_response(request, &resp);
+        Ok(resp)
+    }
 
-        let tool_uses = crate::content_util::extract_tool_uses(&resp.content_blocks);
-        if tool_uses.is_empty() || resp.finish_reason != "tool_use" {
-            // Model ended cleanly.
-            break;
-        }
-
-        loop_state.tool_rounds = loop_state.tool_rounds.saturating_add(1);
-        let mut tool_results = Vec::with_capacity(tool_uses.len());
-        for (id, name, input) in tool_uses {
-            loop_state.tools_called.push(name.clone());
-            let (output, is_error) =
-                dispatch_compaction_tool(&name, &input, tool_ctx, workspace_dir, &mut loop_state)
-                    .await;
-            tool_results.push(WireBlock::ToolResult {
-                tool_use_id: id,
+    async fn dispatch(
+        &mut self,
+        _request: &mut crate::llm::types::LlmRequest,
+        _turn: &Self::Turn,
+        uses: Vec<crate::llm::types::ToolUseEvent>,
+    ) -> Vec<WireBlock> {
+        self.state.tool_rounds = self.state.tool_rounds.saturating_add(1);
+        let mut results = Vec::with_capacity(uses.len());
+        for tool_use in uses {
+            self.state.tools_called.push(tool_use.name.clone());
+            let (output, is_error) = dispatch_compaction_tool(
+                &tool_use.name,
+                &tool_use.input,
+                self.tool_ctx,
+                self.workspace_dir,
+                &mut self.state,
+            )
+            .await;
+            results.push(WireBlock::ToolResult {
+                tool_use_id: tool_use.id,
                 content: ToolResultContent::Text(output),
                 is_error,
             });
         }
-        request
-            .messages
-            .push(WireMessage::new(WireRole::User, tool_results));
-
-        // `None` = unlimited: keep going until the model ends cleanly above.
-        if let Some(max) = max_tool_iterations {
-            if loop_state.tool_rounds >= max {
-                loop_state.max_rounds_hit = true;
-                break;
-            }
-        }
+        results
     }
-
-    Ok(loop_state)
 }
 
 /// Queue a MEMORY.md prompt refresh when the compaction wrote the memory index
