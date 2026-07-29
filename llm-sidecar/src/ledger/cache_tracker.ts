@@ -7,8 +7,9 @@
  *
  * It reads a sequence of recorded calls and labels each with a cache state and,
  * when something is wrong, an anomaly. It never influences a request — the
- * decisions it informs are made elsewhere (see `cache_keepalive.rs`, which is
- * next).
+ * decisions it informs are made elsewhere, in `../autonomy/cache_keepalive.ts`
+ * (ported, not yet driving the live schedule; the daemon's
+ * `cache_keepalive.rs` still does).
  *
  * The invariants are Anthropic's: a 1h prompt-cache TTL, a keepalive cadence
  * that bridges idle stretches, and a cacheable prefix that grows monotonically.

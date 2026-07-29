@@ -588,6 +588,402 @@ mod tests {
         assert!(ka.snapshot().is_none());
     }
 
+    // ── cross-language parity fixture ────────────────────────────────────────
+
+    /// Deterministic xorshift64. A fixed seed keeps the generated fixture
+    /// byte-stable across runs, which is what makes it reviewable as a diff.
+    struct Rng(u64);
+
+    impl Rng {
+        fn next_u64(&mut self) -> u64 {
+            let mut x = self.0;
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            self.0 = x;
+            x
+        }
+
+        fn below(&mut self, n: u64) -> u64 {
+            self.next_u64() % n
+        }
+    }
+
+    fn snapshot_json(snap: Option<&KeepaliveSnapshot>, base: Instant) -> serde_json::Value {
+        snap.map_or(serde_json::Value::Null, |s| {
+            serde_json::json!({
+                "model": s.model,
+                "interval_ms": u64::try_from(s.interval.as_millis()).unwrap_or(u64::MAX),
+                "last_warm_at_ms": u64::try_from(
+                    s.last_warm_at.duration_since(base).as_millis()
+                ).unwrap_or(u64::MAX),
+                "last_active_at_ms": u64::try_from(
+                    s.last_active_at.duration_since(base).as_millis()
+                ).unwrap_or(u64::MAX),
+            })
+        })
+    }
+
+    fn ms(d: Duration) -> u64 {
+        u64::try_from(d.as_millis()).unwrap_or(u64::MAX)
+    }
+
+    /// How far the clock moves before the next random step.
+    ///
+    /// Time only ever moves forward, as it does in the daemon. A backwards step
+    /// would compare Rust's saturating `duration_since` against TypeScript's
+    /// signed subtraction, which is a divergence the real system cannot produce.
+    ///
+    /// Advances cluster on and around the cadences in play (55m, 6h) and the 2h
+    /// ceiling, with ±1min of jitter, rather than spreading uniformly. A uniform
+    /// walk almost never lands on an armed deadline, so almost every tick
+    /// answers `None` and the fixture stops discriminating exactly where it
+    /// matters — a divergence that fires an *extra* ping is the expensive
+    /// direction, and it only shows up at a boundary.
+    fn random_advance(rng: &mut Rng) -> u64 {
+        const MIN_MS: u64 = 60 * 1000;
+        let jitter = |r: &mut Rng, centre_min: u64| {
+            centre_min * MIN_MS + r.below(2 * MIN_MS) - MIN_MS
+        };
+        match rng.below(8) {
+            0 | 1 => rng.below(3 * MIN_MS),
+            2 | 3 => jitter(rng, 55),
+            4 => jitter(rng, 6 * 60),
+            5 => jitter(rng, 2 * 60),
+            _ => rng.below(40 * MIN_MS),
+        }
+    }
+
+    /// One random mutation of, or probe against, the state machine.
+    fn random_step(t: &mut Trace, rng: &mut Rng, at_ms: u64) {
+        let model = if rng.below(4) == 0 { OTHER_MODEL } else { MODEL };
+        match rng.below(12) {
+            0 | 1 => {
+                let interval = match rng.below(3) {
+                    0 => None,
+                    1 => Some(minutes(55)),
+                    _ => Some(hours(6)),
+                };
+                t.set_interval(interval, model, at_ms);
+            }
+            2..=4 => t.warm(model, at_ms),
+            5 => t.ping_succeeded(at_ms),
+            6 => t.ping_failed(at_ms),
+            7 => t.invalidate(),
+            8 => {
+                let _recorded = t.snapshot();
+            }
+            _ => t.tick(at_ms),
+        }
+    }
+
+    /// Generate one pseudo-random scenario, recording the state machine's own
+    /// answer at every observable point.
+    fn generate_case(rng: &mut Rng, index: usize) -> serde_json::Value {
+        // Alternate the ceiling so both the 12h default and a tight 2h ceiling
+        // (where the idle cutoff actually bites mid-scenario) are exercised.
+        let max_idle = if index.is_multiple_of(3) {
+            hours(2)
+        } else {
+            hours(12)
+        };
+        let mut t = Trace::new(max_idle);
+        let mut at_ms: u64 = 0;
+        for _ in 0..30 {
+            at_ms += random_advance(rng);
+            random_step(&mut t, rng, at_ms);
+        }
+        t.restore_tail(rng);
+        t.finish(&format!("walk_{index:02}"))
+    }
+
+    /// Drives the real state machine while recording every call and every
+    /// decision, so a hand-written scenario and a random walk emit the same
+    /// fixture shape.
+    struct Trace {
+        ka: CacheKeepalive,
+        base: Instant,
+        max_idle: Duration,
+        steps: Vec<serde_json::Value>,
+    }
+
+    impl Trace {
+        fn new(max_idle: Duration) -> Self {
+            Self {
+                ka: CacheKeepalive::new(max_idle),
+                base: Instant::now(),
+                max_idle,
+                steps: Vec::new(),
+            }
+        }
+
+        fn at(&self, at_ms: u64) -> Instant {
+            self.base + Duration::from_millis(at_ms)
+        }
+
+        fn set_interval(&mut self, interval: Option<Duration>, model: &str, at_ms: u64) {
+            self.ka.set_interval(interval, model, self.at(at_ms));
+            self.steps.push(serde_json::json!({
+                "op": "set_interval",
+                "at_ms": at_ms,
+                "model": model,
+                "interval_ms": interval.map(ms),
+            }));
+        }
+
+        fn warm(&mut self, model: &str, at_ms: u64) {
+            self.ka.on_cache_warmed(model, self.at(at_ms));
+            self.steps
+                .push(serde_json::json!({ "op": "warm", "at_ms": at_ms, "model": model }));
+        }
+
+        fn ping_succeeded(&mut self, at_ms: u64) {
+            self.ka.on_ping_succeeded(self.at(at_ms));
+            self.steps
+                .push(serde_json::json!({ "op": "ping_succeeded", "at_ms": at_ms }));
+        }
+
+        fn ping_failed(&mut self, at_ms: u64) {
+            self.ka.on_ping_failed(self.at(at_ms));
+            self.steps
+                .push(serde_json::json!({ "op": "ping_failed", "at_ms": at_ms }));
+        }
+
+        fn invalidate(&mut self) {
+            self.ka.on_cache_invalidated();
+            self.steps.push(serde_json::json!({ "op": "invalidate" }));
+        }
+
+        fn tick(&mut self, at_ms: u64) {
+            let action = self.ka.tick(self.at(at_ms));
+            self.steps.push(serde_json::json!({
+                "op": "tick",
+                "at_ms": at_ms,
+                "expect": match action {
+                    CacheKeepaliveAction::Ping => "ping",
+                    CacheKeepaliveAction::None => "none",
+                },
+            }));
+        }
+
+        /// Record what the keepalive would persist, and hand it back so the
+        /// caller can restart from it.
+        fn snapshot(&mut self) -> Option<KeepaliveSnapshot> {
+            let snap = self.ka.snapshot();
+            self.steps.push(serde_json::json!({
+                "op": "snapshot",
+                "expect": snapshot_json(snap.as_ref(), self.base),
+            }));
+            snap
+        }
+
+        /// Snapshot, then restart from it into fresh keepalives at several ages
+        /// relative to the snapshot's own interval — including *exactly* one
+        /// interval, the `>=` boundary in `restore`. Half an interval must
+        /// re-arm; one interval and beyond must not. Getting that edge wrong is
+        /// a ping at a prefix that may already be dead.
+        ///
+        /// Runs against whatever state the walk happened to end in, which is the
+        /// point: a restart lands on arbitrary state, not on a tidy one.
+        fn restore_tail(&mut self, rng: &mut Rng) {
+            let Some(snap) = self.snapshot() else {
+                return;
+            };
+            let snap_json = snapshot_json(Some(&snap), self.base);
+            let warm_at_ms = ms(snap.last_warm_at.duration_since(self.base));
+            let interval_ms = ms(snap.interval);
+            let ages = [
+                interval_ms / 2,
+                interval_ms.saturating_sub(1),
+                interval_ms,
+                interval_ms + 1,
+                interval_ms * 2,
+            ];
+            for age_ms in ages {
+                let restore_at_ms = warm_at_ms + age_ms;
+                let mut restored = CacheKeepalive::new(self.max_idle);
+                let armed = restored.restore(&snap, self.at(restore_at_ms));
+                self.steps.push(serde_json::json!({
+                    "op": "restore",
+                    "at_ms": restore_at_ms,
+                    "snapshot": snap_json.clone(),
+                    "expect": armed,
+                }));
+                let mut probe_ms = restore_at_ms;
+                for _ in 0..4 {
+                    probe_ms += rng.below(40 * 60 * 1000);
+                    let action = restored.tick(self.at(probe_ms));
+                    self.steps.push(serde_json::json!({
+                        "op": "restored_tick",
+                        "at_ms": probe_ms,
+                        "expect": match action {
+                            CacheKeepaliveAction::Ping => "ping",
+                            CacheKeepaliveAction::None => "none",
+                        },
+                    }));
+                }
+            }
+        }
+
+        fn finish(self, name: &str) -> serde_json::Value {
+            serde_json::json!({
+                "name": name,
+                "max_idle_ms": ms(self.max_idle),
+                "steps": self.steps,
+            })
+        }
+    }
+
+    /// Scenarios that sit exactly on a comparison boundary.
+    ///
+    /// These are not decoration. Mutating each `>=` in this file to `>`, and
+    /// each backoff constant by one step, showed that the random walks and the
+    /// unit tests above *both* missed four of them: the idle ceiling, the
+    /// give-up window, the retry cap, and the retry grace. A random walk lands
+    /// on an exact boundary essentially never, and the unit tests were written
+    /// a comfortable margin past each one.
+    ///
+    /// Every survivor is an over-ping: the mutant keeps a schedule armed where
+    /// the real machine disarms it, and the ping it eventually fires lands on a
+    /// prefix that is already gone. That is a full cache write per occurrence,
+    /// which is the entire cost this subsystem exists to avoid.
+    fn boundary_cases() -> Vec<serde_json::Value> {
+        let mut out = Vec::new();
+
+        // `tick`: the due-check is `now < next_ping_at`, so landing exactly on
+        // the deadline must ping.
+        {
+            let mut t = Trace::new(hours(12));
+            t.set_interval(Some(minutes(55)), MODEL, 0);
+            t.warm(MODEL, 0);
+            t.tick(ms(minutes(55)) - 1);
+            t.tick(ms(minutes(55)));
+            out.push(t.finish("boundary_tick_exactly_on_deadline"));
+        }
+
+        // `tick`: the ceiling is `now - last_active >= max_idle`, so landing
+        // exactly on it must stop. A 60m cadence under a 120m ceiling puts the
+        // second scheduled ping precisely there.
+        {
+            let mut t = Trace::new(hours(2));
+            t.set_interval(Some(minutes(60)), MODEL, 0);
+            t.warm(MODEL, 0);
+            t.tick(ms(minutes(60)));
+            t.ping_succeeded(ms(minutes(60)));
+            t.tick(ms(minutes(120)));
+            t.tick(ms(minutes(121)));
+            out.push(t.finish("boundary_idle_ceiling_exact"));
+        }
+
+        // One minute of headroom under the same schedule flips it back to a
+        // ping — otherwise the case above would also pass with the ceiling
+        // check deleted outright.
+        {
+            let mut t = Trace::new(minutes(121));
+            t.set_interval(Some(minutes(60)), MODEL, 0);
+            t.warm(MODEL, 0);
+            t.tick(ms(minutes(60)));
+            t.ping_succeeded(ms(minutes(60)));
+            t.tick(ms(minutes(120)));
+            out.push(t.finish("boundary_idle_ceiling_headroom"));
+        }
+
+        // `on_ping_failed`: one millisecond inside `interval + grace` still
+        // retries.
+        {
+            let mut t = Trace::new(hours(12));
+            t.set_interval(Some(minutes(55)), MODEL, 0);
+            t.warm(MODEL, 0);
+            t.ping_failed(ms(minutes(60)) - 1);
+            t.tick(ms(minutes(60)) - 1 + ms(Duration::from_secs(30)));
+            out.push(t.finish("boundary_giveup_inside_window"));
+        }
+
+        // ...and exactly on it disarms for good. This is the case that pins the
+        // 5m grace: widening it to 6m turns the tick below back into a ping.
+        {
+            let mut t = Trace::new(hours(12));
+            t.set_interval(Some(minutes(55)), MODEL, 0);
+            t.warm(MODEL, 0);
+            t.ping_failed(ms(minutes(60)));
+            t.tick(ms(minutes(61)));
+            t.tick(ms(hours(5)));
+            out.push(t.finish("boundary_giveup_exact"));
+        }
+
+        // The full backoff ladder: 30s doubling, clamped at 15m. A 6h cadence
+        // keeps every failure inside the give-up window so the run is not cut
+        // short, and 20m spacing keeps each probe pair ahead of the next
+        // failure.
+        {
+            let mut t = Trace::new(hours(12));
+            t.set_interval(Some(hours(6)), MODEL, 0);
+            t.warm(MODEL, 0);
+            for (i, delay_secs) in [30_u64, 60, 120, 240, 480, 900, 900].iter().enumerate() {
+                let fail_at = ms(minutes(20)) * (u64::try_from(i).unwrap_or(0) + 1);
+                let delay_ms = delay_secs * 1000;
+                t.ping_failed(fail_at);
+                t.tick(fail_at + delay_ms - 1);
+                t.tick(fail_at + delay_ms);
+            }
+            out.push(t.finish("boundary_retry_backoff_ladder"));
+        }
+
+        out
+    }
+
+    /// Pins the keepalive's decisions across the two implementations that must
+    /// agree on them: this state machine and `CacheKeepalive` in
+    /// `llm-sidecar/src/autonomy/cache_keepalive.ts`.
+    ///
+    /// The unit tests above are a poor guard against a *port*: they were
+    /// translated alongside the TypeScript, so both sides can be wrong in the
+    /// same way and stay green. This walks 40 pseudo-random event sequences
+    /// through the real Rust machine and records what it decided, which is a
+    /// claim about behaviour rather than about either test suite. A disagreement
+    /// means one implementation would ping when the other would not — and a ping
+    /// at a cold prefix is a full cache write.
+    ///
+    /// Regenerate with `SHORE_REGENERATE_FIXTURES=1 cargo test -p shore-daemon
+    /// keepalive_decisions_match_shared_fixture`, then read the diff: it is
+    /// exactly the schedule change you are shipping.
+    #[test]
+    fn keepalive_decisions_match_shared_fixture() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/cache_keepalive_parity.json"
+        );
+
+        let mut rng = Rng(0x5EED_C0FF_EE15_600D);
+        let mut cases = boundary_cases();
+        cases.extend((0..40).map(|i| generate_case(&mut rng, i)));
+        let doc = serde_json::json!({
+            "_comment": [
+                "Generated. Do not hand-edit — see `keepalive_decisions_match_shared_fixture`",
+                "in crates/daemon/src/cache_keepalive.rs.",
+                "Pseudo-random event walks through the cache keepalive, with the decision",
+                "the Rust state machine made at every observable point. Replayed by",
+                "llm-sidecar/tests/cache_keepalive_parity.test.ts against the TypeScript",
+                "port; the two must agree on every one.",
+                "All times are milliseconds from an arbitrary origin, non-decreasing."
+            ],
+            "cases": cases,
+        });
+        let rendered = format!("{}\n", serde_json::to_string_pretty(&doc).unwrap());
+
+        if std::env::var_os("SHORE_REGENERATE_FIXTURES").is_some() {
+            std::fs::write(path, &rendered).unwrap();
+            return;
+        }
+
+        let on_disk = std::fs::read_to_string(path).unwrap_or_default();
+        assert_eq!(
+            rendered, on_disk,
+            "keepalive decisions changed. Regenerate with SHORE_REGENERATE_FIXTURES=1 \
+             and update llm-sidecar/src/autonomy/cache_keepalive.ts to match."
+        );
+    }
+
     #[test]
     fn set_interval_after_invalidation_does_not_arm_cold_cache() {
         // After invalidation, a model-switch `set_interval` must NOT re-arm off

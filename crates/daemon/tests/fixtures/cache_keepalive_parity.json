@@ -1,0 +1,8111 @@
+{
+  "_comment": [
+    "Generated. Do not hand-edit — see `keepalive_decisions_match_shared_fixture`",
+    "in crates/daemon/src/cache_keepalive.rs.",
+    "Pseudo-random event walks through the cache keepalive, with the decision",
+    "the Rust state machine made at every observable point. Replayed by",
+    "llm-sidecar/tests/cache_keepalive_parity.test.ts against the TypeScript",
+    "port; the two must agree on every one.",
+    "All times are milliseconds from an arbitrary origin, non-decreasing."
+  ],
+  "cases": [
+    {
+      "name": "boundary_tick_exactly_on_deadline",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 0,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "warm",
+          "at_ms": 0,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 3299999,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 3300000,
+          "expect": "ping"
+        }
+      ]
+    },
+    {
+      "name": "boundary_idle_ceiling_exact",
+      "max_idle_ms": 7200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 0,
+          "model": "opus",
+          "interval_ms": 3600000
+        },
+        {
+          "op": "warm",
+          "at_ms": 0,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 3600000,
+          "expect": "ping"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 3600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 7200000,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 7260000,
+          "expect": "none"
+        }
+      ]
+    },
+    {
+      "name": "boundary_idle_ceiling_headroom",
+      "max_idle_ms": 7260000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 0,
+          "model": "opus",
+          "interval_ms": 3600000
+        },
+        {
+          "op": "warm",
+          "at_ms": 0,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 3600000,
+          "expect": "ping"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 3600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 7200000,
+          "expect": "ping"
+        }
+      ]
+    },
+    {
+      "name": "boundary_giveup_inside_window",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 0,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "warm",
+          "at_ms": 0,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 3599999
+        },
+        {
+          "op": "tick",
+          "at_ms": 3629999,
+          "expect": "ping"
+        }
+      ]
+    },
+    {
+      "name": "boundary_giveup_exact",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 0,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "warm",
+          "at_ms": 0,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 3600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 3660000,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 18000000,
+          "expect": "none"
+        }
+      ]
+    },
+    {
+      "name": "boundary_retry_backoff_ladder",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 0,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "warm",
+          "at_ms": 0,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 1200000
+        },
+        {
+          "op": "tick",
+          "at_ms": 1229999,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 1230000,
+          "expect": "ping"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 2400000
+        },
+        {
+          "op": "tick",
+          "at_ms": 2459999,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 2460000,
+          "expect": "ping"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 3600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 3719999,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 3720000,
+          "expect": "ping"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 4800000
+        },
+        {
+          "op": "tick",
+          "at_ms": 5039999,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 5040000,
+          "expect": "ping"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 6000000
+        },
+        {
+          "op": "tick",
+          "at_ms": 6479999,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 6480000,
+          "expect": "ping"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 7200000
+        },
+        {
+          "op": "tick",
+          "at_ms": 8099999,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 8100000,
+          "expect": "ping"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 8400000
+        },
+        {
+          "op": "tick",
+          "at_ms": 9299999,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 9300000,
+          "expect": "ping"
+        }
+      ]
+    },
+    {
+      "name": "walk_00",
+      "max_idle_ms": 7200000,
+      "steps": [
+        {
+          "op": "ping_succeeded",
+          "at_ms": 7232446
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 8688592
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 33670495,
+          "model": "glm",
+          "interval_ms": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 36980884,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 37637941,
+          "model": "glm"
+        },
+        {
+          "op": "warm",
+          "at_ms": 40938645,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 62552306,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 62696269,
+          "expect": "none"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 84258447
+        },
+        {
+          "op": "warm",
+          "at_ms": 84688397,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 84764974,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "warm",
+          "at_ms": 86048841,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 93269872,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 96527423,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 103698709,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 107048241,
+          "expect": "ping"
+        },
+        {
+          "op": "tick",
+          "at_ms": 107126761,
+          "expect": "ping"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 109328933,
+          "model": "glm",
+          "interval_ms": null
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 110265369,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 110398248,
+          "expect": "none"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 111244634,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 112695873,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 114477347,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 116124247,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "warm",
+          "at_ms": 119411498,
+          "model": "glm"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 122687752
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_01",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 146686,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 3464374,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 3715172,
+          "expect": "none"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 7069319,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 7070808
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 9061133,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 9849637,
+          "model": "opus"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 31733975,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 31781505
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 31908201
+        },
+        {
+          "op": "tick",
+          "at_ms": 31949361,
+          "expect": "ping"
+        },
+        {
+          "op": "tick",
+          "at_ms": 35267782,
+          "expect": "ping"
+        },
+        {
+          "op": "tick",
+          "at_ms": 38532421,
+          "expect": "ping"
+        },
+        {
+          "op": "tick",
+          "at_ms": 60151898,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 63435170,
+          "expect": "none"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 85058283
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 88333459
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 95484151
+        },
+        {
+          "op": "tick",
+          "at_ms": 102692273,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 102776707,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 103952898
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 106285310
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 106285310,
+            "last_active_at_ms": 9849637
+          }
+        },
+        {
+          "op": "tick",
+          "at_ms": 113517743,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 114251967,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 115902026,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 137516616,
+          "model": "opus"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_02",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 7170600,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 10478511,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 13729422,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 17060413,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 24293581,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 27620245,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 49194156,
+          "model": "opus"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 56362129
+        },
+        {
+          "op": "tick",
+          "at_ms": 58486986,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 61824049,
+          "model": "glm"
+        },
+        {
+          "op": "warm",
+          "at_ms": 61901006,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 62951397,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 66290755,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "tick",
+          "at_ms": 87877278,
+          "expect": "ping"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 91170940,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 94446711,
+          "expect": "ping"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 94507510
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 108247233
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 108260964
+        },
+        {
+          "op": "warm",
+          "at_ms": 109488959,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 131141622,
+          "model": "glm"
+        },
+        {
+          "op": "warm",
+          "at_ms": 134465303,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 135090445,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 134465303,
+            "last_active_at_ms": 134465303
+          }
+        },
+        {
+          "op": "tick",
+          "at_ms": 157897772,
+          "expect": "ping"
+        },
+        {
+          "op": "warm",
+          "at_ms": 165054937,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 186597027,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 186630427,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 186597027,
+            "last_active_at_ms": 186597027
+          }
+        },
+        {
+          "op": "restore",
+          "at_ms": 197397027,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 186597027,
+            "last_active_at_ms": 186597027
+          },
+          "expect": true
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 197737999,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 197788826,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 198301026,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 200613673,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 208197026,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 186597027,
+            "last_active_at_ms": 186597027
+          },
+          "expect": true
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 209721580,
+          "expect": "ping"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 210635426,
+          "expect": "ping"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 211062283,
+          "expect": "ping"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 211826278,
+          "expect": "ping"
+        },
+        {
+          "op": "restore",
+          "at_ms": 208197027,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 186597027,
+            "last_active_at_ms": 186597027
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 208523234,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 209897529,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 211065846,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 212585898,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 208197028,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 186597027,
+            "last_active_at_ms": 186597027
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 210038701,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 211651862,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 212107263,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 213679379,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 229797027,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 186597027,
+            "last_active_at_ms": 186597027
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 230447051,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 231813263,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 232828666,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 233776495,
+          "expect": "none"
+        }
+      ]
+    },
+    {
+      "name": "walk_03",
+      "max_idle_ms": 7200000,
+      "steps": [
+        {
+          "op": "ping_failed",
+          "at_ms": 983709
+        },
+        {
+          "op": "tick",
+          "at_ms": 1103610,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 1671386,
+          "expect": "none"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 1859195
+        },
+        {
+          "op": "tick",
+          "at_ms": 1982442,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 2009754,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 5338530,
+          "model": "glm",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 8782859,
+          "expect": "none"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 10214371
+        },
+        {
+          "op": "tick",
+          "at_ms": 31856201,
+          "expect": "ping"
+        },
+        {
+          "op": "warm",
+          "at_ms": 39013937,
+          "model": "opus"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 44688809,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 48011676,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 55174275
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 58490943
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 80134977
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 80178779,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "tick",
+          "at_ms": 83474982,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 108364302,
+          "model": "glm",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 108503373
+        },
+        {
+          "op": "warm",
+          "at_ms": 111763603,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 115098037,
+          "expect": "none"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 115981458,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 116106590,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 116135466,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 117663013,
+          "model": "glm"
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "glm",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 117663013,
+            "last_active_at_ms": 117663013
+          }
+        },
+        {
+          "op": "restore",
+          "at_ms": 128463013,
+          "snapshot": {
+            "model": "glm",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 117663013,
+            "last_active_at_ms": 117663013
+          },
+          "expect": true
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 130608608,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 131661221,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 132702859,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 132794388,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 139263012,
+          "snapshot": {
+            "model": "glm",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 117663013,
+            "last_active_at_ms": 117663013
+          },
+          "expect": true
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 140879768,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 142542752,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 144670036,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 146659247,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 139263013,
+          "snapshot": {
+            "model": "glm",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 117663013,
+            "last_active_at_ms": 117663013
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 140323876,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 141387508,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 143315381,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 145643521,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 139263014,
+          "snapshot": {
+            "model": "glm",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 117663013,
+            "last_active_at_ms": 117663013
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 140256684,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 141320183,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 142187696,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 142747376,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 160863013,
+          "snapshot": {
+            "model": "glm",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 117663013,
+            "last_active_at_ms": 117663013
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 161201233,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 161506367,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 162533604,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 163615632,
+          "expect": "none"
+        }
+      ]
+    },
+    {
+      "name": "walk_04",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "warm",
+          "at_ms": 7214954,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 28801676,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 30491102,
+          "model": "glm"
+        },
+        {
+          "op": "warm",
+          "at_ms": 30560668,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 30676734,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 52246782,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 54604460,
+          "expect": "none"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 61949204,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 83600532,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "warm",
+          "at_ms": 84873372,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 106424180,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 106864830,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "warm",
+          "at_ms": 107912254,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 115105786,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 116479924,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 119729610
+        },
+        {
+          "op": "warm",
+          "at_ms": 121839165,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 121875967,
+          "model": "opus"
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 121875967,
+            "last_active_at_ms": 121875967
+          }
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 128404212,
+          "model": "glm",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "tick",
+          "at_ms": 135647691,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 138966767,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 139134982,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 142376675,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "warm",
+          "at_ms": 149560294,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 152835748,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 156136738,
+          "model": "glm",
+          "interval_ms": null
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 159391844,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_05",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "ping_failed",
+          "at_ms": 21563301
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 43145808
+        },
+        {
+          "op": "tick",
+          "at_ms": 44199225,
+          "expect": "none"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 44914990
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 53924397
+        },
+        {
+          "op": "tick",
+          "at_ms": 75481317,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 82711936,
+          "model": "glm"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 86054183,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 107606572,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 110894929,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 112080478
+        },
+        {
+          "op": "tick",
+          "at_ms": 113349758,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 113520169,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 115659962,
+          "model": "glm",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 117336151
+        },
+        {
+          "op": "warm",
+          "at_ms": 117364746,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 117471313,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 124618306,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 127899562,
+          "model": "glm"
+        },
+        {
+          "op": "warm",
+          "at_ms": 135082645,
+          "model": "opus"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 136677919
+        },
+        {
+          "op": "tick",
+          "at_ms": 158322585,
+          "expect": "ping"
+        },
+        {
+          "op": "warm",
+          "at_ms": 158452009,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 159989518,
+          "model": "glm"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 163245077,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "warm",
+          "at_ms": 163399230,
+          "model": "glm"
+        },
+        {
+          "op": "tick",
+          "at_ms": 166650609,
+          "expect": "none"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 168647205
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_06",
+      "max_idle_ms": 7200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 21629404,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 43202638
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 44473528,
+          "model": "glm",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "warm",
+          "at_ms": 45683148,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 47531427,
+          "model": "glm"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 47592183,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "tick",
+          "at_ms": 48569382,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 51887399,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 53254866
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 53347747
+        },
+        {
+          "op": "warm",
+          "at_ms": 53717243,
+          "model": "glm"
+        },
+        {
+          "op": "warm",
+          "at_ms": 53741246,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 55028765,
+          "expect": "none"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 57353217
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 86121473,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 89422346
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 89588425,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 96759439,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 99221535,
+          "expect": "none"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 99267662
+        },
+        {
+          "op": "tick",
+          "at_ms": 99300515,
+          "expect": "none"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 102647342
+        },
+        {
+          "op": "tick",
+          "at_ms": 104623935,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 111820118,
+          "model": "opus"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_07",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "ping_succeeded",
+          "at_ms": 102824
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 3378410,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 6707356,
+          "model": "opus"
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 6707356,
+            "last_active_at_ms": 6707356
+          }
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 31689236,
+          "model": "glm"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 53319911,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "warm",
+          "at_ms": 56594877,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 56605052,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "warm",
+          "at_ms": 56786902,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 60041867,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 60146877,
+          "expect": "ping"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 62388465,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "warm",
+          "at_ms": 62481383,
+          "model": "opus"
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 62481383,
+            "last_active_at_ms": 62481383
+          }
+        },
+        {
+          "op": "tick",
+          "at_ms": 69802795,
+          "expect": "ping"
+        },
+        {
+          "op": "tick",
+          "at_ms": 73117328,
+          "expect": "ping"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 73722395,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 74657835,
+          "model": "glm",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "warm",
+          "at_ms": 75779593,
+          "model": "opus"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 75878459
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 76607745,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 87111769,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 90366144,
+          "model": "glm"
+        },
+        {
+          "op": "warm",
+          "at_ms": 90371379,
+          "model": "glm"
+        },
+        {
+          "op": "tick",
+          "at_ms": 93729159,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_08",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "ping_failed",
+          "at_ms": 1019846
+        },
+        {
+          "op": "warm",
+          "at_ms": 4332095,
+          "model": "glm"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 4477908
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 29448099,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 36597080,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 36636710,
+          "model": "glm",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "tick",
+          "at_ms": 36737588,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 39994193,
+          "model": "opus"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 43346402
+        },
+        {
+          "op": "warm",
+          "at_ms": 45211223,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 45268514,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 45333232,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 52557348,
+          "expect": "none"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 55894785,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 58058734,
+          "model": "glm",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "warm",
+          "at_ms": 58237856,
+          "model": "glm"
+        },
+        {
+          "op": "warm",
+          "at_ms": 61495295,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 83066366,
+          "expect": "ping"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 83174641
+        },
+        {
+          "op": "warm",
+          "at_ms": 86471777,
+          "model": "opus"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 90216365,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 111824111,
+          "model": "glm"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 118447045
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 132308137,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_09",
+      "max_idle_ms": 7200000,
+      "steps": [
+        {
+          "op": "warm",
+          "at_ms": 286044,
+          "model": "opus"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 387404,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 520470,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 3788702,
+          "expect": "none"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 4357229
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 7715209,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 9641269
+        },
+        {
+          "op": "tick",
+          "at_ms": 31227913,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 32828329,
+          "model": "opus"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 34205776,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 37480703,
+          "model": "opus"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 51872192,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 55221352,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 57462230,
+          "model": "glm",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 57519007,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 57667770,
+          "expect": "none"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 79286186
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 80793965
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 84120111,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "warm",
+          "at_ms": 87385177,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 94632429,
+          "expect": "none"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 94927259
+        },
+        {
+          "op": "warm",
+          "at_ms": 95067923,
+          "model": "opus"
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 95067923,
+            "last_active_at_ms": 95067923
+          }
+        },
+        {
+          "op": "tick",
+          "at_ms": 98162624,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 98241547,
+          "expect": "none"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 101521848
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 101521848,
+            "last_active_at_ms": 95067923
+          }
+        },
+        {
+          "op": "restore",
+          "at_ms": 103171848,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 101521848,
+            "last_active_at_ms": 95067923
+          },
+          "expect": true
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 105107100,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 107198325,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 108638045,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 109028734,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 104821847,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 101521848,
+            "last_active_at_ms": 95067923
+          },
+          "expect": true
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 106177902,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 108302499,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 110087754,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 111626300,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 104821848,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 101521848,
+            "last_active_at_ms": 95067923
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 105472043,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 105518159,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 106829389,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 108027456,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 104821849,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 101521848,
+            "last_active_at_ms": 95067923
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 104986713,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 105945713,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 106225171,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 106325076,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 108121848,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 101521848,
+            "last_active_at_ms": 95067923
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 109779591,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 111910321,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 112342535,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 113336887,
+          "expect": "none"
+        }
+      ]
+    },
+    {
+      "name": "walk_10",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 716584,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 7896594,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 8283278,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 11538187,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 12408132,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 14562531,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 12408132,
+            "last_active_at_ms": 12408132
+          }
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 14970163
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 16198108
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 19514420
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 44466116,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 66045988
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 66169028,
+          "model": "glm",
+          "interval_ms": null
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 69482902,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 70527360,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 74161596,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 95782816,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 99122090,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 102390897,
+          "model": "glm",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 105705946
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 109051601,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 109068304,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 130625660,
+          "model": "glm"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 137839851
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 137906382
+        },
+        {
+          "op": "tick",
+          "at_ms": 140216148,
+          "expect": "none"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 161757097
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_11",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 611478,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 617123
+        },
+        {
+          "op": "tick",
+          "at_ms": 673713,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 11166996,
+          "model": "glm",
+          "interval_ms": null
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 32756407,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "tick",
+          "at_ms": 54403127,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 54563462,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 59714906,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 62964043,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 70155137,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 72768898,
+          "model": "glm"
+        },
+        {
+          "op": "tick",
+          "at_ms": 72908614,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 74572121,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 81824472,
+          "model": "glm",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "tick",
+          "at_ms": 85160759,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 87404179,
+          "model": "glm"
+        },
+        {
+          "op": "warm",
+          "at_ms": 88084628,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 95281363,
+          "expect": "ping"
+        },
+        {
+          "op": "warm",
+          "at_ms": 116888460,
+          "model": "glm"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 124052624,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 127319503
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 134576814,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 135001053,
+          "model": "opus"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 142173592
+        },
+        {
+          "op": "tick",
+          "at_ms": 145525658,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 145647938,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_12",
+      "max_idle_ms": 7200000,
+      "steps": [
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 6668600
+        },
+        {
+          "op": "warm",
+          "at_ms": 9976865,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 13287337,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 16613917,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 23850952,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 45391819,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 48719948,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 48895682,
+          "expect": "none"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 50415829
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 57674481,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 60953242,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 71460401,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 74757906,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 76581148,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "tick",
+          "at_ms": 77330463,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 80660785,
+          "model": "glm"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 83388789,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 90555881,
+          "model": "glm"
+        },
+        {
+          "op": "tick",
+          "at_ms": 97700367,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 97885864,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 100261424,
+          "expect": "none"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 125146510,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 126431899,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_13",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 2349340,
+          "model": "glm",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 9550169,
+          "expect": "none"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 31179924
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 52788346,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "tick",
+          "at_ms": 52937122,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 53087545,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 56355483
+        },
+        {
+          "op": "tick",
+          "at_ms": 59595838,
+          "expect": "ping"
+        },
+        {
+          "op": "warm",
+          "at_ms": 81162254,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 82121417,
+          "model": "glm"
+        },
+        {
+          "op": "warm",
+          "at_ms": 83178757,
+          "model": "glm"
+        },
+        {
+          "op": "tick",
+          "at_ms": 90358020,
+          "expect": "ping"
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 81162254,
+            "last_active_at_ms": 81162254
+          }
+        },
+        {
+          "op": "tick",
+          "at_ms": 92785065,
+          "expect": "ping"
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 81162254,
+            "last_active_at_ms": 81162254
+          }
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 95164254,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 95305419,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 98580451,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 99345658,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 99958212,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 100131610,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 103469921,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 110612946,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 110757629,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 132838072,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 154488728,
+          "expect": "ping"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 157764673,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 157839928
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_14",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 3293945,
+          "model": "glm",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 7859259,
+          "expect": "none"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 10062670
+        },
+        {
+          "op": "tick",
+          "at_ms": 10125988,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 10235978,
+          "model": "glm",
+          "interval_ms": null
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 10750694
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 12405325
+        },
+        {
+          "op": "tick",
+          "at_ms": 12499225,
+          "expect": "none"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 19742745
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 27729555
+        },
+        {
+          "op": "tick",
+          "at_ms": 28942726,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 50525903,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 52712113,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 56062033,
+          "model": "glm"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 63305345,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "warm",
+          "at_ms": 70447863,
+          "model": "glm"
+        },
+        {
+          "op": "tick",
+          "at_ms": 73747390,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 73809538,
+          "model": "glm"
+        },
+        {
+          "op": "tick",
+          "at_ms": 77162115,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 79444722,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 79836428,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 80188073,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 87357305,
+          "model": "glm",
+          "interval_ms": null
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 90661231,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "warm",
+          "at_ms": 91842235,
+          "model": "glm"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_15",
+      "max_idle_ms": 7200000,
+      "steps": [
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 23794637,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 31053266,
+          "model": "glm",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 34317457,
+          "expect": "none"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 55967844
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 77544366
+        },
+        {
+          "op": "warm",
+          "at_ms": 80822490,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 80866477,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 81597715,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 81726508,
+          "model": "glm"
+        },
+        {
+          "op": "warm",
+          "at_ms": 84997402,
+          "model": "opus"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 85473591
+        },
+        {
+          "op": "tick",
+          "at_ms": 85574638,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 88933326,
+          "expect": "none"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 95547549,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 96498863
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 103736003,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 110899389,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "tick",
+          "at_ms": 118104205,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 119189845,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 122579338
+        },
+        {
+          "op": "tick",
+          "at_ms": 122733492,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 125979556,
+          "model": "opus"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 133327847,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 136577505,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 139933389,
+          "model": "opus"
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 139933389,
+            "last_active_at_ms": 139933389
+          }
+        },
+        {
+          "op": "restore",
+          "at_ms": 150733389,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 139933389,
+            "last_active_at_ms": 139933389
+          },
+          "expect": true
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 152197403,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 152859508,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 154563401,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 156777049,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 161533388,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 139933389,
+            "last_active_at_ms": 139933389
+          },
+          "expect": true
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 162238576,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 164463947,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 166014753,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 166824280,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 161533389,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 139933389,
+            "last_active_at_ms": 139933389
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 162897470,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 164893705,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 165119867,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 167437677,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 161533390,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 139933389,
+            "last_active_at_ms": 139933389
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 163339347,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 164509583,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 166784221,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 168046211,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 183133389,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 139933389,
+            "last_active_at_ms": 139933389
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 183793702,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 184650015,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 184868481,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 186864371,
+          "expect": "none"
+        }
+      ]
+    },
+    {
+      "name": "walk_16",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "ping_failed",
+          "at_ms": 21582152
+        },
+        {
+          "op": "warm",
+          "at_ms": 28749562,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 28847342,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 28901642,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 32191999,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 39511168,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "warm",
+          "at_ms": 41542330,
+          "model": "glm"
+        },
+        {
+          "op": "warm",
+          "at_ms": 41638004,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 44887005,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 44897851,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 44921024,
+          "model": "opus"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 44975487
+        },
+        {
+          "op": "tick",
+          "at_ms": 48333418,
+          "expect": "none"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 73217119
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 75007724
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 75130473
+        },
+        {
+          "op": "warm",
+          "at_ms": 96721252,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 98595150,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 101935277,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 104099679,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 111304873,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 132945068,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 133069711
+        },
+        {
+          "op": "tick",
+          "at_ms": 133136816,
+          "expect": "none"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 133685174
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 133810983,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 140964341
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_17",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 6637647,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 6812125,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 10058185,
+          "model": "glm"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 31694199,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 35046256,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 38366799
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 39159302,
+          "model": "glm",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 42517356
+        },
+        {
+          "op": "tick",
+          "at_ms": 64061877,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 64140532,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 64652926,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 67931917,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 69642917,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 76877858,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 78530097,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 100087946,
+          "expect": "ping"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 111076777,
+          "model": "glm"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 118330375,
+          "model": "glm",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 125690240
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 129020476,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 136232013,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 143414073,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 144480884,
+          "model": "opus"
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 144480884,
+            "last_active_at_ms": 144480884
+          }
+        },
+        {
+          "op": "restore",
+          "at_ms": 155280884,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 144480884,
+            "last_active_at_ms": 144480884
+          },
+          "expect": true
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 156331505,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 157267337,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 158330872,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 160476523,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 166080883,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 144480884,
+            "last_active_at_ms": 144480884
+          },
+          "expect": true
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 167606504,
+          "expect": "ping"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 168103445,
+          "expect": "ping"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 169783842,
+          "expect": "ping"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 170384575,
+          "expect": "ping"
+        },
+        {
+          "op": "restore",
+          "at_ms": 166080884,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 144480884,
+            "last_active_at_ms": 144480884
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 167076522,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 169447766,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 170764281,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 171704525,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 166080885,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 144480884,
+            "last_active_at_ms": 144480884
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 166338802,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 167182495,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 167629737,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 168851381,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 187680884,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 144480884,
+            "last_active_at_ms": 144480884
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 189473850,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 191569713,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 193401933,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 194304769,
+          "expect": "none"
+        }
+      ]
+    },
+    {
+      "name": "walk_18",
+      "max_idle_ms": 7200000,
+      "steps": [
+        {
+          "op": "warm",
+          "at_ms": 7203882,
+          "model": "glm"
+        },
+        {
+          "op": "tick",
+          "at_ms": 7298199,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 28847133,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 29024340,
+          "model": "opus"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 33538491,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 36887659,
+          "model": "glm",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 40174932,
+          "expect": "none"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 43462621
+        },
+        {
+          "op": "tick",
+          "at_ms": 46731672,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 49992094,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 50364261,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 51859365,
+          "expect": "none"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 59083870
+        },
+        {
+          "op": "warm",
+          "at_ms": 80665563,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 80827908,
+          "expect": "ping"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 84167179,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 84325461,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 85258044,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 88549072,
+          "model": "opus"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 91151992,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 94434212,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 94491840,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 116068367,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 119324209,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 121154566,
+          "model": "glm"
+        },
+        {
+          "op": "warm",
+          "at_ms": 142755317,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 143294941,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 143404191,
+          "model": "opus"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_19",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 3466767,
+          "model": "glm"
+        },
+        {
+          "op": "warm",
+          "at_ms": 10660697,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 32247269,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 32750295,
+          "expect": "none"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 33418741
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 37499161,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 37506069,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 44749521
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 45723034
+        },
+        {
+          "op": "warm",
+          "at_ms": 47487831,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 47494442
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 49238317,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 56387925,
+          "model": "glm"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 77955907,
+          "model": "glm",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 79887041,
+          "model": "glm",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 86493665,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 90874154
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 98088323,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 101364640,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 101505562,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 104812859,
+          "model": "glm",
+          "interval_ms": null
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 111469162,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 111542908,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 133102647,
+          "model": "opus"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_20",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "tick",
+          "at_ms": 148311,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 3479522,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 5868343,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 27419570,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 27452323,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 29189218,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 29871506,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 37056186,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 38236586,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 39358206
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 46977848,
+          "model": "glm",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "tick",
+          "at_ms": 50239196,
+          "expect": "none"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 53501050
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 56855871,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 65588019,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 87239840,
+          "model": "glm"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 87316183
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 87976913,
+          "expect": "none"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 88128882
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 95309435,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 96167462,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "warm",
+          "at_ms": 99503573,
+          "model": "glm"
+        },
+        {
+          "op": "warm",
+          "at_ms": 101873872,
+          "model": "opus"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 123562802,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 130211532
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_21",
+      "max_idle_ms": 7200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 85860,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 794470
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 4063321
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 6044708
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 27690745
+        },
+        {
+          "op": "tick",
+          "at_ms": 49248468,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 70809452,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 71637898,
+          "model": "glm",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "warm",
+          "at_ms": 74925247,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 96528811,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 96672290,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 96710050,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 118285248,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 118286926,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "tick",
+          "at_ms": 121607898,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 128860135,
+          "expect": "none"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 129029181
+        },
+        {
+          "op": "warm",
+          "at_ms": 136250937,
+          "model": "opus"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 139998163,
+          "model": "glm",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 147169815
+        },
+        {
+          "op": "warm",
+          "at_ms": 150453668,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 153762316,
+          "model": "opus"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 155965140,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 159301886
+        },
+        {
+          "op": "warm",
+          "at_ms": 159469163,
+          "model": "opus"
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 159469163,
+            "last_active_at_ms": 159469163
+          }
+        },
+        {
+          "op": "tick",
+          "at_ms": 164475927,
+          "expect": "ping"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 167835012
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_22",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "warm",
+          "at_ms": 53699,
+          "model": "opus"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 14426741,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 17839232
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 40007614
+        },
+        {
+          "op": "warm",
+          "at_ms": 40029625,
+          "model": "glm"
+        },
+        {
+          "op": "tick",
+          "at_ms": 40068211,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 40860826,
+          "expect": "none"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 43124076
+        },
+        {
+          "op": "tick",
+          "at_ms": 43174959,
+          "expect": "ping"
+        },
+        {
+          "op": "warm",
+          "at_ms": 50422068,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 71991071,
+          "model": "glm",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "warm",
+          "at_ms": 79136112,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 100739763,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 123375005,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 130602456,
+          "expect": "none"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 131387702
+        },
+        {
+          "op": "tick",
+          "at_ms": 133496276,
+          "expect": "none"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 133535888
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 140721283
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 162361866,
+          "model": "glm",
+          "interval_ms": null
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 162456691
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 184036350,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 191248737
+        },
+        {
+          "op": "warm",
+          "at_ms": 191384064,
+          "model": "glm"
+        },
+        {
+          "op": "tick",
+          "at_ms": 191449557,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_23",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "tick",
+          "at_ms": 1412122,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 2760550,
+          "model": "glm",
+          "interval_ms": null
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 6031612
+        },
+        {
+          "op": "tick",
+          "at_ms": 6050775,
+          "expect": "none"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 13247064,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 13247828,
+          "model": "opus"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 38166777,
+          "model": "glm"
+        },
+        {
+          "op": "tick",
+          "at_ms": 40540399,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 62092973,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 62220284,
+          "model": "glm",
+          "interval_ms": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 83792073,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 87098660,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 87664512,
+          "model": "glm",
+          "interval_ms": null
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 87835178
+        },
+        {
+          "op": "warm",
+          "at_ms": 91155619,
+          "model": "opus"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 112793623
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 112827098,
+          "model": "glm",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 134445228
+        },
+        {
+          "op": "warm",
+          "at_ms": 137751658,
+          "model": "glm"
+        },
+        {
+          "op": "tick",
+          "at_ms": 139629231,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 139717760,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 139752050,
+          "model": "opus"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 162530537,
+          "model": "glm",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 165818106
+        },
+        {
+          "op": "tick",
+          "at_ms": 187442896,
+          "expect": "ping"
+        },
+        {
+          "op": "tick",
+          "at_ms": 190715153,
+          "expect": "ping"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_24",
+      "max_idle_ms": 7200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 694905,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 11271188
+        },
+        {
+          "op": "warm",
+          "at_ms": 18474351,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 18497313
+        },
+        {
+          "op": "warm",
+          "at_ms": 40111555,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 43469906,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 50675425,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 57833578,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 61108752,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 61205391,
+          "model": "glm"
+        },
+        {
+          "op": "warm",
+          "at_ms": 64543245,
+          "model": "opus"
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 64543245,
+            "last_active_at_ms": 64543245
+          }
+        },
+        {
+          "op": "warm",
+          "at_ms": 67227486,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 69028337,
+          "expect": "none"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 70466905
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 70466905,
+            "last_active_at_ms": 67227486
+          }
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 70466905,
+            "last_active_at_ms": 67227486
+          }
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 81299000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 81412945,
+          "model": "glm",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "warm",
+          "at_ms": 82526996,
+          "model": "glm"
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "glm",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 82526996,
+            "last_active_at_ms": 82526996
+          }
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 89026134
+        },
+        {
+          "op": "tick",
+          "at_ms": 92329087,
+          "expect": "none"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 95616145,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 98972441,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 99119749,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 106274406,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 106397484,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_25",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 3280852,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 5625012,
+          "expect": "none"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 9020095,
+          "model": "glm"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 12331895
+        },
+        {
+          "op": "warm",
+          "at_ms": 15600070,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 18877070,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 21241463,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 24500491,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 46062643,
+          "model": "opus"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 53212547
+        },
+        {
+          "op": "warm",
+          "at_ms": 55421656,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 58694315,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 58715769,
+          "model": "glm"
+        },
+        {
+          "op": "tick",
+          "at_ms": 60231896,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 61066762,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 61071283
+        },
+        {
+          "op": "warm",
+          "at_ms": 61238022,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 61242407,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 64523144,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 65048741,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 65565086,
+          "model": "glm"
+        },
+        {
+          "op": "tick",
+          "at_ms": 68806813,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 72156981,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 72254759,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 72374448,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "warm",
+          "at_ms": 73875651,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 75735805,
+          "model": "glm"
+        },
+        {
+          "op": "warm",
+          "at_ms": 76709678,
+          "model": "opus"
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 76709678,
+            "last_active_at_ms": 76709678
+          }
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 76709678,
+            "last_active_at_ms": 76709678
+          }
+        },
+        {
+          "op": "restore",
+          "at_ms": 87509678,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 76709678,
+            "last_active_at_ms": 76709678
+          },
+          "expect": true
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 89222547,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 90403485,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 91551925,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 92670173,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 98309677,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 76709678,
+            "last_active_at_ms": 76709678
+          },
+          "expect": true
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 99966011,
+          "expect": "ping"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 101837481,
+          "expect": "ping"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 103832889,
+          "expect": "ping"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 105537838,
+          "expect": "ping"
+        },
+        {
+          "op": "restore",
+          "at_ms": 98309678,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 76709678,
+            "last_active_at_ms": 76709678
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 99239294,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 101558874,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 103346583,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 104608198,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 98309679,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 76709678,
+            "last_active_at_ms": 76709678
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 100229748,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 100936739,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 101131467,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 102503414,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 119909678,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 76709678,
+            "last_active_at_ms": 76709678
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 121340945,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 123478317,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 124089043,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 125454684,
+          "expect": "none"
+        }
+      ]
+    },
+    {
+      "name": "walk_26",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "tick",
+          "at_ms": 40451,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 18209260
+        },
+        {
+          "op": "warm",
+          "at_ms": 18227158,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 21586177,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 23203021,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 23931192,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 24100499,
+          "model": "glm"
+        },
+        {
+          "op": "tick",
+          "at_ms": 25045631,
+          "expect": "none"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 32211922
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 33284826
+        },
+        {
+          "op": "tick",
+          "at_ms": 40529284,
+          "expect": "none"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 40587175
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 64495756,
+          "expect": "none"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 65382754
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 65559414,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 72711905,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 76030682,
+          "model": "opus"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 84043789
+        },
+        {
+          "op": "warm",
+          "at_ms": 84075627,
+          "model": "opus"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 87464493,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 109021982,
+          "model": "glm"
+        },
+        {
+          "op": "tick",
+          "at_ms": 112270887,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_27",
+      "max_idle_ms": 7200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 65206,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 195727
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 21800302
+        },
+        {
+          "op": "warm",
+          "at_ms": 21971417,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 29214680,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 52935025,
+          "model": "glm",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "tick",
+          "at_ms": 53082420,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 60250338,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 63545621,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 63577713,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 65327800,
+          "model": "opus"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 68570484
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 68638013,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 71915963
+        },
+        {
+          "op": "tick",
+          "at_ms": 74068018,
+          "expect": "none"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 77342521
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 98917724,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "warm",
+          "at_ms": 99038676,
+          "model": "opus"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 102338437
+        },
+        {
+          "op": "warm",
+          "at_ms": 105661763,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 109018900,
+          "model": "glm"
+        },
+        {
+          "op": "warm",
+          "at_ms": 116178098,
+          "model": "opus"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 119495480
+        },
+        {
+          "op": "warm",
+          "at_ms": 122814992,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 123122256,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 123384209,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "tick",
+          "at_ms": 144979830,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 166566377,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 123122256,
+            "last_active_at_ms": 123122256
+          }
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 123122256,
+            "last_active_at_ms": 123122256
+          }
+        },
+        {
+          "op": "restore",
+          "at_ms": 124772256,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 123122256,
+            "last_active_at_ms": 123122256
+          },
+          "expect": true
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 125192130,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 127587622,
+          "expect": "ping"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 128401658,
+          "expect": "ping"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 130668709,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 126422255,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 123122256,
+            "last_active_at_ms": 123122256
+          },
+          "expect": true
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 128787809,
+          "expect": "ping"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 130221299,
+          "expect": "ping"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 132065160,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 132131504,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 126422256,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 123122256,
+            "last_active_at_ms": 123122256
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 128355330,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 129380456,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 129735162,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 130377363,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 126422257,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 123122256,
+            "last_active_at_ms": 123122256
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 127314223,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 128144179,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 130253937,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 131041477,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 129722256,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 123122256,
+            "last_active_at_ms": 123122256
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 129836928,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 130762345,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 132503331,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 133045138,
+          "expect": "none"
+        }
+      ]
+    },
+    {
+      "name": "walk_28",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "tick",
+          "at_ms": 143938,
+          "expect": "none"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 220974
+        },
+        {
+          "op": "warm",
+          "at_ms": 638104,
+          "model": "glm"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 799763,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 910123,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 4268941,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 7626333,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 14872541,
+          "expect": "none"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 16755945
+        },
+        {
+          "op": "tick",
+          "at_ms": 17323557,
+          "expect": "ping"
+        },
+        {
+          "op": "warm",
+          "at_ms": 38876962,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 46102972,
+          "model": "glm"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 46170523
+        },
+        {
+          "op": "warm",
+          "at_ms": 49521576,
+          "model": "opus"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 78223334,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 87422924,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 87505555,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 87943900,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 91223422,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 92266689,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 92375849
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 113958969
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 135607810
+        },
+        {
+          "op": "tick",
+          "at_ms": 138920827,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 139081877,
+          "model": "glm"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 139286353,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 141672487,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_29",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 120461,
+          "model": "glm",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "warm",
+          "at_ms": 21714705,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 25018903,
+          "model": "opus"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 25127766
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 25177119
+        },
+        {
+          "op": "tick",
+          "at_ms": 28510692,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 28522531,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 35758121,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 39087526,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 39218350,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 46453226,
+          "model": "opus"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 71389684
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 81338892,
+          "expect": "none"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 84591499
+        },
+        {
+          "op": "warm",
+          "at_ms": 84672904,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 86486192,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 108112580,
+          "expect": "ping"
+        },
+        {
+          "op": "warm",
+          "at_ms": 108249315,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 111563840,
+          "expect": "ping"
+        },
+        {
+          "op": "tick",
+          "at_ms": 111619476,
+          "expect": "ping"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 115124122,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "warm",
+          "at_ms": 118450499,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 125599601,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 147216625,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 150548923,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_30",
+      "max_idle_ms": 7200000,
+      "steps": [
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 1934151,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "tick",
+          "at_ms": 2087707,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 11195350,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 32803283,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 54362419,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 55049085,
+          "expect": "none"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 62364764,
+          "model": "glm"
+        },
+        {
+          "op": "tick",
+          "at_ms": 64374275,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 66237639,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 87790322,
+          "expect": "none"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 109358419
+        },
+        {
+          "op": "warm",
+          "at_ms": 130984942,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 134301078,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 134487150,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "tick",
+          "at_ms": 137778920,
+          "expect": "ping"
+        },
+        {
+          "op": "tick",
+          "at_ms": 137805929,
+          "expect": "ping"
+        },
+        {
+          "op": "warm",
+          "at_ms": 138506717,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 141793781
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 163914092,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 185565014,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 207113344,
+          "expect": "none"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 210395449
+        },
+        {
+          "op": "tick",
+          "at_ms": 212758514,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 212903787,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 214680378,
+          "model": "glm",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_31",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 28995519,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 32258562,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 35572037,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 35725678,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 57295267,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "tick",
+          "at_ms": 60605070,
+          "expect": "ping"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 63930813,
+          "model": "glm",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 78339590,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 99899237,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 103157276,
+          "model": "glm"
+        },
+        {
+          "op": "tick",
+          "at_ms": 110299827,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "glm",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 103157276,
+            "last_active_at_ms": 103157276
+          }
+        },
+        {
+          "op": "warm",
+          "at_ms": 120860709,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 142468754,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 143435813,
+          "model": "glm"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 165003830,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 172243587,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 174220791,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 195796761,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 199096523,
+          "model": "opus"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 200078576
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 201063506
+        },
+        {
+          "op": "warm",
+          "at_ms": 204367491,
+          "model": "glm"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 206099084,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_32",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 1848444,
+          "model": "glm",
+          "interval_ms": null
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 23402565
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 45758210,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 52916432,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 60105391,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 60241652,
+          "model": "glm",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "warm",
+          "at_ms": 81885310,
+          "model": "opus"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 103646872
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 106954355
+        },
+        {
+          "op": "warm",
+          "at_ms": 107010296,
+          "model": "opus"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 113652118,
+          "model": "opus"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 120841843
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 122030170
+        },
+        {
+          "op": "warm",
+          "at_ms": 125383401,
+          "model": "glm"
+        },
+        {
+          "op": "tick",
+          "at_ms": 125505221,
+          "expect": "none"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 126383442,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 126466459
+        },
+        {
+          "op": "warm",
+          "at_ms": 127556677,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 149205656,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 152534764,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 153731950
+        },
+        {
+          "op": "tick",
+          "at_ms": 153761879,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 153792625,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 175430032,
+          "expect": "none"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 196975980
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_33",
+      "max_idle_ms": 7200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 21598425,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 21624497
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 21735179,
+          "model": "glm",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "tick",
+          "at_ms": 23897553,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 23977441,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 24258602,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 27531537
+        },
+        {
+          "op": "tick",
+          "at_ms": 29319716,
+          "expect": "none"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 32662654,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 54273926,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 54372695,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 57666773,
+          "expect": "none"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 59540267
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 60994319
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 67739911
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 73399687,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 75617829,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 78915266,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "warm",
+          "at_ms": 80242981,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 80252504,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 101841057,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 102000020,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 102044999,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 102135637,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_34",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 3675912,
+          "model": "glm"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 6016279
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 6160420,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 6300443,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "warm",
+          "at_ms": 9648292,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 12892481,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 16134326,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 16923180,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 17087268,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 38718435,
+          "model": "opus"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 38889179
+        },
+        {
+          "op": "warm",
+          "at_ms": 38919408,
+          "model": "glm"
+        },
+        {
+          "op": "tick",
+          "at_ms": 41161297,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 44456090,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 45835182,
+          "model": "glm",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "warm",
+          "at_ms": 45886286,
+          "model": "glm"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 45950866,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 47794390,
+          "model": "glm",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 49283582
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 56507060
+        },
+        {
+          "op": "warm",
+          "at_ms": 59775964,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 61313660,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 62172241,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 62179692,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 62730209
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 66149532
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 66395470,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_35",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "tick",
+          "at_ms": 90020,
+          "expect": "none"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 3348959
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 10739600,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 12682548,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 14122615,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 14313299,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 14430490,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 17728284,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 21055884,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 21812106,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 21953856,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 21957852,
+          "model": "glm"
+        },
+        {
+          "op": "tick",
+          "at_ms": 22750968,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 26081395,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 47701479,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 51001194,
+          "model": "glm",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "warm",
+          "at_ms": 58181222,
+          "model": "opus"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 59564549
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 83166427,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 86509180,
+          "expect": "ping"
+        },
+        {
+          "op": "tick",
+          "at_ms": 93657695,
+          "expect": "ping"
+        },
+        {
+          "op": "warm",
+          "at_ms": 94851103,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 102058560
+        },
+        {
+          "op": "warm",
+          "at_ms": 102131479,
+          "model": "opus"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 105553600,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "tick",
+          "at_ms": 105590307,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_36",
+      "max_idle_ms": 7200000,
+      "steps": [
+        {
+          "op": "warm",
+          "at_ms": 140468,
+          "model": "glm"
+        },
+        {
+          "op": "warm",
+          "at_ms": 7314893,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 7375014
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 10728237,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 14062274,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 14127725,
+          "model": "glm"
+        },
+        {
+          "op": "warm",
+          "at_ms": 15683463,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 15818827
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 19059882
+        },
+        {
+          "op": "tick",
+          "at_ms": 40645997,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 15683463,
+            "last_active_at_ms": 15683463
+          }
+        },
+        {
+          "op": "tick",
+          "at_ms": 44051473,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 44462915,
+          "model": "opus"
+        },
+        {
+          "op": "warm",
+          "at_ms": 45479727,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 45846152,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 52405912
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 66755831,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "warm",
+          "at_ms": 66847065,
+          "model": "glm"
+        },
+        {
+          "op": "warm",
+          "at_ms": 88440452,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 95585057,
+          "expect": "ping"
+        },
+        {
+          "op": "tick",
+          "at_ms": 96951295,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 99283972,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 102608555,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 105955087,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 105989153,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 106826952,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 88440452,
+            "last_active_at_ms": 88440452
+          }
+        },
+        {
+          "op": "restore",
+          "at_ms": 99240452,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 88440452,
+            "last_active_at_ms": 88440452
+          },
+          "expect": true
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 101575193,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 103501204,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 104877535,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 106536098,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 110040451,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 88440452,
+            "last_active_at_ms": 88440452
+          },
+          "expect": true
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 111688601,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 113798147,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 115491991,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 117022108,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 110040452,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 88440452,
+            "last_active_at_ms": 88440452
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 112148133,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 112633816,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 114332127,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 116072474,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 110040453,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 88440452,
+            "last_active_at_ms": 88440452
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 110092714,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 111917217,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 113943749,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 114770717,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 131640452,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 88440452,
+            "last_active_at_ms": 88440452
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 132989070,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 133931512,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 135076436,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 135544062,
+          "expect": "none"
+        }
+      ]
+    },
+    {
+      "name": "walk_37",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 158620,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 3532424,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 10692741,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 14003438,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 35668754,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 37161034
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 40467982
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 43827711
+        },
+        {
+          "op": "warm",
+          "at_ms": 44188946,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 44265213,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 47567515,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 47576361,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 50838346,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 72396115,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 75658945,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 78912523,
+          "expect": "ping"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 79008343
+        },
+        {
+          "op": "warm",
+          "at_ms": 100576543,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 103915295,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 105455198,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 108801299,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 100576543,
+            "last_active_at_ms": 100576543
+          }
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 116358064,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 119628675,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 100576543,
+            "last_active_at_ms": 100576543
+          }
+        },
+        {
+          "op": "tick",
+          "at_ms": 141208657,
+          "expect": "ping"
+        },
+        {
+          "op": "warm",
+          "at_ms": 162798058,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 166042757,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 162798058,
+            "last_active_at_ms": 162798058
+          }
+        },
+        {
+          "op": "restore",
+          "at_ms": 173598058,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 162798058,
+            "last_active_at_ms": 162798058
+          },
+          "expect": true
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 175201141,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 176299644,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 178095663,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 179547641,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 184398057,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 162798058,
+            "last_active_at_ms": 162798058
+          },
+          "expect": true
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 186519284,
+          "expect": "ping"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 188813129,
+          "expect": "ping"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 190972294,
+          "expect": "ping"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 191161921,
+          "expect": "ping"
+        },
+        {
+          "op": "restore",
+          "at_ms": 184398058,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 162798058,
+            "last_active_at_ms": 162798058
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 186672610,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 186896579,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 188767755,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 189655477,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 184398059,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 162798058,
+            "last_active_at_ms": 162798058
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 185618072,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 187305718,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 188415578,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 188805334,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 205998058,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 162798058,
+            "last_active_at_ms": 162798058
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 207237898,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 208021558,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 208489238,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 208777411,
+          "expect": "none"
+        }
+      ]
+    },
+    {
+      "name": "walk_38",
+      "max_idle_ms": 43200000,
+      "steps": [
+        {
+          "op": "set_interval",
+          "at_ms": 91232,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 3435330,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "warm",
+          "at_ms": 3575078,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 3669918,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 7026665,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 10273806,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "tick",
+          "at_ms": 13547081,
+          "expect": "ping"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 13661063
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 13690783,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 13661063,
+            "last_active_at_ms": 7026665
+          }
+        },
+        {
+          "op": "tick",
+          "at_ms": 35323283,
+          "expect": "ping"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 35448351
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 57133017,
+          "model": "glm"
+        },
+        {
+          "op": "warm",
+          "at_ms": 60402593,
+          "model": "opus"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 81967446,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 103516521
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "warm",
+          "at_ms": 114121304,
+          "model": "glm"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 116132789
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 117407605,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 124599225,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 146230101,
+          "expect": "none"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 147716227
+        },
+        {
+          "op": "tick",
+          "at_ms": 147786770,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 147863815,
+          "expect": "none"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 151164136,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        }
+      ]
+    },
+    {
+      "name": "walk_39",
+      "max_idle_ms": 7200000,
+      "steps": [
+        {
+          "op": "ping_succeeded",
+          "at_ms": 21651941
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 25000993,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 25008374,
+          "expect": "none"
+        },
+        {
+          "op": "warm",
+          "at_ms": 28258867,
+          "model": "opus"
+        },
+        {
+          "op": "tick",
+          "at_ms": 28339663,
+          "expect": "none"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "tick",
+          "at_ms": 50044526,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 53369321,
+          "expect": "none"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 56699144
+        },
+        {
+          "op": "warm",
+          "at_ms": 60013284,
+          "model": "opus"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 81569824
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 83336419,
+          "model": "opus",
+          "interval_ms": 3300000
+        },
+        {
+          "op": "warm",
+          "at_ms": 86598545,
+          "model": "opus"
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 3300000,
+            "last_warm_at_ms": 86598545,
+            "last_active_at_ms": 86598545
+          }
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 90004047,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "tick",
+          "at_ms": 90105601,
+          "expect": "none"
+        },
+        {
+          "op": "tick",
+          "at_ms": 93464416,
+          "expect": "none"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 115115030
+        },
+        {
+          "op": "invalidate"
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 118428437
+        },
+        {
+          "op": "warm",
+          "at_ms": 125686608,
+          "model": "opus"
+        },
+        {
+          "op": "ping_failed",
+          "at_ms": 147300936
+        },
+        {
+          "op": "warm",
+          "at_ms": 168901452,
+          "model": "glm"
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 172254961,
+          "model": "opus",
+          "interval_ms": null
+        },
+        {
+          "op": "ping_succeeded",
+          "at_ms": 172524924
+        },
+        {
+          "op": "set_interval",
+          "at_ms": 173221687,
+          "model": "opus",
+          "interval_ms": 21600000
+        },
+        {
+          "op": "tick",
+          "at_ms": 176562452,
+          "expect": "none"
+        },
+        {
+          "op": "snapshot",
+          "expect": null
+        },
+        {
+          "op": "warm",
+          "at_ms": 200398755,
+          "model": "opus"
+        },
+        {
+          "op": "snapshot",
+          "expect": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 200398755,
+            "last_active_at_ms": 200398755
+          }
+        },
+        {
+          "op": "restore",
+          "at_ms": 211198755,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 200398755,
+            "last_active_at_ms": 200398755
+          },
+          "expect": true
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 212841913,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 213024640,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 214740536,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 216304125,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 221998754,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 200398755,
+            "last_active_at_ms": 200398755
+          },
+          "expect": true
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 223962148,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 226144073,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 228276890,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 229049381,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 221998755,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 200398755,
+            "last_active_at_ms": 200398755
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 222299069,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 224114519,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 224568038,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 225031598,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 221998756,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 200398755,
+            "last_active_at_ms": 200398755
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 222687481,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 224380104,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 225714410,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 226088780,
+          "expect": "none"
+        },
+        {
+          "op": "restore",
+          "at_ms": 243598755,
+          "snapshot": {
+            "model": "opus",
+            "interval_ms": 21600000,
+            "last_warm_at_ms": 200398755,
+            "last_active_at_ms": 200398755
+          },
+          "expect": false
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 243693347,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 243785718,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 243886778,
+          "expect": "none"
+        },
+        {
+          "op": "restored_tick",
+          "at_ms": 244621071,
+          "expect": "none"
+        }
+      ]
+    }
+  ]
+}
