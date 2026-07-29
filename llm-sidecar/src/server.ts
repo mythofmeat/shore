@@ -1,5 +1,7 @@
 import { chmodSync, existsSync, lstatSync, unlinkSync } from "node:fs";
 
+import type { BudgetBlock } from "./ledger/budget.ts";
+import { budgetBlockFor } from "./ledger/gate.ts";
 import { recordGenerate, recordGenerateError, recordingStream } from "./ledger/record.ts";
 import { generateImage } from "./llm/image_generate.ts";
 import { GeminiProvider } from "./llm/providers/gemini.ts";
@@ -65,6 +67,15 @@ const NDJSON_HEADERS = {
  */
 const HEARTBEAT_MS = 5_000;
 
+/**
+ * Status for a call refused by a usage budget.
+ *
+ * Distinct from anything a provider returns, so the daemon can tell a policy
+ * refusal apart from an upstream failure and surface the budget's own message
+ * rather than an HTTP error.
+ */
+export const BUDGET_BLOCKED_STATUS = 402;
+
 /** The slice of Bun's `Server` we use: per-request idle-timeout override. */
 interface RequestTimeoutServer {
   timeout(request: Request, seconds: number): void;
@@ -110,6 +121,8 @@ export function createSidecarHandler(
       const req = parsed.value;
       const provider = providers[req.sdk];
       if (!provider) return textError(501, `unsupported sdk: ${req.sdk}`);
+      const blocked = budgetBlockFor(req);
+      if (blocked) return budgetRefusal(blocked);
       // `tool_rpc` is the switch: with it, this side drives the tool loop and
       // calls back to run each tool. Anthropic only — the SDK tool runner this
       // is built on has no equivalent elsewhere, so every other dialect keeps
@@ -134,6 +147,8 @@ export function createSidecarHandler(
       const req = parsed.value;
       const provider = providers[req.sdk];
       if (!provider) return textError(501, `unsupported sdk: ${req.sdk}`);
+      const blocked = budgetBlockFor(req);
+      if (blocked) return budgetRefusal(blocked);
       const startedAt = Date.now();
       try {
         const result = await provider.generate(req, request.signal);
@@ -290,6 +305,22 @@ function errorResponse(e: unknown): Response {
 
 function textError(status: number, body: string): Response {
   return new Response(body, { status, headers: { "content-type": "text/plain" } });
+}
+
+/**
+ * A call refused by a usage budget.
+ *
+ * `402 Payment Required` rather than a 4xx the provider might also return: the
+ * daemon maps this one status back to the same error it used to raise itself,
+ * so the text the user reads is unchanged by the move. Nothing is recorded —
+ * no call was made, and a ledger row here would be a call that never happened.
+ */
+function budgetRefusal(block: BudgetBlock): Response {
+  console.warn(
+    `shore: LLM call blocked by usage budget "${block.budget_name}" ` +
+      `(${block.scope}, $${block.current_cost}/$${block.cost_limit}, action ${block.action})`,
+  );
+  return textError(BUDGET_BLOCKED_STATUS, block.message);
 }
 
 function errorStatus(e: unknown): number {

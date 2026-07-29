@@ -185,6 +185,18 @@ export class Ledger {
     return this.#ttlSecs;
   }
 
+  /**
+   * The open handle, for the read-side modules.
+   *
+   * `query.ts` and `budget.ts` are free functions over a `Database`, mirroring
+   * the Rust they came from, and the writer has no business re-wrapping them.
+   * Exposing the handle keeps one open connection per ledger path rather than a
+   * second one racing the first.
+   */
+  get database(): Database {
+    return this.#db;
+  }
+
   close(): void {
     this.#db.close();
   }

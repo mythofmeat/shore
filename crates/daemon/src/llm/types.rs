@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use shore_common::config::app::ThinkingReplay;
+use shore_common::config::app::{ThinkingReplay, UsageConfig};
 use shore_common::config::models::Sdk;
 use std::path::Path;
 pub use shore_common::protocol::types::ContentBlock;
@@ -594,6 +594,15 @@ pub struct CallContext<'req> {
     pub forensics_dir: Option<&'req Path>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rid: Option<&'req str>,
+    /// `[usage]`, so the sidecar can refuse a call that would exceed a budget.
+    ///
+    /// Enforcement lives on the side that makes the call, for the same reason
+    /// the ledger row does: the daemon was authorising a call it no longer
+    /// places. Sent per call rather than pushed once and cached — a cached
+    /// config is one sidecar restart away from being empty, and an empty budget
+    /// list allows everything without saying so.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<&'req UsageConfig>,
 }
 
 impl LlmRequest {
@@ -1424,6 +1433,46 @@ mod tests {
         assert!(continuation);
     }
 
+    /// Budgets for the census, with every field the sidecar's gate reads set to
+    /// something other than its default. A rename on either side then shows up
+    /// as a fixture diff rather than as a budget that silently stops matching.
+    fn census_usage_config() -> UsageConfig {
+        use shore_common::config::app::{
+            BudgetWeekday, UsageBudgetAction, UsageBudgetConfig, UsageBudgetPeriod,
+            UsageSpikeWarningsConfig,
+        };
+        UsageConfig {
+            timezone: "local".into(),
+            allow_compaction_over_budget: true,
+            budgets: vec![UsageBudgetConfig {
+                name: "weekly".into(),
+                period: UsageBudgetPeriod::Week,
+                cost_usd: 14.0,
+                warn_at: vec![0.8, 1.0],
+                limit: UsageBudgetAction::Block,
+                character: Some("aria".into()),
+                provider: Some("anthropic".into()),
+                api_key: Some("default".into()),
+                model: Some("claude-opus-4-6".into()),
+                call_type: Some("message".into()),
+                usage_kind: vec!["message_with_tools".into()],
+                allow_compaction_over_budget: Some(false),
+                reset_hour: Some(6),
+                reset_day_of_week: Some(BudgetWeekday::Wednesday),
+                reset_day_of_month: Some(28),
+                pace_period: Some(UsageBudgetPeriod::Day),
+                pace_action: Some(UsageBudgetAction::PauseBackground),
+                pace_warn_at: Some(vec![0.5]),
+            }],
+            spike_warnings: UsageSpikeWarningsConfig {
+                enabled: true,
+                period: UsageBudgetPeriod::Day,
+                multiplier: 1.5,
+                min_cost_usd: 0.5,
+            },
+        }
+    }
+
     #[expect(
         clippy::too_many_lines,
         reason = "one flat literal per pinned wire shape; splitting it hides the census"
@@ -1470,6 +1519,7 @@ mod tests {
                     keepalive_max_secs: None,
                     forensics_dir: None,
                     rid: None,
+                    usage: None,
                 },
                 "full": CallContext {
                     ledger: Some(Path::new("/var/lib/shore/ledger.db")),
@@ -1482,6 +1532,7 @@ mod tests {
                     keepalive_max_secs: Some(43_200),
                     forensics_dir: Some(Path::new("/var/cache/shore")),
                     rid: Some("rid_1"),
+                    usage: Some(&census_usage_config()),
                 },
             },
             "provider_options": {

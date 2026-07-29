@@ -51,7 +51,46 @@
       "reasoning_effort": "high",
       "keepalive_max_secs": 43200,
       "forensics_dir": "/var/cache/shore",
-      "rid": "rid_1"
+      "rid": "rid_1",
+      "usage": {
+        "timezone": "local",
+        "allow_compaction_over_budget": true,
+        "budgets": [
+          {
+            "name": "weekly",
+            "period": "week",
+            "cost_usd": 14.0,
+            "warn_at": [
+              0.8,
+              1.0
+            ],
+            "limit": "block",
+            "character": "aria",
+            "provider": "anthropic",
+            "api_key": "default",
+            "model": "claude-opus-4-6",
+            "call_type": "message",
+            "usage_kind": [
+              "message_with_tools"
+            ],
+            "allow_compaction_over_budget": false,
+            "reset_hour": 6,
+            "reset_day_of_week": "wednesday",
+            "reset_day_of_month": 28,
+            "pace_period": "day",
+            "pace_action": "pause_background",
+            "pace_warn_at": [
+              0.5
+            ]
+          }
+        ],
+        "spike_warnings": {
+          "enabled": true,
+          "period": "day",
+          "multiplier": 1.5,
+          "min_cost_usd": 0.5
+        }
+      }
     }
   },
   "provider_options": {

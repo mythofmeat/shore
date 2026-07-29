@@ -38,6 +38,7 @@ import type {
 import {
   systemToText,
   toolResultText,
+  type CallContext,
   type ProviderOptions,
   type SidecarRequest,
   type StreamEvent,
@@ -70,6 +71,7 @@ interface WireFixture {
   tool_definition: ToolDefinition;
   call_complete: CallComplete;
   provider_options: { empty: ProviderOptions; full: ProviderOptions };
+  call_context: { minimal: CallContext; full: CallContext };
   reasoning_carrier: Record<string, Record<string, unknown>>;
   wire_block: Record<string, ContentBlock>;
   wire_message: { bare: WireMessage; with_provenance: WireMessage };
@@ -136,6 +138,44 @@ describe("scalar mirrors carry exactly the declared fields", () => {
       ["name", "description", "input_schema"],
       "ToolDefinition",
     );
+  });
+
+  test("CallContext", () => {
+    // These labels decide what a ledger row says and — since budget
+    // enforcement moved to this side — whether the call is made at all. A
+    // renamed `usage` would not fail a build on either side; it would just
+    // stop every budget matching, silently, in the allowing direction.
+    assertKeys<CallContext>(
+      wire.call_context.minimal,
+      ["character", "call_type", "thinking_enabled"],
+      "CallContext (minimal)",
+    );
+    assertKeys<CallContext>(
+      wire.call_context.full,
+      [
+        "ledger",
+        "character",
+        "call_type",
+        "api_key_name",
+        "thinking_enabled",
+        "cache_ttl",
+        "reasoning_effort",
+        "keepalive_max_secs",
+        "forensics_dir",
+        "rid",
+        "usage",
+      ],
+      "CallContext (full)",
+    );
+    // The budget the gate reads must survive the trip with its filters intact:
+    // these are the fields `budgetMatchesCall` compares against.
+    const budget = wire.call_context.full.usage?.budgets?.[0];
+    expect(budget, "the census carries a budget").toBeDefined();
+    expect(budget!.period).toBe("week");
+    expect(budget!.limit).toBe("block");
+    expect(budget!.reset_day_of_week).toBe("wednesday");
+    expect(budget!.pace_action).toBe("pause_background");
+    expect(budget!.usage_kind).toEqual(["message_with_tools"]);
   });
 
   test("call_complete", () => {

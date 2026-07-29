@@ -1,7 +1,7 @@
 //! LedgerClient: compiler-enforced wrapper around LlmClient.
 
 use crate::ledger::budget::{
-    enforce_budget_for_call, newly_crossed_budget_warnings, BudgetCallContext,
+    newly_crossed_budget_warnings,
     UsageBudgetWarningEvent,
 };
 use crate::ledger::pricing::PricingEngine;
@@ -80,6 +80,21 @@ pub struct CredentialFallbackEvent {
 // calls and then dies would be double-counted by a daemon-side error row.
 
 // ── LedgerClient ────────────────────────────────────────────────────────────
+
+/// The per-call labels resolved on this side before dispatch.
+///
+/// Grouped rather than passed loose: they share the property of being decided
+/// here and consumed over there, and `cache_ttl`/`reasoning_effort` are sent
+/// already resolved so a row's shape does not depend on two implementations of
+/// the same resolution agreeing.
+#[derive(Debug, Clone, Copy)]
+struct CallLabels<'req> {
+    thinking_enabled: bool,
+    cache_ttl: Option<&'req str>,
+    reasoning_effort: Option<&'req str>,
+    /// Budgets for the sidecar's gate. `None` when none are configured.
+    usage: Option<&'req UsageConfig>,
+}
 
 #[derive(Debug, Clone)]
 pub struct LedgerClient {
@@ -162,9 +177,7 @@ impl LedgerClient {
         request: &'req LlmRequest,
         call_type: CallType,
         character: &'req str,
-        thinking_enabled: bool,
-        cache_ttl: Option<&'req str>,
-        reasoning_effort: Option<&'req str>,
+        labels: CallLabels<'req>,
     ) -> CallContext<'req> {
         let ceiling = self.keepalive_max_secs.load(Ordering::Relaxed);
         CallContext {
@@ -172,13 +185,23 @@ impl LedgerClient {
             character,
             call_type: call_type.as_str(),
             api_key_name: request.api_key_name.as_deref(),
-            thinking_enabled,
-            cache_ttl,
-            reasoning_effort,
+            thinking_enabled: labels.thinking_enabled,
+            cache_ttl: labels.cache_ttl,
+            reasoning_effort: labels.reasoning_effort,
             keepalive_max_secs: (ceiling > 0).then_some(ceiling),
             forensics_dir: crate::llm::cache_forensics::dir(),
             rid: request.rid.as_deref(),
+            usage: labels.usage,
         }
+    }
+
+    /// The budgets to send with a call, or `None` when there are none to
+    /// enforce. Cloned into the caller's frame so the borrow outlives the
+    /// [`CallContext`] built from it.
+    #[must_use]
+    fn usage_for_call(&self) -> Option<UsageConfig> {
+        let config = self.usage_config_snapshot();
+        (!config.budgets.is_empty()).then_some(config)
     }
 
     fn usage_config_snapshot(&self) -> UsageConfig {
@@ -188,50 +211,13 @@ impl LedgerClient {
         }
     }
 
-    fn enforce_usage_budget(
-        &self,
-        provider_key: &str,
-        api_key_name: Option<&str>,
-        model: &str,
-        call_type: CallType,
-        character: &str,
-    ) -> Result<(), LlmError> {
-        let config = self.usage_config_snapshot();
-        if config.budgets.is_empty() {
-            return Ok(());
-        }
-
-        match enforce_budget_for_call(
-            &self.ledger,
-            &config,
-            BudgetCallContext {
-                provider: provider_key,
-                api_key_name,
-                model,
-                call_type,
-                character,
-            },
-            Utc::now(),
-        ) {
-            Ok(()) => Ok(()),
-            Err(block) => {
-                warn!(
-                    provider = provider_key,
-                    model,
-                    character,
-                    call_type = call_type.as_str(),
-                    budget = %block.budget_name,
-                    current_cost = block.current_cost,
-                    cost_limit = block.cost_limit,
-                    action = ?block.action,
-                    "LLM call blocked by usage budget"
-                );
-                Err(LlmError::Provider {
-                    message: block.to_string(),
-                })
-            }
-        }
-    }
+    // The budget gate used to live here, between `usage_config_snapshot` and
+    // the dispatch below. It now runs in the sidecar, which is the side that
+    // actually places the call — the same move the ledger row writer made in
+    // shore commit fe2058b3, and for the same reason: this side was authorising
+    // a call it no longer makes. The budgets travel with each request in
+    // `CallContext::usage`, and a refusal comes back as a `Provider` error
+    // carrying the budget's own message, so the text a user reads is unchanged.
 
     /// Return newly crossed usage budget warning thresholds and mark them
     /// delivered for the current budget window.
@@ -303,13 +289,6 @@ impl LedgerClient {
             .provider_key
             .as_deref()
             .unwrap_or(request.sdk.as_str());
-        self.enforce_usage_budget(
-            provider_key,
-            request.api_key_name.as_deref(),
-            &request.model,
-            call_type,
-            character,
-        )?;
         debug!(
             model = request.model,
             call_type = call_type.as_str(),
@@ -329,13 +308,17 @@ impl LedgerClient {
             .provider_options
             .as_ref()
             .and_then(crate::llm::types::ProviderOptions::resolved_reasoning_effort);
+        let usage = self.usage_for_call();
         let context = self.call_context(
             request,
             call_type,
             character,
-            thinking_enabled,
-            cache_ttl.as_deref(),
-            reasoning_effort.as_deref(),
+            CallLabels {
+                thinking_enabled,
+                cache_ttl: cache_ttl.as_deref(),
+                reasoning_effort: reasoning_effort.as_deref(),
+                usage: usage.as_ref(),
+            },
         );
 
         let resp = match self.inner.generate(request, Some(context)).await {
@@ -518,13 +501,6 @@ impl LedgerClient {
             .provider_key
             .as_deref()
             .unwrap_or(request.sdk.as_str());
-        self.enforce_usage_budget(
-            provider_key,
-            request.api_key_name.as_deref(),
-            &request.model,
-            call_type,
-            character,
-        )?;
         debug!(
             model = request.model,
             call_type = call_type.as_str(),
@@ -544,13 +520,17 @@ impl LedgerClient {
             .provider_options
             .as_ref()
             .and_then(crate::llm::types::ProviderOptions::resolved_reasoning_effort);
+        let usage = self.usage_for_call();
         let context = self.call_context(
             request,
             call_type,
             character,
-            thinking_enabled,
-            cache_ttl.as_deref(),
-            reasoning_effort.as_deref(),
+            CallLabels {
+                thinking_enabled,
+                cache_ttl: cache_ttl.as_deref(),
+                reasoning_effort: reasoning_effort.as_deref(),
+                usage: usage.as_ref(),
+            },
         );
 
         self.inner

@@ -22,6 +22,7 @@
  */
 
 import type { ContentBlock, ImageRef } from "../engine/types.ts";
+import type { UsageConfig } from "../ledger/budget.ts";
 
 // ─────────────────────────────────────────────────────────────────────────
 // CONTRACT — mirrors crates/daemon/src/llm/types.rs (the Rust↔sidecar wire)
@@ -220,6 +221,18 @@ export interface CallContext {
   /** Directory for `cache_forensics.jsonl`. Absent is the forensics off switch. */
   forensics_dir?: string;
   rid?: string;
+  /**
+   * `[usage]`, so this side can refuse a call that would exceed a budget.
+   *
+   * Carried **per call** rather than pushed once and cached, deliberately. A
+   * cached config is one restart away from being empty, and an empty budget
+   * list does not fail loudly — it silently allows everything, which is the
+   * expensive direction. Sending it every time costs a few hundred bytes on a
+   * request that is about to cost money.
+   *
+   * Absent, or present with no budgets, means nothing to enforce.
+   */
+  usage?: UsageConfig;
 }
 
 /**

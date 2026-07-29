@@ -19,6 +19,28 @@ use crate::llm::types::{
 };
 use crate::llm::{body_preview, check_response, LlmError};
 
+/// Status the sidecar returns for a call refused by a usage budget.
+///
+/// Distinct from anything a provider produces, so a policy refusal can be told
+/// apart from an upstream failure. Mirrors `BUDGET_BLOCKED_STATUS` in
+/// `llm-sidecar/src/server.ts`.
+const BUDGET_BLOCKED: u16 = 402;
+
+/// [`check_response`], plus the budget refusal.
+///
+/// A blocked call is not a transport failure and must not read like one: the
+/// body is the budget's own message, and surfacing it as `Provider` keeps the
+/// text identical to what the daemon raised when it ran this check itself.
+async fn check_sidecar_response(
+    response: reqwest::Response,
+) -> Result<reqwest::Response, LlmError> {
+    if response.status().as_u16() == BUDGET_BLOCKED {
+        let message = response.text().await.unwrap_or_default();
+        return Err(LlmError::Provider { message });
+    }
+    check_response(response).await
+}
+
 const SIDECAR_ORIGIN: &str = "http://sidecar";
 
 /// Per-request ceiling for non-streaming calls.
@@ -86,7 +108,7 @@ where
         .timeout(NON_STREAMING_TIMEOUT)
         .send()
         .await?;
-    let checked = check_response(response).await?;
+    let checked = check_sidecar_response(response).await?;
     let text = checked.text().await?;
     serde_json::from_str(&text).map_err(|e| LlmError::Provider {
         message: format!(
@@ -145,7 +167,7 @@ async fn open_stream(
         .json(&OutboundRequest { request, context })
         .send()
         .await?;
-    let checked = check_response(response).await?;
+    let checked = check_sidecar_response(response).await?;
 
     let (mut writer, reader) = tokio::io::duplex(64 * 1024);
     let _stream_pump = tokio::spawn(async move {
