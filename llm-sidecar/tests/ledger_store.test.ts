@@ -210,6 +210,53 @@ describe.skipIf(!haveDaemon)("writing rows the daemon's schema accepts", () => {
     }
   });
 
+  test("a shorter TTL shortens the warm window", () => {
+    const { path, cleanup } = daemonMadeLedger();
+    try {
+      const at = (iso: string) => () => new Date(iso);
+      const read = (r: number, w: number) => ({
+        input_tokens: 10,
+        output_tokens: 5,
+        cache_read_tokens: r,
+        cache_creation_tokens: w,
+      });
+
+      // Six minutes apart. Under Anthropic's 1h TTL that prefix is still
+      // warm; under 5m it aged out, and the smaller read that follows is the
+      // TTL working rather than an anomaly.
+      const ledger = Ledger.open(path);
+      ledger.setCacheTtlSecs(300);
+      ledger.record(call({ usage: read(0, 40_000) }), at("2026-04-05T10:00:00Z"));
+      const expired = ledger.record(call({ usage: read(0, 40_000) }), at("2026-04-05T10:06:00Z"));
+      ledger.close();
+      expect(expired.cache_state).toBe("warm");
+      expect(expired.cache_anomaly).toBe("keepalive_miss");
+    } finally {
+      cleanup();
+    }
+  });
+
+  test("the default TTL keeps the same pair warm", () => {
+    const { path, cleanup } = daemonMadeLedger();
+    try {
+      const at = (iso: string) => () => new Date(iso);
+      const read = (r: number, w: number) => ({
+        input_tokens: 10,
+        output_tokens: 5,
+        cache_read_tokens: r,
+        cache_creation_tokens: w,
+      });
+      // Same six minutes, TTL left at the 1h default: no expiry, no anomaly.
+      const ledger = Ledger.open(path);
+      ledger.record(call({ usage: read(0, 40_000) }), at("2026-04-05T10:00:00Z"));
+      const still = ledger.record(call({ usage: read(0, 40_000) }), at("2026-04-05T10:06:00Z"));
+      ledger.close();
+      expect(still.cache_anomaly).toBeNull();
+    } finally {
+      cleanup();
+    }
+  });
+
   test("opening a database with no schema is an error, not a CREATE TABLE", () => {
     const root = mkdtempSync(join(tmpdir(), "shore-ledger-empty-"));
     try {

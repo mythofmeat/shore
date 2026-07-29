@@ -53,6 +53,10 @@ pub struct PricingEngine {
     memory_cache: Mutex<HashMap<String, ModelPricing>>,
 }
 
+/// Ceiling on the OpenRouter catalog fetch. Generous for a few hundred KB of
+/// JSON, and short enough that a hung endpoint cannot hold a turn open.
+const CATALOG_FETCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
 impl PricingEngine {
     pub fn new(ledger: Arc<Ledger>) -> Self {
         Self {
@@ -171,7 +175,20 @@ impl PricingEngine {
         target_model_id: &str,
     ) -> Result<Option<ModelPricing>, Box<dyn Error + Send + Sync>> {
         let url = "https://openrouter.ai/api/v1/models";
-        let resp = reqwest::get(url).await?;
+        // Bounded, because this is awaited on the request hot path: the daemon
+        // warms the shared `pricing` table here so the sidecar — which prices
+        // rows from cache only, never over the network — finds an entry when it
+        // records. A bare `reqwest::get` has no deadline at all, so an
+        // OpenRouter that accepts the connection and then goes quiet would hang
+        // every LLM call behind it. The result is discarded either way
+        // (`let _ignored` at both call sites): an unpriced row is recoverable
+        // with `shore usage --recalculate`, a stalled turn is not.
+        let resp = reqwest::Client::builder()
+            .timeout(CATALOG_FETCH_TIMEOUT)
+            .build()?
+            .get(url)
+            .send()
+            .await?;
         if !resp.status().is_success() {
             warn!(status = %resp.status(), "OpenRouter catalog fetch failed");
             return Ok(None);

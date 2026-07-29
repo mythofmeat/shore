@@ -599,7 +599,19 @@ pub fn null_cost_rows(ledger: &Ledger) -> Result<Vec<CostRow>, rusqlite::Error> 
 pub fn all_cost_rows(ledger: &Ledger) -> Result<Vec<CostRow>, rusqlite::Error> {
     ledger.with_conn(|conn| {
         let mut stmt = conn.prepare(
-            "SELECT id, provider, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cache_ttl FROM calls WHERE COALESCE(cost_source, 'pricing_catalog') != 'provider_reported'",
+            // `provider_reported` rows carry the provider's own total, and
+            // `subscription` rows are billed by a flat plan — repricing either
+            // from the catalog would replace a true cost with an invented one.
+            // The subscription exclusion is not belt-and-braces: `update_costs`
+            // unconditionally rewrites `cost_source` to `pricing_catalog` and
+            // sets a non-zero total, so a subscription row that priced would
+            // start accruing against usage budgets. Nothing catches it today
+            // only because `opencode-go/<model>` is never in OpenRouter's
+            // catalog, which is luck, not a rule. The rule itself lives in
+            // `llm-sidecar/src/ledger/store.ts`, which writes the marker.
+            "SELECT id, provider, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cache_ttl \
+             FROM calls \
+             WHERE COALESCE(cost_source, 'pricing_catalog') NOT IN ('provider_reported', 'subscription')",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(CostRow {
@@ -883,6 +895,29 @@ mod tests {
         let rows = all_cost_rows(&ledger).unwrap();
         assert_eq!(rows.len(), 3);
         assert!(rows.iter().all(|row| row.id != 4));
+    }
+
+    /// A subscription row must never be repriced. `update_costs` rewrites
+    /// `cost_source` to `pricing_catalog` and sets a non-zero total, so a
+    /// repriced subscription row would start accruing against usage budgets
+    /// for a plan that bills a flat rate. Only the catalog not listing
+    /// `opencode-go/<model>` was stopping it.
+    #[test]
+    fn all_cost_rows_skips_subscription_rows() {
+        let ledger = populated_ledger();
+        let mut subscription = ledger.recent(1).unwrap().remove(0);
+        subscription.ts = "2026-04-05T10:04:00Z".into();
+        subscription.provider = "opencode-go".into();
+        subscription.model = "kimi-k3".into();
+        subscription.cost_source = Some("subscription".into());
+        subscription.total_cost = Some(0.0);
+        let id = ledger.insert(&subscription).unwrap();
+
+        let rows = all_cost_rows(&ledger).unwrap();
+        assert!(
+            rows.iter().all(|row| row.id != id),
+            "a flat-plan row must not be handed to the pricing catalog"
+        );
     }
 
     #[test]

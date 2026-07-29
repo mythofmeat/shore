@@ -29,7 +29,10 @@ import type { CallContext, GenerateResponse, SidecarRequest, StreamEvent } from 
  */
 const ledgers = new Map<string, Ledger | null>();
 
-function ledgerFor(path: string): Ledger | null {
+/** The open handle for `path`, opening it on first use. Exported so a test can
+ *  assert what a recorded call configured on it. */
+
+export function ledgerFor(path: string): Ledger | null {
   const existing = ledgers.get(path);
   if (existing !== undefined) return existing;
   let opened: Ledger | null = null;
@@ -71,6 +74,25 @@ export function continuationOf(callType: string): string {
   }
 }
 
+/**
+ * Anthropic's prompt-cache TTL as seconds.
+ *
+ * `cache_ttl` is a free-form string on the model profile, so an unrecognised
+ * value leaves the tracker's default alone rather than guessing: a wrong TTL
+ * either invents expiries or hides them, and both show up as cache anomalies
+ * that are really config.
+ */
+export function cacheTtlSeconds(ttl: string | undefined): number | undefined {
+  switch (ttl) {
+    case "5m":
+      return 300;
+    case "1h":
+      return 3600;
+    default:
+      return undefined;
+  }
+}
+
 /** A call that reported no tokens. Kept out of the cache tracker by `store.ts`. */
 const NO_USAGE = {
   input_tokens: 0,
@@ -93,6 +115,14 @@ function record(ctx: CallContext, req: SidecarRequest, call: Recorded): void {
   const ledger = ledgerFor(ctx.ledger);
   if (ledger === null) return;
   if (ctx.keepalive_max_secs !== undefined) ledger.setMaxIdleSecs(ctx.keepalive_max_secs);
+  // The tracker's TTL is what decides a prefix has aged out. It defaulted to an
+  // hour whatever the model asked for, which is right for Anthropic's `1h` and
+  // twelve times too long for `5m` — a 5m model's expiry would go unnoticed
+  // until the read collapsed, and then read as an anomaly rather than as the
+  // TTL doing its job. The daemon has been sending the resolved value all
+  // along; this is the reader it never had.
+  const ttl = cacheTtlSeconds(ctx.cache_ttl);
+  if (ttl !== undefined) ledger.setCacheTtlSecs(ttl);
 
   const entry: RecordCall = {
     // The ledger's `provider` is the models.toml key, not the SDK dialect —

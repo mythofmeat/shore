@@ -178,6 +178,11 @@ export class Ledger {
     this.#ttlSecs = secs;
   }
 
+  /** The TTL trackers are seeded and aged against. */
+  get cacheTtlSecs(): number {
+    return this.#ttlSecs;
+  }
+
   close(): void {
     this.#db.close();
   }

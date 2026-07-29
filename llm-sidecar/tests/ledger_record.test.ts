@@ -12,7 +12,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
 import {
+  cacheTtlSeconds,
   closeLedgers,
+  ledgerFor,
   continuationOf,
   recordGenerate,
   recordGenerateError,
@@ -276,6 +278,27 @@ describe.skipIf(!haveDaemon)("what a stream records", () => {
     });
   });
 
+  test("the model's TTL reaches the tracker, and an unknown one does not", async () => {
+    await withLedger(async (path) => {
+      const done = (): StreamEvent => ({
+        type: "done",
+        content: "x",
+        finish_reason: "end_turn",
+        usage: usage(0, 1),
+        timing: TIMING,
+      });
+      await drain(recordingStream(ctx(path, { cache_ttl: "5m" }), REQ, events(done())));
+      expect(ledgerFor(path)?.cacheTtlSecs).toBe(300);
+
+      await drain(recordingStream(ctx(path, { cache_ttl: "1h" }), REQ, events(done())));
+      expect(ledgerFor(path)?.cacheTtlSecs).toBe(3600);
+
+      // An unrecognised value must not reset it to some guess.
+      await drain(recordingStream(ctx(path, { cache_ttl: "90s" }), REQ, events(done())));
+      expect(ledgerFor(path)?.cacheTtlSecs).toBe(3600);
+    });
+  });
+
   test("no context → no rows, and the events still flow", async () => {
     await withLedger(async (path) => {
       const seen = await drain(
@@ -400,5 +423,29 @@ describe("continuation types match the Rust copy", () => {
     ["memory_query", "memory_query"],
   ])("%s → %s", (from, to) => {
     expect(continuationOf(from)).toBe(to);
+  });
+});
+
+/**
+ * The tracker's TTL, from the value the daemon already sends.
+ *
+ * Two halves, tested where each is observable: the mapping here, and what the
+ * TTL actually does to the warm window in `ledger_store.test.ts` (which can
+ * inject a clock, as the recorder cannot). The line joining them is
+ * `record()` calling `setCacheTtlSecs` with this.
+ */
+describe("cache TTL parsed from the model's setting", () => {
+  test("Anthropic's two values map to seconds", () => {
+    expect(cacheTtlSeconds("5m")).toBe(300);
+    expect(cacheTtlSeconds("1h")).toBe(3600);
+  });
+
+  test("an unset or unrecognised TTL leaves the default alone", () => {
+    // `cache_ttl` is free-form on the model profile. Guessing at an unknown
+    // value either invents expiries or hides them, and both surface as cache
+    // anomalies that are really a config problem.
+    expect(cacheTtlSeconds(undefined)).toBeUndefined();
+    expect(cacheTtlSeconds("90s")).toBeUndefined();
+    expect(cacheTtlSeconds("")).toBeUndefined();
   });
 });
