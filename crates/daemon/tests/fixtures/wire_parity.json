@@ -34,6 +34,25 @@
     "finish_reason": "tool_use",
     "continuation": true
   },
+  "call_context": {
+    "minimal": {
+      "character": "aria",
+      "call_type": "message",
+      "thinking_enabled": false
+    },
+    "full": {
+      "ledger": "/var/lib/shore/ledger.db",
+      "character": "aria",
+      "call_type": "tool_loop",
+      "api_key_name": "default",
+      "thinking_enabled": true,
+      "cache_ttl": "1h",
+      "reasoning_effort": "high",
+      "keepalive_max_secs": 43200,
+      "forensics_dir": "/var/cache/shore",
+      "rid": "rid_1"
+    }
+  },
   "provider_options": {
     "empty": {},
     "full": {

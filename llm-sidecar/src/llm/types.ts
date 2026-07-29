@@ -22,7 +22,6 @@
  */
 
 import type { ContentBlock, ImageRef } from "../engine/types.ts";
-import type { ForensicsContext } from "./forensics.ts";
 
 // ─────────────────────────────────────────────────────────────────────────
 // CONTRACT — mirrors crates/daemon/src/llm/types.rs (the Rust↔sidecar wire)
@@ -192,11 +191,42 @@ export interface ToolRpc {
 }
 
 /**
+ * Per-call labels from the daemon — mirrors Rust `CallContext`
+ * (`crates/daemon/src/llm/types.rs`). The two must change together, and the
+ * shape is pinned in `wire_parity.json`.
+ *
+ * This is daemon bookkeeping, not part of the LLM request: who the call is for,
+ * what kind it is, which key paid, where to write the row. It arrives beside
+ * the request rather than inside it, so none of it can reach a provider.
+ *
+ * The ledger row is written here because this side makes the call, and so is
+ * the only side that sees each call of a tool loop separately — and the only
+ * one that can record a failed call at the moment it fails. `cache_ttl` and
+ * `reasoning_effort` arrive already resolved so a row's shape does not depend
+ * on two implementations of the same resolution agreeing.
+ */
+export interface CallContext {
+  /** Path to `ledger.db`. Absent means no ledger — record nothing. */
+  ledger?: string;
+  character: string;
+  /** `message` | `tool_loop` | `keepalive` | … See Rust `CallType::as_str`. */
+  call_type: string;
+  api_key_name?: string;
+  thinking_enabled: boolean;
+  cache_ttl?: string;
+  reasoning_effort?: string;
+  /** `[behavior.autonomy].cache_keepalive_max`, in seconds. */
+  keepalive_max_secs?: number;
+  /** Directory for `cache_forensics.jsonl`. Absent is the forensics off switch. */
+  forensics_dir?: string;
+  rid?: string;
+}
+
+/**
  * The request the sidecar receives — the serialized Rust `LlmRequest` minus its
  * `#[serde(skip)]` transient fields (`api_key_name`, `rid`, `forensic_character`,
- * `retain_long`), which stay Rust-side. When cache forensics is on, `rid` and
- * `forensic_character` do cross, inside `forensics`, so the sidecar can label
- * the rows it writes.
+ * `retain_long`), which stay Rust-side. The ones this side needs cross in
+ * `context` instead, where they cannot be mistaken for provider input.
  */
 export interface SidecarRequest {
   sdk: Sdk;
@@ -220,9 +250,9 @@ export interface SidecarRequest {
   /** How much prior-turn thinking to replay. Applied here, not by the daemon —
    * see `llm/replay.ts`. */
   replay_prior_thinking: ThinkingReplay;
-  /** Present only when the daemon has cache forensics enabled. Its presence is
-   * the switch; see `llm/forensics.ts`. Stripped before any provider call. */
-  forensics?: ForensicsContext;
+  /** Per-call labels for the ledger row and the forensic log. Absent only for
+   * callers with no ledger behind them. See {@link CallContext}. */
+  context?: CallContext;
   /** Present when this side drives the tool loop. See {@link ToolRpc}. */
   tool_rpc?: ToolRpc;
   /** Dispatch rounds the loop may run. Absent means unlimited — the model

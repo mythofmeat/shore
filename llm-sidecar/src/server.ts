@@ -1,5 +1,6 @@
 import { chmodSync, existsSync, lstatSync, unlinkSync } from "node:fs";
 
+import { recordGenerate, recordGenerateError, recordingStream } from "./ledger/record.ts";
 import { generateImage } from "./llm/image_generate.ts";
 import { GeminiProvider } from "./llm/providers/gemini.ts";
 import { AnthropicProvider } from "./llm/providers/anthropic.ts";
@@ -117,18 +118,29 @@ export function createSidecarHandler(
         req.tool_rpc !== undefined && req.sdk === "anthropic"
           ? (signal: AbortSignal) => anthropicToolLoopEvents(req, signal)
           : (signal: AbortSignal) => provider.stream(req, signal);
-      return streamResponse(source, request.signal, heartbeatMs);
+      // Every provider call in the stream becomes a ledger row here, including
+      // a loop's individual calls, which reach the daemon only as one summed
+      // `done`. See `ledger/record.ts`.
+      return streamResponse(
+        (signal) => recordingStream(req.context, req, source(signal)),
+        request.signal,
+        heartbeatMs,
+      );
     }
 
     if (url.pathname === "/v1/generate") {
       const parsed = await readJson<SidecarRequest>(request);
       if (!parsed.ok) return parsed.response;
-      const provider = providers[parsed.value.sdk];
-      if (!provider) return textError(501, `unsupported sdk: ${parsed.value.sdk}`);
+      const req = parsed.value;
+      const provider = providers[req.sdk];
+      if (!provider) return textError(501, `unsupported sdk: ${req.sdk}`);
+      const startedAt = Date.now();
       try {
-        const result = await provider.generate(parsed.value, request.signal);
+        const result = await provider.generate(req, request.signal);
+        recordGenerate(req.context, req, result);
         return jsonResponse(result);
       } catch (e) {
+        recordGenerateError(req.context, req, startedAt);
         return errorResponse(e);
       }
     }

@@ -12,22 +12,18 @@
  * One row per call, placement and usage together — there is no correlation id
  * because there is nothing to correlate.
  *
- * The daemon attaches `forensics` to a request only when
+ * The daemon fills `context.forensics_dir` only when
  * `[advanced].cache_forensics` is on, so its absence is the off switch and this
- * module needs no configuration of its own.
+ * module needs no configuration of its own. The labels themselves ride on the
+ * same `CallContext` the ledger row is written from — they used to have their
+ * own `ForensicsContext`, which was the same three fields sent only when
+ * forensics happened to be enabled.
  */
 
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 
-/** Per-call labels from the daemon. Mirrors Rust `ForensicsContext`. */
-export interface ForensicsContext {
-  /** Directory to append `cache_forensics.jsonl` to. */
-  dir: string;
-  character: string;
-  call_type: string;
-  rid?: string;
-}
+import type { CallContext } from "./types.ts";
 
 /** What the adapter decided about caching for this call. */
 export interface CachePlacement {
@@ -59,13 +55,14 @@ const LOG_FILE = "cache_forensics.jsonl";
  * that otherwise succeeded, so I/O errors are swallowed.
  */
 export function recordCacheCall(
-  ctx: ForensicsContext | undefined,
+  ctx: CallContext | undefined,
   model: string,
   placement: CachePlacement,
   usage: CacheUsage,
   outcome: string,
 ): void {
-  if (ctx === undefined) return;
+  const dir = ctx?.forensics_dir;
+  if (ctx === undefined || dir === undefined) return;
   const row = {
     ts: new Date().toISOString(),
     character: ctx.character,
@@ -77,7 +74,7 @@ export function recordCacheCall(
     ...usage,
   };
   try {
-    appendFileSync(join(ctx.dir, LOG_FILE), `${JSON.stringify(row)}\n`);
+    appendFileSync(join(dir, LOG_FILE), `${JSON.stringify(row)}\n`);
   } catch {
     // Diagnostics are never worth failing a call over.
   }

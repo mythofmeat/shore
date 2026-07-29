@@ -621,12 +621,12 @@ async fn build_llm_client(
             .as_duration(),
     );
 
-    // Reconstruct cache tracker state from the ledger for each known character.
-    // This prevents false-positive anomalies when the cache is still warm from
-    // before the restart.
-    for character in shore_common::config::discover_characters(&loaded.dirs.config) {
-        llm_client.reconstruct_cache_state(&character, 3600);
-    }
+    // Cache-tracker state is no longer reconstructed here: the tracker lives in
+    // the sidecar with the ledger writer, and seeds itself from the last
+    // recorded Anthropic call on a character's first call. Doing it lazily
+    // there needs no startup ordering between the two processes — the daemon
+    // used to walk every discovered character at boot for the same reason (a
+    // still-warm cache must not read as a cold start after a restart).
 
     Ok((llm_client, llm_sidecar_socket))
 }

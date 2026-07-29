@@ -5,12 +5,10 @@ mod convert;
 pub mod pricing;
 pub mod query;
 pub mod store;
-pub mod stream;
 mod sync;
 
 pub use client::{CallType, CredentialFallbackEvent, LedgerClient};
 pub use store::Ledger;
-pub use stream::LedgerStream;
 
 /// Whether a provider is billed by a flat subscription rather than metered
 /// per-token usage.

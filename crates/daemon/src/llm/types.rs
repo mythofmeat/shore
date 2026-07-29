@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use shore_common::config::app::ThinkingReplay;
 use shore_common::config::models::Sdk;
+use std::path::Path;
 pub use shore_common::protocol::types::ContentBlock;
 
 /// Per-provider knobs the sidecar's adapters consume.
@@ -545,6 +546,54 @@ impl std::fmt::Debug for LlmRequest {
             .field("keepalive_interval", &self.keepalive_interval)
             .finish()
     }
+}
+
+/// Per-call labels the sidecar needs and no provider does.
+///
+/// Everything here is daemon bookkeeping — who the call is for, what kind it
+/// is, which key paid for it, where to write the row. It rides *beside* the
+/// request rather than inside it so none of it can reach a provider: the
+/// sidecar reads the wrapper and hands the SDK only the request.
+///
+/// The sidecar writes the ledger row, because the sidecar is what makes the
+/// call and so is the only side that sees each call in a loop separately.
+/// These are the columns it cannot derive from the request. They are sent
+/// already resolved (`cache_ttl`, `reasoning_effort`) rather than re-derived
+/// over there, so a row's shape does not depend on two implementations of the
+/// same resolution agreeing.
+///
+/// This began as `ForensicsContext`, which carried `character`/`call_type` for
+/// the same reason but only when `[advanced].cache_forensics` was on. Forensics
+/// is now one optional field of it.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct CallContext<'req> {
+    /// Path to `ledger.db`. Absent means no ledger — the sidecar records
+    /// nothing, which is what in-memory test clients want.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ledger: Option<&'req Path>,
+    pub character: &'req str,
+    pub call_type: &'req str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key_name: Option<&'req str>,
+    pub thinking_enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<&'req str>,
+    /// Effort is part of Anthropic's prompt-cache key: changing it invalidates
+    /// every message-level breakpoint, so the row keeps it to tell a config
+    /// change apart from a cache bug.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<&'req str>,
+    /// The keepalive idle ceiling (`[behavior.autonomy].cache_keepalive_max`),
+    /// so `keepalive_miss` is judged against the interval the keepalive
+    /// subsystem actually enforces rather than the tracker's default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keepalive_max_secs: Option<u64>,
+    /// Directory to append `cache_forensics.jsonl` to. Absent means forensics
+    /// is off, which keeps `[advanced].cache_forensics` the single switch.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub forensics_dir: Option<&'req Path>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rid: Option<&'req str>,
 }
 
 impl LlmRequest {
@@ -1360,6 +1409,10 @@ mod tests {
         }
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one flat literal per pinned wire shape; splitting it hides the census"
+    )]
     fn wire_shape_census() -> serde_json::Value {
         json!({
             "wire_role": [WireRole::User, WireRole::Assistant, WireRole::System],
@@ -1386,6 +1439,35 @@ mod tests {
                 },
                 finish_reason: "tool_use".into(),
                 continuation: true,
+            },
+            // The labels the sidecar writes ledger rows from. Pinned because a
+            // silently renamed field here does not fail a build — it produces
+            // rows with a null column.
+            "call_context": {
+                "minimal": CallContext {
+                    ledger: None,
+                    character: "aria",
+                    call_type: "message",
+                    api_key_name: None,
+                    thinking_enabled: false,
+                    cache_ttl: None,
+                    reasoning_effort: None,
+                    keepalive_max_secs: None,
+                    forensics_dir: None,
+                    rid: None,
+                },
+                "full": CallContext {
+                    ledger: Some(Path::new("/var/lib/shore/ledger.db")),
+                    character: "aria",
+                    call_type: "tool_loop",
+                    api_key_name: Some("default"),
+                    thinking_enabled: true,
+                    cache_ttl: Some("1h"),
+                    reasoning_effort: Some("high"),
+                    keepalive_max_secs: Some(43_200),
+                    forensics_dir: Some(Path::new("/var/cache/shore")),
+                    rid: Some("rid_1"),
+                },
             },
             "provider_options": {
                 // Absent knobs are omitted, not sent as null: `undefined`

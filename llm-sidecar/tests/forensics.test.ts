@@ -12,7 +12,7 @@ import { join } from "node:path";
 
 import { buildAnthropicPlan } from "../src/llm/providers/anthropic.ts";
 import { recordCacheCall, type CachePlacement } from "../src/llm/forensics.ts";
-import type { SidecarRequest } from "../src/llm/types.ts";
+import type { CallContext, SidecarRequest } from "../src/llm/types.ts";
 
 let dir: string;
 
@@ -38,6 +38,15 @@ const USAGE = {
   cache_creation_tokens: 0,
 };
 
+/** A context with forensics on, which is what makes `recordCacheCall` write. */
+const ctx = (over: Partial<CallContext> = {}): CallContext => ({
+  character: "poppy",
+  call_type: "message",
+  thinking_enabled: true,
+  forensics_dir: dir,
+  ...over,
+});
+
 const PLACEMENT: CachePlacement = {
   msg_breakpoints: [4, 6, 8],
   sys_breakpoints: [2],
@@ -50,7 +59,7 @@ const PLACEMENT: CachePlacement = {
 describe("cache forensics rows", () => {
   test("a row carries placement, usage, and the daemon's labels", () => {
     recordCacheCall(
-      { dir, character: "poppy", call_type: "keepalive", rid: "r-1" },
+      ctx({ character: "poppy", call_type: "keepalive", rid: "r-1" }),
       "claude-opus-5",
       PLACEMENT,
       USAGE,
@@ -75,15 +84,23 @@ describe("cache forensics rows", () => {
     expect(row).not.toHaveProperty("call_id");
   });
 
-  test("no forensics context → nothing is written", () => {
+  test("no context at all → nothing is written", () => {
     recordCacheCall(undefined, "claude-opus-5", PLACEMENT, USAGE, "done");
     expect(() => rows()).toThrow(); // file never created
   });
 
+  test("a context with forensics off → nothing is written", () => {
+    // Every call carries a context now, so the presence of the *directory* is
+    // the switch, not the presence of the context.
+    const { forensics_dir: _off, ...off } = ctx();
+    recordCacheCall(off, "claude-opus-5", PLACEMENT, USAGE, "done");
+    expect(() => rows()).toThrow();
+  });
+
   test("rows append rather than overwrite", () => {
-    const ctx = { dir, character: "poppy", call_type: "message" };
-    recordCacheCall(ctx, "claude-opus-5", PLACEMENT, USAGE, "done");
-    recordCacheCall(ctx, "claude-opus-5", PLACEMENT, USAGE, "error");
+    const both = ctx({ character: "poppy" });
+    recordCacheCall(both, "claude-opus-5", PLACEMENT, USAGE, "done");
+    recordCacheCall(both, "claude-opus-5", PLACEMENT, USAGE, "error");
     expect(rows().map((r) => r["outcome"])).toEqual(["done", "error"]);
   });
 
@@ -91,7 +108,7 @@ describe("cache forensics rows", () => {
     // Diagnostics must never fail a call that otherwise succeeded.
     expect(() =>
       recordCacheCall(
-        { dir: join(dir, "does", "not", "exist"), character: "p", call_type: "message" },
+        ctx({ character: "p", forensics_dir: join(dir, "does", "not", "exist") }),
         "claude-opus-5",
         PLACEMENT,
         USAGE,

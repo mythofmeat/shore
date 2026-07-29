@@ -15,50 +15,7 @@ import { join } from "node:path";
 
 import { Ledger, type RecordCall } from "../src/ledger/store.ts";
 import { PricingEngine, type ModelPricing, type PricingStore } from "../src/ledger/pricing.ts";
-
-const ROOT = new URL("../..", import.meta.url).pathname.replace(/\/$/, "");
-const DAEMON = `${ROOT}/target/debug/shore-daemon`;
-const haveDaemon = Bun.spawnSync(["test", "-x", DAEMON]).exitCode === 0;
-
-/**
- * Boot the daemon just long enough for it to create `ledger.db`, then stop it.
- * That guarantees the schema under test is the one the daemon actually writes.
- */
-function daemonMadeLedger(): { path: string; cleanup: () => void } {
-  const root = mkdtempSync(join(tmpdir(), "shore-ledger-"));
-  const [CONFIG, DATA] = [`${root}/config`, `${root}/data`];
-  Bun.spawnSync(["mkdir", "-p", `${CONFIG}/characters/probe/workspace`, DATA]);
-  Bun.spawnSync(["sh", "-c", `printf '[daemon]\\naddr = "127.0.0.1:0"\\n' > ${CONFIG}/config.toml`]);
-
-  const proc = Bun.spawn([DAEMON], {
-    env: {
-      ...process.env,
-      SHORE_CONFIG_DIR: CONFIG,
-      SHORE_DATA_DIR: DATA,
-      SHORE_CACHE_DIR: `${root}/cache`,
-      SHORE_RUNTIME_DIR: `${root}/run`,
-      RUST_LOG: "error",
-    },
-    stdout: "ignore",
-    stderr: "ignore",
-  });
-
-  const path = `${DATA}/ledger.db`;
-  const deadline = Date.now() + 20_000;
-  while (Date.now() < deadline) {
-    try {
-      const db = new Database(path, { readonly: true, create: false });
-      const has = db.query("SELECT name FROM sqlite_master WHERE name = 'calls'").get();
-      db.close();
-      if (has) break;
-    } catch {
-      /* not created yet */
-    }
-    Bun.sleepSync(150);
-  }
-  proc.kill();
-  return { path, cleanup: () => rmSync(root, { recursive: true, force: true }) };
-}
+import { daemonMadeLedger, haveDaemon, rowsIn } from "./support/ledger_fixture.ts";
 
 function fixedPricing(entry: ModelPricing): PricingEngine {
   const map = new Map<string, ModelPricing>([["anthropic/claude-opus-4.6", entry]]);
@@ -84,15 +41,6 @@ const call = (over: Partial<RecordCall> = {}): RecordCall => ({
   thinking_enabled: true,
   ...over,
 });
-
-const rowsIn = (path: string) => {
-  const db = new Database(path, { readonly: true });
-  const rows = db.query("SELECT * FROM calls ORDER BY id ASC").all() as Array<
-    Record<string, unknown>
-  >;
-  db.close();
-  return rows;
-};
 
 describe.skipIf(!haveDaemon)("writing rows the daemon's schema accepts", () => {
   test("a recorded call lands as a row", () => {

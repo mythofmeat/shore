@@ -66,7 +66,7 @@ export class AnthropicProvider implements SidecarProvider {
     // for any cache write reported in `message_start`.
     for await (const event of anthropicStreamEvents(req.model, stream)) {
       if (event.type === "done" || event.type === "error") {
-        recordCacheCall(req.forensics, req.model, placement, event.usage, event.type);
+        recordCacheCall(req.context, req.model, placement, event.usage, event.type);
       }
       yield event;
     }
@@ -97,7 +97,7 @@ export class AnthropicProvider implements SidecarProvider {
 
     const total = Date.now() - startedAt;
     const usage = anthropicUsage(message.usage);
-    recordCacheCall(req.forensics, req.model, placement, usage, "generate");
+    recordCacheCall(req.context, req.model, placement, usage, "generate");
     return {
       content: textAccum,
       content_blocks,

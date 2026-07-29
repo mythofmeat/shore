@@ -254,10 +254,21 @@ export class Ledger {
   /** Ported from `track_cache_state`. Returns `[state, anomaly]`. */
   #trackCacheState(record: RecordCall, ts: string): [string | null, string | null] {
     // A `cancelled` row stands for a call whose stream was dropped before any
-    // terminal frame. Its usage is all zero, so feeding it to the tracker would
-    // inject a bogus cold observation. A genuine mid-stream `error` is
-    // different — it can carry a real cache write — and is tracked normally.
+    // terminal frame. Its usage is all zero by construction, so feeding it to
+    // the tracker would inject a bogus cold observation.
     if (record.finish_reason === "cancelled") return [null, null];
+
+    // A failure carries a cache signal only when the provider reported one —
+    // Anthropic bills the write announced in `message_start` even if the stream
+    // then dies, and that write must be tracked. A failure that reported
+    // *nothing* is the zero-observation problem again: against a warm baseline
+    // it reads as a total cache loss and flips the state to cold on a cache
+    // that is fine. The daemon never produced such a row, so this guard is new
+    // with the writer: a non-streaming call that fails before the provider
+    // answers is recorded here, and it has no usage to report.
+    const noCacheSignal =
+      record.usage.cache_read_tokens === 0 && record.usage.cache_creation_tokens === 0;
+    if (record.finish_reason === "error" && noCacheSignal) return [null, null];
     if (!affectsCacheTracker(record.call_type)) return [null, null];
 
     this.#seedIfNeeded(record.character);

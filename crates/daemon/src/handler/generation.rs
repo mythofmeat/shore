@@ -65,21 +65,12 @@ pub(super) async fn stream_with_retry(
         let consumer = StreamConsumer::new(ctx.direct_tx.clone(), request.rid.clone());
 
         let stream_result = async {
-            let mut ledger_stream = ctx
+            let mut reader = ctx
                 .llm_client
                 .stream_raw(request, CallType::Message, char_name, thinking_enabled)
                 .await?;
 
-            match consumer.consume(ledger_stream.reader_mut(), regen).await {
-                Ok(result) => {
-                    ledger_stream.finalize(&result);
-                    Ok(result)
-                }
-                Err(e) => {
-                    ledger_stream.finalize_error(&e);
-                    Err(e)
-                }
-            }
+            consumer.consume(&mut reader, regen).await
         }
         .await;
 

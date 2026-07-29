@@ -20,7 +20,7 @@ use tracing::{debug, error, warn};
 use crate::call_store::CallStore;
 use shore_common::config::app::ThinkingReplay;
 use shore_common::config::models::ResolvedModel;
-use types::{ImageGenerateParams, ImageGenerateResponse, LlmRequest, WireMessage};
+use types::{CallContext, ImageGenerateParams, ImageGenerateResponse, LlmRequest, WireMessage};
 
 /// The reader returned by `LlmClient::stream_raw`.
 ///
@@ -380,13 +380,14 @@ impl LlmClient {
     /// Returns a `BufReader` over an `AsyncRead` that yields NDJSON
     /// `StreamEvent` lines for consumption by the stream consumer. When a call
     /// store is configured, the reader is transparently teed so the full
-    /// response is recorded on drop. `call_type` is the ledger call-type label,
-    /// threaded down for filtering in the store.
+    /// response is recorded on drop. `context` carries the per-call labels the
+    /// sidecar records the ledger row from; `None` means no row.
     pub async fn stream_raw(
         &self,
         request: &LlmRequest,
-        call_type: Option<&str>,
+        context: Option<CallContext<'_>>,
     ) -> Result<StreamReader, LlmError> {
+        let call_type = context.map(|c| c.call_type);
         let prepared = preprocess_request(request);
         let body = serde_json::to_string(&*prepared).map_err(LlmError::Serialize)?;
         let ctx = debug_log::start(self.call_store.as_ref(), &prepared, &body, call_type);
@@ -397,34 +398,35 @@ impl LlmClient {
             "Sending streaming request to provider"
         );
 
-        // Forensics labels ride the outbound body, not `body` above: the debug
-        // log records the LLM request proper, and these labels never reach a
-        // provider — the sidecar strips them before the SDK call.
-        let forensics = cache_forensics::context(request, call_type);
-        let read_half = sidecar::stream(&prepared, forensics, self.sidecar_socket()).await?;
+        // The labels ride the outbound body, not `body` above: the debug log
+        // records the LLM request proper, and these never reach a provider —
+        // the sidecar reads the wrapper and hands the SDK only the request.
+        let read_half = sidecar::stream(&prepared, context, self.sidecar_socket()).await?;
         let reader: Box<dyn AsyncRead + Send + Unpin> = match ctx {
-            Some(context) => Box::new(debug_log::TeeReader::new(read_half, context)),
+            Some(log) => Box::new(debug_log::TeeReader::new(read_half, log)),
             None => Box::new(read_half),
         };
         Ok(BufReader::new(reader))
     }
 
-    /// Send a non-streaming completion request to the LLM provider. `call_type`
-    /// is the ledger call-type label, threaded down for filtering in the store.
+    /// Send a non-streaming completion request to the LLM provider. `context`
+    /// carries the per-call labels the sidecar records the ledger row from;
+    /// `None` means no row.
     pub async fn generate(
         &self,
         request: &LlmRequest,
-        call_type: Option<&str>,
+        context: Option<CallContext<'_>>,
     ) -> Result<types::GenerateResponse, LlmError> {
+        let call_type = context.map(|c| c.call_type);
         let prepared = preprocess_request(request);
         let body = serde_json::to_string(&*prepared).map_err(LlmError::Serialize)?;
         let ctx = debug_log::start(self.call_store.as_ref(), &prepared, &body, call_type);
 
-        let result = sidecar::generate(&prepared, self.sidecar_socket()).await;
-        if let Some(context) = ctx {
+        let result = sidecar::generate(&prepared, context, self.sidecar_socket()).await;
+        if let Some(log) = ctx {
             match &result {
-                Ok(resp) => context.finish_response(resp),
-                Err(e) => context.finish_error(e),
+                Ok(resp) => log.finish_response(resp),
+                Err(e) => log.finish_error(e),
             }
         }
         result

@@ -1,11 +1,7 @@
 //! Per-character Anthropic cache warm/cold state machine.
 
 use crate::ledger::convert::u64_to_i64;
-use crate::ledger::sync::lock_or_recover;
 use chrono::{DateTime, Utc};
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, MutexGuard};
 use tracing::debug;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -81,52 +77,9 @@ pub struct CacheTracker {
 /// Default keepalive idle ceiling in seconds (12h), mirroring the
 /// `[behavior.autonomy].cache_keepalive_max` config default. Past this gap the
 /// keepalive subsystem stops pinging, so a cold start is expected. The daemon
-/// pushes the *configured* value into [`CacheTrackers`] at startup and on
-/// config reload; this constant is only the fallback when nothing was pushed.
+/// sends the *configured* value on each call as `CallContext.keepalive_max_secs`;
+/// this constant is only the fallback when nothing was sent.
 pub const DEFAULT_MAX_IDLE_SECS: u64 = 12 * 3600;
-
-/// Shared per-character tracker map plus the keepalive idle ceiling applied to
-/// the trackers it holds. The ceiling mirrors
-/// `[behavior.autonomy].cache_keepalive_max`; the ledger cannot read the app
-/// config itself, so the daemon pushes the value in (like the usage-budget
-/// config). Keeping it beside the map guarantees every tracker — existing or
-/// lazily created on a character's first Anthropic call — judges
-/// `KeepaliveMiss` against the same ceiling the keepalive subsystem actually
-/// enforces.
-#[derive(Debug)]
-pub struct CacheTrackers {
-    max_idle_secs: AtomicU64,
-    map: Mutex<HashMap<String, CacheTracker>>,
-}
-
-impl Default for CacheTrackers {
-    fn default() -> Self {
-        Self {
-            max_idle_secs: AtomicU64::new(DEFAULT_MAX_IDLE_SECS),
-            map: Mutex::new(HashMap::new()),
-        }
-    }
-}
-
-impl CacheTrackers {
-    /// Set the keepalive idle ceiling for future trackers and retune the ones
-    /// already live. Called by the daemon at startup and on config reload.
-    pub fn set_max_idle_secs(&self, secs: u64) {
-        self.max_idle_secs.store(secs, Ordering::Relaxed);
-        let mut map = self.lock();
-        for tracker in map.values_mut() {
-            tracker.set_max_idle_secs(secs);
-        }
-    }
-
-    pub(crate) fn lock(&self) -> MutexGuard<'_, HashMap<String, CacheTracker>> {
-        lock_or_recover("ledger cache tracker map", &self.map)
-    }
-
-    pub(crate) fn max_idle_secs(&self) -> u64 {
-        self.max_idle_secs.load(Ordering::Relaxed)
-    }
-}
 
 impl Default for CacheTracker {
     fn default() -> Self {
@@ -1165,42 +1118,6 @@ mod tests {
             call_type: "message".into(),
         });
         assert_eq!(flagged.anomaly, Some(Anomaly::UnexpectedWrite));
-    }
-
-    #[test]
-    fn ceiling_raise_retunes_live_trackers() {
-        // The daemon pushes `[behavior.autonomy].cache_keepalive_max` into the
-        // shared tracker map on startup/reload. Raising it must retune already
-        // live trackers: with a 24h ceiling, a cold start at a 19h gap is a
-        // genuine KeepaliveMiss (pings should have bridged it), where the 12h
-        // default would have written it off as a by-design stop.
-        let trackers = CacheTrackers::default();
-        {
-            let max_idle = trackers.max_idle_secs();
-            let mut map = trackers.lock();
-            _ = map.insert("poppy".into(), CacheTracker::with_max_idle_secs(max_idle));
-        }
-        trackers.set_max_idle_secs(24 * 3600);
-
-        let mut map = trackers.lock();
-        let tracker = map.get_mut("poppy").unwrap();
-        _ = tracker.observe(&Observation {
-            ts: "2026-04-05T00:00:00Z".into(),
-            model: "claude-opus-4-6".into(),
-            thinking_enabled: true,
-            cache_read_tokens: 0,
-            cache_write_tokens: 11_000,
-            call_type: "message".into(),
-        });
-        let result = tracker.observe(&Observation {
-            ts: "2026-04-05T19:00:00Z".into(),
-            model: "claude-opus-4-6".into(),
-            thinking_enabled: true,
-            cache_read_tokens: 0,
-            cache_write_tokens: 11_200,
-            call_type: "message".into(),
-        });
-        assert_eq!(result.anomaly, Some(Anomaly::KeepaliveMiss));
     }
 
     #[test]

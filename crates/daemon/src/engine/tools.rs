@@ -663,19 +663,10 @@ async fn stream_tool_loop_continuation(
 
     loop {
         let stream_result = async {
-            let mut ledger_stream = client
+            let mut reader = client
                 .stream_raw(request, CallType::ToolLoop, character, thinking_enabled)
                 .await?;
-            match consumer.consume(ledger_stream.reader_mut(), false).await {
-                Ok(result) => {
-                    ledger_stream.finalize(&result);
-                    Ok(result)
-                }
-                Err(e) => {
-                    ledger_stream.finalize_error(&e);
-                    Err(e)
-                }
-            }
+            consumer.consume(&mut reader, false).await
         }
         .await;
 

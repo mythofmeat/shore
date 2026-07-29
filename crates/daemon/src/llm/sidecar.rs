@@ -14,8 +14,9 @@ use serde::Serialize;
 use tokio::io::{AsyncWriteExt, DuplexStream};
 use tracing::{debug, warn};
 
-use crate::llm::cache_forensics::ForensicsContext;
-use crate::llm::types::{GenerateResponse, ImageGenerateParams, ImageGenerateResponse, LlmRequest};
+use crate::llm::types::{
+    CallContext, GenerateResponse, ImageGenerateParams, ImageGenerateResponse, LlmRequest,
+};
 use crate::llm::{body_preview, check_response, LlmError};
 
 const SIDECAR_ORIGIN: &str = "http://sidecar";
@@ -101,7 +102,7 @@ where
 /// lines, pumped from the sidecar response body by a background task.
 pub(crate) async fn stream(
     request: &LlmRequest,
-    forensics: Option<ForensicsContext<'_>>,
+    context: Option<CallContext<'_>>,
     socket_path: Option<&Path>,
 ) -> Result<DuplexStream, LlmError> {
     debug!(
@@ -112,36 +113,36 @@ pub(crate) async fn stream(
         has_tools = request.tools.is_some(),
         "dispatching streaming LLM request through sidecar"
     );
-    open_stream(request, forensics, socket_path)
+    open_stream(request, context, socket_path)
         .await
         .inspect_err(|e| {
         warn!(sdk = ?request.sdk, model = %request.model, error = %e, "streaming request failed");
     })
 }
 
-/// The outbound body: the request plus the per-call forensics labels.
+/// The outbound body: the request plus the per-call bookkeeping labels.
 ///
 /// Flattened over a *borrowed* request so attaching labels costs no clone of
-/// the message history. `forensics` is absent when the feature is off, and the
-/// sidecar writes nothing without it — the daemon's `[advanced].cache_forensics`
-/// stays the single switch.
+/// the message history. `context` is what the sidecar writes ledger and
+/// forensic rows from; it is absent only for callers with no ledger behind
+/// them, and then the sidecar records nothing. See [`CallContext`].
 #[derive(Serialize)]
 struct OutboundRequest<'req> {
     #[serde(flatten)]
     request: &'req LlmRequest,
     #[serde(skip_serializing_if = "Option::is_none")]
-    forensics: Option<ForensicsContext<'req>>,
+    context: Option<CallContext<'req>>,
 }
 
 async fn open_stream(
     request: &LlmRequest,
-    forensics: Option<ForensicsContext<'_>>,
+    context: Option<CallContext<'_>>,
     socket_path: Option<&Path>,
 ) -> Result<DuplexStream, LlmError> {
     let client = sidecar_client(socket_path)?;
     let response = client
         .post(format!("{SIDECAR_ORIGIN}/v1/stream"))
-        .json(&OutboundRequest { request, forensics })
+        .json(&OutboundRequest { request, context })
         .send()
         .await?;
     let checked = check_response(response).await?;
@@ -173,6 +174,7 @@ async fn open_stream(
 /// Send a non-streaming completion request.
 pub(crate) async fn generate(
     request: &LlmRequest,
+    context: Option<CallContext<'_>>,
     socket_path: Option<&Path>,
 ) -> Result<GenerateResponse, LlmError> {
     debug!(
@@ -183,7 +185,7 @@ pub(crate) async fn generate(
         "dispatching non-streaming LLM request through sidecar"
     );
     let result: Result<GenerateResponse, LlmError> =
-        post_json(socket_path, "/v1/generate", request).await;
+        post_json(socket_path, "/v1/generate", &OutboundRequest { request, context }).await;
     match &result {
         Ok(resp) => debug!(
             model = %resp.model,
@@ -416,7 +418,7 @@ mod tests {
         .to_string();
         let captured = serve_once(&socket, "200 OK", response_body)?;
 
-        let resp = generate(&test_request(), Some(&socket)).await?;
+        let resp = generate(&test_request(), None, Some(&socket)).await?;
         let (path, body) = captured.await??;
         let parsed: serde_json::Value = serde_json::from_str(&body)?;
 
@@ -482,7 +484,7 @@ mod tests {
         let socket = tmp.path().join("llm.sock");
         let captured = serve_once(&socket, "429 Too Many Requests", "slow down".into())?;
 
-        let Err(err) = generate(&test_request(), Some(&socket)).await else {
+        let Err(err) = generate(&test_request(), None, Some(&socket)).await else {
             return Err(io::Error::other("expected sidecar 429 to fail").into());
         };
         let (path, _) = captured.await??;
@@ -505,7 +507,7 @@ mod tests {
         let Err(stream_err) = stream(&test_request(), None, None).await else {
             return Err(io::Error::other("stream without sidecar unexpectedly succeeded").into());
         };
-        let Err(generate_err) = generate(&test_request(), None).await else {
+        let Err(generate_err) = generate(&test_request(), None, None).await else {
             return Err(io::Error::other("generate without sidecar unexpectedly succeeded").into());
         };
         let Err(image_err) = image_generate(&test_image_params(), None).await else {

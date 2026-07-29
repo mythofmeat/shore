@@ -115,18 +115,14 @@ pub(crate) async fn run(
     let forward = spawn_forwarder(rx, runtime.direct_tx.clone(), name.to_owned());
 
     let consumer = StreamConsumer::new(tx.clone(), request.rid.clone());
-    let mut ledger_stream = runtime
+    let mut reader = runtime
         .ledger_client
         .stream_raw(&request, CallType::Subagent, char_name, thinking)
         .await
         .map_err(|e| ToolError::Http(e.to_string()))?;
-    let first = match consumer.consume(ledger_stream.reader_mut(), false).await {
-        Ok(r) => {
-            ledger_stream.finalize(&r);
-            r
-        }
+    let first = match consumer.consume(&mut reader, false).await {
+        Ok(r) => r,
         Err(e) => {
-            ledger_stream.finalize_error(&e);
             forward.abort();
             return Err(ToolError::Http(e.to_string()));
         }
