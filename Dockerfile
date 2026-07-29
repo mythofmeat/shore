@@ -1,18 +1,23 @@
 FROM rust:latest AS rust
 WORKDIR /src
 COPY . .
-RUN cargo build --workspace --release
+RUN cargo build --bin shore-daemon --release
 
 FROM oven/bun:latest AS bun
-WORKDIR /src
-COPY . .
+COPY --from=rust /src /src
 WORKDIR /src/llm-sidecar
 RUN bun install
-RUN bun run build 
+RUN bun run build
+RUN mv dist/shore-llm-sidecar ../target/release
+WORKDIR /src/target/release
+ENV SHORE_CONFIG_DIR=/config
+ENV SHORE_DATA_DIR=/data
+ENV SHORE_CACHE_DIR=/cache
+ENV SHORE_ADDR=0.0.0.0
+ENV SHORE_UNSAFE_ALLOW_REMOTE_ACCESS=1
 
 FROM debian:testing-slim
 COPY --from=rust /src/target/release/shore /usr/bin/shore
-COPY --from=rust /src/target/release/shore-daemon /usr/bin/shore-daemon
 COPY --from=rust /src/target/release/shore-tui /usr/bin/shore-tui
 COPY --from=rust /src/target/release/shore-matrix /usr/lib/shore/shore-matrix
 COPY --from=bun /src/llm-sidecar/dist/shore-llm-sidecar /usr/lib/shore/shore-llm-sidecar
@@ -32,8 +37,7 @@ EOF
 RUN apt-get update
 RUN apt-get install tuwunel --yes
 
-ENV SHORE_CONFIG_DIR=/config
-ENV SHORE_DATA_DIR=/data
-ENV SHORE_CACHE_DIR=/cache
+CMD ["./shore-daemon"]
 
-CMD ["shore-daemon"]
+
+

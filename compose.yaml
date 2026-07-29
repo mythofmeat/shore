@@ -1,11 +1,17 @@
 services:
-  shore:
+  daemon:
     container_name: shore
     build:
       context: git@github.com:mythofmeat/shore#main
     image: shore-test:latest
     init: true
     # user: "1000:1000"
+    # dockerfile_inline: |
+    #     FROM alpine:latest
+    #     RUN apk update && apk add --no-cache curl python3
+    #     WORKDIR /app
+    #     COPY . /app
+    #     CMD ["python3", "-m", "http.server", "8000"]
     volumes:
       - ./config:/config
       - ./workspace:/config/characters
@@ -15,5 +21,4 @@ services:
       - /tmp
     ports:
       - 1112:1112
-
     restart: unless-stopped

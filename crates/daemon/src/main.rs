@@ -45,6 +45,11 @@ const CALL_STORE_MAX_BYTES: u64 = 536_870_912;
 /// How often the rotation task runs, in seconds (1 hour).
 const CALL_STORE_ROTATE_SECS: u64 = 3600;
 
+/// Environment override for `[daemon].unsafe_allow_remote_access`. Lets a
+/// container opt into a non-loopback bind without a writable config.toml,
+/// mirroring how `SHORE_ADDR` overrides `[daemon].addr`.
+const ALLOW_REMOTE_ENV: &str = "SHORE_UNSAFE_ALLOW_REMOTE_ACCESS";
+
 #[derive(Debug, Parser)]
 #[command(name = "shore-daemon", about = "Shore daemon")]
 struct Cli {
@@ -71,6 +76,9 @@ struct StartupConfig {
     config_path: PathBuf,
     bind_addr: String,
     bind_addr_source: StartupValueSource,
+    allow_remote_access: bool,
+    /// Where the remote-access opt-in came from, for the startup log.
+    allow_remote_access_source: &'static str,
     remote_access_warnings: Vec<RemoteAccessWarning>,
 }
 
@@ -117,6 +125,9 @@ enum StartupError {
         bind_addr_source: StartupValueSource,
         message: String,
     },
+
+    #[error("Invalid boolean {value:?} for {var}: expected 1/true/yes/on or 0/false/no/off")]
+    InvalidEnvBool { var: &'static str, value: String },
 
     #[error("Failed to create {kind} directory {path}: {source}")]
     CreateDir {
@@ -170,12 +181,20 @@ async fn run_daemon() -> Result<(), Box<dyn std::error::Error>> {
         config_path,
         bind_addr: addr,
         bind_addr_source,
+        allow_remote_access,
+        allow_remote_access_source,
         remote_access_warnings,
-    } = resolve_startup(cli_parsed, startup_env_addr())?;
+    } = resolve_startup(
+        cli_parsed,
+        startup_env_addr(),
+        startup_env_allow_remote_access()?,
+    )?;
     info!(
         config_path = %config_path.display(),
         bind_addr = %addr,
         bind_addr_source = %bind_addr_source,
+        allow_remote_access,
+        allow_remote_access_source,
         "Startup configuration resolved"
     );
 
@@ -812,7 +831,11 @@ fn unregister_instance(registry: &Registry, instance_id: &str) {
     }
 }
 
-fn resolve_startup(cli: Cli, env_addr: Option<String>) -> Result<StartupConfig, StartupError> {
+fn resolve_startup(
+    cli: Cli,
+    env_addr: Option<String>,
+    env_allow_remote_access: Option<bool>,
+) -> Result<StartupConfig, StartupError> {
     let explicit_config_path = resolve_explicit_config_path(cli.config.as_deref())?;
     let config_path_for_errors = explicit_config_path
         .clone()
@@ -824,9 +847,11 @@ fn resolve_startup(cli: Cli, env_addr: Option<String>) -> Result<StartupConfig, 
         }
     })?;
     let (bind_addr, bind_addr_source) = resolve_listen_addr(cli.addr, env_addr, &loaded);
+    let (allow_remote_access, allow_remote_access_source) =
+        resolve_allow_remote_access(env_allow_remote_access, &loaded);
     let remote_access_warnings: Vec<RemoteAccessWarning> = validate_remote_access_policy(
         &bind_addr,
-        loaded.app.daemon.unsafe_allow_remote_access,
+        allow_remote_access,
         &loaded.app.daemon.allowed_hosts,
     )
     .map_err(|message| StartupError::RemoteAccessPolicy {
@@ -847,6 +872,8 @@ fn resolve_startup(cli: Cli, env_addr: Option<String>) -> Result<StartupConfig, 
         config_path: explicit_config_path.unwrap_or_else(default_config_path),
         bind_addr,
         bind_addr_source,
+        allow_remote_access,
+        allow_remote_access_source,
         remote_access_warnings,
     })
 }
@@ -891,10 +918,47 @@ fn resolve_listen_addr(
     (loaded.app.daemon.addr.clone(), StartupValueSource::Config)
 }
 
+/// `SHORE_UNSAFE_ALLOW_REMOTE_ACCESS` wins over `[daemon].unsafe_allow_remote_access`
+/// in both directions — setting it to a false value revokes a config opt-in.
+fn resolve_allow_remote_access(
+    env_allow_remote_access: Option<bool>,
+    loaded: &LoadedConfig,
+) -> (bool, &'static str) {
+    match env_allow_remote_access {
+        Some(allow) => (allow, ALLOW_REMOTE_ENV),
+        None => (
+            loaded.app.daemon.unsafe_allow_remote_access,
+            "[daemon].unsafe_allow_remote_access",
+        ),
+    }
+}
+
 fn startup_env_addr() -> Option<String> {
     std::env::var("SHORE_ADDR")
         .ok()
         .filter(|value| !value.trim().is_empty())
+}
+
+/// An unset or blank variable leaves the config value alone; an unparseable one
+/// is a hard error rather than a silent ignore — misreading it in either
+/// direction gets the daemon's exposure wrong.
+fn startup_env_allow_remote_access() -> Result<Option<bool>, StartupError> {
+    let Ok(raw) = std::env::var(ALLOW_REMOTE_ENV) else {
+        return Ok(None);
+    };
+    parse_env_bool(ALLOW_REMOTE_ENV, &raw)
+}
+
+fn parse_env_bool(var: &'static str, raw: &str) -> Result<Option<bool>, StartupError> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "" => Ok(None),
+        "1" | "true" | "yes" | "on" => Ok(Some(true)),
+        "0" | "false" | "no" | "off" => Ok(Some(false)),
+        _ => Err(StartupError::InvalidEnvBool {
+            var,
+            value: raw.to_owned(),
+        }),
+    }
 }
 
 fn default_config_path() -> PathBuf {
@@ -913,7 +977,7 @@ fn validate_remote_access_policy(
     if !unsafe_allow_remote_access {
         return Err(format!(
             "Refusing to bind shore-daemon to non-loopback address {addr}. \
-Set [daemon].unsafe_allow_remote_access = true to acknowledge unauthenticated remote TCP exposure. \
+Set [daemon].unsafe_allow_remote_access = true (or {ALLOW_REMOTE_ENV}=1) to acknowledge unauthenticated remote TCP exposure. \
 [daemon].allowed_hosts is only an IP allowlist and does not provide authentication or TLS."
         ));
     }
@@ -968,8 +1032,9 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::{
-        epoch_timestamp, resolve_explicit_config_path, resolve_listen_addr, resolve_startup,
-        validate_remote_access_policy, Cli, StartupError, StartupValueSource,
+        epoch_timestamp, parse_env_bool, resolve_explicit_config_path, resolve_listen_addr,
+        resolve_startup, validate_remote_access_policy, Cli, StartupError, StartupValueSource,
+        ALLOW_REMOTE_ENV,
     };
     use clap::Parser;
     use tempfile::TempDir;
@@ -1135,12 +1200,14 @@ unsafe_allow_remote_access = true
                 instance_id: None,
             },
             Some("127.0.0.1:8000".into()),
+            None,
         )
         .unwrap();
 
         assert_eq!(startup.config_path, config_path);
         assert_eq!(startup.bind_addr, "0.0.0.0:9000");
         assert_eq!(startup.bind_addr_source, StartupValueSource::Cli);
+        assert!(startup.allow_remote_access);
         assert!(!startup.remote_access_warnings.is_empty());
     }
 
@@ -1159,6 +1226,7 @@ unsafe_allow_remote_access = true
                 instance_id: None,
             },
             Some("0.0.0.0:9000".into()),
+            None,
         )
         .expect_err("non-loopback SHORE_ADDR should still enforce remote-access policy");
 
@@ -1174,5 +1242,81 @@ unsafe_allow_remote_access = true
 
 
         );
+    }
+
+    #[test]
+    fn env_bool_accepts_common_spellings() {
+        for raw in ["1", "true", "TRUE", " yes ", "on"] {
+            assert_eq!(parse_env_bool(ALLOW_REMOTE_ENV, raw).unwrap(), Some(true));
+        }
+        for raw in ["0", "false", "No", "off"] {
+            assert_eq!(parse_env_bool(ALLOW_REMOTE_ENV, raw).unwrap(), Some(false));
+        }
+        for raw in ["", "   "] {
+            assert_eq!(parse_env_bool(ALLOW_REMOTE_ENV, raw).unwrap(), None);
+        }
+    }
+
+    #[test]
+    fn env_bool_rejects_garbage_instead_of_ignoring_it() {
+        let err = parse_env_bool(ALLOW_REMOTE_ENV, "flase")
+            .expect_err("an unparseable opt-in must not be silently dropped");
+        assert!(matches!(err, StartupError::InvalidEnvBool { .. }));
+        assert!(err.to_string().contains(ALLOW_REMOTE_ENV));
+    }
+
+    #[test]
+    fn env_opt_in_permits_remote_bind_without_config_edit() {
+        let tmp = TempDir::new().unwrap();
+        let config_dir = tmp.path().join("config");
+        std::fs::create_dir_all(&config_dir).unwrap();
+        let config_path = config_dir.join("config.toml");
+        std::fs::write(&config_path, "").unwrap();
+
+        let startup = resolve_startup(
+            Cli {
+                config: Some(config_path),
+                addr: None,
+                instance_id: None,
+            },
+            Some("0.0.0.0:9000".into()),
+            Some(true),
+        )
+        .expect("env opt-in should satisfy the remote-access policy");
+
+        assert_eq!(startup.bind_addr, "0.0.0.0:9000");
+        assert!(startup.allow_remote_access);
+        assert_eq!(startup.allow_remote_access_source, ALLOW_REMOTE_ENV);
+        assert!(!startup.remote_access_warnings.is_empty());
+    }
+
+    #[test]
+    fn env_opt_out_overrides_a_config_opt_in() {
+        let tmp = TempDir::new().unwrap();
+        let config_dir = tmp.path().join("config");
+        std::fs::create_dir_all(&config_dir).unwrap();
+        let config_path = config_dir.join("config.toml");
+        std::fs::write(
+            &config_path,
+            r#"
+[daemon]
+addr = "0.0.0.0:7000"
+unsafe_allow_remote_access = true
+"#,
+        )
+        .unwrap();
+
+        let err = resolve_startup(
+            Cli {
+                config: Some(config_path),
+                addr: None,
+                instance_id: None,
+            },
+            None,
+            Some(false),
+        )
+        .expect_err("env opt-out should revoke the config opt-in");
+
+        assert!(matches!(err, StartupError::RemoteAccessPolicy { .. }));
     }
 }
