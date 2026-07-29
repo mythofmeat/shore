@@ -1,140 +1,19 @@
-# Shore — disposable test instance.
-#
-# This is not a production deployment. It exists to answer one question:
-# "does a build of shore-daemon actually boot and work?" Config, data, and
-# cache live under /tmp — deliberately NOT ~/.config/shore, ~/.local/share/shore,
-# ~/.cache/shore — so this can never collide with (or accidentally mutate) a
-# real deployment on the same machine, and a host reboot wipes it back to a
-# clean slate for free.
-#
-# First run — Docker bind-mounts create missing host dirs as root, which the
-# container's uid-1000 user then can't write to, so create them yourself first:
-#   mkdir -p /tmp/shore-test/{config,data,cache}
-#
-# The daemon self-seeds a default config.toml on first launch (see
-# create_default_config() in crates/common/src/config/mod.rs), so it boots with zero
-# setup. To exercise real provider calls, drop a config.toml + .env (API
-# keys) into /tmp/shore-test/config, same as a real deployment would.
-#
-# Run:    docker compose up -d --build
-# Logs:   docker compose logs -f daemon
-# CLI:    docker compose exec daemon shore status
-# TUI:    docker compose run --rm tui        (interactive, against this daemon)
-# Matrix: docker compose --profile matrix up -d
-#         (needs [connections.matrix] in /tmp/shore-test/config/config.toml or
-#          MATRIX_* env vars — see the matrix service below)
-# Reset:  rm -rf /tmp/shore-test   (also gone on next host reboot)
-
 services:
-  daemon:
+  shore:
+    container_name: shore
     build:
-      context: .
-      target: slim
-    image: shore-daemon:test
-
-    # Host networking, deliberately.
-    #
-    # validate_remote_access_policy() (crates/daemon/src/main.rs:893-932)
-    # decides exposure from the bind-address literal alone. Under bridge
-    # networking the daemon would have to bind 0.0.0.0 for a published port to
-    # reach it, which trips the guard and forces
-    # `unsafe_allow_remote_access = true` — a flag whose whole job is to
-    # acknowledge unauthenticated remote TCP. Host networking keeps
-    # `addr = "127.0.0.1:..."` honest: the listener really is host loopback
-    # and the guard really does pass.
-    #
-    # SHORE_ADDR picks a different port than the default 127.0.0.1:7320 so
-    # this throwaway instance can run alongside a real daemon on the same
-    # host instead of fighting it for the port.
-    #
-    # Cost: no compose network isolation, and Linux-only.
-    network_mode: host
-    environment:
-      - SHORE_ADDR=127.0.0.1:7321
-
-    # The daemon supervises the Bun sidecar as a child process; init reaps it
-    # and makes SIGTERM propagate on `compose down`.
+      context: git@github.com:mythofmeat/shore#main
+    image: shore-test:latest
     init: true
-
-    # Must match the owner of the /tmp/shore-test dirs created above. The
-    # workspace is a real git repo — a UID mismatch breaks commits and memory
-    # writes.
-    user: "1000:1000"
-
+    # user: "1000:1000"
     volumes:
-      # Config dir carries config.toml, .env (provider keys — dotenvy loads
-      # it from here), and every character's workspace/ + memory git repo.
-      # Read-write: the daemon owns this state.
-      - /tmp/shore-test/config:/config
-      - /tmp/shore-test/data:/data
-      - /tmp/shore-test/cache:/cache
-
-    # llm.sock + scratch. tmpfs keeps it out of the container's write layer.
+      - ./config:/config
+      - ./workspace:/config/characters
+      - ./data:/data
+      - ./cache:/cache
     tmpfs:
       - /tmp
+    ports:
+      - 1112:1112
 
-    # Disposable by design: no auto-restart. `docker compose up` to check
-    # something, `docker compose down` when you're done with it.
-    restart: "no"
-
-  # Interactive TUI against the test daemon. Profile-gated so a plain
-  # `docker compose up -d` never tries to run a TUI detached; instead:
-  #   docker compose run --rm tui
-  # (compose starts the daemon first via depends_on). No mounts, no env:
-  # the tui talks plain TCP and persists its view prefs daemon-side.
-  tui:
-    build:
-      context: .
-      target: tui
-    image: shore-tui:test
-    profiles: ["tui"]
-    network_mode: host
-    user: "1000:1000"
-    stdin_open: true
-    tty: true
-    depends_on:
-      - daemon
-    command: ["--addr", "127.0.0.1:7321"]
-
-  # Matrix bridge against the test daemon, as its own service — the daemon
-  # image deliberately ships no shore-matrix binary (binary presence toggles
-  # in-daemon supervision; see Dockerfile).
-  #
-  # Profile-gated because it needs real Matrix credentials to do anything:
-  # either [connections.matrix] in /tmp/shore-test/config/config.toml
-  # (external mode — `homeserver`, not `embedded`; this image ships no
-  # homeserver binary to spawn) or the MATRIX_* env vars passed through
-  # below. Then:
-  #   docker compose --profile matrix up -d
-  matrix:
-    build:
-      context: .
-      target: matrix
-    image: shore-matrix:test
-    profiles: ["matrix"]
-    network_mode: host
-    # The bridge manages child processes and expects SIGTERM to propagate
-    # cleanly on `compose down`, same as the daemon.
-    init: true
-    user: "1000:1000"
-    depends_on:
-      - daemon
-    # Pass-through only: unset vars stay unset in the container, so config
-    # file values win unless you export these on the host.
-    environment:
-      - MATRIX_HOMESERVER
-      - MATRIX_USER_ID
-      - MATRIX_ACCESS_TOKEN
-      - MATRIX_PASSWORD
-      - MATRIX_DEVICE_ID
-      - MATRIX_TRUSTED_USER
-    volumes:
-      # Same contract as the daemon: [connections.matrix] lives in config,
-      # the bridge's session store lives in data.
-      - /tmp/shore-test/config:/config
-      - /tmp/shore-test/data:/data
-      - /tmp/shore-test/cache:/cache
-    tmpfs:
-      - /tmp
-    command: ["--addr", "127.0.0.1:7321"]
-    restart: "no"
+    restart: unless-stopped
