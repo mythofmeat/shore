@@ -692,6 +692,12 @@ pub enum StreamEvent {
         content_blocks: Option<Vec<ContentBlock>>,
         usage: Usage,
         timing: Timing,
+        /// One entry per provider call, when the sidecar drove a loop. `usage`
+        /// above stays the sum, so anything that only wants a total is
+        /// unaffected; the ledger writes one row per entry instead of one per
+        /// loop. Empty on single-call streams. See [`CallRecord`].
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        calls: Vec<CallRecord>,
     },
     /// A no-op keepalive emitted by the sidecar during quiet stretches (e.g. a
     /// long max-effort thinking turn where the provider sends only `ping`s,
@@ -749,6 +755,33 @@ pub struct StreamResult {
     /// Contains the full sequence of text, thinking, and tool_use blocks
     /// in the order they were received. Used for persistence.
     pub content_blocks: Vec<ContentBlock>,
+
+    /// One entry per provider call, when the sidecar drove a loop. Empty on a
+    /// single-call stream, where [`Self::usage`] already *is* the call. See
+    /// [`CallRecord`].
+    pub calls: Vec<CallRecord>,
+}
+
+/// One provider call inside a loop the sidecar drove.
+///
+/// The whole loop reaches the daemon as one `start` … `done`, so without this
+/// the ledger gets a single row whose usage is the sum across every call. That
+/// is not just coarse — it is wrong in a way that misreports the cache. The
+/// tracker compares each row's `cache_read` against the previous row's, and a
+/// summed read exceeds any single call's, so it raises the baseline; the next
+/// ordinary message then reads "less" than expected and is flagged
+/// `unexpected_write`, flipping the tracker to Cold over a cache that is fine.
+///
+/// The TS mirror is `CallRecord` in `llm-sidecar/src/llm/types.ts`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CallRecord {
+    pub usage: Usage,
+    pub timing: Timing,
+    pub finish_reason: String,
+    /// False for the loop's opening call, true for the calls answering tool
+    /// results — the distinction the daemon-driven loop wrote as
+    /// `call_type: "message"` versus `"tool_loop"`.
+    pub continuation: bool,
 }
 
 /// Parameters for an image generation request.
@@ -1337,6 +1370,23 @@ mod tests {
                 "Read a file.",
                 json!({"type": "object", "properties": {}}),
             ),
+            // One ledger row per provider call, so a loop the sidecar drove is
+            // not stored as a single summed row — see `CallRecord`.
+            "call_record": CallRecord {
+                usage: Usage {
+                    input_tokens: 12,
+                    output_tokens: 34,
+                    cache_read_tokens: 2200,
+                    cache_creation_tokens: 200,
+                    total_cost_usd: None,
+                },
+                timing: Timing {
+                    total_ms: 900,
+                    time_to_first_token_ms: 120,
+                },
+                finish_reason: "tool_use".into(),
+                continuation: true,
+            },
             "provider_options": {
                 // Absent knobs are omitted, not sent as null: `undefined`
                 // unambiguously means "not configured" on the far side.

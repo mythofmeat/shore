@@ -551,6 +551,48 @@ mod tests {
         assert_eq!(result.anomaly, Some(Anomaly::UnexpectedWrite));
     }
 
+    /// Why a loop must be recorded per call rather than as one summed row.
+    ///
+    /// This tracker judges a row by comparing its `cache_read` against the
+    /// previous row's. A loop summed into one row reports a read no single call
+    /// ever made, which becomes the baseline; the next ordinary message then
+    /// looks like a regression and is flagged `unexpected_write`, and the
+    /// tracker drops to Cold over a cache that never went cold. Per-call rows
+    /// keep the comparison against a real predecessor.
+    #[test]
+    fn a_summed_loop_row_would_invent_an_anomaly() {
+        let obs = |read: u64, write: u64, call_type: &str| Observation {
+            ts: "2026-04-05T12:00:00Z".into(),
+            model: "claude-opus-5".into(),
+            thinking_enabled: true,
+            cache_read_tokens: read,
+            cache_write_tokens: write,
+            call_type: call_type.into(),
+        };
+
+        // What the ledger stores now: one row per provider call.
+        let mut per_call = CacheTracker::new();
+        _ = per_call.observe(&obs(0, 2000, "message"));
+        _ = per_call.observe(&obs(2000, 200, "message"));
+        _ = per_call.observe(&obs(2200, 200, "tool_loop"));
+        _ = per_call.observe(&obs(2400, 200, "tool_loop"));
+        let after_loop = per_call.observe(&obs(2600, 200, "message"));
+        assert_eq!(after_loop.anomaly, None, "a healthy loop raises nothing");
+        assert_eq!(per_call.state(), CacheState::Warm);
+
+        // What it stored before: the loop collapsed into one summed row.
+        let mut summed = CacheTracker::new();
+        _ = summed.observe(&obs(0, 2000, "message"));
+        _ = summed.observe(&obs(2000 + 2200 + 2400, 600, "message"));
+        let after_summed = summed.observe(&obs(2600, 200, "message"));
+        assert_eq!(
+            after_summed.anomaly,
+            Some(Anomaly::UnexpectedWrite),
+            "the summed baseline is what made the next message look wrong"
+        );
+        assert_eq!(summed.state(), CacheState::Cold);
+    }
+
     #[test]
     fn cold_to_warm_on_cache_read() {
         let mut tracker = CacheTracker::new();

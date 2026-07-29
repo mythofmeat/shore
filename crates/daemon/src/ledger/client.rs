@@ -42,6 +42,25 @@ pub enum CallType {
 }
 
 impl CallType {
+    /// The type a *continuation* of this call carries — the calls a tool loop
+    /// makes after feeding results back. Mirrors how the daemon-driven loop
+    /// tags its own continuations, so a delegated loop produces the same row
+    /// sequence the cache tracker was built to read.
+    #[must_use]
+    pub fn continuation(self) -> Self {
+        match self {
+            // A sub-agent's continuations are `ToolLoop` too — see the variant.
+            CallType::Message | CallType::ToolLoop | CallType::Subagent => CallType::ToolLoop,
+            CallType::Heartbeat | CallType::HeartbeatToolLoop => CallType::HeartbeatToolLoop,
+            // No loop runs under these; if one ever does, its continuations are
+            // most honestly still itself rather than a chat tool loop.
+            CallType::Keepalive
+            | CallType::Compaction
+            | CallType::Dreaming
+            | CallType::MemoryQuery => self,
+        }
+    }
+
     pub fn as_str(&self) -> &'static str {
         match self {
             CallType::Message => "message",

@@ -181,9 +181,13 @@ impl StreamConsumer {
                 content_blocks,
                 usage,
                 timing,
+                calls,
             } => {
                 // StreamEnd is emitted by the caller — see emit_stream_end.
                 let mut result = st.finish(content, finish_reason, usage, timing);
+                // Per-call breakdown for the ledger, when a loop produced this
+                // stream. `usage` above is their sum; the rows are per call.
+                result.calls = calls;
                 // A tool loop driven by the sidecar names its terminal turn's
                 // blocks, because this accumulator has been collecting every
                 // turn of that loop and cannot tell them apart. Applied after
@@ -298,6 +302,7 @@ impl ConsumeState {
             timing,
             tool_uses: std::mem::take(&mut self.tool_uses),
             content_blocks: std::mem::take(&mut self.content_blocks),
+            calls: Vec::new(),
         }
     }
 }

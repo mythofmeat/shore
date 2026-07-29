@@ -46,7 +46,7 @@ import {
   type ReportedMessage,
   type ToolRpcUnreachable,
 } from "../tool_rpc.ts";
-import type { SidecarRequest, StreamEvent, SystemContent, Usage } from "../types.ts";
+import type { CallRecord, SidecarRequest, StreamEvent, SystemContent, Usage } from "../types.ts";
 import {
   anthropicContentEvents,
   buildAnthropicPlan,
@@ -55,14 +55,24 @@ import {
   placeContinuationBreakpoints,
 } from "./anthropic.ts";
 
-/** Accumulated usage across every call a loop makes. */
-function addUsage(total: Usage, message: BetaMessage): Usage {
+/** One call's usage, in the daemon's shape. */
+function callUsage(message: BetaMessage): Usage {
   const u = message.usage;
   return {
-    input_tokens: total.input_tokens + (u.input_tokens ?? 0),
-    output_tokens: total.output_tokens + (u.output_tokens ?? 0),
-    cache_read_tokens: total.cache_read_tokens + (u.cache_read_input_tokens ?? 0),
-    cache_creation_tokens: total.cache_creation_tokens + (u.cache_creation_input_tokens ?? 0),
+    input_tokens: u.input_tokens ?? 0,
+    output_tokens: u.output_tokens ?? 0,
+    cache_read_tokens: u.cache_read_input_tokens ?? 0,
+    cache_creation_tokens: u.cache_creation_input_tokens ?? 0,
+  };
+}
+
+/** Accumulated usage across every call a loop makes. */
+function addUsage(total: Usage, one: Usage): Usage {
+  return {
+    input_tokens: total.input_tokens + one.input_tokens,
+    output_tokens: total.output_tokens + one.output_tokens,
+    cache_read_tokens: total.cache_read_tokens + one.cache_read_tokens,
+    cache_creation_tokens: total.cache_creation_tokens + one.cache_creation_tokens,
   };
 }
 
@@ -83,8 +93,12 @@ export async function* anthropicToolLoopEvents(
 
   const startedAt = now();
   let firstTokenAt = 0;
+  // Per-call, so each ledger row gets its own timing rather than the loop's.
+  let callStartedAt = startedAt;
+  let callFirstTokenAt = 0;
   const markFirst = () => {
     if (firstTokenAt === 0) firstTokenAt = now();
+    if (callFirstTokenAt === 0) callFirstTokenAt = now();
   };
 
   const client = new Anthropic({
@@ -166,6 +180,8 @@ export async function* anthropicToolLoopEvents(
   let finishReason = "end_turn";
   /** The last turn's blocks — what the daemon should persist as this response. */
   let terminalBlocks: unknown[] = [];
+  /** One entry per provider call, for the daemon's ledger. See {@link CallRecord}. */
+  const calls: CallRecord[] = [];
 
   try {
     for await (const stream of runner) {
@@ -180,8 +196,24 @@ export async function* anthropicToolLoopEvents(
       text += acc.text;
 
       const message = await stream.finalMessage();
-      usage = addUsage(usage, message);
+      const one = callUsage(message);
+      usage = addUsage(usage, one);
       finishReason = message.stop_reason ?? "end_turn";
+      const callEnd = now();
+      calls.push({
+        usage: one,
+        timing: {
+          total_ms: callEnd - callStartedAt,
+          time_to_first_token_ms:
+            callFirstTokenAt === 0 ? callEnd - callStartedAt : callFirstTokenAt - callStartedAt,
+        },
+        finish_reason: finishReason,
+        // The opening call is the turn itself; everything after it answers tool
+        // results, which is what the daemon-driven loop called `tool_loop`.
+        continuation: calls.length > 0,
+      });
+      callStartedAt = callEnd;
+      callFirstTokenAt = 0;
       // The daemon persists this one from the `done` event rather than from its
       // own stream accumulator, which cannot tell one turn from the next.
       terminalBlocks = message.content;
@@ -273,5 +305,7 @@ export async function* anthropicToolLoopEvents(
       total_ms: total,
       time_to_first_token_ms: firstTokenAt === 0 ? total : firstTokenAt - startedAt,
     },
+    // The daemon writes one ledger row per entry. `usage` above stays the sum.
+    calls,
   };
 }

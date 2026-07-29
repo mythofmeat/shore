@@ -93,6 +93,19 @@ impl LedgerStream {
         timing: &crate::llm::types::Timing,
         finish_reason: &str,
     ) {
+        self.record_as(self.meta.call_type, usage, timing, finish_reason);
+    }
+
+    /// As [`Self::record`], but for a call whose type differs from the stream's
+    /// — a loop's continuations, which are `tool_loop` even though the stream
+    /// that carried them was a `message`.
+    fn record_as(
+        &self,
+        call_type: CallType,
+        usage: &crate::llm::types::Usage,
+        timing: &crate::llm::types::Timing,
+        finish_reason: &str,
+    ) {
         record_call(
             &self.ledger,
             &self.pricing,
@@ -101,7 +114,7 @@ impl LedgerStream {
                 provider: &self.meta.provider,
                 api_key_name: self.meta.api_key_name.clone(),
                 model: &self.meta.model,
-                call_type: self.meta.call_type,
+                call_type,
                 character: &self.meta.character,
                 usage,
                 timing,
@@ -113,8 +126,27 @@ impl LedgerStream {
         );
     }
 
+    /// Record this stream's ledger rows.
+    ///
+    /// One row per provider call when the sidecar reported a breakdown, in the
+    /// order the calls were made. A summed row would misreport the cache: the
+    /// tracker reads each row's `cache_read` against the last one's, and a sum
+    /// exceeds any single call's, so the following message looks like a
+    /// regression and trips `unexpected_write`. Streams with no breakdown —
+    /// every non-delegated call — record exactly one row, as before.
     pub fn finalize(&mut self, result: &StreamResult) {
-        self.record(&result.usage, &result.timing, &result.finish_reason);
+        if result.calls.is_empty() {
+            self.record(&result.usage, &result.timing, &result.finish_reason);
+        } else {
+            for call in &result.calls {
+                let call_type = if call.continuation {
+                    self.meta.call_type.continuation()
+                } else {
+                    self.meta.call_type
+                };
+                self.record_as(call_type, &call.usage, &call.timing, &call.finish_reason);
+            }
+        }
         self.finalized = true;
     }
 
@@ -223,6 +255,7 @@ mod tests {
                 time_to_first_token_ms: 200,
             },
             tool_uses: vec![],
+            calls: vec![],
             content_blocks: vec![],
         };
 
@@ -235,6 +268,94 @@ mod tests {
         assert_eq!(row.input_tokens, 100);
         assert_eq!(row.cache_read_tokens, 80);
         assert_eq!(row.cache_write_tokens, 20);
+    }
+
+    /// A delegated loop's calls each get their own row, typed the way the
+    /// daemon-driven loop typed them.
+    ///
+    /// The sum is what the sidecar used to report and what the ledger used to
+    /// store. Rows are what the cache tracker reads, and it compares each row's
+    /// `cache_read` against the last one's — so a summed read raises the
+    /// baseline above anything a single call can reach, and the *next* ordinary
+    /// message reads "less" and is flagged `unexpected_write`. Splitting the
+    /// rows is what stops the tracker inventing an anomaly.
+    #[test]
+    fn a_delegated_loop_records_one_row_per_call() {
+        let ledger = Arc::new(Ledger::open_in_memory().unwrap());
+        let pricing = Arc::new(PricingEngine::new(Arc::clone(&ledger)));
+        let trackers = Arc::new(CacheTrackers::default());
+
+        let mut stream = LedgerStream::new_test(
+            CallMeta {
+                provider: "anthropic".into(),
+                api_key_name: None,
+                model: "claude-opus-4-6".into(),
+                call_type: CallType::Message,
+                character: "aria".into(),
+                thinking_enabled: true,
+                cache_ttl: None,
+                reasoning_effort: None,
+            },
+            Arc::clone(&ledger),
+            pricing,
+            trackers,
+        );
+
+        let call = |read: u64, write: u64, continuation: bool| crate::llm::types::CallRecord {
+            usage: Usage {
+                input_tokens: 10,
+                output_tokens: 5,
+                cache_read_tokens: read,
+                cache_creation_tokens: write,
+                ..Default::default()
+            },
+            timing: Timing {
+                total_ms: 900,
+                time_to_first_token_ms: 100,
+            },
+            finish_reason: if continuation { "end_turn" } else { "tool_use" }.into(),
+            continuation,
+        };
+
+        let result = StreamResult {
+            content: "done".into(),
+            model: "claude-opus-4-6".into(),
+            finish_reason: "end_turn".into(),
+            // The sum, as the sidecar still reports it.
+            usage: Usage {
+                input_tokens: 30,
+                output_tokens: 15,
+                cache_read_tokens: 2000 + 2200 + 2400,
+                cache_creation_tokens: 600,
+                ..Default::default()
+            },
+            timing: Timing {
+                total_ms: 2700,
+                time_to_first_token_ms: 100,
+            },
+            tool_uses: vec![],
+            calls: vec![
+                call(2000, 200, false),
+                call(2200, 200, true),
+                call(2400, 200, true),
+            ],
+            content_blocks: vec![],
+        };
+
+        stream.finalize(&result);
+
+        let rows = ledger.recent(10).unwrap();
+        assert_eq!(rows.len(), 3, "one row per provider call, not one per loop");
+        // `recent` is newest-first; read them in the order the calls happened.
+        let ordered: Vec<_> = rows.iter().rev().collect();
+        let reads: Vec<u64> = ordered.iter().map(|r| r.cache_read_tokens).collect();
+        assert_eq!(reads, vec![2000, 2200, 2400], "no row carries the sum");
+        let types: Vec<&str> = ordered.iter().map(|r| r.call_type.as_str()).collect();
+        assert_eq!(
+            types,
+            vec!["message", "tool_loop", "tool_loop"],
+            "the opening call is the turn; the rest answer tool results"
+        );
     }
 
     /// Regression: a stream that errors *after* `message_start` (so Anthropic
@@ -404,6 +525,7 @@ mod tests {
                 time_to_first_token_ms: 200,
             },
             tool_uses: vec![],
+            calls: vec![],
             content_blocks: vec![],
         };
 

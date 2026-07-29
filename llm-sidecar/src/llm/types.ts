@@ -248,6 +248,28 @@ export interface Timing {
 }
 
 /**
+ * One provider call inside a loop this side drove — mirrors Rust `CallRecord`.
+ *
+ * A loop reaches the daemon as a single `start` … `done`, so without this the
+ * daemon can only write one ledger row per loop, summing usage across every
+ * call. That is not merely coarse: the daemon's cache tracker compares each
+ * row's `cache_read` against the previous one, and a summed read is larger than
+ * any single call's, so it poisons the baseline and the *next* ordinary message
+ * reads "less" than expected and is flagged `unexpected_write` — which flips
+ * the tracker to Cold on a cache that is fine.
+ *
+ * `continuation` is false for a loop's opening call and true for the calls that
+ * follow tool results, which is the distinction the daemon-driven loop encoded
+ * as `call_type: "message"` vs `"tool_loop"`.
+ */
+export interface CallRecord {
+  usage: Usage;
+  timing: Timing;
+  finish_reason: string;
+  continuation: boolean;
+}
+
+/**
  * The NDJSON event vocabulary the daemon's `StreamConsumer` consumes.
  * Mirrors Rust `StreamEvent` (`#[serde(tag = "type", rename_all = "snake_case")]`).
  * Ordering rules live in `docs/LLM_SIDECAR_IPC.md`.
@@ -275,6 +297,11 @@ export type StreamEvent =
       content_blocks?: unknown[];
       usage: Usage;
       timing: Timing;
+      // One entry per provider call, when this side drove a loop. `usage` above
+      // stays the sum so nothing that only wants a total has to change; the
+      // daemon writes one ledger row per entry instead. Absent on single-call
+      // streams, where the total already is the call.
+      calls?: CallRecord[];
     }
   // A no-op keepalive emitted during quiet stretches (a long max-effort
   // thinking turn sends only provider `ping`s, which we do not forward). Its

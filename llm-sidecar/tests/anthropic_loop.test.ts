@@ -283,6 +283,17 @@ describe("driving a tool loop", () => {
     expect(done.usage.output_tokens).toBe(14);
     expect(done.usage.cache_read_tokens).toBe(8);
 
+    // …and the per-call breakdown rides alongside it, because the daemon
+    // writes one ledger row per call. A single summed row reports a
+    // `cache_read` no call made, which poisons its cache-tracker baseline.
+    expect(done.calls?.map((c) => c.continuation)).toEqual([false, true]);
+    expect(done.calls?.reduce((n, c) => n + c.usage.output_tokens, 0)).toBe(
+      done.usage.output_tokens,
+    );
+    expect(done.calls?.reduce((n, c) => n + c.usage.cache_read_tokens, 0)).toBe(
+      done.usage.cache_read_tokens,
+    );
+
     // The tool actually ran, in the daemon, with the loop's rid — and the
     // assistant turn that asked for it was reported first, on the same channel,
     // so the daemon has it recorded before dispatching. The round's results

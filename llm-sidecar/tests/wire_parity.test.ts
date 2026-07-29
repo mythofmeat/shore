@@ -38,6 +38,7 @@ import type {
 import {
   systemToText,
   toolResultText,
+  type CallRecord,
   type ProviderOptions,
   type SidecarRequest,
   type SystemBlock,
@@ -64,6 +65,7 @@ interface WireFixture {
   thinking_replay: Array<SidecarRequest["replay_prior_thinking"]>;
   system_block: SystemBlock;
   tool_definition: ToolDefinition;
+  call_record: CallRecord;
   provider_options: { empty: ProviderOptions; full: ProviderOptions };
   reasoning_carrier: Record<string, Record<string, unknown>>;
   wire_block: Record<string, ContentBlock>;
@@ -130,6 +132,28 @@ describe("scalar mirrors carry exactly the declared fields", () => {
       wire.tool_definition,
       ["name", "description", "input_schema"],
       "ToolDefinition",
+    );
+  });
+
+  test("CallRecord", () => {
+    // One entry per provider call in a loop this side drove. The daemon writes
+    // a ledger row per entry; a single summed row misreports the cache, since
+    // its `cache_read` exceeds anything one call made and becomes a baseline
+    // the next ordinary message cannot meet.
+    assertKeys<CallRecord>(
+      wire.call_record,
+      ["usage", "timing", "finish_reason", "continuation"],
+      "CallRecord",
+    );
+    assertKeys<CallRecord["usage"]>(
+      wire.call_record.usage,
+      ["input_tokens", "output_tokens", "cache_read_tokens", "cache_creation_tokens"],
+      "CallRecord.usage",
+    );
+    assertKeys<CallRecord["timing"]>(
+      wire.call_record.timing,
+      ["total_ms", "time_to_first_token_ms"],
+      "CallRecord.timing",
     );
   });
 

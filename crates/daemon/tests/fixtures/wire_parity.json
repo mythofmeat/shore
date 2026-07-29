@@ -20,6 +20,20 @@
       "properties": {}
     }
   },
+  "call_record": {
+    "usage": {
+      "input_tokens": 12,
+      "output_tokens": 34,
+      "cache_read_tokens": 2200,
+      "cache_creation_tokens": 200
+    },
+    "timing": {
+      "total_ms": 900,
+      "time_to_first_token_ms": 120
+    },
+    "finish_reason": "tool_use",
+    "continuation": true
+  },
   "provider_options": {
     "empty": {},
     "full": {

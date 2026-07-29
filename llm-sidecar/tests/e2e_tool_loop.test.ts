@@ -19,6 +19,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 
 const ROOT = new URL("../..", import.meta.url).pathname.replace(/\/$/, "");
 const DAEMON = `${ROOT}/target/debug/shore-daemon`;
@@ -96,8 +97,20 @@ interface StoredMessage {
   content_blocks?: Block[];
 }
 
+/** One usage-ledger row, as `record_call` wrote it. */
+interface LedgerRow {
+  call_type: string;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  input_tokens: number;
+}
+
 interface Run {
   stored: StoredMessage[];
+  /** Usage-ledger rows, oldest first. Not the call store `call_log` reads —
+   *  that records one entry per HTTP request to the sidecar, so a whole
+   *  delegated loop is one entry there no matter how many calls it made. */
+  ledger: LedgerRow[];
   /** Message arrays as they were sent to the provider, per call. */
   sent: Array<Array<{ role: string; content: Block[] }>>;
   /** Command replies, in the order the commands were sent. */
@@ -263,7 +276,17 @@ async function run(script: Turn[], prompts: string[], commands: string[] = []): 
       .split("\n")
       .filter((l) => l.trim())
       .map((l) => JSON.parse(l) as StoredMessage);
-    return { stored, sent, replies };
+
+    const db = new Database(`${DATA}/ledger.db`, { readonly: true });
+    const ledger = db
+      .query(
+        "SELECT call_type, cache_read_tokens, cache_write_tokens, input_tokens \
+         FROM calls ORDER BY id ASC",
+      )
+      .all() as LedgerRow[];
+    db.close();
+
+    return { stored, sent, replies, ledger };
   } finally {
     stop();
   }
@@ -310,6 +333,22 @@ describe.skipIf(!ready)("delegated tool loop, end to end", () => {
         .map((b) => String(b.tool_use_id));
       expect(ids).toEqual(["toolu_A", "toolu_B"]);
       expect(resultMsgs.length).toBe(2); // one per round, not one per tool
+    },
+    90_000,
+  );
+
+  test(
+    "the ledger gets one row per provider call, not one per loop",
+    async () => {
+      const { ledger } = await run(TWO_THEN_ONE, ["roll some dice"]);
+
+      // Three scripted turns is three provider calls. Summed into one row they
+      // report a `cache_read` no single call made; that becomes the daemon's
+      // cache-tracker baseline, and the next ordinary message then reads
+      // "less" than it and is flagged `unexpected_write` on a healthy cache.
+      expect(ledger.map((r) => r.call_type)).toEqual(["message", "tool_loop", "tool_loop"]);
+      // Each row carries its own call's usage, not the loop's total.
+      expect(ledger.map((r) => r.input_tokens)).toEqual([20, 20, 20]);
     },
     90_000,
   );
