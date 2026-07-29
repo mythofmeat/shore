@@ -41,25 +41,6 @@ pub enum CallType {
 }
 
 impl CallType {
-    /// The type a *continuation* of this call carries — the calls a tool loop
-    /// makes after feeding results back. Mirrors how the daemon-driven loop
-    /// tags its own continuations, so a delegated loop produces the same row
-    /// sequence the cache tracker was built to read.
-    #[must_use]
-    pub fn continuation(self) -> Self {
-        match self {
-            // A sub-agent's continuations are `ToolLoop` too — see the variant.
-            CallType::Message | CallType::ToolLoop | CallType::Subagent => CallType::ToolLoop,
-            CallType::Heartbeat | CallType::HeartbeatToolLoop => CallType::HeartbeatToolLoop,
-            // No loop runs under these; if one ever does, its continuations are
-            // most honestly still itself rather than a chat tool loop.
-            CallType::Keepalive
-            | CallType::Compaction
-            | CallType::Dreaming
-            | CallType::MemoryQuery => self,
-        }
-    }
-
     pub fn as_str(&self) -> &'static str {
         match self {
             CallType::Message => "message",
@@ -748,28 +729,4 @@ mod tests {
         assert_eq!(CallType::MemoryQuery.as_str(), "memory_query");
     }
 
-    /// A loop's continuations carry the type the daemon-driven loop gave them,
-    /// so a delegated loop produces the row sequence the cache tracker reads.
-    /// The sidecar has its own copy of this map; they must agree.
-    #[test]
-    fn continuation_types_match_the_sidecar_copy() {
-        assert_eq!(CallType::Message.continuation().as_str(), "tool_loop");
-        assert_eq!(CallType::Subagent.continuation().as_str(), "tool_loop");
-        assert_eq!(CallType::ToolLoop.continuation().as_str(), "tool_loop");
-        assert_eq!(
-            CallType::Heartbeat.continuation().as_str(),
-            "heartbeat_tool_loop"
-        );
-        assert_eq!(
-            CallType::HeartbeatToolLoop.continuation().as_str(),
-            "heartbeat_tool_loop"
-        );
-        assert_eq!(CallType::Keepalive.continuation().as_str(), "keepalive");
-        assert_eq!(CallType::Compaction.continuation().as_str(), "compaction");
-        assert_eq!(CallType::Dreaming.continuation().as_str(), "dreaming");
-        assert_eq!(
-            CallType::MemoryQuery.continuation().as_str(),
-            "memory_query"
-        );
-    }
 }

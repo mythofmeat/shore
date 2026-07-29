@@ -455,18 +455,16 @@ fn usage_summary_default(
     let cache_health: Vec<serde_json::Value> = characters
         .iter()
         .map(|(char_name, last_row)| {
-            let tracker = crate::ledger::cache_tracker::CacheTracker::reconstruct(
+            let streak = crate::ledger::query::warm_streak(ledger, char_name).unwrap_or(0);
+            // Recomputed rather than read off `last_row.cache_state`: that is
+            // what was true when the call was made, and a prefix that has since
+            // aged past its TTL is cold now.
+            let state = crate::ledger::cache_tracker::reconstruct_state(
                 &last_row.ts,
-                &last_row.model,
-                last_row.thinking_enabled,
                 last_row.cache_read_tokens,
                 3600,
-            );
-            let streak = crate::ledger::query::warm_streak(ledger, char_name).unwrap_or(0);
-            let state = match tracker.state() {
-                crate::ledger::cache_tracker::CacheState::Warm => "warm",
-                crate::ledger::cache_tracker::CacheState::Cold => "cold",
-            };
+            )
+            .as_str();
             json!({
                 "character": char_name,
                 "state": state,

@@ -1,11 +1,17 @@
 //! SQLite-backed append-only ledger for LLM call recording.
 
-use crate::ledger::convert::{i64_to_u32, i64_to_u64, u64_to_i64};
+use crate::ledger::convert::{i64_to_u32, i64_to_u64};
+#[cfg(test)]
+use crate::ledger::convert::u64_to_i64;
 use crate::ledger::sync::lock_or_recover;
-use rusqlite::{params, Connection, Result as SqlResult};
+use rusqlite::{Connection, Result as SqlResult};
+#[cfg(test)]
+use rusqlite::params;
 use std::path::Path;
 use std::sync::Mutex;
-use tracing::{debug, info};
+use tracing::info;
+#[cfg(test)]
+use tracing::debug;
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -199,6 +205,13 @@ impl Ledger {
     }
 
     /// Insert a call row, returning its autoincrement ID.
+    /// Insert one call row.
+    ///
+    /// Test-only: the production writer is `llm-sidecar/src/ledger/store.ts`.
+    /// This exists so the Rust readers' tests can seed fixtures, and is gated
+    /// so a future schema change cannot be made here in the belief that the
+    /// daemon still writes rows.
+    #[cfg(test)]
     pub fn insert(&self, row: &CallRow) -> Result<i64, rusqlite::Error> {
         let started = std::time::Instant::now();
         let row_id = self.with_conn(|conn| {
@@ -259,6 +272,8 @@ impl Ledger {
     }
 
     /// Return the `limit` most recent rows, newest first.
+    /// Test-only: reads back rows a test seeded. See [`Self::insert`].
+    #[cfg(test)]
     pub fn recent(&self, limit: u32) -> Result<Vec<CallRow>, rusqlite::Error> {
         let started = std::time::Instant::now();
         let rows = self.with_conn(|conn| {
@@ -270,33 +285,6 @@ impl Ledger {
         Ok(rows)
     }
 
-    /// Return the most recent non-compaction Anthropic call for `character`.
-    ///
-    /// Matches both native Anthropic (`provider = 'anthropic'`) and
-    /// OpenRouter-routed Anthropic (`model LIKE 'anthropic/%'`, regardless of
-    /// custom provider key). Mirrors `pricing::is_anthropic_pricing`.
-    pub fn last_anthropic_call(&self, character: &str) -> Result<Option<CallRow>, rusqlite::Error> {
-        let started = std::time::Instant::now();
-        let row = self.with_conn(|conn| {
-            let mut stmt = conn.prepare(
-                r"SELECT * FROM calls
-                   WHERE character = ?1
-                     AND (provider = 'anthropic' OR model LIKE 'anthropic/%')
-                     AND call_type != 'compaction'
-                   ORDER BY id DESC
-                   LIMIT 1",
-            )?;
-            let mut rows = stmt.query_map(params![character], row_from_sqlite)?;
-            rows.next().transpose()
-        })?;
-        debug!(
-            character,
-            found = row.is_some(),
-            elapsed = ?started.elapsed(),
-            "Ledger last anthropic call query"
-        );
-        Ok(row)
-    }
 
     pub(crate) fn with_conn<T>(
         &self,
@@ -423,37 +411,7 @@ mod tests {
         assert!(row.cache_anomaly.is_none());
     }
 
-    #[test]
-    fn last_anthropic_call() {
-        let ledger = test_ledger();
-        let mut row = sample_row();
-        _ = ledger.insert(&row).unwrap();
-        row.ts = "2026-04-05T12:01:00Z".into();
-        row.cache_read_tokens = 120;
-        _ = ledger.insert(&row).unwrap();
-        // Compaction should be excluded
-        row.ts = "2026-04-05T12:02:00Z".into();
-        row.call_type = "compaction".into();
-        row.cache_read_tokens = 0;
-        _ = ledger.insert(&row).unwrap();
-        let last = ledger.last_anthropic_call("aria").unwrap().unwrap();
-        assert_eq!(last.cache_read_tokens, 120);
-    }
 
-    #[test]
-    fn last_anthropic_call_matches_routed_anthropic() {
-        // OpenRouter-routed Anthropic carries a custom provider key but an
-        // `anthropic/...` model id by the time it reaches the ledger; seeding
-        // must still find it (issue #118).
-        let ledger = test_ledger();
-        let mut row = sample_row();
-        row.provider = "openrouter-anthropic".into();
-        row.model = "anthropic/claude-opus-4-6".into();
-        row.cache_read_tokens = 99;
-        _ = ledger.insert(&row).unwrap();
-        let last = ledger.last_anthropic_call("aria").unwrap().unwrap();
-        assert_eq!(last.cache_read_tokens, 99);
-    }
 
     #[test]
     fn null_costs_when_pricing_unavailable() {

@@ -339,15 +339,6 @@ pub fn to_openrouter_id(provider: &str, model: &str) -> String {
     }
 }
 
-/// Recognize Anthropic-family rows for cache health and diagnostics. Native
-/// Anthropic uses the literal provider key; OpenRouter-routed Anthropic
-/// (regardless of custom provider name) carries an `anthropic/...` model id by
-/// the time it reaches the ledger. Mirrored in `query.rs` as the SQL fragment
-/// `(provider = 'anthropic' OR model LIKE 'anthropic/%')`.
-pub fn is_anthropic_pricing(provider: &str, model: &str) -> bool {
-    provider == "anthropic" || model.starts_with("anthropic/")
-}
-
 fn normalize_anthropic_model(model: &str) -> String {
     let mut chars: Vec<char> = model.chars().collect();
     for (offset, window) in chars.windows(3).enumerate().rev() {
@@ -549,21 +540,6 @@ mod tests {
             to_openrouter_id("openrouter", "anthropic/claude-opus-4.6"),
             "anthropic/claude-opus-4.6"
         );
-    }
-
-    #[test]
-    fn is_anthropic_pricing_recognizes_routed_calls() {
-        assert!(is_anthropic_pricing("anthropic", "claude-opus-4-6"));
-        assert!(is_anthropic_pricing(
-            "openrouter-anthropic",
-            "anthropic/claude-opus-4.6"
-        ));
-        assert!(is_anthropic_pricing(
-            "openrouter",
-            "anthropic/claude-opus-4.6"
-        ));
-        assert!(!is_anthropic_pricing("openai", "gpt-4o"));
-        assert!(!is_anthropic_pricing("openrouter", "openai/gpt-4o"));
     }
 
     #[test]
