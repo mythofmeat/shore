@@ -122,6 +122,22 @@ impl Ledger {
     }
 
     fn init(conn: Connection) -> Result<Self, rusqlite::Error> {
+        // The call store has set these since it was written; the ledger never
+        // did, and got away with it because one process opens this file and an
+        // in-process `Mutex` serializes every access. That stops being true as
+        // soon as anything else opens it: in the default rollback-journal mode
+        // a writer locks out readers and a reader locks out the writer, so a
+        // `shore usage` query landing at the same moment as a call is a
+        // `database is locked` error rather than a wait. WAL lets readers run
+        // while a write is in flight, and the timeout makes writer-vs-writer
+        // block briefly instead of failing.
+        //
+        // `journal_mode` is a no-op on the in-memory databases tests use, which
+        // report `memory` and carry on.
+        conn.execute_batch(
+            "PRAGMA journal_mode = WAL;
+             PRAGMA busy_timeout = 5000;",
+        )?;
         conn.execute_batch(SCHEMA)?;
         Self::migrate(&conn)?;
         info!("Ledger schema initialized");
@@ -338,6 +354,23 @@ mod tests {
 
     fn first_item<T>(items: &[T]) -> &T {
         items.first().expect("expected at least one item")
+    }
+
+    /// A file-backed ledger runs in WAL.
+    ///
+    /// Load-bearing once a second process opens this file: the default
+    /// rollback journal makes a read and a write at the same moment a
+    /// `database is locked` error rather than a wait. Asserted against a real
+    /// file because `journal_mode` is a no-op in memory, where every other
+    /// test here runs — this reports `delete` without the pragma.
+    #[test]
+    fn a_file_backed_ledger_runs_in_wal() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let ledger = Ledger::open(&tmp.path().join("ledger.db")).expect("open");
+        let mode: String = ledger
+            .with_conn(|conn| conn.query_row("PRAGMA journal_mode", [], |row| row.get(0)))
+            .expect("read journal_mode");
+        assert_eq!(mode.to_lowercase(), "wal");
     }
 
     fn sample_row() -> CallRow {
