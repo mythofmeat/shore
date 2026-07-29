@@ -304,8 +304,14 @@ fn arb_heartbeat_config() -> impl Strategy<Value = HeartbeatConfig> {
 }
 
 fn arb_tool_override() -> impl Strategy<Value = ToolOverride> {
-    prop::option::of(0_usize..100_000)
-        .prop_map(|max_result_chars| ToolOverride { max_result_chars })
+    (
+        prop::option::of(0_usize..100_000),
+        prop::option::of(arb_duration()),
+    )
+        .prop_map(|(max_result_chars, timeout)| ToolOverride {
+            max_result_chars,
+            timeout,
+        })
 }
 
 fn arb_sandbox_config() -> impl Strategy<Value = shore_common::config::app::SandboxConfig> {
@@ -327,6 +333,7 @@ fn arb_tools_config() -> impl Strategy<Value = ToolsConfig> {
         prop::collection::vec(arb_nonempty_text(), 0..5),
         prop::collection::vec(arb_nonempty_text(), 0..3),
         0_usize..100_000,
+        arb_duration(),
         (
             arb_nonempty_text(),
             0_u32..25,
@@ -341,6 +348,7 @@ fn arb_tools_config() -> impl Strategy<Value = ToolsConfig> {
                 enabled_tools,
                 enabled_subagents,
                 max_result_chars,
+                timeout,
                 search,
                 sandbox,
                 per_tool_entries,
@@ -351,6 +359,7 @@ fn arb_tools_config() -> impl Strategy<Value = ToolsConfig> {
                     enabled_tools,
                     enabled_subagents,
                     max_result_chars,
+                    timeout,
                     web_search: SearchConfig {
                         api_key_env,
                         result_limit,

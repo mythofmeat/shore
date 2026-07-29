@@ -455,7 +455,7 @@ async fn execute_tool_use(
 
     let dispatch_start = Instant::now();
     let dispatch_result =
-        tool_system::dispatch_tool(&tool_use.name, tool_use.input.clone(), ctx).await;
+        dispatch_within_deadline(tool_use, ctx, tools_cfg.timeout_for(&tool_use.name)).await;
     let dispatch_ms = elapsed_ms_u64(dispatch_start.elapsed());
     let (raw_output, is_error, ok_value) = match dispatch_result {
         Ok(value) => {
@@ -489,6 +489,42 @@ async fn execute_tool_use(
             content: output_str,
             is_error,
         },
+    }
+}
+
+/// Run one tool, cancelling it if it outlives its deadline.
+///
+/// A tool that never returns used to hold the turn open forever, and neither
+/// loop could notice: the daemon-driven one awaits the handler directly, and
+/// the sidecar-driven one awaits an answer over the tool socket whose ping pump
+/// keeps reporting the connection healthy the whole time. The deadline belongs
+/// here rather than at either loop because this is the only side that can
+/// actually *stop* the work — dropping the future cancels it. Timing it out
+/// from the sidecar would abandon the call while the tool kept running.
+///
+/// The timeout becomes a failed tool result, not a transport error, so the
+/// model is told and the loop continues. That is the same shape a tool that
+/// returns an error takes, which is what makes it recoverable.
+async fn dispatch_within_deadline(
+    tool_use: &ToolUseEvent,
+    ctx: &dyn ToolContext,
+    deadline: Option<Duration>,
+) -> Result<Value, tool_system::ToolError> {
+    let dispatch = tool_system::dispatch_tool(&tool_use.name, tool_use.input.clone(), ctx);
+    let Some(limit) = deadline else {
+        return dispatch.await;
+    };
+    match tokio::time::timeout(limit, dispatch).await {
+        Ok(result) => result,
+        Err(_elapsed) => {
+            warn!(
+                tool_id = %tool_use.id,
+                tool_name = %tool_use.name,
+                timeout_secs = limit.as_secs(),
+                "Tool exceeded its deadline and was cancelled"
+            );
+            Err(tool_system::ToolError::TimedOut(limit.as_secs()))
+        }
     }
 }
 
@@ -841,6 +877,129 @@ mod tests {
             max_result_chars: max,
             ..Default::default()
         }
+    }
+
+    // ── Tool deadline ───────────────────────────────────────────────
+
+    /// A context whose sub-agent never returns — what a wedged tool looks like
+    /// from the loop's side, where the handler simply never completes.
+    struct HangingContext {
+        search: shore_common::config::app::SearchConfig,
+    }
+
+    impl ToolContext for HangingContext {
+        fn image_dir(&self) -> &'static str {
+            ""
+        }
+        fn llm_client(&self) -> Option<&LlmClient> {
+            None
+        }
+        fn image_gen_config(&self) -> Option<&crate::memory::compaction_impls::ImageGenConfig> {
+            None
+        }
+        fn search_config(&self) -> &shore_common::config::app::SearchConfig {
+            &self.search
+        }
+        fn run_subagent<'ctx>(
+            &'ctx self,
+            _name: &'ctx str,
+            _query: &'ctx str,
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<Output = Result<Value, tool_system::ToolError>>
+                    + Send
+                    + 'ctx,
+            >,
+        > {
+            Box::pin(std::future::pending())
+        }
+    }
+
+    fn hanging_ctx() -> HangingContext {
+        HangingContext {
+            search: shore_common::config::app::SearchConfig::default(),
+        }
+    }
+
+    fn hanging_tool_use() -> ToolUseEvent {
+        ToolUseEvent {
+            id: "tu_hang".into(),
+            name: "ask_wedged".into(),
+            input: json!({"query": "anything"}),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_tool_that_never_returns_is_cancelled_at_its_deadline() {
+        let ctx = hanging_ctx();
+        let (direct_tx, _events) = mpsc::channel(32);
+        let mut cfg = tools_cfg(0);
+        cfg.timeout = shore_common::config::duration::ConfigDuration::from_millis(50);
+
+        let outcome = execute_tool_use(
+            &hanging_tool_use(),
+            &direct_tx,
+            None,
+            &ctx,
+            &cfg,
+            &test_diag(),
+            &mut [],
+        )
+        .await;
+
+        // A failed *tool*, not a transport error: the model is told and the
+        // loop continues. Without the deadline this call never returns at all.
+        match outcome.content_block {
+            ContentBlock::ToolResult {
+                content, is_error, ..
+            } => {
+                assert!(is_error, "a cancelled tool reports is_error");
+                assert!(content.contains("timed out"), "{content}");
+            }
+            other @ (ContentBlock::Text { .. }
+            | ContentBlock::Thinking { .. }
+            | ContentBlock::RedactedThinking { .. }
+            | ContentBlock::ToolUse { .. }) => panic!("expected a tool result, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_per_tool_override_outranks_the_global_deadline() {
+        // The reason overrides exist: a sub-agent runs its own loop and
+        // legitimately outlives a deadline meant for a filesystem read. Here
+        // the global would fire and the override keeps the tool alive, so a
+        // returned result is proof the override was the one consulted.
+        let ctx = hanging_ctx();
+        let (direct_tx, _events) = mpsc::channel(32);
+        let mut cfg = tools_cfg(0);
+        cfg.timeout = shore_common::config::duration::ConfigDuration::from_millis(50);
+        let _replaced = cfg.config.insert(
+            "ask_wedged".into(),
+            shore_common::config::app::ToolOverride {
+                max_result_chars: None,
+                timeout: Some(shore_common::config::duration::ConfigDuration::from_secs(
+                    60,
+                )),
+            },
+        );
+
+        let dispatched = tokio::time::timeout(
+            Duration::from_millis(250),
+            execute_tool_use(
+                &hanging_tool_use(),
+                &direct_tx,
+                None,
+                &ctx,
+                &cfg,
+                &test_diag(),
+                &mut [],
+            ),
+        )
+        .await;
+        assert!(
+            dispatched.is_err(),
+            "the override's 60s deadline should still be pending, not the global 50ms"
+        );
     }
 
     /// Build a test LlmRequest. The sidecar mock handles transport; base_url

@@ -552,6 +552,18 @@ pub struct ToolsConfig {
     #[serde(default = "default_max_result_chars")]
     pub max_result_chars: usize,
 
+    /// How long one tool may run before it is cancelled and reported to the
+    /// model as a failed tool. `0` disables the deadline entirely. Per-tool
+    /// `[tools.config.<name>]` tables may override it via
+    /// [`ToolOverride::timeout`].
+    ///
+    /// Nothing else bounds a tool: a handler that never returns holds the turn
+    /// open indefinitely, and every transport in front of it (the sidecar's
+    /// tool socket, the SWP stream) stays healthy while it does, so the hang
+    /// surfaces to the user as silence rather than as an error.
+    #[serde(default = "default_tool_timeout")]
+    pub timeout: ConfigDuration,
+
     /// Web search (Tavily) settings — `[tools.web_search]`.
     #[serde(default)]
     pub web_search: SearchConfig,
@@ -570,6 +582,10 @@ pub struct ToolsConfig {
 }
 
 serde_default!(default_max_result_chars -> usize { 20_000 });
+// Long enough that no tool reaches it by working — a sub-agent running its own
+// loop is the slowest thing here and finishes well inside it — and short enough
+// that a wedged one does not hold the turn open for the rest of the day.
+serde_default!(default_tool_timeout -> ConfigDuration { ConfigDuration::from_secs(300) });
 
 impl Default for ToolsConfig {
     fn default() -> Self {
@@ -577,6 +593,7 @@ impl Default for ToolsConfig {
             enabled_tools: Vec::new(),
             enabled_subagents: Vec::new(),
             max_result_chars: default_max_result_chars(),
+            timeout: default_tool_timeout(),
             web_search: SearchConfig::default(),
             sandbox: SandboxConfig::default(),
             config: BTreeMap::new(),
@@ -665,6 +682,17 @@ impl ToolsConfig {
             .and_then(|o| o.max_result_chars)
             .unwrap_or(self.max_result_chars)
     }
+
+    /// Effective per-tool deadline: the tool's override, else the global.
+    /// `None` means no deadline — the tool runs until it returns.
+    pub fn timeout_for(&self, name: &str) -> Option<std::time::Duration> {
+        let resolved = self
+            .config
+            .get(name)
+            .and_then(|o| o.timeout)
+            .unwrap_or(self.timeout);
+        (resolved.as_millis() > 0).then(|| resolved.as_duration())
+    }
 }
 
 /// Per-tool override table `[tools.config.<name>]`.
@@ -675,6 +703,13 @@ pub struct ToolOverride {
     /// global value.
     #[serde(default)]
     pub max_result_chars: Option<usize>,
+
+    /// Override `[tools].timeout` for this tool. `None` inherits the global
+    /// value. Set it on the tools that legitimately run long — a sub-agent
+    /// (`ask_<name>`) driving its own loop, or an MCP tool waiting on
+    /// something remote.
+    #[serde(default)]
+    pub timeout: Option<ConfigDuration>,
 }
 
 // ── [tools.web_search] ───────────────────────────────────────────────────
@@ -1807,6 +1842,61 @@ max_result_chars = 10000
         assert_eq!(config.tools.result_chars_for("search"), 10000);
         // A tool with no override inherits the global cap.
         assert_eq!(config.tools.result_chars_for("read"), 20000);
+    }
+
+    #[test]
+    fn per_tool_timeout_override() {
+        let toml_str = r#"
+[tools]
+enabled_tools = ["read"]
+enabled_subagents = ["researcher"]
+timeout = "30s"
+
+[tools.config.ask_researcher]
+timeout = "20m"
+"#;
+        let config: AppConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(
+            config.tools.timeout_for("ask_researcher"),
+            Some(std::time::Duration::from_mins(20))
+        );
+        // A tool with no override inherits the global deadline.
+        assert_eq!(
+            config.tools.timeout_for("read"),
+            Some(std::time::Duration::from_secs(30))
+        );
+    }
+
+    #[test]
+    fn a_zero_timeout_means_no_deadline() {
+        // The same escape hatch `max_result_chars = 0` gives for truncation:
+        // an operator who wants a tool to run as long as it takes says so,
+        // rather than picking a number large enough to mean "never".
+        let toml_str = r#"
+[tools]
+enabled_tools = ["read", "git"]
+timeout = 0
+
+[tools.config.git]
+timeout = "45s"
+"#;
+        let config: AppConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.tools.timeout_for("read"), None);
+        assert_eq!(
+            config.tools.timeout_for("git"),
+            Some(std::time::Duration::from_secs(45))
+        );
+    }
+
+    #[test]
+    fn tools_have_a_deadline_without_being_configured() {
+        // The point of the default: a config that never mentions timeouts is
+        // still protected from a tool that never returns.
+        let config: AppConfig = toml::from_str("[tools]\nenabled_tools = [\"read\"]\n").unwrap();
+        assert_eq!(
+            config.tools.timeout_for("read"),
+            Some(std::time::Duration::from_mins(5))
+        );
     }
 
     #[test]

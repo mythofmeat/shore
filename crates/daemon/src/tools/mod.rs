@@ -59,6 +59,11 @@ pub enum ToolError {
     Io(String),
     #[error("http: {0}")]
     Http(String),
+    /// The tool ran past its `[tools] timeout` and was cancelled. Reported to
+    /// the model as an ordinary failed tool so it can decide what to do next —
+    /// narrow the request, try something else, or answer without it.
+    #[error("timed out after {0}s and was cancelled")]
+    TimedOut(u64),
 }
 
 // ---------------------------------------------------------------------------

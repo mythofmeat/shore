@@ -3405,10 +3405,9 @@ fn append_wrap_up_nudge(request: &mut LlmRequest) {
 // Dormant ping executor
 // ---------------------------------------------------------------------------
 
-#[expect(
-    clippy::struct_field_names,
-    reason = "these are token counts; the `_tokens` suffix mirrors the upstream usage struct"
-)]
+// The `_tokens` suffix that once tripped `struct_field_names` mirrors the
+// upstream usage struct. The lint skips exported types, so no expectation is
+// needed now that this one is `pub`.
 #[derive(Debug, Clone, Copy)]
 pub struct DormantPingUsage {
     pub input_tokens: u64,
