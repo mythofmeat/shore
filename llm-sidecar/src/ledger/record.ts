@@ -18,13 +18,7 @@
  */
 
 import { Ledger, type RecordCall, type Timing, type Usage } from "./store.ts";
-import type {
-  CallContext,
-  CallRecord,
-  GenerateResponse,
-  SidecarRequest,
-  StreamEvent,
-} from "../llm/types.ts";
+import type { CallContext, GenerateResponse, SidecarRequest, StreamEvent } from "../llm/types.ts";
 
 /**
  * Open ledgers by path, including the failures.
@@ -76,6 +70,14 @@ export function continuationOf(callType: string): string {
       return callType;
   }
 }
+
+/** A call that reported no tokens. Kept out of the cache tracker by `store.ts`. */
+const NO_USAGE = {
+  input_tokens: 0,
+  output_tokens: 0,
+  cache_read_tokens: 0,
+  cache_creation_tokens: 0,
+} as const;
 
 /** Everything a row needs that is not in the {@link CallContext}. */
 interface Recorded {
@@ -145,29 +147,26 @@ function notifyAnomaly(ctx: CallContext, call: RecordCall, anomaly: string): voi
   }
 }
 
-/** One row per entry in a loop's `calls`, in the order the calls were made. */
-function recordLoop(ctx: CallContext, req: SidecarRequest, calls: CallRecord[]): void {
-  for (const call of calls) {
-    tryRecord(ctx, req, {
-      usage: call.usage,
-      timing: call.timing,
-      finish_reason: call.finish_reason,
-      call_type: call.continuation ? continuationOf(ctx.call_type) : ctx.call_type,
-    });
-  }
-}
-
 /**
  * Pass a provider stream through, recording each provider call in it.
  *
- * Rows are written *before* the terminal event is yielded, so a daemon that
- * never receives it still has the row — the call happened either way.
+ * A stream that made several calls says so as it goes, with `call_complete`;
+ * one that made a single call says nothing and is recorded from `done`. That
+ * distinction is the whole design: a loop's rows are written as each call
+ * lands, so a loop that fails on its third call — or that the client walks away
+ * from — keeps the rows for the two that already happened and were already
+ * billed. Recording at the end could only ever have written their sum, which is
+ * the shape that misreports the cache.
  *
- * A stream that ends with neither `done` nor `error` was abandoned: the client
- * disconnected, or the generator threw. That records a `cancelled` row with
- * zero usage, which is what the daemon's `LedgerStream::drop` wrote and what
- * keeps `shore usage` honest about the call having happened. Its zero usage is
- * why `store.ts` keeps `cancelled` out of the cache tracker.
+ * Rows are written *before* the event is yielded, so a daemon that never
+ * receives it still has the row: the call happened either way.
+ *
+ * A stream that ends having recorded nothing was abandoned before its first
+ * call returned — the client disconnected, or the generator threw. That leaves
+ * a `cancelled` row with zero usage, which is what the daemon's
+ * `LedgerStream::drop` wrote and what keeps `shore usage` honest about the call
+ * having been attempted. Its zero usage is why `store.ts` keeps `cancelled` out
+ * of the cache tracker.
  */
 export async function* recordingStream(
   ctx: CallContext | undefined,
@@ -178,41 +177,46 @@ export async function* recordingStream(
     yield* source;
     return;
   }
-  let terminal = false;
+  let recorded = 0;
   try {
     for await (const event of source) {
-      if (event.type === "done") {
-        terminal = true;
-        if (event.calls !== undefined && event.calls.length > 0) {
-          recordLoop(ctx, req, event.calls);
-        } else {
+      if (event.type === "call_complete") {
+        tryRecord(ctx, req, {
+          usage: event.usage,
+          timing: event.timing,
+          finish_reason: event.finish_reason,
+          call_type: event.continuation ? continuationOf(ctx.call_type) : ctx.call_type,
+        });
+        recorded += 1;
+      } else if (event.type === "done") {
+        // A stream that announced its calls has already recorded them; `usage`
+        // here is their sum and recording it again would double-count.
+        if (recorded === 0) {
           tryRecord(ctx, req, {
             usage: event.usage,
             timing: event.timing,
             finish_reason: event.finish_reason,
           });
+          recorded += 1;
         }
       } else if (event.type === "error") {
-        // A mid-stream failure can still carry real usage — Anthropic bills the
-        // cache write announced in `message_start`, before any output.
-        terminal = true;
+        // A single-call stream reports what the provider billed before dying —
+        // notably Anthropic's cache write, announced in `message_start`. A loop
+        // reports the sum of its completed calls, which are already rows, so
+        // the failed call contributes nothing but the fact that it happened.
         tryRecord(ctx, req, {
-          usage: event.usage,
+          usage: recorded === 0 ? event.usage : NO_USAGE,
           timing: event.timing,
           finish_reason: "error",
         });
+        recorded += 1;
       }
       yield event;
     }
   } finally {
-    if (!terminal) {
+    if (recorded === 0) {
       tryRecord(ctx, req, {
-        usage: {
-          input_tokens: 0,
-          output_tokens: 0,
-          cache_read_tokens: 0,
-          cache_creation_tokens: 0,
-        },
+        usage: NO_USAGE,
         timing: { total_ms: 0, time_to_first_token_ms: 0 },
         finish_reason: "cancelled",
       });
@@ -248,12 +252,7 @@ export function recordGenerateError(
 ): void {
   if (ctx === undefined) return;
   tryRecord(ctx, req, {
-    usage: {
-      input_tokens: 0,
-      output_tokens: 0,
-      cache_read_tokens: 0,
-      cache_creation_tokens: 0,
-    },
+    usage: NO_USAGE,
     timing: { total_ms: now() - startedAt, time_to_first_token_ms: 0 },
     finish_reason: "error",
   });

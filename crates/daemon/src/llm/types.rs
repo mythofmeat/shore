@@ -741,12 +741,28 @@ pub enum StreamEvent {
         content_blocks: Option<Vec<ContentBlock>>,
         usage: Usage,
         timing: Timing,
-        /// One entry per provider call, when the sidecar drove a loop. `usage`
-        /// above stays the sum, so anything that only wants a total is
-        /// unaffected; the ledger writes one row per entry instead of one per
-        /// loop. Empty on single-call streams. See [`CallRecord`].
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        calls: Vec<CallRecord>,
+    },
+    /// One provider call finished, inside a stream that made several.
+    ///
+    /// The daemon ignores it: the *sidecar* writes the ledger row when it emits
+    /// this, which is the whole reason the event exists. It replaced a `calls`
+    /// array on `done`, which could only be recorded once the loop finished —
+    /// so a loop that failed on its third call reported the sum of the first
+    /// two as a single row, and one the client abandoned reported nothing at
+    /// all. A summed row is the specific shape that misreports the cache: its
+    /// `cache_read` exceeds anything a single call made, so the next ordinary
+    /// message reads "less" than expected and is flagged `unexpected_write`.
+    ///
+    /// The daemon knows the variant rather than ignoring an unknown `type`,
+    /// because an unrecognised event fails the whole stream at the parse.
+    CallComplete {
+        usage: Usage,
+        timing: Timing,
+        finish_reason: String,
+        /// False for a loop's opening call, true for the calls that answer tool
+        /// results — the distinction the daemon-driven loop drew between
+        /// `message` and `tool_loop`.
+        continuation: bool,
     },
     /// A no-op keepalive emitted by the sidecar during quiet stretches (e.g. a
     /// long max-effort thinking turn where the provider sends only `ping`s,
@@ -804,33 +820,6 @@ pub struct StreamResult {
     /// Contains the full sequence of text, thinking, and tool_use blocks
     /// in the order they were received. Used for persistence.
     pub content_blocks: Vec<ContentBlock>,
-
-    /// One entry per provider call, when the sidecar drove a loop. Empty on a
-    /// single-call stream, where [`Self::usage`] already *is* the call. See
-    /// [`CallRecord`].
-    pub calls: Vec<CallRecord>,
-}
-
-/// One provider call inside a loop the sidecar drove.
-///
-/// The whole loop reaches the daemon as one `start` … `done`, so without this
-/// the ledger gets a single row whose usage is the sum across every call. That
-/// is not just coarse — it is wrong in a way that misreports the cache. The
-/// tracker compares each row's `cache_read` against the previous row's, and a
-/// summed read exceeds any single call's, so it raises the baseline; the next
-/// ordinary message then reads "less" than expected and is flagged
-/// `unexpected_write`, flipping the tracker to Cold over a cache that is fine.
-///
-/// The TS mirror is `CallRecord` in `llm-sidecar/src/llm/types.ts`.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct CallRecord {
-    pub usage: Usage,
-    pub timing: Timing,
-    pub finish_reason: String,
-    /// False for the loop's opening call, true for the calls answering tool
-    /// results — the distinction the daemon-driven loop wrote as
-    /// `call_type: "message"` versus `"tool_loop"`.
-    pub continuation: bool,
 }
 
 /// Parameters for an image generation request.
@@ -1409,6 +1398,32 @@ mod tests {
         }
     }
 
+    /// The census pins `call_complete` as a hand-written literal, because
+    /// `StreamEvent` is deserialize-only and cannot be serialized into it. This
+    /// is the other half of that pin: the daemon must actually accept the exact
+    /// bytes the fixture tells the sidecar to send. Without it the literal
+    /// could drift from the enum and nothing would notice until a live stream
+    /// died on a parse error.
+    #[test]
+    fn call_complete_parses() {
+        let pinned = &wire_shape_census()["call_complete"];
+        let event: StreamEvent =
+            serde_json::from_value(pinned.clone()).expect("the census literal must deserialize");
+        let StreamEvent::CallComplete {
+            usage,
+            timing,
+            finish_reason,
+            continuation,
+        } = event
+        else {
+            panic!("the census literal must parse as CallComplete");
+        };
+        assert_eq!(usage.cache_read_tokens, 2200);
+        assert_eq!(timing.total_ms, 900);
+        assert_eq!(finish_reason, "tool_use");
+        assert!(continuation);
+    }
+
     #[expect(
         clippy::too_many_lines,
         reason = "one flat literal per pinned wire shape; splitting it hides the census"
@@ -1423,22 +1438,22 @@ mod tests {
                 "Read a file.",
                 json!({"type": "object", "properties": {}}),
             ),
-            // One ledger row per provider call, so a loop the sidecar drove is
-            // not stored as a single summed row — see `CallRecord`.
-            "call_record": CallRecord {
-                usage: Usage {
-                    input_tokens: 12,
-                    output_tokens: 34,
-                    cache_read_tokens: 2200,
-                    cache_creation_tokens: 200,
-                    total_cost_usd: None,
+            // The event the sidecar emits per provider call, and writes the
+            // ledger row from. `StreamEvent` is deserialize-only, so unlike the
+            // types above this is a hand-written literal — same as `tool_rpc`
+            // below. `call_complete_parses` asserts the daemon accepts exactly
+            // this, so the two halves of the pin cannot drift apart silently.
+            "call_complete": {
+                "type": "call_complete",
+                "usage": {
+                    "input_tokens": 12,
+                    "output_tokens": 34,
+                    "cache_read_tokens": 2200,
+                    "cache_creation_tokens": 200,
                 },
-                timing: Timing {
-                    total_ms: 900,
-                    time_to_first_token_ms: 120,
-                },
-                finish_reason: "tool_use".into(),
-                continuation: true,
+                "timing": { "total_ms": 900, "time_to_first_token_ms": 120 },
+                "finish_reason": "tool_use",
+                "continuation": true,
             },
             // The labels the sidecar writes ledger rows from. Pinned because a
             // silently renamed field here does not fail a build — it produces

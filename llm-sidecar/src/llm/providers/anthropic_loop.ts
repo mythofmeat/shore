@@ -46,7 +46,7 @@ import {
   type ReportedMessage,
   type ToolRpcUnreachable,
 } from "../tool_rpc.ts";
-import type { CallRecord, SidecarRequest, StreamEvent, SystemContent, Usage } from "../types.ts";
+import type { SidecarRequest, StreamEvent, SystemContent, Usage } from "../types.ts";
 import {
   anthropicContentEvents,
   buildAnthropicPlan,
@@ -180,8 +180,11 @@ export async function* anthropicToolLoopEvents(
   let finishReason = "end_turn";
   /** The last turn's blocks — what the daemon should persist as this response. */
   let terminalBlocks: unknown[] = [];
-  /** One entry per provider call, for the daemon's ledger. See {@link CallRecord}. */
-  const calls: CallRecord[] = [];
+  /** How many provider calls have completed, which is what makes the next one
+   *  a continuation. The calls themselves are not held: each is emitted as a
+   *  `call_complete` and recorded there and then, so a loop that fails or is
+   *  abandoned keeps the rows for the calls that already happened. */
+  let completedCalls = 0;
 
   try {
     for await (const stream of runner) {
@@ -200,7 +203,10 @@ export async function* anthropicToolLoopEvents(
       usage = addUsage(usage, one);
       finishReason = message.stop_reason ?? "end_turn";
       const callEnd = now();
-      calls.push({
+      // Emitted before the loop continues, so the row exists whether or not the
+      // loop ever reaches `done`.
+      yield {
+        type: "call_complete",
         usage: one,
         timing: {
           total_ms: callEnd - callStartedAt,
@@ -210,8 +216,9 @@ export async function* anthropicToolLoopEvents(
         finish_reason: finishReason,
         // The opening call is the turn itself; everything after it answers tool
         // results, which is what the daemon-driven loop called `tool_loop`.
-        continuation: calls.length > 0,
-      });
+        continuation: completedCalls > 0,
+      };
+      completedCalls += 1;
       callStartedAt = callEnd;
       callFirstTokenAt = 0;
       // The daemon persists this one from the `done` event rather than from its
@@ -305,7 +312,5 @@ export async function* anthropicToolLoopEvents(
       total_ms: total,
       time_to_first_token_ms: firstTokenAt === 0 ? total : firstTokenAt - startedAt,
     },
-    // The daemon writes one ledger row per entry. `usage` above stays the sum.
-    calls,
   };
 }

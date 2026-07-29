@@ -52,6 +52,15 @@ const usage = (read: number, write: number) => ({
 
 const TIMING = { total_ms: 900, time_to_first_token_ms: 100 };
 
+/** One provider call announcing itself, as a loop does per call. */
+const call = (read: number, continuation: boolean, finish: string): StreamEvent => ({
+  type: "call_complete",
+  usage: usage(read, 200),
+  timing: TIMING,
+  finish_reason: finish,
+  continuation,
+});
+
 async function* events(...list: StreamEvent[]): AsyncIterable<StreamEvent> {
   for (const e of list) yield e;
 }
@@ -107,19 +116,19 @@ describe.skipIf(!haveDaemon)("what a stream records", () => {
   test("a loop records one row per provider call, not one summed row", async () => {
     await withLedger(async (path) => {
       await drain(
-        recordingStream(ctx(path), REQ, events({
-          type: "done",
-          content: "done",
-          finish_reason: "end_turn",
-          // The sum, which is what the daemon used to store as a single row.
-          usage: usage(2_000 + 2_200 + 2_400, 600),
-          timing: TIMING,
-          calls: [
-            { usage: usage(2_000, 200), timing: TIMING, finish_reason: "tool_use", continuation: false },
-            { usage: usage(2_200, 200), timing: TIMING, finish_reason: "tool_use", continuation: true },
-            { usage: usage(2_400, 200), timing: TIMING, finish_reason: "end_turn", continuation: true },
-          ],
-        })),
+        recordingStream(ctx(path), REQ, events(
+          call(2_000, false, "tool_use"),
+          call(2_200, true, "tool_use"),
+          call(2_400, true, "end_turn"),
+          {
+            type: "done",
+            content: "done",
+            finish_reason: "end_turn",
+            // The sum. Recording it too would double-count every call.
+            usage: usage(2_000 + 2_200 + 2_400, 600),
+            timing: TIMING,
+          },
+        )),
       );
 
       const rows = rowsIn(path);
@@ -131,6 +140,66 @@ describe.skipIf(!haveDaemon)("what a stream records", () => {
       // poisons the tracker's baseline.
       expect(rows.some((r) => r["cache_read_tokens"] === 6_600)).toBe(false);
       expect(rows.every((r) => r["cache_anomaly"] === null)).toBe(true);
+    });
+  });
+
+  test("a loop that fails partway keeps the rows it already billed", async () => {
+    await withLedger(async (path) => {
+      // Two calls landed and were billed; the third died. The `error` frame
+      // carries the SUM of the first two — recording that as a row is the bug
+      // this design exists to prevent, because the sum exceeds any single
+      // call's read and the next ordinary message would look like a
+      // regression against it.
+      await drain(
+        recordingStream(ctx(path), REQ, events(
+          call(2_000, false, "tool_use"),
+          call(2_200, true, "tool_use"),
+          { type: "error", message: "connection reset", usage: usage(4_200, 400), timing: TIMING },
+        )),
+      );
+
+      const rows = rowsIn(path);
+      expect(rows.map((r) => r["cache_read_tokens"])).toEqual([2_000, 2_200, 0]);
+      expect(rows.map((r) => r["finish_reason"])).toEqual(["tool_use", "tool_use", "error"]);
+      // The failed call is recorded as having happened, but reports nothing —
+      // so it stays out of the tracker rather than reading as a cache loss.
+      expect(rows[2]!["cache_state"]).toBeNull();
+      expect(rows.every((r) => r["cache_anomaly"] === null)).toBe(true);
+    });
+  });
+
+  test("a loop the client abandons keeps the rows it already billed", async () => {
+    await withLedger(async (path) => {
+      const stream = recordingStream(ctx(path), REQ, events(
+        call(2_000, false, "tool_use"),
+        call(2_200, true, "tool_use"),
+        { type: "done", content: "x", finish_reason: "end_turn", usage: usage(4_200, 400), timing: TIMING },
+      ));
+      // Read both completed calls, then walk away before `done`.
+      let seen = 0;
+      for await (const _e of stream) {
+        seen += 1;
+        if (seen === 2) break;
+      }
+
+      const rows = rowsIn(path);
+      expect(rows.map((r) => r["cache_read_tokens"])).toEqual([2_000, 2_200]);
+      // No `cancelled` row on top: those two calls happened and were billed,
+      // and there is no evidence a third ever started.
+      expect(rows.some((r) => r["finish_reason"] === "cancelled")).toBe(false);
+    });
+  });
+
+  test("a single-call stream is recorded from done, not double-counted", async () => {
+    await withLedger(async (path) => {
+      await drain(
+        recordingStream(ctx(path), REQ, events(
+          call(1_000, false, "end_turn"),
+          { type: "done", content: "x", finish_reason: "end_turn", usage: usage(1_000, 200), timing: TIMING },
+        )),
+      );
+      // The call announced itself, so `done` adds nothing.
+      expect(rowsIn(path)).toHaveLength(1);
     });
   });
 

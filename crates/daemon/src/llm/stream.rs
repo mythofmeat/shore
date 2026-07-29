@@ -78,6 +78,10 @@ impl StreamConsumer {
     /// final `StreamResult` once the terminal `Done` event arrives. A terminal
     /// `Error` event becomes `Err(LlmError::StreamErrored)`, carrying the
     /// partial usage the provider had already reported.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one arm per wire event; splitting the match hides the vocabulary"
+    )]
     async fn handle_event(
         &self,
         st: &mut ConsumeState,
@@ -181,13 +185,9 @@ impl StreamConsumer {
                 content_blocks,
                 usage,
                 timing,
-                calls,
             } => {
                 // StreamEnd is emitted by the caller — see emit_stream_end.
                 let mut result = st.finish(content, finish_reason, usage, timing);
-                // Per-call breakdown for the ledger, when a loop produced this
-                // stream. `usage` above is their sum; the rows are per call.
-                result.calls = calls;
                 // A tool loop driven by the sidecar names its terminal turn's
                 // blocks, because this accumulator has been collecting every
                 // turn of that loop and cannot tell them apart. Applied after
@@ -204,6 +204,16 @@ impl StreamConsumer {
             // the line already reset the transport idle timer, which is the
             // whole point. Keep consuming.
             StreamEvent::Ping => {}
+
+            // Ledger bookkeeping, addressed to nobody here: the sidecar emits
+            // it as each provider call lands and writes the row itself. The
+            // daemon needs the variant only so an unrecognised `type` does not
+            // fail the parse and take the whole stream with it.
+            #[expect(
+                clippy::match_same_arms,
+                reason = "same empty body as Ping, for an unrelated reason worth stating separately"
+            )]
+            StreamEvent::CallComplete { .. } => {}
 
             // A mid-stream provider failure that still carried partial usage
             // (e.g. the Anthropic cache write reported in `message_start`).
@@ -302,7 +312,6 @@ impl ConsumeState {
             timing,
             tool_uses: std::mem::take(&mut self.tool_uses),
             content_blocks: std::mem::take(&mut self.content_blocks),
-            calls: Vec::new(),
         }
     }
 }

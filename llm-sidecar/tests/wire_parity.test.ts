@@ -38,13 +38,16 @@ import type {
 import {
   systemToText,
   toolResultText,
-  type CallRecord,
   type ProviderOptions,
   type SidecarRequest,
+  type StreamEvent,
   type SystemBlock,
   type ToolDefinition,
   type WireMessage,
 } from "../src/llm/types.ts";
+
+/** The `call_complete` member of the {@link StreamEvent} union. */
+type CallComplete = Extract<StreamEvent, { type: "call_complete" }>;
 
 /**
  * The census, typed as what this side *expects* to receive.
@@ -65,7 +68,7 @@ interface WireFixture {
   thinking_replay: Array<SidecarRequest["replay_prior_thinking"]>;
   system_block: SystemBlock;
   tool_definition: ToolDefinition;
-  call_record: CallRecord;
+  call_complete: CallComplete;
   provider_options: { empty: ProviderOptions; full: ProviderOptions };
   reasoning_carrier: Record<string, Record<string, unknown>>;
   wire_block: Record<string, ContentBlock>;
@@ -135,25 +138,31 @@ describe("scalar mirrors carry exactly the declared fields", () => {
     );
   });
 
-  test("CallRecord", () => {
-    // One entry per provider call in a loop this side drove. The daemon writes
-    // a ledger row per entry; a single summed row misreports the cache, since
-    // its `cache_read` exceeds anything one call made and becomes a baseline
-    // the next ordinary message cannot meet.
-    assertKeys<CallRecord>(
-      wire.call_record,
-      ["usage", "timing", "finish_reason", "continuation"],
-      "CallRecord",
+  test("call_complete", () => {
+    // Emitted per provider call in a loop this side drove, and the point at
+    // which the ledger row is written. Recording only at the end could write
+    // just their sum, and a summed row misreports the cache: its `cache_read`
+    // exceeds anything one call made and becomes a baseline the next ordinary
+    // message cannot meet.
+    //
+    // The daemon's copy is deserialize-only, so the census entry is a literal
+    // rather than a serialized value — which is exactly why it needs asserting
+    // from both ends. `call_complete_parses` is the Rust half.
+    assertKeys<CallComplete>(
+      wire.call_complete,
+      ["type", "usage", "timing", "finish_reason", "continuation"],
+      "call_complete",
     );
-    assertKeys<CallRecord["usage"]>(
-      wire.call_record.usage,
+    expect(wire.call_complete.type).toBe("call_complete");
+    assertKeys<CallComplete["usage"]>(
+      wire.call_complete.usage,
       ["input_tokens", "output_tokens", "cache_read_tokens", "cache_creation_tokens"],
-      "CallRecord.usage",
+      "call_complete.usage",
     );
-    assertKeys<CallRecord["timing"]>(
-      wire.call_record.timing,
+    assertKeys<CallComplete["timing"]>(
+      wire.call_complete.timing,
       ["total_ms", "time_to_first_token_ms"],
-      "CallRecord.timing",
+      "call_complete.timing",
     );
   });
 

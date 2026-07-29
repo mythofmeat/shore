@@ -283,16 +283,22 @@ describe("driving a tool loop", () => {
     expect(done.usage.output_tokens).toBe(14);
     expect(done.usage.cache_read_tokens).toBe(8);
 
-    // …and the per-call breakdown rides alongside it, because the daemon
-    // writes one ledger row per call. A single summed row reports a
-    // `cache_read` no call made, which poisons its cache-tracker baseline.
-    expect(done.calls?.map((c) => c.continuation)).toEqual([false, true]);
-    expect(done.calls?.reduce((n, c) => n + c.usage.output_tokens, 0)).toBe(
+    // …and each call announced itself as it landed, because the ledger row is
+    // written there and then. A single summed row reports a `cache_read` no
+    // call made, which poisons the cache tracker's baseline — and recording
+    // only at the end would lose the completed calls of a loop that failed or
+    // was abandoned partway.
+    const completed = events.filter((e) => e.type === "call_complete");
+    expect(completed.map((c) => c.continuation)).toEqual([false, true]);
+    expect(completed.reduce((n, c) => n + c.usage.output_tokens, 0)).toBe(
       done.usage.output_tokens,
     );
-    expect(done.calls?.reduce((n, c) => n + c.usage.cache_read_tokens, 0)).toBe(
+    expect(completed.reduce((n, c) => n + c.usage.cache_read_tokens, 0)).toBe(
       done.usage.cache_read_tokens,
     );
+    // Each one precedes the `done` it contributes to — that ordering is what
+    // makes a mid-loop failure keep the rows that were already billed.
+    expect(types.lastIndexOf("call_complete")).toBeLessThan(types.indexOf("done"));
 
     // The tool actually ran, in the daemon, with the loop's rid — and the
     // assistant turn that asked for it was reported first, on the same channel,

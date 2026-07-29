@@ -278,28 +278,6 @@ export interface Timing {
 }
 
 /**
- * One provider call inside a loop this side drove — mirrors Rust `CallRecord`.
- *
- * A loop reaches the daemon as a single `start` … `done`, so without this the
- * daemon can only write one ledger row per loop, summing usage across every
- * call. That is not merely coarse: the daemon's cache tracker compares each
- * row's `cache_read` against the previous one, and a summed read is larger than
- * any single call's, so it poisons the baseline and the *next* ordinary message
- * reads "less" than expected and is flagged `unexpected_write` — which flips
- * the tracker to Cold on a cache that is fine.
- *
- * `continuation` is false for a loop's opening call and true for the calls that
- * follow tool results, which is the distinction the daemon-driven loop encoded
- * as `call_type: "message"` vs `"tool_loop"`.
- */
-export interface CallRecord {
-  usage: Usage;
-  timing: Timing;
-  finish_reason: string;
-  continuation: boolean;
-}
-
-/**
  * The NDJSON event vocabulary the daemon's `StreamConsumer` consumes.
  * Mirrors Rust `StreamEvent` (`#[serde(tag = "type", rename_all = "snake_case")]`).
  * Ordering rules live in `docs/LLM_SIDECAR_IPC.md`.
@@ -327,11 +305,25 @@ export type StreamEvent =
       content_blocks?: unknown[];
       usage: Usage;
       timing: Timing;
-      // One entry per provider call, when this side drove a loop. `usage` above
-      // stays the sum so nothing that only wants a total has to change; the
-      // daemon writes one ledger row per entry instead. Absent on single-call
-      // streams, where the total already is the call.
-      calls?: CallRecord[];
+    }
+  // One provider call finished, in a stream that made several. The ledger row
+  // is written HERE, as this is emitted — which is the whole point of the
+  // event. It replaced a `calls` array on `done`, which could only be recorded
+  // once the loop finished: a loop that failed on its third call reported the
+  // first two as one summed row, and one the client abandoned reported nothing.
+  // A summed row is the shape that misreports the cache — its `cache_read`
+  // exceeds anything a single call made, so the next ordinary message reads
+  // "less" and is flagged `unexpected_write`.
+  //
+  // The daemon knows the variant and ignores it; an unrecognised `type` fails
+  // its parse and takes the whole stream down. Pinned in `wire_parity.json`.
+  | {
+      type: "call_complete";
+      usage: Usage;
+      timing: Timing;
+      finish_reason: string;
+      /** False for a loop's opening call, true for those answering tool results. */
+      continuation: boolean;
     }
   // A no-op keepalive emitted during quiet stretches (a long max-effort
   // thinking turn sends only provider `ping`s, which we do not forward). Its

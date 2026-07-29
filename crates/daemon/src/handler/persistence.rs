@@ -425,7 +425,6 @@ mod tests {
             timing: crate::llm::types::Timing::default(),
             tool_uses: vec![],
             content_blocks,
-            calls: vec![],
         }
     }
 

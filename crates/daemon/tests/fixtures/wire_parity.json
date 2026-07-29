@@ -20,7 +20,8 @@
       "properties": {}
     }
   },
-  "call_record": {
+  "call_complete": {
+    "type": "call_complete",
     "usage": {
       "input_tokens": 12,
       "output_tokens": 34,

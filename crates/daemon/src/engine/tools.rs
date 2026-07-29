@@ -1041,7 +1041,6 @@ mod tests {
                 timing: Timing::default(),
                 tool_uses: vec![],
                 content_blocks: vec![],
-                calls: vec![],
             };
 
             let out = run_tool_loop(
@@ -1088,7 +1087,6 @@ mod tests {
                 timing: Timing::default(),
                 tool_uses: vec![],
                 content_blocks: vec![],
-                calls: vec![],
             };
 
             let out = run_tool_loop(
