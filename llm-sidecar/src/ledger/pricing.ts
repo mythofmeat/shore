@@ -177,6 +177,19 @@ export class PricingEngine {
     return this.cached(provider, model);
   }
 
+  /**
+   * Drop the in-memory catalog so the next lookup re-reads the store.
+   *
+   * `shore usage --refresh-pricing` empties the `pricing` table from the daemon,
+   * which is the only copy the daemon has. This process keeps its own memory in
+   * front of that table, and it survives the delete — a refresh that did not
+   * reach here would clear the store and go on pricing calls from the stale
+   * catalog it already read, for the life of the sidecar. See `usage.ts`.
+   */
+  clearMemory(): void {
+    this.#memory.clear();
+  }
+
   /** Price a call, or `undefined` when the model has no catalog entry. */
   cost(request: CostRequest): CostBreakdown | undefined {
     const pricing = this.cached(request.provider, request.model);

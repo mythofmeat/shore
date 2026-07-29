@@ -3,6 +3,14 @@ import { chmodSync, existsSync, lstatSync, unlinkSync } from "node:fs";
 import type { BudgetBlock } from "./ledger/budget.ts";
 import { budgetBlockFor } from "./ledger/gate.ts";
 import { recordGenerate, recordGenerateError, recordingStream } from "./ledger/record.ts";
+import {
+  budgetWarnings,
+  modelHistory,
+  usageReport,
+  type BudgetWarningsRequest,
+  type ModelHistoryRequest,
+  type UsageRequest,
+} from "./ledger/usage.ts";
 import { generateImage } from "./llm/image_generate.ts";
 import { GeminiProvider } from "./llm/providers/gemini.ts";
 import { AnthropicProvider } from "./llm/providers/anthropic.ts";
@@ -156,6 +164,38 @@ export function createSidecarHandler(
         return jsonResponse(result);
       } catch (e) {
         recordGenerateError(req.context, req, startedAt);
+        return errorResponse(e);
+      }
+    }
+
+    // The `shore usage` read side. Not a provider call: no budget gate, no
+    // ledger row, and a plain JSON reply. See `ledger/usage.ts`.
+    if (url.pathname === "/v1/usage") {
+      const parsed = await readJson<UsageRequest>(request);
+      if (!parsed.ok) return parsed.response;
+      try {
+        return jsonResponse(await usageReport(parsed.value));
+      } catch (e) {
+        return errorResponse(e);
+      }
+    }
+
+    if (url.pathname === "/v1/usage/warnings") {
+      const parsed = await readJson<BudgetWarningsRequest>(request);
+      if (!parsed.ok) return parsed.response;
+      try {
+        return jsonResponse(budgetWarnings(parsed.value));
+      } catch (e) {
+        return errorResponse(e);
+      }
+    }
+
+    if (url.pathname === "/v1/usage/models") {
+      const parsed = await readJson<ModelHistoryRequest>(request);
+      if (!parsed.ok) return parsed.response;
+      try {
+        return jsonResponse(modelHistory(parsed.value));
+      } catch (e) {
         return errorResponse(e);
       }
     }

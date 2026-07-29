@@ -5,7 +5,14 @@ use tracing::debug;
 
 use super::{CommandContext, CommandResult};
 
-fn parse_last_period_at(
+/// The `--last` window's lower bound, or `None` for no lower bound.
+///
+/// `None` covers `"all"` and anything unparseable alike: an argument we cannot
+/// read means the whole ledger, not an error.
+///
+/// Public for `tests/usage_parity.rs`, which generates the cross-language
+/// fixture from it.
+pub fn parse_last_period_at(
     period: &str,
     now: chrono::DateTime<chrono::Utc>,
     timezone: &str,
@@ -94,17 +101,17 @@ fn calendar_start(
     }
 }
 
-fn parse_last_period(period: &str, timezone: &str) -> Option<String> {
-    parse_last_period_at(period, chrono::Utc::now(), timezone)
-}
-
-fn build_filter(args: &serde_json::Value, timezone: &str) -> (QueryFilter, String) {
+fn build_filter(
+    args: &serde_json::Value,
+    timezone: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> (QueryFilter, String) {
     let last = args
         .get("last")
         .and_then(|v| v.as_str())
         .unwrap_or("today")
         .to_owned();
-    let since = parse_last_period(&last, timezone);
+    let since = parse_last_period_at(&last, now, timezone);
     let filter = QueryFilter {
         since,
         character: args
@@ -129,10 +136,11 @@ fn build_filter(args: &serde_json::Value, timezone: &str) -> (QueryFilter, Strin
     (filter, last)
 }
 
-fn budget_payload(ctx: &CommandContext) -> CommandResult {
-    let ledger = ctx.llm_client.ledger();
-    let usage_config = &ctx.config.app.usage;
-    let now = chrono::Utc::now();
+fn budget_payload(
+    ledger: &crate::ledger::Ledger,
+    usage_config: &shore_common::config::app::UsageConfig,
+    now: chrono::DateTime<chrono::Utc>,
+) -> CommandResult {
     let budgets = crate::ledger::budget::budget_statuses(ledger, usage_config, now)
         .map_err(|e| (ErrorCode::InternalError, e.to_string()))?;
     let spike_warnings = crate::ledger::budget::spike_warnings(ledger, usage_config, now)
@@ -154,40 +162,73 @@ fn flag(args: &serde_json::Value, key: &str) -> bool {
 
 pub async fn usage(ctx: &CommandContext, args: &serde_json::Value) -> CommandResult {
     let ledger = ctx.llm_client.ledger();
+    let now = chrono::Utc::now();
 
-    let timezone = ctx.config.app.usage.timezone.as_str();
-    let (filter, last) = build_filter(args, timezone);
-    debug!(period = %last, "Usage query started");
+    if let Some(result) = usage_payload_at(ledger, &ctx.config.app.usage, args, now) {
+        return result;
+    }
 
-    if flag(args, "budget") {
-        return budget_payload(ctx);
-    }
-    if flag(args, "export_tsv") {
-        return usage_export_tsv(ledger, &filter);
-    }
-    if flag(args, "export_csv") {
-        return usage_export_csv(ledger, &filter);
-    }
-    if flag(args, "by_kind") {
-        return usage_summary_by_kind(ledger, &filter, &last);
-    }
-    if flag(args, "by_api_key") {
-        return usage_summary_by_api_key(ledger, &filter, &last);
-    }
-    if flag(args, "by_call_type") {
-        return usage_summary_by_call_type(ledger, &filter, &last);
-    }
-    if flag(args, "anomalies") {
-        return usage_anomalies(ledger, filter, &last, timezone);
-    }
+    // The two modes that need the daemon's `PricingEngine` rather than just the
+    // ledger, which is why `usage_payload_at` hands them back rather than
+    // answering them.
     if flag(args, "refresh_pricing") {
         return usage_refresh_pricing(ctx);
     }
-    if flag(args, "recalculate") {
-        return usage_recalculate(ctx, ledger, args).await;
+    usage_recalculate(ctx, ledger, args).await
+}
+
+/// Every `shore usage` mode that is answerable from the ledger alone, with the
+/// clock supplied rather than read.
+///
+/// `None` means the mode needs the pricing engine — `refresh_pricing` or
+/// `recalculate` — and is checked in the position the flag ladder gave it, so
+/// which flag wins when several are set is unchanged.
+///
+/// Public, and taking `now`, for one reason: `tests/usage_parity.rs` generates
+/// the cross-language fixture from it. The daemon calls it with `Utc::now()`.
+pub fn usage_payload_at(
+    ledger: &crate::ledger::Ledger,
+    usage_config: &shore_common::config::app::UsageConfig,
+    args: &serde_json::Value,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Option<CommandResult> {
+    let timezone = usage_config.timezone.as_str();
+    let (filter, last) = build_filter(args, timezone, now);
+    debug!(period = %last, "Usage query started");
+
+    if flag(args, "budget") {
+        return Some(budget_payload(ledger, usage_config, now));
+    }
+    if flag(args, "export_tsv") {
+        return Some(usage_export_tsv(ledger, &filter));
+    }
+    if flag(args, "export_csv") {
+        return Some(usage_export_csv(ledger, &filter));
+    }
+    if flag(args, "by_kind") {
+        return Some(usage_summary_by_kind(ledger, &filter, &last));
+    }
+    if flag(args, "by_api_key") {
+        return Some(usage_summary_by_api_key(ledger, &filter, &last));
+    }
+    if flag(args, "by_call_type") {
+        return Some(usage_summary_by_call_type(ledger, &filter, &last));
+    }
+    if flag(args, "anomalies") {
+        return Some(usage_anomalies(ledger, filter, &last, timezone, now));
+    }
+    if flag(args, "refresh_pricing") || flag(args, "recalculate") {
+        return None;
     }
 
-    usage_summary_default(ctx, ledger, &filter, &last, timezone)
+    Some(usage_summary_default(
+        ledger,
+        usage_config,
+        &filter,
+        &last,
+        timezone,
+        now,
+    ))
 }
 
 fn usage_export_tsv(ledger: &crate::ledger::Ledger, filter: &QueryFilter) -> CommandResult {
@@ -307,10 +348,11 @@ fn usage_anomalies(
     filter: QueryFilter,
     last: &str,
     timezone: &str,
+    now: chrono::DateTime<chrono::Utc>,
 ) -> CommandResult {
     let anomaly_filter = if last == "today" {
         QueryFilter {
-            since: parse_last_period("7d", timezone),
+            since: parse_last_period_at("7d", now, timezone),
             ..filter.clone()
         }
     } else {
@@ -424,11 +466,12 @@ async fn usage_recalculate(
 }
 
 fn usage_summary_default(
-    ctx: &CommandContext,
     ledger: &crate::ledger::Ledger,
+    usage_config: &shore_common::config::app::UsageConfig,
     filter: &QueryFilter,
     last: &str,
     timezone: &str,
+    now: chrono::DateTime<chrono::Utc>,
 ) -> CommandResult {
     let summary = crate::ledger::query::usage_summary(ledger, filter)
         .map_err(|e| (ErrorCode::InternalError, e.to_string()))?;
@@ -463,6 +506,7 @@ fn usage_summary_default(
                 &last_row.ts,
                 last_row.cache_read_tokens,
                 3600,
+                now,
             )
             .as_str();
             json!({
@@ -474,7 +518,7 @@ fn usage_summary_default(
         .collect();
 
     let anomaly_filter = QueryFilter {
-        since: parse_last_period("7d", timezone),
+        since: parse_last_period_at("7d", now, timezone),
         ..Default::default()
     };
     let anomaly_count =
@@ -494,9 +538,9 @@ fn usage_summary_default(
         "summary": summary_rows,
         "cache_health": cache_health,
         "anomaly_count_7d": anomaly_count,
-        "budgets": crate::ledger::budget::budget_statuses(ledger, &ctx.config.app.usage, chrono::Utc::now())
+        "budgets": crate::ledger::budget::budget_statuses(ledger, usage_config, now)
             .map_err(|e| (ErrorCode::InternalError, e.to_string()))?,
-        "spike_warnings": crate::ledger::budget::spike_warnings(ledger, &ctx.config.app.usage, chrono::Utc::now())
+        "spike_warnings": crate::ledger::budget::spike_warnings(ledger, usage_config, now)
             .map_err(|e| (ErrorCode::InternalError, e.to_string()))?,
     }))
 }

@@ -46,11 +46,16 @@ impl CacheState {
 /// says "cold" instead of failing, and a row we cannot date is one we cannot
 /// claim is fresh.
 #[must_use]
-pub fn reconstruct_state(last_ts: &str, last_cache_read: u64, ttl_secs: u64) -> CacheState {
+pub fn reconstruct_state(
+    last_ts: &str,
+    last_cache_read: u64,
+    ttl_secs: u64,
+    now: chrono::DateTime<chrono::Utc>,
+) -> CacheState {
     let Ok(ts) = chrono::DateTime::parse_from_rfc3339(last_ts) else {
         return CacheState::Cold;
     };
-    let elapsed = chrono::Utc::now()
+    let elapsed = now
         .signed_duration_since(ts.with_timezone(&chrono::Utc))
         .num_seconds();
     if elapsed < crate::ledger::convert::u64_to_i64(ttl_secs) && last_cache_read > 0 {
@@ -64,36 +69,58 @@ pub fn reconstruct_state(last_ts: &str, last_cache_read: u64, ttl_secs: u64) -> 
 mod tests {
     use super::*;
 
+    fn now() -> chrono::DateTime<chrono::Utc> {
+        chrono::Utc::now()
+    }
+
     fn ago(secs: i64) -> String {
-        (chrono::Utc::now() - chrono::Duration::seconds(secs)).to_rfc3339()
+        (now() - chrono::Duration::seconds(secs)).to_rfc3339()
     }
 
     #[test]
     fn a_recent_call_that_read_the_cache_is_warm() {
-        assert_eq!(reconstruct_state(&ago(60), 5_000, 3600), CacheState::Warm);
+        assert_eq!(
+            reconstruct_state(&ago(60), 5_000, 3600, now()),
+            CacheState::Warm
+        );
     }
 
     #[test]
     fn a_call_past_the_ttl_is_cold() {
-        assert_eq!(reconstruct_state(&ago(3_601), 5_000, 3600), CacheState::Cold);
+        assert_eq!(
+            reconstruct_state(&ago(3_601), 5_000, 3600, now()),
+            CacheState::Cold
+        );
     }
 
     /// A write with no read is a prefix being created, not one being reused —
     /// there is nothing yet to say survives. Mirrors the sidecar's rule.
     #[test]
     fn a_recent_call_that_read_nothing_is_cold() {
-        assert_eq!(reconstruct_state(&ago(60), 0, 3600), CacheState::Cold);
+        assert_eq!(
+            reconstruct_state(&ago(60), 0, 3600, now()),
+            CacheState::Cold
+        );
     }
 
     #[test]
     fn an_undateable_row_is_cold_rather_than_an_error() {
-        assert_eq!(reconstruct_state("not a timestamp", 5_000, 3600), CacheState::Cold);
+        assert_eq!(
+            reconstruct_state("not a timestamp", 5_000, 3600, now()),
+            CacheState::Cold
+        );
     }
 
     /// A shorter configured TTL must shorten the warm window, not be ignored.
     #[test]
     fn the_ttl_is_the_one_passed_in() {
-        assert_eq!(reconstruct_state(&ago(400), 5_000, 300), CacheState::Cold);
-        assert_eq!(reconstruct_state(&ago(400), 5_000, 3600), CacheState::Warm);
+        assert_eq!(
+            reconstruct_state(&ago(400), 5_000, 300, now()),
+            CacheState::Cold
+        );
+        assert_eq!(
+            reconstruct_state(&ago(400), 5_000, 3600, now()),
+            CacheState::Warm
+        );
     }
 }

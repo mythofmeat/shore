@@ -85,6 +85,33 @@ function toolLoopKind(callType: string): string | undefined {
   return callType === "tool_loop" || callType === "heartbeat_tool_loop" ? callType : undefined;
 }
 
+/**
+ * Whether the prefix behind a character's last Anthropic call is still warm.
+ *
+ * Warm requires both halves: the call must be inside the cache TTL, and it must
+ * actually have read something. A call that read nothing wrote a prefix but
+ * proves nothing about one existing before it.
+ *
+ * An unparseable timestamp reads as cold rather than as an error — a row we
+ * cannot date is one we cannot claim is fresh.
+ *
+ * Two callers, one rule: {@link CacheTracker.reconstruct} seeds a tracker after
+ * a restart, and `usage.ts` recomputes cache health for `shore usage`. The
+ * daemon kept a second copy of this in `ledger/cache_tracker.rs` for the latter;
+ * it went when its reader did.
+ */
+export function reconstructState(
+  lastTs: string,
+  lastCacheRead: number,
+  ttlSecs: number,
+  now: number = Date.now(),
+): CacheState {
+  const parsed = parseTs(lastTs);
+  return parsed !== undefined && secondsBetween(now, parsed) < ttlSecs && lastCacheRead > 0
+    ? "warm"
+    : "cold";
+}
+
 export class CacheTracker {
   #state: CacheState = "cold";
   #lastTs: number | undefined;
@@ -144,10 +171,7 @@ export class CacheTracker {
     tracker.#lastModel = lastModel;
     tracker.#lastThinking = lastThinking;
     tracker.#lastCacheRead = lastCacheRead;
-    tracker.#state =
-      parsed !== undefined && secondsBetween(now, parsed) < ttlSecs && lastCacheRead > 0
-        ? "warm"
-        : "cold";
+    tracker.#state = reconstructState(lastTs, lastCacheRead, ttlSecs, now);
     // Activity history is unknown, so the keepalive-miss window falls back to
     // flagging rather than silently excusing a gap it cannot measure.
     return tracker;
