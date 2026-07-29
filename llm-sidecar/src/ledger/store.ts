@@ -85,7 +85,9 @@ export interface CallRow {
   output_cost: number | null;
   cache_read_cost: number | null;
   cache_write_cost: number | null;
-  cost_source: string;
+  /** Nullable to match Rust's `Option<String>`: the writer here always sets
+   *  one, but rows predating that are still readable. */
+  cost_source: string | null;
   total_cost: number | null;
 }
 

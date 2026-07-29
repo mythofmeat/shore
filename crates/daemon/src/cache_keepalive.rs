@@ -642,9 +642,8 @@ mod tests {
     /// direction, and it only shows up at a boundary.
     fn random_advance(rng: &mut Rng) -> u64 {
         const MIN_MS: u64 = 60 * 1000;
-        let jitter = |r: &mut Rng, centre_min: u64| {
-            centre_min * MIN_MS + r.below(2 * MIN_MS) - MIN_MS
-        };
+        let jitter =
+            |r: &mut Rng, centre_min: u64| centre_min * MIN_MS + r.below(2 * MIN_MS) - MIN_MS;
         match rng.below(8) {
             0 | 1 => rng.below(3 * MIN_MS),
             2 | 3 => jitter(rng, 55),
@@ -656,7 +655,11 @@ mod tests {
 
     /// One random mutation of, or probe against, the state machine.
     fn random_step(t: &mut Trace, rng: &mut Rng, at_ms: u64) {
-        let model = if rng.below(4) == 0 { OTHER_MODEL } else { MODEL };
+        let model = if rng.below(4) == 0 {
+            OTHER_MODEL
+        } else {
+            MODEL
+        };
         match rng.below(12) {
             0 | 1 => {
                 let interval = match rng.below(3) {

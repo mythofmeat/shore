@@ -975,6 +975,374 @@ mod tests {
         assert!(!chars.contains("leo"));
     }
 
+    // ── cross-language parity fixture ────────────────────────────────────────
+
+    fn row_json(r: &CallRow) -> serde_json::Value {
+        serde_json::json!({
+            "ts": r.ts,
+            "character": r.character,
+            "provider": r.provider,
+            "api_key_name": r.api_key_name,
+            "model": r.model,
+            "call_type": r.call_type,
+            "input_tokens": r.input_tokens,
+            "output_tokens": r.output_tokens,
+            "cache_read_tokens": r.cache_read_tokens,
+            "cache_write_tokens": r.cache_write_tokens,
+            "cache_ttl": r.cache_ttl,
+            "reasoning_effort": r.reasoning_effort,
+            "total_ms": r.total_ms,
+            "ttft_ms": r.ttft_ms,
+            "finish_reason": r.finish_reason,
+            "thinking_enabled": i32::from(r.thinking_enabled),
+            "cache_state": r.cache_state,
+            "cache_anomaly": r.cache_anomaly,
+            "input_cost": r.input_cost,
+            "output_cost": r.output_cost,
+            "cache_read_cost": r.cache_read_cost,
+            "cache_write_cost": r.cache_write_cost,
+            "cost_source": r.cost_source,
+            "total_cost": r.total_cost,
+        })
+    }
+
+    /// Rows chosen to stress the parts of these queries that can silently
+    /// disagree across a port: the `usage_kind` CASE arms, `COALESCE` on a null
+    /// api key, the Anthropic match that has to catch an OpenRouter-routed
+    /// model, the `cost_source` values `all_cost_rows` must refuse, and costs
+    /// small enough that Rust's `f64::to_string` and JavaScript's `String()`
+    /// disagree on notation.
+    /// The row every seed row varies from.
+    fn parity_base() -> CallRow {
+        CallRow {
+            ts: "2026-04-05T10:00:00Z".into(),
+            character: "aria".into(),
+            provider: "anthropic".into(),
+            api_key_name: Some("default".into()),
+            model: "claude-opus-4-6".into(),
+            call_type: "message".into(),
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_tokens: 80,
+            cache_write_tokens: 20,
+            cache_ttl: None,
+            reasoning_effort: None,
+            total_ms: 1500,
+            ttft_ms: 200,
+            finish_reason: "tool_use".into(),
+            thinking_enabled: true,
+            cache_state: Some("warm".into()),
+            cache_anomaly: None,
+            input_cost: Some(0.0015),
+            output_cost: Some(0.003_75),
+            cache_read_cost: Some(0.000_12),
+            cache_write_cost: Some(0.000_375),
+            cost_source: Some("pricing_catalog".into()),
+            total_cost: Some(0.005_745),
+        }
+    }
+
+    fn parity_seed() -> Vec<CallRow> {
+        let base = parity_base();
+        let at = |mins: u32| format!("2026-04-05T10:{mins:02}:00Z");
+        let ended = |ts: String| CallRow {
+            ts,
+            finish_reason: "end_turn".into(),
+            ..base.clone()
+        };
+
+        vec![
+            base.clone(),
+            // tool_loop → message_with_tools, different api key.
+            CallRow {
+                ts: at(1),
+                call_type: "tool_loop".into(),
+                api_key_name: Some("overflow".into()),
+                input_tokens: 200,
+                total_cost: Some(0.01),
+                ..base.clone()
+            },
+            // message + end_turn → message_no_tools, another provider.
+            CallRow {
+                provider: "openai".into(),
+                model: "gpt-4o".into(),
+                cache_read_tokens: 0,
+                cache_write_tokens: 0,
+                cache_state: None,
+                total_cost: Some(0.002),
+                ..ended(at(2))
+            },
+            // heartbeat_tool_loop → heartbeat; null api key exercises COALESCE.
+            CallRow {
+                character: "kai".into(),
+                call_type: "heartbeat_tool_loop".into(),
+                api_key_name: None,
+                total_cost: Some(0.000_000_15),
+                ..ended(at(3))
+            },
+            // OpenRouter-routed anthropic: custom provider, `anthropic/` model.
+            CallRow {
+                character: "kai".into(),
+                provider: "openrouter-anthropic".into(),
+                model: "anthropic/claude-opus-4.6".into(),
+                call_type: "keepalive".into(),
+                cache_read_tokens: 0,
+                cache_write_tokens: 900,
+                cache_state: Some("cold".into()),
+                cache_anomaly: Some("cold_keepalive".into()),
+                total_cost: Some(0.123_456_789),
+                ..ended(at(4))
+            },
+            // A second anomaly row, so `query_anomalies`'s `ORDER BY id DESC` is
+            // observable at all — with one flagged row the ordering is
+            // untestable, and a port that reversed it would pass anyway.
+            CallRow {
+                cache_read_tokens: 5,
+                cache_write_tokens: 700,
+                cache_state: Some("cold".into()),
+                cache_anomaly: Some("unexpected_write".into()),
+                total_cost: Some(0.02),
+                ..ended(at(5))
+            },
+            // provider_reported: `all_cost_rows` must skip it.
+            CallRow {
+                character: "leo".into(),
+                input_cost: None,
+                output_cost: None,
+                cache_read_cost: None,
+                cache_write_cost: None,
+                cost_source: Some("provider_reported".into()),
+                total_cost: Some(0.1234),
+                ..ended(at(6))
+            },
+            // subscription flat plan: `all_cost_rows` must skip it too.
+            CallRow {
+                character: "leo".into(),
+                provider: "opencode-go".into(),
+                model: "kimi-k3".into(),
+                call_type: "compaction".into(),
+                cost_source: Some("subscription".into()),
+                total_cost: Some(0.0),
+                ..ended(at(7))
+            },
+            // Unpriced row: `null_cost_rows` must find exactly this one.
+            CallRow {
+                character: "leo".into(),
+                cost_source: None,
+                total_cost: None,
+                ..ended(at(8))
+            },
+        ]
+    }
+
+    /// The filters each summary query is run under.
+    fn parity_filters() -> Vec<(&'static str, QueryFilter)> {
+        vec![
+            ("none", QueryFilter::default()),
+            (
+                "character",
+                QueryFilter {
+                    character: Some("kai".into()),
+                    ..QueryFilter::default()
+                },
+            ),
+            (
+                "provider",
+                QueryFilter {
+                    provider: Some("anthropic".into()),
+                    ..QueryFilter::default()
+                },
+            ),
+            (
+                "api_key_unknown",
+                QueryFilter {
+                    api_key_name: Some("unknown".into()),
+                    ..QueryFilter::default()
+                },
+            ),
+            (
+                "model",
+                QueryFilter {
+                    model: Some("gpt-4o".into()),
+                    ..QueryFilter::default()
+                },
+            ),
+            (
+                "call_type",
+                QueryFilter {
+                    call_type: Some("tool_loop".into()),
+                    ..QueryFilter::default()
+                },
+            ),
+            (
+                "usage_kinds",
+                QueryFilter {
+                    usage_kinds: vec!["message_with_tools".into(), "heartbeat".into()],
+                    ..QueryFilter::default()
+                },
+            ),
+            (
+                "window",
+                QueryFilter {
+                    since: Some("2026-04-05T10:02:00Z".into()),
+                    until: Some("2026-04-05T10:06:00Z".into()),
+                    ..QueryFilter::default()
+                },
+            ),
+            (
+                "compound",
+                QueryFilter {
+                    character: Some("aria".into()),
+                    provider: Some("anthropic".into()),
+                    since: Some("2026-04-05T10:01:00Z".into()),
+                    ..QueryFilter::default()
+                },
+            ),
+        ]
+    }
+
+    fn totals_json(t: &UsageTotals) -> serde_json::Value {
+        serde_json::json!({
+            "call_count": t.call_count,
+            "total_input": t.total_input,
+            "total_output": t.total_output,
+            "total_cache_read": t.total_cache_read,
+            "total_cache_write": t.total_cache_write,
+            "total_cost": t.total_cost,
+        })
+    }
+
+    /// Pins every query's result across the two implementations that must agree
+    /// on them: this module and `llm-sidecar/src/ledger/query.ts`.
+    ///
+    /// These queries are the definition of what `shore usage` reports and what a
+    /// usage budget counts, so a divergence is a wrong bill rather than a wrong
+    /// number on a screen. `export_tsv` is compared as a whole string on
+    /// purpose: it is the only assertion that pins column order, the boolean
+    /// rendering, and float notation all at once — `f64::to_string` and
+    /// JavaScript's `String()` part company below 1e-6, and the seed carries a
+    /// cost that small.
+    ///
+    /// Regenerate with `SHORE_REGENERATE_FIXTURES=1 cargo test -p shore-daemon
+    /// query_results_match_shared_fixture`.
+    #[test]
+    fn query_results_match_shared_fixture() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/ledger_query_parity.json"
+        );
+
+        let ledger = Ledger::open_in_memory().unwrap();
+        let seed = parity_seed();
+        for row in &seed {
+            _ = ledger.insert(row).unwrap();
+        }
+
+        let cases: Vec<_> = parity_filters()
+            .iter()
+            .map(|(name, filter)| parity_case(&ledger, name, filter))
+            .collect();
+
+        let cost_row_json = |r: &CostRow| {
+            serde_json::json!({
+                "id": r.id, "provider": r.provider, "model": r.model,
+                "input_tokens": r.input_tokens, "output_tokens": r.output_tokens,
+                "cache_read_tokens": r.cache_read_tokens,
+                "cache_write_tokens": r.cache_write_tokens,
+                "cache_ttl": r.cache_ttl,
+            })
+        };
+
+        let doc = serde_json::json!({
+            "_comment": [
+                "Generated. Do not hand-edit — see `query_results_match_shared_fixture`",
+                "in crates/daemon/src/ledger/query.rs.",
+                "Seed rows plus the result of every query under every filter, as the Rust",
+                "produced them. Replayed by llm-sidecar/tests/ledger_query_parity.test.ts",
+                "against the TypeScript port; the two must agree on all of it."
+            ],
+            "seed": seed.iter().map(row_json).collect::<Vec<_>>(),
+            "cases": cases,
+            "warm_streak": {
+                "aria": warm_streak(&ledger, "aria").unwrap(),
+                "kai": warm_streak(&ledger, "kai").unwrap(),
+                "leo": warm_streak(&ledger, "leo").unwrap(),
+                "nobody": warm_streak(&ledger, "nobody").unwrap(),
+            },
+            "null_cost_rows": null_cost_rows(&ledger).unwrap().iter()
+                .map(cost_row_json).collect::<Vec<_>>(),
+            "all_cost_rows": all_cost_rows(&ledger).unwrap().iter()
+                .map(cost_row_json).collect::<Vec<_>>(),
+        });
+        let rendered = format!("{}\n", serde_json::to_string_pretty(&doc).unwrap());
+
+        if std::env::var_os("SHORE_REGENERATE_FIXTURES").is_some() {
+            std::fs::write(path, &rendered).unwrap();
+            return;
+        }
+
+        let on_disk = std::fs::read_to_string(path).unwrap_or_default();
+        assert_eq!(
+            rendered, on_disk,
+            "ledger query results changed. Regenerate with SHORE_REGENERATE_FIXTURES=1 \
+             and update llm-sidecar/src/ledger/query.ts to match."
+        );
+    }
+
+    /// Every query's answer under one filter.
+    fn parity_case(ledger: &Ledger, name: &str, filter: &QueryFilter) -> serde_json::Value {
+        serde_json::json!({
+                "filter": name,
+                "usage_totals": totals_json(&usage_totals(ledger, filter).unwrap()),
+                "usage_summary": usage_summary(ledger, filter).unwrap().iter()
+                    .map(|s| serde_json::json!({
+                        "provider": s.provider, "model": s.model,
+                        "call_count": s.call_count, "total_input": s.total_input,
+                        "total_output": s.total_output,
+                        "total_cache_read": s.total_cache_read,
+                        "total_cache_write": s.total_cache_write,
+                        "total_cost": s.total_cost,
+                    })).collect::<Vec<_>>(),
+                "by_call_type": usage_summary_by_call_type(ledger, filter).unwrap().iter()
+                    .map(|s| serde_json::json!({
+                        "call_type": s.call_type, "call_count": s.call_count,
+                        "total_input": s.total_input, "total_output": s.total_output,
+                        "total_cache_read": s.total_cache_read,
+                        "total_cache_write": s.total_cache_write,
+                        "total_cost": s.total_cost,
+                    })).collect::<Vec<_>>(),
+                "by_usage_kind": usage_summary_by_usage_kind(ledger, filter).unwrap().iter()
+                    .map(|s| serde_json::json!({
+                        "usage_kind": s.usage_kind, "call_count": s.call_count,
+                        "total_input": s.total_input, "total_output": s.total_output,
+                        "total_cache_read": s.total_cache_read,
+                        "total_cache_write": s.total_cache_write,
+                        "total_cost": s.total_cost,
+                    })).collect::<Vec<_>>(),
+                "by_api_key": usage_summary_by_api_key(ledger, filter).unwrap().iter()
+                    .map(|s| serde_json::json!({
+                        "provider": s.provider, "api_key_name": s.api_key_name,
+                        "call_count": s.call_count, "total_input": s.total_input,
+                        "total_output": s.total_output,
+                        "total_cache_read": s.total_cache_read,
+                        "total_cache_write": s.total_cache_write,
+                        "total_cost": s.total_cost,
+                    })).collect::<Vec<_>>(),
+                "model_usage": model_usage_summary(ledger, filter).unwrap().iter()
+                    .map(|s| serde_json::json!({
+                        "model": s.model, "provider": s.provider,
+                        "call_type": s.call_type, "first_ts": s.first_ts,
+                        "last_ts": s.last_ts, "call_count": s.call_count,
+                    })).collect::<Vec<_>>(),
+                "anomalies": query_anomalies(ledger, filter).unwrap().iter()
+                    .map(row_json).collect::<Vec<_>>(),
+                "active_anthropic": active_anthropic_characters(ledger, filter).unwrap().iter()
+                    .map(|(c, row)| serde_json::json!([c, row_json(row)]))
+                    .collect::<Vec<_>>(),
+                "export_tsv": export_tsv(ledger, filter).unwrap(),
+        })
+    }
+
     #[test]
     fn warm_streak_counts_consecutive() {
         let ledger = Ledger::open_in_memory().unwrap();
