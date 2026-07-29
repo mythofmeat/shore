@@ -1534,13 +1534,17 @@ async fn execute_cache_keepalive_ping(character: &str, ctx: &TickContext) {
             if cold {
                 // Disarm rather than reschedule. A cold read is positive proof
                 // the prefix this keepalive existed to protect is already gone,
-                // and a ping cannot rebuild it: when the provider refuses the
-                // response it bills the cache write without persisting it, so
-                // the next ping starts exactly as cold and pays again. Observed
-                // in the ledger as twelve consecutive `cold_keepalive` rows at
-                // full write price — including two byte-identical pings nine
-                // seconds apart that both read 0 — until a real message landed
-                // and the write finally stuck.
+                // and the ledger says a ping does not rebuild it: twelve
+                // consecutive `cold_keepalive` rows at full write price —
+                // including two byte-identical pings nine seconds apart that
+                // both read 0 — until a real message landed and the write
+                // finally stuck.
+                //
+                // *Why* a ping's write does not stick is not established. This
+                // used to claim the provider refused the response and billed
+                // the write without persisting it; that was tested twice and is
+                // wrong, so do not re-derive it. The disarm rests on the
+                // observation, which holds regardless of the mechanism.
                 //
                 // `on_cache_invalidated` (not `on_ping_failed`) because this is
                 // knowledge, not a transient error: retry backoff would buy
