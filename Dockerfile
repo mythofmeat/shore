@@ -3,7 +3,7 @@ WORKDIR /src
 COPY . .
 RUN cargo build --bin shore-daemon --release
 
-FROM oven/bun:latest
+FROM oven/bun:latest AS bun
 COPY --from=rust /src /src
 WORKDIR /src/llm-sidecar
 RUN bun install
@@ -16,26 +16,28 @@ ENV SHORE_CACHE_DIR=/cache
 ENV SHORE_ADDR=0.0.0.0
 ENV SHORE_UNSAFE_ALLOW_REMOTE_ACCESS=1
 
+FROM debian:testing-slim
+COPY --from=rust /src/target/release/shore /usr/bin/shore
+COPY --from=rust /src/target/release/shore-tui /usr/bin/shore-tui
+COPY --from=rust /src/target/release/shore-matrix /usr/lib/shore/shore-matrix
+COPY --from=bun /src/llm-sidecar/dist/shore-llm-sidecar /usr/lib/shore/shore-llm-sidecar
+
+RUN apt-get update 
+RUN apt-get install npm --yes
+RUN npm install -g bun
+RUN apt-get install curl --yes
+RUN curl -fsSL -o /usr/share/keyrings/tuwunel-archive-keyring.gpg https://apt.f.dog/tuwunel-archive-keyring.gpg
+RUN tee /etc/apt/sources.list.d/tuwunel.sources >/dev/null <<EOF
+Types: deb
+URIs: https://apt.f.dog
+Suites: stable
+Components: main
+Signed-By: /usr/share/keyrings/tuwunel-archive-keyring.gpg
+EOF
+RUN apt-get update
+RUN apt-get install tuwunel --yes
+
 CMD ["./shore-daemon"]
 
 
-# FROM debian:testing-slim
-# COPY --from=rust /src/target/release/shore /usr/bin/shore
-# COPY --from=rust /src/target/release/shore-tui /usr/bin/shore-tui
-# COPY --from=rust /src/target/release/shore-matrix /usr/lib/shore/shore-matrix
-# COPY --from=bun /src/llm-sidecar/dist/shore-llm-sidecar /usr/lib/shore/shore-llm-sidecar
-#
-# RUN apt-get update 
-# RUN apt-get install npm --yes
-# RUN npm install -g bun
-# RUN apt-get install curl --yes
-# RUN curl -fsSL -o /usr/share/keyrings/tuwunel-archive-keyring.gpg https://apt.f.dog/tuwunel-archive-keyring.gpg
-# RUN tee /etc/apt/sources.list.d/tuwunel.sources >/dev/null <<EOF
-# Types: deb
-# URIs: https://apt.f.dog
-# Suites: stable
-# Components: main
-# Signed-By: /usr/share/keyrings/tuwunel-archive-keyring.gpg
-# EOF
-# RUN apt-get update
-# RUN apt-get install tuwunel --yes
+
