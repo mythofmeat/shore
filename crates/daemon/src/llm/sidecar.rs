@@ -206,8 +206,12 @@ pub(crate) async fn generate(
         message_count = request.messages.len(),
         "dispatching non-streaming LLM request through sidecar"
     );
-    let result: Result<GenerateResponse, LlmError> =
-        post_json(socket_path, "/v1/generate", &OutboundRequest { request, context }).await;
+    let result: Result<GenerateResponse, LlmError> = post_json(
+        socket_path,
+        "/v1/generate",
+        &OutboundRequest { request, context },
+    )
+    .await;
     match &result {
         Ok(resp) => debug!(
             model = %resp.model,

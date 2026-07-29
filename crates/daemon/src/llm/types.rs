@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use shore_common::config::app::{ThinkingReplay, UsageConfig};
 use shore_common::config::models::Sdk;
-use std::path::Path;
 pub use shore_common::protocol::types::ContentBlock;
+use std::path::Path;
 
 /// Per-provider knobs the sidecar's adapters consume.
 ///

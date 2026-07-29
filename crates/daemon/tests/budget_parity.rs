@@ -55,8 +55,9 @@ fn seeded_ledger(dir: &std::path::Path, case: usize, rows: &[CallRow]) -> Ledger
 
     let conn = rusqlite::Connection::open(&path).expect("seed connection opens");
     for r in rows {
-        let _inserted = conn.execute(
-            "INSERT INTO calls (ts, character, provider, api_key_name, model, call_type,
+        let _inserted = conn
+            .execute(
+                "INSERT INTO calls (ts, character, provider, api_key_name, model, call_type,
                  input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
                  cache_ttl, reasoning_effort, total_ms, ttft_ms, finish_reason,
                  thinking_enabled, cache_state, cache_anomaly,
@@ -64,34 +65,34 @@ fn seeded_ledger(dir: &std::path::Path, case: usize, rows: &[CallRow]) -> Ledger
                  cost_source, total_cost)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
                  ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)",
-            rusqlite::params![
-                r.ts,
-                r.character,
-                r.provider,
-                r.api_key_name,
-                r.model,
-                r.call_type,
-                r.input_tokens,
-                r.output_tokens,
-                r.cache_read_tokens,
-                r.cache_write_tokens,
-                r.cache_ttl,
-                r.reasoning_effort,
-                r.total_ms,
-                r.ttft_ms,
-                r.finish_reason,
-                i32::from(r.thinking_enabled),
-                r.cache_state,
-                r.cache_anomaly,
-                r.input_cost,
-                r.output_cost,
-                r.cache_read_cost,
-                r.cache_write_cost,
-                r.cost_source,
-                r.total_cost,
-            ],
-        )
-        .expect("seed row inserts");
+                rusqlite::params![
+                    r.ts,
+                    r.character,
+                    r.provider,
+                    r.api_key_name,
+                    r.model,
+                    r.call_type,
+                    r.input_tokens,
+                    r.output_tokens,
+                    r.cache_read_tokens,
+                    r.cache_write_tokens,
+                    r.cache_ttl,
+                    r.reasoning_effort,
+                    r.total_ms,
+                    r.ttft_ms,
+                    r.finish_reason,
+                    i32::from(r.thinking_enabled),
+                    r.cache_state,
+                    r.cache_anomaly,
+                    r.input_cost,
+                    r.output_cost,
+                    r.cache_read_cost,
+                    r.cache_write_cost,
+                    r.cost_source,
+                    r.total_cost,
+                ],
+            )
+            .expect("seed row inserts");
     }
     ledger
 }

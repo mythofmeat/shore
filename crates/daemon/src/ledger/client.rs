@@ -1,9 +1,6 @@
 //! LedgerClient: compiler-enforced wrapper around LlmClient.
 
-use crate::ledger::budget::{
-    newly_crossed_budget_warnings,
-    UsageBudgetWarningEvent,
-};
+use crate::ledger::budget::{newly_crossed_budget_warnings, UsageBudgetWarningEvent};
 use crate::ledger::pricing::PricingEngine;
 use crate::ledger::store::Ledger;
 use crate::llm::credentials::{
@@ -561,7 +558,6 @@ impl LedgerClient {
     pub fn pricing(&self) -> &Arc<PricingEngine> {
         &self.pricing
     }
-
 }
 
 fn resolve_model_for_request<'ctx>(
@@ -708,5 +704,4 @@ mod tests {
         assert_eq!(CallType::Dreaming.as_str(), "dreaming");
         assert_eq!(CallType::MemoryQuery.as_str(), "memory_query");
     }
-
 }

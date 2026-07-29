@@ -1,17 +1,17 @@
 //! SQLite-backed append-only ledger for LLM call recording.
 
-use crate::ledger::convert::{i64_to_u32, i64_to_u64};
 #[cfg(test)]
 use crate::ledger::convert::u64_to_i64;
+use crate::ledger::convert::{i64_to_u32, i64_to_u64};
 use crate::ledger::sync::lock_or_recover;
-use rusqlite::{Connection, Result as SqlResult};
 #[cfg(test)]
 use rusqlite::params;
+use rusqlite::{Connection, Result as SqlResult};
 use std::path::Path;
 use std::sync::Mutex;
-use tracing::info;
 #[cfg(test)]
 use tracing::debug;
+use tracing::info;
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -285,7 +285,6 @@ impl Ledger {
         Ok(rows)
     }
 
-
     pub(crate) fn with_conn<T>(
         &self,
         op: impl FnOnce(&Connection) -> Result<T, rusqlite::Error>,
@@ -410,8 +409,6 @@ mod tests {
         assert_eq!(row.cache_read_tokens, 80);
         assert!(row.cache_anomaly.is_none());
     }
-
-
 
     #[test]
     fn null_costs_when_pricing_unavailable() {
