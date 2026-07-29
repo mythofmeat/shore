@@ -557,8 +557,9 @@ fn create_default_config(config_dir: &Path) {
 # cache_ttl = "1h"
 
 # [daemon]
-# addr = "127.0.0.1:7320"
+# addr = "127.0.0.1:7320"             # env override: SHORE_ADDR
 # unsafe_allow_remote_access = false  # required for non-loopback binds
+#                                     # env override: SHORE_UNSAFE_ALLOW_REMOTE_ACCESS
 # allowed_hosts = []                  # IP allowlist only; not auth/TLS
 "#;
     let path = config_dir.join("config.toml");
