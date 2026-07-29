@@ -1,10 +1,11 @@
 /**
  * Cross-language parity for the ledger's read queries.
  *
- * The fixture is *generated* by running every query under every filter through
- * the real Rust (`query_results_match_shared_fixture` in
- * `crates/daemon/src/ledger/query.rs`) against a known set of seed rows. This
- * inserts the same rows into a daemon-made ledger, runs the TypeScript port,
+ * The fixture was *generated* by running every query under every filter through
+ * the real Rust (`query_results_match_shared_fixture` in the daemon's since-
+ * deleted `ledger/query.rs`) against a known set of seed rows. That generator
+ * is gone with the module it exercised, so the fixture is frozen. This inserts
+ * the same rows into a daemon-made ledger, runs the TypeScript that took over,
  * and demands the same answer.
  *
  * These queries define what `shore usage` reports and what a usage budget
@@ -21,7 +22,7 @@
 import { Database } from "bun:sqlite";
 import { afterAll, expect, test } from "bun:test";
 
-import fixture from "../../crates/daemon/tests/fixtures/ledger_query_parity.json";
+import fixture from "./ledger_fixtures/ledger_query_parity.json";
 import {
   activeAnthropicCharacters,
   allCostRows,

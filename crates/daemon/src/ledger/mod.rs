@@ -1,9 +1,7 @@
-pub mod budget;
-pub mod cache_tracker;
 pub mod client;
 mod convert;
 pub mod pricing;
-pub mod query;
+pub mod reports;
 pub mod store;
 mod sync;
 

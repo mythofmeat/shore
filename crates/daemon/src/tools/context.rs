@@ -76,10 +76,8 @@ impl ToolContext for SharedToolContext {
     // The ledger handle rides on the sub-agent runtime's ledger-wrapped
     // client, which every path except compaction populates — no separate
     // field to thread through construction sites.
-    fn ledger(&self) -> Option<&crate::ledger::Ledger> {
-        self.subagent_runtime
-            .as_ref()
-            .map(|rt| rt.ledger_client.ledger().as_ref())
+    fn ledger_client(&self) -> Option<&crate::ledger::LedgerClient> {
+        self.subagent_runtime.as_ref().map(|rt| &rt.ledger_client)
     }
     fn markdown_store(&self) -> Option<&MarkdownMemoryStore> {
         self.markdown_store.as_ref()

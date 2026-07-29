@@ -1,7 +1,9 @@
 //! LedgerClient: compiler-enforced wrapper around LlmClient.
 
-use crate::ledger::budget::{newly_crossed_budget_warnings, UsageBudgetWarningEvent};
 use crate::ledger::pricing::PricingEngine;
+use crate::ledger::reports::{
+    BudgetWarnings, ModelHistory, ModelUsageRow, UsageBudgetWarningEvent,
+};
 use crate::ledger::store::Ledger;
 use crate::llm::credentials::{
     classify_credential_failure, read_candidate_env, resolve_key_candidates, CredentialFailureKind,
@@ -9,7 +11,7 @@ use crate::llm::credentials::{
 };
 use crate::llm::types::{CallContext, GenerateResponse, LlmRequest};
 use crate::llm::{LlmClient, LlmError};
-use chrono::Utc;
+use serde::Serialize;
 use shore_common::config::app::UsageConfig;
 use shore_common::config::models::ResolvedModel;
 use shore_common::config::providers::ProviderRegistry;
@@ -91,6 +93,36 @@ struct CallLabels<'req> {
     reasoning_effort: Option<&'req str>,
     /// Budgets for the sidecar's gate. `None` when none are configured.
     usage: Option<&'req UsageConfig>,
+}
+
+// ── Ledger query bodies ─────────────────────────────────────────────────────
+//
+// The three `/v1/usage*` requests. Each names the ledger to read, because the
+// sidecar serves whatever path it is handed rather than holding one open for
+// the daemon — the same arrangement the recording path uses.
+
+#[derive(Serialize)]
+struct UsageReportRequest<'req> {
+    ledger: &'req Path,
+    /// The `shore usage` arguments, verbatim. The sidecar picks the mode.
+    args: &'req serde_json::Value,
+    usage: &'req UsageConfig,
+}
+
+#[derive(Serialize)]
+struct BudgetWarningsRequest<'req> {
+    ledger: &'req Path,
+    usage: &'req UsageConfig,
+}
+
+#[derive(Serialize)]
+struct ModelHistoryRequest<'req> {
+    ledger: &'req Path,
+    character: &'req str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    since: Option<&'req str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    until: Option<&'req str>,
 }
 
 #[derive(Debug, Clone)]
@@ -216,16 +248,82 @@ impl LedgerClient {
     // `CallContext::usage`, and a refusal comes back as a `Provider` error
     // carrying the budget's own message, so the text a user reads is unchanged.
 
-    /// Return newly crossed usage budget warning thresholds and mark them
-    /// delivered for the current budget window.
-    pub fn newly_crossed_usage_budget_warnings(
+    /// Where the sidecar should read from, or an error naming why it cannot.
+    ///
+    /// `None` is an in-memory ledger, which no second process can open. Tests
+    /// build those; a running daemon always has a file.
+    fn ledger_path(&self) -> Result<&Path, LlmError> {
+        self.db_path.as_deref().ok_or_else(|| LlmError::Provider {
+            message: "usage reports need a ledger on disk; this client has an in-memory one".into(),
+        })
+    }
+
+    /// The `shore usage` payload for `args`, computed by the sidecar.
+    ///
+    /// Forwarded as opaque JSON. The daemon has no business reshaping a report
+    /// it does not compute, and the CLI is what reads the fields.
+    pub async fn usage_report(
         &self,
-    ) -> Result<Vec<UsageBudgetWarningEvent>, rusqlite::Error> {
+        args: &serde_json::Value,
+    ) -> Result<serde_json::Value, LlmError> {
+        self.inner
+            .ledger_query(
+                "/v1/usage",
+                &UsageReportRequest {
+                    ledger: self.ledger_path()?,
+                    args,
+                    usage: &self.usage_config_snapshot(),
+                },
+            )
+            .await
+    }
+
+    /// Newly crossed usage budget warning thresholds, marked delivered for the
+    /// current window as a side effect of being reported.
+    ///
+    /// The dedup marker is why this is one call rather than a read here and a
+    /// write there: whoever decides a threshold is "new" must be the one that
+    /// records it, or two processes race for the same row.
+    pub async fn newly_crossed_usage_budget_warnings(
+        &self,
+    ) -> Result<Vec<UsageBudgetWarningEvent>, LlmError> {
         let config = self.usage_config_snapshot();
         if config.budgets.is_empty() {
             return Ok(Vec::new());
         }
-        newly_crossed_budget_warnings(&self.ledger, &config, Utc::now())
+        let reply: BudgetWarnings = self
+            .inner
+            .ledger_query(
+                "/v1/usage/warnings",
+                &BudgetWarningsRequest {
+                    ledger: self.ledger_path()?,
+                    usage: &config,
+                },
+            )
+            .await?;
+        Ok(reply.warnings)
+    }
+
+    /// Per-model provenance for one character, backing the `model_history` tool.
+    pub async fn model_history(
+        &self,
+        character: &str,
+        since: Option<&str>,
+        until: Option<&str>,
+    ) -> Result<Vec<ModelUsageRow>, LlmError> {
+        let reply: ModelHistory = self
+            .inner
+            .ledger_query(
+                "/v1/usage/models",
+                &ModelHistoryRequest {
+                    ledger: self.ledger_path()?,
+                    character,
+                    since,
+                    until,
+                },
+            )
+            .await?;
+        Ok(reply.models)
     }
 
     /// Passthrough to `LlmClient::build_request`.

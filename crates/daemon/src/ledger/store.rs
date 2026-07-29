@@ -1,12 +1,13 @@
 //! SQLite-backed append-only ledger for LLM call recording.
 
 #[cfg(test)]
-use crate::ledger::convert::u64_to_i64;
-use crate::ledger::convert::{i64_to_u32, i64_to_u64};
+use crate::ledger::convert::{i64_to_u32, i64_to_u64, u64_to_i64};
 use crate::ledger::sync::lock_or_recover;
 #[cfg(test)]
 use rusqlite::params;
-use rusqlite::{Connection, Result as SqlResult};
+use rusqlite::Connection;
+#[cfg(test)]
+use rusqlite::Result as SqlResult;
 use std::path::Path;
 use std::sync::Mutex;
 #[cfg(test)]
@@ -296,6 +297,9 @@ impl Ledger {
 
 // ── Row deserializer ──────────────────────────────────────────────────────────
 
+/// Test-only, with [`Ledger::recent`]: nothing in the daemon reads rows back
+/// any more. The sidecar's `rowFromSqlite` is the live one.
+#[cfg(test)]
 pub(crate) fn row_from_sqlite(row: &rusqlite::Row<'_>) -> SqlResult<CallRow> {
     // Use column names, not positions. Migrations (e.g. adding `cache_ttl`)
     // append columns to the end of the table on existing databases, which
@@ -498,15 +502,20 @@ mod tests {
         assert_eq!(row.cost_source.as_deref(), Some("pricing_catalog"));
         assert_eq!(row.cache_anomaly.as_deref(), Some("unexpected_read"));
 
-        // And also check the anomaly query path (the one that surfaces the
-        // error in `shore usage --anomalies`).
-        let anomalies = crate::ledger::query::query_anomalies(
-            &ledger,
-            &crate::ledger::query::QueryFilter::default(),
-        )
-        .unwrap();
-        assert_eq!(anomalies.len(), 1);
-        assert_eq!(first_item(&anomalies).total_ms, 1500);
+        // And that the column `shore usage --anomalies` selects on is what the
+        // migration left behind. The query itself lives in the sidecar now
+        // (`llm-sidecar/src/ledger/query.ts`), so this asserts the predicate it
+        // uses rather than running it: the migration is what is under test.
+        let anomalous: i64 = ledger
+            .with_conn(|db| {
+                db.query_row(
+                    "SELECT COUNT(*) FROM calls WHERE cache_anomaly IS NOT NULL",
+                    [],
+                    |r| r.get(0),
+                )
+            })
+            .unwrap();
+        assert_eq!(anomalous, 1);
     }
 
     #[test]

@@ -439,6 +439,19 @@ impl LlmClient {
     ) -> Result<ImageGenerateResponse, LlmError> {
         sidecar::image_generate(params, self.sidecar_socket()).await
     }
+
+    /// Ask the sidecar a question about the ledger it writes.
+    ///
+    /// See `sidecar::ledger_query`. Exposed here rather than reached through
+    /// `generate`/`stream_raw` because it is not a provider call and must not
+    /// pick up any of their handling — no preprocessing, no debug-log row.
+    pub async fn ledger_query<Req, Resp>(&self, path: &str, body: &Req) -> Result<Resp, LlmError>
+    where
+        Req: serde::Serialize + ?Sized,
+        Resp: serde::de::DeserializeOwned,
+    {
+        sidecar::ledger_query(path, body, self.sidecar_socket()).await
+    }
 }
 
 /// Preprocess an outbound request before serialization:

@@ -228,6 +228,26 @@ pub(crate) async fn generate(
     result
 }
 
+/// Ask the sidecar a ledger question.
+///
+/// The `/v1/usage*` endpoints are not provider calls: no API key, no budget
+/// gate, no ledger row — just a read (and, for warnings, the dedup write that
+/// goes with it) performed on the side that owns `ledger.db`. They share this
+/// transport because they share the socket, and nothing else.
+pub(crate) async fn ledger_query<Req, Resp>(
+    path: &str,
+    body: &Req,
+    socket_path: Option<&Path>,
+) -> Result<Resp, LlmError>
+where
+    Req: Serialize + ?Sized,
+    Resp: DeserializeOwned,
+{
+    post_json(socket_path, path, body).await.inspect_err(|e| {
+        warn!(path, error = %e, "ledger query through sidecar failed");
+    })
+}
+
 /// Send an image generation request.
 pub(crate) async fn image_generate(
     params: &ImageGenerateParams<'_>,

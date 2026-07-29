@@ -44,19 +44,29 @@ export function daemonMadeLedger(): LedgerFixture {
 
   const path = `${DATA}/ledger.db`;
   const deadline = Date.now() + 20_000;
-  while (Date.now() < deadline) {
+  let ready = false;
+  while (!ready && Date.now() < deadline) {
     try {
       const db = new Database(path, { readonly: true, create: false });
       const has = db.query("SELECT name FROM sqlite_master WHERE name = 'calls'").get();
       db.close();
-      if (has) break;
+      ready = has !== null;
     } catch {
       /* not created yet */
     }
-    Bun.sleepSync(150);
+    if (!ready) Bun.sleepSync(150);
   }
   proc.kill();
-  return { path, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  const cleanup = () => rmSync(root, { recursive: true, force: true });
+  if (!ready) {
+    // Say so here rather than handing back a path with no schema. A caller that
+    // gets one fails later, somewhere else, with a message about a missing
+    // table — which reads as a bug in the code under test rather than as the
+    // daemon having been slow to start on a loaded machine.
+    cleanup();
+    throw new Error(`daemon did not create ${path} within 20s`);
+  }
+  return { path, cleanup };
 }
 
 /** Every row in the ledger, oldest first. */

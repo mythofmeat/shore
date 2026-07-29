@@ -165,12 +165,12 @@ pub trait ToolContext: Sync {
         Box::pin(async move { Err(ToolError::NotImplemented(format!("ask_{name}"))) })
     }
 
-    /// Read access to the usage ledger for provenance queries
-    /// (`model_history`). Default: unavailable — only contexts that carry a
-    /// ledger handle (chat and background paths) override this; compaction
-    /// and bare test contexts return `None` and the tool reports itself
-    /// unavailable instead of panicking.
-    fn ledger(&self) -> Option<&crate::ledger::Ledger> {
+    /// The client that answers usage-ledger questions (`model_history`) by
+    /// asking the sidecar. Default: unavailable — only contexts that carry one
+    /// (chat and background paths) override this; compaction and bare test
+    /// contexts return `None` and the tool reports itself unavailable instead
+    /// of panicking.
+    fn ledger_client(&self) -> Option<&crate::ledger::LedgerClient> {
         None
     }
 
@@ -332,7 +332,7 @@ pub fn dispatch_tool<'ctx>(
     Box::pin(async move {
         match name {
             "search_chat_logs" => history::handle_search_history(&input, ctx),
-            "model_history" => model_history::handle_model_history(&input, ctx),
+            "model_history" => model_history::handle_model_history(&input, ctx).await,
             "generate_image" => images::handle_generate_image(input, ctx).await,
             // Web tools
             "web_search" => web::handle_web_search(input, ctx).await,

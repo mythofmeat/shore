@@ -6,6 +6,10 @@
 //! is the coarse timeline complement to `search_chat_logs`' per-message
 //! `model` field: the ledger covers periods whose transcripts predate
 //! per-message model stamping.
+//!
+//! The query runs in the sidecar, which owns the ledger. What stays here is
+//! the tool's own vocabulary: argument parsing, the time-bound validation that
+//! produces a user-facing `InvalidArgs`, and the voice attribution below.
 
 use chrono::Utc;
 use serde_json::{json, Value};
@@ -53,11 +57,14 @@ fn utc_bound(input: &Value, field: &str) -> Result<Option<String>, ToolError> {
     Ok(parse_time_bound(input, field)?.map(|ts| ts.with_timezone(&Utc).to_rfc3339()))
 }
 
-pub fn handle_model_history(input: &Value, ctx: &dyn ToolContext) -> Result<Value, ToolError> {
+pub async fn handle_model_history(
+    input: &Value,
+    ctx: &dyn ToolContext,
+) -> Result<Value, ToolError> {
     // NotImplemented is reserved for unrouted tool names (see
     // test_dispatch_all_registered_names_route); a context without a ledger
-    // handle is an availability problem, not a missing dispatch arm.
-    let Some(ledger) = ctx.ledger() else {
+    // client is an availability problem, not a missing dispatch arm.
+    let Some(ledger) = ctx.ledger_client() else {
         return Err(ToolError::Io(
             "the usage ledger is not available in this context".into(),
         ));
@@ -79,13 +86,9 @@ pub fn handle_model_history(input: &Value, ctx: &dyn ToolContext) -> Result<Valu
         }
     }
 
-    let filter = crate::ledger::query::QueryFilter {
-        since: since.clone(),
-        until: until.clone(),
-        character: Some(character.to_owned()),
-        ..crate::ledger::query::QueryFilter::default()
-    };
-    let rows = crate::ledger::query::model_usage_summary(ledger, &filter)
+    let rows = ledger
+        .model_history(character, since.as_deref(), until.as_deref())
+        .await
         .map_err(|e| ToolError::Io(e.to_string()))?;
 
     let models: Vec<Value> = rows
@@ -118,124 +121,40 @@ pub fn handle_model_history(input: &Value, ctx: &dyn ToolContext) -> Result<Valu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ledger::store::CallRow;
-    use crate::ledger::store::Ledger;
     use crate::test_support::TestToolContext;
 
-    fn call_row(ts: &str, character: &str, model: &str, call_type: &str) -> CallRow {
-        CallRow {
-            ts: ts.to_owned(),
-            character: character.to_owned(),
-            provider: "anthropic".to_owned(),
-            api_key_name: None,
-            model: model.to_owned(),
-            call_type: call_type.to_owned(),
-            input_tokens: 10,
-            output_tokens: 5,
-            cache_read_tokens: 0,
-            cache_write_tokens: 0,
-            cache_ttl: None,
-            total_ms: 100,
-            ttft_ms: 10,
-            finish_reason: "end_turn".to_owned(),
-            thinking_enabled: false,
-            reasoning_effort: None,
-            cache_state: None,
-            cache_anomaly: None,
-            input_cost: None,
-            output_cost: None,
-            cache_read_cost: None,
-            cache_write_cost: None,
-            cost_source: None,
-            total_cost: None,
-        }
-    }
-
-    fn ledger_with_calls() -> Ledger {
-        let ledger = Ledger::open_in_memory().unwrap();
-        for row in [
-            call_row(
-                "2026-04-05T10:00:00+00:00",
-                "poppy",
-                "claude-opus-4-6",
-                "message",
-            ),
-            call_row(
-                "2026-05-01T10:00:00+00:00",
-                "poppy",
-                "claude-opus-4-6",
-                "message",
-            ),
-            call_row("2026-06-01T10:00:00+00:00", "poppy", "glm-5.2", "heartbeat"),
-            call_row("2026-06-02T10:00:00+00:00", "poppy", "glm-5.2", "dreaming"),
-            call_row("2026-06-03T10:00:00+00:00", "other", "gpt-5.5", "message"),
-        ] {
-            let _ignored = ledger.insert(&row).unwrap();
-        }
-        ledger
-    }
-
-    #[tokio::test]
-    async fn model_history_reports_character_scoped_rows_with_kinds() {
-        let ctx = TestToolContext::new()
-            .with_ledger(ledger_with_calls())
-            .with_character("poppy");
-        let result = handle_model_history(&json!({}), &ctx).unwrap();
-
-        assert_eq!(result["character"], "poppy");
-        let models = result["models"].as_array().unwrap();
-        // gpt-5.5 belongs to another character and must not leak in.
-        assert_eq!(models.len(), 3);
-        assert_eq!(models[0]["model"], "claude-opus-4-6");
-        assert_eq!(models[0]["kind"], "interactive");
-        assert_eq!(models[0]["calls"], 2);
-        assert_eq!(models[0]["first_seen"], "2026-04-05T10:00:00+00:00");
-        assert_eq!(models[0]["last_seen"], "2026-05-01T10:00:00+00:00");
-        assert_eq!(models[1]["kind"], "autonomous");
-        assert_eq!(models[2]["kind"], "background");
-    }
-
-    #[tokio::test]
-    async fn model_history_time_bounds_rebase_to_utc() {
-        let ctx = TestToolContext::new()
-            .with_ledger(ledger_with_calls())
-            .with_character("poppy");
-        // 2026-05-01T20:00+10:00 == 2026-05-01T10:00Z — the +10:00 bound must
-        // still include the May call stored in UTC.
-        let result = handle_model_history(
-            &json!({
-                "start_time": "2026-04-20T00:00:00+10:00",
-                "end_time": "2026-05-01T20:00:00+10:00"
-            }),
-            &ctx,
-        )
-        .unwrap();
-        let models = result["models"].as_array().unwrap();
-        assert_eq!(models.len(), 1);
-        assert_eq!(models[0]["model"], "claude-opus-4-6");
-        assert_eq!(models[0]["calls"], 1);
-    }
+    // What `model_history` *returns* is pinned where the query runs, in
+    // `llm-sidecar/tests/ledger_usage.test.ts` — character scoping, the UTC
+    // rebase of the bounds, the grouping. What is left here is the handling
+    // this side still owns: the arguments, and saying so when the ledger is
+    // out of reach.
 
     #[tokio::test]
     async fn model_history_rejects_reversed_range() {
-        let ctx = TestToolContext::new()
-            .with_ledger(ledger_with_calls())
-            .with_character("poppy");
+        let ctx = TestToolContext::new().with_ledger().with_character("poppy");
         let result = handle_model_history(
             &json!({
                 "start_time": "2026-06-01T00:00:00Z",
                 "end_time": "2026-05-01T00:00:00Z"
             }),
             &ctx,
-        );
+        )
+        .await;
         assert!(matches!(result, Err(ToolError::InvalidArgs(_))));
     }
 
     #[tokio::test]
     async fn model_history_unavailable_without_ledger() {
         let ctx = TestToolContext::new().with_character("poppy");
-        let result = handle_model_history(&json!({}), &ctx);
+        let result = handle_model_history(&json!({}), &ctx).await;
         // Io, not NotImplemented — the latter is reserved for unrouted names.
         assert!(matches!(result, Err(ToolError::Io(_))));
+    }
+
+    #[tokio::test]
+    async fn model_history_requires_a_character() {
+        let ctx = TestToolContext::new().with_ledger();
+        let result = handle_model_history(&json!({}), &ctx).await;
+        assert!(matches!(result, Err(ToolError::InvalidArgs(_))));
     }
 }

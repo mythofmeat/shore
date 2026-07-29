@@ -581,8 +581,8 @@ impl ToolContext for SubagentGuardContext<'_> {
     }
     // Forward ledger access so a sub-agent (e.g. the memory agent) can run
     // `model_history`.
-    fn ledger(&self) -> Option<&crate::ledger::Ledger> {
-        self.inner.ledger()
+    fn ledger_client(&self) -> Option<&LedgerClient> {
+        self.inner.ledger_client()
     }
     // Forward MCP calls to the parent context so a sub-agent can use MCP tools.
     // `run_subagent` is deliberately *not* overridden (falls back to the

@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use crate::autonomy::manager::AutonomyManager;
-use crate::ledger::store::Ledger;
+use crate::ledger::LedgerClient;
 use crate::llm::embed::Embedder;
 use crate::llm::LlmClient;
 use crate::memory::compaction_impls::ImageGenConfig;
@@ -115,7 +115,7 @@ pub struct TestToolContext {
     pub memory_index_path_val: Option<std::path::PathBuf>,
     pub workspace_dir_val: String,
     pub character_data_dir_val: String,
-    pub ledger_val: Option<Arc<Ledger>>,
+    pub ledger_client_val: Option<LedgerClient>,
 }
 
 impl std::fmt::Debug for TestToolContext {
@@ -135,7 +135,10 @@ impl std::fmt::Debug for TestToolContext {
             .field("memory_index_path_val", &self.memory_index_path_val)
             .field("workspace_dir_val", &self.workspace_dir_val)
             .field("character_data_dir_val", &self.character_data_dir_val)
-            .field("ledger_val", &self.ledger_val.as_ref().map(|_| "<ledger>"))
+            .field(
+                "ledger_client_val",
+                &self.ledger_client_val.as_ref().map(|_| "<ledger client>"),
+            )
             .finish()
     }
 }
@@ -155,7 +158,7 @@ impl TestToolContext {
             memory_index_path_val: None,
             workspace_dir_val: String::new(),
             character_data_dir_val: String::new(),
-            ledger_val: None,
+            ledger_client_val: None,
         }
     }
 
@@ -201,10 +204,17 @@ impl TestToolContext {
         self
     }
 
-    /// Set a ledger (usually `Ledger::open_in_memory()`) for model-history
-    /// tool tests.
-    pub fn with_ledger(mut self, ledger: Ledger) -> Self {
-        self.ledger_val = Some(Arc::new(ledger));
+    /// Make the usage ledger available to `model_history`.
+    ///
+    /// The client is backed by an in-memory ledger and has no sidecar socket,
+    /// so any query it makes fails at the transport. That is enough for the
+    /// tests that live here — they check the argument handling that happens
+    /// *before* the query. What the query itself returns is pinned on the side
+    /// that runs it, in `llm-sidecar/tests/ledger_usage.test.ts`.
+    pub fn with_ledger(mut self) -> Self {
+        self.ledger_client_val = Some(LedgerClient::new_in_memory(
+            LlmClient::try_new().expect("test LLM client builds"),
+        ));
         self
     }
 }
@@ -252,8 +262,8 @@ impl ToolContext for TestToolContext {
     fn character_data_dir(&self) -> &str {
         &self.character_data_dir_val
     }
-    fn ledger(&self) -> Option<&Ledger> {
-        self.ledger_val.as_deref()
+    fn ledger_client(&self) -> Option<&LedgerClient> {
+        self.ledger_client_val.as_ref()
     }
     fn config_dir(&self) -> &'static str {
         ""

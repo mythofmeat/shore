@@ -6,7 +6,6 @@
 use std::sync::{Arc, PoisonError};
 use std::time::Instant;
 
-use crate::ledger::budget::BudgetScope;
 use shore_common::config::models::Sdk;
 use shore_common::protocol::server_msg::{MessageOrigin, NewMessage, ServerMessage, UsageWarning};
 use shore_common::protocol::types::{derive_content_from_blocks, ContentBlock, Message, Role};
@@ -98,7 +97,7 @@ pub(super) async fn persist_and_notify(
         &notify_content,
         wall_clock_ms,
     );
-    emit_usage_budget_warnings(ctx, request.rid.as_deref());
+    emit_usage_budget_warnings(ctx, request.rid.as_deref()).await;
 
     Ok(())
 }
@@ -243,8 +242,8 @@ fn record_completion_diagnostics(
     );
 }
 
-fn emit_usage_budget_warnings(ctx: &GenContext, rid: Option<&str>) {
-    let warnings = match ctx.llm_client.newly_crossed_usage_budget_warnings() {
+async fn emit_usage_budget_warnings(ctx: &GenContext, rid: Option<&str>) {
+    let warnings = match ctx.llm_client.newly_crossed_usage_budget_warnings().await {
         Ok(warnings) => warnings,
         Err(e) => {
             warn!(error = %e, "Usage budget warning check failed");
@@ -262,15 +261,15 @@ fn emit_usage_budget_warnings(ctx: &GenContext, rid: Option<&str>) {
             cost_limit: warning.cost_limit,
             percent_used: warning.percent_used,
             crossed_warn_at: warning.crossed_warn_at,
-            period: warning.period.as_str().to_owned(),
+            period: warning.period,
             period_start: warning.period_start,
             reset_at: warning.reset_at,
             reset_at_display: warning.reset_at_display,
             // Omitted for budget-cap warnings so the frame stays byte-identical
             // to what pre-pace clients already parse.
-            scope: match warning.scope {
-                BudgetScope::Budget => None,
-                BudgetScope::Pace => Some(BudgetScope::Pace.as_str().to_owned()),
+            scope: match warning.scope.as_str() {
+                "budget" => None,
+                other => Some(other.to_owned()),
             },
         };
         if let Err(e) = ctx.direct_tx.try_send(ServerMessage::UsageWarning(frame)) {
