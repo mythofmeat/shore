@@ -59,9 +59,15 @@ const DEFAULT_MAX_IDLE_SECS = 12 * 60 * 60;
  * on every call.
  */
 export interface KeepalivePrefix extends SidecarRequest {
-  /** The model's `cache_keepalive` cadence, seconds. Absent means off, which
-   *  disarms rather than leaving a stale cadence running. */
-  keepalive_interval_secs?: number;
+  /**
+   * The model's `cache_keepalive` cadence, milliseconds. Absent means off,
+   * which disarms rather than leaving a stale cadence running.
+   *
+   * Milliseconds because the config domain allows a sub-second cadence and
+   * seconds would truncate it to zero — and a zero interval puts the next ping
+   * at the moment of the last one, so every tick is due and the loop spins.
+   */
+  keepalive_interval_ms?: number;
 }
 
 /** What a ping did, for the daemon's heartbeat log. */
@@ -162,7 +168,7 @@ export function buildKeepalivePing(prefix: KeepalivePrefix): SidecarRequest {
     role: "user",
     content: [{ type: "text", text: "." }],
   };
-  const { keepalive_interval_secs: _cadence, context, ...request } = prefix;
+  const { keepalive_interval_ms: _cadence, context, ...request } = prefix;
   const ping: SidecarRequest = {
     ...request,
     max_tokens: 1,
@@ -202,13 +208,7 @@ export class KeepaliveService {
     const maxIdleSecs = prefix.context?.keepalive_max_secs ?? DEFAULT_MAX_IDLE_SECS;
     const entry = this.#entryFor(character, maxIdleSecs);
     entry.prefix = prefix;
-    entry.keepalive.setInterval(
-      prefix.keepalive_interval_secs === undefined
-        ? undefined
-        : prefix.keepalive_interval_secs * 1000,
-      prefix.model,
-      this.#now(),
-    );
+    entry.keepalive.setInterval(prefix.keepalive_interval_ms, prefix.model, this.#now());
   }
 
   /**

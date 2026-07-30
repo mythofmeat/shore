@@ -30,7 +30,7 @@ const minutes = (m: number) => m * 60_000;
 const hours = (h: number) => h * 3_600_000;
 
 /** 55m cadence, 12h ceiling — the Anthropic defaults the subsystem is tuned to. */
-const INTERVAL_SECS = 55 * 60;
+const INTERVAL_MS = 55 * 60_000;
 const MAX_IDLE_SECS = 12 * 3600;
 
 /** An arbitrary wall-clock origin; a non-zero base keeps the arithmetic honest. */
@@ -82,7 +82,7 @@ function prefix(overrides: Partial<KeepalivePrefix> = {}): KeepalivePrefix {
     tools: [{ name: "read", description: "read a file", input_schema: { type: "object" } }],
     max_tokens: 4096,
     replay_prior_thinking: "all",
-    keepalive_interval_secs: INTERVAL_SECS,
+    keepalive_interval_ms: INTERVAL_MS,
     context: {
       character: CHARACTER,
       call_type: "message",
@@ -154,9 +154,11 @@ describe("the ping body", () => {
   });
 
   test("carries no cadence field onto the wire", () => {
-    // `keepalive_interval_secs` is scheduling config, not part of the request.
+    // `keepalive_interval_ms` is scheduling config, not part of the request.
     // Leaving it on would send a key no provider knows.
-    expect("keepalive_interval_secs" in buildKeepalivePing(prefix())).toBe(false);
+    const cached = prefix();
+    expect(cached.keepalive_interval_ms, "the fixture carries one to strip").toBeDefined();
+    expect("keepalive_interval_ms" in buildKeepalivePing(cached)).toBe(false);
   });
 });
 
@@ -377,7 +379,7 @@ describe("arming and disarming", () => {
     // Absent, not `undefined`: the daemon omits the key when the model has no
     // `cache_keepalive`, and `exactOptionalPropertyTypes` keeps those distinct.
     const off = prefix();
-    delete off.keepalive_interval_secs;
+    delete off.keepalive_interval_ms;
     h.service.arm(off);
 
     h.clock.advance(hours(4));
@@ -460,7 +462,7 @@ describe("what the daemon drains", () => {
     expect(a[0]).toMatchObject({
       character: CHARACTER,
       model: MODEL,
-      interval: INTERVAL_SECS * 1000,
+      interval: INTERVAL_MS,
     });
   });
 

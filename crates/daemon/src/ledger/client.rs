@@ -138,9 +138,16 @@ struct KeepalivePrefixRequest<'req> {
     #[serde(flatten)]
     request: &'req LlmRequest,
     context: CallContext<'req>,
-    /// The model's `cache_keepalive`, seconds. Absent means off.
+    /// The model's `cache_keepalive`, milliseconds. Absent means off.
+    ///
+    /// Milliseconds rather than seconds because the config domain allows a
+    /// sub-second cadence: `"500ms"` is a legal `cache_keepalive`, and seconds
+    /// would truncate it to zero. A zero interval schedules the next ping at
+    /// the moment of the last one, so every tick is due and the loop spins —
+    /// which is why `CacheKeepaliveSetting::parse` rejects `"0s"` outright.
+    /// Sending the unit the far side already works in keeps that guarantee.
     #[serde(skip_serializing_if = "Option::is_none")]
-    keepalive_interval_secs: Option<u64>,
+    keepalive_interval_ms: Option<u64>,
 }
 
 /// The body for the two keepalive endpoints that name a character and nothing
@@ -462,7 +469,9 @@ impl LedgerClient {
                     context,
                     // Read off the request the model profile resolved it onto.
                     // `None` means keepalive is off for this model.
-                    keepalive_interval_secs: request.keepalive_interval.map(|iv| iv.as_secs()),
+                    keepalive_interval_ms: request
+                        .keepalive_interval
+                        .map(|iv| u64::try_from(iv.as_millis()).unwrap_or(u64::MAX)),
                 },
             )
             .await?;

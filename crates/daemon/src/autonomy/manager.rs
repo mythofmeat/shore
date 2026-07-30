@@ -220,10 +220,18 @@ struct PersistedState {
     /// message paid a full cold write. All-or-nothing — any absent field
     /// leaves the keepalive unarmed, which fails safe (never ping a cache we
     /// can't prove warm).
+    ///
+    /// The cadence is milliseconds, and was `keepalive_interval_secs` until the
+    /// schedule moved to the sidecar. Seconds truncated a legal sub-second
+    /// `cache_keepalive` to zero, and a zero interval puts the next ping at the
+    /// moment of the last one — every tick due, the loop spinning. A state file
+    /// written before the rename simply does not restore, which is the
+    /// fail-safe direction and costs one cold write on the first message after
+    /// an upgrade.
     #[serde(default)]
     keepalive_model: Option<String>,
     #[serde(default)]
-    keepalive_interval_secs: Option<u64>,
+    keepalive_interval_ms: Option<u64>,
     #[serde(default)]
     keepalive_last_warm_at: Option<String>,
     #[serde(default)]
@@ -320,10 +328,10 @@ fn save_state(data_dir: &Path, character: &str, state: &mut AutonomyState) {
         last_user_at: state.heartbeat.last_user_at().map(instant_to_rfc3339),
         covered_turn_count: state.covered_turn_count,
         keepalive_model: keepalive.map(|k| k.model.clone()),
-        // The schedule arrives from the sidecar in wall-clock ms, so these are a
-        // straight conversion rather than the `Instant` delta the rest of this
-        // file still needs. Same four fields on disk as before.
-        keepalive_interval_secs: keepalive.map(|k| Duration::from_millis(k.interval).as_secs()),
+        // The schedule arrives from the sidecar in wall-clock ms, so the
+        // timestamps are a straight conversion rather than the `Instant` delta
+        // the rest of this file still needs, and the cadence is stored as-is.
+        keepalive_interval_ms: keepalive.map(|k| k.interval),
         keepalive_last_warm_at: keepalive.map(|k| ms_to_rfc3339(k.last_warm_at)),
         keepalive_last_active_at: keepalive.map(|k| ms_to_rfc3339(k.last_active_at)),
     };
@@ -398,7 +406,7 @@ fn keepalive_schedule_from_persisted(
     Some(KeepaliveSchedule {
         character: character.to_owned(),
         model: persisted.keepalive_model.clone()?,
-        interval: persisted.keepalive_interval_secs?.saturating_mul(1000),
+        interval: persisted.keepalive_interval_ms?,
         last_warm_at: rfc3339_to_ms(persisted.keepalive_last_warm_at.as_deref()?)?,
         last_active_at: rfc3339_to_ms(persisted.keepalive_last_active_at.as_deref()?)?,
     })
@@ -4070,7 +4078,7 @@ mod tests {
         let schedule = KeepaliveSchedule {
             character: "alice".to_owned(),
             model: "claude-opus-4-6".to_owned(),
-            interval: 55 * 60 * 1000,
+            interval: 55 * 60_000,
             last_warm_at: warmed_at,
             last_active_at: warmed_at - 60_000,
         };
@@ -4121,7 +4129,7 @@ mod tests {
             keepalive_schedule: Some(KeepaliveSchedule {
                 character: "alice".to_owned(),
                 model: "claude-opus-4-6".to_owned(),
-                interval: 55 * 60 * 1000,
+                interval: 55 * 60_000,
                 last_warm_at: 1_785_600_000_000,
                 last_active_at: 1_785_600_000_000,
             }),
