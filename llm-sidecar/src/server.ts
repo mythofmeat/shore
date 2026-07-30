@@ -1,8 +1,19 @@
 import { chmodSync, existsSync, lstatSync, unlinkSync } from "node:fs";
 
+import {
+  KeepaliveService,
+  startKeepaliveTimer,
+  type KeepalivePrefix,
+  type KeepaliveRestore,
+} from "./autonomy/keepalive.ts";
 import type { BudgetBlock } from "./ledger/budget.ts";
 import { budgetBlockFor } from "./ledger/gate.ts";
-import { recordGenerate, recordGenerateError, recordingStream } from "./ledger/record.ts";
+import {
+  recordGenerate,
+  recordGenerateError,
+  recordingStream,
+  setCallObserver,
+} from "./ledger/record.ts";
 import {
   budgetWarnings,
   modelHistory,
@@ -32,6 +43,12 @@ export interface SidecarDeps {
   imageGenerate?: (req: ImageRequest, signal?: AbortSignal) => Promise<ImageResponse>;
   /** Override the streaming keepalive cadence (ms). Defaults to {@link HEARTBEAT_MS}; tests set it small. */
   heartbeatMs?: number;
+  /**
+   * The prompt-cache keepalive scheduler. Distinct from `heartbeatMs` above,
+   * which is the socket-level `ping` that stops Bun culling a quiet stream:
+   * this one keeps a *provider's* prompt cache warm and costs money.
+   */
+  keepalive?: KeepaliveService;
 }
 
 interface HttpishError {
@@ -95,6 +112,17 @@ export function createSidecarHandler(
   const providers = { ...DEFAULT_PROVIDERS, ...deps.providers };
   const imageGenerate = deps.imageGenerate ?? generateImage;
   const heartbeatMs = deps.heartbeatMs ?? HEARTBEAT_MS;
+  // Owned per handler rather than per module so a test gets an empty schedule.
+  // `serveSidecar` builds the live one, because that is also where the ledger
+  // observer is registered and the clock is started — effects a test should opt
+  // into, not inherit.
+  const keepalive =
+    deps.keepalive ??
+    new KeepaliveService((req, signal) => {
+      const provider = providers[req.sdk];
+      if (!provider) throw new Error(`unsupported sdk: ${req.sdk}`);
+      return provider.generate(req, signal);
+    });
 
   return async (request: Request, server?: RequestTimeoutServer): Promise<Response> => {
     const url = new URL(request.url);
@@ -200,6 +228,43 @@ export function createSidecarHandler(
       }
     }
 
+    // The prompt-cache keepalive. Not provider calls in themselves — they arm,
+    // disarm, and report on a schedule this side runs on its own clock. The
+    // pings it fires are ordinary calls, budget-gated and recorded like any
+    // other. See `autonomy/keepalive.ts`.
+    if (url.pathname === "/v1/keepalive/prefix") {
+      const parsed = await readJson<KeepalivePrefix>(request);
+      if (!parsed.ok) return parsed.response;
+      keepalive.arm(parsed.value);
+      return jsonResponse({ ok: true });
+    }
+
+    // Re-arm from the daemon's persisted copy at character startup. The
+    // provider's cache does not cool when shore restarts, so a schedule that is
+    // still provably warm is worth taking up; `restore` decides whether it is.
+    if (url.pathname === "/v1/keepalive/restore") {
+      const parsed = await readJson<KeepaliveRestore>(request);
+      if (!parsed.ok) return parsed.response;
+      const { character, max_idle_secs, ...snapshot } = parsed.value;
+      return jsonResponse({ rearmed: keepalive.restore(character, snapshot, max_idle_secs) });
+    }
+
+    if (url.pathname === "/v1/keepalive/disarm") {
+      const parsed = await readJson<{ character: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      keepalive.disarm(parsed.value.character);
+      return jsonResponse({ ok: true });
+    }
+
+    // Drained by the daemon's autonomy tick: it still owns the heartbeat log
+    // and the persisted state, so what happened here has to reach it. Scoped to
+    // the draining character, because that tick can only reach its own state.
+    if (url.pathname === "/v1/keepalive/drain") {
+      const parsed = await readJson<{ character?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      return jsonResponse(keepalive.drain(parsed.value.character));
+    }
+
     if (url.pathname === "/v1/image") {
       const parsed = await readJson<ImageRequest>(request);
       if (!parsed.ok) return parsed.response;
@@ -223,9 +288,22 @@ export function serveSidecar(socketPath: string): ReturnType<typeof Bun.serve> {
     }
     unlinkSync(socketPath);
   }
+  // The live keepalive: built here so its two effects — observing every
+  // recorded call, and running a clock — belong to a real server rather than to
+  // anything that merely builds a handler.
+  const keepalive = new KeepaliveService((req, signal) => {
+    const provider = DEFAULT_PROVIDERS[req.sdk];
+    if (!provider) throw new Error(`unsupported sdk: ${req.sdk}`);
+    return provider.generate(req, signal);
+  });
+  setCallObserver((ctx, model, callType) => {
+    keepalive.observe(ctx.character, model, callType, ctx.keepalive_max_secs);
+  });
+  startKeepaliveTimer(keepalive);
+
   const server = Bun.serve({
     unix: socketPath,
-    fetch: createSidecarHandler(),
+    fetch: createSidecarHandler({ keepalive }),
   });
   chmodSync(socketPath, 0o600);
   return server;

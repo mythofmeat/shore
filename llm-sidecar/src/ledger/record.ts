@@ -110,6 +110,35 @@ interface Recorded {
   call_type?: string;
 }
 
+/**
+ * Notified for each provider call that completed and was billed.
+ *
+ * The keepalive registers here because this is already the one funnel every
+ * provider call passes through, whichever endpoint or loop made it — see
+ * `autonomy/keepalive.ts`. The dependency points this way (autonomy registers
+ * with the ledger, not the reverse) so recording stays ignorant of who is
+ * listening: a row must be written whether or not anything cares.
+ */
+type CallObserver = (ctx: CallContext, model: string, callType: string) => void;
+
+let observer: CallObserver | undefined;
+
+/** Register the observer. Passing `undefined` clears it; tests do that. */
+export function setCallObserver(fn: CallObserver | undefined): void {
+  observer = fn;
+}
+
+/**
+ * Whether a recorded call actually reached the provider and warmed a prefix.
+ *
+ * `error` and `cancelled` rows exist to say the attempt happened; they carry no
+ * usage and touched no cache, so treating them as activity would push a ping
+ * deadline out on the strength of a call that never landed.
+ */
+function callLanded(finishReason: string): boolean {
+  return finishReason !== "error" && finishReason !== "cancelled";
+}
+
 function record(ctx: CallContext, req: SidecarRequest, call: Recorded): void {
   if (ctx.ledger === undefined) return;
   const ledger = ledgerFor(ctx.ledger);
@@ -145,12 +174,27 @@ function record(ctx: CallContext, req: SidecarRequest, call: Recorded): void {
   }
 }
 
-/** Record, and never let a recording failure reach the caller. */
+/**
+ * Record, and never let a recording failure reach the caller.
+ *
+ * The observer fires outside `record`, which returns early when there is no
+ * ledger path or the file will not open. Those are recording concerns; a call
+ * that reached a provider warmed its prefix whether or not a row landed, and
+ * tying the keepalive's clock to the ledger opening would stop the schedule for
+ * a reason that has nothing to do with it.
+ */
 function tryRecord(ctx: CallContext, req: SidecarRequest, call: Recorded): void {
   try {
     record(ctx, req, call);
   } catch (e) {
     console.error(`shore: failed to record ledger row: ${String(e)}`);
+  }
+  const finishReason = call.finish_reason;
+  if (observer === undefined || !callLanded(finishReason)) return;
+  try {
+    observer(ctx, req.model, call.call_type ?? ctx.call_type);
+  } catch (e) {
+    console.error(`shore: call observer failed: ${String(e)}`);
   }
 }
 
