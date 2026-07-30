@@ -3,12 +3,15 @@
  *
  * The unit tests in `cache_keepalive.test.ts` were translated from the Rust
  * alongside the implementation, so they cannot catch a mistake made in both
- * halves of the translation at once. This can: the fixture is *generated* by
- * running pseudo-random event walks through the real Rust state machine
- * (`keepalive_decisions_match_shared_fixture` in
- * `crates/daemon/src/cache_keepalive.rs`) and recording what it decided. This
- * replays those walks against the TypeScript port and demands the same answer
- * at every observable point.
+ * halves of the translation at once. This can: the fixture was *generated* by
+ * running pseudo-random event walks through the real Rust state machine and
+ * recording what it decided. This replays those walks against the TypeScript
+ * port and demands the same answer at every observable point.
+ *
+ * The Rust that generated it — `crates/daemon/src/cache_keepalive.rs` — is gone,
+ * deleted when the schedule, the clock, and the ping moved to this side. So the
+ * fixture is frozen: it is the last word on what the daemon did, not something
+ * to regenerate when a diff appears.
  *
  * What a failure here means: the two implementations disagree about when to
  * ping. If TypeScript pings where Rust would not, that ping lands on a prefix
@@ -19,7 +22,7 @@
 
 import { expect, test } from "bun:test";
 
-import fixture from "../../crates/daemon/tests/fixtures/cache_keepalive_parity.json";
+import fixture from "./keepalive_fixtures/cache_keepalive_parity.json";
 import {
   CacheKeepalive,
   type CacheKeepaliveAction,
