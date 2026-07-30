@@ -11,7 +11,7 @@ use crate::llm::credentials::{
 };
 use crate::llm::types::{CallContext, GenerateResponse, LlmRequest};
 use crate::llm::{LlmClient, LlmError};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use shore_common::config::app::UsageConfig;
 use shore_common::config::models::ResolvedModel;
 use shore_common::config::providers::ProviderRegistry;
@@ -123,6 +123,80 @@ struct ModelHistoryRequest<'req> {
     since: Option<&'req str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     until: Option<&'req str>,
+}
+
+// ── Keepalive control bodies ────────────────────────────────────────────────
+
+/// `POST /v1/keepalive/prefix` — the body to ping from, plus the cadence.
+///
+/// Deliberately the same shape as a real outbound call (flattened request plus
+/// `context`), because the sidecar pings by cloning it: reusing the
+/// serialization both sides already have is what keeps the ping byte-identical
+/// to the turn it stands in for.
+#[derive(Serialize)]
+struct KeepalivePrefixRequest<'req> {
+    #[serde(flatten)]
+    request: &'req LlmRequest,
+    context: CallContext<'req>,
+    /// The model's `cache_keepalive`, seconds. Absent means off.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    keepalive_interval_secs: Option<u64>,
+}
+
+/// The body for the two keepalive endpoints that name a character and nothing
+/// else: `/v1/keepalive/disarm` and `/v1/keepalive/drain`.
+#[derive(Serialize)]
+struct CharacterScoped<'req> {
+    character: &'req str,
+}
+
+/// `POST /v1/keepalive/restore` — a schedule persisted before a restart. The
+/// ceiling rides along because a restored character may not have been armed
+/// yet, so there is no pushed prefix for the sidecar to read it from.
+#[derive(Serialize)]
+struct RestoreKeepaliveRequest<'req> {
+    #[serde(flatten)]
+    schedule: &'req KeepaliveSchedule,
+    max_idle_secs: u64,
+}
+
+#[derive(Deserialize)]
+struct RestoreKeepaliveReply {
+    /// False when the sidecar judged the schedule too stale to be provably
+    /// warm. Not an error — it is the guard doing its job.
+    rearmed: bool,
+}
+
+/// What a keepalive ping did, for the heartbeat log.
+#[derive(Debug, Clone, Deserialize)]
+pub struct KeepaliveEvent {
+    pub character: String,
+    /// `sent` | `cold` | `failed` | `skipped`.
+    pub outcome: String,
+    pub detail: String,
+}
+
+/// One character's armed schedule, as persisted across a restart. Times are
+/// wall-clock ms — the sidecar runs on `Date.now()`, because the prefix it
+/// protects expires on wall time and a monotonic clock stops during suspend.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct KeepaliveSchedule {
+    pub character: String,
+    pub model: String,
+    /// Ping cadence, ms.
+    pub interval: u64,
+    pub last_warm_at: u64,
+    pub last_active_at: u64,
+}
+
+/// `POST /v1/keepalive/drain` — everything the daemon still owns a copy of.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct KeepaliveDrain {
+    /// Cleared by the drain, so whoever calls this must write them down.
+    pub events: Vec<KeepaliveEvent>,
+    /// Current state, reported in full each time. A character that is absent
+    /// has nothing worth restoring — which is how a persisted copy gets cleared.
+    pub schedules: Vec<KeepaliveSchedule>,
 }
 
 #[derive(Debug, Clone)]
@@ -267,7 +341,7 @@ impl LedgerClient {
         args: &serde_json::Value,
     ) -> Result<serde_json::Value, LlmError> {
         self.inner
-            .ledger_query(
+            .control_call(
                 "/v1/usage",
                 &UsageReportRequest {
                     ledger: self.ledger_path()?,
@@ -293,7 +367,7 @@ impl LedgerClient {
         }
         let reply: BudgetWarnings = self
             .inner
-            .ledger_query(
+            .control_call(
                 "/v1/usage/warnings",
                 &BudgetWarningsRequest {
                     ledger: self.ledger_path()?,
@@ -313,7 +387,7 @@ impl LedgerClient {
     ) -> Result<Vec<ModelUsageRow>, LlmError> {
         let reply: ModelHistory = self
             .inner
-            .ledger_query(
+            .control_call(
                 "/v1/usage/models",
                 &ModelHistoryRequest {
                     ledger: self.ledger_path()?,
@@ -324,6 +398,122 @@ impl LedgerClient {
             )
             .await?;
         Ok(reply.models)
+    }
+
+    // ── prompt-cache keepalive ──────────────────────────────────────────────
+    //
+    // The schedule, the clock, and the ping live in the sidecar
+    // (`llm-sidecar/src/autonomy/keepalive.ts`). What stays here is the part
+    // this side is the only one that can do: hand over the body to ping from.
+    //
+    // A ping must be byte-identical to the cached request in every field that
+    // participates in the cache prefix, and that body is `request + this turn's
+    // response`, assembled in `handler/persistence.rs` from persisted content
+    // blocks. Rebuilding it over there would mean reimplementing this side's
+    // response persistence and hoping the two agree forever; one divergent byte
+    // turns every ping from a read at 0.1x into a write at 2.0x.
+
+    /// Hand the sidecar the request to ping from, and the cadence to ping on.
+    ///
+    /// Called wherever the daemon caches a new `last_request`. `interval` is the
+    /// model's resolved `cache_keepalive`; `None` means keepalive is off for
+    /// this model, which disarms rather than leaving a stale cadence running.
+    pub async fn push_keepalive_prefix(
+        &self,
+        request: &LlmRequest,
+        character: &str,
+    ) -> Result<(), LlmError> {
+        // Derived rather than threaded through every caller: it is a pure
+        // function of the request, and the same one `generation.rs` applies.
+        let thinking_enabled = request
+            .provider_options
+            .as_ref()
+            .is_some_and(crate::llm::types::ProviderOptions::thinking_enabled);
+        let cache_ttl = request
+            .provider_options
+            .as_ref()
+            .and_then(|opts| opts.cache_ttl.clone());
+        let reasoning_effort = request
+            .provider_options
+            .as_ref()
+            .and_then(crate::llm::types::ProviderOptions::resolved_reasoning_effort);
+        let usage = self.usage_for_call();
+        // Built through the same helper as a real call's context, so the ping's
+        // ledger row carries the labels the turn it clones would have.
+        // `call_type` is `Keepalive`: that is what makes the row a keepalive row
+        // and lets the tracker's `cold_keepalive` check fire on it.
+        let context = self.call_context(
+            request,
+            CallType::Keepalive,
+            character,
+            CallLabels {
+                thinking_enabled,
+                cache_ttl: cache_ttl.as_deref(),
+                reasoning_effort: reasoning_effort.as_deref(),
+                usage: usage.as_ref(),
+            },
+        );
+        let _ack: serde_json::Value = self
+            .inner
+            .control_call(
+                "/v1/keepalive/prefix",
+                &KeepalivePrefixRequest {
+                    request,
+                    context,
+                    // Read off the request the model profile resolved it onto.
+                    // `None` means keepalive is off for this model.
+                    keepalive_interval_secs: request.keepalive_interval.map(|iv| iv.as_secs()),
+                },
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// Offer the sidecar a schedule persisted before a restart.
+    ///
+    /// The provider's cache does not cool when shore restarts, so a schedule
+    /// still inside its ping interval is provably warm and worth taking up. The
+    /// sidecar applies that guard; `Ok(false)` means it declined as too stale,
+    /// which is the safe outcome rather than an error.
+    pub async fn restore_keepalive(
+        &self,
+        schedule: &KeepaliveSchedule,
+        max_idle_secs: u64,
+    ) -> Result<bool, LlmError> {
+        let reply: RestoreKeepaliveReply = self
+            .inner
+            .control_call(
+                "/v1/keepalive/restore",
+                &RestoreKeepaliveRequest {
+                    schedule,
+                    max_idle_secs,
+                },
+            )
+            .await?;
+        Ok(reply.rearmed)
+    }
+
+    /// Tell the sidecar the cached prefix is gone (compaction, prompt reload).
+    /// Pinging pauses until a real call warms a new one.
+    pub async fn disarm_keepalive(&self, character: &str) -> Result<(), LlmError> {
+        let _ack: serde_json::Value = self
+            .inner
+            .control_call("/v1/keepalive/disarm", &CharacterScoped { character })
+            .await?;
+        Ok(())
+    }
+
+    /// Collect what the keepalive did for `character` since the last drain, and
+    /// the schedule to persist.
+    ///
+    /// Draining clears the events, so the caller must be the one that writes
+    /// them down. Scoped to one character because the autonomy tick that calls
+    /// this can only reach its own state — an unscoped drain would hand it
+    /// events for characters it cannot log, and they are gone by then.
+    pub async fn drain_keepalive(&self, character: &str) -> Result<KeepaliveDrain, LlmError> {
+        self.inner
+            .control_call("/v1/keepalive/drain", &CharacterScoped { character })
+            .await
     }
 
     /// Passthrough to `LlmClient::build_request`.

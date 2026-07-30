@@ -25,9 +25,8 @@ use tracing::{debug, error, info, warn};
 use super::activity::ActivityTracker;
 use super::heartbeat::{HeartbeatAction, HeartbeatClock};
 use super::{AutonomyStatus, HeartbeatEventKind, HeartbeatLog};
-use crate::cache_keepalive::{CacheKeepalive, CacheKeepaliveAction, KeepaliveSnapshot};
 use crate::characters::CharacterRegistry;
-use crate::ledger::{CallType, CredentialFallbackEvent, LedgerClient};
+use crate::ledger::{CallType, CredentialFallbackEvent, KeepaliveSchedule, LedgerClient};
 use crate::llm::types::{LlmRequest, ToolResultContent, WireBlock, WireMessage, WireRole};
 use crate::memory::compaction_impls::resolve_image_gen_config;
 use crate::memory::retrieval::resolve_embedder;
@@ -139,7 +138,15 @@ impl ToolContext for HeartbeatToolContext {
 )]
 pub struct AutonomyState {
     pub heartbeat: HeartbeatClock,
-    pub cache_keepalive: CacheKeepalive,
+    /// The sidecar's keepalive schedule, as last drained.
+    ///
+    /// Held only to persist it: the schedule itself lives in the sidecar, which
+    /// decides when to ping and does the pinging. This side keeps a copy so a
+    /// restart can hand it back — the provider-side cache lives on Anthropic's
+    /// servers and does not cool when shore restarts, and losing the schedule is
+    /// what used to turn a quick redeploy into a full cold cache write on the
+    /// user's next message.
+    pub keepalive_schedule: Option<KeepaliveSchedule>,
     pub activity: ActivityTracker,
     /// Ring buffer of heartbeat events for `shore log --heartbeat`.
     pub heartbeat_log: HeartbeatLog,
@@ -227,6 +234,24 @@ fn state_path(data_dir: &Path, character: &str) -> PathBuf {
     character_data_dir(data_dir, character).join(STATE_FILENAME)
 }
 
+/// Wall-clock milliseconds to RFC3339, for the keepalive schedule.
+///
+/// Exact, unlike [`instant_to_rfc3339`] next to it: the sidecar's schedule is
+/// already wall-clock (`Date.now()`), so there is no monotonic reading to
+/// approximate a wall time from.
+fn ms_to_rfc3339(ms: u64) -> String {
+    chrono::DateTime::from_timestamp_millis(i64::try_from(ms).unwrap_or(i64::MAX))
+        .unwrap_or_else(chrono::Utc::now)
+        .to_rfc3339()
+}
+
+/// RFC3339 back to wall-clock milliseconds. The inverse of [`ms_to_rfc3339`],
+/// used to hand a persisted schedule back to the sidecar after a restart.
+fn rfc3339_to_ms(s: &str) -> Option<u64> {
+    let parsed = chrono::DateTime::parse_from_rfc3339(s).ok()?;
+    u64::try_from(parsed.timestamp_millis()).ok()
+}
+
 /// Convert a `tokio::time::Instant` to an RFC3339 wall-clock string.
 /// Approximate: uses the delta from `Instant::now()` applied to `Utc::now()`.
 fn instant_to_rfc3339(instant: Instant) -> String {
@@ -287,21 +312,20 @@ fn save_state(data_dir: &Path, character: &str, state: &mut AutonomyState) {
         return;
     }
 
-    let keepalive = state.cache_keepalive.snapshot();
+    let keepalive = state.keepalive_schedule.as_ref();
     let persisted = PersistedState {
         version: STATE_VERSION,
         ticks_without_user: state.heartbeat.ticks_without_user(),
         next_wake_at: state.heartbeat.next_wake().map(instant_to_rfc3339),
         last_user_at: state.heartbeat.last_user_at().map(instant_to_rfc3339),
         covered_turn_count: state.covered_turn_count,
-        keepalive_model: keepalive.as_ref().map(|k| k.model.clone()),
-        keepalive_interval_secs: keepalive.as_ref().map(|k| k.interval.as_secs()),
-        keepalive_last_warm_at: keepalive
-            .as_ref()
-            .map(|k| instant_to_rfc3339(k.last_warm_at)),
-        keepalive_last_active_at: keepalive
-            .as_ref()
-            .map(|k| instant_to_rfc3339(k.last_active_at)),
+        keepalive_model: keepalive.map(|k| k.model.clone()),
+        // The schedule arrives from the sidecar in wall-clock ms, so these are a
+        // straight conversion rather than the `Instant` delta the rest of this
+        // file still needs. Same four fields on disk as before.
+        keepalive_interval_secs: keepalive.map(|k| Duration::from_millis(k.interval).as_secs()),
+        keepalive_last_warm_at: keepalive.map(|k| ms_to_rfc3339(k.last_warm_at)),
+        keepalive_last_active_at: keepalive.map(|k| ms_to_rfc3339(k.last_active_at)),
     };
 
     let path = state_path(data_dir, character);
@@ -357,39 +381,26 @@ fn restore_from_persisted(persisted: &PersistedState, heartbeat: &mut HeartbeatC
     heartbeat.restore(persisted.ticks_without_user, next_wake, last_user);
 }
 
-/// Build the cache keepalive for a (re)started character. The provider-side
-/// prompt cache lives on Anthropic's servers and outlives the process, so the
-/// persisted ping schedule is re-armed when the last warm is recent enough to
-/// provably still be warm (see [`CacheKeepalive::restore`] for the guard).
-/// Otherwise the keepalive starts unarmed until the first real LLM call warms
-/// a prefix and supplies the active model's `cache_keepalive` cadence.
-fn build_cache_keepalive(
-    autonomy_cfg: &AutonomyConfig,
-    snapshot: Option<KeepaliveSnapshot>,
+/// Re-arm the sidecar's keepalive from this character's persisted schedule.
+///
+/// The provider-side prompt cache lives on Anthropic's servers and outlives the
+/// process, so a restart does not cool it — losing the schedule here is what
+/// used to turn a quick redeploy into a full cold cache write on the user's next
+/// message. The sidecar applies its own staleness guard and re-arms only when
+/// the last warm is recent enough that the prefix is provably still warm.
+///
+/// Any missing or unparseable field yields `None` and the schedule stays down,
+/// which fails safe: arming from a wrong anchor could ping a cold cache.
+fn keepalive_schedule_from_persisted(
+    persisted: &PersistedState,
     character: &str,
-) -> CacheKeepalive {
-    let mut cache_keepalive = CacheKeepalive::new(autonomy_cfg.cache_keepalive_max.as_duration());
-    if let Some(snap) = snapshot {
-        if cache_keepalive.restore(&snap, Instant::now()) {
-            info!(
-                character,
-                model = %snap.model,
-                "Cache keepalive re-armed from persisted state"
-            );
-        }
-    }
-    cache_keepalive
-}
-
-/// Assemble the keepalive snapshot from a persisted state file. Any missing
-/// or unparseable field yields `None`, leaving the keepalive unarmed —
-/// fail-safe, since arming with a wrong anchor could ping a cold cache.
-fn keepalive_snapshot_from_persisted(persisted: &PersistedState) -> Option<KeepaliveSnapshot> {
-    Some(KeepaliveSnapshot {
+) -> Option<KeepaliveSchedule> {
+    Some(KeepaliveSchedule {
+        character: character.to_owned(),
         model: persisted.keepalive_model.clone()?,
-        interval: Duration::from_secs(persisted.keepalive_interval_secs?),
-        last_warm_at: rfc3339_to_instant(persisted.keepalive_last_warm_at.as_deref()?)?,
-        last_active_at: rfc3339_to_instant(persisted.keepalive_last_active_at.as_deref()?)?,
+        interval: persisted.keepalive_interval_secs?.saturating_mul(1000),
+        last_warm_at: rfc3339_to_ms(persisted.keepalive_last_warm_at.as_deref()?)?,
+        last_active_at: rfc3339_to_ms(persisted.keepalive_last_active_at.as_deref()?)?,
     })
 }
 
@@ -609,17 +620,31 @@ impl AutonomyManager {
 
         // Restore persisted state if available.
         let mut covered_turn_count = 0;
-        let mut keepalive_snapshot = None;
+        let mut keepalive_schedule = None;
         if let Some(persisted) = load_state(&self.data_dir, character) {
             restore_from_persisted(&persisted, &mut heartbeat);
             covered_turn_count = persisted.covered_turn_count;
-            keepalive_snapshot = keepalive_snapshot_from_persisted(&persisted);
+            keepalive_schedule = keepalive_schedule_from_persisted(&persisted, character);
             info!(character, "Autonomy state restored from disk");
         } else {
             info!(character, "Autonomy state created (no prior state)");
         }
 
-        let cache_keepalive = build_cache_keepalive(&autonomy_cfg, keepalive_snapshot, character);
+        // Hand the persisted schedule back to the sidecar, which applies its own
+        // staleness guard before re-arming. Spawned so a sidecar that is not up
+        // yet cannot block character startup; the schedule is only an
+        // optimisation, and the next real turn re-arms regardless.
+        if let (Some(schedule), Some(client)) =
+            (keepalive_schedule.clone(), self.llm_client.clone())
+        {
+            let owned_character = character.to_owned();
+            let max_idle_secs = autonomy_cfg.cache_keepalive_max.as_duration().as_secs();
+            let _ignored = tokio::spawn(async move {
+                if let Err(e) = client.restore_keepalive(&schedule, max_idle_secs).await {
+                    warn!(character = owned_character, error = %e, "Failed to restore keepalive schedule on sidecar");
+                }
+            });
+        }
 
         let heartbeat_log_path =
             character_data_dir(&self.data_dir, character).join("heartbeat.jsonl");
@@ -628,7 +653,7 @@ impl AutonomyManager {
 
         let state = Arc::new(Mutex::new(AutonomyState {
             heartbeat,
-            cache_keepalive,
+            keepalive_schedule,
             activity: ActivityTracker::new(),
             heartbeat_log,
             paused: false,
@@ -709,19 +734,13 @@ impl AutonomyManager {
             let was_idle = s.heartbeat.ticks_without_user() > 0;
             let now = Instant::now();
             s.heartbeat.on_user_message(now);
-            // The user message will trigger an LLM response on the foreground
-            // chat model — a real warm of the cache the keepalive maintains.
-            // (The cadence itself is (re)set when that response's request is
-            // cached, via `cache_last_request`.) Source the model from the last
-            // cached request, the foreground model the keepalive targets. On the
-            // very first turn there is no cached request yet and no target set —
-            // an empty model still bootstraps the clock (the gate only rejects a
-            // *mismatched* model once a target exists).
-            let fg_model = s
-                .last_request
-                .as_ref()
-                .map_or_else(String::new, |r| r.model.clone());
-            s.cache_keepalive.on_cache_warmed(&fg_model, now);
+            // This used to report a cache warm, on the reasoning that the user
+            // message will trigger a response on the foreground model. It had to
+            // guess which model that would be, from the previously cached
+            // request, and had to treat the first turn — where there is no
+            // cached request — as a warm on the empty string. The sidecar waits
+            // for the call to actually land and reads the model off it, so the
+            // guess and its special case are both gone.
             if was_idle {
                 info!(character, "User returned — resetting idle counter");
                 s.heartbeat_log.push(
@@ -773,10 +792,72 @@ impl AutonomyManager {
         debug!(character, count, "Activity backfilled from history");
     }
 
-    /// Cache the last LLM request for heartbeat tick reuse.
+    /// Cache the last LLM request for heartbeat tick reuse, and hand the
+    /// sidecar the same body to keep the prompt cache warm from.
     pub fn notify_last_request(&self, character: &str, request: LlmRequest) {
         let _ignored = self.with_state(character, |s| {
-            cache_last_request(s, character, request);
+            cache_last_request(s, character, request.clone());
+        });
+        self.push_keepalive_prefix(character, request);
+    }
+
+    /// Hand the sidecar the body to ping from and the cadence to ping on.
+    ///
+    /// Spawned rather than awaited: this runs on the reply path, and a slow or
+    /// unreachable sidecar must not hold up the turn. Losing a push costs one
+    /// stale cadence until the next turn, which the next push corrects.
+    fn push_keepalive_prefix(&self, character: &str, request: LlmRequest) {
+        let Some(client) = self.llm_client.clone() else {
+            return;
+        };
+        let owned_character = character.to_owned();
+        let _ignored = tokio::spawn(async move {
+            if let Err(e) = client
+                .push_keepalive_prefix(&request, &owned_character)
+                .await
+            {
+                warn!(character = owned_character, error = %e, "Failed to push keepalive prefix to sidecar");
+            }
+        });
+    }
+
+    /// Re-point the sidecar's keepalive after the cached prefix was invalidated.
+    ///
+    /// Invalidation deliberately does not stop pinging. Compaction changes the
+    /// conversation tail, but the pinned system prefix — usually the expensive
+    /// part — is still worth keeping warm, and dropping the schedule here means
+    /// the user's next message after an idle stretch pays a full cold write.
+    /// The daemon used to get this for free by rebuilding from disk lazily at
+    /// ping time; the sidecar has no disk access, so the rebuild happens here
+    /// and the result is pushed.
+    fn reprime_keepalive(&self, character: &str) {
+        let registry = self
+            .mcp_registry
+            .clone()
+            .unwrap_or_else(|| Arc::new(crate::tools::mcp_registry::McpRegistry::default()));
+        let rebuilt = self.loaded_config.as_deref().and_then(|config| {
+            rebuild_request_from_disk(character, &self.data_dir, config, &registry)
+        });
+        self.send_keepalive_reprime(character, reprime_decision(rebuilt));
+    }
+
+    fn send_keepalive_reprime(&self, character: &str, decision: KeepaliveReprime) {
+        let Some(client) = self.llm_client.clone() else {
+            return;
+        };
+        let owned_character = character.to_owned();
+        let _ignored = tokio::spawn(async move {
+            let outcome = match &decision {
+                KeepaliveReprime::Push(request) => {
+                    client
+                        .push_keepalive_prefix(request, &owned_character)
+                        .await
+                }
+                KeepaliveReprime::Disarm => client.disarm_keepalive(&owned_character).await,
+            };
+            if let Err(e) = outcome {
+                warn!(character = owned_character, error = %e, "Failed to reprime keepalive on sidecar");
+            }
         });
     }
 
@@ -816,6 +897,9 @@ impl AutonomyManager {
                 "Compaction complete — last_request invalidated"
             );
         });
+        // Outside the lock: the rebuild reads `active.jsonl` and re-derives the
+        // tool surface, which is not work to do while holding the state mutex.
+        self.reprime_keepalive(character);
     }
 
     /// Call after a manual prompt-snapshot refresh (`config_reload`). The
@@ -826,6 +910,7 @@ impl AutonomyManager {
         let _ignored = self.with_state(character, |s| {
             invalidate_cached_request(s, character, CachedRequestInvalidationReason::PromptReload);
         });
+        self.reprime_keepalive(character);
     }
 
     /// Call after compaction fails. Resets the trigger so it can retry.
@@ -1064,14 +1149,64 @@ fn lock_state(m: &Mutex<AutonomyState>) -> std::sync::MutexGuard<'_, AutonomySta
 /// through this so the log line stays consistent and nobody silently
 /// forgets to emit it.
 fn cache_last_request(state: &mut AutonomyState, character: &str, request: LlmRequest) {
-    // The cached request carries the active model's resolved `cache_keepalive`
-    // cadence — feed it to the standalone keepalive subsystem so a model switch
-    // (or first request after restart) takes effect immediately.
-    state
-        .cache_keepalive
-        .set_interval(request.keepalive_interval, &request.model, Instant::now());
+    // The cadence used to be fed to a keepalive subsystem here. That subsystem
+    // is the sidecar's now, and the request itself is what it needs — see
+    // `AutonomyManager::push_keepalive_prefix`, which the public caller runs
+    // after this returns and the lock is released.
     state.last_request = Some(request);
     debug!(character, "Cached last LLM request for heartbeat reuse");
+}
+
+/// What to tell the sidecar after the cached prefix was invalidated.
+#[derive(Debug)]
+enum KeepaliveReprime {
+    /// Ping this body from now on.
+    Push(Box<LlmRequest>),
+    /// Stop pinging until a real call warms a new prefix.
+    Disarm,
+}
+
+/// Re-point the sidecar's keepalive from a tick, which holds a `TickContext`
+/// rather than the manager. Same contract as
+/// [`AutonomyManager::reprime_keepalive`]; call it after releasing the state
+/// lock, because the rebuild reads `active.jsonl`.
+fn reprime_keepalive_from_tick(character: &str, ctx: &TickContext) {
+    let Some(client) = ctx.llm_client.clone() else {
+        return;
+    };
+    let rebuilt = ctx.loaded_config.as_deref().and_then(|config| {
+        rebuild_request_from_disk(character, &ctx.data_dir, config, &ctx.mcp_registry)
+    });
+    let decision = reprime_decision(rebuilt);
+    let owned_character = character.to_owned();
+    let _ignored = tokio::spawn(async move {
+        let outcome = match &decision {
+            KeepaliveReprime::Push(request) => {
+                client
+                    .push_keepalive_prefix(request, &owned_character)
+                    .await
+            }
+            KeepaliveReprime::Disarm => client.disarm_keepalive(&owned_character).await,
+        };
+        if let Err(e) = outcome {
+            warn!(character = owned_character, error = %e, "Failed to reprime keepalive on sidecar");
+        }
+    });
+}
+
+/// Choose between them.
+///
+/// Split out as a pure function because the choice, not the HTTP call, is the
+/// behaviour worth pinning: keeping the schedule alive across compaction is the
+/// whole reason invalidation does not simply disarm, and a rebuild that failed
+/// must disarm rather than leave the pre-invalidation body armed — pinging a
+/// prefix the next real turn will not reuse spends money warming the wrong
+/// thing.
+fn reprime_decision(rebuilt: Option<LlmRequest>) -> KeepaliveReprime {
+    match rebuilt {
+        Some(request) => KeepaliveReprime::Push(Box::new(request)),
+        None => KeepaliveReprime::Disarm,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1188,7 +1323,7 @@ async fn tick_character(character: &str, ctx: &TickContext) {
     let now = Instant::now();
 
     // Collect actions under the lock, then release before any async work.
-    let (int_action, mut keepalive_action, compaction_needed, deep_archive_needed, dream_needed) =
+    let (int_action, compaction_needed, deep_archive_needed, dream_needed) =
         collect_tick_actions(character, ctx, now);
 
     let run_compaction_now = resolve_idle_compaction(character, ctx, compaction_needed);
@@ -1197,14 +1332,14 @@ async fn tick_character(character: &str, ctx: &TickContext) {
     // No outer tokio::time::timeout wrapper: `execute_heartbeat_tick` enforces
     // its own soft deadline on the tool loop so a slow loop can't starve
     // later autonomy work.
-    if let Some(updated) = execute_heartbeat_action(character, ctx, int_action).await {
-        keepalive_action = updated;
-    }
+    execute_heartbeat_action(character, ctx, int_action).await;
 
-    // -- cache keepalive ping (async, outside lock) -------------------------
-    if keepalive_action == CacheKeepaliveAction::Ping {
-        execute_cache_keepalive_ping(character, ctx).await;
-    }
+    // -- cache keepalive ------------------------------------------------------
+    // The schedule, the clock, and the ping live in the sidecar now
+    // (`llm-sidecar/src/autonomy/keepalive.ts`). What is left here is collecting
+    // what it did, because the heartbeat log and the persisted state are still
+    // this side's. See `drain_keepalive_events`.
+    drain_keepalive_events(character, ctx).await;
 
     // -- idle-triggered compaction (async, outside lock) -------------------
     if run_compaction_now {
@@ -1254,17 +1389,16 @@ fn resolve_idle_compaction(character: &str, ctx: &TickContext, compaction_needed
     false
 }
 
-/// Execute a fired heartbeat action. Returns the re-evaluated cache-keepalive
-/// action after a tick ran: a tick that warmed the cache has already reset the
-/// keepalive timer, so the pre-heartbeat `Ping` decision is stale and must be
-/// re-derived to avoid a redundant ping right after the tick.
-async fn execute_heartbeat_action(
-    character: &str,
-    ctx: &TickContext,
-    action: HeartbeatAction,
-) -> Option<CacheKeepaliveAction> {
+/// Execute a fired heartbeat action.
+///
+/// This used to re-derive the keepalive decision afterwards, because a tick that
+/// warmed the cache had already reset the timer and the pre-heartbeat `Ping`
+/// decision was stale. The sidecar owns the schedule now and learns about the
+/// tick's provider call the moment it lands, so the ordering problem is gone
+/// with the split decision that created it.
+async fn execute_heartbeat_action(character: &str, ctx: &TickContext, action: HeartbeatAction) {
     match action {
-        HeartbeatAction::None => None,
+        HeartbeatAction::None => {}
         HeartbeatAction::RunTick => {
             {
                 let mut s = lock_state(&ctx.state);
@@ -1283,11 +1417,42 @@ async fn execute_heartbeat_action(
                 &ctx.mcp_registry,
             )
             .await;
-
-            let mut s = lock_state(&ctx.state);
-            Some(s.cache_keepalive.tick(Instant::now()))
         }
     }
+}
+
+/// Collect what the sidecar's keepalive did and fold it back into the state
+/// this side still owns: the heartbeat log the user reads, and the persisted
+/// schedule that survives a restart.
+///
+/// Draining clears the events on the far side, so anything not written down
+/// here is lost. That is why this runs before the tick's final persist.
+async fn drain_keepalive_events(character: &str, ctx: &TickContext) {
+    let Some(client) = ctx.llm_client.as_ref() else {
+        return;
+    };
+    let drained = match client.drain_keepalive(character).await {
+        Ok(drained) => drained,
+        Err(e) => {
+            debug!(character, error = %e, "Could not drain keepalive events from sidecar");
+            return;
+        }
+    };
+    if drained.events.is_empty() && drained.schedules.is_empty() {
+        return;
+    }
+
+    let mut s = lock_state(&ctx.state);
+    for event in drained.events {
+        info!(character, outcome = event.outcome, "{}", event.detail);
+        s.heartbeat_log
+            .push(HeartbeatEventKind::DormantPing, event.detail);
+    }
+    // Absent means the sidecar has nothing worth restoring — keepalive off,
+    // never warmed, or disarmed — so the persisted copy is cleared rather than
+    // left to re-arm a dead prefix on the next restart.
+    s.keepalive_schedule = drained.schedules.into_iter().next();
+    s.mark_dirty();
 }
 
 /// Revalidate idleness and tick dependencies, then run the deep-idle archive.
@@ -1345,13 +1510,16 @@ async fn execute_dream_if_still_inactive(character: &str, ctx: &TickContext) {
 }
 
 /// Snapshot the per-tick actions while holding the state lock, then release it
-/// before any async work runs. Returns the heartbeat action, cache-keepalive
-/// action, and the compaction-needed / dream-needed gates.
+/// before any async work runs. Returns the heartbeat action and the
+/// compaction-needed / deep-archive / dream-needed gates.
+///
+/// The cache-keepalive decision used to be taken here too. It is the sidecar's
+/// now, on its own clock, so there is nothing to snapshot for it.
 fn collect_tick_actions(
     character: &str,
     ctx: &TickContext,
     now: Instant,
-) -> (HeartbeatAction, CacheKeepaliveAction, bool, bool, bool) {
+) -> (HeartbeatAction, bool, bool, bool) {
     let mut s = lock_state(&ctx.state);
     debug!(
         character,
@@ -1362,9 +1530,6 @@ fn collect_tick_actions(
     );
 
     let int_action = heartbeat_tick_action(&mut s, ctx, now);
-
-    // -- cache keepalive -------------------------------------------------
-    let keepalive_action = s.cache_keepalive.tick(now);
 
     let dream_backoff_elapsed = s
         .next_dream_attempt_at
@@ -1383,7 +1548,6 @@ fn collect_tick_actions(
     s.heartbeat_log.flush_if_dirty();
     (
         int_action,
-        keepalive_action,
         compaction_needed,
         deep_archive_needed,
         dream_needed,
@@ -1506,109 +1670,6 @@ fn deep_archive_trigger_fired(
     false
 }
 
-/// Send a dormant cache-keepalive ping and fold the outcome back into per-tick
-/// state: success confirms the keepalive schedule; failure or skip backs it off.
-async fn execute_cache_keepalive_ping(character: &str, ctx: &TickContext) {
-    let ping_result = execute_dormant_ping(
-        character,
-        &ctx.state,
-        &ctx.data_dir,
-        ctx.llm_client.as_ref(),
-        ctx.loaded_config.as_deref(),
-        &ctx.mcp_registry,
-    )
-    .await;
-    let mut s = lock_state(&ctx.state);
-    match ping_result {
-        DormantPingOutcome::Success {
-            usage,
-            fallback_events,
-        } => {
-            // A ping that read nothing but paid a write did not refresh a warm
-            // cache — it recreated the prefix. The HTTP call "succeeded", but the
-            // keepalive failed at its only job. The predicate matches the
-            // ledger's `cold_keepalive` contract exactly (read 0 AND a write):
-            // read 0 with no write means caching was off / a non-cached
-            // fallback, which is not a cold *write* and must not warn.
-            let cold = ping_landed_cold(&usage);
-            if cold {
-                // Disarm rather than reschedule. A cold read is positive proof
-                // the prefix this keepalive existed to protect is already gone,
-                // and the ledger says a ping does not rebuild it: twelve
-                // consecutive `cold_keepalive` rows at full write price —
-                // including two byte-identical pings nine seconds apart that
-                // both read 0 — until a real message landed and the write
-                // finally stuck.
-                //
-                // *Why* a ping's write does not stick is not established. This
-                // used to claim the provider refused the response and billed
-                // the write without persisting it; that was tested twice and is
-                // wrong, so do not re-derive it. The disarm rests on the
-                // observation, which holds regardless of the mechanism.
-                //
-                // `on_cache_invalidated` (not `on_ping_failed`) because this is
-                // knowledge, not a transient error: retry backoff would buy
-                // another guaranteed full write. Pinging resumes when a real
-                // call re-warms a prefix worth keeping.
-                s.cache_keepalive.on_cache_invalidated();
-                warn!(
-                    character,
-                    cache_write_tokens = usage.cache_creation_tokens,
-                    "Cache keepalive ping landed cold (read 0) — paid a cache write instead of refreshing a warm prefix; disarming until a real call re-warms"
-                );
-            } else {
-                // Ping actually refreshed a warm prefix — confirm to the
-                // keepalive so it schedules the next ping one interval out. Uses
-                // `on_ping_succeeded` (NOT `on_cache_warmed`) so the global idle
-                // ceiling keeps counting from the last real message, not from
-                // this ping.
-                s.cache_keepalive.on_ping_succeeded(Instant::now());
-            }
-            push_provider_fallback_events(
-                &mut s,
-                HeartbeatEventKind::DormantPing,
-                &fallback_events,
-            );
-            s.heartbeat_log.push(
-                HeartbeatEventKind::DormantPing,
-                format!(
-                    "Cache refresh ping ({}cache_read: {}, input: {})",
-                    if cold {
-                        "COLD — wrote cache, disarmed; "
-                    } else {
-                        ""
-                    },
-                    usage.cache_read_tokens,
-                    usage.input_tokens
-                ),
-            );
-            s.mark_dirty();
-        }
-        DormantPingOutcome::Failed(reason) => {
-            s.cache_keepalive.on_ping_failed(Instant::now());
-            s.heartbeat_log.push(
-                HeartbeatEventKind::DormantPing,
-                format!(
-                    "Cache keepalive ping failed: {}",
-                    truncate_summary(&reason, 160)
-                ),
-            );
-            s.mark_dirty();
-        }
-        DormantPingOutcome::Skipped(reason) => {
-            s.cache_keepalive.on_ping_failed(Instant::now());
-            s.heartbeat_log.push(
-                HeartbeatEventKind::DormantPing,
-                format!(
-                    "Cache keepalive ping skipped: {}",
-                    truncate_summary(&reason, 160)
-                ),
-            );
-            s.mark_dirty();
-        }
-    }
-}
-
 /// Run compaction for a character during an autonomy tick, without waiting
 /// for the user's next message. Resets the compaction state flags and reloads
 /// the engine's cached messages on success so the next turn (or heartbeat
@@ -1667,6 +1728,8 @@ async fn execute_idle_compaction(character: &str, ctx: &TickContext) {
                 character,
                 retained_count, "Idle compaction complete, state reset"
             );
+            drop(s);
+            reprime_keepalive_from_tick(character, ctx);
         }
         Err(e) => {
             warn!(
@@ -1857,6 +1920,8 @@ async fn execute_deep_archive_pure(
                 character,
                 archivable, tail, "Deep-idle archive complete (pure archive)"
             );
+            drop(s);
+            reprime_keepalive_from_tick(character, ctx);
         }
         Err(e) => {
             warn!(
@@ -1924,6 +1989,8 @@ async fn execute_deep_archive_compaction(character: &str, ctx: &TickContext) {
                 character,
                 retained_count, "Deep-idle archive complete (compaction pass)"
             );
+            drop(s);
+            reprime_keepalive_from_tick(character, ctx);
         }
         Err(e) => {
             warn!(
@@ -2173,6 +2240,8 @@ async fn run_pre_dream_compaction(
     s.last_compaction_activity = Instant::now();
     s.mark_dirty();
     info!(character, retained_count, "Pre-dream compaction complete");
+    drop(s);
+    reprime_keepalive_from_tick(character, ctx);
     Ok(())
 }
 
@@ -2540,7 +2609,7 @@ async fn execute_heartbeat_tick(
         state: Arc::clone(state),
     });
 
-    let (send_message_text, generated_images, cache_warmed) = run_heartbeat_tool_loop(
+    let (send_message_text, generated_images) = run_heartbeat_tool_loop(
         character,
         state,
         &mut request,
@@ -2551,17 +2620,11 @@ async fn execute_heartbeat_tick(
     )
     .await;
 
-    // -- Cache warmed: the tick itself was a cache-warming LLM call -----------
-    // Pass the model the heartbeat actually ran on. When it runs on a pinned
-    // background model (the common case), it does NOT warm the foreground
-    // model's cache, so the keepalive ignores it and lets the foreground ping
-    // schedule stand. Only when the heartbeat runs on the keepalive's own model
-    // does this count as a real warm.
-    if cache_warmed {
-        let mut s = lock_state(state);
-        s.cache_keepalive
-            .on_cache_warmed(&request.model, Instant::now());
-    }
+    // A heartbeat tick that ran on the keepalive's own model warmed its cache;
+    // one on a pinned background model (the common case) did not, and must not
+    // push the foreground ping schedule out. That distinction is still made —
+    // by the sidecar, which sees the tick's provider call land and compares the
+    // model itself, rather than being told about it from here.
 
     persist_heartbeat_message(
         character,
@@ -2759,7 +2822,7 @@ fn heartbeat_budget_break(
 /// Run the heartbeat tool loop: repeated non-streaming `generate()` calls with
 /// tool dispatch, a soft deadline, and a wrap-up grace window. Tool-loop
 /// messages are appended to `request` ephemerally. Returns the last-wins
-/// `<sendMessage>` text (if any) and whether any LLM call warmed the cache.
+/// `<sendMessage>` text (if any) and any images the tick generated.
 async fn run_heartbeat_tool_loop(
     character: &str,
     state: &Arc<Mutex<AutonomyState>>,
@@ -2768,7 +2831,7 @@ async fn run_heartbeat_tool_loop(
     lc: &LoadedConfig,
     tool_ctx: &Arc<HeartbeatToolContext>,
     max_tool_iterations: Option<u32>,
-) -> (Option<String>, Vec<ImageRef>, bool) {
+) -> (Option<String>, Vec<ImageRef>) {
     // `None` = unlimited, so the round count is bounded only by the wall-clock
     // `HEARTBEAT_LOOP_DEADLINE`; `u32::MAX` makes the loop bound effectively
     // infinite while the deadline does the real work and still fires the
@@ -2790,7 +2853,6 @@ async fn run_heartbeat_tool_loop(
     // Images generated this tick — gathered here (a heartbeat has no live client
     // channel) and attached to the autonomous message persisted at tick end.
     let mut generated_images: Vec<ImageRef> = Vec::new();
-    let mut cache_warmed = false;
 
     let loop_start = std::time::Instant::now();
     let budget = HeartbeatLoopBudget {
@@ -2825,7 +2887,6 @@ async fn run_heartbeat_tool_loop(
         else {
             break;
         };
-        cache_warmed = true;
         // Provider may have changed under config fallback; read it back from the
         // request the call actually ran on.
         let provider = request.provider_key.clone();
@@ -2878,7 +2939,7 @@ async fn run_heartbeat_tool_loop(
         }
     }
 
-    (send_message_text, generated_images, cache_warmed)
+    (send_message_text, generated_images)
 }
 
 /// Record one heartbeat-call curated transcript entry to the store (no-op when
@@ -3448,11 +3509,14 @@ pub enum KeepalivePing {
     Skipped(String),
 }
 
+/// The result of the on-demand `keepalive ping-now` diagnostic.
+///
+/// The scheduled keepalive no longer comes through here — it runs in the
+/// sidecar, on its own clock. This path survives for the command that answers
+/// "would a ping read the cache right now?", which has to make the call itself
+/// to report the answer.
 enum DormantPingOutcome {
-    Success {
-        usage: DormantPingUsage,
-        fallback_events: Vec<CredentialFallbackEvent>,
-    },
+    Success { usage: DormantPingUsage },
     Failed(String),
     Skipped(String),
 }
@@ -3543,7 +3607,7 @@ async fn execute_dormant_ping(
     };
 
     match generate_result {
-        Ok((resp, fallback_events)) => {
+        Ok((resp, _fallback_events)) => {
             info!(
                 character,
                 cache_read = resp.usage.cache_read_tokens,
@@ -3556,7 +3620,6 @@ async fn execute_dormant_ping(
                     cache_read_tokens: resp.usage.cache_read_tokens,
                     cache_creation_tokens: resp.usage.cache_creation_tokens,
                 },
-                fallback_events,
             }
         }
         Err(e) => {
@@ -3952,7 +4015,7 @@ mod tests {
         // Create and save.
         let mut state = AutonomyState {
             heartbeat: HeartbeatClock::with_config(&HeartbeatConfig::default()),
-            cache_keepalive: CacheKeepalive::new(Duration::from_hours(12)),
+            keepalive_schedule: None,
             activity: ActivityTracker::new(),
             heartbeat_log: HeartbeatLog::new(),
             paused: false,
@@ -3981,24 +4044,40 @@ mod tests {
         assert!(persisted.next_wake_at.is_none());
         // Keepalive was never armed — nothing persisted, restore stays unarmed.
         assert!(persisted.keepalive_model.is_none());
-        assert!(keepalive_snapshot_from_persisted(&persisted).is_none());
+        assert!(keepalive_schedule_from_persisted(&persisted, "alice").is_none());
     }
 
+    /// The schedule the sidecar drains must survive a save/load round trip
+    /// without drifting, because what comes back is offered straight to
+    /// `/v1/keepalive/restore` and its staleness guard compares these timestamps
+    /// against the ping interval. A round trip that lost precision, or a
+    /// seconds/milliseconds mix-up, would look like a schedule an hour out of
+    /// date and silently stop re-arming across every restart.
+    ///
+    /// Whether the sidecar then *accepts* it is its own test — see
+    /// `llm-sidecar/tests/keepalive_service.test.ts`, "schedules survive a
+    /// restart through restore".
     #[test]
     fn keepalive_schedule_survives_save_and_restore() {
         let tmp = tempfile::tempdir().unwrap();
         let data_dir = tmp.path();
         std::fs::create_dir_all(data_dir.join("alice")).unwrap();
 
-        // Arm the keepalive as a real warm call would.
-        let mut cache_keepalive = CacheKeepalive::new(Duration::from_hours(12));
-        let now = Instant::now();
-        cache_keepalive.set_interval(Some(Duration::from_mins(55)), "claude-opus-4-6", now);
-        cache_keepalive.on_cache_warmed("claude-opus-4-6", now);
+        // Wall-clock ms, as the sidecar reports them. Truncated to the second,
+        // because RFC3339 is the on-disk format and that is the precision the
+        // round trip can actually carry.
+        let warmed_at = 1_785_600_000_000_u64;
+        let schedule = KeepaliveSchedule {
+            character: "alice".to_owned(),
+            model: "claude-opus-4-6".to_owned(),
+            interval: 55 * 60 * 1000,
+            last_warm_at: warmed_at,
+            last_active_at: warmed_at - 60_000,
+        };
 
         let mut state = AutonomyState {
             heartbeat: HeartbeatClock::with_config(&HeartbeatConfig::default()),
-            cache_keepalive,
+            keepalive_schedule: Some(schedule.clone()),
             activity: ActivityTracker::new(),
             heartbeat_log: HeartbeatLog::new(),
             paused: false,
@@ -4015,25 +4094,60 @@ mod tests {
         };
         save_state(data_dir, "alice", &mut state);
 
-        // A "restarted daemon" loads the state and re-arms: the warm is only
-        // seconds old, well within one interval, so the schedule comes back
-        // and the ping fires roughly one interval after the original warm.
         let persisted = load_state(data_dir, "alice").unwrap();
         assert_eq!(
             persisted.keepalive_model.as_deref(),
             Some("claude-opus-4-6")
         );
-        let snapshot = keepalive_snapshot_from_persisted(&persisted).unwrap();
-        let mut restored = CacheKeepalive::new(Duration::from_hours(12));
-        assert!(restored.restore(&snapshot, Instant::now()));
-        assert_eq!(
-            restored.tick(now + Duration::from_mins(54)),
-            CacheKeepaliveAction::None
-        );
-        assert_eq!(
-            restored.tick(now + Duration::from_mins(56)),
-            CacheKeepaliveAction::Ping
-        );
+        let restored = keepalive_schedule_from_persisted(&persisted, "alice").unwrap();
+        assert_eq!(restored.model, schedule.model);
+        assert_eq!(restored.interval, schedule.interval);
+        assert_eq!(restored.last_warm_at, schedule.last_warm_at);
+        assert_eq!(restored.last_active_at, schedule.last_active_at);
+        assert_eq!(restored.character, "alice");
+    }
+
+    /// An absent schedule must clear the persisted copy rather than leave the
+    /// last one on disk. A stale schedule is the one input that could re-arm a
+    /// prefix the sidecar had already disarmed.
+    #[test]
+    fn absent_keepalive_schedule_clears_the_persisted_copy() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data_dir = tmp.path();
+        std::fs::create_dir_all(data_dir.join("alice")).unwrap();
+
+        let mut state = AutonomyState {
+            heartbeat: HeartbeatClock::with_config(&HeartbeatConfig::default()),
+            keepalive_schedule: Some(KeepaliveSchedule {
+                character: "alice".to_owned(),
+                model: "claude-opus-4-6".to_owned(),
+                interval: 55 * 60 * 1000,
+                last_warm_at: 1_785_600_000_000,
+                last_active_at: 1_785_600_000_000,
+            }),
+            activity: ActivityTracker::new(),
+            heartbeat_log: HeartbeatLog::new(),
+            paused: false,
+            dirty: true,
+            last_compaction_activity: Instant::now(),
+            compaction_triggered: false,
+            active_turn_count: 0,
+            compaction_pending: false,
+            covered_turn_count: 0,
+            deep_archive_done: false,
+            last_request: None,
+            next_dream_attempt_at: None,
+            dream_failure_count: 0,
+        };
+        save_state(data_dir, "alice", &mut state);
+
+        state.keepalive_schedule = None;
+        state.dirty = true;
+        save_state(data_dir, "alice", &mut state);
+
+        let persisted = load_state(data_dir, "alice").unwrap();
+        assert!(persisted.keepalive_model.is_none());
+        assert!(keepalive_schedule_from_persisted(&persisted, "alice").is_none());
     }
 
     #[test]
@@ -4069,7 +4183,7 @@ mod tests {
         let config = test_config();
         let state = Arc::new(Mutex::new(AutonomyState {
             heartbeat: HeartbeatClock::with_config(&HeartbeatConfig::default()),
-            cache_keepalive: CacheKeepalive::new(Duration::from_hours(12)),
+            keepalive_schedule: None,
             activity: ActivityTracker::new(),
             heartbeat_log: HeartbeatLog::new(),
             paused: false,
@@ -4296,195 +4410,45 @@ mod tests {
     // These test the seam between tick_character, execute_dormant_ping, and
     // on_cache_warmed — the exact boundary where the phantom ping bug lived.
 
-    /// Helper: build a TickContext with no LLM client (pings always fail).
-    fn tick_ctx_no_llm(state: Arc<Mutex<AutonomyState>>, data_dir: &Path) -> TickContext {
-        TickContext {
-            state,
-            config: Arc::new(test_config()),
-            compaction: Arc::new(CompactionConfig::default()),
-            data_dir: data_dir.to_path_buf(),
-            llm_client: None,
-            push_tx: None,
-            loaded_config: None,
-            notifier: None,
-            registry: None,
-            mcp_registry: Arc::new(crate::tools::mcp_registry::McpRegistry::default()),
-        }
-    }
-
-    /// Arm a keepalive with a 55m interval whose deadline is already due (last
-    /// real activity 56m ago — past the interval, but with the prefix still
-    /// inside its warm window so failed pings retry rather than give up).
-    fn due_keepalive(now: Instant) -> CacheKeepalive {
-        let mut ka = CacheKeepalive::new(Duration::from_hours(12));
-        ka.set_interval(
-            Some(Duration::from_mins(55)),
-            "test-model",
-            now - Duration::from_mins(56),
-        );
-        ka.on_cache_warmed("test-model", now - Duration::from_mins(56));
-        ka
-    }
-
+    /// Compaction clears the cached request but must NOT stop the keepalive.
+    ///
+    /// The conversation tail changes; the pinned system prefix — usually the
+    /// expensive cache entry — does not, and dropping the schedule means the
+    /// user's next message after an idle stretch pays a full cold write. The
+    /// daemon used to get this by leaving the deadline armed and rebuilding from
+    /// disk lazily at ping time. The sidecar cannot read disk, so the rebuild
+    /// moved here and the contract became "push a fresh body, do not disarm".
     #[tokio::test]
-    async fn failed_ping_does_not_advance_timer() {
-        // A keepalive ping that is skipped (no LLM client / no last_request)
-        // must take the short retry-backoff path, NOT be reset for another full
-        // keepalive interval.
-        let tmp = tempfile::tempdir().unwrap();
-        let now = Instant::now();
-
-        let ka = due_keepalive(now);
-        let state = Arc::new(Mutex::new(AutonomyState {
-            heartbeat: HeartbeatClock::with_config(&HeartbeatConfig::default()),
-            cache_keepalive: ka,
-            activity: ActivityTracker::new(),
-            heartbeat_log: HeartbeatLog::new(),
-            paused: false,
-            dirty: false,
-            last_compaction_activity: now,
-            compaction_triggered: false,
-            active_turn_count: 0,
-            compaction_pending: false,
-            covered_turn_count: 0,
-            deep_archive_done: false,
-            last_request: None, // <-- no request → ping will be skipped
-            next_dream_attempt_at: None,
-            dream_failure_count: 0,
-        }));
-
-        let ctx = tick_ctx_no_llm(Arc::clone(&state), tmp.path());
-        tick_character("test", &ctx).await;
-
-        // After the tick: the keepalive should not fire immediately, but
-        // should retry shortly rather than waiting a full keepalive interval.
-        let mut s = lock_state(&state);
-        let immediate = s.cache_keepalive.tick(Instant::now());
-        assert_eq!(immediate, CacheKeepaliveAction::None);
-        let action = s
-            .cache_keepalive
-            .tick(Instant::now() + Duration::from_secs(31));
-        assert_eq!(
-            action,
-            CacheKeepaliveAction::Ping,
-            "Failed ping must retry after short backoff"
-        );
-    }
-
-    #[test]
-    fn cold_ping_is_only_a_read_of_zero_that_paid_a_write() {
-        let cold = DormantPingUsage {
-            input_tokens: 2,
-            cache_read_tokens: 0,
-            cache_creation_tokens: 14144,
-        };
-        assert!(ping_landed_cold(&cold));
-
-        // Read 0 with no write: caching off, or a non-cached fallback answered.
-        // Nothing was paid for and nothing was lost, so this must not disarm.
-        let uncached = DormantPingUsage {
-            input_tokens: 2,
-            cache_read_tokens: 0,
-            cache_creation_tokens: 0,
-        };
-        assert!(!ping_landed_cold(&uncached));
-
-        // A healthy ping reads the prefix. A small trailing write is normal —
-        // the appended user turn sits past the last breakpoint.
-        let warm = DormantPingUsage {
-            input_tokens: 2,
-            cache_read_tokens: 14205,
-            cache_creation_tokens: 188,
-        };
-        assert!(!ping_landed_cold(&warm));
-    }
-
-    #[test]
-    fn cold_ping_disarms_instead_of_rescheduling() {
-        // The keepalive used to reschedule on any 200, so a prefix that was
-        // already gone got recreated at full write price once an interval for
-        // the whole max_idle window. A cold read proves the prefix is gone and
-        // a ping cannot rebuild it, so pinging stops until a real call warms
-        // one — no retry backoff, which would only buy another full write.
-        let now = Instant::now();
-        let mut ka = due_keepalive(now);
-        assert_eq!(ka.tick(now), CacheKeepaliveAction::Ping);
-
-        ka.on_cache_invalidated();
-
-        assert_eq!(
-            ka.tick(now + Duration::from_secs(31)),
-            CacheKeepaliveAction::None,
-            "a cold ping must not retry on the short backoff"
-        );
-        assert_eq!(
-            ka.tick(now + Duration::from_mins(55)),
-            CacheKeepaliveAction::None,
-            "nor an interval later — pinging a cold prefix only pays again"
-        );
-
-        // A real call re-warms; only then does pinging resume.
-        ka.on_cache_warmed("test-model", now + Duration::from_hours(1));
-        assert_eq!(
-            ka.tick(now + Duration::from_mins(115)),
-            CacheKeepaliveAction::Ping,
-            "a real warm must re-arm the schedule"
-        );
-    }
-
-    #[tokio::test]
-    async fn successful_ping_advances_timer() {
-        // After on_ping_succeeded (simulating a successful ping), the next tick
-        // should NOT return Ping until one interval later.
-        let now = Instant::now();
-        let mut ka = due_keepalive(now);
-
-        // Ping is due.
-        assert_eq!(ka.tick(now), CacheKeepaliveAction::Ping);
-        // Caller confirms success — advances from the ping time.
-        ka.on_ping_succeeded(now);
-
-        // Immediately after: should NOT be due (55 min away).
-        assert_eq!(
-            ka.tick(now + Duration::from_secs(30)),
-            CacheKeepaliveAction::None
-        );
-        // 55 minutes later: should fire again.
-        assert_eq!(
-            ka.tick(now + Duration::from_mins(55)),
-            CacheKeepaliveAction::Ping
-        );
-    }
-
-    #[tokio::test]
-    async fn compaction_keeps_keepalive_deadline() {
+    async fn compaction_keeps_keepalive_alive() {
         let tmp = tempfile::tempdir().unwrap();
         let mgr = test_manager(tmp.path());
         let _ignored = mgr.ensure_state("alice");
 
-        let now = Instant::now();
         _ = mgr.with_state("alice", |s| {
-            s.cache_keepalive.set_interval(
-                Some(Duration::from_mins(55)),
-                "test-model",
-                now - Duration::from_hours(1),
-            );
-            s.cache_keepalive
-                .on_cache_warmed("test-model", now - Duration::from_hours(1));
             s.last_request = Some(empty_request());
         });
 
         mgr.notify_compaction_complete("alice", 2);
 
-        let (action, request_cleared) = mgr
-            .with_state("alice", |s| {
-                (s.cache_keepalive.tick(now), s.last_request.is_none())
-            })
+        let request_cleared = mgr
+            .with_state("alice", |s| s.last_request.is_none())
             .unwrap();
-        assert_eq!(action, CacheKeepaliveAction::Ping);
-        assert!(request_cleared);
+        assert!(request_cleared, "the pre-compaction body must be dropped");
 
         mgr.shutdown().await;
+    }
+
+    /// The half of that contract the manager actually decides. A rebuilt body is
+    /// pushed; only a rebuild that produced nothing disarms.
+    #[test]
+    fn reprime_pushes_a_rebuilt_prefix_and_disarms_only_without_one() {
+        assert!(matches!(
+            reprime_decision(Some(empty_request())),
+            KeepaliveReprime::Push(_)
+        ));
+        // Leaving the pre-invalidation body armed would keep warming a prefix
+        // the next real turn will not reuse, which is spend with no payoff.
+        assert!(matches!(reprime_decision(None), KeepaliveReprime::Disarm));
     }
 
     #[test]
@@ -4554,13 +4518,14 @@ mod tests {
             let _ignored = mgr.ensure_state("alice");
         });
 
-        // Unarmed: no ping even far in the future, since no request was cached.
+        // Nothing to offer the sidecar: the persisted state carries no keepalive
+        // fields, so startup has no schedule to restore and none is invented.
+        // Arming from a state file that never recorded a warm is exactly how a
+        // ping reaches a cold cache.
         let state = mgr.states.get("alice").unwrap();
-        let mut s = lock_state(&state);
-        let future = Instant::now() + Duration::from_hours(2);
-        assert_eq!(
-            s.cache_keepalive.tick(future),
-            CacheKeepaliveAction::None,
+        let s = lock_state(&state);
+        assert!(
+            s.keepalive_schedule.is_none(),
             "Keepalive must stay unarmed on startup until a request is cached"
         );
     }
@@ -5471,7 +5436,7 @@ api_key_env = "{heartbeat_env}"
 
         let state = Arc::new(Mutex::new(AutonomyState {
             heartbeat: HeartbeatClock::with_config(&HeartbeatConfig::default()),
-            cache_keepalive: CacheKeepalive::new(Duration::from_hours(12)),
+            keepalive_schedule: None,
             activity: ActivityTracker::new(),
             heartbeat_log: HeartbeatLog::new(),
             paused: false,
@@ -5525,7 +5490,7 @@ api_key_env = "{heartbeat_env}"
         config.enabled = true;
         let state = Arc::new(Mutex::new(AutonomyState {
             heartbeat: HeartbeatClock::with_config(&HeartbeatConfig::default()),
-            cache_keepalive: CacheKeepalive::new(Duration::from_hours(12)),
+            keepalive_schedule: None,
             activity: ActivityTracker::new(),
             heartbeat_log: HeartbeatLog::new(),
             paused: false,
@@ -5579,7 +5544,7 @@ api_key_env = "{heartbeat_env}"
             false,
         );
 
-        let (_, _, compaction_needed, deep_archive_needed, _) =
+        let (_, compaction_needed, deep_archive_needed, _) =
             collect_tick_actions("alice", &ctx, Instant::now());
 
         assert!(!compaction_needed);
@@ -5601,7 +5566,7 @@ api_key_env = "{heartbeat_env}"
             true,
         );
 
-        let (_, _, compaction_needed, deep_archive_needed, _) =
+        let (_, compaction_needed, deep_archive_needed, _) =
             collect_tick_actions("alice", &ctx, Instant::now());
 
         assert!(!compaction_needed);
@@ -5617,7 +5582,7 @@ api_key_env = "{heartbeat_env}"
         };
         let ctx = deep_archive_test_parts(&tmp, compaction, 1, Duration::from_hours(24), false);
 
-        let (_, _, _, deep_archive_needed, _) = collect_tick_actions("alice", &ctx, Instant::now());
+        let (_, _, deep_archive_needed, _) = collect_tick_actions("alice", &ctx, Instant::now());
 
         assert!(!deep_archive_needed);
     }
@@ -5633,7 +5598,7 @@ api_key_env = "{heartbeat_env}"
         // trigger wins the tick; the deep trigger must not also fire.
         let ctx = deep_archive_test_parts(&tmp, compaction, 8, Duration::from_mins(1), false);
 
-        let (_, _, compaction_needed, deep_archive_needed, _) =
+        let (_, compaction_needed, deep_archive_needed, _) =
             collect_tick_actions("alice", &ctx, Instant::now());
 
         assert!(compaction_needed);

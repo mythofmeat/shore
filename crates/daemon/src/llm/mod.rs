@@ -440,17 +440,18 @@ impl LlmClient {
         sidecar::image_generate(params, self.sidecar_socket()).await
     }
 
-    /// Ask the sidecar a question about the ledger it writes.
+    /// Call one of the sidecar's control endpoints — `/v1/usage*` for the
+    /// ledger it writes, `/v1/keepalive/*` for the schedule it runs.
     ///
-    /// See `sidecar::ledger_query`. Exposed here rather than reached through
+    /// See `sidecar::control_call`. Exposed here rather than reached through
     /// `generate`/`stream_raw` because it is not a provider call and must not
     /// pick up any of their handling — no preprocessing, no debug-log row.
-    pub async fn ledger_query<Req, Resp>(&self, path: &str, body: &Req) -> Result<Resp, LlmError>
+    pub async fn control_call<Req, Resp>(&self, path: &str, body: &Req) -> Result<Resp, LlmError>
     where
         Req: serde::Serialize + ?Sized,
         Resp: serde::de::DeserializeOwned,
     {
-        sidecar::ledger_query(path, body, self.sidecar_socket()).await
+        sidecar::control_call(path, body, self.sidecar_socket()).await
     }
 }
 

@@ -228,13 +228,19 @@ pub(crate) async fn generate(
     result
 }
 
-/// Ask the sidecar a ledger question.
+/// Call one of the sidecar's control endpoints.
 ///
-/// The `/v1/usage*` endpoints are not provider calls: no API key, no budget
-/// gate, no ledger row — just a read (and, for warnings, the dedup write that
-/// goes with it) performed on the side that owns `ledger.db`. They share this
-/// transport because they share the socket, and nothing else.
-pub(crate) async fn ledger_query<Req, Resp>(
+/// These are not provider calls: no API key, no budget gate, no ledger row.
+/// They share this transport with each other because they share the socket, and
+/// nothing else.
+///
+/// - `/v1/usage*` — reads (and, for warnings, the dedup write that goes with
+///   them) performed on the side that owns `ledger.db`.
+/// - `/v1/keepalive/*` — arming, disarming, and draining the prompt-cache
+///   keepalive, whose schedule and clock live over there. The pings it fires
+///   *are* provider calls, but they are made on that side and never travel this
+///   transport.
+pub(crate) async fn control_call<Req, Resp>(
     path: &str,
     body: &Req,
     socket_path: Option<&Path>,
@@ -244,7 +250,7 @@ where
     Resp: DeserializeOwned,
 {
     post_json(socket_path, path, body).await.inspect_err(|e| {
-        warn!(path, error = %e, "ledger query through sidecar failed");
+        warn!(path, error = %e, "sidecar control call failed");
     })
 }
 
