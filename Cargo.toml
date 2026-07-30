@@ -16,6 +16,8 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/mythofmeat/shore"
 
 [workspace.dependencies]
+shore-common = { path = "crates/common" }
+shore-daemon = { path = "crates/daemon" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 toml = "0.8"
@@ -40,10 +42,6 @@ futures-util = "0.3"
 async-trait = "0.1"
 insta = { version = "1", features = ["json"] }
 proptest = "1"
-# All internal crates are path-only: nothing publishes to crates.io, so no
-# dep carries a version and no crate can drift against another.
-shore-common = { path = "crates/common" }
-shore-daemon = { path = "crates/daemon" }
 rusqlite = { version = "0.37", features = ["bundled"] }
 zstd = "0.13"
 rmcp = { version = "1.7", features = [
@@ -53,8 +51,6 @@ rmcp = { version = "1.7", features = [
 ] }
 
 [workspace.lints.clippy]
-# Pedantic, minus the high-churn/low-signal members. priority = -1 lets the
-# `allow`s below override the group.
 pedantic = { level = "warn", priority = -1 }
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
@@ -62,11 +58,6 @@ must_use_candidate = "allow"
 module_name_repetitions = "allow"
 doc_markdown = "allow"
 
-# Everything below is denied workspace-wide: every crate is clean against these,
-# and a new crate inherits them via `[lints] workspace = true`. Tests are exempt
-# from the panic lints via clippy.toml (allow-{unwrap,expect,panic}-in-tests).
-
-# Panic hygiene.
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"
@@ -75,10 +66,6 @@ todo = "deny"
 unimplemented = "deny"
 unwrap_in_result = "deny"
 panic_in_result_fn = "deny"
-
-# Indexing, arithmetic and casts: these panic or silently corrupt at runtime.
-# Float-heavy code (scoring, cosine similarity, pricing, time formatting) carries
-# a reasoned function-level `#[expect]` rather than being rewritten.
 indexing_slicing = "deny"
 arithmetic_side_effects = "deny"
 integer_division = "deny"
@@ -88,46 +75,28 @@ as_conversions = "deny"
 cast_possible_truncation = "deny"
 cast_sign_loss = "deny"
 cast_possible_wrap = "deny"
-
-# String handling. `string_slice` closes a real panic class: `&s[i..j]` panics
-# when an index falls mid-UTF-8-codepoint.
 string_slice = "deny"
 str_to_string = "deny"
-
-# Shadowing: a binding can never silently rebind another.
 shadow_same = "deny"
 shadow_reuse = "deny"
 shadow_unrelated = "deny"
-
-# Import and literal hygiene: keeps provenance and literals greppable.
 wildcard_imports = "deny"
 unseparated_literal_suffix = "deny"
 single_char_lifetime_names = "deny"
-
-# Suppressions must be explicit and reasoned; must-use results can't be dropped.
 allow_attributes = "deny"
 allow_attributes_without_reason = "deny"
 let_underscore_must_use = "deny"
-
-# Unsafe and assertions: one unsafe op per block, each with its own SAFETY note.
 undocumented_unsafe_blocks = "deny"
 multiple_unsafe_ops_per_block = "deny"
 missing_assert_message = "deny"
-
-# Control flow and type surface: every `else if` chain ends in a final `else`;
-# generics stay nameable rather than `impl Trait` in argument position.
 else_if_without_else = "deny"
 impl_trait_in_params = "deny"
-
-# Misc correctness and clarity.
 clone_on_ref_ptr = "deny"
 dbg_macro = "deny"
 exit = "deny"
 mem_forget = "deny"
 match_wildcard_for_single_variants = "deny"
 wildcard_enum_match_arm = "deny"
-
-# Not clean in every crate yet; CI's `-D warnings` still makes these hard.
 print_stdout = "warn"
 print_stderr = "warn"
 
@@ -135,8 +104,6 @@ print_stderr = "warn"
 unsafe_code = "deny"
 elided_lifetimes_in_paths = "deny"
 unused_qualifications = "deny"
-
-# Not clean in every crate yet; CI's `-D warnings` still makes these hard.
 missing_debug_implementations = "warn"
 unreachable_pub = "warn"
 unused_results = "warn"
@@ -150,6 +117,5 @@ debug = "line-tables-only"
 [profile.release]
 strip = true
 opt-level = "z"
-# opt-level = 3
 lto = "fat"
 codegen-units = 1
