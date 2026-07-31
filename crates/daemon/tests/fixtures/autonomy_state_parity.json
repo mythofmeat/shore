@@ -1,0 +1,6 @@
+{
+  "version": 4,
+  "filename": "autonomy_state.json",
+  "populated": "{\n  \"version\": 4,\n  \"ticks_without_user\": 3,\n  \"next_wake_at\": \"2026-04-30T09:00:00+00:00\",\n  \"last_user_at\": \"2026-04-30T08:00:00+00:00\",\n  \"covered_turn_count\": 12,\n  \"keepalive_model\": \"claude-opus-4-6\",\n  \"keepalive_interval_ms\": 3300000,\n  \"keepalive_last_warm_at\": \"2026-04-30T08:30:00+00:00\",\n  \"keepalive_last_active_at\": \"2026-04-30T08:29:00+00:00\"\n}",
+  "bare": "{\n  \"version\": 4,\n  \"ticks_without_user\": 0,\n  \"next_wake_at\": null,\n  \"last_user_at\": null,\n  \"covered_turn_count\": 0,\n  \"keepalive_model\": null,\n  \"keepalive_interval_ms\": null,\n  \"keepalive_last_warm_at\": null,\n  \"keepalive_last_active_at\": null\n}"
+}

@@ -4341,6 +4341,132 @@ mod tests {
     }
 
     #[test]
+    fn load_state_returns_none_when_there_is_no_file() {
+        // The first-run case, and not an error: a character with no state file
+        // starts from defaults rather than refusing to start.
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(load_state(tmp.path(), "never-run").is_none());
+    }
+
+    #[test]
+    fn save_state_writes_only_when_dirty_and_clears_the_flag_itself() {
+        // Both halves matter. Writing a clean state on every tick is a file
+        // write per character per loop for nothing; clearing the flag without
+        // writing loses whatever changed.
+        let tmp = tempfile::tempdir().unwrap();
+        let path = state_path(tmp.path(), "alice");
+
+        let mut clean = state_for_persistence_test(false);
+        save_state(tmp.path(), "alice", &mut clean);
+        assert!(!path.exists(), "a clean state must not touch disk");
+
+        let mut dirty = state_for_persistence_test(true);
+        save_state(tmp.path(), "alice", &mut dirty);
+        assert!(path.exists());
+        assert!(!dirty.dirty, "a successful save clears the flag");
+    }
+
+    #[test]
+    fn a_saved_state_loads_back_with_the_same_numbers() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = state_for_persistence_test(true);
+        state.covered_turn_count = 12;
+        state.heartbeat.on_user_message(Instant::now());
+        save_state(tmp.path(), "alice", &mut state);
+
+        let loaded = load_state(tmp.path(), "alice").expect("round trip");
+        assert_eq!(loaded.version, STATE_VERSION);
+        assert_eq!(loaded.covered_turn_count, 12);
+        assert!(loaded.last_user_at.is_some());
+
+        let mut clock = HeartbeatClock::with_config(&HeartbeatConfig::default());
+        restore_from_persisted(&loaded, &mut clock);
+        assert!(
+            clock.last_user_at().is_some(),
+            "the timestamps survive the string round trip"
+        );
+    }
+
+    /// A state with just enough in it to persist.
+    fn state_for_persistence_test(dirty: bool) -> AutonomyState {
+        AutonomyState {
+            heartbeat: HeartbeatClock::with_config(&HeartbeatConfig::default()),
+            keepalive_schedule: None,
+            activity: ActivityTracker::new(),
+            heartbeat_log: HeartbeatLog::new(),
+            paused: false,
+            dirty,
+            last_compaction_activity: Instant::now(),
+            compaction_triggered: false,
+            active_turn_count: 0,
+            compaction_pending: false,
+            covered_turn_count: 0,
+            deep_archive_done: false,
+            last_request: None,
+            next_dream_attempt_at: None,
+            dream_failure_count: 0,
+        }
+    }
+
+    /// The exact bytes of `autonomy_state.json`, both populated and bare.
+    ///
+    /// This file is on users' disks. Every field is `#[serde(default)]`, so a
+    /// name that changes on one side of the port does not fail to parse — it
+    /// reads as absent, and absent means the keepalive stays unarmed and the
+    /// heartbeat forgets its deadline. That is the fail-safe direction, which
+    /// is exactly why it would go unnoticed: the daemon starts, nothing errors,
+    /// and the user pays one cold cache write and one missed wake.
+    #[test]
+    fn autonomy_state_file_matches_shared_fixture() {
+        let populated = PersistedState {
+            version: STATE_VERSION,
+            ticks_without_user: 3,
+            next_wake_at: Some("2026-04-30T09:00:00+00:00".to_owned()),
+            last_user_at: Some("2026-04-30T08:00:00+00:00".to_owned()),
+            covered_turn_count: 12,
+            keepalive_model: Some("claude-opus-4-6".to_owned()),
+            keepalive_interval_ms: Some(3_300_000),
+            keepalive_last_warm_at: Some("2026-04-30T08:30:00+00:00".to_owned()),
+            keepalive_last_active_at: Some("2026-04-30T08:29:00+00:00".to_owned()),
+        };
+        let bare = PersistedState {
+            version: STATE_VERSION,
+            ticks_without_user: 0,
+            ..Default::default()
+        };
+
+        let rendered = format!(
+            "{}\n",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "version": STATE_VERSION,
+                "filename": STATE_FILENAME,
+                // Written exactly as `save_state` writes it: pretty, no
+                // trailing newline. A reader comparing bytes should see this.
+                "populated": serde_json::to_string_pretty(&populated).expect("populated"),
+                "bare": serde_json::to_string_pretty(&bare).expect("bare"),
+            }))
+            .expect("render")
+        );
+
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/autonomy_state_parity.json"
+        );
+        if std::env::var_os("SHORE_REGENERATE_FIXTURES").is_some() {
+            std::fs::write(path, &rendered).expect("write fixture");
+            return;
+        }
+        let on_disk = std::fs::read_to_string(path).unwrap_or_default();
+        assert_eq!(
+            rendered, on_disk,
+            "the autonomy state file's shape changed. Anything already on a \
+             user's disk was written in the old one, and every field is \
+             `serde(default)` — so the old file will parse, quietly, as \
+             missing whatever was renamed."
+        );
+    }
+
+    #[test]
     fn restore_from_persisted_sets_clock_state() {
         let persisted = PersistedState {
             version: STATE_VERSION,
