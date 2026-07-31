@@ -685,10 +685,10 @@ mod tests {
         let mut out = vec![at];
         for _ in 1..count {
             let gap = match rng.below(100) {
-                0..=59 => rng.below(295) + 5,          // a reply, mid-conversation
-                60..=79 => rng.below(1_400) + 300,     // a slow reply, same session
-                80..=94 => rng.below(5_400) + 1_800,   // a session break
-                _ => rng.below(115_200) + 28_800,      // overnight, or days away
+                0..=59 => rng.below(295) + 5,        // a reply, mid-conversation
+                60..=79 => rng.below(1_400) + 300,   // a slow reply, same session
+                80..=94 => rng.below(5_400) + 1_800, // a session break
+                _ => rng.below(115_200) + 28_800,    // overnight, or days away
             };
             at += chrono::TimeDelta::seconds(i64::try_from(gap).unwrap_or(i64::MAX));
             out.push(at);
