@@ -628,6 +628,57 @@ mod tests {
 
     // -- abandonment guard: silent duration ---------------------------------
 
+    /// The silence guard is `>=`, so it trips *at* the threshold rather than a
+    /// tick past it.
+    ///
+    /// `guard_trips_on_silent_duration` above steps a second beyond (7201 for a
+    /// 7200 ceiling), which leaves the boundary itself unpinned — relaxing the
+    /// comparison to `>` passes it, and passes the parity walks too, because a
+    /// randomised walk essentially never lands on an exact 48-hour mark. This is
+    /// the case only a deliberate test reaches.
+    #[test]
+    fn silent_guard_trips_exactly_at_the_threshold() {
+        let mut c = clock(3600, 100); // tick ceiling high enough not to trip first
+        c.max_silent_duration = secs(7200);
+        let now = Instant::now();
+        c.on_user_message(now);
+
+        // Arm a deadline that the boundary tick will have reached.
+        c.schedule(now + secs(3600), now);
+
+        // Exactly at the ceiling: silent for 7200s, not 7201.
+        let at_threshold = now + secs(7200);
+        assert_eq!(c.tick(at_threshold), HeartbeatAction::None);
+        assert!(
+            c.next_wake_at.is_none(),
+            "tripping the guard clears the deadline"
+        );
+    }
+
+    /// The same `>=` boundary on the *other* copy of the silence check.
+    ///
+    /// `is_abandoned` duplicates it for two callers `tick`'s deadline path never
+    /// reaches: the bootstrap branch, which must refuse to re-arm a dormant
+    /// clock, and `state_at`, which labels it. Relaxing only this copy leaves
+    /// the test above green.
+    #[test]
+    fn silence_marks_dormant_exactly_at_the_threshold() {
+        let mut c = clock(3600, 100);
+        c.max_silent_duration = secs(7200);
+        let now = Instant::now();
+        c.on_user_message(now);
+        c.next_wake_at = None;
+
+        let at_threshold = now + secs(7200);
+        assert_eq!(c.state_at(at_threshold), "Dormant");
+        // The bootstrap branch must not hand a dormant clock a fresh deadline.
+        assert_eq!(c.tick(at_threshold), HeartbeatAction::None);
+        assert!(
+            c.next_wake_at.is_none(),
+            "an abandoned clock must not re-arm itself"
+        );
+    }
+
     #[test]
     fn guard_trips_on_silent_duration() {
         let mut c = clock(3600, 100); // high tick count so it doesn't trip first
