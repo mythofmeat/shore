@@ -31,6 +31,7 @@
  * twice.
  */
 
+import { ActivityTracker, weekdayOf, type ActivityStats } from "./activity.ts";
 import { HeartbeatClock, type HeartbeatAction } from "./heartbeat.ts";
 import { HeartbeatLog, type HeartbeatEventKind } from "./heartbeat_log.ts";
 import {
@@ -147,6 +148,7 @@ export class CharacterAutonomy {
 
   readonly #clock: HeartbeatClock;
   readonly #log: HeartbeatLog;
+  readonly #activity = new ActivityTracker();
   /** Reads the wall clock. Injected because a tick reads it more than once —
    *  see the note on rechecking above — and a test has to control both reads. */
   readonly #now: () => number;
@@ -220,8 +222,18 @@ export class CharacterAutonomy {
    * silence anchor moves, the compaction clock restarts, and both single-flight
    * latches release. A character the user has come back to is not mid-idle-period
    * any more, so triggers that had already fired for it must be able to fire again.
+   *
+   * The activity tracker is told separately, by
+   * {@link CharacterAutonomy.recordUserActivity}, because it runs on a different
+   * clock and a method taking both would be two timestamps in a row that nothing
+   * would notice being swapped.
    */
   onUserMessage(turnCount: number, now: number): void {
+    // Read before the clock clears it: this is the counter's last chance to say
+    // the character had been talking into silence.
+    if (this.#clock.ticksWithoutUser > 0) {
+      this.note("wake", "User returned — idle counter reset", now);
+    }
     this.#clock.onUserMessage(now);
     this.#state.activeTurnCount = turnCount;
     this.#state.lastActivityAt = now;
@@ -263,6 +275,58 @@ export class CharacterAutonomy {
     this.#state.compactionTriggered = false;
     this.#state.lastActivityAt = now;
     this.#state.dirty = true;
+  }
+
+  /**
+   * A user message, as the user's calendar saw it.
+   *
+   * Separate from {@link CharacterAutonomy.onUserMessage} because the clocks are
+   * separate. `localAt` is a calendar reading — naive local wall clock carried
+   * as epoch ms in UTC, the encoding {@link ActivityTracker} is pinned on — and
+   * it answers "which hour of which day". Everything else about a user message
+   * runs on real elapsed time and answers "how long has it been".
+   *
+   * The daemon supplies the reading rather than this side deriving one, for the
+   * reason on {@link CharacterAutonomy.backfillActivity}.
+   */
+  recordUserActivity(localAt: number): void {
+    this.#activity.recordMessage(localAt);
+  }
+
+  /**
+   * Seed the activity tracker from chat history a character already has.
+   *
+   * `localTimestamps` are calendar readings, as above; `latestUserAt` is one
+   * real instant, on the clock the heartbeat runs on.
+   *
+   * Both are computed by the daemon, which is where the conversation and its
+   * timestamps are. Deriving the calendar readings here would need the sidecar
+   * to hold its own opinion of the machine's timezone — and worse, one current
+   * opinion applied to timestamps from months ago, which puts every message
+   * either side of a DST boundary an hour out. `chrono`'s conversion on the
+   * daemon side uses the offset that was actually in force at each instant.
+   *
+   * Seeding the silence anchor matters for a character bootstrapped from
+   * history: without it `lastUserAt` stays unset, which reads as "nobody to
+   * disturb", and dreaming would sweep a conversation the user left an hour ago.
+   */
+  backfillActivity(localTimestamps: readonly number[], latestUserAt: number | undefined): void {
+    this.#activity.backfill(localTimestamps);
+    if (latestUserAt !== undefined) this.#clock.seedLastUserAtIfUnset(latestUserAt);
+  }
+
+  /**
+   * What the `activity` tool and `shore status` read.
+   *
+   * `now` ages the memoised result; `localAt` says which weekday to weight the
+   * histogram towards. Separate parameters because they are separate clocks —
+   * the Rust read one from `Instant::now()` and the other from `Local::now()`.
+   */
+  activityStats(now: number, localAt: number): { stats: ActivityStats; messageCount: number } {
+    return {
+      stats: this.#activity.stats(now, weekdayOf(localAt)),
+      messageCount: this.#activity.messageCount,
+    };
   }
 
   /**

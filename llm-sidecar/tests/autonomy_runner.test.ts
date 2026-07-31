@@ -454,6 +454,88 @@ describe("the abandonment guard", () => {
       expect(runner.log.recent(20).some((e) => e.kind === "dormant")).toBe(false);
     });
   });
+
+  test("the user coming back is written to the log too", async () => {
+    // The other half of the pair, and the one the log would be misleading
+    // without: `dormant` says the character gave up, and only `wake` says
+    // anybody came back. Mirrors the `was_idle` arm of `notify_user_message`.
+    await inTempDir(async (dir) => {
+      const { runner, time } = build({ dir });
+      runner.onUserMessage(1, time.now);
+      await driveToHeartbeat(runner, time);
+      expect(runner.clock.ticksWithoutUser, "the character talked into silence").toBeGreaterThan(0);
+
+      runner.onUserMessage(2, time.now);
+
+      const wakes = runner.log.recent(20).filter((e) => e.kind === "wake");
+      expect(wakes.length).toBe(1);
+      expect(wakes[0]?.detail).toBe("User returned — idle counter reset");
+    });
+  });
+
+  test("an ordinary user message is not a return", async () => {
+    // Every message would otherwise log one, and a `wake` line on a
+    // conversation nobody left says nothing at all.
+    await inTempDir(async (dir) => {
+      const { runner, time } = build({ dir });
+      runner.onUserMessage(1, time.now);
+      runner.onUserMessage(2, time.now);
+
+      expect(runner.log.recent(20).some((e) => e.kind === "wake")).toBe(false);
+    });
+  });
+});
+
+describe("the activity tracker", () => {
+  test("records user messages on the calendar clock, not the wall clock", async () => {
+    // The two are different numbers and the tracker only ever sees one of
+    // them: `stats` buckets by hour of day, so a message recorded against the
+    // heartbeat's clock lands in whatever hour UTC happened to be in.
+    await inTempDir(async (dir) => {
+      const { runner, time } = build({ dir });
+      const nineAM = Date.UTC(2026, 6, 30, 9, 0, 0);
+
+      runner.onUserMessage(1, time.now);
+      runner.recordUserActivity(nineAM);
+
+      const { stats, messageCount } = runner.activityStats(time.now, nineAM);
+      expect(messageCount).toBe(1);
+      // A density: the one message it has puts all the mass on its own hour.
+      // Recorded against `time.now` instead, it would land on whatever hour
+      // that is — 03:00 UTC, not 09:00.
+      expect(stats.hourHistogram[9]).toBe(1);
+      expect(stats.computedAt, "the TTL runs on the wall clock").toBe(time.now);
+    });
+  });
+
+  test("backfilling seeds the silence anchor as well as the histogram", async () => {
+    // Without the anchor `lastUserAt` stays unset, which reads as "nobody to
+    // disturb" — and dreaming would sweep a conversation the user left an hour
+    // ago. Mirrors `seed_last_user_at_if_unset` on the Rust's backfill path.
+    await inTempDir(async (dir) => {
+      const { runner, time } = build({ dir });
+      const anHourAgo = time.now - HOUR;
+      const calendar = Date.UTC(2026, 6, 30, 9, 0, 0);
+
+      runner.backfillActivity([calendar, calendar + HOUR], anHourAgo);
+
+      expect(runner.activityStats(time.now, calendar).messageCount).toBe(2);
+      expect(runner.clock.lastUserAt).toBe(anHourAgo);
+    });
+  });
+
+  test("backfilling does not overwrite a user message already seen", async () => {
+    // Registration order is not guaranteed against the first live message, and
+    // the seed is explicitly "if unset" on the Rust side for the same reason.
+    await inTempDir(async (dir) => {
+      const { runner, time } = build({ dir });
+      runner.onUserMessage(1, time.now);
+
+      runner.backfillActivity([Date.UTC(2026, 6, 30, 9, 0, 0)], time.now - 48 * HOUR);
+
+      expect(runner.clock.lastUserAt).toBe(time.now);
+    });
+  });
 });
 
 describe("a completed compaction", () => {

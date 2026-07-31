@@ -26,6 +26,13 @@ import { createSidecarHandler } from "../src/server.ts";
 const HOUR = 3_600_000;
 const START = 1_000_000_000_000;
 
+/**
+ * A calendar reading for the activity tracker, deliberately nowhere near the
+ * fake wall clock these tests run on. The two are different clocks, and a
+ * value that could pass for either would hide them being crossed.
+ */
+const LOCAL_AT = Date.UTC(2026, 6, 30, 14, 0, 0);
+
 /** Records what it was asked to do, per character, and can be made to hang. */
 class SpyExecutor implements AutonomyExecutor {
   readonly calls: string[] = [];
@@ -182,7 +189,7 @@ describe("registering", () => {
       const dir = characterDir(root, "nova");
       const { service, now } = build();
       await service.register(registration("nova", dir));
-      service.onUserMessage("nova", 12);
+      service.onUserMessage("nova", 12, LOCAL_AT);
 
       now.value += HOUR;
       await service.register(registration("nova", dir));
@@ -199,7 +206,7 @@ describe("registering", () => {
       const dir = characterDir(root, "nova");
       const { service, executor, now } = build();
       await service.register(registration("nova", dir));
-      service.onUserMessage("nova", 50);
+      service.onUserMessage("nova", 50, LOCAL_AT);
 
       await service.unregister("nova");
       now.value += 2 * HOUR;
@@ -218,8 +225,8 @@ describe("ticking", () => {
       const { service, executor, now } = build();
       await service.register(registration("nova", characterDir(root, "nova")));
       await service.register(registration("iris", characterDir(root, "iris")));
-      service.onUserMessage("nova", 50);
-      service.onUserMessage("iris", 50);
+      service.onUserMessage("nova", 50, LOCAL_AT);
+      service.onUserMessage("iris", 50, LOCAL_AT);
 
       now.value += 2 * HOUR;
       await service.tick();
@@ -238,7 +245,7 @@ describe("ticking", () => {
       await service.register(
         registration("nova", characterDir(root, "nova"), COMPACTION_ONLY),
       );
-      service.onUserMessage("nova", 50);
+      service.onUserMessage("nova", 50, LOCAL_AT);
       executor.hanging.add("nova");
 
       now.value += 2 * HOUR;
@@ -258,8 +265,8 @@ describe("ticking", () => {
       const { service, executor, now } = build();
       await service.register(registration("nova", characterDir(root, "nova")));
       await service.register(registration("iris", characterDir(root, "iris")));
-      service.onUserMessage("nova", 50);
-      service.onUserMessage("iris", 50);
+      service.onUserMessage("nova", 50, LOCAL_AT);
+      service.onUserMessage("iris", 50, LOCAL_AT);
       executor.unreachable.add("nova");
 
       now.value += 2 * HOUR;
@@ -276,7 +283,7 @@ describe("ticking", () => {
       await service.register(
         registration("nova", characterDir(root, "nova"), COMPACTION_ONLY),
       );
-      service.onUserMessage("nova", 50);
+      service.onUserMessage("nova", 50, LOCAL_AT);
       executor.unreachable.add("nova");
 
       now.value += 2 * HOUR;
@@ -296,11 +303,11 @@ describe("what the daemon reports", () => {
     await inTempDir(async (root) => {
       const { service, executor, now } = build();
       await service.register(registration("nova", characterDir(root, "nova")));
-      service.onUserMessage("nova", 50);
+      service.onUserMessage("nova", 50, LOCAL_AT);
       now.value += 2 * HOUR;
       await service.tick();
 
-      service.onUserMessage("nova", 50);
+      service.onUserMessage("nova", 50, LOCAL_AT);
       now.value += 2 * HOUR;
       await service.tick();
       expect(executor.calls.filter((c) => c.startsWith("nova:compaction")).length).toBe(2);
@@ -314,7 +321,7 @@ describe("what the daemon reports", () => {
     await inTempDir(async (root) => {
       const { service } = build();
       await service.register(registration("nova", characterDir(root, "nova")));
-      service.onUserMessage("nova", 50);
+      service.onUserMessage("nova", 50, LOCAL_AT);
       service.onCompactionComplete("nova", 4);
       expect(service.status("nova")?.covered_turn_count).toBe(4);
     });
@@ -322,7 +329,7 @@ describe("what the daemon reports", () => {
 
   test("notifying a character nobody registered is ignored, not an error", async () => {
     const { service } = build();
-    expect(() => service.onUserMessage("ghost", 1)).not.toThrow();
+    expect(() => service.onUserMessage("ghost", 1, LOCAL_AT)).not.toThrow();
     expect(service.setPaused("ghost", true)).toBeUndefined();
     expect(service.log("ghost", 10)).toEqual([]);
   });
@@ -353,7 +360,11 @@ describe("the endpoints", () => {
       expect(await (await post("/v1/autonomy/register", registration("nova", dir))).json()).toEqual({
         ok: true,
       });
-      await post("/v1/autonomy/user-message", { character: "nova", turn_count: 12 });
+      await post("/v1/autonomy/user-message", {
+        character: "nova",
+        turn_count: 12,
+        local_ms: LOCAL_AT,
+      });
       await post("/v1/autonomy/compaction-complete", { character: "nova", turn_count: 4 });
 
       const status = await (await post("/v1/autonomy/status", { character: "nova" })).json();
@@ -389,7 +400,11 @@ describe("the endpoints", () => {
     await inTempDir(async (root) => {
       const { post, service, now } = handler();
       await post("/v1/autonomy/register", registration("nova", characterDir(root, "nova")));
-      await post("/v1/autonomy/user-message", { character: "nova", turn_count: 1 });
+      await post("/v1/autonomy/user-message", {
+        character: "nova",
+        turn_count: 1,
+        local_ms: LOCAL_AT,
+      });
 
       // Two hours and two ticks: the clock arms on one and fires on the next.
       now.value += 2 * HOUR;
@@ -401,6 +416,58 @@ describe("the endpoints", () => {
         await post("/v1/autonomy/log", { character: "nova", limit: 10 })
       ).json()) as { events: { kind: string }[] };
       expect(body.events.map((e) => e.kind)).toContain("tick_fired");
+    });
+  });
+
+  test("the activity tracker fills from live messages and from history", async () => {
+    await inTempDir(async (root) => {
+      const { post } = handler();
+      await post("/v1/autonomy/register", registration("nova", characterDir(root, "nova")));
+
+      const nineAM = Date.UTC(2026, 6, 30, 9, 0, 0);
+      await post("/v1/autonomy/backfill-activity", {
+        character: "nova",
+        local_timestamps: [nineAM, nineAM + 24 * HOUR],
+        latest_user_at: START - HOUR,
+      });
+      await post("/v1/autonomy/user-message", {
+        character: "nova",
+        turn_count: 1,
+        local_ms: nineAM + 48 * HOUR,
+      });
+
+      const body = (await (
+        await post("/v1/autonomy/activity", { character: "nova", local_ms: nineAM })
+      ).json()) as { messageCount: number; stats: { hourHistogram: number[] } };
+      expect(body.messageCount, "two backfilled and one live").toBe(3);
+      // Densities, not counts: every message landed at 09:00, so that hour
+      // holds all of the mass and the other twenty-three hold none.
+      expect(body.stats.hourHistogram[9]).toBe(1);
+      expect(body.stats.hourHistogram.filter((d) => d > 0).length).toBe(1);
+    });
+  });
+
+  test("a timestamp that did not arrive is a 400, not a NaN in the record", async () => {
+    // The bodies here are hand-mirrored Rust structs. A field renamed on one
+    // side only would otherwise land as `undefined`, and `new Date(undefined)`
+    // poisons the character's own engagement score with no error anywhere —
+    // the same silent shape as the keepalive's `keepalive_interval_secs`.
+    await inTempDir(async (root) => {
+      const { post } = handler();
+      await post("/v1/autonomy/register", registration("nova", characterDir(root, "nova")));
+
+      expect((await post("/v1/autonomy/user-message", { character: "nova", turn_count: 1 })).status)
+        .toBe(400);
+      expect(
+        (await post("/v1/autonomy/backfill-activity", { character: "nova", local_timestamps: [1, null] }))
+          .status,
+      ).toBe(400);
+      expect((await post("/v1/autonomy/activity", { character: "nova" })).status).toBe(400);
+
+      const body = (await (
+        await post("/v1/autonomy/activity", { character: "nova", local_ms: LOCAL_AT })
+      ).json()) as { messageCount: number };
+      expect(body.messageCount, "and nothing was recorded").toBe(0);
     });
   });
 

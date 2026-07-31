@@ -29,6 +29,7 @@
  * half of a guard that exists on both sides.
  */
 
+import type { ActivityStats } from "./activity.ts";
 import { HeartbeatClock, type HeartbeatClockConfig } from "./heartbeat.ts";
 import { HeartbeatLog, type HeartbeatEvent } from "./heartbeat_log.ts";
 import { CharacterAutonomy, type AutonomyExecutor, type AutonomyRunnerConfig } from "./runner.ts";
@@ -62,6 +63,12 @@ export interface AutonomyStatus {
   next_wake_at?: number;
   ticks_without_user: number;
   covered_turn_count: number;
+}
+
+/** What `/v1/autonomy/activity` answers: the statistics and what they are from. */
+export interface ActivityReport {
+  stats: ActivityStats;
+  messageCount: number;
 }
 
 interface Entry {
@@ -143,9 +150,32 @@ export class AutonomyService {
     );
   }
 
-  /** A user said something. */
-  onUserMessage(character: string, turnCount: number): void {
-    this.#entries.get(character)?.runner.onUserMessage(turnCount, this.#now());
+  /**
+   * A user said something.
+   *
+   * `localAt` is that same moment as the user's calendar reads it, which is what
+   * the activity tracker records against — see
+   * {@link CharacterAutonomy.backfillActivity}.
+   */
+  onUserMessage(character: string, turnCount: number, localAt: number): void {
+    const runner = this.#entries.get(character)?.runner;
+    if (runner === undefined) return;
+    runner.onUserMessage(turnCount, this.#now());
+    runner.recordUserActivity(localAt);
+  }
+
+  /** Seed a freshly registered character's activity tracker from its history. */
+  backfillActivity(
+    character: string,
+    localTimestamps: readonly number[],
+    latestUserAt: number | undefined,
+  ): void {
+    this.#entries.get(character)?.runner.backfillActivity(localTimestamps, latestUserAt);
+  }
+
+  /** What the `activity` tool and `shore status` read. */
+  activityStats(character: string, localAt: number): ActivityReport | undefined {
+    return this.#entries.get(character)?.runner.activityStats(this.#now(), localAt);
   }
 
   /** The character said something, in the foreground. */

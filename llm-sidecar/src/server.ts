@@ -318,9 +318,14 @@ export function createSidecarHandler(
     // pipeline, which has not moved. Each restarts something a tick reads: the
     // heartbeat's silence anchor, the compaction clock, the turn count.
     if (url.pathname === "/v1/autonomy/user-message") {
-      const parsed = await readJson<{ character: string; turn_count: number }>(request);
+      const parsed = await readJson<{
+        character: string;
+        turn_count: number;
+        local_ms: number;
+      }>(request);
       if (!parsed.ok) return parsed.response;
-      autonomy.onUserMessage(parsed.value.character, parsed.value.turn_count);
+      if (!finiteMs(parsed.value.local_ms)) return textError(400, "local_ms must be a number");
+      autonomy.onUserMessage(parsed.value.character, parsed.value.turn_count, parsed.value.local_ms);
       return jsonResponse({ ok: true });
     }
 
@@ -335,6 +340,25 @@ export function createSidecarHandler(
       const parsed = await readJson<{ character: string; turn_count: number }>(request);
       if (!parsed.ok) return parsed.response;
       autonomy.onCompactionComplete(parsed.value.character, parsed.value.turn_count);
+      return jsonResponse({ ok: true });
+    }
+
+    // Seeding a character the daemon has just registered from the chat history
+    // it already had. `local_timestamps` are calendar readings and
+    // `latest_user_at` is a real instant; both come from the daemon because the
+    // conversation does, and mixing the two clocks is how a heatmap drifts.
+    if (url.pathname === "/v1/autonomy/backfill-activity") {
+      const parsed = await readJson<{
+        character: string;
+        local_timestamps: number[];
+        latest_user_at?: number;
+      }>(request);
+      if (!parsed.ok) return parsed.response;
+      const stamps = parsed.value.local_timestamps;
+      if (!Array.isArray(stamps) || !stamps.every(finiteMs)) {
+        return textError(400, "local_timestamps must be numbers");
+      }
+      autonomy.backfillActivity(parsed.value.character, stamps, parsed.value.latest_user_at);
       return jsonResponse({ ok: true });
     }
 
@@ -355,6 +379,15 @@ export function createSidecarHandler(
       const status = autonomy.status(parsed.value.character);
       if (status === undefined) return textError(404, "no such character");
       return jsonResponse(status);
+    }
+
+    if (url.pathname === "/v1/autonomy/activity") {
+      const parsed = await readJson<{ character: string; local_ms: number }>(request);
+      if (!parsed.ok) return parsed.response;
+      if (!finiteMs(parsed.value.local_ms)) return textError(400, "local_ms must be a number");
+      const report = autonomy.activityStats(parsed.value.character, parsed.value.local_ms);
+      if (report === undefined) return textError(404, "no such character");
+      return jsonResponse(report);
     }
 
     if (url.pathname === "/v1/autonomy/log") {
@@ -522,6 +555,21 @@ async function readJson<T>(request: Request): Promise<
     const message = e instanceof Error ? e.message : String(e);
     return { ok: false, response: textError(400, `invalid json: ${message}`) };
   }
+}
+
+/**
+ * Reject a timestamp that did not arrive.
+ *
+ * The bodies on this seam are hand-mirrored Rust structs, and a field that goes
+ * missing — renamed on one side, spelled differently on the other — reads as
+ * `undefined` with nothing to complain. For the activity tracker's clocks that
+ * is not merely absent but corrupting: `new Date(undefined)` is NaN, and a NaN
+ * timestamp in the record turns the character's own engagement score into NaN
+ * from then on, with no error anywhere. The same shape as the keepalive's
+ * `keepalive_interval_secs`, so it gets the same answer: fail loudly.
+ */
+function finiteMs(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function jsonResponse(value: unknown): Response {
