@@ -23,7 +23,7 @@ import type {
   StreamEvent,
 } from "../src/llm/types.ts";
 import type { UsageConfig } from "../src/ledger/budget.ts";
-import { daemonMadeLedger, haveDaemon } from "./support/ledger_fixture.ts";
+import { daemonMadeLedger, haveDaemon, openLedger } from "./support/ledger_fixture.ts";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -42,7 +42,7 @@ afterEach(() => {
 function spentLedger(): string {
   const f = daemonMadeLedger();
   cleanups.push(f.cleanup);
-  const db = new Database(f.path);
+  const db = openLedger(f.path);
   db.query(
     `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type,
        input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,

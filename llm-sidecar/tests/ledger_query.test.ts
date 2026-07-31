@@ -33,7 +33,7 @@ import {
   type QueryFilter,
 } from "../src/ledger/query.ts";
 import type { CallRow } from "../src/ledger/store.ts";
-import { daemonMadeLedger, haveDaemon } from "./support/ledger_fixture.ts";
+import { daemonMadeLedger, haveDaemon, openLedger } from "./support/ledger_fixture.ts";
 
 const cleanups: Array<() => void> = [];
 afterAll(() => {
@@ -83,7 +83,7 @@ function insert(db: Database, row: CallRow): number {
 function ledgerWith(rows: CallRow[]): Database {
   const fixture = daemonMadeLedger();
   cleanups.push(fixture.cleanup);
-  const db = new Database(fixture.path);
+  const db = openLedger(fixture.path);
   for (const r of rows) insert(db, r);
   return db;
 }

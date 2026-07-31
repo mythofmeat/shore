@@ -34,7 +34,7 @@ import {
   type UsageBudgetPeriod,
   type UsageConfig,
 } from "../src/ledger/budget.ts";
-import { daemonMadeLedger, haveDaemon } from "./support/ledger_fixture.ts";
+import { daemonMadeLedger, haveDaemon, openLedger } from "./support/ledger_fixture.ts";
 
 interface Case {
   config: string;
@@ -225,14 +225,14 @@ function caseLedger(index: number): Database {
     const f = daemonMadeLedger();
     cleanups.push(f.cleanup);
     // Fold the WAL back into the main file so a plain copy carries the schema.
-    const db = new Database(f.path);
+    const db = openLedger(f.path);
     db.run("PRAGMA wal_checkpoint(TRUNCATE)");
     db.close();
     template = f.path;
   }
   const path = `${template}.case${index}`;
   copyFileSync(template, path);
-  const db = new Database(path);
+  const db = openLedger(path);
   const columns = Object.keys(doc.seed[0]!);
   const sql = `INSERT INTO calls (${columns.join(", ")}) VALUES (${columns
     .map((c) => `$${c}`)

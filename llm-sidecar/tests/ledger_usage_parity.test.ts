@@ -26,7 +26,7 @@ import fixture from "./ledger_fixtures/ledger_usage_parity.json";
 import type { UsageConfig } from "../src/ledger/budget.ts";
 import { closeLedgers } from "../src/ledger/record.ts";
 import { parseLastPeriod, usageReport } from "../src/ledger/usage.ts";
-import { daemonMadeLedger, haveDaemon } from "./support/ledger_fixture.ts";
+import { daemonMadeLedger, haveDaemon, openLedger } from "./support/ledger_fixture.ts";
 
 interface PeriodCase {
   timezone: string;
@@ -115,7 +115,7 @@ afterAll(() => {
 function seededLedgerPath(): string {
   const f = daemonMadeLedger();
   cleanups.push(f.cleanup);
-  const db = new Database(f.path);
+  const db = openLedger(f.path);
   const columns = Object.keys(doc.seed[0]!);
   const sql = `INSERT INTO calls (${columns.join(", ")}) VALUES (${columns
     .map((c) => `$${c}`)

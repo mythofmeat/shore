@@ -38,7 +38,7 @@ import {
   warmStreak,
   type QueryFilter,
 } from "../src/ledger/query.ts";
-import { daemonMadeLedger, haveDaemon } from "./support/ledger_fixture.ts";
+import { daemonMadeLedger, haveDaemon, openLedger } from "./support/ledger_fixture.ts";
 
 interface Case {
   filter: string;
@@ -91,7 +91,7 @@ afterAll(() => {
 function seededLedger(): Database {
   const f = daemonMadeLedger();
   cleanups.push(f.cleanup);
-  const db = new Database(f.path);
+  const db = openLedger(f.path);
   const columns = Object.keys(doc.seed[0]!);
   const sql = `INSERT INTO calls (${columns.join(", ")}) VALUES (${columns
     .map((c) => `$${c}`)

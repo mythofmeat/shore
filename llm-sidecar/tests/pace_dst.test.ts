@@ -18,7 +18,7 @@ import { Database } from "bun:sqlite";
 import { afterAll, expect, test } from "bun:test";
 
 import { budgetStatuses, type UsageConfig } from "../src/ledger/budget.ts";
-import { daemonMadeLedger, haveDaemon } from "./support/ledger_fixture.ts";
+import { daemonMadeLedger, haveDaemon, openLedger } from "./support/ledger_fixture.ts";
 
 const ZONE = "America/New_York";
 
@@ -58,7 +58,7 @@ const PACED_WEEKLY: UsageConfig = {
 test.skipIf(!haveDaemon)("day pace holds the local reset hour across spring forward", () => {
   const f = daemonMadeLedger();
   cleanups.push(f.cleanup);
-  const db = new Database(f.path);
+  const db = openLedger(f.path);
 
   // Monday March 9, 12:00 EDT — the day after the transition.
   const now = Date.parse("2026-03-09T16:00:00+00:00");

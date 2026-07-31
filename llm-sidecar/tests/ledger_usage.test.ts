@@ -23,7 +23,7 @@ import { closeLedgers, ledgerFor } from "../src/ledger/record.ts";
 import type { UsageConfig } from "../src/ledger/budget.ts";
 import { createSidecarHandler } from "../src/server.ts";
 import { budgetWarnings, modelHistory, usageReport } from "../src/ledger/usage.ts";
-import { daemonMadeLedger, haveDaemon } from "./support/ledger_fixture.ts";
+import { daemonMadeLedger, haveDaemon, openLedger } from "./support/ledger_fixture.ts";
 
 const cleanups: Array<() => void> = [];
 const realFetch = globalThis.fetch;
@@ -49,7 +49,7 @@ interface SeedRow {
 function ledgerWith(rows: SeedRow[]): string {
   const f = daemonMadeLedger();
   cleanups.push(f.cleanup);
-  const db = new Database(f.path);
+  const db = openLedger(f.path);
   for (const r of rows) {
     db.query(
       `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type,
@@ -78,7 +78,7 @@ function ledgerWith(rows: SeedRow[]): string {
 
 /** Put a price in the `pricing` table, where a cached lookup finds it. */
 function priceInStore(path: string, modelId: string, perToken: number): void {
-  const db = new Database(path);
+  const db = openLedger(path);
   db.query(
     `INSERT OR REPLACE INTO pricing (model_id, input_per_token, output_per_token,
        cache_read_per_token, cache_write_per_token, fetched_at)
@@ -113,7 +113,7 @@ function stubCatalog(modelId?: string): { calls: number } {
 }
 
 function costOf(path: string, id: number): number | null {
-  const db = new Database(path, { readonly: true });
+  const db = openLedger(path, { readonly: true });
   const row = db.query("SELECT total_cost FROM calls WHERE id = ?1").get(id) as
     | { total_cost: number | null }
     | null;
@@ -223,7 +223,7 @@ test.skipIf(!haveDaemon)("refresh_pricing drops the in-memory catalog", async ()
 
   // The daemon empties the table, then calls in here. Without the second half
   // the engine would keep answering from the copy it already read.
-  const db = new Database(ledger);
+  const db = openLedger(ledger);
   db.run("DELETE FROM pricing");
   db.run("PRAGMA wal_checkpoint(TRUNCATE)");
   db.close();

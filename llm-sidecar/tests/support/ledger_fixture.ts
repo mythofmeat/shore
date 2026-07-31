@@ -69,9 +69,32 @@ export function daemonMadeLedger(): LedgerFixture {
   return { path, cleanup };
 }
 
+/**
+ * Open a ledger the way production does — with a busy timeout.
+ *
+ * `Ledger.open` sets `busy_timeout = 5000` because a real daemon and a real
+ * sidecar share `ledger.db`, and a reader that meets a writer mid-checkpoint
+ * must wait rather than throw. Tests opening the file raw got no such grace, so
+ * the suite failed intermittently with `SQLiteError: database is locked` — on a
+ * different test each run, since which one lost the race depended on when the
+ * daemon this fixture spawned got round to shutting down.
+ *
+ * The daemon is killed but not waited for, deliberately: it takes seconds to
+ * checkpoint and exit, and blocking on that put every fixture over the 5s test
+ * timeout. Tolerating the overlap is cheaper than serialising against it.
+ */
+export function openLedger(path: string, opts: { readonly?: boolean } = {}): Database {
+  // `readonly` and `create` are mutually exclusive in bun:sqlite — asking for a
+  // writable handle with `create: false` is rejected as API misuse rather than
+  // ignored, so the two cases are opened separately.
+  const db = opts.readonly ? new Database(path, { readonly: true }) : new Database(path);
+  db.exec("PRAGMA busy_timeout = 5000;");
+  return db;
+}
+
 /** Every row in the ledger, oldest first. */
 export function rowsIn(path: string): Array<Record<string, unknown>> {
-  const db = new Database(path, { readonly: true });
+  const db = openLedger(path, { readonly: true });
   const rows = db.query("SELECT * FROM calls ORDER BY id ASC").all() as Array<
     Record<string, unknown>
   >;

@@ -19,7 +19,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { Database } from "bun:sqlite";
+import { openLedger } from "./support/ledger_fixture.ts";
 
 const ROOT = new URL("../..", import.meta.url).pathname.replace(/\/$/, "");
 const DAEMON = `${ROOT}/target/debug/shore-daemon`;
@@ -277,7 +277,7 @@ async function run(script: Turn[], prompts: string[], commands: string[] = []): 
       .filter((l) => l.trim())
       .map((l) => JSON.parse(l) as StoredMessage);
 
-    const db = new Database(`${DATA}/ledger.db`, { readonly: true });
+    const db = openLedger(`${DATA}/ledger.db`, { readonly: true });
     const ledger = db
       .query(
         "SELECT call_type, cache_read_tokens, cache_write_tokens, input_tokens \
