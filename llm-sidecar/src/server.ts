@@ -1,11 +1,17 @@
 import { chmodSync, existsSync, lstatSync, unlinkSync } from "node:fs";
 
+import { RpcAutonomyExecutor } from "./autonomy/executor.ts";
 import {
   KeepaliveService,
   startKeepaliveTimer,
   type KeepalivePrefix,
   type KeepaliveRestore,
 } from "./autonomy/keepalive.ts";
+import {
+  AutonomyService,
+  startAutonomyTimer,
+  type RegisterCharacter,
+} from "./autonomy/service.ts";
 import type { BudgetBlock } from "./ledger/budget.ts";
 import { budgetBlockFor } from "./ledger/gate.ts";
 import {
@@ -49,6 +55,18 @@ export interface SidecarDeps {
    * this one keeps a *provider's* prompt cache warm and costs money.
    */
   keepalive?: KeepaliveService;
+  /**
+   * Every loaded character's autonomy loop. Like the keepalive, a handler owns
+   * its own so a test starts with no characters and no clock running.
+   */
+  autonomy?: AutonomyService;
+  /**
+   * The daemon's tool socket, which autonomy actions call back over.
+   *
+   * `serveSidecar` derives it; a handler built without one has nowhere to send
+   * an action, which only matters once a character is registered.
+   */
+  toolSocketPath?: string;
 }
 
 interface HttpishError {
@@ -123,6 +141,10 @@ export function createSidecarHandler(
       if (!provider) throw new Error(`unsupported sdk: ${req.sdk}`);
       return provider.generate(req, signal);
     });
+  // Owned per handler for the same reason: a test starts with no characters
+  // registered and no tick timer running. The timer is `serveSidecar`'s.
+  const autonomy =
+    deps.autonomy ?? new AutonomyService(new RpcAutonomyExecutor(deps.toolSocketPath ?? ""));
 
   return async (request: Request, server?: RequestTimeoutServer): Promise<Response> => {
     const url = new URL(request.url);
@@ -273,6 +295,74 @@ export function createSidecarHandler(
       return jsonResponse(keepalive.drain(parsed.value.character));
     }
 
+    // Autonomy: the heartbeat, compaction, the deep archive and dreaming. This
+    // side owns the loop, `autonomy_state.json` and `heartbeat.jsonl`; the
+    // daemon registers each character as it loads, tells this side when the
+    // conversation moves, and executes what a tick decides — over the tool
+    // socket, not here. See `autonomy/service.ts`.
+    if (url.pathname === "/v1/autonomy/register") {
+      const parsed = await readJson<RegisterCharacter>(request);
+      if (!parsed.ok) return parsed.response;
+      await autonomy.register(parsed.value);
+      return jsonResponse({ ok: true });
+    }
+
+    if (url.pathname === "/v1/autonomy/unregister") {
+      const parsed = await readJson<{ character: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      await autonomy.unregister(parsed.value.character);
+      return jsonResponse({ ok: true });
+    }
+
+    // The three the daemon has to report, because they happen in the request
+    // pipeline, which has not moved. Each restarts something a tick reads: the
+    // heartbeat's silence anchor, the compaction clock, the turn count.
+    if (url.pathname === "/v1/autonomy/user-message") {
+      const parsed = await readJson<{ character: string; turn_count: number }>(request);
+      if (!parsed.ok) return parsed.response;
+      autonomy.onUserMessage(parsed.value.character, parsed.value.turn_count);
+      return jsonResponse({ ok: true });
+    }
+
+    if (url.pathname === "/v1/autonomy/assistant-message") {
+      const parsed = await readJson<{ character: string; turn_count: number }>(request);
+      if (!parsed.ok) return parsed.response;
+      autonomy.onAssistantMessage(parsed.value.character, parsed.value.turn_count);
+      return jsonResponse({ ok: true });
+    }
+
+    if (url.pathname === "/v1/autonomy/compaction-complete") {
+      const parsed = await readJson<{ character: string; turn_count: number }>(request);
+      if (!parsed.ok) return parsed.response;
+      autonomy.onCompactionComplete(parsed.value.character, parsed.value.turn_count);
+      return jsonResponse({ ok: true });
+    }
+
+    if (url.pathname === "/v1/autonomy/pause") {
+      const parsed = await readJson<{ character: string; paused: boolean }>(request);
+      if (!parsed.ok) return parsed.response;
+      const paused = autonomy.setPaused(parsed.value.character, parsed.value.paused);
+      if (paused === undefined) return textError(404, "no such character");
+      return jsonResponse({ paused });
+    }
+
+    // The read side, for `shore status` and `shore log --heartbeat`. A 404 is
+    // "not loaded here" rather than an error: the CLI can ask about a character
+    // that has not spoken since the daemon started.
+    if (url.pathname === "/v1/autonomy/status") {
+      const parsed = await readJson<{ character: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const status = autonomy.status(parsed.value.character);
+      if (status === undefined) return textError(404, "no such character");
+      return jsonResponse(status);
+    }
+
+    if (url.pathname === "/v1/autonomy/log") {
+      const parsed = await readJson<{ character: string; limit: number }>(request);
+      if (!parsed.ok) return parsed.response;
+      return jsonResponse({ events: autonomy.log(parsed.value.character, parsed.value.limit) });
+    }
+
     if (url.pathname === "/v1/image") {
       const parsed = await readJson<ImageRequest>(request);
       if (!parsed.ok) return parsed.response;
@@ -309,12 +399,29 @@ export function serveSidecar(socketPath: string): ReturnType<typeof Bun.serve> {
   });
   startKeepaliveTimer(keepalive);
 
+  // Built here for the same reason as the keepalive: it runs a clock, and a
+  // handler that merely exists should not.
+  const toolSocketPath = toolSocketPathFor(socketPath);
+  const autonomy = new AutonomyService(new RpcAutonomyExecutor(toolSocketPath));
+  startAutonomyTimer(autonomy);
+
   const server = Bun.serve({
     unix: socketPath,
-    fetch: createSidecarHandler({ keepalive }),
+    fetch: createSidecarHandler({ keepalive, autonomy, toolSocketPath }),
   });
   chmodSync(socketPath, 0o600);
   return server;
+}
+
+/**
+ * Where the daemon serves tool calls, given where it serves this one.
+ *
+ * Derived rather than configured, mirroring `tool_rpc::socket_path_for`: the
+ * two sockets belong to the same daemon instance, and a second setting is a
+ * second thing to get wrong.
+ */
+export function toolSocketPathFor(sidecarSocket: string): string {
+  return `${sidecarSocket}.tools`;
 }
 
 async function streamResponse(
