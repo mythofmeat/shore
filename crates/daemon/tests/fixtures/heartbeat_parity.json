@@ -1,0 +1,4796 @@
+{
+  "bounds": {
+    "min_wake_interval_secs": 3600,
+    "max_wake_interval_secs": 172800
+  },
+  "walks": [
+    {
+      "seed": 1,
+      "config": {
+        "default_interval_secs": 3600,
+        "max_idle_ticks": 6,
+        "max_silent_secs": 172800,
+        "min_wake_secs": 3600
+      },
+      "steps": [
+        {
+          "now_ms": 2967000,
+          "event": {
+            "kind": "seed_last_user_if_unset",
+            "at_ms": 0
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 0,
+            "last_user_ms": 0,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 5356000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 3600000,
+            "ticks_without_user": 0,
+            "last_user_ms": 0,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 18311000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 0,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 25140000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 21911000,
+            "ticks_without_user": 1,
+            "last_user_ms": 0,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 27400000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 31000000,
+            "ticks_without_user": 0,
+            "last_user_ms": 27400000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 31400000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 27400000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 39777000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 43377000,
+            "ticks_without_user": 0,
+            "last_user_ms": 39777000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 51598000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 55198000,
+            "ticks_without_user": 0,
+            "last_user_ms": 51598000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 61082000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 95058000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 156140000,
+            "ticks_without_user": 0,
+            "last_user_ms": 51598000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 61830000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 318114000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 234630000,
+            "ticks_without_user": 0,
+            "last_user_ms": 51598000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 70942000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 234630000,
+            "ticks_without_user": 0,
+            "last_user_ms": 70942000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 82739000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 234630000,
+            "ticks_without_user": 0,
+            "last_user_ms": 70942000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 85224000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 234630000,
+            "ticks_without_user": 0,
+            "last_user_ms": 85224000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 85462000,
+          "event": {
+            "kind": "seed_last_user_if_unset",
+            "at_ms": 0
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 234630000,
+            "ticks_without_user": 0,
+            "last_user_ms": 85224000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 99604000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 234630000,
+            "ticks_without_user": 0,
+            "last_user_ms": 99604000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 113577000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 234630000,
+            "ticks_without_user": 0,
+            "last_user_ms": 113577000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 117309000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 234630000,
+            "ticks_without_user": 0,
+            "last_user_ms": 117309000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 123015000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 234630000,
+            "ticks_without_user": 0,
+            "last_user_ms": 117309000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 128371000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 234630000,
+            "ticks_without_user": 0,
+            "last_user_ms": 117309000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 132310000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 234630000,
+            "ticks_without_user": 0,
+            "last_user_ms": 117309000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 138499000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 234630000,
+            "ticks_without_user": 0,
+            "last_user_ms": 117309000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 141861000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 234630000,
+            "ticks_without_user": 0,
+            "last_user_ms": 141861000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 145157000,
+          "event": {
+            "kind": "seed_last_user_if_unset",
+            "at_ms": 116090000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 234630000,
+            "ticks_without_user": 0,
+            "last_user_ms": 141861000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 148170000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 234630000,
+            "ticks_without_user": 0,
+            "last_user_ms": 141861000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 158986000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 234630000,
+            "ticks_without_user": 0,
+            "last_user_ms": 158986000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 169774000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 234630000,
+            "ticks_without_user": 0,
+            "last_user_ms": 169774000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 176066000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 234630000,
+            "ticks_without_user": 0,
+            "last_user_ms": 169774000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 179271000,
+          "event": {
+            "kind": "force_dormant"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 6,
+            "last_user_ms": 169774000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 183906000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 6,
+            "last_user_ms": 169774000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 189773000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 3069000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 193373000,
+            "ticks_without_user": 6,
+            "last_user_ms": 169774000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 196628000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 200228000,
+            "ticks_without_user": 0,
+            "last_user_ms": 196628000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 210931000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 196628000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 213380000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 216980000,
+            "ticks_without_user": 0,
+            "last_user_ms": 213380000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 222540000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 213380000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 229377000,
+          "event": {
+            "kind": "force_dormant"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 6,
+            "last_user_ms": 213380000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 231726000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 6,
+            "last_user_ms": 213380000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 234243000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 237843000,
+            "ticks_without_user": 0,
+            "last_user_ms": 234243000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 240566000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 234243000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 246220000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 249820000,
+            "ticks_without_user": 0,
+            "last_user_ms": 246220000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 259822000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 263422000,
+            "ticks_without_user": 0,
+            "last_user_ms": 259822000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 269455000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 600000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 273055000,
+            "ticks_without_user": 0,
+            "last_user_ms": 259822000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 280325000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 1921000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 283925000,
+            "ticks_without_user": 0,
+            "last_user_ms": 259822000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 282078000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 283925000,
+            "ticks_without_user": 0,
+            "last_user_ms": 259822000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 288684000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 259822000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 297730000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 301330000,
+            "ticks_without_user": 0,
+            "last_user_ms": 297730000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 306439000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 297730000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 320340000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 323940000,
+            "ticks_without_user": 0,
+            "last_user_ms": 320340000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 321581000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 323940000,
+            "ticks_without_user": 0,
+            "last_user_ms": 320340000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 324067000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 33847000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 357914000,
+            "ticks_without_user": 0,
+            "last_user_ms": 320340000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 331750000,
+          "event": {
+            "kind": "force_dormant"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 6,
+            "last_user_ms": 320340000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 343563000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 6,
+            "last_user_ms": 320340000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 346829000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 6,
+            "last_user_ms": 320340000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 349273000,
+          "event": {
+            "kind": "force_dormant"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 6,
+            "last_user_ms": 320340000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 352491000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 186297000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 525291000,
+            "ticks_without_user": 6,
+            "last_user_ms": 320340000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 353167000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 525291000,
+            "ticks_without_user": 0,
+            "last_user_ms": 353167000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 353224000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 353936000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 526024000,
+            "ticks_without_user": 0,
+            "last_user_ms": 353167000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 365398000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 2594000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 368998000,
+            "ticks_without_user": 0,
+            "last_user_ms": 353167000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 372177000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 375777000,
+            "ticks_without_user": 0,
+            "last_user_ms": 372177000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 373941000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 377541000,
+            "ticks_without_user": 0,
+            "last_user_ms": 373941000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 377464000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 377541000,
+            "ticks_without_user": 0,
+            "last_user_ms": 373941000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 377511000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 377541000,
+            "ticks_without_user": 0,
+            "last_user_ms": 373941000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 384731000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 373941000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 394378000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 388331000,
+            "ticks_without_user": 1,
+            "last_user_ms": 373941000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 402539000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 2,
+            "last_user_ms": 373941000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 411737000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 86004000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 497741000,
+            "ticks_without_user": 2,
+            "last_user_ms": 373941000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 412881000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 497741000,
+            "ticks_without_user": 2,
+            "last_user_ms": 373941000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 420657000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 497741000,
+            "ticks_without_user": 0,
+            "last_user_ms": 420657000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 429632000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 497741000,
+            "ticks_without_user": 0,
+            "last_user_ms": 429632000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 432609000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 1209000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 436209000,
+            "ticks_without_user": 0,
+            "last_user_ms": 429632000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 443927000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 447527000,
+            "ticks_without_user": 0,
+            "last_user_ms": 443927000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 456657000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 443927000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 465737000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 460257000,
+            "ticks_without_user": 1,
+            "last_user_ms": 443927000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 474560000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 478160000,
+            "ticks_without_user": 0,
+            "last_user_ms": 474560000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 479853000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 474560000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 486377000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 489977000,
+            "ticks_without_user": 0,
+            "last_user_ms": 486377000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 491067000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 494667000,
+            "ticks_without_user": 0,
+            "last_user_ms": 491067000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 491385000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 494667000,
+            "ticks_without_user": 0,
+            "last_user_ms": 491067000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 499186000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 491067000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 500638000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 504238000,
+            "ticks_without_user": 0,
+            "last_user_ms": 500638000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 510376000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 500638000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 521704000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 513976000,
+            "ticks_without_user": 1,
+            "last_user_ms": 500638000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 526963000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 1283000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 530563000,
+            "ticks_without_user": 1,
+            "last_user_ms": 500638000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 527749000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 530563000,
+            "ticks_without_user": 1,
+            "last_user_ms": 500638000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 536703000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 540303000,
+            "ticks_without_user": 0,
+            "last_user_ms": 536703000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 540093000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 540303000,
+            "ticks_without_user": 0,
+            "last_user_ms": 536703000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 547060000,
+          "event": {
+            "kind": "seed_last_user_if_unset",
+            "at_ms": 267073000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 540303000,
+            "ticks_without_user": 0,
+            "last_user_ms": 536703000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 550858000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 536703000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 553319000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 554458000,
+            "ticks_without_user": 1,
+            "last_user_ms": 536703000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 559685000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 2,
+            "last_user_ms": 536703000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 564632000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 568232000,
+            "ticks_without_user": 0,
+            "last_user_ms": 564632000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 573680000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 577280000,
+            "ticks_without_user": 0,
+            "last_user_ms": 573680000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 588017000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 591617000,
+            "ticks_without_user": 0,
+            "last_user_ms": 588017000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 588279000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 591617000,
+            "ticks_without_user": 0,
+            "last_user_ms": 588017000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 591450000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 595050000,
+            "ticks_without_user": 0,
+            "last_user_ms": 591450000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 597497000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 601097000,
+            "ticks_without_user": 0,
+            "last_user_ms": 597497000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 602742000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 606342000,
+            "ticks_without_user": 0,
+            "last_user_ms": 602742000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 615706000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 619306000,
+            "ticks_without_user": 0,
+            "last_user_ms": 615706000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 619305000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 29927000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 649232000,
+            "ticks_without_user": 0,
+            "last_user_ms": 615706000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 621914000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 649232000,
+            "ticks_without_user": 0,
+            "last_user_ms": 615706000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 631608000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 649232000,
+            "ticks_without_user": 0,
+            "last_user_ms": 615706000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 644846000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 649232000,
+            "ticks_without_user": 0,
+            "last_user_ms": 615706000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 647703000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 72376000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 720079000,
+            "ticks_without_user": 0,
+            "last_user_ms": 615706000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 653054000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 720079000,
+            "ticks_without_user": 0,
+            "last_user_ms": 615706000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 658937000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 720079000,
+            "ticks_without_user": 0,
+            "last_user_ms": 615706000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 662170000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 292188000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 834970000,
+            "ticks_without_user": 0,
+            "last_user_ms": 615706000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 673694000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 834970000,
+            "ticks_without_user": 0,
+            "last_user_ms": 615706000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 678859000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 834970000,
+            "ticks_without_user": 0,
+            "last_user_ms": 615706000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 691940000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 834970000,
+            "ticks_without_user": 0,
+            "last_user_ms": 615706000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 698376000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 3114000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 701976000,
+            "ticks_without_user": 0,
+            "last_user_ms": 615706000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 699742000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 701976000,
+            "ticks_without_user": 0,
+            "last_user_ms": 615706000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 712645000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 3527000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 716245000,
+            "ticks_without_user": 0,
+            "last_user_ms": 615706000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 721847000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 615706000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 733499000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 93690000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 827189000,
+            "ticks_without_user": 1,
+            "last_user_ms": 615706000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 746442000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 827189000,
+            "ticks_without_user": 1,
+            "last_user_ms": 615706000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 749148000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 827189000,
+            "ticks_without_user": 1,
+            "last_user_ms": 615706000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 762126000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 827189000,
+            "ticks_without_user": 1,
+            "last_user_ms": 615706000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 765806000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 827189000,
+            "ticks_without_user": 1,
+            "last_user_ms": 615706000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 770489000,
+          "event": {
+            "kind": "seed_last_user_if_unset",
+            "at_ms": 494630000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 827189000,
+            "ticks_without_user": 1,
+            "last_user_ms": 615706000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 775078000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 827189000,
+            "ticks_without_user": 0,
+            "last_user_ms": 775078000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 781532000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 827189000,
+            "ticks_without_user": 0,
+            "last_user_ms": 775078000,
+            "label": "Active"
+          }
+        }
+      ]
+    },
+    {
+      "seed": 2,
+      "config": {
+        "default_interval_secs": 7200,
+        "max_idle_ticks": 3,
+        "max_silent_secs": 172800,
+        "min_wake_secs": 3600
+      },
+      "steps": [
+        {
+          "now_ms": 5934000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 9534000,
+            "ticks_without_user": 0,
+            "last_user_ms": 5934000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 7949000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 9534000,
+            "ticks_without_user": 0,
+            "last_user_ms": 5934000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 22909000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 26509000,
+            "ticks_without_user": 0,
+            "last_user_ms": 22909000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 39708000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 22909000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 67737000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 71337000,
+            "ticks_without_user": 0,
+            "last_user_ms": 67737000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 90437000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 67737000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 118481000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 97637000,
+            "ticks_without_user": 1,
+            "last_user_ms": 67737000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 137814000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 141414000,
+            "ticks_without_user": 0,
+            "last_user_ms": 137814000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 161124000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 137814000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 184610000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 168324000,
+            "ticks_without_user": 1,
+            "last_user_ms": 137814000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 205362000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 2,
+            "last_user_ms": 137814000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 212987000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 62156000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 275143000,
+            "ticks_without_user": 2,
+            "last_user_ms": 137814000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 224826000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 275143000,
+            "ticks_without_user": 0,
+            "last_user_ms": 224826000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 238795000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 275143000,
+            "ticks_without_user": 0,
+            "last_user_ms": 224826000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 239662000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 275143000,
+            "ticks_without_user": 0,
+            "last_user_ms": 224826000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 256416000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 275143000,
+            "ticks_without_user": 0,
+            "last_user_ms": 224826000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 282763000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 224826000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 301848000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 289963000,
+            "ticks_without_user": 1,
+            "last_user_ms": 224826000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 313880000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 2,
+            "last_user_ms": 224826000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 325026000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 321080000,
+            "ticks_without_user": 2,
+            "last_user_ms": 224826000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 341735000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 86541000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 428276000,
+            "ticks_without_user": 2,
+            "last_user_ms": 224826000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 342225000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 428276000,
+            "ticks_without_user": 2,
+            "last_user_ms": 224826000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 347726000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 428276000,
+            "ticks_without_user": 0,
+            "last_user_ms": 347726000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 352848000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 428276000,
+            "ticks_without_user": 0,
+            "last_user_ms": 347726000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 381087000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 428276000,
+            "ticks_without_user": 0,
+            "last_user_ms": 381087000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 384504000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 428276000,
+            "ticks_without_user": 0,
+            "last_user_ms": 381087000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 396464000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 428276000,
+            "ticks_without_user": 0,
+            "last_user_ms": 396464000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 396669000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 428276000,
+            "ticks_without_user": 0,
+            "last_user_ms": 396669000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 409731000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 428276000,
+            "ticks_without_user": 0,
+            "last_user_ms": 396669000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 425525000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 428276000,
+            "ticks_without_user": 0,
+            "last_user_ms": 396669000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 438796000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 442396000,
+            "ticks_without_user": 0,
+            "last_user_ms": 438796000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 456151000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 438796000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 465859000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 246645000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 638659000,
+            "ticks_without_user": 1,
+            "last_user_ms": 438796000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 466452000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 638659000,
+            "ticks_without_user": 1,
+            "last_user_ms": 438796000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 491579000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 638659000,
+            "ticks_without_user": 1,
+            "last_user_ms": 438796000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 503565000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 638659000,
+            "ticks_without_user": 0,
+            "last_user_ms": 503565000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 522574000,
+          "event": {
+            "kind": "force_dormant"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 3,
+            "last_user_ms": 503565000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 528030000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 474000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 531630000,
+            "ticks_without_user": 3,
+            "last_user_ms": 503565000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 528316000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 531630000,
+            "ticks_without_user": 3,
+            "last_user_ms": 503565000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 541173000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 3,
+            "last_user_ms": 503565000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 554324000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 3,
+            "last_user_ms": 503565000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 567875000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 3,
+            "last_user_ms": 503565000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 589708000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 221295000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 762508000,
+            "ticks_without_user": 3,
+            "last_user_ms": 503565000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 593435000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 348653000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 766235000,
+            "ticks_without_user": 3,
+            "last_user_ms": 503565000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 612657000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 766235000,
+            "ticks_without_user": 0,
+            "last_user_ms": 612657000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 629918000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 766235000,
+            "ticks_without_user": 0,
+            "last_user_ms": 612657000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 647071000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 766235000,
+            "ticks_without_user": 0,
+            "last_user_ms": 647071000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 654881000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 766235000,
+            "ticks_without_user": 0,
+            "last_user_ms": 647071000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 680700000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 766235000,
+            "ticks_without_user": 0,
+            "last_user_ms": 647071000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 691946000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 766235000,
+            "ticks_without_user": 0,
+            "last_user_ms": 647071000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 717986000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 766235000,
+            "ticks_without_user": 0,
+            "last_user_ms": 717986000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 723502000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 766235000,
+            "ticks_without_user": 0,
+            "last_user_ms": 717986000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 740576000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 45078000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 785654000,
+            "ticks_without_user": 0,
+            "last_user_ms": 717986000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 759485000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 785654000,
+            "ticks_without_user": 0,
+            "last_user_ms": 717986000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 766630000,
+          "event": {
+            "kind": "force_dormant"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 3,
+            "last_user_ms": 717986000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 790736000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 3,
+            "last_user_ms": 717986000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 816211000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 13353000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 829564000,
+            "ticks_without_user": 3,
+            "last_user_ms": 717986000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 833141000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 3,
+            "last_user_ms": 717986000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 849537000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 162162000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1011699000,
+            "ticks_without_user": 3,
+            "last_user_ms": 717986000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 878037000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 1011699000,
+            "ticks_without_user": 3,
+            "last_user_ms": 717986000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 888825000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1011699000,
+            "ticks_without_user": 0,
+            "last_user_ms": 888825000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 890511000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 1011699000,
+            "ticks_without_user": 0,
+            "last_user_ms": 888825000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 902853000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 1011699000,
+            "ticks_without_user": 0,
+            "last_user_ms": 888825000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 916720000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 1011699000,
+            "ticks_without_user": 0,
+            "last_user_ms": 888825000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 936710000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 1011699000,
+            "ticks_without_user": 0,
+            "last_user_ms": 888825000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 952562000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 3517000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 956162000,
+            "ticks_without_user": 0,
+            "last_user_ms": 888825000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 969964000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 1368000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 973564000,
+            "ticks_without_user": 0,
+            "last_user_ms": 888825000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 972510000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 973564000,
+            "ticks_without_user": 0,
+            "last_user_ms": 888825000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 990859000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 888825000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1005314000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1008914000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1005314000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1033833000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1037433000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1033833000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1052666000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 273957000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1225466000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1033833000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1067836000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 1225466000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1033833000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1070404000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1225466000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1070404000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1096973000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 2217000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1100573000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1070404000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1098242000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 1100573000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1070404000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1123193000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 296971000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1295993000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1070404000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1138273000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 1295993000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1070404000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1141198000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 1295993000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1070404000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1162722000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 74635000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1237357000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1070404000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1172405000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 1237357000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1070404000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1192958000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 1237357000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1070404000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1211125000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1237357000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1211125000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1225440000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 1237357000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1211125000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1236115000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1239715000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1236115000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1256524000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 1236115000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1272240000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 1730000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1275840000,
+            "ticks_without_user": 1,
+            "last_user_ms": 1236115000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1273638000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 1275840000,
+            "ticks_without_user": 1,
+            "last_user_ms": 1236115000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1292156000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 2,
+            "last_user_ms": 1236115000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1319403000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1323003000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1319403000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1343301000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 1319403000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1361486000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 1945000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1365086000,
+            "ticks_without_user": 1,
+            "last_user_ms": 1319403000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1374755000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 248419000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1547555000,
+            "ticks_without_user": 1,
+            "last_user_ms": 1319403000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1388637000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1547555000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1388637000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1403707000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 1547555000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1388637000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1423045000,
+          "event": {
+            "kind": "seed_last_user_if_unset",
+            "at_ms": 1396886000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1547555000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1388637000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1434725000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1547555000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1434725000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1442982000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 147209000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1590191000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1434725000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1452938000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1590191000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1452938000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1456771000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 1590191000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1452938000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1463592000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 2489000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1467192000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1452938000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1471479000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 1452938000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1471858000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 1478679000,
+            "ticks_without_user": 1,
+            "last_user_ms": 1452938000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1491297000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 212590000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1664097000,
+            "ticks_without_user": 1,
+            "last_user_ms": 1452938000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1517179000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1664097000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1517179000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1538538000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1664097000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1538538000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1562254000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 1664097000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1538538000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1565138000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1664097000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1565138000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1574314000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1664097000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1574314000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1583241000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1664097000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1583241000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1606203000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1664097000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1606203000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1619333000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 113195000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1732528000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1606203000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1634493000,
+          "event": {
+            "kind": "force_dormant"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 3,
+            "last_user_ms": 1606203000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 1640747000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 3,
+            "last_user_ms": 1606203000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 1664384000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 3,
+            "last_user_ms": 1606203000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 1672048000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 1675648000,
+            "ticks_without_user": 0,
+            "last_user_ms": 1672048000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1681717000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 1672048000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1699213000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 1688917000,
+            "ticks_without_user": 1,
+            "last_user_ms": 1672048000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1712606000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 2,
+            "last_user_ms": 1672048000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 1722134000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 1719806000,
+            "ticks_without_user": 2,
+            "last_user_ms": 1672048000,
+            "label": "Active"
+          }
+        }
+      ]
+    },
+    {
+      "seed": 3,
+      "config": {
+        "default_interval_secs": 1800,
+        "max_idle_ticks": 12,
+        "max_silent_secs": 172800,
+        "min_wake_secs": 3600
+      },
+      "steps": [
+        {
+          "now_ms": 4452000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 1800000,
+            "ticks_without_user": 0,
+            "last_user_ms": null,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 6527000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": null,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 7548000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 11148000,
+            "ticks_without_user": 0,
+            "last_user_ms": 7548000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 10494000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 11148000,
+            "ticks_without_user": 0,
+            "last_user_ms": 7548000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 11747000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 7548000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 15867000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 259838000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 188667000,
+            "ticks_without_user": 1,
+            "last_user_ms": 7548000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 17702000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 188667000,
+            "ticks_without_user": 1,
+            "last_user_ms": 7548000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 17957000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 188667000,
+            "ticks_without_user": 0,
+            "last_user_ms": 17957000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 22397000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 188667000,
+            "ticks_without_user": 0,
+            "last_user_ms": 22397000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 26442000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 188667000,
+            "ticks_without_user": 0,
+            "last_user_ms": 26442000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 27554000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 188667000,
+            "ticks_without_user": 0,
+            "last_user_ms": 26442000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 29381000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 188667000,
+            "ticks_without_user": 0,
+            "last_user_ms": 26442000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 30935000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 332538000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 203735000,
+            "ticks_without_user": 0,
+            "last_user_ms": 26442000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 30993000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 203735000,
+            "ticks_without_user": 0,
+            "last_user_ms": 26442000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 31652000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 203735000,
+            "ticks_without_user": 0,
+            "last_user_ms": 31652000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 34204000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 203735000,
+            "ticks_without_user": 0,
+            "last_user_ms": 31652000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 36801000,
+          "event": {
+            "kind": "seed_last_user_if_unset",
+            "at_ms": 0
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 203735000,
+            "ticks_without_user": 0,
+            "last_user_ms": 31652000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 40090000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 203735000,
+            "ticks_without_user": 0,
+            "last_user_ms": 31652000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 42878000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 203735000,
+            "ticks_without_user": 0,
+            "last_user_ms": 31652000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 46623000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 203735000,
+            "ticks_without_user": 0,
+            "last_user_ms": 46623000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 46667000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 203735000,
+            "ticks_without_user": 0,
+            "last_user_ms": 46623000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 47910000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 203735000,
+            "ticks_without_user": 0,
+            "last_user_ms": 46623000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 52796000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 200656000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 225596000,
+            "ticks_without_user": 0,
+            "last_user_ms": 46623000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 56500000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 225596000,
+            "ticks_without_user": 0,
+            "last_user_ms": 46623000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 58165000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 225596000,
+            "ticks_without_user": 0,
+            "last_user_ms": 46623000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 63304000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 225596000,
+            "ticks_without_user": 0,
+            "last_user_ms": 46623000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 63987000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 225596000,
+            "ticks_without_user": 0,
+            "last_user_ms": 63987000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 64199000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 436000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 67799000,
+            "ticks_without_user": 0,
+            "last_user_ms": 63987000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 71093000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 74693000,
+            "ticks_without_user": 0,
+            "last_user_ms": 71093000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 75917000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 71093000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 80392000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 77717000,
+            "ticks_without_user": 1,
+            "last_user_ms": 71093000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 84181000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 2,
+            "last_user_ms": 71093000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 89337000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 85981000,
+            "ticks_without_user": 2,
+            "last_user_ms": 71093000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 90937000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 94537000,
+            "ticks_without_user": 0,
+            "last_user_ms": 90937000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 93053000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 96653000,
+            "ticks_without_user": 0,
+            "last_user_ms": 93053000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 95856000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 96653000,
+            "ticks_without_user": 0,
+            "last_user_ms": 93053000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 98353000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 44066000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 142419000,
+            "ticks_without_user": 0,
+            "last_user_ms": 93053000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 101505000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 28173000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 129678000,
+            "ticks_without_user": 0,
+            "last_user_ms": 93053000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 108100000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 129678000,
+            "ticks_without_user": 0,
+            "last_user_ms": 93053000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 113873000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 129678000,
+            "ticks_without_user": 0,
+            "last_user_ms": 113873000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 114784000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 129678000,
+            "ticks_without_user": 0,
+            "last_user_ms": 113873000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 121260000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 129678000,
+            "ticks_without_user": 0,
+            "last_user_ms": 121260000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 127122000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 130722000,
+            "ticks_without_user": 0,
+            "last_user_ms": 127122000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 132576000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 127122000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 136637000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 322975000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 309437000,
+            "ticks_without_user": 1,
+            "last_user_ms": 127122000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 142527000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 309437000,
+            "ticks_without_user": 1,
+            "last_user_ms": 127122000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 143385000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 309437000,
+            "ticks_without_user": 1,
+            "last_user_ms": 127122000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 145384000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 309437000,
+            "ticks_without_user": 1,
+            "last_user_ms": 127122000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 149676000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 309437000,
+            "ticks_without_user": 0,
+            "last_user_ms": 149676000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 149923000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 309437000,
+            "ticks_without_user": 0,
+            "last_user_ms": 149676000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 150565000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 309437000,
+            "ticks_without_user": 0,
+            "last_user_ms": 149676000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 153077000,
+          "event": {
+            "kind": "seed_last_user_if_unset",
+            "at_ms": 53365000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 309437000,
+            "ticks_without_user": 0,
+            "last_user_ms": 149676000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 159994000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 309437000,
+            "ticks_without_user": 0,
+            "last_user_ms": 149676000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 161902000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 309437000,
+            "ticks_without_user": 0,
+            "last_user_ms": 149676000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 163464000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 309437000,
+            "ticks_without_user": 0,
+            "last_user_ms": 149676000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 165339000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 309437000,
+            "ticks_without_user": 0,
+            "last_user_ms": 165339000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 166970000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 309437000,
+            "ticks_without_user": 0,
+            "last_user_ms": 165339000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 171693000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 309437000,
+            "ticks_without_user": 0,
+            "last_user_ms": 165339000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 175801000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 309437000,
+            "ticks_without_user": 0,
+            "last_user_ms": 165339000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 177906000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 309437000,
+            "ticks_without_user": 0,
+            "last_user_ms": 165339000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 179891000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 309437000,
+            "ticks_without_user": 0,
+            "last_user_ms": 165339000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 180792000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 309437000,
+            "ticks_without_user": 0,
+            "last_user_ms": 180792000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 187384000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 1221000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 190984000,
+            "ticks_without_user": 0,
+            "last_user_ms": 180792000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 190174000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 190984000,
+            "ticks_without_user": 0,
+            "last_user_ms": 180792000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 193736000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 369532000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 366536000,
+            "ticks_without_user": 0,
+            "last_user_ms": 180792000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 198372000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 366536000,
+            "ticks_without_user": 0,
+            "last_user_ms": 180792000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 200323000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 366536000,
+            "ticks_without_user": 0,
+            "last_user_ms": 180792000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 202039000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 366536000,
+            "ticks_without_user": 0,
+            "last_user_ms": 180792000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 206418000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 366536000,
+            "ticks_without_user": 0,
+            "last_user_ms": 180792000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 207854000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 366536000,
+            "ticks_without_user": 0,
+            "last_user_ms": 207854000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 212272000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 366536000,
+            "ticks_without_user": 0,
+            "last_user_ms": 212272000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 217700000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 246437000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 390500000,
+            "ticks_without_user": 0,
+            "last_user_ms": 212272000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 221996000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 55370000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 277366000,
+            "ticks_without_user": 0,
+            "last_user_ms": 212272000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 222813000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 124509000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 347322000,
+            "ticks_without_user": 0,
+            "last_user_ms": 212272000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 228500000,
+          "event": {
+            "kind": "seed_last_user_if_unset",
+            "at_ms": 116142000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 347322000,
+            "ticks_without_user": 0,
+            "last_user_ms": 212272000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 233445000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 74546000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 307991000,
+            "ticks_without_user": 0,
+            "last_user_ms": 212272000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 239890000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 159293000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 399183000,
+            "ticks_without_user": 0,
+            "last_user_ms": 212272000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 245115000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 399183000,
+            "ticks_without_user": 0,
+            "last_user_ms": 212272000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 246887000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 101730000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 348617000,
+            "ticks_without_user": 0,
+            "last_user_ms": 212272000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 249430000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 348617000,
+            "ticks_without_user": 0,
+            "last_user_ms": 212272000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 249449000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 348617000,
+            "ticks_without_user": 0,
+            "last_user_ms": 249449000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 252402000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 348617000,
+            "ticks_without_user": 0,
+            "last_user_ms": 249449000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 255597000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 348617000,
+            "ticks_without_user": 0,
+            "last_user_ms": 249449000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 261567000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 348617000,
+            "ticks_without_user": 0,
+            "last_user_ms": 249449000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 264788000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 348617000,
+            "ticks_without_user": 0,
+            "last_user_ms": 264788000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 269850000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 1448000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 273450000,
+            "ticks_without_user": 0,
+            "last_user_ms": 264788000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 273087000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 273450000,
+            "ticks_without_user": 0,
+            "last_user_ms": 264788000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 279816000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 264788000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 280122000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 281616000,
+            "ticks_without_user": 1,
+            "last_user_ms": 264788000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 286213000,
+          "event": {
+            "kind": "force_dormant"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 12,
+            "last_user_ms": 264788000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 292408000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 12,
+            "last_user_ms": 264788000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 296327000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 1505000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 299927000,
+            "ticks_without_user": 12,
+            "last_user_ms": 264788000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 303499000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 12,
+            "last_user_ms": 264788000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 305268000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 306466000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 478068000,
+            "ticks_without_user": 12,
+            "last_user_ms": 264788000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 305783000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 478068000,
+            "ticks_without_user": 12,
+            "last_user_ms": 264788000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 312632000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 131923000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 444555000,
+            "ticks_without_user": 12,
+            "last_user_ms": 264788000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 314927000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 444555000,
+            "ticks_without_user": 12,
+            "last_user_ms": 264788000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 316462000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 444555000,
+            "ticks_without_user": 12,
+            "last_user_ms": 264788000,
+            "label": "Dormant"
+          }
+        },
+        {
+          "now_ms": 318160000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 444555000,
+            "ticks_without_user": 0,
+            "last_user_ms": 318160000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 319625000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 444555000,
+            "ticks_without_user": 0,
+            "last_user_ms": 318160000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 320220000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 3298000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 323820000,
+            "ticks_without_user": 0,
+            "last_user_ms": 318160000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 322227000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 323820000,
+            "ticks_without_user": 0,
+            "last_user_ms": 318160000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 325827000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "run_tick",
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 318160000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 330649000,
+          "event": {
+            "kind": "seed_last_user_if_unset",
+            "at_ms": 228868000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": null,
+            "ticks_without_user": 1,
+            "last_user_ms": 318160000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 334898000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 327627000,
+            "ticks_without_user": 1,
+            "last_user_ms": 318160000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 337212000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 276274000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 510012000,
+            "ticks_without_user": 1,
+            "last_user_ms": 318160000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 339417000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 510012000,
+            "ticks_without_user": 0,
+            "last_user_ms": 339417000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 345566000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 510012000,
+            "ticks_without_user": 0,
+            "last_user_ms": 345566000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 352441000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 968000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 356041000,
+            "ticks_without_user": 0,
+            "last_user_ms": 345566000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 355088000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 356041000,
+            "ticks_without_user": 0,
+            "last_user_ms": 345566000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 358326000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 361926000,
+            "ticks_without_user": 0,
+            "last_user_ms": 358326000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 360547000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 262414000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 533347000,
+            "ticks_without_user": 0,
+            "last_user_ms": 358326000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 361679000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 533347000,
+            "ticks_without_user": 0,
+            "last_user_ms": 361679000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 367761000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 533347000,
+            "ticks_without_user": 0,
+            "last_user_ms": 361679000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 372565000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 6548000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 379113000,
+            "ticks_without_user": 0,
+            "last_user_ms": 361679000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 372999000,
+          "event": {
+            "kind": "tick"
+          },
+          "action": "none",
+          "state": {
+            "next_wake_ms": 379113000,
+            "ticks_without_user": 0,
+            "last_user_ms": 361679000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 375551000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 379151000,
+            "ticks_without_user": 0,
+            "last_user_ms": 375551000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 378938000,
+          "event": {
+            "kind": "schedule",
+            "delta_ms": 1086000
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 382538000,
+            "ticks_without_user": 0,
+            "last_user_ms": 375551000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 384055000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 387655000,
+            "ticks_without_user": 0,
+            "last_user_ms": 384055000,
+            "label": "Active"
+          }
+        },
+        {
+          "now_ms": 384248000,
+          "event": {
+            "kind": "user_message"
+          },
+          "action": null,
+          "state": {
+            "next_wake_ms": 387848000,
+            "ticks_without_user": 0,
+            "last_user_ms": 384248000,
+            "label": "Active"
+          }
+        }
+      ]
+    }
+  ]
+}

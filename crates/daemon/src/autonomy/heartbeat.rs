@@ -347,6 +347,195 @@ mod tests {
         Duration::from_secs(s)
     }
 
+    // -- cross-language parity fixture --------------------------------------
+    //
+    // The tests below were written against this implementation and will be
+    // translated alongside the TypeScript port, so they cannot catch a mistake
+    // made in both halves of the translation at once. This can.
+    //
+    // It drives the real clock through deterministic event walks and records
+    // what it decided at every observable point. The TypeScript replays the
+    // same walks and must give the same answers. Once the Rust is deleted the
+    // fixture freezes: it becomes the last word on what the daemon did, not a
+    // file to regenerate when a diff appears.
+    //
+    // `force_wake` and `force_active` are deliberately absent — both read
+    // `Instant::now()` internally rather than a passed `now`, so they cannot
+    // appear in a time-controlled walk. They are three lines each and pinned by
+    // the unit tests above.
+
+    /// Deterministic LCG. Only the *generator* needs one; the walk it produces
+    /// is written into the fixture as an explicit event list, so the replaying
+    /// side reproduces nothing and just applies what it is given.
+    struct Lcg(u64);
+
+    impl Lcg {
+        fn next(&mut self) -> u64 {
+            self.0 = self
+                .0
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1);
+            self.0 >> 33
+        }
+
+        fn below(&mut self, n: u64) -> u64 {
+            self.next() % n
+        }
+    }
+
+    /// Milliseconds from the walk's origin, rounded half-up.
+    ///
+    /// Rounding rather than truncating matters for reproducibility, not
+    /// tidiness. `with_config` captures its own `Instant::now()` for
+    /// `last_anchor` a few microseconds after `origin`, so every value derived
+    /// from the bootstrap path carries that skew. Truncating or ceiling turns
+    /// it into a `3600001` that changes with machine load; rounding absorbs it,
+    /// and the fixture reproduces byte for byte.
+    fn ms_since(origin: Instant, at: Instant) -> u64 {
+        let nanos = at.saturating_duration_since(origin).as_nanos();
+        u64::try_from((nanos + 500_000) / 1_000_000).unwrap_or(u64::MAX)
+    }
+
+    fn observed(clock: &HeartbeatClock, origin: Instant, now: Instant) -> serde_json::Value {
+        serde_json::json!({
+            "next_wake_ms": clock.next_wake().map(|w| ms_since(origin, w)),
+            "ticks_without_user": clock.ticks_without_user(),
+            "last_user_ms": clock.last_user_at().map(|u| ms_since(origin, u)),
+            "label": clock.state_at(now),
+        })
+    }
+
+    fn walk(seed: u64, interval_secs: u64, max_idle: u32) -> serde_json::Value {
+        let origin = Instant::now();
+        let mut clock = clock(interval_secs, max_idle);
+        let mut rng = Lcg(seed);
+        let mut at = origin;
+        let mut steps = Vec::new();
+
+        for _ in 0..120 {
+            // Advance by a spread that straddles the interval, so deadlines are
+            // sometimes met and sometimes not.
+            at = at
+                .checked_add(secs(rng.below(4 * interval_secs.max(1)) + 1))
+                .unwrap_or(at);
+
+            // Weighted towards what the loop actually does. `force_dormant` is
+            // a manual command, so it is rare here — an even spread let it
+            // dominate, and a dormant clock decides nothing, which starved the
+            // paths worth pinning.
+            let (event, action) = match rng.below(100) {
+                0..=57 => {
+                    let action = clock.tick(at);
+                    (serde_json::json!({ "kind": "tick" }), Some(action))
+                }
+                58..=79 => {
+                    clock.on_user_message(at);
+                    (serde_json::json!({ "kind": "user_message" }), None)
+                }
+                80..=94 => {
+                    // Bucketed rather than uniform, so every branch of the
+                    // clamp is hit: a uniform draw over the plausible range is
+                    // 98% in-bounds and would almost never exercise the floor.
+                    let delta = match rng.below(3) {
+                        0 => secs(rng.below(3_600)),             // below MIN
+                        1 => secs(rng.below(169_200) + 3_600),   // in range
+                        _ => secs(rng.below(200_000) + 172_800), // above MAX
+                    };
+                    let when = at.checked_add(delta).unwrap_or(at);
+                    clock.schedule(when, at);
+                    (
+                        serde_json::json!({
+                            "kind": "schedule",
+                            "delta_ms": u64::try_from(delta.as_millis()).unwrap_or(u64::MAX),
+                        }),
+                        None,
+                    )
+                }
+                95..=97 => {
+                    let ago = secs(rng.below(300_000));
+                    let seeded = at.checked_sub(ago).unwrap_or(origin);
+                    clock.seed_last_user_at_if_unset(seeded);
+                    (
+                        serde_json::json!({
+                            "kind": "seed_last_user_if_unset",
+                            "at_ms": ms_since(origin, seeded),
+                        }),
+                        None,
+                    )
+                }
+                _ => {
+                    clock.force_dormant();
+                    (serde_json::json!({ "kind": "force_dormant" }), None)
+                }
+            };
+
+            steps.push(serde_json::json!({
+                "now_ms": ms_since(origin, at),
+                "event": event,
+                "action": action.map(|a| match a {
+                    HeartbeatAction::None => "none",
+                    HeartbeatAction::RunTick => "run_tick",
+                }),
+                "state": observed(&clock, origin, at),
+            }));
+        }
+
+        serde_json::json!({
+            "seed": seed,
+            "config": {
+                "default_interval_secs": interval_secs,
+                "max_idle_ticks": max_idle,
+                "max_silent_secs": 172_800,
+                "min_wake_secs": 3_600,
+            },
+            "steps": steps,
+        })
+    }
+
+    fn heartbeat_census() -> serde_json::Value {
+        serde_json::json!({
+            "bounds": {
+                "min_wake_interval_secs": MIN_WAKE_INTERVAL.as_secs(),
+                "max_wake_interval_secs": MAX_WAKE_INTERVAL.as_secs(),
+            },
+            // Three shapes: a short interval that fires often, the realistic
+            // default, and a low tick ceiling that trips the guard early.
+            "walks": [
+                walk(1, 3_600, 6),
+                walk(2, 7_200, 3),
+                walk(3, 1_800, 12),
+            ],
+        })
+    }
+
+    /// Regenerate with `SHORE_REGENERATE_FIXTURES=1 cargo test -p shore-daemon
+    /// heartbeat_decisions_match_shared_fixture`, then read the diff: it is
+    /// exactly what the TypeScript will now be held to.
+    #[test]
+    fn heartbeat_decisions_match_shared_fixture() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/heartbeat_parity.json"
+        );
+        let rendered = format!(
+            "{}\n",
+            serde_json::to_string_pretty(&heartbeat_census()).unwrap()
+        );
+
+        if std::env::var_os("SHORE_REGENERATE_FIXTURES").is_some() {
+            std::fs::write(path, &rendered).unwrap();
+            return;
+        }
+
+        let on_disk = std::fs::read_to_string(path).unwrap_or_default();
+        assert_eq!(
+            rendered, on_disk,
+            "heartbeat decisions changed. If that was intended, regenerate with \
+             SHORE_REGENERATE_FIXTURES=1 and make the TypeScript match; if it \
+             was not, this is the regression the fixture exists to catch."
+        );
+    }
+
     // -- basic lifecycle ----------------------------------------------------
 
     #[test]
