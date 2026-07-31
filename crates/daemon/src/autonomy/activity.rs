@@ -164,7 +164,7 @@ impl ActivityTracker {
                 messages = self.timestamps.len(),
                 "Recomputing activity stats"
             );
-            let stats = self.compute_stats();
+            let stats = self.compute_stats(today());
             self.cached_stats = Some(stats);
         }
         #[expect(
@@ -180,7 +180,7 @@ impl ActivityTracker {
             messages = self.timestamps.len(),
             "Force-recomputing activity stats"
         );
-        let stats = self.compute_stats();
+        let stats = self.compute_stats(today());
         self.cached_stats.insert(stats)
     }
 
@@ -192,9 +192,8 @@ impl ActivityTracker {
         clippy::float_arithmetic,
         reason = "activity statistics compute f64 session rates and weighted engagement scores"
     )]
-    fn compute_stats(&self) -> ActivityStats {
+    fn compute_stats(&self, current_weekday: Weekday) -> ActivityStats {
         let now = Instant::now();
-        let current_weekday = Local::now().naive_local().weekday();
 
         let distinct_days = self.distinct_days();
         let msg_count = self.timestamps.len();
@@ -466,6 +465,16 @@ impl Default for ActivityTracker {
 // Free functions
 // ---------------------------------------------------------------------------
 
+/// The weekday whose events the histogram prefers: whatever day it is locally.
+///
+/// Split out so `compute_stats` takes the weekday instead of reading the clock,
+/// for the same reason the heartbeat clock takes a `now`. Every other input to
+/// the statistics is recorded data, so this single call was all that stood
+/// between the whole computation and being replayable.
+fn today() -> Weekday {
+    Local::now().naive_local().weekday()
+}
+
 /// Tempo score logistic: 1 / (1 + e^((median_gap - 900) / 400)).
 #[expect(
     clippy::float_arithmetic,
@@ -558,6 +567,255 @@ mod tests {
         tracker
     }
 
+    // -----------------------------------------------------------------------
+    // Parity fixture
+    // -----------------------------------------------------------------------
+    //
+    // The generator behind `crates/daemon/tests/fixtures/activity_parity.json`.
+    //
+    // It feeds the real tracker deterministic message streams and records every
+    // number it produced. The TypeScript replays the same streams and must
+    // agree. Once the Rust is deleted the fixture freezes: it stops being a
+    // file to regenerate and becomes the last word on what the daemon computed.
+    //
+    // Every case is recorded for all seven weekdays, because the histogram
+    // prefers the current one and falls back to the global set only when that
+    // weekday is thin. One `today` per case would leave whichever branch it
+    // missed unrecorded, and the branch is a silent one: the wrong fallback
+    // gives a plausible histogram, just of the wrong days.
+
+    struct Lcg(u64);
+
+    impl Lcg {
+        fn next(&mut self) -> u64 {
+            self.0 = self
+                .0
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1);
+            self.0 >> 33
+        }
+
+        fn below(&mut self, n: u64) -> u64 {
+            self.next() % n
+        }
+    }
+
+    const WEEKDAYS: [Weekday; 7] = [
+        Weekday::Mon,
+        Weekday::Tue,
+        Weekday::Wed,
+        Weekday::Thu,
+        Weekday::Fri,
+        Weekday::Sat,
+        Weekday::Sun,
+    ];
+
+    fn stats_json(stats: &ActivityStats) -> serde_json::Value {
+        serde_json::json!({
+            "engagement_score": stats.engagement_score,
+            "consistency": stats.consistency,
+            "tempo_score": stats.tempo_score,
+            "session_count": stats.session_count,
+            "sessions_per_day": stats.sessions_per_day,
+            "hour_histogram": stats.hour_histogram.to_vec(),
+            "hour_classifications": stats
+                .hour_classifications
+                .iter()
+                .map(|c| match *c {
+                    HourClassification::Peak => "peak",
+                    HourClassification::Trough => "trough",
+                    HourClassification::Normal => "normal",
+                })
+                .collect::<Vec<_>>(),
+            "has_sufficient_data": stats.has_sufficient_data,
+            "has_sufficient_heatmap": stats.has_sufficient_heatmap,
+            "median_session_gap": stats.median_session_gap,
+            "anomaly_z_score": stats.anomaly_z_score,
+        })
+    }
+
+    /// One recorded case: a stream of messages, and what the tracker made of it.
+    ///
+    /// `via` picks the door the timestamps came through. It matters for
+    /// unordered input and only for unordered input: `backfill` sorts, and
+    /// `record` does not, which leaves the session walk reading a negative gap
+    /// as a positive one.
+    fn case(name: &str, via: &str, times: &[NaiveDateTime]) -> serde_json::Value {
+        let mut tracker = ActivityTracker::new();
+        if via == "backfill" {
+            tracker.backfill(times);
+        } else {
+            let base = Instant::now();
+            for (i, wall) in times.iter().enumerate() {
+                let offset = u64::try_from(i).unwrap_or(u64::MAX);
+                tracker.record_message_at(base + Duration::from_secs(offset), *wall);
+            }
+        }
+
+        let by_weekday: serde_json::Map<String, serde_json::Value> = WEEKDAYS
+            .iter()
+            .map(|wd| (wd.to_string(), stats_json(&tracker.compute_stats(*wd))))
+            .collect();
+
+        serde_json::json!({
+            "name": name,
+            "via": via,
+            // Milliseconds, always printed. `NaiveDateTime` carries nanoseconds
+            // and a JavaScript `Date` cannot, so the fixture meets at the
+            // coarser of the two. Nothing is lost that a conversation could
+            // express: two messages less than a millisecond apart are one
+            // message as far as any of these statistics are concerned.
+            "timestamps": times
+                .iter()
+                .map(|t| t.format("%Y-%m-%dT%H:%M:%S%.3f").to_string())
+                .collect::<Vec<_>>(),
+            "message_count": tracker.message_count(),
+            "by_weekday": by_weekday,
+        })
+    }
+
+    /// A stream of messages with realistic clumping.
+    ///
+    /// Bucketed rather than uniform, for the reason the heartbeat walks are:
+    /// a flat draw over the plausible range produces one long session and
+    /// never reaches session breaks, day boundaries, or either window cap.
+    fn stream(seed: u64, count: usize, start: NaiveDateTime) -> Vec<NaiveDateTime> {
+        let mut rng = Lcg(seed);
+        let mut at = start;
+        let mut out = vec![at];
+        for _ in 1..count {
+            let gap = match rng.below(100) {
+                0..=59 => rng.below(295) + 5,          // a reply, mid-conversation
+                60..=79 => rng.below(1_400) + 300,     // a slow reply, same session
+                80..=94 => rng.below(5_400) + 1_800,   // a session break
+                _ => rng.below(115_200) + 28_800,      // overnight, or days away
+            };
+            at += chrono::TimeDelta::seconds(i64::try_from(gap).unwrap_or(i64::MAX));
+            out.push(at);
+        }
+        out
+    }
+
+    /// One session a day for `days` days, two messages each.
+    fn daily_sessions(days: i64, start: NaiveDateTime) -> Vec<NaiveDateTime> {
+        let mut times = Vec::new();
+        for day in 0..days {
+            let at = start + chrono::TimeDelta::days(day);
+            times.push(at);
+            times.push(at + chrono::TimeDelta::seconds(60));
+        }
+        times
+    }
+
+    fn activity_census() -> serde_json::Value {
+        let start = dt(2026, 3, 2, 9, 0, 0); // a Monday
+        serde_json::json!({
+            "thresholds": {
+                "session_gap_secs": SESSION_GAP,
+                "sufficient_data_msgs": SUFFICIENT_DATA_MSGS,
+                "sufficient_data_days": SUFFICIENT_DATA_DAYS,
+                "sufficient_heatmap_msgs": SUFFICIENT_HEATMAP_MSGS,
+                "sufficient_heatmap_days": SUFFICIENT_HEATMAP_DAYS,
+                "weekday_heatmap_min": WEEKDAY_HEATMAP_MIN,
+                "peak_hour_threshold": PEAK_HOUR_THRESHOLD,
+                "trough_hour_threshold": TROUGH_HOUR_THRESHOLD,
+                "session_medians_window": SESSION_MEDIANS_WINDOW,
+                "session_tempo_window": SESSION_TEMPO_WINDOW,
+                "anomaly_z_score": ANOMALY_Z_SCORE,
+                "stats_cache_ttl_secs": STATS_CACHE_TTL,
+            },
+            "cases": [
+                // Degenerate shapes, where most of the early returns live.
+                case("no messages at all", "record", &[]),
+                case("a single message", "record", &[start]),
+                case("two messages, five days apart", "record", &[
+                    start,
+                    start + chrono::TimeDelta::days(5),
+                ]),
+                // Unordered input through both doors. Backfill sorts; record
+                // does not, and the session walk takes the absolute gap.
+                case("unordered, sorted on the way in", "backfill", &[
+                    start + chrono::TimeDelta::days(2),
+                    start,
+                    start + chrono::TimeDelta::days(1),
+                ]),
+                case("unordered, left as it arrived", "record", &[
+                    start + chrono::TimeDelta::days(2),
+                    start,
+                    start + chrono::TimeDelta::days(1),
+                ]),
+                // Both window caps, and the rate that divides across them.
+                case("thirty-five daily sessions", "record", &daily_sessions(35, start)),
+                // A silence the detector is supposed to notice. The random
+                // streams draw their gaps from a wide enough spread that the
+                // *last* one is hardly ever extreme — across every walk below,
+                // the highest score reached was 0.79 against a threshold of
+                // 1.5, so the branch that matters was recorded only in its
+                // quiet state until this case existed.
+                case("a long silence after a rhythm", "record", &{
+                    let mut times = Vec::new();
+                    for session in 0..4 {
+                        let at = start + chrono::TimeDelta::hours(session * 2);
+                        times.push(at);
+                        times.push(at + chrono::TimeDelta::seconds(60));
+                    }
+                    let after = start + chrono::TimeDelta::hours(20);
+                    times.push(after);
+                    times.push(after + chrono::TimeDelta::seconds(60));
+                    times
+                }),
+                case("one long session", "record", &(0..40)
+                    .map(|i| start + chrono::TimeDelta::seconds(i * 45))
+                    .collect::<Vec<_>>()),
+                // Walks of increasing length: the short one is below every
+                // sufficiency threshold, the long one above all of them.
+                // Gaps that are not whole seconds. Every other case is, so
+                // truncation and rounding are indistinguishable across all of
+                // them — including at the session boundary, where the two
+                // answers differ by a whole session.
+                case("gaps that are not whole seconds", "record", &[
+                    start,
+                    start + chrono::TimeDelta::milliseconds(10_700),
+                    start + chrono::TimeDelta::milliseconds(1_810_699),
+                    start + chrono::TimeDelta::milliseconds(3_610_698),
+                ]),
+                case("a short history", "record", &stream(1, 8, start)),
+                case("a fortnight of use", "record", &stream(2, 60, start)),
+                case("a heavy user", "record", &stream(3, 200, start)),
+                case("a sparse user", "record", &stream(4, 25, start)),
+                case("backfilled from chat history", "backfill", &stream(5, 90, start)),
+            ],
+        })
+    }
+
+    /// Regenerate with `SHORE_REGENERATE_FIXTURES=1 cargo test -p shore-daemon
+    /// activity_stats_match_shared_fixture`, then read the diff: it is exactly
+    /// what the TypeScript will now be held to.
+    #[test]
+    fn activity_stats_match_shared_fixture() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/activity_parity.json"
+        );
+        let rendered = format!(
+            "{}\n",
+            serde_json::to_string_pretty(&activity_census()).unwrap()
+        );
+
+        if std::env::var_os("SHORE_REGENERATE_FIXTURES").is_some() {
+            std::fs::write(path, &rendered).unwrap();
+            return;
+        }
+
+        let on_disk = std::fs::read_to_string(path).unwrap_or_default();
+        assert_eq!(
+            rendered, on_disk,
+            "activity statistics changed. If that was intended, regenerate with \
+             SHORE_REGENERATE_FIXTURES=1 and make the TypeScript match; if it \
+             was not, this is the regression the fixture exists to catch."
+        );
+    }
+
     // -- tempo_score logistic -------------------------------------------------
 
     #[test]
@@ -646,6 +904,26 @@ mod tests {
     }
 
     #[test]
+    fn exactly_five_events_on_a_weekday_is_enough_to_prefer_it() {
+        // The check is `>=`. The test above uses six events and two, so nothing
+        // sat on the line and relaxing it to `>` passed the whole suite.
+        let mut times: Vec<NaiveDateTime> = (0..5).map(|i| dt(2026, 3, 25, 10, i * 5, 0)).collect();
+        times.extend((0..4).map(|i| dt(2026, 3, 26, 14, i * 5, 0)));
+        let tracker = build_tracker_with_timestamps(&times);
+
+        let wed = tracker.compute_hour_histogram(Weekday::Wed);
+        assert!(
+            (wed[10] - 1.0).abs() < f64::EPSILON,
+            "five is enough to narrow to Wednesday"
+        );
+        assert!(wed[14].abs() < f64::EPSILON, "Thursday excluded");
+
+        // Four is not, so Thursday still sees everything.
+        let thu = tracker.compute_hour_histogram(Weekday::Thu);
+        assert!(thu[10] > 0.0 && thu[14] > 0.0);
+    }
+
+    #[test]
     fn test_hour_histogram_global_fallback() {
         // Only 3 events on Monday → below WEEKDAY_HEATMAP_MIN.
         let times: Vec<NaiveDateTime> = (0..3)
@@ -686,7 +964,64 @@ mod tests {
         assert!(classes.iter().all(|c| *c == HourClassification::Normal));
     }
 
+    #[test]
+    fn an_hour_with_no_events_at_all_is_a_trough() {
+        // The average is taken over non-zero hours only, but the comparison
+        // runs over all 24 — so an hour nobody has ever spoken in is a trough,
+        // not a normal. That is what makes the heatmap read as a sleep pattern
+        // rather than a flat band, and skipping the empties would erase it.
+        let mut histogram = [0.0_f64; 24];
+        histogram[10] = 0.5;
+        histogram[11] = 0.5;
+
+        let classes = classify_hours(&histogram);
+        let troughs = classes
+            .iter()
+            .filter(|c| **c == HourClassification::Trough)
+            .count();
+        assert_eq!(troughs, 22, "every hour but the two with events");
+        assert_eq!(classes[0], HourClassification::Trough);
+    }
+
+    #[test]
+    fn an_hour_exactly_on_either_line_is_normal() {
+        // Both comparisons are strict, and nothing pinned which way the
+        // boundary falls. The numbers are chosen so the arithmetic is exact in
+        // binary: two non-zero hours of 0.75 and 0.25 average to 0.5, putting
+        // the peak line at exactly 0.75 and the trough line at exactly 0.25.
+        let mut histogram = [0.0_f64; 24];
+        histogram[9] = 0.75;
+        histogram[21] = 0.25;
+
+        let classes = classify_hours(&histogram);
+        assert_eq!(
+            classes[9],
+            HourClassification::Normal,
+            "on the peak line, not above it"
+        );
+        assert_eq!(
+            classes[21],
+            HourClassification::Normal,
+            "on the trough line, not below it"
+        );
+    }
+
     // -- session detection ----------------------------------------------------
+
+    #[test]
+    fn a_gap_is_measured_in_whole_seconds_rounded_down() {
+        // Real timestamps carry nanoseconds — `Local::now().naive_local()`
+        // does — and `num_seconds()` truncates. Every other test uses whole
+        // seconds and so cannot tell truncation from rounding, though at the
+        // session boundary the two answers differ by an entire session.
+        let start = dt(2026, 3, 25, 10, 0, 0);
+        let just_under = start + chrono::TimeDelta::milliseconds(1_799_999);
+        let tracker = build_tracker_with_timestamps(&[start, just_under]);
+
+        let sessions = tracker.detect_sessions();
+        assert_eq!(sessions.len(), 1, "1799.999s truncates to 1799, not 1800");
+        assert_eq!(tracker.compute_tempo_gaps(&sessions), vec![1799.0]);
+    }
 
     #[test]
     fn test_session_detection() {
@@ -714,6 +1049,58 @@ mod tests {
         let sessions = tracker.detect_sessions();
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].len(), 5);
+    }
+
+    // -- consistency ----------------------------------------------------------
+
+    #[test]
+    fn consistency_of_nothing_is_zero_and_of_one_message_is_one() {
+        // `compute_consistency` matches `[first, .., last]`, which needs two
+        // elements — a lone message falls to the other arm entirely, and its
+        // two outcomes were reachable only through the composite engagement
+        // test, which never has fewer than five messages.
+        let empty = ActivityTracker::new();
+        assert!((empty.compute_consistency() - 0.0).abs() < f64::EPSILON);
+
+        let one = build_tracker_with_timestamps(&[dt(2026, 3, 25, 10, 0, 0)]);
+        assert!((one.compute_consistency() - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn consistency_counts_the_days_a_character_stayed_quiet() {
+        // Two active days at the ends of a five-day span. The span is
+        // inclusive of both endpoints, so this is 2/5 and not 2/4.
+        let tracker =
+            build_tracker_with_timestamps(&[dt(2026, 3, 21, 10, 0, 0), dt(2026, 3, 25, 10, 0, 0)]);
+        assert!((tracker.compute_consistency() - 0.4).abs() < 1e-9);
+    }
+
+    // -- tempo window ---------------------------------------------------------
+
+    #[test]
+    fn tempo_reads_only_the_last_ten_gaps() {
+        // The session window (30) was pinned; this one was not, so raising it
+        // changed no test. It trims from the front, which is the point: a
+        // conversation that started slow and turned fast scores as fast.
+        let mut times = vec![dt(2026, 3, 25, 8, 0, 0)];
+        for _ in 0..12 {
+            times.push(*times.last().unwrap() + chrono::TimeDelta::seconds(600));
+        }
+        for _ in 0..10 {
+            times.push(*times.last().unwrap() + chrono::TimeDelta::seconds(10));
+        }
+
+        let tracker = build_tracker_with_timestamps(&times);
+        let sessions = tracker.detect_sessions();
+        assert_eq!(sessions.len(), 1, "the whole walk is one session");
+
+        let gaps = tracker.compute_tempo_gaps(&sessions);
+        assert_eq!(gaps.len(), SESSION_TEMPO_WINDOW);
+        assert!(
+            gaps.iter().all(|g| (g - 10.0).abs() < f64::EPSILON),
+            "the twelve slow gaps are dropped, not averaged in: {gaps:?}"
+        );
+        assert!(compute_tempo_score(&gaps) > 0.85);
     }
 
     // -- engagement score -----------------------------------------------------
@@ -802,7 +1189,118 @@ mod tests {
         );
     }
 
+    #[test]
+    fn twenty_messages_over_seven_days_is_enough_for_the_heatmap() {
+        // Only ever asserted false before, so both thresholds could be raised
+        // to anything at all and every test stayed green.
+        let base = dt(2026, 3, 20, 9, 0, 0);
+        let mut times = Vec::new();
+        for day in 0..7 {
+            for msg in 0..3 {
+                times.push(
+                    base + chrono::TimeDelta::days(day) + chrono::TimeDelta::minutes(msg * 5),
+                );
+            }
+        }
+        assert_eq!(times.len(), 21);
+
+        let tracker = build_tracker_with_timestamps(&times);
+        let stats = tracker.compute_stats(Weekday::Fri);
+        assert!(stats.has_sufficient_heatmap);
+        assert!(stats.has_sufficient_data);
+    }
+
+    // -- session windowing leaks into the rate --------------------------------
+
+    #[test]
+    fn sessions_per_day_divides_a_capped_count_by_an_uncapped_span() {
+        // `detect_sessions` keeps the last 30, but `distinct_days` counts every
+        // day on record — so a character with a long history reports a rate
+        // lower than it lived, and the number keeps sinking as history grows.
+        // Pinned as it stands: it reads like an oversight, and a reader who
+        // "fixes" it silently changes what the activity tool reports.
+        let base = dt(2026, 3, 1, 10, 0, 0);
+        let mut times = Vec::new();
+        for day in 0..35 {
+            let at = base + chrono::TimeDelta::days(day);
+            times.push(at);
+            times.push(at + chrono::TimeDelta::seconds(60));
+        }
+
+        let tracker = build_tracker_with_timestamps(&times);
+        let stats = tracker.compute_stats(Weekday::Fri);
+        assert_eq!(stats.session_count, SESSION_MEDIANS_WINDOW);
+        assert!(
+            (stats.sessions_per_day - 30.0 / 35.0).abs() < 1e-9,
+            "one session a day for 35 days reports {}",
+            stats.sessions_per_day
+        );
+    }
+
+    // -- z-score anomaly edges ------------------------------------------------
+
+    #[test]
+    fn the_anomaly_score_wants_three_gaps_before_it_will_speak() {
+        // Three sessions give two gaps, and two points are not a distribution.
+        let times = vec![
+            dt(2026, 3, 25, 8, 0, 0),
+            dt(2026, 3, 25, 8, 1, 0),
+            dt(2026, 3, 25, 10, 0, 0),
+            dt(2026, 3, 25, 10, 1, 0),
+            dt(2026, 3, 25, 12, 0, 0),
+            dt(2026, 3, 25, 12, 1, 0),
+        ];
+        let tracker = build_tracker_with_timestamps(&times);
+        let sessions = tracker.detect_sessions();
+        assert_eq!(sessions.len(), 3);
+        assert_eq!(tracker.compute_anomaly_z_score(&sessions), None);
+    }
+
+    #[test]
+    fn a_perfectly_regular_rhythm_scores_zero_rather_than_dividing_by_it() {
+        // Identical gaps mean zero standard deviation. Without the early
+        // return this is 0/0 — a NaN that would ride out through
+        // `engagement_score` into the activity tool as `null`.
+        let mut times = Vec::new();
+        for session in 0..4 {
+            let at = dt(2026, 3, 25, 8, 0, 0) + chrono::TimeDelta::hours(session * 2);
+            times.push(at);
+            times.push(at + chrono::TimeDelta::seconds(60));
+        }
+        let tracker = build_tracker_with_timestamps(&times);
+        let sessions = tracker.detect_sessions();
+        assert_eq!(sessions.len(), 4);
+
+        let z = tracker.compute_anomaly_z_score(&sessions);
+        assert_eq!(z, Some(0.0), "a steady rhythm is not an anomaly");
+    }
+
     // -- stats caching --------------------------------------------------------
+
+    #[tokio::test(start_paused = true)]
+    async fn cached_stats_are_reused_until_the_ttl_is_reached_exactly() {
+        // The TTL check is `>=`, and nothing pinned either side of it: the
+        // cache could have been disabled outright, or held forever, and the
+        // suite would not have noticed.
+        let times = vec![dt(2026, 3, 25, 10, 0, 0), dt(2026, 3, 25, 10, 1, 0)];
+        let mut tracker = build_tracker_with_timestamps(&times);
+
+        let first = tracker.stats().computed_at;
+
+        tokio::time::advance(Duration::from_secs(STATS_CACHE_TTL - 1)).await;
+        assert_eq!(
+            tracker.stats().computed_at,
+            first,
+            "a second short of the TTL still serves the cache"
+        );
+
+        tokio::time::advance(Duration::from_secs(1)).await;
+        assert_ne!(
+            tracker.stats().computed_at,
+            first,
+            "at the TTL exactly the cache is stale"
+        );
+    }
 
     #[test]
     fn test_stats_cache_invalidated_on_new_message() {
