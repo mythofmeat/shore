@@ -60,6 +60,13 @@ export interface AutonomyRunnerConfig {
   readonly maxTurns: number;
   readonly idleTriggerSecs: number;
   readonly archiveAfterSecs: number;
+  /**
+   * Prompt-context ceiling, in tokens, past which the handler compacts.
+   *
+   * Only {@link CharacterAutonomy.shouldCompactNow} reads it: a tick has no
+   * token count to compare against, because nothing has just been sent.
+   */
+  readonly maxContextTokens: number;
 
   readonly dreamingEnabled: boolean;
   readonly minimumInactiveMs: number;
@@ -278,6 +285,72 @@ export class CharacterAutonomy {
   }
 
   /**
+   * A compaction the daemon ran failed.
+   *
+   * The latch releases so a later trigger can fire, and the activity clock moves
+   * to now so the retry waits a full window instead of firing on the next tick
+   * ten seconds later. The same landing a compaction the *tick* ran gets when it
+   * fails, because it is the same event arriving by the other route. Mirrors
+   * `notify_compaction_failed`.
+   */
+  onCompactionFailed(now: number): void {
+    this.#state.compactionTriggered = false;
+    this.#state.lastActivityAt = now;
+    this.#state.dirty = true;
+  }
+
+  /**
+   * Should the handler compact the conversation it has just added a turn to?
+   *
+   * Asked once per generation, and answered here rather than on the daemon side
+   * because saying yes *takes the latch* — leaving that on the far side would
+   * have the handler and the next tick each believe they were the only one
+   * compacting.
+   *
+   * Two triggers, both floored by `minTurns` so a short conversation is never
+   * worth the call. Neither is the idle trigger, which a tick runs for itself.
+   *
+   * The Rust checked `compaction.enabled` here and nothing else — not
+   * `autonomyEnabled`, not `paused`, and notably not the latch it then sets, so
+   * a handler compaction could start while a tick's was still running. Carried
+   * over unchanged: a port is the wrong place to tighten a gate, and the daemon
+   * refuses a concurrent action on its own side anyway.
+   */
+  shouldCompactNow(turnCount: number, contextTokens: number): boolean {
+    const c = this.#config;
+    if (!c.compactionEnabled || turnCount < c.minTurns) return false;
+
+    const overTurns = c.maxTurns > 0 && turnCount >= c.maxTurns;
+    const overTokens = c.maxContextTokens > 0 && contextTokens >= c.maxContextTokens;
+    if (!overTurns && !overTokens) return false;
+
+    this.#state.compactionTriggered = true;
+    this.#state.dirty = true;
+    return true;
+  }
+
+  /** Fire the next heartbeat immediately. Answers whether the clock is dormant,
+   *  in which case the tick will be suppressed anyway. */
+  forceHeartbeatNow(now: number): boolean {
+    const dormant = this.#clock.isDormant(now);
+    this.#clock.forceWake(now);
+    this.#state.dirty = true;
+    return dormant;
+  }
+
+  /** Force the abandonment guard on. Stays until a user message clears it. */
+  forceDormant(): void {
+    this.#clock.forceDormant();
+    this.#state.dirty = true;
+  }
+
+  /** Force the abandonment guard off and tick immediately. */
+  forceActive(now: number): void {
+    this.#clock.forceActive(now);
+    this.#state.dirty = true;
+  }
+
+  /**
    * A user message, as the user's calendar saw it.
    *
    * Separate from {@link CharacterAutonomy.onUserMessage} because the clocks are
@@ -473,9 +546,7 @@ export class CharacterAutonomy {
       this.onCompactionComplete(result.turnCount, now);
       return;
     }
-    this.#state.compactionTriggered = false;
-    this.#state.lastActivityAt = now;
-    this.#state.dirty = true;
+    this.onCompactionFailed(now);
   }
 
   /**

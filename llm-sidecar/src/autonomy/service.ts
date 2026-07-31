@@ -55,15 +55,38 @@ export interface RegisterCharacter {
   clock: HeartbeatClockConfig;
 }
 
-/** What `shore status` reads back. */
+/**
+ * What `shore status` reads back.
+ *
+ * Times are epoch ms and durations are ms, both raw. The daemon renders them —
+ * RFC3339 stamps, "in 40 minutes", whole seconds — because how a status reads
+ * is the CLI's business and the CLI is the one that stayed Rust.
+ *
+ * The four bounds are echoed back rather than filled in by the daemon from its
+ * own config. They say what the loop *is* running on, which is the only version
+ * of the number worth putting in a diagnostic: a reload that never reached this
+ * side is exactly what a status should be able to show.
+ */
 export interface AutonomyStatus {
   character: string;
   paused: boolean;
-  /** Epoch ms of the next scheduled heartbeat, absent when none is armed. */
-  next_wake_at?: number;
+  /** `"Active"` or `"Dormant"` — whether the abandonment guard has tripped. */
+  heartbeat_state: string;
   ticks_without_user: number;
   covered_turn_count: number;
+  /** Epoch ms of the next scheduled heartbeat, absent when none is armed. */
+  next_wake_at?: number;
+  /** Epoch ms of the last user message, absent when none is on record. */
+  last_user_at?: number;
+  default_interval_ms: number;
+  max_idle_ticks: number;
+  min_wake_interval_ms: number;
+  max_silent_ms: number;
+  recent_events: HeartbeatEvent[];
 }
+
+/** How many log lines `shore status` shows inline. */
+const RECENT_EVENT_LIMIT = 5;
 
 /** What `/v1/autonomy/activity` answers: the statistics and what they are from. */
 export interface ActivityReport {
@@ -209,17 +232,60 @@ export class AutonomyService {
   status(character: string): AutonomyStatus | undefined {
     const runner = this.#entries.get(character)?.runner;
     if (runner === undefined) return undefined;
+    const now = this.#now();
     const snapshot = runner.snapshot();
+    const bounds = runner.clock.config;
     const status: AutonomyStatus = {
       character,
       paused: runner.paused,
+      heartbeat_state: runner.clock.stateAt(now),
       ticks_without_user: snapshot.ticksWithoutUser,
       covered_turn_count: snapshot.coveredTurnCount,
+      default_interval_ms: bounds.defaultIntervalMs,
+      max_idle_ticks: bounds.maxIdleTicks,
+      min_wake_interval_ms: bounds.minWakeIntervalMs,
+      max_silent_ms: bounds.maxSilentMs,
+      recent_events: runner.log.recent(RECENT_EVENT_LIMIT),
     };
-    // Omitted rather than sent as null, matching the rest of this seam:
-    // absent unambiguously means "no wake is armed".
+    // Omitted rather than sent as null, matching the rest of this seam: absent
+    // unambiguously means "no wake is armed" / "no user message on record".
     if (snapshot.nextWakeAt !== undefined) status.next_wake_at = snapshot.nextWakeAt;
+    if (snapshot.lastUserAt !== undefined) status.last_user_at = snapshot.lastUserAt;
     return status;
+  }
+
+  /** A compaction the daemon ran failed; let a later trigger retry it. */
+  onCompactionFailed(character: string): void {
+    this.#entries.get(character)?.runner.onCompactionFailed(this.#now());
+  }
+
+  /**
+   * Should the handler compact after the turn it has just persisted?
+   *
+   * `undefined` for a character nobody registered, which the daemon reads as
+   * "no" — the same answer the Rust's `with_state` miss gave.
+   */
+  shouldCompactNow(
+    character: string,
+    turnCount: number,
+    contextTokens: number,
+  ): boolean | undefined {
+    return this.#entries.get(character)?.runner.shouldCompactNow(turnCount, contextTokens);
+  }
+
+  /** `shore debug heartbeat_tick_now`. Answers whether the clock is dormant, in
+   *  which case the forced wake will be suppressed anyway. */
+  forceHeartbeatNow(character: string): boolean | undefined {
+    return this.#entries.get(character)?.runner.forceHeartbeatNow(this.#now());
+  }
+
+  /** `shore debug status_dormant` / `status_active`. False when not loaded. */
+  forceHeartbeatState(character: string, state: "dormant" | "active"): boolean {
+    const runner = this.#entries.get(character)?.runner;
+    if (runner === undefined) return false;
+    if (state === "dormant") runner.forceDormant();
+    else runner.forceActive(this.#now());
+    return true;
   }
 
   /** What `shore log --heartbeat` shows. */

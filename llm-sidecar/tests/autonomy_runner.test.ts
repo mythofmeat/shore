@@ -76,12 +76,16 @@ function config(overrides: Partial<AutonomyRunnerConfig> = {}): AutonomyRunnerCo
     maxTurns: 20,
     idleTriggerSecs: 3600,
     archiveAfterSecs: 86_400,
+    maxContextTokens: 0,
 
     dreamingEnabled: true,
     minimumInactiveMs: HOUR,
     ...overrides,
   };
 }
+
+/** Compaction as the only thing a tick can do, so a call list is unambiguous. */
+const COMPACTION_ONLY = { heartbeatEnabled: false, dreamingEnabled: false } as const;
 
 function clockConfig(): HeartbeatClockConfig {
   return {
@@ -482,6 +486,124 @@ describe("the abandonment guard", () => {
       runner.onUserMessage(2, time.now);
 
       expect(runner.log.recent(20).some((e) => e.kind === "wake")).toBe(false);
+    });
+  });
+});
+
+describe("the compaction the handler runs", () => {
+  test("fires on turns, on tokens, and on neither below min turns", async () => {
+    await inTempDir(async (dir) => {
+      const { runner } = build({ dir, config: { maxTurns: 20, maxContextTokens: 100_000 } });
+
+      expect(runner.shouldCompactNow(20, 0), "over max turns").toBe(true);
+      expect(runner.shouldCompactNow(5, 100_000), "over the token ceiling").toBe(true);
+      expect(runner.shouldCompactNow(19, 99_999), "under both").toBe(false);
+      // The floor holds however far past a ceiling the conversation is: a short
+      // conversation is not worth the call whatever the config says.
+      expect(runner.shouldCompactNow(3, 1_000_000), "under min turns").toBe(false);
+    });
+  });
+
+  test("a zero ceiling is an off switch, not an always-on one", async () => {
+    // What a bare `>=` against an unset config would give, and the reason the
+    // tick decision spells the same guard out.
+    await inTempDir(async (dir) => {
+      const { runner } = build({ dir, config: { maxTurns: 0, maxContextTokens: 0 } });
+      expect(runner.shouldCompactNow(10_000, 10_000_000)).toBe(false);
+    });
+  });
+
+  test("compaction switched off answers no whatever the numbers are", async () => {
+    await inTempDir(async (dir) => {
+      const { runner } = build({ dir, config: { compactionEnabled: false } });
+      expect(runner.shouldCompactNow(500, 0)).toBe(false);
+    });
+  });
+
+  test("saying yes takes the latch, so the next tick does not compact too", async () => {
+    // The whole reason this is asked here rather than decided by the daemon
+    // from config it also holds: one latch, one owner. Two would have the
+    // handler and the tick compacting the same conversation at once.
+    await inTempDir(async (dir) => {
+      const { runner, executor, time } = build({ dir, config: COMPACTION_ONLY });
+      runner.onUserMessage(50, time.now);
+
+      expect(runner.shouldCompactNow(50, 0)).toBe(true);
+      time.now += 3 * HOUR;
+      await runner.tick();
+
+      expect(executor.calls).toEqual([]);
+    });
+  });
+
+  test("a failure the handler reports lets a later trigger retry", async () => {
+    await inTempDir(async (dir) => {
+      // The idle trigger only: `max_turns` has no time in it, so it would fire
+      // on the very next tick and say nothing about the retry window.
+      const { runner, executor, time } = build({
+        dir,
+        config: { ...COMPACTION_ONLY, maxTurns: 0, maxContextTokens: 100 },
+      });
+      runner.onUserMessage(50, time.now);
+      expect(runner.shouldCompactNow(50, 100)).toBe(true);
+
+      runner.onCompactionFailed(time.now);
+
+      // A full idle window, not the next tick ten seconds later: the failure
+      // moved the activity clock, so the retry waits rather than spins.
+      time.now += 30_000;
+      await runner.tick();
+      expect(executor.calls, "not straight away").toEqual([]);
+
+      time.now += 3 * HOUR;
+      await runner.tick();
+      expect(executor.calls).toEqual(["compaction:idle"]);
+    });
+  });
+});
+
+describe("forcing the heartbeat's hand", () => {
+  test("a forced wake fires on the next tick and says whether it was dormant", async () => {
+    await inTempDir(async (dir) => {
+      const { runner, executor, time } = build({ dir, config: { dreamingEnabled: false } });
+      runner.onUserMessage(1, time.now);
+
+      expect(runner.forceHeartbeatNow(time.now), "not dormant").toBe(false);
+      expect((await runner.tick()).heartbeat).toBe("run_tick");
+      expect(executor.calls).toEqual(["heartbeat"]);
+    });
+  });
+
+  test("forcing dormant stops the ticks; forcing active starts them again", async () => {
+    await inTempDir(async (dir) => {
+      const { runner, executor, time } = build({ dir, config: { dreamingEnabled: false } });
+      runner.onUserMessage(1, time.now);
+
+      runner.forceDormant();
+      expect(runner.forceHeartbeatNow(time.now), "and it says so").toBe(true);
+      time.now += 2 * HOUR;
+      await runner.tick();
+      expect(executor.calls, "a dormant clock suppresses the forced wake").toEqual([]);
+
+      runner.forceActive(time.now);
+      expect((await runner.tick()).heartbeat).toBe("run_tick");
+      expect(executor.calls).toEqual(["heartbeat"]);
+    });
+  });
+
+  test("a forced state survives a restart", async () => {
+    // All three mark the state dirty. Without that the next persist writes the
+    // pre-force snapshot and the debug command silently does nothing across a
+    // restart — which is the case somebody reaches for it in.
+    await inTempDir(async (dir) => {
+      const { runner, time } = build({ dir });
+      runner.onUserMessage(1, time.now);
+      runner.forceDormant();
+      await runner.persist();
+
+      const saved = await loadState(join(dir, STATE_FILENAME));
+      expect(saved?.ticksWithoutUser).toBe(100);
+      expect(saved?.nextWakeAt).toBeUndefined();
     });
   });
 });

@@ -343,6 +343,31 @@ export function createSidecarHandler(
       return jsonResponse({ ok: true });
     }
 
+    if (url.pathname === "/v1/autonomy/compaction-failed") {
+      const parsed = await readJson<{ character: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      autonomy.onCompactionFailed(parsed.value.character);
+      return jsonResponse({ ok: true });
+    }
+
+    // Asked once per generation. Answering yes takes the single-flight latch,
+    // which is why it is asked here rather than decided on the daemon side from
+    // config it also holds — two owners of that latch is two compactions.
+    if (url.pathname === "/v1/autonomy/should-compact") {
+      const parsed = await readJson<{
+        character: string;
+        turn_count: number;
+        context_tokens: number;
+      }>(request);
+      if (!parsed.ok) return parsed.response;
+      const compact = autonomy.shouldCompactNow(
+        parsed.value.character,
+        parsed.value.turn_count,
+        parsed.value.context_tokens,
+      );
+      return jsonResponse({ compact: compact ?? false });
+    }
+
     // Seeding a character the daemon has just registered from the chat history
     // it already had. `local_timestamps` are calendar readings and
     // `latest_user_at` is a real instant; both come from the daemon because the
@@ -379,6 +404,25 @@ export function createSidecarHandler(
       const status = autonomy.status(parsed.value.character);
       if (status === undefined) return textError(404, "no such character");
       return jsonResponse(status);
+    }
+
+    // `shore debug` — forcing the heartbeat's hand, for looking at it without
+    // waiting an hour.
+    if (url.pathname === "/v1/autonomy/heartbeat/tick-now") {
+      const parsed = await readJson<{ character: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const dormant = autonomy.forceHeartbeatNow(parsed.value.character);
+      if (dormant === undefined) return textError(404, "no such character");
+      return jsonResponse({ dormant });
+    }
+
+    if (url.pathname === "/v1/autonomy/heartbeat/state") {
+      const parsed = await readJson<{ character: string; state: "dormant" | "active" }>(request);
+      if (!parsed.ok) return parsed.response;
+      if (!autonomy.forceHeartbeatState(parsed.value.character, parsed.value.state)) {
+        return textError(404, "no such character");
+      }
+      return jsonResponse({ ok: true });
     }
 
     if (url.pathname === "/v1/autonomy/activity") {

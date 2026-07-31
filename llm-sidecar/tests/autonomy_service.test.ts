@@ -87,6 +87,7 @@ function registration(
       maxTurns: 20,
       idleTriggerSecs: 3600,
       archiveAfterSecs: 86_400,
+      maxContextTokens: 0,
       dreamingEnabled: false,
       minimumInactiveMs: HOUR,
       ...config,
@@ -151,8 +152,16 @@ describe("registering", () => {
       expect(service.status("nova")).toEqual({
         character: "nova",
         paused: false,
+        heartbeat_state: "Active",
         ticks_without_user: 0,
         covered_turn_count: 0,
+        // Echoed straight back off the clock, so a status can show a reload
+        // that never arrived rather than the number the daemon meant to send.
+        default_interval_ms: HOUR,
+        max_idle_ticks: 100,
+        min_wake_interval_ms: HOUR,
+        max_silent_ms: 48 * HOUR,
+        recent_events: [],
       });
     });
   });
@@ -469,6 +478,84 @@ describe("the endpoints", () => {
       ).json()) as { messageCount: number };
       expect(body.messageCount, "and nothing was recorded").toBe(0);
     });
+  });
+
+  test("the handler's compaction question is answered and the latch taken", async () => {
+    await inTempDir(async (root) => {
+      const { post, service, executor, now } = handler();
+      await post(
+        "/v1/autonomy/register",
+        registration("nova", characterDir(root, "nova"), COMPACTION_ONLY),
+      );
+      await post("/v1/autonomy/user-message", {
+        character: "nova",
+        turn_count: 50,
+        local_ms: LOCAL_AT,
+      });
+
+      const answer = await (
+        await post("/v1/autonomy/should-compact", {
+          character: "nova",
+          turn_count: 50,
+          context_tokens: 0,
+        })
+      ).json();
+      expect(answer).toEqual({ compact: true });
+
+      now.value += 3 * HOUR;
+      await service.tick();
+      expect(executor.calls, "the tick sees the latch the handler took").toEqual([]);
+
+      // And the failure gives it back.
+      await post("/v1/autonomy/compaction-failed", { character: "nova" });
+      now.value += 3 * HOUR;
+      await service.tick();
+      expect(executor.calls).toEqual(["nova:compaction:max_turns"]);
+    });
+  });
+
+  test("a character nobody registered is told not to compact", async () => {
+    // Rather than a 404: the handler asks on every generation, and a character
+    // that has not been registered yet has nothing to compact anyway. Matches
+    // the Rust, where a `with_state` miss fell through to `false`.
+    const { post } = handler();
+    const response = await post("/v1/autonomy/should-compact", {
+      character: "ghost",
+      turn_count: 500,
+      context_tokens: 0,
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ compact: false });
+  });
+
+  test("the debug commands force the heartbeat and report what they found", async () => {
+    await inTempDir(async (root) => {
+      const { post } = handler();
+      await post("/v1/autonomy/register", registration("nova", characterDir(root, "nova")));
+      const heartbeatState = async (): Promise<string> =>
+        ((await (await post("/v1/autonomy/status", { character: "nova" })).json()) as {
+          heartbeat_state: string;
+        }).heartbeat_state;
+
+      expect(await (await post("/v1/autonomy/heartbeat/tick-now", { character: "nova" })).json())
+        .toEqual({ dormant: false });
+
+      await post("/v1/autonomy/heartbeat/state", { character: "nova", state: "dormant" });
+      expect(await (await post("/v1/autonomy/heartbeat/tick-now", { character: "nova" })).json())
+        .toEqual({ dormant: true });
+      expect(await heartbeatState()).toBe("Dormant");
+
+      await post("/v1/autonomy/heartbeat/state", { character: "nova", state: "active" });
+      expect(await heartbeatState()).toBe("Active");
+    });
+  });
+
+  test("the debug commands 404 on a character that is not loaded", async () => {
+    const { post } = handler();
+    expect((await post("/v1/autonomy/heartbeat/tick-now", { character: "ghost" })).status).toBe(404);
+    expect(
+      (await post("/v1/autonomy/heartbeat/state", { character: "ghost", state: "active" })).status,
+    ).toBe(404);
   });
 
   test("unregistering leaves nothing to ask about", async () => {

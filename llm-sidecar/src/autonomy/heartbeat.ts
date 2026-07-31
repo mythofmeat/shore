@@ -99,6 +99,18 @@ export class HeartbeatClock {
     return this.#config.maxIdleTicks;
   }
 
+  /**
+   * The bounds this clock is running on, for `shore status` to report.
+   *
+   * Read back off the clock rather than off the daemon's own copy on purpose: a
+   * config reload that never reached this side would otherwise be invisible,
+   * with the status confidently reporting the interval the daemon *meant* while
+   * the loop kept running the old one.
+   */
+  get config(): Readonly<HeartbeatClockConfig> {
+    return this.#config;
+  }
+
   /** Fire the next tick immediately. Does NOT reset the abandonment counters —
    *  a forced wake is not evidence the user came back. */
   forceWake(now: number): void {
