@@ -194,6 +194,129 @@ fn background_retry_delay(failure_count: u32) -> Duration {
 }
 
 // ---------------------------------------------------------------------------
+// Tick decisions
+// ---------------------------------------------------------------------------
+
+/// Everything a tick's triggers depend on, lifted out of the state, the config
+/// and the clock.
+///
+/// Separated so the decision is a function of its inputs rather than of a lock
+/// and an `Instant::now()`. That is what makes it recordable: the numbers below
+/// go into a fixture, and the TypeScript is held to the same answers.
+///
+/// The units are not uniform, and that is deliberate. Compaction compares
+/// `as_secs()` against `as_secs()`, truncating both sides; dreaming compares
+/// whole `Duration`s. For a sub-second threshold the two disagree — an idle
+/// trigger of 1.5s fires at 1.2s of idleness, where a minimum inactive time of
+/// 1.5s does not. Nobody configures either in fractions of a second, but the
+/// port carries the difference rather than quietly picking one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "a record of the switches a tick reads; grouping them would hide what it depends on"
+)]
+struct TickInputs {
+    autonomy_enabled: bool,
+    paused: bool,
+    heartbeat_enabled: bool,
+
+    compaction_enabled: bool,
+    /// Already fired for this idle period; the single-flight latch.
+    compaction_triggered: bool,
+    /// The deep archive already ran for this idle period.
+    deep_archive_done: bool,
+    active_turn_count: usize,
+    min_turns: usize,
+    max_turns: usize,
+    /// Since the last message activity, truncated to seconds.
+    idle_secs: u64,
+    idle_trigger_secs: u64,
+    archive_after_secs: u64,
+
+    /// Dreaming is configured *and* switched on.
+    dreaming_enabled: bool,
+    /// The retry backoff has expired, or there was never a failure.
+    dream_backoff_elapsed: bool,
+    /// Since the last user message. `None` means no user message is on record,
+    /// which reads as "not disturbing anyone" rather than "just spoke to".
+    ms_since_user: Option<u128>,
+    minimum_inactive_ms: u128,
+}
+
+/// Why compaction fired.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CompactionReason {
+    /// The active conversation grew past `max_turns`.
+    MaxTurns,
+    /// It has been quiet for `idle_trigger`, with enough turns to be worth it.
+    Idle,
+}
+
+/// What a tick may do, before anything is done about it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TickDecision {
+    /// Whether the heartbeat clock gets to run at all this tick. The clock's
+    /// own decision is separate, and mutates, so it stays with the clock.
+    heartbeat_may_tick: bool,
+    compaction: Option<CompactionReason>,
+    deep_archive: bool,
+    dream: bool,
+}
+
+/// The whole per-tick trigger decision, as a function of the numbers.
+///
+/// Compaction and the deep archive are mutually exclusive: they share one
+/// single-flight latch, and running both against the same conversation would
+/// have the second work from what the first had already archived. Compaction
+/// wins, because it is the trigger with a turn threshold behind it — the deep
+/// archive exists for the short conversations the idle trigger never picks up.
+fn tick_decision(i: TickInputs) -> TickDecision {
+    let compaction = compaction_reason(i);
+
+    // Not `compaction.is_none()` alone: a latch set on an earlier tick also
+    // suppresses this one, and in that case nothing fires now to notice it.
+    let deep_archive = i.autonomy_enabled
+        && i.compaction_enabled
+        && i.archive_after_secs > 0
+        && compaction.is_none()
+        && !i.compaction_triggered
+        && !i.deep_archive_done
+        && i.idle_secs >= i.archive_after_secs;
+
+    TickDecision {
+        heartbeat_may_tick: i.autonomy_enabled && i.heartbeat_enabled && !i.paused,
+        compaction,
+        deep_archive,
+        dream: i.dream_backoff_elapsed && i.autonomy_enabled && i.dreaming_enabled && {
+            match i.ms_since_user {
+                Some(since) => since >= i.minimum_inactive_ms,
+                None => true,
+            }
+        },
+    }
+}
+
+/// Which compaction trigger, if either, this tick's numbers satisfy.
+fn compaction_reason(i: TickInputs) -> Option<CompactionReason> {
+    if !(i.autonomy_enabled && i.compaction_enabled && !i.compaction_triggered) {
+        return None;
+    }
+    // `max_turns > 0` is the off switch; a conversation still under `min_turns`
+    // is too short to be worth compacting however far past `max_turns` it is,
+    // which can only happen when the two are configured out of order.
+    if i.max_turns > 0 && i.active_turn_count >= i.max_turns && i.active_turn_count >= i.min_turns {
+        return Some(CompactionReason::MaxTurns);
+    }
+    if i.active_turn_count >= i.min_turns
+        && i.idle_trigger_secs > 0
+        && i.idle_secs >= i.idle_trigger_secs
+    {
+        return Some(CompactionReason::Idle);
+    }
+    None
+}
+
+// ---------------------------------------------------------------------------
 // Persistence
 // ---------------------------------------------------------------------------
 
@@ -1544,40 +1667,106 @@ fn collect_tick_actions(
         "tick"
     );
 
-    let int_action = heartbeat_tick_action(&mut s, ctx, now);
+    let inputs = tick_inputs(&s, ctx, now);
+    let decision = tick_decision(inputs);
 
-    let dream_backoff_elapsed = s
-        .next_dream_attempt_at
-        .is_none_or(|next_attempt| now >= next_attempt);
-    let dreaming_cfg = ctx.loaded_config.as_ref().map(|lc| &lc.app.memory.dreaming);
-    let dream_needed = dream_backoff_elapsed
-        && ctx.config.enabled
-        && dreaming_cfg.is_some_and(|cfg| cfg.enabled)
-        && dream_inactivity_satisfied(dreaming_cfg, s.heartbeat.last_user_at(), now);
-
-    let compaction_needed = compaction_trigger_fired(character, &mut s, ctx, now);
-    let deep_archive_needed =
-        deep_archive_trigger_fired(character, &mut s, ctx, now, compaction_needed);
+    let int_action = run_heartbeat_tick(&mut s, decision.heartbeat_may_tick, now);
+    apply_compaction_decision(character, &mut s, inputs, decision);
 
     save_state(&ctx.data_dir, character, &mut s);
     s.heartbeat_log.flush_if_dirty();
     (
         int_action,
-        compaction_needed,
-        deep_archive_needed,
-        dream_needed,
+        decision.compaction.is_some(),
+        decision.deep_archive,
+        decision.dream,
     )
+}
+
+/// Read the tick's decision inputs out of the state, the config and the clock.
+fn tick_inputs(s: &AutonomyState, ctx: &TickContext, now: Instant) -> TickInputs {
+    let dreaming_cfg = ctx.loaded_config.as_ref().map(|lc| &lc.app.memory.dreaming);
+    TickInputs {
+        autonomy_enabled: ctx.config.enabled,
+        paused: s.paused,
+        heartbeat_enabled: ctx.config.heartbeat.enabled,
+
+        compaction_enabled: ctx.compaction.enabled,
+        compaction_triggered: s.compaction_triggered,
+        deep_archive_done: s.deep_archive_done,
+        active_turn_count: s.active_turn_count,
+        min_turns: ctx.compaction.min_turns,
+        max_turns: ctx.compaction.max_turns,
+        idle_secs: now.duration_since(s.last_compaction_activity).as_secs(),
+        idle_trigger_secs: ctx.compaction.idle_trigger.as_secs(),
+        archive_after_secs: ctx.compaction.archive_after.as_secs(),
+
+        dreaming_enabled: dreaming_cfg.is_some_and(|cfg| cfg.enabled),
+        dream_backoff_elapsed: s
+            .next_dream_attempt_at
+            .is_none_or(|next_attempt| now >= next_attempt),
+        ms_since_user: s
+            .heartbeat
+            .last_user_at()
+            .map(|at| now.duration_since(at).as_millis()),
+        minimum_inactive_ms: dreaming_cfg
+            .map(|cfg| cfg.minimum_inactive_time.as_duration().as_millis())
+            .unwrap_or_default(),
+    }
+}
+
+/// Take the compaction single-flight latch and say which trigger took it.
+///
+/// Both triggers set the same flag, and `tick_decision` has already ruled out
+/// their firing together — this only writes down what it decided.
+fn apply_compaction_decision(
+    character: &str,
+    s: &mut AutonomyState,
+    inputs: TickInputs,
+    decision: TickDecision,
+) {
+    match decision.compaction {
+        Some(CompactionReason::MaxTurns) => {
+            s.compaction_triggered = true;
+            info!(
+                character = %character,
+                turn_count = inputs.active_turn_count,
+                max_turns = inputs.max_turns,
+                "Compaction: max turns trigger fired"
+            );
+        }
+        Some(CompactionReason::Idle) => {
+            s.compaction_triggered = true;
+            info!(
+                character = %character,
+                idle_secs = inputs.idle_secs,
+                threshold_secs = inputs.idle_trigger_secs,
+                turn_count = inputs.active_turn_count,
+                "Compaction: idle trigger fired"
+            );
+        }
+        None if decision.deep_archive => {
+            s.compaction_triggered = true;
+            info!(
+                character = %character,
+                idle_secs = inputs.idle_secs,
+                archive_after_secs = inputs.archive_after_secs,
+                turn_count = inputs.active_turn_count,
+                "Compaction: deep-idle archive trigger fired"
+            );
+        }
+        None => {}
+    }
 }
 
 /// Run the heartbeat scheduler for this tick (under the caller's state lock)
 /// and log an abandonment-guard trip: had a deadline, tick returned `None`,
 /// deadline now cleared.
-fn heartbeat_tick_action(
-    s: &mut AutonomyState,
-    ctx: &TickContext,
-    now: Instant,
-) -> HeartbeatAction {
-    if !(ctx.config.enabled && ctx.config.heartbeat.enabled && !s.paused) {
+///
+/// `may_tick` comes from [`tick_decision`]; the clock's own decision stays here
+/// because it mutates, and a decision that mutates cannot be replayed.
+fn run_heartbeat_tick(s: &mut AutonomyState, may_tick: bool, now: Instant) -> HeartbeatAction {
+    if !may_tick {
         return HeartbeatAction::None;
     }
     let had_deadline = s.heartbeat.next_wake().is_some();
@@ -1600,89 +1789,6 @@ fn heartbeat_tick_action(
         // guard. The guard governs heartbeat ticks, not cache warming.
     }
     action
-}
-
-/// Evaluate the max-turns and idle compaction triggers (under the caller's
-/// state lock). Sets `compaction_triggered` and returns whether compaction
-/// fired this tick.
-fn compaction_trigger_fired(
-    character: &str,
-    s: &mut AutonomyState,
-    ctx: &TickContext,
-    now: Instant,
-) -> bool {
-    if !(ctx.config.enabled && ctx.compaction.enabled && !s.compaction_triggered) {
-        return false;
-    }
-    if ctx.compaction.max_turns > 0
-        && s.active_turn_count >= ctx.compaction.max_turns
-        && s.active_turn_count >= ctx.compaction.min_turns
-    {
-        s.compaction_triggered = true;
-        info!(
-            character = %character,
-            turn_count = s.active_turn_count,
-            max_turns = ctx.compaction.max_turns,
-            "Compaction: max turns trigger fired"
-        );
-        return true;
-    }
-    if s.active_turn_count >= ctx.compaction.min_turns {
-        let idle_secs = now.duration_since(s.last_compaction_activity).as_secs();
-        let threshold_secs = ctx.compaction.idle_trigger.as_secs();
-        if threshold_secs > 0 && idle_secs >= threshold_secs {
-            s.compaction_triggered = true;
-            info!(
-                character = %character,
-                idle_secs,
-                threshold_secs,
-                turn_count = s.active_turn_count,
-                "Compaction: idle trigger fired"
-            );
-            return true;
-        }
-        return false;
-    }
-    // Below min_turns: no compaction trigger applies.
-    false
-}
-
-/// Evaluate the deep-idle archive trigger (under the caller's state lock).
-/// After an extended idle period (`archive_after`), archive what's left of
-/// the active conversation so the next exchange starts from a clean slate.
-/// Not gated by `min_turns` — short conversations are exactly the ones the
-/// regular idle trigger never picks up. Mutually exclusive with a normal
-/// compaction firing on the same tick; `deep_archive_done` suppresses
-/// re-fires until new message activity arrives.
-fn deep_archive_trigger_fired(
-    character: &str,
-    s: &mut AutonomyState,
-    ctx: &TickContext,
-    now: Instant,
-    compaction_needed: bool,
-) -> bool {
-    let archive_after_secs = ctx.compaction.archive_after.as_secs();
-    if ctx.config.enabled
-        && ctx.compaction.enabled
-        && archive_after_secs > 0
-        && !compaction_needed
-        && !s.compaction_triggered
-        && !s.deep_archive_done
-    {
-        let idle_secs = now.duration_since(s.last_compaction_activity).as_secs();
-        if idle_secs >= archive_after_secs {
-            s.compaction_triggered = true;
-            info!(
-                character = %character,
-                idle_secs,
-                archive_after_secs,
-                turn_count = s.active_turn_count,
-                "Compaction: deep-idle archive trigger fired"
-            );
-            return true;
-        }
-    }
-    false
 }
 
 /// Run compaction for a character during an autonomy tick, without waiting
@@ -5102,12 +5208,17 @@ api_key_env = "{heartbeat_env}"
                 mcp_registry: Arc::new(crate::tools::mcp_registry::McpRegistry::default()),
             };
             let mut s = lock_state(&state);
+            let may = |snapshot: &AutonomyState, at| {
+                tick_decision(tick_inputs(snapshot, &ctx, at)).heartbeat_may_tick
+            };
             // First tick bootstraps the deadline; the second is the one that
             // can fire, so drive past it.
-            let _bootstrap = heartbeat_tick_action(&mut s, &ctx, now);
+            let bootstrap_allowed = may(&s, now);
+            let _bootstrap = run_heartbeat_tick(&mut s, bootstrap_allowed, now);
             let later = now + Duration::from_hours(6);
+            let allowed = may(&s, later);
             matches!(
-                heartbeat_tick_action(&mut s, &ctx, later),
+                run_heartbeat_tick(&mut s, allowed, later),
                 HeartbeatAction::RunTick
             )
         };
@@ -5122,6 +5233,420 @@ api_key_env = "{heartbeat_env}"
             !armed(false, true, false),
             "heartbeat disabled suppresses it"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Tick decision parity fixture
+    // -----------------------------------------------------------------------
+    //
+    // The generator behind `crates/daemon/tests/fixtures/tick_parity.json`.
+    //
+    // Unlike the heartbeat and activity fixtures, this one does not walk: the
+    // decision is stateless, so a sweep of input combinations covers it better
+    // than any sequence would. The candidate values per field are chosen to sit
+    // on the thresholds and a step either side of them, so a `>=` relaxed to
+    // `>` shows up somewhere in the sweep rather than only in the unit tests.
+
+    struct Lcg(u64);
+
+    impl Lcg {
+        fn next(&mut self) -> u64 {
+            self.0 = self
+                .0
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1);
+            self.0 >> 33
+        }
+
+        /// One of `options`, chosen deterministically.
+        fn pick<T: Copy>(&mut self, options: &[T]) -> T {
+            let i = usize::try_from(self.next()).unwrap_or(0) % options.len();
+            options[i]
+        }
+    }
+
+    fn tick_inputs_json(i: TickInputs) -> Value {
+        serde_json::json!({
+            "autonomy_enabled": i.autonomy_enabled,
+            "paused": i.paused,
+            "heartbeat_enabled": i.heartbeat_enabled,
+            "compaction_enabled": i.compaction_enabled,
+            "compaction_triggered": i.compaction_triggered,
+            "deep_archive_done": i.deep_archive_done,
+            "active_turn_count": i.active_turn_count,
+            "min_turns": i.min_turns,
+            "max_turns": i.max_turns,
+            "idle_secs": i.idle_secs,
+            "idle_trigger_secs": i.idle_trigger_secs,
+            "archive_after_secs": i.archive_after_secs,
+            "dreaming_enabled": i.dreaming_enabled,
+            "dream_backoff_elapsed": i.dream_backoff_elapsed,
+            "ms_since_user": i.ms_since_user.map(|ms| u64::try_from(ms).unwrap_or(u64::MAX)),
+            "minimum_inactive_ms": u64::try_from(i.minimum_inactive_ms).unwrap_or(u64::MAX),
+        })
+    }
+
+    fn tick_decision_json(d: TickDecision) -> Value {
+        serde_json::json!({
+            "heartbeat_may_tick": d.heartbeat_may_tick,
+            "compaction": d.compaction.map(|r| match r {
+                CompactionReason::MaxTurns => "max_turns",
+                CompactionReason::Idle => "idle",
+            }),
+            "deep_archive": d.deep_archive,
+            "dream": d.dream,
+        })
+    }
+
+    fn tick_census() -> Value {
+        // Weighted towards the switches being on: a tick with autonomy off
+        // decides nothing, and an even spread over the booleans would spend
+        // most of the sweep recording that.
+        const ON: [bool; 4] = [true, true, true, false];
+        const OFF: [bool; 4] = [false, false, false, true];
+
+        let mut rng = Lcg(7);
+        let mut cases = Vec::new();
+        for _ in 0..400 {
+            let inputs = TickInputs {
+                autonomy_enabled: rng.pick(&ON),
+                paused: rng.pick(&OFF),
+                heartbeat_enabled: rng.pick(&ON),
+
+                compaction_enabled: rng.pick(&ON),
+                compaction_triggered: rng.pick(&OFF),
+                deep_archive_done: rng.pick(&OFF),
+                active_turn_count: rng.pick(&[0, 1, 3, 4, 10, 19, 20, 21, 50]),
+                min_turns: rng.pick(&[0, 4, 10]),
+                max_turns: rng.pick(&[0, 4, 20]),
+                idle_secs: rng.pick(&[0, 1, 4, 5, 3_599, 3_600, 3_601, 86_399, 86_400, 100_000]),
+                idle_trigger_secs: rng.pick(&[0, 1, 3_600]),
+                archive_after_secs: rng.pick(&[0, 5, 86_400]),
+
+                dreaming_enabled: rng.pick(&ON),
+                dream_backoff_elapsed: rng.pick(&ON),
+                ms_since_user: rng.pick(&[
+                    None,
+                    Some(0),
+                    Some(3_599_999),
+                    Some(3_600_000),
+                    Some(3_600_001),
+                    Some(100_000_000),
+                ]),
+                minimum_inactive_ms: rng.pick(&[0, 3_600_000, 86_400_000]),
+            };
+            cases.push(serde_json::json!({
+                "inputs": tick_inputs_json(inputs),
+                "decision": tick_decision_json(tick_decision(inputs)),
+            }));
+        }
+        serde_json::json!({ "cases": cases })
+    }
+
+    /// Regenerate with `SHORE_REGENERATE_FIXTURES=1 cargo test -p shore-daemon
+    /// tick_decisions_match_shared_fixture`, then read the diff: it is exactly
+    /// what the TypeScript will now be held to.
+    #[test]
+    fn tick_decisions_match_shared_fixture() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/tick_parity.json"
+        );
+        let rendered = format!(
+            "{}\n",
+            serde_json::to_string_pretty(&tick_census()).unwrap()
+        );
+
+        if std::env::var_os("SHORE_REGENERATE_FIXTURES").is_some() {
+            std::fs::write(path, &rendered).unwrap();
+            return;
+        }
+
+        let on_disk = std::fs::read_to_string(path).unwrap_or_default();
+        assert_eq!(
+            rendered, on_disk,
+            "tick decisions changed. If that was intended, regenerate with \
+             SHORE_REGENERATE_FIXTURES=1 and make the TypeScript match; if it \
+             was not, this is the regression the fixture exists to catch."
+        );
+    }
+
+    // -- the pure tick decision ----------------------------------------------
+    //
+    // `collect_tick_actions` reads a lock and a clock, so the tests above have
+    // to build a whole `TickContext` to ask it anything. These go at the
+    // decision itself, where every input is a number on the page — which is
+    // also what lets the fixture record it.
+
+    /// A tick that fires nothing: every switch on, every threshold unmet.
+    fn quiet_tick() -> TickInputs {
+        TickInputs {
+            autonomy_enabled: true,
+            paused: false,
+            heartbeat_enabled: true,
+
+            compaction_enabled: true,
+            compaction_triggered: false,
+            deep_archive_done: false,
+            active_turn_count: 10,
+            min_turns: 4,
+            max_turns: 20,
+            idle_secs: 0,
+            idle_trigger_secs: 3_600,
+            archive_after_secs: 86_400,
+
+            dreaming_enabled: true,
+            dream_backoff_elapsed: true,
+            ms_since_user: Some(0),
+            minimum_inactive_ms: 3_600_000,
+        }
+    }
+
+    #[test]
+    fn a_quiet_tick_fires_nothing_but_still_lets_the_heartbeat_run() {
+        let d = tick_decision(quiet_tick());
+        assert!(d.heartbeat_may_tick);
+        assert_eq!(d.compaction, None);
+        assert!(!d.deep_archive);
+        assert!(!d.dream);
+    }
+
+    #[test]
+    fn compaction_triggers_fire_exactly_at_their_thresholds() {
+        // Both comparisons are `>=`, and nothing sat on either line: the idle
+        // trigger was only ever tested well past its threshold.
+        let at_max = TickInputs {
+            active_turn_count: 20,
+            ..quiet_tick()
+        };
+        assert_eq!(
+            tick_decision(at_max).compaction,
+            Some(CompactionReason::MaxTurns)
+        );
+        assert_eq!(
+            tick_decision(TickInputs {
+                active_turn_count: 19,
+                ..at_max
+            })
+            .compaction,
+            None
+        );
+
+        let at_idle = TickInputs {
+            idle_secs: 3_600,
+            ..quiet_tick()
+        };
+        assert_eq!(
+            tick_decision(at_idle).compaction,
+            Some(CompactionReason::Idle)
+        );
+        assert_eq!(
+            tick_decision(TickInputs {
+                idle_secs: 3_599,
+                ..at_idle
+            })
+            .compaction,
+            None
+        );
+    }
+
+    #[test]
+    fn a_zero_threshold_is_the_off_switch_for_each_trigger() {
+        // Each of the three reads zero as "never", not as "always" — which is
+        // what a bare `>=` against an unset config would give.
+        let flooded = TickInputs {
+            active_turn_count: 10_000,
+            idle_secs: 10_000_000,
+            ..quiet_tick()
+        };
+        assert!(tick_decision(flooded).compaction.is_some());
+
+        assert_eq!(
+            tick_decision(TickInputs {
+                max_turns: 0,
+                idle_trigger_secs: 0,
+                ..flooded
+            })
+            .compaction,
+            None,
+            "both compaction triggers off"
+        );
+        assert!(
+            !tick_decision(TickInputs {
+                max_turns: 0,
+                idle_trigger_secs: 0,
+                archive_after_secs: 0,
+                ..flooded
+            })
+            .deep_archive,
+            "and the deep archive too"
+        );
+    }
+
+    #[test]
+    fn a_conversation_below_min_turns_compacts_on_neither_trigger() {
+        // The idle path is gated on `min_turns` and the max path checks it
+        // again, so a short conversation is left alone however long it idles.
+        // Its safety net is the deep archive, which has no turn threshold.
+        let short = TickInputs {
+            active_turn_count: 3,
+            idle_secs: 10_000_000,
+            ..quiet_tick()
+        };
+        assert_eq!(tick_decision(short).compaction, None);
+        assert!(
+            tick_decision(short).deep_archive,
+            "the deep archive covers it"
+        );
+    }
+
+    #[test]
+    fn max_turns_wins_when_both_compaction_triggers_are_satisfied() {
+        // Only the log line distinguishes them, but the order is what decides
+        // which one a reader sees when a long conversation also goes quiet.
+        let both = TickInputs {
+            active_turn_count: 50,
+            idle_secs: 10_000,
+            ..quiet_tick()
+        };
+        assert_eq!(
+            tick_decision(both).compaction,
+            Some(CompactionReason::MaxTurns)
+        );
+    }
+
+    #[test]
+    fn a_latch_from_an_earlier_tick_suppresses_the_deep_archive_too() {
+        // `!compaction.is_none()` alone would not catch this: when the latch
+        // was taken on an earlier tick, nothing fires *now* to block it, and
+        // the deep archive would run against a conversation already being
+        // compacted.
+        let latched = TickInputs {
+            compaction_triggered: true,
+            idle_secs: 10_000_000,
+            active_turn_count: 1,
+            ..quiet_tick()
+        };
+        assert_eq!(tick_decision(latched).compaction, None);
+        assert!(!tick_decision(latched).deep_archive);
+    }
+
+    #[test]
+    fn the_deep_archive_fires_exactly_at_its_threshold() {
+        let at = TickInputs {
+            active_turn_count: 1,
+            idle_secs: 86_400,
+            ..quiet_tick()
+        };
+        assert!(tick_decision(at).deep_archive);
+        assert!(
+            !tick_decision(TickInputs {
+                idle_secs: 86_399,
+                ..at
+            })
+            .deep_archive
+        );
+    }
+
+    #[test]
+    fn dreaming_waits_out_its_backoff_and_the_users_silence() {
+        let ready = TickInputs {
+            ms_since_user: Some(3_600_000),
+            ..quiet_tick()
+        };
+        assert!(tick_decision(ready).dream);
+
+        assert!(
+            !tick_decision(TickInputs {
+                ms_since_user: Some(3_599_999),
+                ..ready
+            })
+            .dream,
+            "a millisecond short of the window"
+        );
+        assert!(
+            !tick_decision(TickInputs {
+                dream_backoff_elapsed: false,
+                ..ready
+            })
+            .dream,
+            "still backing off from a failure"
+        );
+        assert!(
+            !tick_decision(TickInputs {
+                dreaming_enabled: false,
+                ..ready
+            })
+            .dream
+        );
+        assert!(
+            !tick_decision(TickInputs {
+                autonomy_enabled: false,
+                ..ready
+            })
+            .dream
+        );
+    }
+
+    #[test]
+    fn a_character_with_no_user_on_record_is_free_to_dream() {
+        // `None` reads as "nobody to disturb". A fresh character with history
+        // to sweep and no conversation yet is the case this exists for.
+        let never_spoken = TickInputs {
+            ms_since_user: None,
+            minimum_inactive_ms: u128::from(u64::MAX),
+            ..quiet_tick()
+        };
+        assert!(tick_decision(never_spoken).dream);
+    }
+
+    #[test]
+    fn pausing_stops_the_heartbeat_and_nothing_else() {
+        // Worth pinning because it is easy to assume otherwise: a paused
+        // character still compacts, still archives, still dreams. Pause is a
+        // switch on speaking, not on housekeeping.
+        let paused = TickInputs {
+            paused: true,
+            active_turn_count: 50,
+            idle_secs: 10_000_000,
+            ms_since_user: Some(u128::from(u64::MAX)),
+            ..quiet_tick()
+        };
+        let d = tick_decision(paused);
+        assert!(!d.heartbeat_may_tick);
+        assert_eq!(d.compaction, Some(CompactionReason::MaxTurns));
+        assert!(d.dream);
+    }
+
+    #[test]
+    fn disabling_autonomy_stops_every_trigger_at_once() {
+        let off = TickInputs {
+            autonomy_enabled: false,
+            active_turn_count: 50,
+            idle_secs: 10_000_000,
+            ms_since_user: None,
+            ..quiet_tick()
+        };
+        let d = tick_decision(off);
+        assert!(!d.heartbeat_may_tick);
+        assert_eq!(d.compaction, None);
+        assert!(!d.deep_archive);
+        assert!(!d.dream);
+    }
+
+    #[test]
+    fn disabling_compaction_leaves_the_heartbeat_and_dreaming_alone() {
+        let d = tick_decision(TickInputs {
+            compaction_enabled: false,
+            active_turn_count: 50,
+            idle_secs: 10_000_000,
+            ms_since_user: Some(u128::from(u64::MAX)),
+            ..quiet_tick()
+        });
+        assert_eq!(d.compaction, None);
+        assert!(!d.deep_archive);
+        assert!(d.heartbeat_may_tick);
+        assert!(d.dream);
     }
 
     /// Configuring `max_turns < min_turns` should disable compaction or
