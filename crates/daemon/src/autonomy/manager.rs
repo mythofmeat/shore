@@ -85,8 +85,14 @@ impl ToolContext for HeartbeatToolContext {
     fn character_name(&self) -> &str {
         self.inner.character_name()
     }
-    fn schedule_next_wake(&self, input: &Value) -> Option<Result<Value, ToolError>> {
-        Some(Ok(schedule_next_wake_in_state(self.state.as_ref(), input)))
+    fn schedule_next_wake<'ctx>(
+        &'ctx self,
+        input: &'ctx Value,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Option<Result<Value, ToolError>>> + Send + 'ctx>,
+    > {
+        let answer = schedule_next_wake_in_state(self.state.as_ref(), input);
+        Box::pin(std::future::ready(Some(Ok(answer))))
     }
     fn workspace_dir(&self) -> &str {
         self.inner.workspace_dir()

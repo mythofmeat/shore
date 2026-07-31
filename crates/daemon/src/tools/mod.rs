@@ -93,8 +93,22 @@ pub trait ToolContext: Sync {
     fn character_name(&self) -> &str {
         ""
     }
-    fn schedule_next_wake(&self, _input: &Value) -> Option<Result<Value, ToolError>> {
-        None
+    /// The `set_next_wake` tool, available only inside a heartbeat.
+    ///
+    /// Returns a future because the clock it schedules against lives in the
+    /// sidecar now, so answering means a round trip. Shaped like
+    /// [`ToolContext::run_subagent`] rather than made an `async fn` for the same
+    /// reason that one is: the trait is object-safe and has to stay that way.
+    ///
+    /// The clamp is deliberately not applied on this side. A character asking
+    /// for a moment in a year is told the hour it will actually get, and
+    /// computing that here as well would put the bound in two places for the
+    /// two to drift apart.
+    fn schedule_next_wake<'ctx>(
+        &'ctx self,
+        _input: &'ctx Value,
+    ) -> Pin<Box<dyn Future<Output = Option<Result<Value, ToolError>>> + Send + 'ctx>> {
+        Box::pin(std::future::ready(None))
     }
 
     // Workspace directory for general filesystem tools
@@ -373,7 +387,7 @@ pub fn dispatch_tool<'ctx>(
             // heartbeat loop intercepts it before dispatch (see
             // `dispatch_heartbeat_tools`). This arm only fires if some other
             // context dispatches the name, and rejects it there.
-            "set_next_wake" => ctx.schedule_next_wake(&input).unwrap_or_else(|| {
+            "set_next_wake" => ctx.schedule_next_wake(&input).await.unwrap_or_else(|| {
                 Err(ToolError::InvalidArgs(
                     "set_next_wake is only available during heartbeat ticks".into(),
                 ))
