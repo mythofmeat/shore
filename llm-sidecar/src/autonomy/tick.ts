@@ -34,7 +34,7 @@ export type CompactionReason =
  * sub-second threshold the two disagree — an idle trigger of 1.5s fires at 1.2s
  * of idleness, where a minimum inactive time of 1.5s does not. Nobody
  * configures either in fractions of a second, but the port carries the
- * difference rather than quietly picking one.
+ * difference rather than quietly picking one. Decision pending in #15.
  */
 export interface TickInputs {
   readonly autonomyEnabled: boolean;

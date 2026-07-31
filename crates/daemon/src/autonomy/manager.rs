@@ -209,7 +209,8 @@ fn background_retry_delay(failure_count: u32) -> Duration {
 /// whole `Duration`s. For a sub-second threshold the two disagree — an idle
 /// trigger of 1.5s fires at 1.2s of idleness, where a minimum inactive time of
 /// 1.5s does not. Nobody configures either in fractions of a second, but the
-/// port carries the difference rather than quietly picking one.
+/// port carries the difference rather than quietly picking one. Decision
+/// pending in #15.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[expect(
     clippy::struct_excessive_bools,

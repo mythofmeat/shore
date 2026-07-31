@@ -1217,7 +1217,7 @@ mod tests {
         // `detect_sessions` keeps the last 30, but `distinct_days` counts every
         // day on record — so a character with a long history reports a rate
         // lower than it lived, and the number keeps sinking as history grows.
-        // Pinned as it stands: it reads like an oversight, and a reader who
+        // Pinned as it stands (see #15): it reads like an oversight, and a reader who
         // "fixes" it silently changes what the activity tool reports.
         let base = dt(2026, 3, 1, 10, 0, 0);
         let mut times = Vec::new();

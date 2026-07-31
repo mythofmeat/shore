@@ -199,7 +199,7 @@ export class ActivityTracker {
    * so a character with a long history reports a rate lower than it lived, and
    * the number keeps sinking as history grows. That is what the Rust did and
    * what the activity tool has always reported; it is preserved deliberately
-   * rather than quietly corrected during a port.
+   * rather than quietly corrected during a port. Decision pending in #15.
    */
   computeStats(today: Weekday): Omit<ActivityStats, "computedAt"> {
     const distinctDays = this.#distinctDays();
