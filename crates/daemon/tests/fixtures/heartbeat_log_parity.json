@@ -1,0 +1,27 @@
+{
+  "capacity": 100,
+  "display_names": [
+    "tick_fired",
+    "message_sent",
+    "message_skipped",
+    "tool_use",
+    "dormant",
+    "wake",
+    "timeout",
+    "dormant_ping",
+    "recap_written",
+    "recap_missing"
+  ],
+  "lines": [
+    "{\"timestamp\":\"2026-04-30T00:00:00+00:00\",\"kind\":\"tick_fired\",\"detail\":\"event 0\"}",
+    "{\"timestamp\":\"2026-04-30T00:00:01+00:00\",\"kind\":\"message_sent\",\"detail\":\"event 1\"}",
+    "{\"timestamp\":\"2026-04-30T00:00:02+00:00\",\"kind\":\"message_skipped\",\"detail\":\"event 2\"}",
+    "{\"timestamp\":\"2026-04-30T00:00:03+00:00\",\"kind\":\"tool_use\",\"detail\":\"event 3\"}",
+    "{\"timestamp\":\"2026-04-30T00:00:04+00:00\",\"kind\":\"dormant\",\"detail\":\"event 4\"}",
+    "{\"timestamp\":\"2026-04-30T00:00:05+00:00\",\"kind\":\"wake\",\"detail\":\"event 5\"}",
+    "{\"timestamp\":\"2026-04-30T00:00:06+00:00\",\"kind\":\"timeout\",\"detail\":\"event 6\"}",
+    "{\"timestamp\":\"2026-04-30T00:00:07+00:00\",\"kind\":\"dormant_ping\",\"detail\":\"event 7\"}",
+    "{\"timestamp\":\"2026-04-30T00:00:08+00:00\",\"kind\":\"recap_written\",\"detail\":\"event 8\"}",
+    "{\"timestamp\":\"2026-04-30T00:00:09+00:00\",\"kind\":\"recap_missing\",\"detail\":\"event 9\"}"
+  ]
+}

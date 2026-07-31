@@ -182,11 +182,22 @@ impl HeartbeatLog {
     }
 
     pub fn push<D: Into<String>>(&mut self, kind: HeartbeatEventKind, detail: D) {
+        self.push_at(kind, detail, chrono::Local::now().to_rfc3339());
+    }
+
+    /// Push with an explicit timestamp, so the ring's behaviour can be recorded
+    /// without the clock in it.
+    pub fn push_at<D: Into<String>>(
+        &mut self,
+        kind: HeartbeatEventKind,
+        detail: D,
+        timestamp: String,
+    ) {
         if self.events.len() >= HEARTBEAT_LOG_CAPACITY {
             let _ignored = self.events.pop_front();
         }
         self.events.push_back(HeartbeatEvent {
-            timestamp: chrono::Local::now().to_rfc3339(),
+            timestamp,
             kind,
             detail: detail.into(),
         });
@@ -339,6 +350,145 @@ mod heartbeat_log_tests {
 
         let loaded = HeartbeatLog::load_from(path).expect("load");
         assert_eq!(loaded.recent(usize::MAX).len(), HEARTBEAT_LOG_CAPACITY);
+    }
+
+    #[test]
+    fn a_failed_flush_leaves_the_log_dirty_so_the_next_one_retries() {
+        // Clearing the bit on failure loses the events silently: nothing
+        // errors, the tick loop sees a clean log, and the last hundred things
+        // the character did are simply not there afterwards.
+        let dir = tempfile::tempdir().unwrap();
+        let blocker = dir.path().join("blocker");
+        std::fs::write(&blocker, "not a directory").unwrap();
+
+        // A path *under* a regular file: every write to it fails with ENOTDIR.
+        let mut log = HeartbeatLog::with_path(blocker.join("heartbeat.jsonl"));
+        log.push_at(HeartbeatEventKind::Wake, "kept", stamp(0));
+        log.flush_if_dirty();
+
+        assert!(log.is_dirty(), "the events must survive to be retried");
+        assert_eq!(log.recent(10).len(), 1);
+    }
+
+    #[test]
+    fn pushing_past_capacity_drops_the_oldest() {
+        // `load_from_caps_at_capacity` pins the same ceiling on the way in from
+        // disk, but nothing pinned it on `push` — so the ring could grow
+        // without bound in a long-running daemon and only be trimmed on the
+        // next restart.
+        let mut log = HeartbeatLog::new();
+        for i in 0..HEARTBEAT_LOG_CAPACITY.saturating_add(5) {
+            log.push_at(HeartbeatEventKind::TickFired, format!("e{i}"), stamp(i));
+        }
+
+        let events = log.recent(usize::MAX);
+        assert_eq!(events.len(), HEARTBEAT_LOG_CAPACITY);
+        assert_eq!(item(&events, 0).detail, "e5", "the first five are gone");
+        assert_eq!(
+            item(&events, HEARTBEAT_LOG_CAPACITY.saturating_sub(1)).detail,
+            format!("e{}", HEARTBEAT_LOG_CAPACITY.saturating_add(4)),
+            "and the newest is last"
+        );
+    }
+
+    #[test]
+    fn recent_takes_the_newest_and_still_reads_oldest_first() {
+        // The window is taken from the end but not reversed: `shore log` prints
+        // these in the order they happened, and the limit is about how far back
+        // to go, not which end to read from.
+        let mut log = HeartbeatLog::new();
+        for i in 0..10 {
+            log.push_at(HeartbeatEventKind::TickFired, format!("e{i}"), stamp(i));
+        }
+
+        let last_three = log.recent(3);
+        assert_eq!(last_three.len(), 3);
+        assert_eq!(item(&last_three, 0).detail, "e7");
+        assert_eq!(item(&last_three, 2).detail, "e9");
+
+        assert_eq!(
+            log.recent(100).len(),
+            10,
+            "a limit past the end is not an error"
+        );
+    }
+
+    #[test]
+    fn an_in_memory_log_clears_its_dirty_bit_without_a_file() {
+        // Otherwise every flush on a path-less log stays dirty and rewrites
+        // nothing forever — harmless but a lie, and the flag is what the tick
+        // loop reads to decide whether to bother.
+        let mut log = HeartbeatLog::new();
+        log.push_at(HeartbeatEventKind::Wake, "hello", stamp(0));
+        assert!(log.is_dirty());
+        log.flush_if_dirty();
+        assert!(!log.is_dirty());
+    }
+
+    /// A deterministic timestamp, so a ring's contents can be asserted on.
+    fn stamp(i: usize) -> String {
+        format!("2026-04-30T00:00:{:02}+00:00", i % 60)
+    }
+
+    /// One line per event kind, exactly as the daemon writes them.
+    ///
+    /// The kinds are `rename_all = "snake_case"`, so the wire name and the
+    /// Rust name differ and can drift apart without any compiler complaining.
+    /// `shore log --heartbeat` reads this file, so a TypeScript writer that
+    /// spells a kind differently produces a log the CLI silently drops — the
+    /// failure is a missing line, not an error.
+    #[test]
+    fn heartbeat_event_lines_match_shared_fixture() {
+        let kinds = [
+            HeartbeatEventKind::TickFired,
+            HeartbeatEventKind::MessageSent,
+            HeartbeatEventKind::MessageSkipped,
+            HeartbeatEventKind::ToolUse,
+            HeartbeatEventKind::Dormant,
+            HeartbeatEventKind::Wake,
+            HeartbeatEventKind::Timeout,
+            HeartbeatEventKind::DormantPing,
+            HeartbeatEventKind::RecapWritten,
+            HeartbeatEventKind::RecapMissing,
+        ];
+
+        let mut log = HeartbeatLog::new();
+        for (i, kind) in kinds.iter().enumerate() {
+            log.push_at(*kind, format!("event {i}"), stamp(i));
+        }
+
+        let lines: Vec<String> = log
+            .recent(usize::MAX)
+            .into_iter()
+            .map(|e| serde_json::to_string(e).expect("serialize"))
+            .collect();
+
+        let rendered = format!(
+            "{}\n",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "capacity": HEARTBEAT_LOG_CAPACITY,
+                // Both spellings, so a rename that touches one and not the
+                // other is caught rather than merely made inconsistent.
+                "display_names": kinds.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                "lines": lines,
+            }))
+            .expect("render")
+        );
+
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/heartbeat_log_parity.json"
+        );
+        if std::env::var_os("SHORE_REGENERATE_FIXTURES").is_some() {
+            std::fs::write(path, &rendered).expect("write fixture");
+            return;
+        }
+        let on_disk = std::fs::read_to_string(path).unwrap_or_default();
+        assert_eq!(
+            rendered, on_disk,
+            "the heartbeat log's wire format changed. Anything already on a \
+             user's disk was written in the old one."
+        );
     }
 
     #[test]
