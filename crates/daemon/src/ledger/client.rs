@@ -196,6 +196,32 @@ pub struct KeepaliveSchedule {
     pub last_active_at: u64,
 }
 
+/// Token counts from an on-demand ping. Only the three the diagnostic reports.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct PingNowUsage {
+    pub input_tokens: u64,
+    #[serde(default)]
+    pub cache_read_tokens: u64,
+    #[serde(default)]
+    pub cache_creation_tokens: u64,
+}
+
+/// `POST /v1/keepalive/ping-now` — what the on-demand ping did.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PingNow {
+    /// `sent` | `skipped` | `failed`.
+    pub status: String,
+    /// Read 0 having paid a write. Only meaningful when `status` is `sent`.
+    pub cold: bool,
+    pub usage: Option<PingNowUsage>,
+    /// Machine-readable cause when skipped: `no_prefix` | `budget`. The first is
+    /// load-bearing — it is what tells this side to rebuild the body from disk
+    /// and push before asking again — so it is matched rather than the prose.
+    pub reason: Option<String>,
+    /// Human-readable, for the command's output.
+    pub detail: Option<String>,
+}
+
 /// `POST /v1/keepalive/drain` — everything the daemon still owns a copy of.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct KeepaliveDrain {
@@ -500,6 +526,18 @@ impl LedgerClient {
             )
             .await?;
         Ok(reply.rearmed)
+    }
+
+    /// Send a keepalive ping right now and report what it read, for the
+    /// `keepalive_ping_now` diagnostic.
+    ///
+    /// The sidecar deliberately leaves its schedule alone for this: measuring
+    /// whether the prefix is still warm must not move the real deadline or
+    /// stand the schedule down.
+    pub async fn keepalive_ping_now(&self, character: &str) -> Result<PingNow, LlmError> {
+        self.inner
+            .control_call("/v1/keepalive/ping-now", &CharacterScoped { character })
+            .await
     }
 
     /// Tell the sidecar the cached prefix is gone (compaction, prompt reload).
@@ -1000,5 +1038,118 @@ mod tests {
         assert_eq!(CallType::Compaction.as_str(), "compaction");
         assert_eq!(CallType::Dreaming.as_str(), "dreaming");
         assert_eq!(CallType::MemoryQuery.as_str(), "memory_query");
+    }
+
+    // ── keepalive control-body parity ───────────────────────────────────────
+    //
+    // The four `/v1/keepalive/*` bodies are Rust structs on this side and
+    // TypeScript interfaces on the other, written to match by hand, with
+    // nothing checking that they do. That is the same exposure `wire_parity`
+    // exists to close, and it is worse here: a renamed field on a provider
+    // request usually breaks something loudly, while a renamed field on these
+    // fails silently in the allowing direction. It happened during the port —
+    // a daemon sending `keepalive_interval_ms` to a sidecar reading
+    // `keepalive_interval_secs` produced no error anywhere. The cadence was
+    // simply absent, so keepalive was off, so nothing pinged. The only symptom
+    // was a character that never warmed its cache.
+    //
+    // Requests are generated from the real structs, because this side sends
+    // them. Replies are hand-written literals asserted to deserialize, because
+    // the sidecar sends those — same split, and same reason, as `call_complete`
+    // in `llm/types.rs`.
+
+    fn census_schedule() -> KeepaliveSchedule {
+        KeepaliveSchedule {
+            character: "aria".to_owned(),
+            model: "claude-opus-4-6".to_owned(),
+            interval: 3_300_000,
+            last_warm_at: 1_785_600_000_000,
+            last_active_at: 1_785_599_940_000,
+        }
+    }
+
+    fn keepalive_census() -> serde_json::Value {
+        serde_json::json!({
+            "character_scoped": CharacterScoped { character: "aria" },
+            "restore": RestoreKeepaliveRequest {
+                schedule: &census_schedule(),
+                max_idle_secs: 43_200,
+            },
+            // Replies. Literals, because the sidecar authors these; the
+            // assertions below are what pin this side's expectations to them.
+            "restore_reply": { "rearmed": true },
+            "drain_reply": {
+                "events": [{
+                    "character": "aria",
+                    "outcome": "cold",
+                    "detail": "Cache refresh ping (COLD — wrote cache, disarmed; cache_read: 0, input: 7)",
+                    "at": 1_785_600_000_000_u64,
+                }],
+                "schedules": [census_schedule()],
+            },
+            "ping_now_reply": {
+                "status": "skipped",
+                "cold": false,
+                "reason": "no_prefix",
+                "detail": "no cached request",
+            },
+        })
+    }
+
+    /// Regenerate with `SHORE_REGENERATE_FIXTURES=1 cargo test -p shore-daemon
+    /// keepalive_control_bodies_match_shared_fixture`, then read the diff: it is
+    /// exactly what the sidecar will now receive, or now be expected to send.
+    #[test]
+    fn keepalive_control_bodies_match_shared_fixture() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/keepalive_parity.json"
+        );
+        let rendered = format!(
+            "{}\n",
+            serde_json::to_string_pretty(&keepalive_census()).unwrap()
+        );
+
+        if std::env::var_os("SHORE_REGENERATE_FIXTURES").is_some() {
+            std::fs::write(path, &rendered).unwrap();
+            return;
+        }
+
+        let on_disk = std::fs::read_to_string(path).unwrap_or_default();
+        assert_eq!(
+            rendered, on_disk,
+            "keepalive control bodies changed. The sidecar mirrors these by \
+             hand; regenerate with SHORE_REGENERATE_FIXTURES=1 and update \
+             llm-sidecar/src/autonomy/keepalive.ts to match."
+        );
+    }
+
+    /// The other half: this side must accept the reply literals above. Without
+    /// this the fixture would only pin what the sidecar sends, not what the
+    /// daemon reads out of it — and every field here is `Option`, so a rename
+    /// deserializes to `None` rather than failing.
+    #[test]
+    fn keepalive_replies_parse() {
+        let census = keepalive_census();
+
+        let restore: RestoreKeepaliveReply =
+            serde_json::from_value(census["restore_reply"].clone()).unwrap();
+        assert!(restore.rearmed);
+
+        let drain: KeepaliveDrain = serde_json::from_value(census["drain_reply"].clone()).unwrap();
+        assert_eq!(drain.events.len(), 1);
+        assert_eq!(drain.events[0].outcome, "cold");
+        assert_eq!(drain.events[0].character, "aria");
+        assert_eq!(drain.schedules.len(), 1);
+        // Milliseconds, not seconds: a schedule read back an hour stale would
+        // fail the sidecar's staleness guard and silently stop re-arming.
+        assert_eq!(drain.schedules[0].interval, 3_300_000);
+        assert_eq!(drain.schedules[0].last_warm_at, 1_785_600_000_000);
+
+        let ping: PingNow = serde_json::from_value(census["ping_now_reply"].clone()).unwrap();
+        assert_eq!(ping.status, "skipped");
+        // The daemon branches on this to decide whether to rebuild from disk.
+        assert_eq!(ping.reason.as_deref(), Some("no_prefix"));
+        assert!(ping.usage.is_none());
     }
 }

@@ -539,64 +539,71 @@ impl AutonomyManager {
         self.mcp_registry = Some(registry);
     }
 
-    /// Send a keepalive ping right now, the way the scheduler would.
+    /// Send a keepalive ping right now and report what it read.
     ///
-    /// Drives [`execute_dormant_ping`] itself rather than reproducing it, so
-    /// what this reports is what the autonomous keepalive does — cached
-    /// `last_request` when there is one, rebuild-from-disk when there is not.
-    /// A parallel implementation would be a second thing to keep in step with
-    /// the first, which is the failure this whole subsystem keeps hitting.
+    /// The ping itself happens in the sidecar, which holds the body and is the
+    /// side that makes every provider call. It deliberately leaves its schedule
+    /// alone for this: measuring whether the prefix is still warm must not move
+    /// the real deadline or stand the schedule down.
     ///
-    /// The point is the usage: a ping that reads nothing and pays a write did
-    /// not keep anything warm, and until now that was only observable by
+    /// The point is the usage. A ping that reads nothing and pays a write did
+    /// not keep anything warm, and without this that is only observable by
     /// waiting for the scheduler and reading the ledger afterwards.
     ///
-    /// Does **not** touch the keepalive clock. Firing this must not disarm the
-    /// real schedule or move its deadline, or measuring would change what is
-    /// being measured.
+    /// When the sidecar has no prefix — it restarted, or this character has not
+    /// spoken since it did — the body is rebuilt from disk and pushed first, so
+    /// the command still answers rather than reporting nothing to ping. Which
+    /// of the two happened is reported as `from_cached_request`.
     pub async fn keepalive_ping_now(&self, character: &str) -> KeepalivePing {
-        let Some(state) = self.states.get(character).map(|s| Arc::clone(s.value())) else {
-            return KeepalivePing::Skipped(format!("no autonomy state for '{character}'"));
+        let Some(client) = self.llm_client.as_ref() else {
+            return KeepalivePing::Skipped("no LLM client available".to_owned());
         };
-        let had_cached = lock_state(&state).last_request.is_some();
-        let outcome = execute_dormant_ping(
-            character,
-            &state,
-            &self.data_dir,
-            self.llm_client.as_ref(),
-            self.loaded_config.as_deref(),
-            &self.mcp_registry.clone().unwrap_or_default(),
-        )
-        .await;
-        match outcome {
-            DormantPingOutcome::Success { usage, .. } => KeepalivePing::Sent {
-                from_cached_request: had_cached,
-                cold: ping_landed_cold(&usage),
-                usage,
-            },
-            DormantPingOutcome::Failed(why) => KeepalivePing::Failed(why),
-            DormantPingOutcome::Skipped(why) => KeepalivePing::Skipped(why),
-        }
-    }
 
-    /// Test/diagnostic seam: rebuild the keepalive request **from disk**
-    /// (bypassing any cached `last_request`) and send the ping. This exercises
-    /// exactly the cold-cache rebuild path the autonomous keepalive uses — the
-    /// one that must reproduce the chat prefix byte-for-byte — so a test can
-    /// assert the warmed surface matches what chat sends. Mirrors
-    /// `trigger_compaction_now` / `trigger_dreaming_now`. Returns the ping that
-    /// was sent, or `None` if nothing could be rebuilt (mid-turn / unresolved
-    /// model / missing resources).
-    pub async fn keepalive_rebuild_ping_now(&self, character: &str) -> Option<LlmRequest> {
-        let config = self.loaded_config.as_deref()?;
-        let client = self.llm_client.as_ref()?;
-        let mcp = self.mcp_registry.clone().unwrap_or_default();
-        let request = rebuild_request_from_disk(character, &self.data_dir, config, &mcp)?;
-        let mut ping = build_keepalive_ping(&request, character);
-        let _ignored = client
-            .generate_with_config_fallback(&mut ping, config, CallType::Keepalive, character, false)
-            .await;
-        Some(ping)
+        let mut from_cached_request = true;
+        let mut outcome = match client.keepalive_ping_now(character).await {
+            Ok(outcome) => outcome,
+            Err(e) => return KeepalivePing::Failed(e.to_string()),
+        };
+
+        if outcome.reason.as_deref() == Some("no_prefix") {
+            from_cached_request = false;
+            let Some(config) = self.loaded_config.as_deref() else {
+                return KeepalivePing::Skipped(
+                    "no cached request and no loaded config for rebuild".to_owned(),
+                );
+            };
+            let registry = self.mcp_registry.clone().unwrap_or_default();
+            let Some(request) =
+                rebuild_request_from_disk(character, &self.data_dir, config, &registry)
+            else {
+                return KeepalivePing::Skipped("no cached or rebuildable request".to_owned());
+            };
+            if let Err(e) = client.push_keepalive_prefix(&request, character).await {
+                return KeepalivePing::Failed(e.to_string());
+            }
+            outcome = match client.keepalive_ping_now(character).await {
+                Ok(retried) => retried,
+                Err(e) => return KeepalivePing::Failed(e.to_string()),
+            };
+        }
+
+        let detail = outcome.detail.unwrap_or_default();
+        match outcome.status.as_str() {
+            "sent" => {
+                let usage = outcome.usage.unwrap_or_default();
+                KeepalivePing::Sent {
+                    from_cached_request,
+                    cold: outcome.cold,
+                    usage: DormantPingUsage {
+                        input_tokens: usage.input_tokens,
+                        cache_read_tokens: usage.cache_read_tokens,
+                        cache_creation_tokens: usage.cache_creation_tokens,
+                    },
+                }
+            }
+            "failed" => KeepalivePing::Failed(detail),
+            _ => KeepalivePing::Skipped(detail),
+        }
     }
 
     /// Ensure autonomy state exists for a character. On first call for a
@@ -3475,27 +3482,19 @@ fn append_wrap_up_nudge(request: &mut LlmRequest) {
 }
 
 // ---------------------------------------------------------------------------
-// Dormant ping executor
+// On-demand ping
 // ---------------------------------------------------------------------------
+//
+// The executor that used to live here is gone with the rest of the keepalive.
+// The sidecar sends the ping (`/v1/keepalive/ping-now`); what stays is the
+// shape the `keepalive_ping_now` command reports, so its output is unchanged.
 
-// The `_tokens` suffix that once tripped `struct_field_names` mirrors the
-// upstream usage struct. The lint skips exported types, so no expectation is
-// needed now that this one is `pub`.
-#[derive(Debug, Clone, Copy)]
+/// Token counts from an on-demand ping.
+#[derive(Debug, Clone, Copy, Default)]
 pub struct DormantPingUsage {
     pub input_tokens: u64,
     pub cache_read_tokens: u64,
     pub cache_creation_tokens: u64,
-}
-
-/// Whether a ping that came back `200 OK` actually failed at its only job.
-///
-/// Read 0 *and* paid a write means the prefix was already gone and this ping
-/// recreated it at full price rather than refreshing it. Read 0 with no write
-/// means caching was off or a non-cached fallback answered — not a cold write,
-/// and must not be treated as one.
-fn ping_landed_cold(usage: &DormantPingUsage) -> bool {
-    usage.cache_read_tokens == 0 && usage.cache_creation_tokens > 0
 }
 
 /// What an on-demand keepalive ping did, for the `keepalive_ping_now` command.
@@ -3506,135 +3505,17 @@ fn ping_landed_cold(usage: &DormantPingUsage) -> bool {
 #[derive(Debug)]
 pub enum KeepalivePing {
     Sent {
-        /// True when a cached `last_request` was pinged, false when it had to
-        /// be rebuilt from disk. The two produce different bytes if anything
-        /// has drifted, which is exactly what a cold read would be telling you.
+        /// True when the sidecar pinged a prefix it already held, false when the
+        /// daemon had to rebuild one from disk and push it first. A rebuilt
+        /// request that reads cold may just mean nothing was cached yet; a
+        /// *cached* one that reads cold means the prefix it was protecting has
+        /// drifted, which is exactly what a cold read would be telling you.
         from_cached_request: bool,
         cold: bool,
         usage: DormantPingUsage,
     },
     Failed(String),
     Skipped(String),
-}
-
-/// The result of the on-demand `keepalive ping-now` diagnostic.
-///
-/// The scheduled keepalive no longer comes through here — it runs in the
-/// sidecar, on its own clock. This path survives for the command that answers
-/// "would a ping read the cache right now?", which has to make the call itself
-/// to report the answer.
-enum DormantPingOutcome {
-    Success { usage: DormantPingUsage },
-    Failed(String),
-    Skipped(String),
-}
-
-/// Build a keepalive ping request from the most recent real request.
-///
-/// The ping MUST be byte-identical to the cached request in every field that
-/// participates in the prompt cache prefix (tools, system, model, and the
-/// original message sequence) — any divergence forces a cache write at 2.0×
-/// instead of a cache read at 0.1×, defeating the entire keepalive subsystem.
-///
-/// The only permitted differences:
-/// - `max_tokens = 1` (we don't want generation, just a cache touch)
-/// - `rid = None` (don't reuse a stale request ID)
-/// - `forensic_character` set for logging
-/// - one extra user message appended (Anthropic requires conversations to end
-///   with a user turn; the cloned request ends on an assistant message)
-fn build_keepalive_ping(req: &LlmRequest, character: &str) -> LlmRequest {
-    let mut ping = req.clone();
-    ping.max_tokens = 1;
-    ping.rid = None;
-    ping.forensic_character = Some(character.to_owned());
-    ping.messages.push(WireMessage::text(WireRole::User, "."));
-    ping
-}
-
-/// Send a minimal API call (max_tokens=1) to keep the prompt cache warm
-/// while the character is dormant (no user activity).
-///
-/// Returns a structured outcome so the scheduler only advances the keepalive
-/// deadline after a confirmed cache-warming call, and records skipped/failed
-/// attempts in the heartbeat log.
-async fn execute_dormant_ping(
-    character: &str,
-    state: &Arc<Mutex<AutonomyState>>,
-    data_dir: &Path,
-    llm_client: Option<&LedgerClient>,
-    loaded_config: Option<&LoadedConfig>,
-    mcp_registry: &crate::tools::mcp_registry::McpRegistry,
-) -> DormantPingOutcome {
-    let Some(client) = llm_client else {
-        return DormantPingOutcome::Skipped("no LLM client available".to_owned());
-    };
-
-    let mut request = {
-        let s = lock_state(state);
-        if let Some(req) = &s.last_request {
-            build_keepalive_ping(req, character)
-        } else {
-            drop(s);
-            let Some(config) = loaded_config else {
-                debug!(character, "Dormant ping: no cached request, skipping");
-                return DormantPingOutcome::Skipped(
-                    "no cached request and no loaded config for rebuild".to_owned(),
-                );
-            };
-            if let Some(req) = rebuild_request_from_disk(character, data_dir, config, mcp_registry)
-            {
-                let mut write_guard = lock_state(state);
-                cache_last_request(&mut write_guard, character, req.clone());
-                drop(write_guard);
-                build_keepalive_ping(&req, character)
-            } else {
-                debug!(
-                    character,
-                    "Dormant ping: failed to rebuild request, skipping"
-                );
-                return DormantPingOutcome::Skipped("no cached or rebuildable request".to_owned());
-            }
-        }
-    };
-    let generate_result = match loaded_config {
-        Some(config) => {
-            client
-                .generate_with_config_fallback(
-                    &mut request,
-                    config,
-                    CallType::Keepalive,
-                    character,
-                    false,
-                )
-                .await
-        }
-        None => client
-            .generate(&request, CallType::Keepalive, character, false)
-            .await
-            .map(|resp| (resp, Vec::new())),
-    };
-
-    match generate_result {
-        Ok((resp, _fallback_events)) => {
-            info!(
-                character,
-                cache_read = resp.usage.cache_read_tokens,
-                input_tokens = resp.usage.input_tokens,
-                "Dormant ping: cache refreshed"
-            );
-            DormantPingOutcome::Success {
-                usage: DormantPingUsage {
-                    input_tokens: resp.usage.input_tokens,
-                    cache_read_tokens: resp.usage.cache_read_tokens,
-                    cache_creation_tokens: resp.usage.cache_creation_tokens,
-                },
-            }
-        }
-        Err(e) => {
-            error!(character, error = %e, "Dormant ping failed");
-            DormantPingOutcome::Failed(e.to_string())
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -5680,63 +5561,5 @@ api_key_env = "{heartbeat_env}"
             .is_some());
         let persisted = load_state(tmp.path(), "alice").expect("state file should load");
         assert_eq!(persisted.covered_turn_count, 2);
-    }
-
-    /// The cache-prefix invariant: a keepalive ping must be byte-identical
-    /// to the cached request in every field that participates in Anthropic's
-    /// prompt-cache prefix (tools, system, model, message prefix). Any
-    /// divergence flips a 0.1× cache read into a 2.0× cache write — a
-    /// 20× cost increase that defeats the entire keepalive subsystem.
-    ///
-    /// Regression guard: this exact bug was fixed in commit addada6 and
-    /// silently re-introduced two months later in cea94c0.
-    #[test]
-    fn keepalive_ping_preserves_cache_prefix() {
-        let mut original = empty_request();
-        original.model = "claude-sonnet-4-6".into();
-        original.system = vec![SystemBlock::new("you are a character", "system")];
-        original.tools = Some(vec![
-            crate::llm::types::ToolDefinition::new("memory", "x", json!({"type": "object"})),
-            crate::llm::types::ToolDefinition::new("schedule", "y", json!({"type": "object"})),
-        ]);
-        original
-            .messages
-            .push(WireMessage::text(WireRole::User, "hello"));
-        original
-            .messages
-            .push(WireMessage::text(WireRole::Assistant, "hi back"));
-
-        let ping = build_keepalive_ping(&original, "alice");
-
-        assert_eq!(
-            ping.tools, original.tools,
-            "tools must be preserved — stripping them invalidates the cache prefix"
-        );
-        assert_eq!(
-            ping.system, original.system,
-            "system prompt must be preserved"
-        );
-        assert_eq!(ping.model, original.model, "model must be preserved");
-        assert_eq!(
-            &ping.messages[..original.messages.len()],
-            &original.messages[..],
-            "the original message sequence must be preserved as a prefix"
-        );
-
-        // Documented diffs:
-        assert_eq!(ping.max_tokens, 1, "ping must request only 1 token");
-        assert_eq!(
-            ping.messages.len(),
-            original.messages.len() + 1,
-            "ping appends exactly one user turn"
-        );
-        let last = ping.messages.last().unwrap();
-        assert_eq!(last.role, WireRole::User, "ping must end with a user turn");
-        assert_eq!(ping.rid, None, "ping must not reuse the cached request ID");
-        assert_eq!(
-            ping.forensic_character.as_deref(),
-            Some("alice"),
-            "ping must carry the character name for forensics"
-        );
     }
 }

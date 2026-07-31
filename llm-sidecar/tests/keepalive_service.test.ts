@@ -120,6 +120,15 @@ beforeEach(() => {
 });
 
 describe("the ping body", () => {
+  /**
+   * The cache-prefix invariant, carried over from the daemon's
+   * `keepalive_ping_preserves_cache_prefix` when that side was deleted.
+   *
+   * Its note is worth keeping with it: this exact bug was fixed in shore commit
+   * addada6 and silently re-introduced two months later in cea94c0. Nothing
+   * fails when it regresses — the ping still returns 200. It just quietly costs
+   * 20x forever.
+   */
   test("differs from the cached request only where it is allowed to", () => {
     const cached = prefix();
     const ping = buildKeepalivePing(cached);
@@ -433,6 +442,48 @@ describe("arming and disarming", () => {
     h.clock.advance(minutes(56));
     await h.service.tick();
     expect(h.sent).toHaveLength(1);
+  });
+});
+
+describe("the on-demand ping", () => {
+  test("does not move the schedule it is measuring", async () => {
+    // `keepalive_ping_now` exists to answer "is the prefix still warm?". If
+    // asking moved the deadline, the answer would be about a schedule the act
+    // of asking had already changed.
+    const h = harness();
+    armWarm(h);
+    const before = h.service.scheduleFor(CHARACTER);
+
+    h.clock.advance(minutes(10));
+    const outcome = await h.service.pingNow(CHARACTER);
+
+    expect(outcome.status).toBe("sent");
+    expect(outcome.cold).toBe(false);
+    expect(outcome.usage?.cache_read_tokens).toBe(2200);
+    expect(h.service.scheduleFor(CHARACTER)).toEqual(before!);
+  });
+
+  test("a cold on-demand ping reports cold without disarming", async () => {
+    // The scheduler disarms on a cold read, because it has to stop spending.
+    // The diagnostic only reports — standing the schedule down as a side effect
+    // of being asked a question would be a surprising way to lose a keepalive.
+    const h = harness([response(0, 21_000)]);
+    armWarm(h);
+    const before = h.service.scheduleFor(CHARACTER);
+
+    const outcome = await h.service.pingNow(CHARACTER);
+    expect(outcome.status).toBe("sent");
+    expect(outcome.cold).toBe(true);
+    expect(h.service.scheduleFor(CHARACTER)).toEqual(before!);
+  });
+
+  test("says so when there is nothing to ping from", async () => {
+    // The daemon reads this exact detail to decide whether to rebuild from
+    // disk and push before asking again.
+    const h = harness();
+    const outcome = await h.service.pingNow(CHARACTER);
+    expect(outcome.status).toBe("skipped");
+    expect(outcome.reason, "the daemon matches on this, not the prose").toBe("no_prefix");
   });
 });
 

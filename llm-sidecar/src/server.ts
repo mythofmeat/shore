@@ -259,6 +259,14 @@ export function createSidecarHandler(
     // Drained by the daemon's autonomy tick: it still owns the heartbeat log
     // and the persisted state, so what happened here has to reach it. Scoped to
     // the draining character, because that tick can only reach its own state.
+    // The `keepalive_ping_now` diagnostic. Fires a real, billed, recorded call
+    // but deliberately leaves the schedule alone — see `pingNow`.
+    if (url.pathname === "/v1/keepalive/ping-now") {
+      const parsed = await readJson<{ character: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      return jsonResponse(await keepalive.pingNow(parsed.value.character));
+    }
+
     if (url.pathname === "/v1/keepalive/drain") {
       const parsed = await readJson<{ character?: string }>(request);
       if (!parsed.ok) return parsed.response;

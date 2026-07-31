@@ -34,7 +34,7 @@
 import { CacheKeepalive, type KeepaliveSnapshot } from "./cache_keepalive.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
 import { recordGenerate, recordGenerateError } from "../ledger/record.ts";
-import type { GenerateResponse, SidecarRequest, WireMessage } from "../llm/types.ts";
+import type { GenerateResponse, SidecarRequest, Usage, WireMessage } from "../llm/types.ts";
 
 /** How often the scheduler wakes to look for due pings. Matches the daemon's
  *  `TICK_INTERVAL`, which drove the schedule before it moved here. */
@@ -103,6 +103,30 @@ export interface KeepaliveDrain {
   /** Every armed schedule. A character with nothing worth restoring is absent,
    *  which is how the daemon learns to clear its persisted copy. */
   schedules: KeepaliveSchedule[];
+}
+
+/**
+ * `POST /v1/keepalive/ping-now` — what an on-demand ping did.
+ *
+ * The question the diagnostic exists to answer is `cold`: a ping that read
+ * nothing and paid a write did not keep anything warm. Until this existed that
+ * was only observable by waiting for the scheduler and reading the ledger
+ * afterwards.
+ */
+export interface PingNowOutcome {
+  status: "sent" | "skipped" | "failed";
+  /** Read 0 having paid a write. Only meaningful when `status` is `sent`. */
+  cold: boolean;
+  usage?: Usage;
+  /**
+   * Machine-readable cause when skipped. `no_prefix` is load-bearing across the
+   * seam: the daemon reads it to decide whether to rebuild the body from disk
+   * and push before asking again. A prose `detail` would make that a
+   * string-match on a log line.
+   */
+  reason?: "no_prefix" | "budget";
+  /** Human-readable, for the command's output. */
+  detail?: string;
 }
 
 /** Sends the ping. Injected so the scheduler does not reach for the provider
@@ -248,6 +272,47 @@ export class KeepaliveService {
       this.#entries.get(character) ??
       this.#entryFor(character, maxIdleSecs ?? DEFAULT_MAX_IDLE_SECS);
     entry.keepalive.onCacheWarmed(model, this.#now());
+  }
+
+  /**
+   * Send a ping right now and report what it read, for the
+   * `keepalive_ping_now` diagnostic.
+   *
+   * Deliberately does **not** touch the schedule — no `onPingSucceeded`, no
+   * backoff, no disarm on a cold read. Measuring must not change what is being
+   * measured: firing this to ask "is the prefix still warm?" must not move the
+   * real deadline or stand the schedule down.
+   *
+   * It is still a real billed call, so it is still recorded.
+   */
+  async pingNow(character: string): Promise<PingNowOutcome> {
+    const prefix = this.#entries.get(character)?.prefix;
+    if (prefix === undefined) {
+      return { status: "skipped", cold: false, reason: "no_prefix", detail: "no cached request" };
+    }
+    const ping = buildKeepalivePing(prefix);
+    const blocked = budgetBlockFor(ping, this.#now());
+    if (blocked !== undefined) {
+      return {
+        status: "skipped",
+        cold: false,
+        reason: "budget",
+        detail: `usage budget "${blocked.budget_name}"`,
+      };
+    }
+    const startedAt = this.#now();
+    try {
+      const response = await this.#send(ping);
+      recordGenerate(ping.context, ping, response);
+      return {
+        status: "sent",
+        cold: pingLandedCold(response.usage),
+        usage: response.usage,
+      };
+    } catch (e) {
+      recordGenerateError(ping.context, ping, startedAt, this.#now);
+      return { status: "failed", cold: false, detail: truncate(String(e), 160) };
+    }
   }
 
   /** Fire whatever is due. Safe to call concurrently with itself; a character
