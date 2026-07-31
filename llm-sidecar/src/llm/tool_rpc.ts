@@ -73,11 +73,24 @@ export interface MessagesRequest {
   messages: ReportedMessage[];
 }
 
-/** What the daemon is being asked to do. Tagged, because confusing the two
+/**
+ * One autonomy action for a character.
+ *
+ * Routes by character rather than by `rid` — it belongs to no request. The
+ * shape and the vocabulary live in `../autonomy/executor.ts`; what it is doing
+ * in this union is sharing the socket, which is all these three have in common.
+ */
+export interface AutonomyCallRequest {
+  character: string;
+  action: string;
+}
+
+/** What the daemon is being asked to do. Tagged, because confusing them
  * would persist an assistant turn as a tool result. */
 export type DaemonRequest =
   | ({ kind: "tool" } & ToolCallRequest)
-  | ({ kind: "messages" } & MessagesRequest);
+  | ({ kind: "messages" } & MessagesRequest)
+  | ({ kind: "autonomy" } & AutonomyCallRequest);
 
 /** A tool that ran. `is_error` means it failed, not that the call failed. */
 export interface ToolCallResponse {
@@ -109,17 +122,23 @@ export class ToolRpcUnreachable extends Error {
  * Resolves with whatever the daemon answered — including a tool that failed.
  * Rejects only when no answer arrived: the socket refused, the connection
  * closed first, the answer was not JSON, or the caller aborted.
+ *
+ * The answer type is a parameter because what comes back depends on what was
+ * asked: a tool answers with output the model reads, an autonomy action with
+ * what it changed. Tool calls, being the common case, get it by default; an
+ * autonomy caller asks for `unknown` and validates, since nothing here inspects
+ * the body beyond parsing it.
  */
-export async function callDaemonTool(
+export async function callDaemonTool<Answer = ToolCallOutcome>(
   socketPath: string,
   request: DaemonRequest,
   signal?: AbortSignal | null,
-): Promise<ToolCallOutcome> {
+): Promise<Answer> {
   if (signal?.aborted) {
     throw new ToolRpcUnreachable("cancelled before the tool call was sent");
   }
 
-  return await new Promise<ToolCallOutcome>((resolve, reject) => {
+  return await new Promise<Answer>((resolve, reject) => {
     let buffer = "";
     let settled = false;
     let close: (() => void) | undefined;
@@ -150,7 +169,7 @@ export async function callDaemonTool(
           const line = buffer.slice(0, newline);
           finish(() => {
             try {
-              resolve(JSON.parse(line) as ToolCallOutcome);
+              resolve(JSON.parse(line) as Answer);
             } catch (cause) {
               reject(
                 new ToolRpcUnreachable(

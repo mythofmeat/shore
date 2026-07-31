@@ -1612,6 +1612,53 @@ mod tests {
                         error: "no in-flight loop for rid rid_1".into(),
                     },
                 ),
+                // Autonomy shares the socket and routes by character instead of
+                // by rid. Every action, because the reason a compaction fired
+                // is spelled into the action name rather than sent beside it,
+                // and a name the far side does not know is silently no action.
+                "request_autonomy": crate::tool_rpc::SidecarRequest::Autonomy(
+                    crate::tool_rpc::AutonomyRequest {
+                        character: "nova".into(),
+                        action: crate::tool_rpc::AutonomyAction::HeartbeatTick,
+                    },
+                ),
+                "autonomy_actions": [
+                    crate::tool_rpc::AutonomyAction::HeartbeatTick,
+                    crate::tool_rpc::AutonomyAction::CompactMaxTurns,
+                    crate::tool_rpc::AutonomyAction::CompactIdle,
+                    crate::tool_rpc::AutonomyAction::DeepArchive,
+                    crate::tool_rpc::AutonomyAction::Dream,
+                ],
+                // An action that worked and changed something, one that worked
+                // and changed nothing, and one that ran and failed. The empty
+                // case is the shape that matters: both optional fields are
+                // omitted, so the far side must read absence as "nothing to
+                // apply" rather than as zero.
+                "autonomy_ran": crate::tool_rpc::AutonomyOutcome::Ok(
+                    crate::tool_rpc::AutonomyResponse {
+                        turn_count: Some(4),
+                        events: vec![crate::tool_rpc::AutonomyEvent {
+                            kind: "message_sent".into(),
+                            detail: "Autonomous message sent: hello".into(),
+                        }],
+                        failed: None,
+                    },
+                ),
+                "autonomy_ran_quietly": crate::tool_rpc::AutonomyOutcome::Ok(
+                    crate::tool_rpc::AutonomyResponse::default(),
+                ),
+                "autonomy_failed": crate::tool_rpc::AutonomyOutcome::Ok(
+                    crate::tool_rpc::AutonomyResponse {
+                        turn_count: None,
+                        events: Vec::new(),
+                        failed: Some("no conversation to compact".into()),
+                    },
+                ),
+                "autonomy_unreachable": crate::tool_rpc::AutonomyOutcome::Err(
+                    crate::tool_rpc::ToolCallError {
+                        error: "character nova is not loaded".into(),
+                    },
+                ),
             },
             "wire_block": wire_block_census(),
             "wire_message": {

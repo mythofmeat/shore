@@ -29,12 +29,18 @@ import { describe, expect, test } from "bun:test";
 import type { ContentBlock } from "../src/engine/types.ts";
 import { replayableMessages } from "../src/llm/replay.ts";
 import { buildAnthropicParams } from "../src/llm/providers/anthropic.ts";
+import {
+  decodeActionResult,
+  type AutonomyAction,
+  type AutonomyRequest,
+} from "../src/autonomy/executor.ts";
 import type {
   ToolCallError,
   ToolCallRequest,
   ToolCallResponse,
   MessagesRequest,
 } from "../src/llm/tool_rpc.ts";
+import { ToolRpcUnreachable } from "../src/llm/tool_rpc.ts";
 import {
   systemToText,
   toolResultText,
@@ -64,6 +70,12 @@ interface WireFixture {
     outcome_ran: ToolCallResponse;
     outcome_failed: ToolCallResponse;
     outcome_unreachable: ToolCallError;
+    request_autonomy: { kind: "autonomy" } & AutonomyRequest;
+    autonomy_actions: AutonomyAction[];
+    autonomy_ran: unknown;
+    autonomy_ran_quietly: unknown;
+    autonomy_failed: unknown;
+    autonomy_unreachable: unknown;
   };
   wire_role: Array<WireMessage["role"]>;
   thinking_replay: Array<SidecarRequest["replay_prior_thinking"]>;
@@ -294,6 +306,66 @@ describe("the tool-call protocol", () => {
     );
     expect("error" in wire.tool_rpc.outcome_ran).toBe(false);
     expect("output" in wire.tool_rpc.outcome_unreachable).toBe(false);
+  });
+});
+
+describe("the autonomy protocol", () => {
+  // Shares the socket with tool calls and nothing else. A rename here is the
+  // quiet kind: an action the daemon does not recognise is a character that
+  // stops compacting, with no error anywhere — the same failure mode the
+  // keepalive's `keepalive_interval_secs` rename produced.
+  test("an action carries exactly the fields the daemon reads", () => {
+    assertKeys<{ kind: string } & AutonomyRequest>(
+      wire.tool_rpc.request_autonomy,
+      ["kind", "character", "action"],
+      "AutonomyRequest",
+    );
+    expect(wire.tool_rpc.request_autonomy.kind).toBe("autonomy");
+    // No `rid`: an action belongs to a character, not to a request, which is
+    // what puts it in a different registry on the far side.
+    expect("rid" in wire.tool_rpc.request_autonomy).toBe(false);
+  });
+
+  test("every action this side can ask for is one the daemon knows", () => {
+    const sendable: AutonomyAction[] = [
+      "heartbeat_tick",
+      "compact_max_turns",
+      "compact_idle",
+      "deep_archive",
+      "dream",
+    ];
+    expect(wire.tool_rpc.autonomy_actions).toEqual(sendable);
+  });
+
+  test("an action that ran is read for what it changed", () => {
+    expect(decodeActionResult(wire.tool_rpc.autonomy_ran, "nova", "heartbeat_tick")).toEqual({
+      turnCount: 4,
+      events: [{ kind: "message_sent", detail: "Autonomous message sent: hello" }],
+      failed: undefined,
+    });
+  });
+
+  test("an action that changed nothing sends an empty object, not nulls", () => {
+    // Both fields are `skip_serializing_if` on the daemon side, so absence is
+    // the normal case and has to read as "nothing to apply". A `turn_count`
+    // read as 0 here would blank a count that is merely unknown.
+    expect(wire.tool_rpc.autonomy_ran_quietly).toEqual({});
+    expect(decodeActionResult(wire.tool_rpc.autonomy_ran_quietly, "nova", "dream")).toEqual({
+      turnCount: undefined,
+      events: [],
+      failed: undefined,
+    });
+  });
+
+  test("an action that ran and failed is a result; one that never ran is a throw", () => {
+    // The outcome is untagged, so the presence of `error` is the only thing
+    // telling "your compaction failed" from "that character is not loaded" —
+    // and the tick treats those completely differently.
+    const failed = decodeActionResult(wire.tool_rpc.autonomy_failed, "nova", "compact_idle");
+    expect(failed.failed).toBe("no conversation to compact");
+    expect(() =>
+      decodeActionResult(wire.tool_rpc.autonomy_unreachable, "nova", "compact_idle"),
+    ).toThrow(ToolRpcUnreachable);
   });
 });
 

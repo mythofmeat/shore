@@ -65,22 +65,55 @@ export interface AutonomyRunnerConfig {
 }
 
 /**
+ * What an action did, for the tick to fold back into its own state.
+ *
+ * The tick decides on turn counts and log lines it cannot see for itself — the
+ * conversation lives on the far side — so an action that changes either has to
+ * say so rather than leave this side to guess.
+ */
+export interface AutonomyActionResult {
+  /**
+   * The active conversation's turn count afterwards, when the action changed
+   * it. Compaction reports one; a heartbeat does not, matching the Rust, where
+   * `execute_heartbeat_tick` writes log lines and leaves `active_turn_count`
+   * alone.
+   */
+  readonly turnCount?: number | undefined;
+  /** Lines for the heartbeat log, in order. */
+  readonly events: readonly { kind: HeartbeatEventKind; detail: string }[];
+  /**
+   * Set when the action ran and failed.
+   *
+   * Not a throw, because a failed action still has log lines worth keeping and
+   * still has to release its latch. Failing to *reach* the far side is the
+   * throw — see the note on {@link AutonomyExecutor}.
+   */
+  readonly failed?: string | undefined;
+}
+
+/**
  * The work a tick cannot do itself.
  *
  * Each call is expected to be slow — every one of them is at least an LLM
- * round trip — and to throw rather than report failure in-band. A throw means
- * the tick stops there and the loop tries again; nothing about a failed
- * heartbeat should prevent the next one.
+ * round trip — and to throw only when it could not be attempted at all: the
+ * character is not loaded, the socket is gone. A throw abandons the rest of the
+ * tick and the loop tries again; nothing about one failed heartbeat should
+ * prevent the next one.
+ *
+ * An action that ran and *failed* is not that. It comes back as a result with
+ * {@link AutonomyActionResult.failed} set, and the tick treats it as a
+ * completed attempt: latch released, retry window restarted, log lines kept.
+ * The same distinction tool calls draw across this seam.
  */
 export interface AutonomyExecutor {
   /** Run a heartbeat: a private turn with tools, which may send a message. */
-  runHeartbeatTick(character: string): Promise<void>;
+  runHeartbeatTick(character: string): Promise<AutonomyActionResult>;
   /** Compact the active conversation. */
-  runCompaction(character: string, reason: CompactionReason): Promise<void>;
+  runCompaction(character: string, reason: CompactionReason): Promise<AutonomyActionResult>;
   /** Archive what is left of a conversation nobody has returned to. */
-  runDeepArchive(character: string): Promise<void>;
+  runDeepArchive(character: string): Promise<AutonomyActionResult>;
   /** Sweep memory while the character is idle. */
-  runDream(character: string): Promise<void>;
+  runDream(character: string): Promise<AutonomyActionResult>;
 }
 
 /** What one tick did, for the caller to log or assert on. */
@@ -273,7 +306,15 @@ export class CharacterAutonomy {
     };
   }
 
-  /** One tick: decide, execute, persist. */
+  /**
+   * One tick: decide, execute, persist.
+   *
+   * The persist is in a `finally` because an executor that cannot be reached
+   * throws, and everything decided before it — the clock's advance, the
+   * `tick_fired` line, the latch — is worth keeping. Losing it would mean a
+   * heartbeat deadline that survives the throw only in memory, and a restart
+   * during an unreachable daemon would forget it entirely.
+   */
   async tick(): Promise<TickOutcome> {
     const now = this.#now();
     const decision = tickDecision(this.inputs(now));
@@ -287,37 +328,56 @@ export class CharacterAutonomy {
     }
 
     const heartbeat = this.#runClock(decision, now);
-    if (heartbeat === "run_tick") {
-      this.note("tick_fired", "Heartbeat tick fired", now);
-      await this.#executor.runHeartbeatTick(this.#character);
-    }
-
-    if (decision.compaction !== undefined) {
-      await this.#executor.runCompaction(this.#character, decision.compaction);
-    }
-
-    if (decision.deepArchive) {
-      if (this.#stillIdleEnoughToArchive()) {
-        await this.#executor.runDeepArchive(this.#character);
-        this.#state.deepArchiveDone = true;
-      } else {
-        // Release the latch so the next tick is not wedged behind a trigger
-        // that no longer applies.
-        this.#state.compactionTriggered = false;
-        abandoned.push("deep_archive");
+    try {
+      if (heartbeat === "run_tick") {
+        this.note("tick_fired", "Heartbeat tick fired", now);
+        this.#apply(await this.#executor.runHeartbeatTick(this.#character));
       }
+
+      if (decision.compaction !== undefined) {
+        this.#applyCompaction(
+          await this.#executor.runCompaction(this.#character, decision.compaction),
+        );
+      }
+
+      if (decision.deepArchive) {
+        if (this.#stillIdleEnoughToArchive()) {
+          const result = await this.#executor.runDeepArchive(this.#character);
+          this.#applyCompaction(result);
+          // A failed archive must be able to run again, so the "already done
+          // for this idle period" flag is only set by one that worked.
+          if (result.failed === undefined) this.#state.deepArchiveDone = true;
+        } else {
+          // Release the latch so the next tick is not wedged behind a trigger
+          // that no longer applies.
+          this.#state.compactionTriggered = false;
+          abandoned.push("deep_archive");
+        }
+        this.#state.dirty = true;
+      }
+
+      if (decision.dream) {
+        if (this.#stillQuietEnoughToDream()) {
+          this.#apply(await this.#executor.runDream(this.#character));
+        } else {
+          abandoned.push("dream");
+        }
+      }
+    } catch (err) {
+      // Nothing ran, so the single-flight latch this tick took has nothing left
+      // to protect. Leaving it set would stop compaction and the deep archive
+      // until the user came back — one unreachable moment costing a character
+      // hours of housekeeping, at exactly the time it needs it most.
+      //
+      // No Rust to mirror here: this case only exists because executing moved
+      // across a seam that can fail on its own.
+      this.#state.compactionTriggered = false;
       this.#state.dirty = true;
+      throw err;
+    } finally {
+      await this.persist();
     }
 
-    if (decision.dream) {
-      if (this.#stillQuietEnoughToDream()) {
-        await this.#executor.runDream(this.#character);
-      } else {
-        abandoned.push("dream");
-      }
-    }
-
-    await this.persist();
     return {
       heartbeat,
       compaction: decision.compaction,
@@ -325,6 +385,33 @@ export class CharacterAutonomy {
       dream: decision.dream && !abandoned.includes("dream"),
       abandoned,
     };
+  }
+
+  /** Fold an action's log lines back in. */
+  #apply(result: AutonomyActionResult): void {
+    const now = this.#now();
+    for (const event of result.events) this.note(event.kind, event.detail, now);
+  }
+
+  /**
+   * Fold back an action that rewrote the conversation.
+   *
+   * Compaction and the deep archive land the same way whether they worked or
+   * not: the latch releases so a later trigger can fire, and the activity clock
+   * moves to now so a failure waits a full window instead of retrying every ten
+   * seconds. Only the turn counts are conditional on it having worked. Mirrors
+   * `execute_idle_compaction` and `notify_compaction_failed`.
+   */
+  #applyCompaction(result: AutonomyActionResult): void {
+    this.#apply(result);
+    const now = this.#now();
+    if (result.failed === undefined && result.turnCount !== undefined) {
+      this.onCompactionComplete(result.turnCount, now);
+      return;
+    }
+    this.#state.compactionTriggered = false;
+    this.#state.lastActivityAt = now;
+    this.#state.dirty = true;
   }
 
   /**

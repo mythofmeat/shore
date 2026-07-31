@@ -173,6 +173,34 @@
     },
     "outcome_unreachable": {
       "error": "no in-flight loop for rid rid_1"
+    },
+    "request_autonomy": {
+      "kind": "autonomy",
+      "character": "nova",
+      "action": "heartbeat_tick"
+    },
+    "autonomy_actions": [
+      "heartbeat_tick",
+      "compact_max_turns",
+      "compact_idle",
+      "deep_archive",
+      "dream"
+    ],
+    "autonomy_ran": {
+      "turn_count": 4,
+      "events": [
+        {
+          "kind": "message_sent",
+          "detail": "Autonomous message sent: hello"
+        }
+      ]
+    },
+    "autonomy_ran_quietly": {},
+    "autonomy_failed": {
+      "failed": "no conversation to compact"
+    },
+    "autonomy_unreachable": {
+      "error": "character nova is not loaded"
     }
   },
   "wire_block": {

@@ -27,12 +27,24 @@
 //! calls within a loop run one at a time, which is what the daemon-side loop
 //! did when it ran `for tool_use in &result.tool_uses` sequentially.
 //!
+//! # Two things route over this socket
+//!
+//! Tool calls belong to one in-flight request and are keyed by its `rid`.
+//! Autonomy calls ([`AutonomyRequest`]) belong to a *character* and outlive
+//! every request — the sidecar's tick loop decides a character should compact,
+//! archive, dream or run a heartbeat, and asks this side to do it, because all
+//! four reach the memory store, the tool registry and MCP.
+//!
+//! They share the socket and the connection handler, and nothing else: separate
+//! registries, separate reply types. A tool answers with output the model reads;
+//! an autonomy action answers with what changed — see [`AutonomyResponse`].
+//!
 //! # Protocol
 //!
 //! Line-delimited JSON over a Unix socket, one connection per call: the caller
-//! writes a [`ToolCallRequest`] and a newline, reads a [`ToolCallResponse`] and
-//! a newline, and closes. There is no framing beyond the newline, no
-//! keep-alive, and no correlation id — a connection *is* the correlation.
+//! writes a [`SidecarRequest`] and a newline, reads an outcome and a newline,
+//! and closes. There is no framing beyond the newline, no keep-alive, and no
+//! correlation id — a connection *is* the correlation.
 //!
 //! The daemon→sidecar direction is HTTP over a Unix socket, so this is not
 //! symmetric with it. That is deliberate: the daemon has no HTTP server
@@ -93,7 +105,39 @@ pub struct MessagesRequest {
     pub messages: Vec<ReportedMessage>,
 }
 
-/// What the sidecar is asking for. Tagged, because the two are answered
+/// One autonomy action the sidecar wants run for a character.
+///
+/// Flat, and the compaction reason is folded into the action name rather than
+/// riding beside it: "compact because the conversation is idle" is a different
+/// thing to ask for than "compact because it grew past `max_turns`", and the
+/// states that would otherwise be representable — a dream with a reason, a
+/// compaction without one — are not worth being able to spell.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AutonomyAction {
+    /// A private turn with tools, which may end in the character speaking.
+    HeartbeatTick,
+    /// The active conversation grew past `max_turns`.
+    CompactMaxTurns,
+    /// It has been quiet for `idle_trigger`, with enough turns to be worth it.
+    CompactIdle,
+    /// Archive what is left of a conversation nobody has returned to.
+    DeepArchive,
+    /// Sweep memory while the character is idle.
+    Dream,
+}
+
+/// Do this for this character.
+///
+/// No `rid`: nothing here belongs to a request. The character is the routing
+/// key and it is registered for as long as the character is loaded.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AutonomyRequest {
+    pub character: String,
+    pub action: AutonomyAction,
+}
+
+/// What the sidecar is asking for. Tagged, because they are answered
 /// differently and confusing them would persist a turn as a tool result.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -102,14 +146,36 @@ pub enum SidecarRequest {
     Tool(ToolCallRequest),
     /// Record these messages; nothing to compute.
     Messages(MessagesRequest),
+    /// Run this autonomy action and tell me what it changed.
+    Autonomy(AutonomyRequest),
+}
+
+/// What a request routes to. The two live in different registries with
+/// different lifetimes: a loop lasts one request, a character lasts as long as
+/// it is loaded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Route<'req> {
+    Loop(&'req str),
+    Character(&'req str),
+}
+
+impl<'req> Route<'req> {
+    /// The registry key, for logging and for the "nobody is listening" message.
+    pub fn key(self) -> &'req str {
+        match self {
+            Self::Loop(rid) => rid,
+            Self::Character(name) => name,
+        }
+    }
 }
 
 impl SidecarRequest {
-    /// Which in-flight loop this belongs to.
-    pub fn rid(&self) -> &str {
+    /// Which registry answers this, and under what key.
+    pub fn route(&self) -> Route<'_> {
         match self {
-            Self::Tool(request) => &request.rid,
-            Self::Messages(request) => &request.rid,
+            Self::Tool(request) => Route::Loop(&request.rid),
+            Self::Messages(request) => Route::Loop(&request.rid),
+            Self::Autonomy(request) => Route::Character(&request.character),
         }
     }
 }
@@ -143,6 +209,57 @@ pub enum ToolCallOutcome {
     Err(ToolCallError),
 }
 
+/// One line for the heartbeat log, produced by an action that ran.
+///
+/// `kind` is the wire spelling rather than a Rust enum, because the log itself
+/// is the sidecar's now and this side no longer has a type for it. What keeps
+/// the two agreeing is the parity fixture, the same guard the log file has: an
+/// unknown kind is dropped by the reader rather than raised, so drift here
+/// costs entries rather than errors, and only a pinned spelling catches it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AutonomyEvent {
+    pub kind: String,
+    pub detail: String,
+}
+
+/// What an autonomy action did.
+///
+/// The distinction that matters is `failed` versus [`ToolCallError`], and it is
+/// the same one tools draw. An action that ran and failed is a **result**: the
+/// tick logs it, stops there, and the next tick tries again. A call that never
+/// reached a character — not registered, shutting down — is a transport error,
+/// and means the sidecar is holding state for a character this side does not
+/// have.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+// Every field here is optional, so without this an error body — which carries
+// only `error` — deserializes cleanly as a *successful* action that changed
+// nothing, and [`AutonomyOutcome`] being untagged means it never reaches the
+// `Err` arm. `ToolCallResponse` is safe from the same trap only by accident, in
+// having two required fields. Do not remove this to add a field: add it as
+// optional and the shape stays unambiguous.
+#[serde(deny_unknown_fields)]
+pub struct AutonomyResponse {
+    /// The active conversation's turn count afterwards, when the action changed
+    /// it. The sidecar's tick decides on turn counts and cannot see the
+    /// conversation, so an action that compacts or speaks has to say so.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_count: Option<usize>,
+    /// What to write to the heartbeat log, in order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub events: Vec<AutonomyEvent>,
+    /// Set when the action ran and failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failed: Option<String>,
+}
+
+/// What an autonomy call carries back: what happened, or why nothing did.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum AutonomyOutcome {
+    Ok(AutonomyResponse),
+    Err(ToolCallError),
+}
+
 /// A request plus the channel its answer goes back on.
 #[derive(Debug)]
 pub struct ToolCall {
@@ -168,10 +285,48 @@ impl ToolCall {
     }
 }
 
-/// Which in-flight loops are accepting tool calls.
+/// An autonomy action plus the channel its answer goes back on.
+#[derive(Debug)]
+pub struct AutonomyCall {
+    pub request: AutonomyRequest,
+    reply: oneshot::Sender<AutonomyResponse>,
+}
+
+impl AutonomyCall {
+    /// Build a call and its reply channel directly, for tests that drive a
+    /// servicing task without a socket in the way.
+    #[cfg(test)]
+    pub fn for_test(request: AutonomyRequest) -> (Self, oneshot::Receiver<AutonomyResponse>) {
+        let (reply, rx) = oneshot::channel();
+        (Self { request, reply }, rx)
+    }
+
+    /// Answer the call. Dropping one without answering is also valid — the
+    /// sidecar sees the character having gone away and retries next tick.
+    pub fn respond(self, response: AutonomyResponse) {
+        let _ignored = self.reply.send(response);
+    }
+}
+
+/// The autonomy channel holds one message, and never more than briefly:
+/// [`ToolRpcRegistry::busy`] is what actually stops a second action, so nothing
+/// queues here. One slot rather than zero only so the send completes without
+/// waiting for the servicing task to be scheduled.
+const AUTONOMY_QUEUE_DEPTH: usize = 1;
+
+/// Which in-flight loops are accepting tool calls, and which characters are
+/// accepting autonomy actions.
 #[derive(Debug, Default)]
 pub struct ToolRpcRegistry {
     loops: DashMap<String, mpsc::Sender<ToolCall>>,
+    characters: DashMap<String, mpsc::Sender<AutonomyCall>>,
+    /// Characters with an action outstanding.
+    ///
+    /// The channel's capacity cannot serve for this: it frees the moment the
+    /// servicing task takes the message, which is the instant *before* the LLM
+    /// round trip everything is actually waiting on. A depth-based guard would
+    /// therefore admit a second action for the entire duration of the first.
+    busy: DashMap<String, ()>,
 }
 
 /// Keeps a loop registered for as long as it is running.
@@ -188,6 +343,23 @@ pub struct LoopRegistration {
 impl Drop for LoopRegistration {
     fn drop(&mut self) {
         let _removed = self.registry.loops.remove(&self.rid);
+    }
+}
+
+/// Keeps a character reachable for as long as it is loaded.
+///
+/// Same drop-to-deregister discipline as [`LoopRegistration`], and it matters
+/// more here: a stale entry would take an autonomy call and never answer it,
+/// which the sidecar cannot tell apart from a heartbeat that is simply slow.
+#[derive(Debug)]
+pub struct CharacterRegistration {
+    registry: std::sync::Arc<ToolRpcRegistry>,
+    character: String,
+}
+
+impl Drop for CharacterRegistration {
+    fn drop(&mut self) {
+        let _removed = self.registry.characters.remove(&self.character);
     }
 }
 
@@ -222,15 +394,39 @@ impl ToolRpcRegistry {
         )
     }
 
+    /// Announce that `character` is loaded and will service autonomy actions.
+    ///
+    /// Same contract as [`Self::register`]: a receiver to select on, and a
+    /// guard that deregisters on drop. Re-registering a character replaces it,
+    /// which is what a config reload does.
+    pub fn register_character<C>(
+        self: &std::sync::Arc<Self>,
+        character: C,
+    ) -> (mpsc::Receiver<AutonomyCall>, CharacterRegistration)
+    where
+        C: Into<String>,
+    {
+        let key: String = character.into();
+        let (tx, rx) = mpsc::channel(AUTONOMY_QUEUE_DEPTH);
+        let _superseded = self.characters.insert(key.clone(), tx);
+        (
+            rx,
+            CharacterRegistration {
+                registry: std::sync::Arc::clone(self),
+                character: key,
+            },
+        )
+    }
+
     /// Route one call to its loop and wait for the answer.
     async fn dispatch(&self, request: SidecarRequest) -> ToolCallOutcome {
-        let Some(sender) = self.loops.get(request.rid()).map(|entry| entry.clone()) else {
+        let rid = request.route().key().to_owned();
+        let Some(sender) = self.loops.get(&rid).map(|entry| entry.clone()) else {
             return ToolCallOutcome::Err(ToolCallError {
-                error: format!("no in-flight loop for rid {}", request.rid()),
+                error: format!("no in-flight loop for rid {rid}"),
             });
         };
 
-        let rid = request.rid().to_owned();
         let (reply_tx, reply_rx) = oneshot::channel();
         let call = ToolCall {
             request,
@@ -249,6 +445,64 @@ impl ToolRpcRegistry {
             // cancelled turn, or a panic in the executor.
             Err(_recv_error) => ToolCallOutcome::Err(ToolCallError {
                 error: format!("loop for rid {rid} dropped the call without answering"),
+            }),
+        }
+    }
+
+    /// Route one autonomy action to its character and wait for the answer.
+    ///
+    /// One at a time per character, refused rather than queued: an action's
+    /// triggers were evaluated when it was sent, and running the second one
+    /// after however long the first LLM round trip takes would act on a
+    /// decision that is by then minutes stale. The sidecar declines to start a
+    /// second anyway; this is the half that holds when it is not the only
+    /// caller.
+    ///
+    /// No timeout, deliberately. A slow action is ordinary here, and a hang
+    /// costs that character's autonomy and nothing else.
+    async fn dispatch_autonomy(&self, request: AutonomyRequest) -> AutonomyOutcome {
+        let character = request.character.clone();
+        let Some(sender) = self.characters.get(&character).map(|entry| entry.clone()) else {
+            return AutonomyOutcome::Err(ToolCallError {
+                error: format!("character {character} is not loaded"),
+            });
+        };
+
+        // Test-and-set in one shard-locked operation: a previous value means
+        // somebody else holds it, and this call must not clear it on the way
+        // out.
+        if self.busy.insert(character.clone(), ()).is_some() {
+            return AutonomyOutcome::Err(ToolCallError {
+                error: format!("character {character} is already running one"),
+            });
+        }
+        let outcome = Self::await_autonomy(sender, request, &character).await;
+        let _released = self.busy.remove(&character);
+        outcome
+    }
+
+    /// Send and wait, split out so the busy flag has exactly one release point.
+    async fn await_autonomy(
+        sender: mpsc::Sender<AutonomyCall>,
+        request: AutonomyRequest,
+        character: &str,
+    ) -> AutonomyOutcome {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        let call = AutonomyCall {
+            request,
+            reply: reply_tx,
+        };
+
+        if sender.send(call).await.is_err() {
+            return AutonomyOutcome::Err(ToolCallError {
+                error: format!("character {character} stopped accepting autonomy actions"),
+            });
+        }
+
+        match reply_rx.await {
+            Ok(response) => AutonomyOutcome::Ok(response),
+            Err(_recv_error) => AutonomyOutcome::Err(ToolCallError {
+                error: format!("character {character} dropped the action without answering"),
             }),
         }
     }
@@ -299,19 +553,27 @@ async fn handle_connection(stream: UnixStream, registry: &ToolRpcRegistry) -> st
         return Ok(());
     }
 
-    let outcome = match serde_json::from_str::<SidecarRequest>(line.trim_end()) {
-        Ok(request) => {
-            debug!(rid = %request.rid(), "Tool RPC: dispatching");
-            registry.dispatch(request).await
+    // The two outcome types are both untagged, so what goes on the wire is the
+    // inner object either way. Which one to build is decided by what was asked
+    // for, not by the answer — a caller that sent an autonomy action must not
+    // get a tool-shaped refusal back.
+    let encoded = match serde_json::from_str::<SidecarRequest>(line.trim_end()) {
+        Ok(SidecarRequest::Autonomy(request)) => {
+            debug!(character = %request.character, action = ?request.action, "Tool RPC: dispatching");
+            serde_json::to_string(&registry.dispatch_autonomy(request).await)
         }
-        Err(e) => ToolCallOutcome::Err(ToolCallError {
+        Ok(request) => {
+            debug!(rid = %request.route().key(), "Tool RPC: dispatching");
+            serde_json::to_string(&registry.dispatch(request).await)
+        }
+        Err(e) => serde_json::to_string(&ToolCallOutcome::Err(ToolCallError {
             error: format!("malformed tool call: {e}"),
-        }),
+        })),
     };
 
-    let mut body = serde_json::to_string(&outcome).unwrap_or_else(|e| {
-        // Only reachable if a tool's output is not representable as JSON, which
-        // it always is — it is a String and a bool.
+    let mut body = encoded.unwrap_or_else(|e| {
+        // Only reachable if an output is not representable as JSON, which it
+        // always is — these are strings, numbers and bools.
         format!(r#"{{"error":"failed to encode tool response: {e}"}}"#)
     });
     body.push('\n');
@@ -324,6 +586,22 @@ async fn handle_connection(stream: UnixStream, registry: &ToolRpcRegistry) -> st
 /// Make one tool call over the socket. Used by tests and by anything on this
 /// side that needs to speak the protocol; the sidecar has its own client.
 pub async fn call(socket: &Path, request: &SidecarRequest) -> std::io::Result<ToolCallOutcome> {
+    round_trip(socket, request).await
+}
+
+/// Make one autonomy call over the socket. Same protocol, different answer.
+pub async fn call_autonomy(
+    socket: &Path,
+    request: &AutonomyRequest,
+) -> std::io::Result<AutonomyOutcome> {
+    round_trip(socket, &SidecarRequest::Autonomy(request.clone())).await
+}
+
+/// Write one request, read one answer, close.
+async fn round_trip<T: serde::de::DeserializeOwned>(
+    socket: &Path,
+    request: &SidecarRequest,
+) -> std::io::Result<T> {
     let stream = UnixStream::connect(socket).await?;
     let mut reader = BufReader::new(stream);
     let mut body = serde_json::to_string(request).map_err(std::io::Error::other)?;
@@ -561,6 +839,263 @@ mod tests {
             ToolCallOutcome::Ok(ToolCallResponse {
                 output: "slow".to_owned(),
                 is_error: false,
+            })
+        );
+    }
+
+    fn autonomy(character: &str, action: AutonomyAction) -> AutonomyRequest {
+        AutonomyRequest {
+            character: character.to_owned(),
+            action,
+        }
+    }
+
+    /// Make one autonomy call, failing the test rather than propagating.
+    async fn autonomy_ok(socket: &Path, request: &AutonomyRequest) -> AutonomyOutcome {
+        call_autonomy(socket, request)
+            .await
+            .expect("tool socket round trip")
+    }
+
+    #[tokio::test]
+    async fn an_action_reaches_its_character_and_what_changed_comes_back() {
+        let h = harness().await;
+        let (mut actions, _registration) = h.registry.register_character("nova");
+
+        let character_task = tokio::spawn(async move {
+            let call = actions.recv().await.expect("an action should arrive");
+            let action = call.request.action;
+            call.respond(AutonomyResponse {
+                turn_count: Some(12),
+                events: vec![AutonomyEvent {
+                    kind: "message_sent".to_owned(),
+                    detail: "said something".to_owned(),
+                }],
+                failed: None,
+            });
+            action
+        });
+
+        let outcome =
+            autonomy_ok(&h.socket, &autonomy("nova", AutonomyAction::HeartbeatTick)).await;
+        assert_eq!(
+            outcome,
+            AutonomyOutcome::Ok(AutonomyResponse {
+                turn_count: Some(12),
+                events: vec![AutonomyEvent {
+                    kind: "message_sent".to_owned(),
+                    detail: "said something".to_owned(),
+                }],
+                failed: None,
+            })
+        );
+        assert_eq!(
+            character_task.await.expect("character task"),
+            AutonomyAction::HeartbeatTick
+        );
+    }
+
+    #[tokio::test]
+    async fn an_action_that_ran_and_failed_is_a_result_not_a_transport_error() {
+        // Same distinction tools draw: the tick logs it and tries again next
+        // time, where a transport error means the sidecar holds state for a
+        // character this side does not have.
+        let h = harness().await;
+        let (mut actions, _registration) = h.registry.register_character("nova");
+        drop(tokio::spawn(async move {
+            let call = actions.recv().await.expect("an action should arrive");
+            call.respond(AutonomyResponse {
+                failed: Some("no conversation to compact".to_owned()),
+                ..AutonomyResponse::default()
+            });
+        }));
+
+        let outcome = autonomy_ok(&h.socket, &autonomy("nova", AutonomyAction::CompactIdle)).await;
+        assert_eq!(
+            outcome,
+            AutonomyOutcome::Ok(AutonomyResponse {
+                turn_count: None,
+                events: Vec::new(),
+                failed: Some("no conversation to compact".to_owned()),
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn an_action_for_an_unloaded_character_is_refused() {
+        let h = harness().await;
+        let outcome = autonomy_ok(&h.socket, &autonomy("ghost", AutonomyAction::Dream)).await;
+        assert_eq!(
+            outcome,
+            AutonomyOutcome::Err(ToolCallError {
+                error: "character ghost is not loaded".to_owned(),
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn a_second_action_is_refused_rather_than_queued_behind_the_first() {
+        // The triggers behind an action were evaluated when it was sent. Queueing
+        // would run the second one after however long the first LLM round trip
+        // takes, on a decision that is by then minutes stale.
+        //
+        // Note *where* the first call is parked: the servicing task has already
+        // taken it off the channel, so the channel is empty and its capacity
+        // says nothing. This is the window a depth-based guard misses, and it is
+        // the entire duration of the action.
+        let h = harness().await;
+        let (mut actions, _registration) = h.registry.register_character("nova");
+
+        let (taken_tx, taken_rx) = oneshot::channel::<()>();
+        let (release_tx, release_rx) = oneshot::channel::<()>();
+        drop(tokio::spawn(async move {
+            let call = actions.recv().await.expect("an action should arrive");
+            let _announced = taken_tx.send(());
+            let _released = release_rx.await;
+            call.respond(AutonomyResponse::default());
+            // Stay alive so a second call would meet a live receiver rather
+            // than a closed channel — the refusal under test has to be the busy
+            // one, not "this character went away".
+            let _parked = actions.recv().await;
+        }));
+
+        let held = tokio::spawn({
+            let socket = h.socket.clone();
+            async move { autonomy_ok(&socket, &autonomy("nova", AutonomyAction::Dream)).await }
+        });
+        taken_rx
+            .await
+            .expect("the first action reached the character");
+
+        let second = autonomy_ok(&h.socket, &autonomy("nova", AutonomyAction::DeepArchive)).await;
+        assert_eq!(
+            second,
+            AutonomyOutcome::Err(ToolCallError {
+                error: "character nova is already running one".to_owned(),
+            })
+        );
+
+        let _ignored = release_tx.send(());
+        assert_eq!(
+            held.await.expect("held task"),
+            AutonomyOutcome::Ok(AutonomyResponse::default())
+        );
+    }
+
+    #[tokio::test]
+    async fn the_next_action_goes_through_once_the_last_one_answered() {
+        // The busy flag has to clear on every path out, or one action would
+        // disable that character's autonomy for the life of the daemon.
+        let h = harness().await;
+        let (mut actions, _registration) = h.registry.register_character("nova");
+        drop(tokio::spawn(async move {
+            while let Some(call) = actions.recv().await {
+                call.respond(AutonomyResponse::default());
+            }
+        }));
+
+        for _attempt in 0..3 {
+            assert_eq!(
+                autonomy_ok(&h.socket, &autonomy("nova", AutonomyAction::Dream)).await,
+                AutonomyOutcome::Ok(AutonomyResponse::default())
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn a_dropped_action_still_clears_the_busy_flag() {
+        let h = harness().await;
+        let (mut actions, _registration) = h.registry.register_character("nova");
+        drop(tokio::spawn(async move {
+            // First call is dropped without an answer; the rest are answered.
+            drop(actions.recv().await.expect("an action should arrive"));
+            while let Some(call) = actions.recv().await {
+                call.respond(AutonomyResponse::default());
+            }
+        }));
+
+        let dropped = autonomy_ok(&h.socket, &autonomy("nova", AutonomyAction::Dream)).await;
+        assert!(matches!(dropped, AutonomyOutcome::Err(_)));
+        assert_eq!(
+            autonomy_ok(&h.socket, &autonomy("nova", AutonomyAction::Dream)).await,
+            AutonomyOutcome::Ok(AutonomyResponse::default())
+        );
+    }
+
+    #[tokio::test]
+    async fn a_character_that_drops_an_action_does_not_hang_the_caller() {
+        let h = harness().await;
+        let (mut actions, _registration) = h.registry.register_character("nova");
+        drop(tokio::spawn(async move {
+            // Takes the call and goes away — a panic in an executor, or a
+            // character unloaded mid-action.
+            drop(actions.recv().await.expect("an action should arrive"));
+        }));
+
+        let outcome = autonomy_ok(&h.socket, &autonomy("nova", AutonomyAction::Dream)).await;
+        assert_eq!(
+            outcome,
+            AutonomyOutcome::Err(ToolCallError {
+                error: "character nova dropped the action without answering".to_owned(),
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn an_unloaded_character_stops_accepting_actions() {
+        let h = harness().await;
+        let (actions, registration) = h.registry.register_character("nova");
+        drop(actions);
+        drop(registration);
+
+        let outcome = autonomy_ok(&h.socket, &autonomy("nova", AutonomyAction::Dream)).await;
+        assert_eq!(
+            outcome,
+            AutonomyOutcome::Err(ToolCallError {
+                error: "character nova is not loaded".to_owned(),
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn a_character_and_a_loop_may_share_a_name_without_meeting() {
+        // Two registries, two key spaces. Nothing stops a request id and a
+        // character name colliding, and if they shared a map an autonomy action
+        // would be handed to a tool loop that has no idea what to do with it.
+        let h = harness().await;
+        let (mut tools, _loop_reg) = h.registry.register("nova", 4);
+        let (mut actions, _character_reg) = h.registry.register_character("nova");
+
+        drop(tokio::spawn(async move {
+            let call = tools.recv().await.expect("a tool call should arrive");
+            call.respond(ToolCallResponse {
+                output: "the loop answered".to_owned(),
+                is_error: false,
+            });
+        }));
+        drop(tokio::spawn(async move {
+            let call = actions.recv().await.expect("an action should arrive");
+            call.respond(AutonomyResponse {
+                turn_count: Some(7),
+                ..AutonomyResponse::default()
+            });
+        }));
+
+        let tool = call_ok(&h.socket, &request("nova", "read")).await;
+        assert_eq!(
+            tool,
+            ToolCallOutcome::Ok(ToolCallResponse {
+                output: "the loop answered".to_owned(),
+                is_error: false,
+            })
+        );
+
+        let action = autonomy_ok(&h.socket, &autonomy("nova", AutonomyAction::Dream)).await;
+        assert_eq!(
+            action,
+            AutonomyOutcome::Ok(AutonomyResponse {
+                turn_count: Some(7),
+                ..AutonomyResponse::default()
             })
         );
     }

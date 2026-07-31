@@ -21,6 +21,7 @@ import { HeartbeatLog } from "../src/autonomy/heartbeat_log.ts";
 import { loadState, STATE_FILENAME, type AutonomyStateFile } from "../src/autonomy/state_file.ts";
 import {
   CharacterAutonomy,
+  type AutonomyActionResult,
   type AutonomyExecutor,
   type AutonomyRunnerConfig,
 } from "../src/autonomy/runner.ts";
@@ -33,26 +34,35 @@ class SpyExecutor implements AutonomyExecutor {
   readonly calls: string[] = [];
   /** Runs before each call returns, so a test can move the world mid-tick. */
   onCall: ((name: string) => void) | undefined;
-  /** Names that should throw instead of completing. */
+  /** Names that should throw: the daemon could not be reached at all. */
+  readonly unreachable = new Set<string>();
+  /** Names that should come back having run and failed. */
   readonly failing = new Set<string>();
+  /** What each name reports back, for the tick to fold in. */
+  readonly results = new Map<string, AutonomyActionResult>();
 
-  #record(name: string): void {
+  #record(name: string): AutonomyActionResult {
     this.calls.push(name);
     this.onCall?.(name);
-    if (this.failing.has(name)) throw new Error(`${name} failed`);
+    if (this.unreachable.has(name)) throw new Error(`${name} unreachable`);
+    const result = this.results.get(name) ?? { events: [] };
+    return this.failing.has(name) ? { ...result, failed: `${name} failed` } : result;
   }
 
-  async runHeartbeatTick(): Promise<void> {
-    this.#record("heartbeat");
+  async runHeartbeatTick(): Promise<AutonomyActionResult> {
+    return this.#record("heartbeat");
   }
-  async runCompaction(_character: string, reason: CompactionReason): Promise<void> {
-    this.#record(`compaction:${reason}`);
+  async runCompaction(
+    _character: string,
+    reason: CompactionReason,
+  ): Promise<AutonomyActionResult> {
+    return this.#record(`compaction:${reason}`);
   }
-  async runDeepArchive(): Promise<void> {
-    this.#record("deep_archive");
+  async runDeepArchive(): Promise<AutonomyActionResult> {
+    return this.#record("deep_archive");
   }
-  async runDream(): Promise<void> {
-    this.#record("dream");
+  async runDream(): Promise<AutonomyActionResult> {
+    return this.#record("dream");
   }
 }
 
@@ -204,6 +214,10 @@ describe("the single-flight latch", () => {
   test("a second tick does not re-fire compaction", async () => {
     await inTempDir(async (dir) => {
       const { runner, executor, time } = build({ dir, config: { dreamingEnabled: false } });
+      // What a real compaction reports: the turns it retained. Without it the
+      // conversation is still 50 turns long and `max_turns` fires again the
+      // moment the latch releases — correctly, since nothing was compacted.
+      executor.results.set("compaction:max_turns", { events: [], turnCount: 4 });
       runner.onUserMessage(50, time.now);
       time.now += 2 * HOUR;
 
@@ -636,22 +650,158 @@ describe("persistence", () => {
   });
 });
 
-describe("when execution fails", () => {
+describe("when the daemon cannot be reached", () => {
   test("the throw reaches the caller and the tick stops there", async () => {
-    // Deliberate: a failed heartbeat is the loop's problem, not the tick's, and
-    // swallowing it here would mean the next tick fires the same broken work
-    // with nothing having reported why.
+    // Deliberate: an unreachable daemon is the loop's problem, not the tick's,
+    // and swallowing it here would mean the next tick fires the same broken
+    // work with nothing having reported why.
     await inTempDir(async (dir) => {
       const { runner, executor, time } = build({
         dir,
         config: { minimumInactiveMs: 0 },
       });
-      executor.failing.add("compaction:max_turns");
+      executor.unreachable.add("compaction:max_turns");
       runner.onUserMessage(50, time.now);
       time.now += 2 * HOUR;
 
-      await expect(runner.tick()).rejects.toThrow("compaction:max_turns failed");
+      await expect(runner.tick()).rejects.toThrow("compaction:max_turns unreachable");
       expect(executor.calls, "dreaming never ran").not.toContain("dream");
+    });
+  });
+
+  test("the latch releases, so one bad moment does not wedge compaction", async () => {
+    // Nothing ran, so the single-flight latch has nothing to protect. Held, it
+    // would stop compaction until the user came back — which for an idle
+    // character is exactly the wait that made compaction due.
+    await inTempDir(async (dir) => {
+      const { runner, executor, time } = build({
+        dir,
+        config: { idleTriggerSecs: 0, dreamingEnabled: false },
+      });
+      executor.unreachable.add("compaction:max_turns");
+      runner.onUserMessage(50, time.now);
+      time.now += 2 * HOUR;
+      await expect(runner.tick()).rejects.toThrow();
+
+      executor.unreachable.clear();
+      expect((await runner.tick()).compaction).toBe("max_turns");
+    });
+  });
+
+  test("what the tick decided before the throw still reaches disk", async () => {
+    // The clock advanced and a `tick_fired` line was written before the
+    // heartbeat was attempted. Losing those to the throw would leave a deadline
+    // that exists only in memory, and a restart would forget the wake entirely.
+    await inTempDir(async (dir) => {
+      const { runner, executor, time } = build({
+        dir,
+        config: { maxTurns: 0, idleTriggerSecs: 0, dreamingEnabled: false },
+      });
+      executor.unreachable.add("heartbeat");
+      runner.onUserMessage(1, time.now);
+      time.now += 4 * HOUR;
+
+      await expect(runner.tick()).rejects.toThrow("heartbeat unreachable");
+
+      const saved = await loadState(join(dir, STATE_FILENAME));
+      expect(saved, "the state was written despite the throw").toBeDefined();
+      expect(saved?.ticksWithoutUser).toBe(1);
+      const log = (await Bun.file(join(dir, "heartbeat.jsonl")).text()).trimEnd();
+      expect(log).toContain("tick_fired");
+    });
+  });
+});
+
+describe("what an action reports back", () => {
+  test("its log lines are written as the tick's own", async () => {
+    // A heartbeat's tool uses and its message all happen on the far side. The
+    // log a person reads is here, so the daemon has to say what it did.
+    await inTempDir(async (dir) => {
+      const { runner, executor, time } = build({
+        dir,
+        config: { maxTurns: 0, idleTriggerSecs: 0, dreamingEnabled: false },
+      });
+      executor.results.set("heartbeat", {
+        events: [
+          { kind: "tool_use", detail: "read a file" },
+          { kind: "message_sent", detail: "Autonomous message sent: hello" },
+        ],
+      });
+      runner.onUserMessage(1, time.now);
+      time.now += 4 * HOUR;
+      await runner.tick();
+
+      const lines = (await Bun.file(join(dir, "heartbeat.jsonl")).text()).trimEnd().split("\n");
+      expect(lines.map((l) => JSON.parse(l).kind)).toEqual([
+        "tick_fired",
+        "tool_use",
+        "message_sent",
+      ]);
+    });
+  });
+
+  test("a compaction's turn count becomes the count the next tick decides on", async () => {
+    // The idle trigger is off so `max_turns` is the only thing that can fire,
+    // which is what makes this about the count and nothing else.
+    await inTempDir(async (dir) => {
+      const { runner, executor, time } = build({
+        dir,
+        config: { idleTriggerSecs: 0, dreamingEnabled: false },
+      });
+      executor.results.set("compaction:max_turns", { events: [], turnCount: 4 });
+      runner.onUserMessage(50, time.now);
+      time.now += 2 * HOUR;
+      await runner.tick();
+
+      expect(runner.snapshot().coveredTurnCount).toBe(4);
+      // 4 is under `maxTurns`, so nothing fires again — where a tick that
+      // ignored the count would still be looking at 50 and compact forever.
+      time.now += 2 * HOUR;
+      expect((await runner.tick()).compaction).toBeUndefined();
+    });
+  });
+
+  test("a compaction that ran and failed keeps its turn count and waits a window", async () => {
+    // Mirrors `notify_compaction_failed`: the latch releases so it can retry,
+    // and the activity clock moves to now so the retry waits a full idle window
+    // rather than firing again ten seconds later.
+    await inTempDir(async (dir) => {
+      const { runner, executor, time } = build({
+        dir,
+        config: { idleTriggerSecs: 0, dreamingEnabled: false },
+      });
+      executor.failing.add("compaction:max_turns");
+      executor.results.set("compaction:max_turns", { events: [], turnCount: 4 });
+      runner.onUserMessage(50, time.now);
+      time.now += 2 * HOUR;
+      await runner.tick();
+
+      expect(runner.snapshot().coveredTurnCount, "nothing was compacted").toBe(0);
+      // Still 50 turns, so `max_turns` fires again.
+      time.now += 2 * HOUR;
+      expect((await runner.tick()).compaction).toBe("max_turns");
+      expect(executor.calls.filter((c) => c.startsWith("compaction:")).length).toBe(2);
+    });
+  });
+
+  test("a deep archive that ran and failed is allowed to run again", async () => {
+    await inTempDir(async (dir) => {
+      const { runner, executor, time } = build({
+        dir,
+        config: { maxTurns: 0, idleTriggerSecs: 0, archiveAfterSecs: 5, dreamingEnabled: false },
+      });
+      executor.failing.add("deep_archive");
+      runner.onUserMessage(10, time.now);
+      time.now += 4 * HOUR;
+      await runner.tick();
+      expect(executor.calls).toContain("deep_archive");
+
+      time.now += 4 * HOUR;
+      await runner.tick();
+      expect(
+        executor.calls.filter((c) => c === "deep_archive").length,
+        "a failed archive is not a done archive",
+      ).toBe(2);
     });
   });
 });

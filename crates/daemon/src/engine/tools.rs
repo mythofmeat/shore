@@ -202,6 +202,19 @@ pub async fn serve_tool_calls(
                 // round completes.
                 tool_response_from(&outcome.content_block)
             }
+            // Autonomy actions are keyed by character and route to a different
+            // registry, so one cannot arrive on a loop's channel. The socket is
+            // a single parse target, though, so the type still admits it —
+            // answered rather than panicked on, same as an unexpected block.
+            crate::tool_rpc::SidecarRequest::Autonomy(request) => {
+                crate::tool_rpc::ToolCallResponse {
+                    output: format!(
+                        "autonomy action for {} was routed to a tool loop",
+                        request.character
+                    ),
+                    is_error: true,
+                }
+            }
         };
         call.respond(response);
     }
