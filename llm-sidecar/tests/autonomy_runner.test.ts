@@ -608,6 +608,40 @@ describe("forcing the heartbeat's hand", () => {
   });
 });
 
+describe("the character scheduling its own next moment", () => {
+  test("arms the clock, logs it, and answers with the hours it used", async () => {
+    await inTempDir(async (dir) => {
+      const { runner, time } = build({ dir });
+      expect(runner.scheduleNextWake(3, "curious about the garden", time.now)).toBe(3);
+      expect(runner.clock.nextWakeAt).toBe(time.now + 3 * HOUR);
+
+      const line = runner.log.recent(5).find((e) => e.kind === "tool_use");
+      expect(line?.detail).toBe("set_next_wake: 3.0h - curious about the garden");
+    });
+  });
+
+  test("a wake outside the bounds is clamped, not refused", async () => {
+    // A character asking for a moment in a year would otherwise disable its own
+    // heartbeat; one asking for a second would hammer it.
+    await inTempDir(async (dir) => {
+      const { runner, time } = build({ dir });
+      expect(runner.scheduleNextWake(500, "", time.now), "past the ceiling").toBe(48);
+      expect(runner.scheduleNextWake(0.01, "", time.now), "under the floor").toBe(1);
+      expect(runner.clock.nextWakeAt).toBe(time.now + HOUR);
+    });
+  });
+
+  test("the new deadline survives a restart", async () => {
+    await inTempDir(async (dir) => {
+      const { runner, time } = build({ dir });
+      runner.scheduleNextWake(5, "later", time.now);
+      await runner.persist();
+
+      expect((await loadState(join(dir, STATE_FILENAME)))?.nextWakeAt).toBe(time.now + 5 * HOUR);
+    });
+  });
+});
+
 describe("the activity tracker", () => {
   test("records user messages on the calendar clock, not the wall clock", async () => {
     // The two are different numbers and the tracker only ever sees one of

@@ -406,6 +406,25 @@ export function createSidecarHandler(
       return jsonResponse(status);
     }
 
+    // The `set_next_wake` tool, which the character reaches for during a
+    // heartbeat the daemon is executing. The clock it schedules against and the
+    // log line it leaves are both on this side.
+    if (url.pathname === "/v1/autonomy/schedule-wake") {
+      const parsed = await readJson<{
+        character: string;
+        hours_from_now: number;
+        reason: string;
+      }>(request);
+      if (!parsed.ok) return parsed.response;
+      const hours = autonomy.scheduleNextWake(
+        parsed.value.character,
+        parsed.value.hours_from_now,
+        parsed.value.reason,
+      );
+      if (hours === undefined) return textError(404, "no such character");
+      return jsonResponse({ hours });
+    }
+
     // `shore debug` — forcing the heartbeat's hand, for looking at it without
     // waiting an hour.
     if (url.pathname === "/v1/autonomy/heartbeat/tick-now") {

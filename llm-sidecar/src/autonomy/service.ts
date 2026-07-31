@@ -254,6 +254,19 @@ export class AutonomyService {
     return status;
   }
 
+  /**
+   * The character scheduled its own next moment, mid-heartbeat.
+   *
+   * Answers with the hours actually used, which is what the tool tells the
+   * character. `undefined` for one nobody registered — the daemon then says so
+   * rather than reporting a wake that was never armed.
+   */
+  scheduleNextWake(character: string, hoursFromNow: number, reason: string): number | undefined {
+    return this.#entries
+      .get(character)
+      ?.runner.scheduleNextWake(hoursFromNow, reason, this.#now());
+  }
+
   /** A compaction the daemon ran failed; let a later trigger retry it. */
   onCompactionFailed(character: string): void {
     this.#entries.get(character)?.runner.onCompactionFailed(this.#now());

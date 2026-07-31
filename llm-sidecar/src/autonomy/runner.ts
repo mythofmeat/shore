@@ -50,6 +50,11 @@ import {
 /** How often each character's loop runs. */
 export const TICK_INTERVAL_MS = 10_000;
 
+/** The range `set_next_wake` accepts, in hours. Matches the clock's own bounds
+ *  in milliseconds; a character asking outside it is clamped, not refused. */
+const MIN_WAKE_HOURS = 1;
+const MAX_WAKE_HOURS = 48;
+
 /** The config a tick reads, already resolved from `config.toml`. */
 export interface AutonomyRunnerConfig {
   readonly autonomyEnabled: boolean;
@@ -327,6 +332,22 @@ export class CharacterAutonomy {
     this.#state.compactionTriggered = true;
     this.#state.dirty = true;
     return true;
+  }
+
+  /**
+   * The character scheduled its own next moment, via the `set_next_wake` tool.
+   *
+   * Runs during a heartbeat the daemon is executing, so it arrives from the far
+   * side rather than from a tick — but the clock and the log it writes to are
+   * both here. The hour bound is applied before the clock's own millisecond one:
+   * the two agree, and the tool's answer quotes the number it actually used.
+   */
+  scheduleNextWake(hoursFromNow: number, reason: string, now: number): number {
+    const hours = Math.min(Math.max(hoursFromNow, MIN_WAKE_HOURS), MAX_WAKE_HOURS);
+    this.#clock.schedule(now + hours * 3_600_000, now);
+    this.note("tool_use", `set_next_wake: ${hours.toFixed(1)}h - ${reason}`, now);
+    this.#state.dirty = true;
+    return hours;
   }
 
   /** Fire the next heartbeat immediately. Answers whether the clock is dormant,
