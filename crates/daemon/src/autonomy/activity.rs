@@ -203,27 +203,32 @@ impl ActivityTracker {
         let has_sufficient_heatmap =
             msg_count >= SUFFICIENT_HEATMAP_MSGS && distinct_days >= SUFFICIENT_HEATMAP_DAYS;
 
-        // Session detection.
+        // Session detection. Every session on record: the count and the rate
+        // below describe the whole history, so they are measured over it.
         let sessions = self.detect_sessions();
         let session_count = sessions.len();
 
-        // Sessions per day.
+        // Sessions per day, over every day and every session on record.
         let sessions_per_day = if distinct_days > 0 {
             usize_to_f64(session_count) / usize_to_f64(distinct_days)
         } else {
             0.0
         };
 
+        // Everything past this point describes *recent rhythm* rather than the
+        // whole history, and reads the window instead.
+        let recent = recent_sessions(&sessions);
+
         // Consistency: fraction of distinct days with at least one message,
         // relative to the span from first to last message.
         let consistency = self.compute_consistency();
 
         // Session medians (inter-session gaps).
-        let session_gaps = self.compute_session_gaps(&sessions);
+        let session_gaps = self.compute_session_gaps(recent);
         let median_session_gap = median(&session_gaps);
 
         // Tempo score from recent intra-session response gaps.
-        let tempo_gaps = self.compute_tempo_gaps(&sessions);
+        let tempo_gaps = self.compute_tempo_gaps(recent);
         let tempo_score = compute_tempo_score(&tempo_gaps);
 
         // Engagement score.
@@ -236,7 +241,7 @@ impl ActivityTracker {
         let hour_classifications = classify_hours(&hour_histogram);
 
         // Z-score anomaly on the most recent gap.
-        let anomaly_z_score = self.compute_anomaly_z_score(&sessions);
+        let anomaly_z_score = self.compute_anomaly_z_score(recent);
 
         ActivityStats {
             engagement_score,
@@ -289,6 +294,10 @@ impl ActivityTracker {
 
     /// Detect sessions: each session is a slice of contiguous timestamps where
     /// consecutive wall-clock gaps are < SESSION_GAP seconds.
+    ///
+    /// Returns every session on record. Callers that describe recent rhythm
+    /// take [`recent_sessions`] first; callers that describe the history — the
+    /// session count and the per-day rate — do not.
     fn detect_sessions(&self) -> Vec<Vec<usize>> {
         if self.timestamps.is_empty() {
             return Vec::new();
@@ -313,12 +322,6 @@ impl ActivityTracker {
             current_session.push(i);
         }
         sessions.push(current_session);
-
-        // Limit to last SESSION_MEDIANS_WINDOW sessions.
-        if sessions.len() > SESSION_MEDIANS_WINDOW {
-            let _ignored = sessions.drain(..sessions.len().saturating_sub(SESSION_MEDIANS_WINDOW));
-        }
-
         sessions
     }
 
@@ -473,6 +476,23 @@ impl Default for ActivityTracker {
 /// between the whole computation and being replayable.
 fn today() -> Weekday {
     Local::now().naive_local().weekday()
+}
+
+/// The tail of `sessions` that describes how the character behaves *now*.
+///
+/// Three statistics ask about recent rhythm rather than the whole history —
+/// the median inter-session gap, the anomaly z-score, and the tempo score —
+/// and last year's pattern is noise to all three. The session count and the
+/// per-day rate are not in that group: they describe the record, and windowing
+/// them was what made `sessions_per_day` decay as history accumulated (#15).
+///
+/// Tempo is bounded a second time, by `SESSION_TEMPO_WINDOW` gaps, and keeps
+/// this bound as well: without it a character whose recent sessions are single
+/// messages would reach arbitrarily far back for its ten gaps and report a
+/// tempo it no longer has.
+fn recent_sessions(sessions: &[Vec<usize>]) -> &[Vec<usize>] {
+    let start = sessions.len().saturating_sub(SESSION_MEDIANS_WINDOW);
+    sessions.get(start..).unwrap_or(sessions)
 }
 
 /// Tempo score logistic: 1 / (1 + e^((median_gap - 900) / 400)).
@@ -1210,15 +1230,13 @@ mod tests {
         assert!(stats.has_sufficient_data);
     }
 
-    // -- session windowing leaks into the rate --------------------------------
+    // -- the rate is measured over the whole record ---------------------------
 
     #[test]
-    fn sessions_per_day_divides_a_capped_count_by_an_uncapped_span() {
-        // `detect_sessions` keeps the last 30, but `distinct_days` counts every
-        // day on record — so a character with a long history reports a rate
-        // lower than it lived, and the number keeps sinking as history grows.
-        // Pinned as it stands (see #15): it reads like an oversight, and a reader who
-        // "fixes" it silently changes what the activity tool reports.
+    fn sessions_per_day_counts_every_session_over_every_day() {
+        // Both sides of the division now span the same history. Before #15 the
+        // numerator was capped at the last 30 sessions and this reported
+        // 30/35 = 0.857 — a rate that sank the longer the user kept the habit.
         let base = dt(2026, 3, 1, 10, 0, 0);
         let mut times = Vec::new();
         for day in 0..35 {
@@ -1229,11 +1247,62 @@ mod tests {
 
         let tracker = build_tracker_with_timestamps(&times);
         let stats = tracker.compute_stats(Weekday::Fri);
-        assert_eq!(stats.session_count, SESSION_MEDIANS_WINDOW);
+        assert_eq!(stats.session_count, 35);
         assert!(
-            (stats.sessions_per_day - 30.0 / 35.0).abs() < 1e-9,
+            (stats.sessions_per_day - 1.0).abs() < 1e-9,
             "one session a day for 35 days reports {}",
             stats.sessions_per_day
+        );
+    }
+
+    #[test]
+    fn the_rate_stops_decaying_as_history_grows() {
+        // The defect's signature was that the number fell the more consistent
+        // the user was. Same habit, three lengths of record, one answer.
+        let base = dt(2026, 3, 1, 10, 0, 0);
+        for days in [20_i64, 60, 200] {
+            let mut times = Vec::new();
+            for day in 0..days {
+                let at = base + chrono::TimeDelta::days(day);
+                times.push(at);
+                times.push(at + chrono::TimeDelta::seconds(60));
+            }
+            let tracker = build_tracker_with_timestamps(&times);
+            let stats = tracker.compute_stats(Weekday::Fri);
+            assert!(
+                (stats.sessions_per_day - 1.0).abs() < 1e-9,
+                "{days} days of one session a day reports {}",
+                stats.sessions_per_day
+            );
+        }
+    }
+
+    #[test]
+    fn the_median_gap_still_only_looks_at_recent_rhythm() {
+        // The window did not go away, it moved. A character that talked hourly
+        // for a long stretch and then settled into daily sessions must report
+        // the daily gap: the hourly ones are outside the last thirty.
+        let base = dt(2026, 3, 1, 0, 0, 0);
+        let mut times = Vec::new();
+        for hour in 0..40_i64 {
+            let at = base + chrono::TimeDelta::hours(hour * 2);
+            times.push(at);
+            times.push(at + chrono::TimeDelta::seconds(60));
+        }
+        let later = base + chrono::TimeDelta::days(30);
+        for day in 0..31_i64 {
+            let at = later + chrono::TimeDelta::days(day);
+            times.push(at);
+            times.push(at + chrono::TimeDelta::seconds(60));
+        }
+
+        let tracker = build_tracker_with_timestamps(&times);
+        let stats = tracker.compute_stats(Weekday::Fri);
+        assert_eq!(stats.session_count, 71, "the count sees all of it");
+        assert_eq!(
+            stats.median_session_gap,
+            Some(86_340.0),
+            "the median sees a day, not two hours"
         );
     }
 
@@ -1331,7 +1400,29 @@ mod tests {
         }
         let tracker = build_tracker_with_timestamps(&times);
         let sessions = tracker.detect_sessions();
-        assert!(sessions.len() <= SESSION_MEDIANS_WINDOW);
+        assert_eq!(sessions.len(), 35, "detection itself keeps everything");
+        assert_eq!(
+            recent_sessions(&sessions).len(),
+            SESSION_MEDIANS_WINDOW,
+            "the window is applied by the statistics that want it"
+        );
+    }
+
+    #[test]
+    fn the_window_takes_the_newest_sessions_not_the_oldest() {
+        // Direction matters and a length assertion cannot see it: `recent`
+        // must be the tail, so the surviving indices are the largest ones.
+        let sessions: Vec<Vec<usize>> = (0..35).map(|i| vec![i]).collect();
+        let recent = recent_sessions(&sessions);
+        assert_eq!(recent.first(), Some(&vec![5]));
+        assert_eq!(recent.last(), Some(&vec![34]));
+    }
+
+    #[test]
+    fn the_window_is_a_no_op_below_its_size() {
+        let sessions: Vec<Vec<usize>> = (0..4).map(|i| vec![i]).collect();
+        assert_eq!(recent_sessions(&sessions).len(), 4);
+        assert!(recent_sessions(&[]).is_empty());
     }
 
     // -- backfill -------------------------------------------------------------

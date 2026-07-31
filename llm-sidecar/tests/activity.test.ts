@@ -19,6 +19,8 @@ import {
   classifyHours,
   computeTempoScore,
   median,
+  recentSessions,
+  SESSION_MEDIANS_WINDOW,
   STATS_CACHE_TTL_MS,
   weekdayOf,
 } from "../src/autonomy/activity.ts";
@@ -270,17 +272,61 @@ describe("session detection", () => {
     expect(under.computeStats("Wed").sessionCount).toBe(1);
   });
 
-  test("only the last thirty sessions survive", () => {
+  test("the count and the rate see every session", () => {
     const t = new ActivityTracker();
     for (let day = 0; day < 35; day += 1) {
       t.recordMessage(at(2026, 3, 1, 10) + day * 24 * HOUR);
       t.recordMessage(at(2026, 3, 1, 10) + day * 24 * HOUR + MINUTE);
     }
     const stats = t.computeStats("Fri");
-    expect(stats.sessionCount).toBe(30);
-    // And the rate divides that capped count by all 35 days — see the note on
-    // `computeStats`.
-    expect(stats.sessionsPerDay).toBeCloseTo(30 / 35, 12);
+    expect(stats.sessionCount).toBe(35);
+    // Before #15 the numerator was windowed to 30 and this read 0.857.
+    expect(stats.sessionsPerDay).toBeCloseTo(1, 12);
+  });
+
+  test("the rate stops falling as the habit continues", () => {
+    // The defect's signature: the more consistent the user, the lower the
+    // number. Same habit at three lengths of record, one answer.
+    for (const days of [20, 60, 200]) {
+      const t = new ActivityTracker();
+      for (let day = 0; day < days; day += 1) {
+        t.recordMessage(at(2026, 3, 1, 10) + day * 24 * HOUR);
+        t.recordMessage(at(2026, 3, 1, 10) + day * 24 * HOUR + MINUTE);
+      }
+      expect(t.computeStats("Fri").sessionsPerDay, `${days} days`).toBeCloseTo(1, 12);
+    }
+  });
+});
+
+describe("the recent-rhythm window", () => {
+  test("it is the newest sessions, and a no-op below its size", () => {
+    const many = Array.from({ length: 35 }, (_, i) => i);
+    expect(recentSessions(many)).toHaveLength(SESSION_MEDIANS_WINDOW);
+    expect(recentSessions(many)[0]).toBe(5);
+    expect(recentSessions(many).at(-1)).toBe(34);
+
+    expect(recentSessions([1, 2, 3])).toEqual([1, 2, 3]);
+    expect(recentSessions([])).toEqual([]);
+  });
+
+  test("the median gap ignores rhythm the character has left behind", () => {
+    // Forty two-hourly sessions, then thirty-one daily ones. The count sees
+    // all of it; the median must report the day it now lives by.
+    const t = new ActivityTracker();
+    const base = at(2026, 3, 1, 0);
+    for (let i = 0; i < 40; i += 1) {
+      t.recordMessage(base + i * 2 * HOUR);
+      t.recordMessage(base + i * 2 * HOUR + MINUTE);
+    }
+    const later = base + 30 * 24 * HOUR;
+    for (let day = 0; day < 31; day += 1) {
+      t.recordMessage(later + day * 24 * HOUR);
+      t.recordMessage(later + day * 24 * HOUR + MINUTE);
+    }
+
+    const stats = t.computeStats("Fri");
+    expect(stats.sessionCount).toBe(71);
+    expect(stats.medianSessionGap).toBe(86_340);
   });
 });
 

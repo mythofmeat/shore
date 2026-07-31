@@ -58,7 +58,7 @@ export const TROUGH_HOUR_THRESHOLD = 0.5;
 /** How long computed stats stay fresh. */
 export const STATS_CACHE_TTL_MS = 60_000;
 
-/** How many recent sessions the median and anomaly score look at. */
+/** How many recent sessions the median, anomaly score and tempo look at. */
 export const SESSION_MEDIANS_WINDOW = 30;
 /** How many recent reply gaps the tempo score looks at. */
 export const SESSION_TEMPO_WINDOW = 10;
@@ -131,10 +131,9 @@ export interface ActivityStats {
   readonly consistency: number;
   /** Logistic over the median reply gap: 1 at instant, 0 at glacial. */
   readonly tempoScore: number;
-  /** Sessions detected, capped at {@link SESSION_MEDIANS_WINDOW}. */
+  /** Sessions detected, over the whole record. */
   readonly sessionCount: number;
-  /** The capped session count over every distinct day on record — see
-   *  {@link ActivityTracker.computeStats}. */
+  /** Sessions over distinct days, both measured over the whole record. */
   readonly sessionsPerDay: number;
   /** 24 densities summing to 1, or all zero when there is nothing to divide. */
   readonly hourHistogram: readonly number[];
@@ -195,11 +194,16 @@ export class ActivityTracker {
   /**
    * The whole computation, as a pure function of what has been recorded.
    *
-   * `sessionsPerDay` divides a capped session count by an uncapped day count,
-   * so a character with a long history reports a rate lower than it lived, and
-   * the number keeps sinking as history grows. That is what the Rust did and
-   * what the activity tool has always reported; it is preserved deliberately
-   * rather than quietly corrected during a port. Decision pending in #15.
+   * Two kinds of number come out of this, and they read different amounts of
+   * history. The count and the rate describe the record, so they see all of
+   * it. The median gap, the z-score and the tempo describe how the character
+   * behaves *now*, so they see {@link recentSessions} — last year's rhythm is
+   * noise to all three.
+   *
+   * Until #15 the window applied to everything, including the count that
+   * `sessionsPerDay` divides, so a character talked to once a day reported
+   * 0.857 at 35 days and 0.3 at 100 — a rate that fell the longer the user
+   * kept the habit.
    */
   computeStats(today: Weekday): Omit<ActivityStats, "computedAt"> {
     const distinctDays = this.#distinctDays();
@@ -208,9 +212,10 @@ export class ActivityTracker {
     const sessions = this.#detectSessions();
     const sessionCount = sessions.length;
 
+    const recent = recentSessions(sessions);
     const consistency = this.#consistency();
-    const sessionGaps = this.#sessionGaps(sessions);
-    const tempoScore = computeTempoScore(this.#tempoGaps(sessions));
+    const sessionGaps = this.#sessionGaps(recent);
+    const tempoScore = computeTempoScore(this.#tempoGaps(recent));
     const hourHistogram = this.#hourHistogram(today);
 
     return {
@@ -254,7 +259,7 @@ export class ActivityTracker {
 
   /**
    * Split the messages into sessions at every gap of {@link SESSION_GAP_SECS}
-   * or more, keeping the most recent {@link SESSION_MEDIANS_WINDOW}.
+   * or more. Every session on record: narrowing is {@link recentSessions}' job.
    *
    * Gaps are absolute. Messages arrive in order in practice, and `backfill`
    * guarantees it, but `recordMessage` does not — so a clock that steps
@@ -276,7 +281,7 @@ export class ActivityTracker {
     }
     sessions.push(current);
 
-    return sessions.slice(-SESSION_MEDIANS_WINDOW);
+    return sessions;
   }
 
   /** Seconds between the end of each session and the start of the next. */
@@ -335,6 +340,24 @@ export class ActivityTracker {
     }
     return histogram;
   }
+}
+
+/**
+ * The tail of `sessions` that describes how the character behaves *now*.
+ *
+ * Three statistics ask about recent rhythm rather than the whole history — the
+ * median inter-session gap, the anomaly z-score and the tempo score — and last
+ * year's pattern is noise to all three. The session count and the per-day rate
+ * are not in that group: they describe the record, and windowing them was what
+ * made `sessionsPerDay` decay as history accumulated (#15).
+ *
+ * Tempo is bounded a second time, by {@link SESSION_TEMPO_WINDOW} gaps, and
+ * keeps this bound as well: without it a character whose recent sessions are
+ * single messages would reach arbitrarily far back for its ten gaps and report
+ * a tempo it no longer has.
+ */
+export function recentSessions<T>(sessions: readonly T[]): readonly T[] {
+  return sessions.slice(-SESSION_MEDIANS_WINDOW);
 }
 
 /**

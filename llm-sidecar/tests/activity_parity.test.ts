@@ -116,8 +116,11 @@ describe("the fixture is real", () => {
     // almost any implementation. These counts are what make it an assertion.
     const all = fixture.cases.flatMap((c) => Object.values(c.by_weekday));
 
-    const capped = all.filter((s) => s.session_count === fixture.thresholds.session_medians_window);
-    expect(capped.length, "the session window must actually be reached").toBeGreaterThan(0);
+    // The window binds on the median, the z-score and the tempo, and no longer
+    // shows up in `session_count` (#15) — so what proves it was exercised is a
+    // case with more sessions than the window, not one whose count equals it.
+    const beyond = all.filter((s) => s.session_count > fixture.thresholds.session_medians_window);
+    expect(beyond.length, "the session window must actually be reached").toBeGreaterThan(0);
 
     expect(all.filter((s) => s.has_sufficient_heatmap).length).toBeGreaterThan(0);
     expect(all.filter((s) => !s.has_sufficient_heatmap).length).toBeGreaterThan(0);
