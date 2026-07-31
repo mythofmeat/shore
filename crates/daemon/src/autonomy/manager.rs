@@ -5023,6 +5023,107 @@ api_key_env = "{heartbeat_env}"
         std::env::remove_var(pin_env);
     }
 
+    /// Dreaming's failure backoff. Untested until the TypeScript port needed a
+    /// specification to match, and the shape matters: dreaming runs a full
+    /// tool loop, so a backoff that collapsed would retry an expensive failing
+    /// call every tick.
+    ///
+    /// 60s doubling per consecutive failure, capped at an hour. The cap is
+    /// reached at the 7th failure and the exponent is clamped there, so no
+    /// amount of further failure overflows the shift.
+    #[test]
+    fn dream_retry_backoff_doubles_then_caps_at_an_hour() {
+        let secs = |n| background_retry_delay(n).as_secs();
+
+        // The first failure is one minute, not two: the exponent is
+        // `count - 1`, so a saturating_sub keeps count 0 and count 1 together.
+        assert_eq!(secs(0), 60);
+        assert_eq!(secs(1), 60);
+        assert_eq!(secs(2), 120);
+        assert_eq!(secs(3), 240);
+        assert_eq!(secs(4), 480);
+        assert_eq!(secs(5), 960);
+        assert_eq!(secs(6), 1_920);
+        // 60 * 2^6 = 3840, clamped to the hour ceiling.
+        assert_eq!(secs(7), 3_600);
+        // And it stays there rather than shifting into overflow.
+        assert_eq!(secs(50), 3_600);
+        assert_eq!(secs(u32::MAX), 3_600);
+    }
+
+    /// The gate in front of every heartbeat tick. Three switches, any of which
+    /// suppresses it: autonomy off, heartbeat off, or the character paused.
+    ///
+    /// Worth pinning separately from the clock's own `tick` — the clock decides
+    /// *when*, this decides *whether*, and only the second one reads config and
+    /// the pause flag.
+    #[test]
+    fn heartbeat_tick_action_gates_on_config_and_pause() {
+        let tmp = tempfile::tempdir().unwrap();
+        let now = Instant::now();
+
+        // A tick that would otherwise fire: deadline already reached.
+        let armed = |paused: bool, enabled: bool, hb_enabled: bool| {
+            let config = AutonomyConfig {
+                enabled,
+                heartbeat: HeartbeatConfig {
+                    enabled: hb_enabled,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let state = Arc::new(Mutex::new(AutonomyState {
+                heartbeat: HeartbeatClock::with_config(&config.heartbeat),
+                keepalive_schedule: None,
+                activity: ActivityTracker::new(),
+                heartbeat_log: HeartbeatLog::new(),
+                paused,
+                dirty: false,
+                last_compaction_activity: now,
+                compaction_triggered: false,
+                active_turn_count: 0,
+                compaction_pending: false,
+                covered_turn_count: 0,
+                deep_archive_done: false,
+                last_request: None,
+                next_dream_attempt_at: None,
+                dream_failure_count: 0,
+            }));
+            let ctx = TickContext {
+                state: Arc::clone(&state),
+                config: Arc::new(config),
+                compaction: Arc::new(CompactionConfig::default()),
+                data_dir: tmp.path().to_path_buf(),
+                llm_client: None,
+                push_tx: None,
+                loaded_config: None,
+                notifier: None,
+                registry: None,
+                mcp_registry: Arc::new(crate::tools::mcp_registry::McpRegistry::default()),
+            };
+            let mut s = lock_state(&state);
+            // First tick bootstraps the deadline; the second is the one that
+            // can fire, so drive past it.
+            let _bootstrap = heartbeat_tick_action(&mut s, &ctx, now);
+            let later = now + Duration::from_hours(6);
+            matches!(
+                heartbeat_tick_action(&mut s, &ctx, later),
+                HeartbeatAction::RunTick
+            )
+        };
+
+        assert!(armed(false, true, true), "all three switches on: it fires");
+        assert!(!armed(true, true, true), "paused suppresses the tick");
+        assert!(
+            !armed(false, false, true),
+            "autonomy disabled suppresses it"
+        );
+        assert!(
+            !armed(false, true, false),
+            "heartbeat disabled suppresses it"
+        );
+    }
+
     /// Configuring `max_turns < min_turns` should disable compaction or
     /// be rejected, since the max_turns trigger can never fire when
     /// `active_turn_count >= max_turns && active_turn_count >= min_turns`
