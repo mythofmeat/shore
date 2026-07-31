@@ -206,11 +206,10 @@ fn background_retry_delay(failure_count: u32) -> Duration {
 ///
 /// The units are not uniform, and that is deliberate. Compaction compares
 /// `as_secs()` against `as_secs()`, truncating both sides; dreaming compares
-/// whole `Duration`s. For a sub-second threshold the two disagree — an idle
-/// trigger of 1.5s fires at 1.2s of idleness, where a minimum inactive time of
-/// 1.5s does not. Nobody configures either in fractions of a second, but the
-/// port carries the difference rather than quietly picking one. Decision
-/// pending in #15.
+/// whole `Duration`s. Those two roundings disagree on any threshold carrying a
+/// fraction of a second, so `CompactionConfig::validate` and
+/// `DreamingConfig::validate` reject that range outright (#15) — the units stay
+/// as each trigger reads them, and no configurable value can tell them apart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[expect(
     clippy::struct_excessive_bools,

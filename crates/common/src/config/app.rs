@@ -494,10 +494,41 @@ impl Default for CompactionConfig {
     }
 }
 
+/// Reject an idle threshold that is not a whole number of seconds.
+///
+/// The two idle triggers round differently. Compaction truncates both sides to
+/// seconds before comparing, so an `idle_trigger` of `1.5s` fires at 1.2s of
+/// idleness; dreaming compares whole `Duration`s, so a `minimum_inactive_time`
+/// of `1.5s` waits the full 1.5. Same file, same shape of value, opposite
+/// rounding (#15).
+///
+/// Rather than pick a winner and silently change what one of them does, the
+/// range where they disagree stops being representable. Nothing is lost: these
+/// are minutes-to-hours thresholds a human types into `config.toml`, and
+/// neither means anything at millisecond resolution.
+///
+/// Zero is a whole number of seconds and stays valid — it is how both fields
+/// spell "off".
+fn reject_fractional_seconds(field: &str, value: ConfigDuration) -> Result<(), String> {
+    if value.as_millis().is_multiple_of(1000) {
+        return Ok(());
+    }
+    Err(format!(
+        "{field} is {}ms. Idle thresholds must be a whole number of seconds: \
+         the compaction and dreaming triggers round fractions differently, so a \
+         value like `1.5s` means different things to each. Use `{}s` or `{}s`.",
+        value.as_millis(),
+        value.as_secs(),
+        value.as_secs().saturating_add(1),
+    ))
+}
+
 impl CompactionConfig {
     /// Check the turn-count invariants that make compaction meaningful: both
     /// turn thresholds must exceed `keep_recent_turns` (otherwise a pass would
     /// have nothing to compact) and `max_turns` must not undercut `min_turns`.
+    /// Also that neither idle threshold carries a fraction of a second — see
+    /// [`reject_fractional_seconds`].
     ///
     /// Config load treats a violation as a hard error so the daemon refuses to
     /// start (and a runtime reload keeps the previous config) instead of
@@ -507,6 +538,8 @@ impl CompactionConfig {
         if !self.enabled {
             return Ok(());
         }
+        reject_fractional_seconds("memory.compaction.idle_trigger", self.idle_trigger)?;
+        reject_fractional_seconds("memory.compaction.archive_after", self.archive_after)?;
         let k = self.keep_recent_turns;
         if self.min_turns <= k || self.max_turns <= k {
             return Err(format!(
@@ -825,6 +858,21 @@ impl Default for DreamingConfig {
             compact_before: true,
             compact_to_zero: false,
         }
+    }
+}
+
+impl DreamingConfig {
+    /// Reject an inactivity window carrying a fraction of a second — the other
+    /// half of the rule [`CompactionConfig::validate`] applies, and the reason
+    /// it exists is that these two disagreed. A disabled config is always valid.
+    pub fn validate(&self) -> Result<(), String> {
+        if !self.enabled {
+            return Ok(());
+        }
+        reject_fractional_seconds(
+            "memory.dreaming.minimum_inactive_time",
+            self.minimum_inactive_time,
+        )
     }
 }
 
@@ -1610,6 +1658,83 @@ mod tests {
             ..CompactionConfig::default()
         };
         assert!(disabled.validate().is_ok());
+    }
+
+    #[test]
+    fn idle_thresholds_must_be_whole_seconds() {
+        // The range where compaction and dreaming round differently (#15) is
+        // rejected rather than resolved, on both fields of both triggers.
+        for millis in [1_u64, 500, 1_500, 90_500] {
+            let compaction = CompactionConfig {
+                idle_trigger: ConfigDuration::from_millis(millis),
+                ..CompactionConfig::default()
+            };
+            assert!(
+                compaction.validate().is_err(),
+                "idle_trigger of {millis}ms was accepted"
+            );
+
+            let archive = CompactionConfig {
+                archive_after: ConfigDuration::from_millis(millis),
+                ..CompactionConfig::default()
+            };
+            assert!(
+                archive.validate().is_err(),
+                "archive_after of {millis}ms was accepted"
+            );
+
+            let dreaming = DreamingConfig {
+                enabled: true,
+                minimum_inactive_time: ConfigDuration::from_millis(millis),
+                ..DreamingConfig::default()
+            };
+            assert!(
+                dreaming.validate().is_err(),
+                "minimum_inactive_time of {millis}ms was accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn whole_seconds_and_zero_stay_valid() {
+        // Zero is how both triggers spell "off" and must survive the rule.
+        for millis in [0_u64, 1_000, 1_800_000] {
+            let compaction = CompactionConfig {
+                idle_trigger: ConfigDuration::from_millis(millis),
+                archive_after: ConfigDuration::from_millis(millis),
+                ..CompactionConfig::default()
+            };
+            assert!(compaction.validate().is_ok(), "{millis}ms was rejected");
+
+            let dreaming = DreamingConfig {
+                enabled: true,
+                minimum_inactive_time: ConfigDuration::from_millis(millis),
+                ..DreamingConfig::default()
+            };
+            assert!(dreaming.validate().is_ok(), "{millis}ms was rejected");
+        }
+
+        // A disabled trigger is never checked at all.
+        let disabled = DreamingConfig {
+            enabled: false,
+            minimum_inactive_time: ConfigDuration::from_millis(1_500),
+            ..DreamingConfig::default()
+        };
+        assert!(disabled.validate().is_ok());
+    }
+
+    #[test]
+    fn the_rejection_says_which_two_values_would_work() {
+        // An error that only says "no" leaves the user guessing at a field
+        // they typed in seconds and got told about in milliseconds.
+        let compaction = CompactionConfig {
+            idle_trigger: ConfigDuration::from_millis(90_500),
+            ..CompactionConfig::default()
+        };
+        let err = compaction.validate().unwrap_err();
+        assert!(err.contains("memory.compaction.idle_trigger"), "{err}");
+        assert!(err.contains("`90s`"), "{err}");
+        assert!(err.contains("`91s`"), "{err}");
     }
 
     #[test]

@@ -667,6 +667,10 @@ fn validate_config(
         .compaction
         .validate()
         .map_err(ConfigError::Validation)?;
+    app.memory
+        .dreaming
+        .validate()
+        .map_err(ConfigError::Validation)?;
 
     Ok(())
 }

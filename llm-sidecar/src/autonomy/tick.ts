@@ -30,11 +30,10 @@ export type CompactionReason =
  * Everything a tick's triggers depend on.
  *
  * The units are not uniform, and that is deliberate. Compaction compares whole
- * seconds, truncating both sides; dreaming compares milliseconds. For a
- * sub-second threshold the two disagree — an idle trigger of 1.5s fires at 1.2s
- * of idleness, where a minimum inactive time of 1.5s does not. Nobody
- * configures either in fractions of a second, but the port carries the
- * difference rather than quietly picking one. Decision pending in #15.
+ * seconds, truncating both sides; dreaming compares milliseconds. Those two
+ * roundings disagree on any threshold carrying a fraction of a second, so
+ * config validation rejects that range outright (#15) — the units stay as each
+ * trigger reads them, and no configurable value can tell them apart.
  */
 export interface TickInputs {
   readonly autonomyEnabled: boolean;
