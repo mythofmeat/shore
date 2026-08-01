@@ -1,3 +1,40 @@
+//! Tool execution for both loop directions.
+//!
+//! **Mostly deletion, not a port.** This module is three separable pieces with
+//! three different fates, and it is worth writing them down because the naive
+//! reading — "1,124 lines to port" — is wrong by about two thirds.
+//!
+//! 1. **The daemon-driven loop** ([`run_tool_loop`], `ChatDriver` and its
+//!    `ToolLoopDriver` impl, [`append_assistant_tool_use_turn`],
+//!    [`assistant_blocks_from_result`], [`stream_tool_loop_continuation`],
+//!    [`ToolLoopRetry`]) — ~325 lines. Already superseded: the decision layer
+//!    is `llm-sidecar/src/engine/tool_loop.ts` and the driver is
+//!    `llm-sidecar/src/llm/providers/generic_loop.ts`. As
+//!    `handler::generation::can_delegate_tool_loop` records, this is now the
+//!    *fallback* path, taken only when no tool socket is serving. A
+//!    TypeScript daemon has no socket to be missing, so the fallback has
+//!    nothing to fall back from. Delete.
+//!
+//! 2. **The sidecar-driven server** ([`serve_tool_calls`],
+//!    [`tool_response_from`], [`record_reported_message`]) — ~120 lines. Pure
+//!    bridge. It exists only because the tools live on the far side of an
+//!    NDJSON hop from the loop that wants them. Same process, no hop, no
+//!    server. Delete with `tool_rpc`.
+//!
+//! 3. **Tool execution proper** ([`execute_tool_use`],
+//!    [`dispatch_within_deadline`], [`attach_generated_image`],
+//!    [`record_tool_diagnostics`], [`emit_tool_result`],
+//!    [`record_tool_result_message`]) — ~225 lines. This is real behaviour —
+//!    per-tool deadlines, SWP event emission, truncation, the generated-image
+//!    side channel — and it is the only part that needs porting. It is coupled
+//!    to the tool registry in `crate::tools`, which is step 5 of the port
+//!    (memory/tools/commands), so it moves with that subsystem rather than
+//!    with the LLM request path.
+//!
+//! Nothing here is removable until the Rust callers above it are gone:
+//! `tools::subagent::run` and `handler::generation` still call
+//! [`run_tool_loop`].
+
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
