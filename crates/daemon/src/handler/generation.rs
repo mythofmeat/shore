@@ -198,18 +198,21 @@ fn build_tool_context(
 
 /// Whether this request can hand its tool loop to the sidecar.
 ///
-/// Anthropic only: the loop is built on the SDK's tool runner, which has no
-/// equivalent in the other dialects, so they keep the daemon's loop. A daemon
-/// with no tool socket serving also stays daemon-side, which is what makes the
-/// socket's absence a graceful degradation rather than a failure.
+/// Every dialect, now. This was Anthropic-only because that side's loop was
+/// built on the Anthropic SDK's tool runner; `llm-sidecar/src/llm/providers/
+/// generic_loop.ts` is the equivalent for the rest, written against the
+/// `SidecarProvider` interface all six adapters already implement.
+///
+/// A daemon with no tool socket serving still stays daemon-side, which is what
+/// makes the socket's absence a graceful degradation rather than a failure.
+/// That path — and the whole daemon-driven loop under it — dies when
+/// sub-agents, compaction and dreaming stop being its other three consumers.
 pub(super) fn can_delegate_tool_loop(
     ctx: &GenContext,
     effective_config: &LoadedConfig,
-    resolved: &shore_common::config::models::ResolvedModel,
+    _resolved: &shore_common::config::models::ResolvedModel,
 ) -> bool {
-    resolved.sdk == shore_common::config::models::Sdk::Anthropic
-        && effective_config.app.tools.any_enabled()
-        && ctx.llm_client.inner().tool_rpc().is_some()
+    effective_config.app.tools.any_enabled() && ctx.llm_client.inner().tool_rpc().is_some()
 }
 
 /// Stream a turn whose tool loop runs in the sidecar.
