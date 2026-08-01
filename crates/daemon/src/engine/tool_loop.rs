@@ -172,18 +172,38 @@ mod tests {
     use serde_json::json;
 
     /// A turn the fake driver hands back: does it ask for tools or not?
+    ///
+    /// `finish_reason` is carried separately rather than derived, because the
+    /// loop checks *both* it and the block list and the two can disagree in
+    /// production — a provider may return tool_use blocks alongside `end_turn`,
+    /// or claim `tool_use` having asked for nothing. A fake that ties them
+    /// together cannot tell the two checks apart; see `FinishReasonMode`.
     #[derive(Clone)]
     struct FakeTurn {
         asks_for_tools: bool,
+        finish_reason: Option<&'static str>,
         label: String,
     }
 
     /// Records the exact interleaving of model calls and dispatch rounds, which
     /// is the whole behaviour under test.
+    /// Whether the fake's `finish_reason` tracks its block list or contradicts
+    /// it. `Natural` is what a well-behaved provider does; the other two are the
+    /// disagreements the loop's two-part check exists to survive.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum FinishReasonMode {
+        Natural,
+        AlwaysEndTurn,
+        AlwaysToolUse,
+    }
+
     #[derive(Default)]
     struct FakeDriver {
         /// How many more turns should ask for tools before the model gives up.
         tool_turns_remaining: u32,
+        /// `None` behaves as `Natural`, which is what the hand-written tests
+        /// below want.
+        finish_reason_mode: Option<FinishReasonMode>,
         calls: u32,
         dispatches: u32,
         log: Vec<String>,
@@ -195,11 +215,11 @@ mod tests {
         type Error = ();
 
         fn finish_reason(turn: &Self::Turn) -> &str {
-            if turn.asks_for_tools {
+            turn.finish_reason.unwrap_or(if turn.asks_for_tools {
                 "tool_use"
             } else {
                 "end_turn"
-            }
+            })
         }
 
         fn tool_uses(turn: &Self::Turn) -> Vec<ToolUseEvent> {
@@ -225,6 +245,11 @@ mod tests {
             self.log.push(label.clone());
             Ok(FakeTurn {
                 asks_for_tools,
+                finish_reason: match self.finish_reason_mode {
+                    None | Some(FinishReasonMode::Natural) => None,
+                    Some(FinishReasonMode::AlwaysEndTurn) => Some("end_turn"),
+                    Some(FinishReasonMode::AlwaysToolUse) => Some("tool_use"),
+                },
                 label,
             })
         }
@@ -382,6 +407,7 @@ mod tests {
             &mut request,
             Some(FakeTurn {
                 asks_for_tools: false,
+                finish_reason: None,
                 label: "seeded".into(),
             }),
             None,
@@ -417,5 +443,117 @@ mod tests {
             .filter(|m| m.role == WireRole::User)
             .count();
         assert_eq!(user_turns, 2, "one tool-result turn per dispatch round");
+    }
+
+    /// Generate the parity fixture the TypeScript loop is replayed against.
+    ///
+    /// Writes only when `SHORE_FIXTURE_OUT` is set, so a normal `cargo test`
+    /// never touches the frozen file. Sweeps every dimension the loop branches
+    /// on — seeded turn or not, how long the model keeps asking, the cap, and
+    /// which cap behaviour — because the interesting cases are the corners:
+    /// a cap of zero, a cap the model beats, and the trailing call that
+    /// `CloseWithFinalTurn` spends and `StopAfterDispatch` does not.
+    #[tokio::test]
+    async fn generate_tool_loop_parity_fixture() {
+        let Ok(out) = std::env::var("SHORE_FIXTURE_OUT") else {
+            return;
+        };
+
+        let mut cases = Vec::new();
+        for mode in [
+            FinishReasonMode::Natural,
+            FinishReasonMode::AlwaysEndTurn,
+            FinishReasonMode::AlwaysToolUse,
+        ] {
+            for initial in [None, Some(false), Some(true)] {
+                for tool_turns in [0_u32, 1, 2, 3, 10] {
+                    for max in [None, Some(0_u32), Some(1), Some(2), Some(3)] {
+                        for cap in [
+                            CapBehavior::StopAfterDispatch,
+                            CapBehavior::CloseWithFinalTurn,
+                        ] {
+                            let mut driver = FakeDriver {
+                                tool_turns_remaining: tool_turns,
+                                finish_reason_mode: Some(mode),
+                                ..FakeDriver::default()
+                            };
+                            let mut request = empty_request();
+                            let seeded = initial.map(|asks_for_tools| FakeTurn {
+                                asks_for_tools,
+                                finish_reason: match mode {
+                                    FinishReasonMode::Natural => None,
+                                    FinishReasonMode::AlwaysEndTurn => Some("end_turn"),
+                                    FinishReasonMode::AlwaysToolUse => Some("tool_use"),
+                                },
+                                label: "seeded".into(),
+                            });
+                            let outcome = run(&mut driver, &mut request, seeded, max, cap)
+                                .await
+                                .unwrap_or_else(|()| panic!("fake driver never errors"));
+
+                            cases.push(json!({
+                                "finish_reason_mode": match mode {
+                                    FinishReasonMode::Natural => "natural",
+                                    FinishReasonMode::AlwaysEndTurn => "always_end_turn",
+                                    FinishReasonMode::AlwaysToolUse => "always_tool_use",
+                                },
+                                "initial": match initial {
+                                    None => "none",
+                                    Some(false) => "seeded_end_turn",
+                                    Some(true) => "seeded_tool_use",
+                                },
+                                "tool_turns": tool_turns,
+                                "max_iterations": max,
+                                "cap_behavior": match cap {
+                                    CapBehavior::StopAfterDispatch => "stop_after_dispatch",
+                                    CapBehavior::CloseWithFinalTurn => "close_with_final_turn",
+                                },
+                                "stop": match outcome.stop {
+                                    LoopStop::ModelDone => "model_done",
+                                    LoopStop::CapReached => "cap_reached",
+                                },
+                                "last_turn": outcome.last_turn.label,
+                                "model_calls": driver.calls,
+                                "dispatch_rounds": driver.dispatches,
+                                "log": driver.log,
+                                "user_turns_appended": request
+                                    .messages
+                                    .iter()
+                                    .filter(|m| m.role == WireRole::User)
+                                    .count(),
+                            }));
+                        }
+                    }
+                }
+            }
+        }
+
+        let doc = json!({
+            "_comment": [
+                "NOT YET FROZEN. Generated by `generate_tool_loop_parity_fixture`",
+                "in crates/daemon/src/engine/tool_loop.rs, driving the real `run`",
+                "through a fake driver that records the exact interleaving of",
+                "model calls and dispatch rounds. That generator still exists and",
+                "still runs, because the Rust loop it characterises has not been",
+                "deleted yet — only the control flow has been ported. It freezes",
+                "in the commit that removes the daemon-driven loop, and the header",
+                "changes to say so then.",
+                "Regenerate only from a green daemon tree; dev-ts is red, so use",
+                "the worktree at the last green commit.",
+                "Replayed by llm-sidecar/tests/tool_loop_parity.test.ts.",
+                "The cap counts DISPATCH ROUNDS, not model calls, and",
+                "close_with_final_turn spends one extra call after the cap so the",
+                "model can answer with the last tool results in hand. The AI SDK's",
+                "stepCountIs() counts steps and does neither, so this is the file",
+                "that says what the daemon actually did."
+            ],
+            "cases": cases,
+        });
+
+        std::fs::write(
+            &out,
+            format!("{}\n", serde_json::to_string_pretty(&doc).unwrap()),
+        )
+        .unwrap_or_else(|e| panic!("write {out}: {e}"));
     }
 }
