@@ -1,0 +1,3734 @@
+{
+  "_header": [
+    "Cross-language parity fixture for the conversation-history search tool.",
+    "",
+    "GENERATED from crates/daemon/src/tools/history.rs by driving the real Rust",
+    "in a throwaway worktree at 9023b46d — the last commit where the daemon",
+    "crate still compiles. This file is FROZEN: nothing regenerates this file.",
+    "A later diff against it is a defect in the TypeScript, not a fixture that",
+    "needs updating."
+  ],
+  "constants": {
+    "DEFAULT_MAX_RESULTS": 20,
+    "MAX_RESULTS": 100,
+    "EXCERPT_CHARS": 360,
+    "MIN_EXCERPT_CHARS": 80,
+    "MAX_EXCERPT_CHARS": 2000,
+    "TERM_HIT": 10,
+    "FULL_COVERAGE_BONUS": 15,
+    "PHRASE_BONUS": 25,
+    "RECENCY_WEIGHT": 15.0
+  },
+  "tool_def": {
+    "name": "search_chat_logs",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Optional keyword or phrase to search for (case-insensitive). Omit this to return messages by time range only."
+        },
+        "start_time": {
+          "type": "string",
+          "description": "Optional inclusive lower timestamp bound in RFC3339 format, for example 2026-05-13T09:00:00+10:00."
+        },
+        "end_time": {
+          "type": "string",
+          "description": "Optional inclusive upper timestamp bound in RFC3339 format, for example 2026-05-13T17:00:00+10:00."
+        },
+        "max_results": {
+          "type": "number",
+          "description": "Maximum matching messages to return. Defaults to 20, maximum 100."
+        },
+        "model": {
+          "type": "string",
+          "description": "Optional model filter: only return assistant messages minted by a matching model. Case-insensitive substring match with '.' and '-' treated as equal, so 'opus-4.6' matches both 'claude-opus-4-6' and 'anthropic/claude-opus-4.6'. Messages stored before model tracking carry no model and never match."
+        },
+        "excerpt_chars": {
+          "type": "number",
+          "description": "Approximate excerpt length in characters. Defaults to 360; maximum 2000. Use larger values when you need full quotes rather than context snippets."
+        }
+      },
+      "required": []
+    }
+  },
+  "normalize_model": [
+    {
+      "input": "claude-opus-4-6",
+      "expect": "claude-opus-4-6"
+    },
+    {
+      "input": "anthropic/claude-opus-4.6",
+      "expect": "anthropic/claude-opus-4-6"
+    },
+    {
+      "input": "Claude-Opus-4.6",
+      "expect": "claude-opus-4-6"
+    },
+    {
+      "input": "GPT-5",
+      "expect": "gpt-5"
+    },
+    {
+      "input": "",
+      "expect": ""
+    },
+    {
+      "input": "a.b.c",
+      "expect": "a-b-c"
+    },
+    {
+      "input": "ÄÖÜ",
+      "expect": "äöü"
+    }
+  ],
+  "model_matches": [
+    {
+      "model": "claude-opus-4-6",
+      "filter": "opus-4-6",
+      "expect": true
+    },
+    {
+      "model": "anthropic/claude-opus-4.6",
+      "filter": "opus-4-6",
+      "expect": true
+    },
+    {
+      "model": "claude-opus-4-6",
+      "filter": "opus-4.6",
+      "expect": true
+    },
+    {
+      "model": "claude-opus-4-6",
+      "filter": "gpt",
+      "expect": false
+    },
+    {
+      "model": null,
+      "filter": "opus",
+      "expect": false
+    },
+    {
+      "model": null,
+      "filter": null,
+      "expect": true
+    },
+    {
+      "model": "gpt-5",
+      "filter": null,
+      "expect": true
+    },
+    {
+      "model": "gpt-5",
+      "filter": "",
+      "expect": true
+    }
+  ],
+  "tokenization": [
+    {
+      "query": "tea",
+      "raw_lower": "tea",
+      "terms": [
+        "tea"
+      ]
+    },
+    {
+      "query": "Tea",
+      "raw_lower": "tea",
+      "terms": [
+        "tea"
+      ]
+    },
+    {
+      "query": "green tea",
+      "raw_lower": "green tea",
+      "terms": [
+        "green",
+        "tea"
+      ]
+    },
+    {
+      "query": "the kettle whistled",
+      "raw_lower": "the kettle whistled",
+      "terms": [
+        "the",
+        "kettle",
+        "whistled"
+      ]
+    },
+    {
+      "query": "a b c",
+      "raw_lower": "a b c",
+      "terms": []
+    },
+    {
+      "query": "a",
+      "raw_lower": "a",
+      "terms": []
+    },
+    {
+      "query": "tea!",
+      "raw_lower": "tea!",
+      "terms": [
+        "tea"
+      ]
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "raw_lower": "tea, coffee; cocoa",
+      "terms": [
+        "tea",
+        "coffee",
+        "cocoa"
+      ]
+    },
+    {
+      "query": "snake_case-name",
+      "raw_lower": "snake_case-name",
+      "terms": [
+        "snake_case-name"
+      ]
+    },
+    {
+      "query": "  spaced   out  ",
+      "raw_lower": "  spaced   out  ",
+      "terms": [
+        "spaced",
+        "out"
+      ]
+    },
+    {
+      "query": "茶",
+      "raw_lower": "茶",
+      "terms": [
+        "茶"
+      ]
+    },
+    {
+      "query": "茶 tea",
+      "raw_lower": "茶 tea",
+      "terms": [
+        "茶",
+        "tea"
+      ]
+    },
+    {
+      "query": "茶, 世界",
+      "raw_lower": "茶, 世界",
+      "terms": [
+        "茶",
+        "世界"
+      ]
+    },
+    {
+      "query": "茶茶 x 界",
+      "raw_lower": "茶茶 x 界",
+      "terms": [
+        "茶茶",
+        "界"
+      ]
+    },
+    {
+      "query": "世界",
+      "raw_lower": "世界",
+      "terms": [
+        "世界"
+      ]
+    },
+    {
+      "query": "🙂",
+      "raw_lower": "🙂",
+      "terms": []
+    },
+    {
+      "query": "tea 茶",
+      "raw_lower": "tea 茶",
+      "terms": [
+        "tea",
+        "茶"
+      ]
+    },
+    {
+      "query": "",
+      "raw_lower": "",
+      "terms": []
+    }
+  ],
+  "scoring": [
+    {
+      "query": "tea",
+      "content": "We talked about tea last winter.",
+      "score": 25,
+      "earliest_index": 16
+    },
+    {
+      "query": "tea",
+      "content": "Green tea and black tea.",
+      "score": 25,
+      "earliest_index": 6
+    },
+    {
+      "query": "tea",
+      "content": "green tea",
+      "score": 25,
+      "earliest_index": 6
+    },
+    {
+      "query": "tea",
+      "content": "TEA",
+      "score": 25,
+      "earliest_index": 0
+    },
+    {
+      "query": "tea",
+      "content": "coffee only",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea",
+      "content": "the kettle whistled loudly",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea",
+      "content": "kettle",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea",
+      "content": "whistled kettle the",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea",
+      "content": "茶を飲む",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea",
+      "content": "世界",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea",
+      "content": "",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "Tea",
+      "content": "We talked about tea last winter.",
+      "score": 25,
+      "earliest_index": 16
+    },
+    {
+      "query": "Tea",
+      "content": "Green tea and black tea.",
+      "score": 25,
+      "earliest_index": 6
+    },
+    {
+      "query": "Tea",
+      "content": "green tea",
+      "score": 25,
+      "earliest_index": 6
+    },
+    {
+      "query": "Tea",
+      "content": "TEA",
+      "score": 25,
+      "earliest_index": 0
+    },
+    {
+      "query": "Tea",
+      "content": "coffee only",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "Tea",
+      "content": "the kettle whistled loudly",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "Tea",
+      "content": "kettle",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "Tea",
+      "content": "whistled kettle the",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "Tea",
+      "content": "茶を飲む",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "Tea",
+      "content": "世界",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "Tea",
+      "content": "",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "green tea",
+      "content": "We talked about tea last winter.",
+      "score": 10,
+      "earliest_index": 16
+    },
+    {
+      "query": "green tea",
+      "content": "Green tea and black tea.",
+      "score": 60,
+      "earliest_index": 0
+    },
+    {
+      "query": "green tea",
+      "content": "green tea",
+      "score": 60,
+      "earliest_index": 0
+    },
+    {
+      "query": "green tea",
+      "content": "TEA",
+      "score": 10,
+      "earliest_index": 0
+    },
+    {
+      "query": "green tea",
+      "content": "coffee only",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "green tea",
+      "content": "the kettle whistled loudly",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "green tea",
+      "content": "kettle",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "green tea",
+      "content": "whistled kettle the",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "green tea",
+      "content": "茶を飲む",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "green tea",
+      "content": "世界",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "green tea",
+      "content": "",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "the kettle whistled",
+      "content": "We talked about tea last winter.",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "the kettle whistled",
+      "content": "Green tea and black tea.",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "the kettle whistled",
+      "content": "green tea",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "the kettle whistled",
+      "content": "TEA",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "the kettle whistled",
+      "content": "coffee only",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "the kettle whistled",
+      "content": "the kettle whistled loudly",
+      "score": 70,
+      "earliest_index": 0
+    },
+    {
+      "query": "the kettle whistled",
+      "content": "kettle",
+      "score": 10,
+      "earliest_index": 0
+    },
+    {
+      "query": "the kettle whistled",
+      "content": "whistled kettle the",
+      "score": 45,
+      "earliest_index": 0
+    },
+    {
+      "query": "the kettle whistled",
+      "content": "茶を飲む",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "the kettle whistled",
+      "content": "世界",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "the kettle whistled",
+      "content": "",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "a b c",
+      "content": "We talked about tea last winter.",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "a b c",
+      "content": "Green tea and black tea.",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "a b c",
+      "content": "green tea",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "a b c",
+      "content": "TEA",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "a b c",
+      "content": "coffee only",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "a b c",
+      "content": "the kettle whistled loudly",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "a b c",
+      "content": "kettle",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "a b c",
+      "content": "whistled kettle the",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "a b c",
+      "content": "茶を飲む",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "a b c",
+      "content": "世界",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "a b c",
+      "content": "",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "a",
+      "content": "We talked about tea last winter.",
+      "score": 25,
+      "earliest_index": 4
+    },
+    {
+      "query": "a",
+      "content": "Green tea and black tea.",
+      "score": 25,
+      "earliest_index": 8
+    },
+    {
+      "query": "a",
+      "content": "green tea",
+      "score": 25,
+      "earliest_index": 8
+    },
+    {
+      "query": "a",
+      "content": "TEA",
+      "score": 25,
+      "earliest_index": 2
+    },
+    {
+      "query": "a",
+      "content": "coffee only",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "a",
+      "content": "the kettle whistled loudly",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "a",
+      "content": "kettle",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "a",
+      "content": "whistled kettle the",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "a",
+      "content": "茶を飲む",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "a",
+      "content": "世界",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "a",
+      "content": "",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea!",
+      "content": "We talked about tea last winter.",
+      "score": 25,
+      "earliest_index": 16
+    },
+    {
+      "query": "tea!",
+      "content": "Green tea and black tea.",
+      "score": 25,
+      "earliest_index": 6
+    },
+    {
+      "query": "tea!",
+      "content": "green tea",
+      "score": 25,
+      "earliest_index": 6
+    },
+    {
+      "query": "tea!",
+      "content": "TEA",
+      "score": 25,
+      "earliest_index": 0
+    },
+    {
+      "query": "tea!",
+      "content": "coffee only",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea!",
+      "content": "the kettle whistled loudly",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea!",
+      "content": "kettle",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea!",
+      "content": "whistled kettle the",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea!",
+      "content": "茶を飲む",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea!",
+      "content": "世界",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea!",
+      "content": "",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "content": "We talked about tea last winter.",
+      "score": 10,
+      "earliest_index": 16
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "content": "Green tea and black tea.",
+      "score": 10,
+      "earliest_index": 6
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "content": "green tea",
+      "score": 10,
+      "earliest_index": 6
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "content": "TEA",
+      "score": 10,
+      "earliest_index": 0
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "content": "coffee only",
+      "score": 10,
+      "earliest_index": 0
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "content": "the kettle whistled loudly",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "content": "kettle",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "content": "whistled kettle the",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "content": "茶を飲む",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "content": "世界",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea, coffee; cocoa",
+      "content": "",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "snake_case-name",
+      "content": "We talked about tea last winter.",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "snake_case-name",
+      "content": "Green tea and black tea.",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "snake_case-name",
+      "content": "green tea",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "snake_case-name",
+      "content": "TEA",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "snake_case-name",
+      "content": "coffee only",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "snake_case-name",
+      "content": "the kettle whistled loudly",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "snake_case-name",
+      "content": "kettle",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "snake_case-name",
+      "content": "whistled kettle the",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "snake_case-name",
+      "content": "茶を飲む",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "snake_case-name",
+      "content": "世界",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "snake_case-name",
+      "content": "",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "  spaced   out  ",
+      "content": "We talked about tea last winter.",
+      "score": 10,
+      "earliest_index": 12
+    },
+    {
+      "query": "  spaced   out  ",
+      "content": "Green tea and black tea.",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "  spaced   out  ",
+      "content": "green tea",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "  spaced   out  ",
+      "content": "TEA",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "  spaced   out  ",
+      "content": "coffee only",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "  spaced   out  ",
+      "content": "the kettle whistled loudly",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "  spaced   out  ",
+      "content": "kettle",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "  spaced   out  ",
+      "content": "whistled kettle the",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "  spaced   out  ",
+      "content": "茶を飲む",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "  spaced   out  ",
+      "content": "世界",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "  spaced   out  ",
+      "content": "",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶",
+      "content": "We talked about tea last winter.",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶",
+      "content": "Green tea and black tea.",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶",
+      "content": "green tea",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶",
+      "content": "TEA",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶",
+      "content": "coffee only",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶",
+      "content": "the kettle whistled loudly",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶",
+      "content": "kettle",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶",
+      "content": "whistled kettle the",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶",
+      "content": "茶を飲む",
+      "score": 25,
+      "earliest_index": 0
+    },
+    {
+      "query": "茶",
+      "content": "世界",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶",
+      "content": "",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶 tea",
+      "content": "We talked about tea last winter.",
+      "score": 10,
+      "earliest_index": 16
+    },
+    {
+      "query": "茶 tea",
+      "content": "Green tea and black tea.",
+      "score": 10,
+      "earliest_index": 6
+    },
+    {
+      "query": "茶 tea",
+      "content": "green tea",
+      "score": 10,
+      "earliest_index": 6
+    },
+    {
+      "query": "茶 tea",
+      "content": "TEA",
+      "score": 10,
+      "earliest_index": 0
+    },
+    {
+      "query": "茶 tea",
+      "content": "coffee only",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶 tea",
+      "content": "the kettle whistled loudly",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶 tea",
+      "content": "kettle",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶 tea",
+      "content": "whistled kettle the",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶 tea",
+      "content": "茶を飲む",
+      "score": 10,
+      "earliest_index": 0
+    },
+    {
+      "query": "茶 tea",
+      "content": "世界",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶 tea",
+      "content": "",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶, 世界",
+      "content": "We talked about tea last winter.",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶, 世界",
+      "content": "Green tea and black tea.",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶, 世界",
+      "content": "green tea",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶, 世界",
+      "content": "TEA",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶, 世界",
+      "content": "coffee only",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶, 世界",
+      "content": "the kettle whistled loudly",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶, 世界",
+      "content": "kettle",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶, 世界",
+      "content": "whistled kettle the",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶, 世界",
+      "content": "茶を飲む",
+      "score": 10,
+      "earliest_index": 0
+    },
+    {
+      "query": "茶, 世界",
+      "content": "世界",
+      "score": 10,
+      "earliest_index": 0
+    },
+    {
+      "query": "茶, 世界",
+      "content": "",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶茶 x 界",
+      "content": "We talked about tea last winter.",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶茶 x 界",
+      "content": "Green tea and black tea.",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶茶 x 界",
+      "content": "green tea",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶茶 x 界",
+      "content": "TEA",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶茶 x 界",
+      "content": "coffee only",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶茶 x 界",
+      "content": "the kettle whistled loudly",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶茶 x 界",
+      "content": "kettle",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶茶 x 界",
+      "content": "whistled kettle the",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶茶 x 界",
+      "content": "茶を飲む",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "茶茶 x 界",
+      "content": "世界",
+      "score": 10,
+      "earliest_index": 3
+    },
+    {
+      "query": "茶茶 x 界",
+      "content": "",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "世界",
+      "content": "We talked about tea last winter.",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "世界",
+      "content": "Green tea and black tea.",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "世界",
+      "content": "green tea",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "世界",
+      "content": "TEA",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "世界",
+      "content": "coffee only",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "世界",
+      "content": "the kettle whistled loudly",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "世界",
+      "content": "kettle",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "世界",
+      "content": "whistled kettle the",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "世界",
+      "content": "茶を飲む",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "世界",
+      "content": "世界",
+      "score": 25,
+      "earliest_index": 0
+    },
+    {
+      "query": "世界",
+      "content": "",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "🙂",
+      "content": "We talked about tea last winter.",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "🙂",
+      "content": "Green tea and black tea.",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "🙂",
+      "content": "green tea",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "🙂",
+      "content": "TEA",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "🙂",
+      "content": "coffee only",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "🙂",
+      "content": "the kettle whistled loudly",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "🙂",
+      "content": "kettle",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "🙂",
+      "content": "whistled kettle the",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "🙂",
+      "content": "茶を飲む",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "🙂",
+      "content": "世界",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "🙂",
+      "content": "",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea 茶",
+      "content": "We talked about tea last winter.",
+      "score": 10,
+      "earliest_index": 16
+    },
+    {
+      "query": "tea 茶",
+      "content": "Green tea and black tea.",
+      "score": 10,
+      "earliest_index": 6
+    },
+    {
+      "query": "tea 茶",
+      "content": "green tea",
+      "score": 10,
+      "earliest_index": 6
+    },
+    {
+      "query": "tea 茶",
+      "content": "TEA",
+      "score": 10,
+      "earliest_index": 0
+    },
+    {
+      "query": "tea 茶",
+      "content": "coffee only",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea 茶",
+      "content": "the kettle whistled loudly",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea 茶",
+      "content": "kettle",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea 茶",
+      "content": "whistled kettle the",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea 茶",
+      "content": "茶を飲む",
+      "score": 10,
+      "earliest_index": 0
+    },
+    {
+      "query": "tea 茶",
+      "content": "世界",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "tea 茶",
+      "content": "",
+      "score": null,
+      "earliest_index": null
+    },
+    {
+      "query": "",
+      "content": "We talked about tea last winter.",
+      "score": 25,
+      "earliest_index": 0
+    },
+    {
+      "query": "",
+      "content": "Green tea and black tea.",
+      "score": 25,
+      "earliest_index": 0
+    },
+    {
+      "query": "",
+      "content": "green tea",
+      "score": 25,
+      "earliest_index": 0
+    },
+    {
+      "query": "",
+      "content": "TEA",
+      "score": 25,
+      "earliest_index": 0
+    },
+    {
+      "query": "",
+      "content": "coffee only",
+      "score": 25,
+      "earliest_index": 0
+    },
+    {
+      "query": "",
+      "content": "the kettle whistled loudly",
+      "score": 25,
+      "earliest_index": 0
+    },
+    {
+      "query": "",
+      "content": "kettle",
+      "score": 25,
+      "earliest_index": 0
+    },
+    {
+      "query": "",
+      "content": "whistled kettle the",
+      "score": 25,
+      "earliest_index": 0
+    },
+    {
+      "query": "",
+      "content": "茶を飲む",
+      "score": 25,
+      "earliest_index": 0
+    },
+    {
+      "query": "",
+      "content": "世界",
+      "score": 25,
+      "earliest_index": 0
+    },
+    {
+      "query": "",
+      "content": "",
+      "score": 25,
+      "earliest_index": 0
+    }
+  ],
+  "excerpts": [
+    {
+      "name": "short, no query @80",
+      "content": "short content",
+      "query": null,
+      "excerpt_chars": 80,
+      "expect": "short content"
+    },
+    {
+      "name": "short, no query @360",
+      "content": "short content",
+      "query": null,
+      "excerpt_chars": 360,
+      "expect": "short content"
+    },
+    {
+      "name": "short, no query @2000",
+      "content": "short content",
+      "query": null,
+      "excerpt_chars": 2000,
+      "expect": "short content"
+    },
+    {
+      "name": "long, no query @80",
+      "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxteayyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "query": null,
+      "excerpt_chars": 80,
+      "expect": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx..."
+    },
+    {
+      "name": "long, no query @360",
+      "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxteayyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "query": null,
+      "excerpt_chars": 360,
+      "expect": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx..."
+    },
+    {
+      "name": "long, no query @2000",
+      "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxteayyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "query": null,
+      "excerpt_chars": 2000,
+      "expect": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxteayyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+    },
+    {
+      "name": "unicode, no query @80",
+      "content": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂",
+      "query": null,
+      "excerpt_chars": 80,
+      "expect": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+    },
+    {
+      "name": "unicode, no query @360",
+      "content": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂",
+      "query": null,
+      "excerpt_chars": 360,
+      "expect": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+    },
+    {
+      "name": "unicode, no query @2000",
+      "content": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂",
+      "query": null,
+      "excerpt_chars": 2000,
+      "expect": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+    },
+    {
+      "name": "unicode long, no query @80",
+      "content": "世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世tea界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界",
+      "query": null,
+      "excerpt_chars": 80,
+      "expect": "世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世..."
+    },
+    {
+      "name": "unicode long, no query @360",
+      "content": "世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世tea界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界",
+      "query": null,
+      "excerpt_chars": 360,
+      "expect": "世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世tea界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界..."
+    },
+    {
+      "name": "unicode long, no query @2000",
+      "content": "世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世tea界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界",
+      "query": null,
+      "excerpt_chars": 2000,
+      "expect": "世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世tea界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界"
+    },
+    {
+      "name": "match at the start / \"tea\" @80",
+      "content": "tea is the topic here and it goes on for a while longer",
+      "query": "tea",
+      "excerpt_chars": 80,
+      "expect": "tea is the topic here and it goes on for a while longer"
+    },
+    {
+      "name": "match at the start / \"tea\" @360",
+      "content": "tea is the topic here and it goes on for a while longer",
+      "query": "tea",
+      "excerpt_chars": 360,
+      "expect": "tea is the topic here and it goes on for a while longer"
+    },
+    {
+      "name": "match at the start / \"green tea\" @80",
+      "content": "tea is the topic here and it goes on for a while longer",
+      "query": "green tea",
+      "excerpt_chars": 80,
+      "expect": "tea is the topic here and it goes on for a while longer"
+    },
+    {
+      "name": "match at the start / \"green tea\" @360",
+      "content": "tea is the topic here and it goes on for a while longer",
+      "query": "green tea",
+      "excerpt_chars": 360,
+      "expect": "tea is the topic here and it goes on for a while longer"
+    },
+    {
+      "name": "match at the start / \"a\" @80",
+      "content": "tea is the topic here and it goes on for a while longer",
+      "query": "a",
+      "excerpt_chars": 80,
+      "expect": "tea is the topic here and it goes on for a while longer"
+    },
+    {
+      "name": "match at the start / \"a\" @360",
+      "content": "tea is the topic here and it goes on for a while longer",
+      "query": "a",
+      "excerpt_chars": 360,
+      "expect": "tea is the topic here and it goes on for a while longer"
+    },
+    {
+      "name": "match deep inside / \"tea\" @80",
+      "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxteayyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "query": "tea",
+      "excerpt_chars": 80,
+      "expect": "...xxxxxxxxxxxxxxxxxxxxteayyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy..."
+    },
+    {
+      "name": "match deep inside / \"tea\" @360",
+      "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxteayyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "query": "tea",
+      "excerpt_chars": 360,
+      "expect": "...xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxteayyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy..."
+    },
+    {
+      "name": "match deep inside / \"green tea\" @80",
+      "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxteayyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "query": "green tea",
+      "excerpt_chars": 80,
+      "expect": "...xxxxxxxxxxxxxxxxxxxxteayyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy..."
+    },
+    {
+      "name": "match deep inside / \"green tea\" @360",
+      "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxteayyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "query": "green tea",
+      "excerpt_chars": 360,
+      "expect": "...xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxteayyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy..."
+    },
+    {
+      "name": "match deep inside / \"a\" @80",
+      "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxteayyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "query": "a",
+      "excerpt_chars": 80,
+      "expect": "...xxxxxxxxxxxxxxxxxxteayyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy..."
+    },
+    {
+      "name": "match deep inside / \"a\" @360",
+      "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxteayyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "query": "a",
+      "excerpt_chars": 360,
+      "expect": "...xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxteayyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy..."
+    },
+    {
+      "name": "match in unicode / \"tea\" @80",
+      "content": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂",
+      "query": "tea",
+      "excerpt_chars": 80,
+      "expect": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+    },
+    {
+      "name": "match in unicode / \"tea\" @360",
+      "content": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂",
+      "query": "tea",
+      "excerpt_chars": 360,
+      "expect": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+    },
+    {
+      "name": "match in unicode / \"green tea\" @80",
+      "content": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂",
+      "query": "green tea",
+      "excerpt_chars": 80,
+      "expect": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+    },
+    {
+      "name": "match in unicode / \"green tea\" @360",
+      "content": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂",
+      "query": "green tea",
+      "excerpt_chars": 360,
+      "expect": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+    },
+    {
+      "name": "match in unicode / \"a\" @80",
+      "content": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂",
+      "query": "a",
+      "excerpt_chars": 80,
+      "expect": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+    },
+    {
+      "name": "match in unicode / \"a\" @360",
+      "content": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂",
+      "query": "a",
+      "excerpt_chars": 360,
+      "expect": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+    },
+    {
+      "name": "match inside a long unicode run / \"tea\" @80",
+      "content": "世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世tea界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界",
+      "query": "tea",
+      "excerpt_chars": 80,
+      "expect": "...世世世世世世世世世世世世世世世世世世世世tea界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界..."
+    },
+    {
+      "name": "match inside a long unicode run / \"tea\" @360",
+      "content": "世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世tea界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界",
+      "query": "tea",
+      "excerpt_chars": 360,
+      "expect": "...世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世tea界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界"
+    },
+    {
+      "name": "match inside a long unicode run / \"green tea\" @80",
+      "content": "世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世tea界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界",
+      "query": "green tea",
+      "excerpt_chars": 80,
+      "expect": "...世世世世世世世世世世世世世世世世世世世世tea界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界..."
+    },
+    {
+      "name": "match inside a long unicode run / \"green tea\" @360",
+      "content": "世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世tea界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界",
+      "query": "green tea",
+      "excerpt_chars": 360,
+      "expect": "...世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世tea界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界"
+    },
+    {
+      "name": "match inside a long unicode run / \"a\" @80",
+      "content": "世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世tea界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界",
+      "query": "a",
+      "excerpt_chars": 80,
+      "expect": "...世世世世世世世世世世世世世世世世世世tea界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界..."
+    },
+    {
+      "name": "match inside a long unicode run / \"a\" @360",
+      "content": "世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世tea界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界",
+      "query": "a",
+      "excerpt_chars": 360,
+      "expect": "...世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世tea界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界"
+    },
+    {
+      "name": "no match / \"tea\" @80",
+      "content": "coffee only, nothing else",
+      "query": "tea",
+      "excerpt_chars": 80,
+      "expect": "coffee only, nothing else"
+    },
+    {
+      "name": "no match / \"tea\" @360",
+      "content": "coffee only, nothing else",
+      "query": "tea",
+      "excerpt_chars": 360,
+      "expect": "coffee only, nothing else"
+    },
+    {
+      "name": "no match / \"green tea\" @80",
+      "content": "coffee only, nothing else",
+      "query": "green tea",
+      "excerpt_chars": 80,
+      "expect": "coffee only, nothing else"
+    },
+    {
+      "name": "no match / \"green tea\" @360",
+      "content": "coffee only, nothing else",
+      "query": "green tea",
+      "excerpt_chars": 360,
+      "expect": "coffee only, nothing else"
+    },
+    {
+      "name": "no match / \"a\" @80",
+      "content": "coffee only, nothing else",
+      "query": "a",
+      "excerpt_chars": 80,
+      "expect": "coffee only, nothing else"
+    },
+    {
+      "name": "no match / \"a\" @360",
+      "content": "coffee only, nothing else",
+      "query": "a",
+      "excerpt_chars": 360,
+      "expect": "coffee only, nothing else"
+    },
+    {
+      "name": "no match, longer than the window / \"tea\" @80",
+      "content": "coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee ",
+      "query": "tea",
+      "excerpt_chars": 80,
+      "expect": "coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee cof"
+    },
+    {
+      "name": "no match, longer than the window / \"tea\" @360",
+      "content": "coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee ",
+      "query": "tea",
+      "excerpt_chars": 360,
+      "expect": "coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee cof"
+    },
+    {
+      "name": "no match, longer than the window / \"green tea\" @80",
+      "content": "coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee ",
+      "query": "green tea",
+      "excerpt_chars": 80,
+      "expect": "coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee cof"
+    },
+    {
+      "name": "no match, longer than the window / \"green tea\" @360",
+      "content": "coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee ",
+      "query": "green tea",
+      "excerpt_chars": 360,
+      "expect": "coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee cof"
+    },
+    {
+      "name": "no match, longer than the window / \"a\" @80",
+      "content": "coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee ",
+      "query": "a",
+      "excerpt_chars": 80,
+      "expect": "coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee cof"
+    },
+    {
+      "name": "no match, longer than the window / \"a\" @360",
+      "content": "coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee ",
+      "query": "a",
+      "excerpt_chars": 360,
+      "expect": "coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee coffee cof"
+    }
+  ],
+  "clamping": [
+    {
+      "input": {},
+      "max_results": 20,
+      "excerpt_chars": 360
+    },
+    {
+      "input": {
+        "max_results": 0,
+        "excerpt_chars": 0
+      },
+      "max_results": 1,
+      "excerpt_chars": 80
+    },
+    {
+      "input": {
+        "max_results": 1,
+        "excerpt_chars": 80
+      },
+      "max_results": 1,
+      "excerpt_chars": 80
+    },
+    {
+      "input": {
+        "max_results": 50,
+        "excerpt_chars": 500
+      },
+      "max_results": 50,
+      "excerpt_chars": 500
+    },
+    {
+      "input": {
+        "max_results": 100,
+        "excerpt_chars": 2000
+      },
+      "max_results": 100,
+      "excerpt_chars": 2000
+    },
+    {
+      "input": {
+        "max_results": 1000,
+        "excerpt_chars": 999999
+      },
+      "max_results": 100,
+      "excerpt_chars": 2000
+    },
+    {
+      "input": {
+        "max_results": 5.5,
+        "excerpt_chars": 100.5
+      },
+      "max_results": 20,
+      "excerpt_chars": 360
+    },
+    {
+      "input": {
+        "max_results": -1,
+        "excerpt_chars": -1
+      },
+      "max_results": 20,
+      "excerpt_chars": 360
+    },
+    {
+      "input": {
+        "max_results": "5",
+        "excerpt_chars": "100"
+      },
+      "max_results": 20,
+      "excerpt_chars": 360
+    },
+    {
+      "input": {
+        "max_results": null,
+        "excerpt_chars": null
+      },
+      "max_results": 20,
+      "excerpt_chars": 360
+    }
+  ],
+  "arg_parsing": [
+    {
+      "input": {},
+      "expect": {
+        "ok": {
+          "query": null,
+          "start": null,
+          "end": null,
+          "range_is_empty": true,
+          "model_filter": null
+        }
+      }
+    },
+    {
+      "input": {
+        "query": "tea"
+      },
+      "expect": {
+        "ok": {
+          "query": "tea",
+          "start": null,
+          "end": null,
+          "range_is_empty": true,
+          "model_filter": null
+        }
+      }
+    },
+    {
+      "input": {
+        "query": "   "
+      },
+      "expect": {
+        "ok": {
+          "query": null,
+          "start": null,
+          "end": null,
+          "range_is_empty": true,
+          "model_filter": null
+        }
+      }
+    },
+    {
+      "input": {
+        "query": ""
+      },
+      "expect": {
+        "ok": {
+          "query": null,
+          "start": null,
+          "end": null,
+          "range_is_empty": true,
+          "model_filter": null
+        }
+      }
+    },
+    {
+      "input": {
+        "query": "  tea  "
+      },
+      "expect": {
+        "ok": {
+          "query": "tea",
+          "start": null,
+          "end": null,
+          "range_is_empty": true,
+          "model_filter": null
+        }
+      }
+    },
+    {
+      "input": {
+        "query": 5
+      },
+      "expect": {
+        "error": "invalid args: query must be a string"
+      }
+    },
+    {
+      "input": {
+        "start_time": "2026-01-01T00:00:00Z"
+      },
+      "expect": {
+        "ok": {
+          "query": null,
+          "start": "2026-01-01T00:00:00+00:00",
+          "end": null,
+          "range_is_empty": false,
+          "model_filter": null
+        }
+      }
+    },
+    {
+      "input": {
+        "start_time": "2026-01-01T00:00:00+10:00"
+      },
+      "expect": {
+        "ok": {
+          "query": null,
+          "start": "2026-01-01T00:00:00+10:00",
+          "end": null,
+          "range_is_empty": false,
+          "model_filter": null
+        }
+      }
+    },
+    {
+      "input": {
+        "start_time": "2026-01-01"
+      },
+      "expect": {
+        "error": "invalid args: start_time must be an RFC3339 timestamp: premature end of input"
+      }
+    },
+    {
+      "input": {
+        "start_time": "nonsense"
+      },
+      "expect": {
+        "error": "invalid args: start_time must be an RFC3339 timestamp: premature end of input"
+      }
+    },
+    {
+      "input": {
+        "start_time": ""
+      },
+      "expect": {
+        "ok": {
+          "query": null,
+          "start": null,
+          "end": null,
+          "range_is_empty": true,
+          "model_filter": null
+        }
+      }
+    },
+    {
+      "input": {
+        "start_time": "  2026-01-01T00:00:00Z  "
+      },
+      "expect": {
+        "ok": {
+          "query": null,
+          "start": "2026-01-01T00:00:00+00:00",
+          "end": null,
+          "range_is_empty": false,
+          "model_filter": null
+        }
+      }
+    },
+    {
+      "input": {
+        "start_time": "2026-01-02T00:00:00Z",
+        "end_time": "2026-01-01T00:00:00Z"
+      },
+      "expect": {
+        "error": "invalid args: start_time must be before or equal to end_time"
+      }
+    },
+    {
+      "input": {
+        "start_time": "2026-01-01T00:00:00Z",
+        "end_time": "2026-01-01T00:00:00Z"
+      },
+      "expect": {
+        "ok": {
+          "query": null,
+          "start": "2026-01-01T00:00:00+00:00",
+          "end": "2026-01-01T00:00:00+00:00",
+          "range_is_empty": false,
+          "model_filter": null
+        }
+      }
+    },
+    {
+      "input": {
+        "model": "  Opus-4.6 "
+      },
+      "expect": {
+        "ok": {
+          "query": null,
+          "start": null,
+          "end": null,
+          "range_is_empty": true,
+          "model_filter": "opus-4-6"
+        }
+      }
+    },
+    {
+      "input": {
+        "model": ""
+      },
+      "expect": {
+        "ok": {
+          "query": null,
+          "start": null,
+          "end": null,
+          "range_is_empty": true,
+          "model_filter": null
+        }
+      }
+    },
+    {
+      "input": {
+        "model": 5
+      },
+      "expect": {
+        "error": "invalid args: model must be a string"
+      }
+    }
+  ],
+  "time_range": [
+    {
+      "start": null,
+      "end": null,
+      "timestamp": "2026-01-01T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": null,
+      "end": null,
+      "timestamp": "2026-01-02T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": null,
+      "end": null,
+      "timestamp": "2026-01-03T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": null,
+      "end": null,
+      "timestamp": "2026-01-04T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": null,
+      "end": null,
+      "timestamp": "2026-01-02T10:00:00+10:00",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": null,
+      "end": null,
+      "timestamp": "not-a-timestamp",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": null,
+      "end": null,
+      "timestamp": "",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": "2026-01-02T00:00:00Z",
+      "end": null,
+      "timestamp": "2026-01-01T00:00:00Z",
+      "expect": false,
+      "skipped": 0
+    },
+    {
+      "start": "2026-01-02T00:00:00Z",
+      "end": null,
+      "timestamp": "2026-01-02T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": "2026-01-02T00:00:00Z",
+      "end": null,
+      "timestamp": "2026-01-03T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": "2026-01-02T00:00:00Z",
+      "end": null,
+      "timestamp": "2026-01-04T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": "2026-01-02T00:00:00Z",
+      "end": null,
+      "timestamp": "2026-01-02T10:00:00+10:00",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": "2026-01-02T00:00:00Z",
+      "end": null,
+      "timestamp": "not-a-timestamp",
+      "expect": false,
+      "skipped": 1
+    },
+    {
+      "start": "2026-01-02T00:00:00Z",
+      "end": null,
+      "timestamp": "",
+      "expect": false,
+      "skipped": 1
+    },
+    {
+      "start": null,
+      "end": "2026-01-02T00:00:00Z",
+      "timestamp": "2026-01-01T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": null,
+      "end": "2026-01-02T00:00:00Z",
+      "timestamp": "2026-01-02T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": null,
+      "end": "2026-01-02T00:00:00Z",
+      "timestamp": "2026-01-03T00:00:00Z",
+      "expect": false,
+      "skipped": 0
+    },
+    {
+      "start": null,
+      "end": "2026-01-02T00:00:00Z",
+      "timestamp": "2026-01-04T00:00:00Z",
+      "expect": false,
+      "skipped": 0
+    },
+    {
+      "start": null,
+      "end": "2026-01-02T00:00:00Z",
+      "timestamp": "2026-01-02T10:00:00+10:00",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": null,
+      "end": "2026-01-02T00:00:00Z",
+      "timestamp": "not-a-timestamp",
+      "expect": false,
+      "skipped": 1
+    },
+    {
+      "start": null,
+      "end": "2026-01-02T00:00:00Z",
+      "timestamp": "",
+      "expect": false,
+      "skipped": 1
+    },
+    {
+      "start": "2026-01-01T00:00:00Z",
+      "end": "2026-01-03T00:00:00Z",
+      "timestamp": "2026-01-01T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": "2026-01-01T00:00:00Z",
+      "end": "2026-01-03T00:00:00Z",
+      "timestamp": "2026-01-02T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": "2026-01-01T00:00:00Z",
+      "end": "2026-01-03T00:00:00Z",
+      "timestamp": "2026-01-03T00:00:00Z",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": "2026-01-01T00:00:00Z",
+      "end": "2026-01-03T00:00:00Z",
+      "timestamp": "2026-01-04T00:00:00Z",
+      "expect": false,
+      "skipped": 0
+    },
+    {
+      "start": "2026-01-01T00:00:00Z",
+      "end": "2026-01-03T00:00:00Z",
+      "timestamp": "2026-01-02T10:00:00+10:00",
+      "expect": true,
+      "skipped": 0
+    },
+    {
+      "start": "2026-01-01T00:00:00Z",
+      "end": "2026-01-03T00:00:00Z",
+      "timestamp": "not-a-timestamp",
+      "expect": false,
+      "skipped": 1
+    },
+    {
+      "start": "2026-01-01T00:00:00Z",
+      "end": "2026-01-03T00:00:00Z",
+      "timestamp": "",
+      "expect": false,
+      "skipped": 1
+    }
+  ],
+  "corpus": {
+    "segments": [
+      {
+        "file": "0001.jsonl",
+        "body": "{\"msg_id\":\"s0-tea\",\"role\":\"user\",\"timestamp\":\"2026-01-01T09:00:00Z\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"We talked about tea last winter, mostly oolong.\"}]}\n{\"msg_id\":\"s0-coffee\",\"role\":\"assistant\",\"model\":\"claude-opus-4-6\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"Coffee came up too, but only briefly.\"}],\"timestamp\":\"2026-01-01T10:00:00Z\"}\n"
+      },
+      {
+        "file": "0002.jsonl",
+        "body": "{\"msg_id\":\"s1-long\",\"role\":\"assistant\",\"model\":\"anthropic/claude-opus-4.6\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards\"}],\"timestamp\":\"2026-01-02T09:00:00Z\"}\n{\"msg_id\":\"s1-unicode\",\"role\":\"user\",\"timestamp\":\"2026-01-02T10:00:00Z\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂\"}]}\n{\"msg_id\":\"s1-silent\",\"role\":\"assistant\",\"timestamp\":\"2026-01-02T11:00:00Z\",\"images\":[],\"content_blocks\":[{\"type\":\"thinking\",\"thinking\":\"tea tea tea\"},{\"type\":\"tool_use\",\"id\":\"t1\",\"name\":\"search\",\"input\":{\"q\":\"tea\"}}]}\n{\"msg_id\":\"s1-toolresult\",\"role\":\"user\",\"timestamp\":\"2026-01-02T12:00:00Z\",\"images\":[],\"content_blocks\":[{\"type\":\"tool_result\",\"tool_use_id\":\"t1\",\"content\":\"brewing instructions\",\"is_error\":false}]}\n"
+      }
+    ],
+    "compaction.json": "{\n  \"segments\": [\n    {\n      \"file\": \"0001.jsonl\",\n      \"message_count\": 2,\n      \"compacted_at\": \"2026-01-01T12:00:00Z\"\n    },\n    {\n      \"file\": \"0002.jsonl\",\n      \"message_count\": 4,\n      \"compacted_at\": \"2026-01-02T12:00:00Z\"\n    }\n  ],\n  \"total_compacted_messages\": 6\n}",
+    "active.jsonl": "{\"msg_id\":\"a-regen\",\"role\":\"assistant\",\"model\":\"claude-opus-4-6\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"Tea came up again today.\"}],\"alt_index\":0,\"alt_count\":3,\"alternatives\":[{\"content\":\"Tea came up again today.\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"Tea came up again today.\"}],\"timestamp\":\"2026-01-03T09:00:00Z\"},{\"content\":\"Coffee came up in a regenerated reply.\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"Coffee came up in a regenerated reply.\"}],\"timestamp\":\"2026-01-03T09:05:00Z\",\"model\":\"gpt-5\"},{\"content\":\"A third take, still about tea.\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"A third take, still about tea.\"}],\"timestamp\":\"\"}],\"timestamp\":\"2026-01-03T09:00:00Z\"}\n{\"msg_id\":\"a-bad-ts\",\"role\":\"user\",\"timestamp\":\"not-a-timestamp\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"Tea with a broken timestamp.\"}]}\n{\"msg_id\":\"a-recent\",\"role\":\"assistant\",\"model\":\"claude-opus-4-6\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"One more note on tea.\"}],\"timestamp\":\"2026-01-04T09:00:00Z\"}\n"
+  },
+  "end_to_end": [
+    {
+      "name": "keyword across segments and active",
+      "input": {
+        "query": "tea"
+      },
+      "expect": {
+        "ok": {
+          "query": "tea",
+          "time_range": {
+            "start_time": null,
+            "end_time": null,
+            "inclusive": true
+          },
+          "model_filter": null,
+          "results": [
+            {
+              "msg_id": "a-recent",
+              "role": "assistant",
+              "timestamp": "2026-01-04T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "One more note on tea."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "Tea came up again today."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active:alt:2",
+              "alternative_index": 2,
+              "alternative_count": 3,
+              "model": "claude-opus-4-6",
+              "excerpt": "A third take, still about tea."
+            },
+            {
+              "msg_id": "s1-unicode",
+              "role": "user",
+              "timestamp": "2026-01-02T10:00:00Z",
+              "source": "segment:1",
+              "model": null,
+              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+            },
+            {
+              "msg_id": "s1-long",
+              "role": "assistant",
+              "timestamp": "2026-01-02T09:00:00Z",
+              "source": "segment:1",
+              "model": "anthropic/claude-opus-4.6",
+              "excerpt": "...iller filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards ..."
+            },
+            {
+              "msg_id": "s0-tea",
+              "role": "user",
+              "timestamp": "2026-01-01T09:00:00Z",
+              "source": "segment:0",
+              "model": null,
+              "excerpt": "We talked about tea last winter, mostly oolong."
+            },
+            {
+              "msg_id": "a-bad-ts",
+              "role": "user",
+              "timestamp": "not-a-timestamp",
+              "source": "active",
+              "model": null,
+              "excerpt": "Tea with a broken timestamp."
+            }
+          ],
+          "count": 7,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 0
+        }
+      }
+    },
+    {
+      "name": "keyword ranks by relevance blended with recency",
+      "input": {
+        "query": "tea kettle"
+      },
+      "expect": {
+        "ok": {
+          "query": "tea kettle",
+          "time_range": {
+            "start_time": null,
+            "end_time": null,
+            "inclusive": true
+          },
+          "model_filter": null,
+          "results": [
+            {
+              "msg_id": "s1-long",
+              "role": "assistant",
+              "timestamp": "2026-01-02T09:00:00Z",
+              "source": "segment:1",
+              "model": "anthropic/claude-opus-4.6",
+              "excerpt": "...iller filler filler filler filler filler filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterward..."
+            },
+            {
+              "msg_id": "a-recent",
+              "role": "assistant",
+              "timestamp": "2026-01-04T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "One more note on tea."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "Tea came up again today."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active:alt:2",
+              "alternative_index": 2,
+              "alternative_count": 3,
+              "model": "claude-opus-4-6",
+              "excerpt": "A third take, still about tea."
+            },
+            {
+              "msg_id": "s1-unicode",
+              "role": "user",
+              "timestamp": "2026-01-02T10:00:00Z",
+              "source": "segment:1",
+              "model": null,
+              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+            },
+            {
+              "msg_id": "s0-tea",
+              "role": "user",
+              "timestamp": "2026-01-01T09:00:00Z",
+              "source": "segment:0",
+              "model": null,
+              "excerpt": "We talked about tea last winter, mostly oolong."
+            },
+            {
+              "msg_id": "a-bad-ts",
+              "role": "user",
+              "timestamp": "not-a-timestamp",
+              "source": "active",
+              "model": null,
+              "excerpt": "Tea with a broken timestamp."
+            }
+          ],
+          "count": 7,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 0
+        }
+      }
+    },
+    {
+      "name": "keyword with no hits",
+      "input": {
+        "query": "zzzznothing"
+      },
+      "expect": {
+        "ok": {
+          "query": "zzzznothing",
+          "time_range": {
+            "start_time": null,
+            "end_time": null,
+            "inclusive": true
+          },
+          "model_filter": null,
+          "results": [],
+          "count": 0,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 0
+        }
+      }
+    },
+    {
+      "name": "recency overturns a stronger older match",
+      "input": {
+        "query": "tea winter zzz"
+      },
+      "expect": {
+        "ok": {
+          "query": "tea winter zzz",
+          "time_range": {
+            "start_time": null,
+            "end_time": null,
+            "inclusive": true
+          },
+          "model_filter": null,
+          "results": [
+            {
+              "msg_id": "a-recent",
+              "role": "assistant",
+              "timestamp": "2026-01-04T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "One more note on tea."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "Tea came up again today."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active:alt:2",
+              "alternative_index": 2,
+              "alternative_count": 3,
+              "model": "claude-opus-4-6",
+              "excerpt": "A third take, still about tea."
+            },
+            {
+              "msg_id": "s0-tea",
+              "role": "user",
+              "timestamp": "2026-01-01T09:00:00Z",
+              "source": "segment:0",
+              "model": null,
+              "excerpt": "We talked about tea last winter, mostly oolong."
+            },
+            {
+              "msg_id": "s1-unicode",
+              "role": "user",
+              "timestamp": "2026-01-02T10:00:00Z",
+              "source": "segment:1",
+              "model": null,
+              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+            },
+            {
+              "msg_id": "s1-long",
+              "role": "assistant",
+              "timestamp": "2026-01-02T09:00:00Z",
+              "source": "segment:1",
+              "model": "anthropic/claude-opus-4.6",
+              "excerpt": "...iller filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards ..."
+            },
+            {
+              "msg_id": "a-bad-ts",
+              "role": "user",
+              "timestamp": "not-a-timestamp",
+              "source": "active",
+              "model": null,
+              "excerpt": "Tea with a broken timestamp."
+            }
+          ],
+          "count": 7,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 0
+        }
+      }
+    },
+    {
+      "name": "recency cannot overturn a much stronger older match",
+      "input": {
+        "query": "tea winter oolong"
+      },
+      "expect": {
+        "ok": {
+          "query": "tea winter oolong",
+          "time_range": {
+            "start_time": null,
+            "end_time": null,
+            "inclusive": true
+          },
+          "model_filter": null,
+          "results": [
+            {
+              "msg_id": "s0-tea",
+              "role": "user",
+              "timestamp": "2026-01-01T09:00:00Z",
+              "source": "segment:0",
+              "model": null,
+              "excerpt": "We talked about tea last winter, mostly oolong."
+            },
+            {
+              "msg_id": "a-recent",
+              "role": "assistant",
+              "timestamp": "2026-01-04T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "One more note on tea."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "Tea came up again today."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active:alt:2",
+              "alternative_index": 2,
+              "alternative_count": 3,
+              "model": "claude-opus-4-6",
+              "excerpt": "A third take, still about tea."
+            },
+            {
+              "msg_id": "s1-unicode",
+              "role": "user",
+              "timestamp": "2026-01-02T10:00:00Z",
+              "source": "segment:1",
+              "model": null,
+              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+            },
+            {
+              "msg_id": "s1-long",
+              "role": "assistant",
+              "timestamp": "2026-01-02T09:00:00Z",
+              "source": "segment:1",
+              "model": "anthropic/claude-opus-4.6",
+              "excerpt": "...iller filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards ..."
+            },
+            {
+              "msg_id": "a-bad-ts",
+              "role": "user",
+              "timestamp": "not-a-timestamp",
+              "source": "active",
+              "model": null,
+              "excerpt": "Tea with a broken timestamp."
+            }
+          ],
+          "count": 7,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 0
+        }
+      }
+    },
+    {
+      "name": "case-insensitive keyword",
+      "input": {
+        "query": "TEA"
+      },
+      "expect": {
+        "ok": {
+          "query": "TEA",
+          "time_range": {
+            "start_time": null,
+            "end_time": null,
+            "inclusive": true
+          },
+          "model_filter": null,
+          "results": [
+            {
+              "msg_id": "a-recent",
+              "role": "assistant",
+              "timestamp": "2026-01-04T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "One more note on tea."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "Tea came up again today."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active:alt:2",
+              "alternative_index": 2,
+              "alternative_count": 3,
+              "model": "claude-opus-4-6",
+              "excerpt": "A third take, still about tea."
+            },
+            {
+              "msg_id": "s1-unicode",
+              "role": "user",
+              "timestamp": "2026-01-02T10:00:00Z",
+              "source": "segment:1",
+              "model": null,
+              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+            },
+            {
+              "msg_id": "s1-long",
+              "role": "assistant",
+              "timestamp": "2026-01-02T09:00:00Z",
+              "source": "segment:1",
+              "model": "anthropic/claude-opus-4.6",
+              "excerpt": "...iller filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards ..."
+            },
+            {
+              "msg_id": "s0-tea",
+              "role": "user",
+              "timestamp": "2026-01-01T09:00:00Z",
+              "source": "segment:0",
+              "model": null,
+              "excerpt": "We talked about tea last winter, mostly oolong."
+            },
+            {
+              "msg_id": "a-bad-ts",
+              "role": "user",
+              "timestamp": "not-a-timestamp",
+              "source": "active",
+              "model": null,
+              "excerpt": "Tea with a broken timestamp."
+            }
+          ],
+          "count": 7,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 0
+        }
+      }
+    },
+    {
+      "name": "multi-term partial coverage",
+      "input": {
+        "query": "coffee tea"
+      },
+      "expect": {
+        "ok": {
+          "query": "coffee tea",
+          "time_range": {
+            "start_time": null,
+            "end_time": null,
+            "inclusive": true
+          },
+          "model_filter": null,
+          "results": [
+            {
+              "msg_id": "a-recent",
+              "role": "assistant",
+              "timestamp": "2026-01-04T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "One more note on tea."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:05:00Z",
+              "source": "active:alt:1",
+              "alternative_index": 1,
+              "alternative_count": 3,
+              "model": "gpt-5",
+              "excerpt": "Coffee came up in a regenerated reply."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "Tea came up again today."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active:alt:2",
+              "alternative_index": 2,
+              "alternative_count": 3,
+              "model": "claude-opus-4-6",
+              "excerpt": "A third take, still about tea."
+            },
+            {
+              "msg_id": "s1-unicode",
+              "role": "user",
+              "timestamp": "2026-01-02T10:00:00Z",
+              "source": "segment:1",
+              "model": null,
+              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+            },
+            {
+              "msg_id": "s1-long",
+              "role": "assistant",
+              "timestamp": "2026-01-02T09:00:00Z",
+              "source": "segment:1",
+              "model": "anthropic/claude-opus-4.6",
+              "excerpt": "...iller filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards ..."
+            },
+            {
+              "msg_id": "s0-coffee",
+              "role": "assistant",
+              "timestamp": "2026-01-01T10:00:00Z",
+              "source": "segment:0",
+              "model": "claude-opus-4-6",
+              "excerpt": "Coffee came up too, but only briefly."
+            },
+            {
+              "msg_id": "s0-tea",
+              "role": "user",
+              "timestamp": "2026-01-01T09:00:00Z",
+              "source": "segment:0",
+              "model": null,
+              "excerpt": "We talked about tea last winter, mostly oolong."
+            },
+            {
+              "msg_id": "a-bad-ts",
+              "role": "user",
+              "timestamp": "not-a-timestamp",
+              "source": "active",
+              "model": null,
+              "excerpt": "Tea with a broken timestamp."
+            }
+          ],
+          "count": 9,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 0
+        }
+      }
+    },
+    {
+      "name": "phrase bonus",
+      "input": {
+        "query": "kettle whistled"
+      },
+      "expect": {
+        "ok": {
+          "query": "kettle whistled",
+          "time_range": {
+            "start_time": null,
+            "end_time": null,
+            "inclusive": true
+          },
+          "model_filter": null,
+          "results": [
+            {
+              "msg_id": "s1-long",
+              "role": "assistant",
+              "timestamp": "2026-01-02T09:00:00Z",
+              "source": "segment:1",
+              "model": "anthropic/claude-opus-4.6",
+              "excerpt": "...iller filler filler filler filler filler filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterward..."
+            }
+          ],
+          "count": 1,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 0
+        }
+      }
+    },
+    {
+      "name": "tool-result text is not searchable",
+      "input": {
+        "query": "brewing"
+      },
+      "expect": {
+        "ok": {
+          "query": "brewing",
+          "time_range": {
+            "start_time": null,
+            "end_time": null,
+            "inclusive": true
+          },
+          "model_filter": null,
+          "results": [],
+          "count": 0,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 0
+        }
+      }
+    },
+    {
+      "name": "thinking text is not searchable",
+      "input": {
+        "query": "zzzz",
+        "start_time": "2026-01-02T10:30:00Z",
+        "end_time": "2026-01-02T11:30:00Z"
+      },
+      "expect": {
+        "ok": {
+          "query": "zzzz",
+          "time_range": {
+            "start_time": "2026-01-02T10:30:00+00:00",
+            "end_time": "2026-01-02T11:30:00+00:00",
+            "inclusive": true
+          },
+          "model_filter": null,
+          "results": [],
+          "count": 0,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 0
+        }
+      }
+    },
+    {
+      "name": "time range only is chronological",
+      "input": {
+        "start_time": "2026-01-01T00:00:00Z",
+        "end_time": "2026-01-02T23:59:59Z"
+      },
+      "expect": {
+        "ok": {
+          "query": null,
+          "time_range": {
+            "start_time": "2026-01-01T00:00:00+00:00",
+            "end_time": "2026-01-02T23:59:59+00:00",
+            "inclusive": true
+          },
+          "model_filter": null,
+          "results": [
+            {
+              "msg_id": "s0-tea",
+              "role": "user",
+              "timestamp": "2026-01-01T09:00:00Z",
+              "source": "segment:0",
+              "model": null,
+              "excerpt": "We talked about tea last winter, mostly oolong."
+            },
+            {
+              "msg_id": "s0-coffee",
+              "role": "assistant",
+              "timestamp": "2026-01-01T10:00:00Z",
+              "source": "segment:0",
+              "model": "claude-opus-4-6",
+              "excerpt": "Coffee came up too, but only briefly."
+            },
+            {
+              "msg_id": "s1-long",
+              "role": "assistant",
+              "timestamp": "2026-01-02T09:00:00Z",
+              "source": "segment:1",
+              "model": "anthropic/claude-opus-4.6",
+              "excerpt": "filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler fil..."
+            },
+            {
+              "msg_id": "s1-unicode",
+              "role": "user",
+              "timestamp": "2026-01-02T10:00:00Z",
+              "source": "segment:1",
+              "model": null,
+              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+            }
+          ],
+          "count": 4,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 1
+        }
+      }
+    },
+    {
+      "name": "time range excludes the broken timestamp",
+      "input": {
+        "start_time": "2026-01-01T00:00:00Z",
+        "end_time": "2026-01-05T00:00:00Z"
+      },
+      "expect": {
+        "ok": {
+          "query": null,
+          "time_range": {
+            "start_time": "2026-01-01T00:00:00+00:00",
+            "end_time": "2026-01-05T00:00:00+00:00",
+            "inclusive": true
+          },
+          "model_filter": null,
+          "results": [
+            {
+              "msg_id": "s0-tea",
+              "role": "user",
+              "timestamp": "2026-01-01T09:00:00Z",
+              "source": "segment:0",
+              "model": null,
+              "excerpt": "We talked about tea last winter, mostly oolong."
+            },
+            {
+              "msg_id": "s0-coffee",
+              "role": "assistant",
+              "timestamp": "2026-01-01T10:00:00Z",
+              "source": "segment:0",
+              "model": "claude-opus-4-6",
+              "excerpt": "Coffee came up too, but only briefly."
+            },
+            {
+              "msg_id": "s1-long",
+              "role": "assistant",
+              "timestamp": "2026-01-02T09:00:00Z",
+              "source": "segment:1",
+              "model": "anthropic/claude-opus-4.6",
+              "excerpt": "filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler fil..."
+            },
+            {
+              "msg_id": "s1-unicode",
+              "role": "user",
+              "timestamp": "2026-01-02T10:00:00Z",
+              "source": "segment:1",
+              "model": null,
+              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "Tea came up again today."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active:alt:2",
+              "alternative_index": 2,
+              "alternative_count": 3,
+              "model": "claude-opus-4-6",
+              "excerpt": "A third take, still about tea."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:05:00Z",
+              "source": "active:alt:1",
+              "alternative_index": 1,
+              "alternative_count": 3,
+              "model": "gpt-5",
+              "excerpt": "Coffee came up in a regenerated reply."
+            },
+            {
+              "msg_id": "a-recent",
+              "role": "assistant",
+              "timestamp": "2026-01-04T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "One more note on tea."
+            }
+          ],
+          "count": 8,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 1
+        }
+      }
+    },
+    {
+      "name": "keyword plus time range",
+      "input": {
+        "query": "tea",
+        "start_time": "2026-01-02T00:00:00Z"
+      },
+      "expect": {
+        "ok": {
+          "query": "tea",
+          "time_range": {
+            "start_time": "2026-01-02T00:00:00+00:00",
+            "end_time": null,
+            "inclusive": true
+          },
+          "model_filter": null,
+          "results": [
+            {
+              "msg_id": "a-recent",
+              "role": "assistant",
+              "timestamp": "2026-01-04T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "One more note on tea."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "Tea came up again today."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active:alt:2",
+              "alternative_index": 2,
+              "alternative_count": 3,
+              "model": "claude-opus-4-6",
+              "excerpt": "A third take, still about tea."
+            },
+            {
+              "msg_id": "s1-unicode",
+              "role": "user",
+              "timestamp": "2026-01-02T10:00:00Z",
+              "source": "segment:1",
+              "model": null,
+              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+            },
+            {
+              "msg_id": "s1-long",
+              "role": "assistant",
+              "timestamp": "2026-01-02T09:00:00Z",
+              "source": "segment:1",
+              "model": "anthropic/claude-opus-4.6",
+              "excerpt": "...iller filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards ..."
+            }
+          ],
+          "count": 5,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 1
+        }
+      }
+    },
+    {
+      "name": "model filter matches across routes",
+      "input": {
+        "query": "tea",
+        "model": "opus-4.6"
+      },
+      "expect": {
+        "ok": {
+          "query": "tea",
+          "time_range": {
+            "start_time": null,
+            "end_time": null,
+            "inclusive": true
+          },
+          "model_filter": "opus-4-6",
+          "results": [
+            {
+              "msg_id": "a-recent",
+              "role": "assistant",
+              "timestamp": "2026-01-04T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "One more note on tea."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "Tea came up again today."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active:alt:2",
+              "alternative_index": 2,
+              "alternative_count": 3,
+              "model": "claude-opus-4-6",
+              "excerpt": "A third take, still about tea."
+            },
+            {
+              "msg_id": "s1-long",
+              "role": "assistant",
+              "timestamp": "2026-01-02T09:00:00Z",
+              "source": "segment:1",
+              "model": "anthropic/claude-opus-4.6",
+              "excerpt": "...iller filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards ..."
+            }
+          ],
+          "count": 4,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 0
+        }
+      }
+    },
+    {
+      "name": "model filter excludes everything else",
+      "input": {
+        "query": "tea",
+        "model": "gpt"
+      },
+      "expect": {
+        "ok": {
+          "query": "tea",
+          "time_range": {
+            "start_time": null,
+            "end_time": null,
+            "inclusive": true
+          },
+          "model_filter": "gpt",
+          "results": [],
+          "count": 0,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 0
+        }
+      }
+    },
+    {
+      "name": "model filter alone",
+      "input": {
+        "model": "opus-4-6"
+      },
+      "expect": {
+        "ok": {
+          "query": null,
+          "time_range": {
+            "start_time": null,
+            "end_time": null,
+            "inclusive": true
+          },
+          "model_filter": "opus-4-6",
+          "results": [
+            {
+              "msg_id": "s0-coffee",
+              "role": "assistant",
+              "timestamp": "2026-01-01T10:00:00Z",
+              "source": "segment:0",
+              "model": "claude-opus-4-6",
+              "excerpt": "Coffee came up too, but only briefly."
+            },
+            {
+              "msg_id": "s1-long",
+              "role": "assistant",
+              "timestamp": "2026-01-02T09:00:00Z",
+              "source": "segment:1",
+              "model": "anthropic/claude-opus-4.6",
+              "excerpt": "filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler fil..."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "Tea came up again today."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active:alt:2",
+              "alternative_index": 2,
+              "alternative_count": 3,
+              "model": "claude-opus-4-6",
+              "excerpt": "A third take, still about tea."
+            },
+            {
+              "msg_id": "a-recent",
+              "role": "assistant",
+              "timestamp": "2026-01-04T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "One more note on tea."
+            }
+          ],
+          "count": 5,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 0
+        }
+      }
+    },
+    {
+      "name": "alternatives surface separately",
+      "input": {
+        "query": "coffee"
+      },
+      "expect": {
+        "ok": {
+          "query": "coffee",
+          "time_range": {
+            "start_time": null,
+            "end_time": null,
+            "inclusive": true
+          },
+          "model_filter": null,
+          "results": [
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:05:00Z",
+              "source": "active:alt:1",
+              "alternative_index": 1,
+              "alternative_count": 3,
+              "model": "gpt-5",
+              "excerpt": "Coffee came up in a regenerated reply."
+            },
+            {
+              "msg_id": "s0-coffee",
+              "role": "assistant",
+              "timestamp": "2026-01-01T10:00:00Z",
+              "source": "segment:0",
+              "model": "claude-opus-4-6",
+              "excerpt": "Coffee came up too, but only briefly."
+            }
+          ],
+          "count": 2,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 0
+        }
+      }
+    },
+    {
+      "name": "alternative inheriting the parent model",
+      "input": {
+        "query": "third take",
+        "model": "opus-4-6"
+      },
+      "expect": {
+        "ok": {
+          "query": "third take",
+          "time_range": {
+            "start_time": null,
+            "end_time": null,
+            "inclusive": true
+          },
+          "model_filter": "opus-4-6",
+          "results": [
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active:alt:2",
+              "alternative_index": 2,
+              "alternative_count": 3,
+              "model": "claude-opus-4-6",
+              "excerpt": "A third take, still about tea."
+            }
+          ],
+          "count": 1,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 0
+        }
+      }
+    },
+    {
+      "name": "max_results truncates after ranking",
+      "input": {
+        "query": "tea",
+        "max_results": 2
+      },
+      "expect": {
+        "ok": {
+          "query": "tea",
+          "time_range": {
+            "start_time": null,
+            "end_time": null,
+            "inclusive": true
+          },
+          "model_filter": null,
+          "results": [
+            {
+              "msg_id": "a-recent",
+              "role": "assistant",
+              "timestamp": "2026-01-04T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "One more note on tea."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "Tea came up again today."
+            }
+          ],
+          "count": 2,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 0
+        }
+      }
+    },
+    {
+      "name": "max_results clamps to at least one",
+      "input": {
+        "query": "tea",
+        "max_results": 0
+      },
+      "expect": {
+        "ok": {
+          "query": "tea",
+          "time_range": {
+            "start_time": null,
+            "end_time": null,
+            "inclusive": true
+          },
+          "model_filter": null,
+          "results": [
+            {
+              "msg_id": "a-recent",
+              "role": "assistant",
+              "timestamp": "2026-01-04T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "One more note on tea."
+            }
+          ],
+          "count": 1,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 0
+        }
+      }
+    },
+    {
+      "name": "the best match is not the first one found",
+      "input": {
+        "query": "世界 tea",
+        "max_results": 1
+      },
+      "expect": {
+        "ok": {
+          "query": "世界 tea",
+          "time_range": {
+            "start_time": null,
+            "end_time": null,
+            "inclusive": true
+          },
+          "model_filter": null,
+          "results": [
+            {
+              "msg_id": "s1-unicode",
+              "role": "user",
+              "timestamp": "2026-01-02T10:00:00Z",
+              "source": "segment:1",
+              "model": null,
+              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+            }
+          ],
+          "count": 1,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 0
+        }
+      }
+    },
+    {
+      "name": "the best match is not the first one found, untruncated",
+      "input": {
+        "query": "世界 tea"
+      },
+      "expect": {
+        "ok": {
+          "query": "世界 tea",
+          "time_range": {
+            "start_time": null,
+            "end_time": null,
+            "inclusive": true
+          },
+          "model_filter": null,
+          "results": [
+            {
+              "msg_id": "s1-unicode",
+              "role": "user",
+              "timestamp": "2026-01-02T10:00:00Z",
+              "source": "segment:1",
+              "model": null,
+              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+            },
+            {
+              "msg_id": "a-recent",
+              "role": "assistant",
+              "timestamp": "2026-01-04T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "One more note on tea."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "Tea came up again today."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active:alt:2",
+              "alternative_index": 2,
+              "alternative_count": 3,
+              "model": "claude-opus-4-6",
+              "excerpt": "A third take, still about tea."
+            },
+            {
+              "msg_id": "s1-long",
+              "role": "assistant",
+              "timestamp": "2026-01-02T09:00:00Z",
+              "source": "segment:1",
+              "model": "anthropic/claude-opus-4.6",
+              "excerpt": "...iller filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards ..."
+            },
+            {
+              "msg_id": "s0-tea",
+              "role": "user",
+              "timestamp": "2026-01-01T09:00:00Z",
+              "source": "segment:0",
+              "model": null,
+              "excerpt": "We talked about tea last winter, mostly oolong."
+            },
+            {
+              "msg_id": "a-bad-ts",
+              "role": "user",
+              "timestamp": "not-a-timestamp",
+              "source": "active",
+              "model": null,
+              "excerpt": "Tea with a broken timestamp."
+            }
+          ],
+          "count": 7,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 0
+        }
+      }
+    },
+    {
+      "name": "excerpt_chars widens the window",
+      "input": {
+        "query": "tea",
+        "excerpt_chars": 2000
+      },
+      "expect": {
+        "ok": {
+          "query": "tea",
+          "time_range": {
+            "start_time": null,
+            "end_time": null,
+            "inclusive": true
+          },
+          "model_filter": null,
+          "results": [
+            {
+              "msg_id": "a-recent",
+              "role": "assistant",
+              "timestamp": "2026-01-04T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "One more note on tea."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "Tea came up again today."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active:alt:2",
+              "alternative_index": 2,
+              "alternative_count": 3,
+              "model": "claude-opus-4-6",
+              "excerpt": "A third take, still about tea."
+            },
+            {
+              "msg_id": "s1-unicode",
+              "role": "user",
+              "timestamp": "2026-01-02T10:00:00Z",
+              "source": "segment:1",
+              "model": null,
+              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+            },
+            {
+              "msg_id": "s1-long",
+              "role": "assistant",
+              "timestamp": "2026-01-02T09:00:00Z",
+              "source": "segment:1",
+              "model": "anthropic/claude-opus-4.6",
+              "excerpt": "...iller filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards"
+            },
+            {
+              "msg_id": "s0-tea",
+              "role": "user",
+              "timestamp": "2026-01-01T09:00:00Z",
+              "source": "segment:0",
+              "model": null,
+              "excerpt": "We talked about tea last winter, mostly oolong."
+            },
+            {
+              "msg_id": "a-bad-ts",
+              "role": "user",
+              "timestamp": "not-a-timestamp",
+              "source": "active",
+              "model": null,
+              "excerpt": "Tea with a broken timestamp."
+            }
+          ],
+          "count": 7,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 0
+        }
+      }
+    },
+    {
+      "name": "excerpt_chars clamps to the floor",
+      "input": {
+        "query": "tea",
+        "excerpt_chars": 1
+      },
+      "expect": {
+        "ok": {
+          "query": "tea",
+          "time_range": {
+            "start_time": null,
+            "end_time": null,
+            "inclusive": true
+          },
+          "model_filter": null,
+          "results": [
+            {
+              "msg_id": "a-recent",
+              "role": "assistant",
+              "timestamp": "2026-01-04T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "One more note on tea."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active",
+              "model": "claude-opus-4-6",
+              "excerpt": "Tea came up again today."
+            },
+            {
+              "msg_id": "a-regen",
+              "role": "assistant",
+              "timestamp": "2026-01-03T09:00:00Z",
+              "source": "active:alt:2",
+              "alternative_index": 2,
+              "alternative_count": 3,
+              "model": "claude-opus-4-6",
+              "excerpt": "...d take, still about tea."
+            },
+            {
+              "msg_id": "s1-unicode",
+              "role": "user",
+              "timestamp": "2026-01-02T10:00:00Z",
+              "source": "segment:1",
+              "model": null,
+              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+            },
+            {
+              "msg_id": "s1-long",
+              "role": "assistant",
+              "timestamp": "2026-01-02T09:00:00Z",
+              "source": "segment:1",
+              "model": "anthropic/claude-opus-4.6",
+              "excerpt": "... and we returned to tea. afterwards afterwards afterwards afterwards afterwards ..."
+            },
+            {
+              "msg_id": "s0-tea",
+              "role": "user",
+              "timestamp": "2026-01-01T09:00:00Z",
+              "source": "segment:0",
+              "model": null,
+              "excerpt": "We talked about tea last winter, mostly oolong."
+            },
+            {
+              "msg_id": "a-bad-ts",
+              "role": "user",
+              "timestamp": "not-a-timestamp",
+              "source": "active",
+              "model": null,
+              "excerpt": "Tea with a broken timestamp."
+            }
+          ],
+          "count": 7,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 0
+        }
+      }
+    },
+    {
+      "name": "unicode query",
+      "input": {
+        "query": "世界"
+      },
+      "expect": {
+        "ok": {
+          "query": "世界",
+          "time_range": {
+            "start_time": null,
+            "end_time": null,
+            "inclusive": true
+          },
+          "model_filter": null,
+          "results": [
+            {
+              "msg_id": "s1-unicode",
+              "role": "user",
+              "timestamp": "2026-01-02T10:00:00Z",
+              "source": "segment:1",
+              "model": null,
+              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+            }
+          ],
+          "count": 1,
+          "searched_messages": 9,
+          "skipped_invalid_timestamps": 0
+        }
+      }
+    },
+    {
+      "name": "no filters at all is rejected",
+      "input": {},
+      "expect": {
+        "error": "invalid args: provide query, start_time, end_time, model, or a combination"
+      }
+    },
+    {
+      "name": "blank query alone is rejected",
+      "input": {
+        "query": "   "
+      },
+      "expect": {
+        "error": "invalid args: provide query, start_time, end_time, model, or a combination"
+      }
+    },
+    {
+      "name": "inverted range is rejected",
+      "input": {
+        "start_time": "2026-02-01T00:00:00Z",
+        "end_time": "2026-01-01T00:00:00Z"
+      },
+      "expect": {
+        "error": "invalid args: start_time must be before or equal to end_time"
+      }
+    },
+    {
+      "name": "bad timestamp is rejected",
+      "input": {
+        "start_time": "nonsense"
+      },
+      "expect": {
+        "error": "invalid args: start_time must be an RFC3339 timestamp: premature end of input"
+      }
+    }
+  ],
+  "empty_character_dir": {
+    "ok": {
+      "query": "tea",
+      "time_range": {
+        "start_time": null,
+        "end_time": null,
+        "inclusive": true
+      },
+      "model_filter": null,
+      "results": [],
+      "count": 0,
+      "searched_messages": 0,
+      "skipped_invalid_timestamps": 0
+    }
+  },
+  "unconfigured_character_dir": {
+    "error": "invalid args: conversation history is not configured"
+  }
+}

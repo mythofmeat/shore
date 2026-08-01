@@ -3,6 +3,14 @@
 //! Searches both compacted segment files and the current active conversation
 //! window for the character. This is intentionally separate from filesystem
 //! search: history is transcript data, not workspace files.
+//!
+//! **Ported.** `llm-sidecar/src/tools/history.ts` is the implementation now,
+//! pinned by `llm-sidecar/tests/engine_fixtures/history_parity.json` (frozen;
+//! generated from this file at 9023b46d). Do not add behaviour here.
+//!
+//! Not deleted yet: tool dispatch still runs through `tools/mod.rs` and the
+//! daemon's tool socket, and the TypeScript side has no executor registry to
+//! receive it (#12, step 3). It goes when dispatch moves.
 
 use std::path::PathBuf;
 
