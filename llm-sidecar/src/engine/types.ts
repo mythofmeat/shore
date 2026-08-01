@@ -73,4 +73,10 @@ export interface Message {
    * wire-shape parity; the replay portability filter runs daemon-side.
    */
   provider_key?: string;
+  /**
+   * Model id that minted this message's content, in the ledger's vocabulary.
+   * Finer-grained than `provider_key`, which an aggregator shares across many
+   * model families — the replay guard needs both.
+   */
+  model?: string;
 }
