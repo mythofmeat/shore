@@ -176,8 +176,8 @@ fn order_transcript_rows(rows: Vec<TranscriptRow>) -> Vec<TranscriptRow> {
     ticks.into_iter().flatten().collect()
 }
 
-/// Query curated background transcripts (`source` = `heartbeat` or `dreaming`)
-/// for the active character, newest first.
+/// Query curated background transcripts (`source` = `heartbeat`) for the
+/// active character, newest first.
 pub fn transcript(
     engine: &ConversationEngine,
     ctx: &CommandContext,
@@ -187,10 +187,10 @@ pub fn transcript(
         .get("source")
         .and_then(Value::as_str)
         .unwrap_or("heartbeat");
-    if source != "heartbeat" && source != "dreaming" {
+    if source != "heartbeat" {
         return Err((
             ErrorCode::InvalidRequest,
-            format!("unknown transcript source '{source}' (expected 'heartbeat' or 'dreaming')"),
+            format!("unknown transcript source '{source}' (expected 'heartbeat')"),
         ));
     }
     let char_name = engine.character_name();

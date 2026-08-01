@@ -215,52 +215,6 @@ fn tool_result_msg(id: &str) -> Message {
 }
 
 #[test]
-fn memory_dream_returns_useful_phase_json() {
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap();
-    let tmp = TempDir::new().unwrap();
-
-    rt.block_on(async {
-        let (engine, ctx, _rx) = make_ctx(&tmp);
-        let mem = shore_common::config::character_memory_dir(
-            &ctx.config.dirs.config,
-            engine.character_name(),
-        );
-        let workspace = shore_common::config::character_workspace_dir(
-            &ctx.config.dirs.config,
-            engine.character_name(),
-        );
-        tokio::fs::create_dir_all(&mem).await.unwrap();
-        tokio::fs::write(
-            mem.join("notes.md"),
-            "- TestChar prefers careful memory reviews and remembers durable facts.\n",
-        )
-        .await
-        .unwrap();
-
-        let result = memory_dream(&engine, &ctx, &json!({ "dry_run": true, "force": true }))
-            .await
-            .unwrap();
-
-        assert_eq!(result["dry_run"], true);
-        assert!(result["candidate_count"].as_u64().unwrap() >= 1);
-        assert!(result["indexed_count"].as_u64().unwrap() >= 1);
-        assert!(result["promoted_count"].as_u64().unwrap() >= 1);
-        assert!(result["rejected_count"].as_u64().is_some());
-        assert_eq!(result["phase_summaries"].as_array().unwrap().len(), 3);
-        assert!(result["would_write_paths"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|path| path.as_str().unwrap().contains("dreams")));
-        assert!(!mem.join("DREAMS.md").exists());
-        assert!(!workspace.join("MEMORY.md").exists());
-    });
-}
-
-#[test]
 fn status_returns_state() {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -2066,13 +2020,11 @@ base_url = "https://openrouter.ai/api/v1"
         blanket: Option<&str>,
         heartbeat: Option<&str>,
         compaction: Option<&str>,
-        dreaming: Option<&str>,
     ) -> shore_common::config::app::AppConfig {
         let mut app = shore_common::config::app::AppConfig::default();
         app.defaults.background.model = blanket.map(str::to_owned);
         app.defaults.background.heartbeat = heartbeat.map(str::to_owned);
         app.defaults.background.compaction = compaction.map(str::to_owned);
-        app.defaults.background.dreaming = dreaming.map(str::to_owned);
         app
     }
 
@@ -2080,7 +2032,7 @@ base_url = "https://openrouter.ai/api/v1"
     fn background_models_reports_per_task_and_blanket_sources() {
         let tmp = TempDir::new().unwrap();
         // Blanket pins everything; compaction overrides it with a per-task pin.
-        let app = app_with_background(Some("claude-sonnet"), None, Some("gpt-4o"), None);
+        let app = app_with_background(Some("claude-sonnet"), None, Some("gpt-4o"));
         let (_engine, ctx, _rx) = make_ctx_with_config(&tmp, app, sample_models());
 
         let out = background_models(&ctx).unwrap();
@@ -2092,7 +2044,6 @@ base_url = "https://openrouter.ai/api/v1"
             by_task("compaction")["source"],
             "config: background.compaction"
         );
-        assert_eq!(by_task("dreaming")["source"], "config: background.model");
         // The per-task pin resolves to a different model than the blanket.
         assert_ne!(
             by_task("compaction")["model"],
@@ -2114,7 +2065,7 @@ base_url = "https://openrouter.ai/api/v1"
     #[test]
     fn model_settings_background_compaction_targets_pinned_model() {
         let tmp = TempDir::new().unwrap();
-        let app = app_with_background(None, None, Some("gpt-4o"), None);
+        let app = app_with_background(None, None, Some("gpt-4o"));
         let (_engine, ctx, _rx) = make_ctx_with_config(&tmp, app, sample_models());
 
         let out = model_settings(&ctx, &json!({ "background_task": "compaction" })).unwrap();
@@ -2125,7 +2076,7 @@ base_url = "https://openrouter.ai/api/v1"
     fn model_settings_background_all_errors_when_models_diverge() {
         let tmp = TempDir::new().unwrap();
         // compaction pinned to gpt-4o; the rest inherit the chat model → divergent.
-        let app = app_with_background(None, None, Some("gpt-4o"), None);
+        let app = app_with_background(None, None, Some("gpt-4o"));
         let (_engine, ctx, _rx) = make_ctx_with_config(&tmp, app, sample_models());
 
         let err = model_settings(&ctx, &json!({ "background_task": "all" })).unwrap_err();
@@ -2140,7 +2091,7 @@ base_url = "https://openrouter.ai/api/v1"
     fn model_settings_background_all_ok_when_models_agree() {
         let tmp = TempDir::new().unwrap();
         // Blanket pin makes every task resolve to the same model.
-        let app = app_with_background(Some("gpt-4o"), None, None, None);
+        let app = app_with_background(Some("gpt-4o"), None, None);
         let (_engine, ctx, _rx) = make_ctx_with_config(&tmp, app, sample_models());
 
         let out = model_settings(&ctx, &json!({ "background_task": "all" })).unwrap();

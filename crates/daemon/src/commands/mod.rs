@@ -103,8 +103,6 @@ pub async fn dispatch(
         "model_settings" => state::model_settings(ctx, &cmd.args),
         "background_models" => state::background_models(ctx),
         "memory_changelog" => state::memory_changelog(engine, ctx, &cmd.args),
-        "memory_dream" => state::memory_dream(engine, ctx, &cmd.args).await,
-        "memory_dreams" => state::memory_dreams(engine, ctx, &cmd.args),
         "memory" => state::memory(engine, ctx, &cmd.args).await,
         "compact" => state::compact(engine, ctx, &cmd.args).await,
         "config" => state::config(ctx, &cmd.args),

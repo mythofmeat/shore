@@ -315,7 +315,6 @@ async fn handle_log_command(
         tools,
         subagent_tools,
         heartbeat,
-        dreaming,
         events,
         api,
         count,
@@ -351,9 +350,9 @@ async fn handle_log_command(
         return Ok(());
     }
 
-    // Background observability views (heartbeat/dreaming transcript, the event
+    // Background observability views (the heartbeat transcript, the event
     // ring, raw call payloads) map to their own SWP commands via `to_swp_command`.
-    if *heartbeat || *dreaming || *events || api.is_some() {
+    if *heartbeat || *events || api.is_some() {
         let Some((name, swp_args)) = crate::cli::to_swp_command(cmd) else {
             return Ok(());
         };
@@ -2101,7 +2100,6 @@ mod tests {
             tools: false,
             subagent_tools: false,
             heartbeat: false,
-            dreaming: false,
             events: false,
             api: None,
             call_type: None,
@@ -2137,7 +2135,6 @@ mod tests {
             tools: false,
             subagent_tools: false,
             heartbeat: false,
-            dreaming: false,
             events: false,
             api: None,
             call_type: None,

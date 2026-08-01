@@ -854,7 +854,7 @@ pub fn overlay_for_character(
 /// Returns `None` only when the catalog has no chat models at all.
 ///
 /// Before this helper existed, every background-task site (manual
-/// `/compact`, background compaction, dreaming, heartbeat override)
+/// `/compact`, background compaction, heartbeat override)
 /// re-implemented the chain and either forgot the overlay or copy-pasted
 /// it inconsistently. The missing overlay silently dropped
 /// per-character `max_output_tokens`, capping responses at 4096 tokens and
@@ -867,7 +867,6 @@ pub fn resolve_background_model(
     let op = match task {
         shore_common::config::app::BackgroundTask::Heartbeat => "heartbeat",
         shore_common::config::app::BackgroundTask::Compaction => "compaction",
-        shore_common::config::app::BackgroundTask::Dreaming => "dreaming",
     };
     if let Some(name) = config.app.defaults.resolve_background_model_name(task) {
         // Resolve through the effective catalog so a background pin written as

@@ -105,7 +105,7 @@ pub(crate) enum CliCommand {
         count: u32,
 
         /// Show only messages from one role (`character` aliases `assistant`)
-        #[arg(long, value_enum, conflicts_with_all = ["heartbeat", "dreaming", "events", "api"])]
+        #[arg(long, value_enum, conflicts_with_all = ["heartbeat", "events", "api"])]
         role: Option<LogRole>,
 
         /// Follow mode: keep listening for new messages
@@ -138,16 +138,12 @@ pub(crate) enum CliCommand {
 
         /// Show the heartbeat transcript: what each tick thought, the tools it
         /// called and their results, and the model/provider that served it
-        #[arg(long, conflicts_with_all = ["dreaming", "events", "api", "msg_ref"])]
+        #[arg(long, conflicts_with_all = ["events", "api", "msg_ref"])]
         heartbeat: bool,
-
-        /// Show the dreaming/librarian transcript (full reasoning + tool I/O)
-        #[arg(long, conflicts_with_all = ["heartbeat", "events", "api", "msg_ref"])]
-        dreaming: bool,
 
         /// Show the heartbeat operational event timeline (tick fired, dormant,
         /// woke, timeout) instead of the transcript
-        #[arg(long, conflicts_with_all = ["heartbeat", "dreaming", "api", "msg_ref"])]
+        #[arg(long, conflicts_with_all = ["heartbeat", "api", "msg_ref"])]
         events: bool,
 
         /// Inspect raw LLM call payloads. Bare lists recent calls; pass an id
@@ -159,7 +155,7 @@ pub(crate) enum CliCommand {
         #[arg(long, num_args = 0..=1, value_name = "ID", conflicts_with = "msg_ref")]
         api: Option<Option<i64>>,
 
-        /// Filter `--api` by ledger call type (e.g. message, heartbeat, dreaming)
+        /// Filter `--api` by ledger call type (e.g. message, heartbeat, compaction)
         #[arg(long, requires = "api")]
         call_type: Option<String>,
     },
@@ -235,8 +231,8 @@ pub(crate) enum CliCommand {
         #[arg(long)]
         all: bool,
 
-        /// Show which model each background task (heartbeat/compaction/
-        /// dreaming) resolves to, and where that selection comes from.
+        /// Show which model each background task (heartbeat/compaction)
+        /// resolves to, and where that selection comes from.
         #[arg(long, conflicts_with_all = ["name", "info", "reset", "all"])]
         background: bool,
 
@@ -441,7 +437,6 @@ pub(crate) enum BackgroundTarget {
     All,
     Heartbeat,
     Compaction,
-    Dreaming,
 }
 
 impl BackgroundTarget {
@@ -450,7 +445,6 @@ impl BackgroundTarget {
             BackgroundTarget::All => "all",
             BackgroundTarget::Heartbeat => "heartbeat",
             BackgroundTarget::Compaction => "compaction",
-            BackgroundTarget::Dreaming => "dreaming",
         }
     }
 }
@@ -559,9 +553,9 @@ pub(crate) enum ModelCommand {
         reset: bool,
 
         /// Operate on the model backing a background task instead of the
-        /// active chat model, so you can tune heartbeat/compaction/dreaming
-        /// without switching chat to that model. `all` errors if the tasks
-        /// resolve to different models.
+        /// active chat model, so you can tune heartbeat/compaction without
+        /// switching chat to that model. `all` errors if the tasks resolve
+        /// to different models.
         #[arg(long, value_enum)]
         background: Option<BackgroundTarget>,
 
@@ -611,28 +605,6 @@ pub(crate) enum MemoryCommand {
     Changelog {
         /// Number of entries to show
         #[arg(short = 'n', long, default_value = "20")]
-        limit: u32,
-    },
-
-    /// Run or inspect the memory dreaming sweep
-    Dream {
-        /// Show dreaming scheduler state
-        #[arg(long)]
-        status: bool,
-
-        /// Preview a sweep without writing dream state, DREAMS.md, or MEMORY.md
-        #[arg(long)]
-        dry_run: bool,
-
-        /// Run even when the scheduler says the sweep is not due
-        #[arg(long)]
-        force: bool,
-    },
-
-    /// Print recent entries from the dreams audit log
-    Dreams {
-        /// Maximum number of entries to print (newest first)
-        #[arg(short = 'n', long, default_value = "10")]
         limit: u32,
     },
 }
@@ -862,7 +834,7 @@ pub(crate) fn to_swp_command(cmd: &CliCommand) -> Option<(&'static str, serde_js
     }
 }
 
-/// `log` subcommands (edit/delete), single message ref, the heartbeat/dreaming
+/// `log` subcommands (edit/delete), single message ref, the heartbeat
 /// transcript, the heartbeat event timeline, raw call payloads, or the message
 /// list.
 fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
@@ -872,7 +844,6 @@ fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         msg_ref,
         role,
         heartbeat,
-        dreaming,
         events,
         api,
         call_type,
@@ -908,12 +879,6 @@ fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         return Some((
             "transcript",
             json!({ "source": "heartbeat", "count": count }),
-        ));
-    }
-    if *dreaming {
-        return Some((
-            "transcript",
-            json!({ "source": "dreaming", "count": count }),
         ));
     }
     if *events {
@@ -1046,7 +1011,7 @@ fn provider_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)
     }
 }
 
-/// `memory` subcommands (compact/changelog/dream/dreams) or status/query.
+/// `memory` subcommands (compact/changelog) or status/query.
 fn memory_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     use serde_json::{json, Map, Value};
     let CliCommand::Memory {
@@ -1066,15 +1031,6 @@ fn memory_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> 
         Some(MemoryCommand::Changelog { limit }) => {
             Some(("memory_changelog", json!({ "limit": limit })))
         }
-        Some(MemoryCommand::Dream {
-            status,
-            dry_run,
-            force,
-        }) => Some((
-            "memory_dream",
-            json!({ "status": status, "dry_run": dry_run, "force": force }),
-        )),
-        Some(MemoryCommand::Dreams { limit }) => Some(("memory_dreams", json!({ "limit": limit }))),
         None => Some(("memory", json!({ "query": query }))),
     }
 }
@@ -1322,7 +1278,6 @@ mod tests {
                 tools,
                 subagent_tools,
                 heartbeat,
-                dreaming,
                 events,
                 api,
                 call_type,
@@ -1339,7 +1294,6 @@ mod tests {
                 assert!(!tools);
                 assert!(!subagent_tools);
                 assert!(!heartbeat);
-                assert!(!dreaming);
                 assert!(!events);
                 assert!(api.is_none());
                 assert!(call_type.is_none());
@@ -2540,7 +2494,6 @@ mod tests {
             tools: false,
             subagent_tools: false,
             heartbeat: false,
-            dreaming: false,
             events: false,
             api: None,
             call_type: None,
@@ -2568,7 +2521,6 @@ mod tests {
             tools: false,
             subagent_tools: false,
             heartbeat: false,
-            dreaming: false,
             events: false,
             api: None,
             call_type: None,
@@ -2618,7 +2570,6 @@ mod tests {
             tools: false,
             subagent_tools: false,
             heartbeat: false,
-            dreaming: false,
             events: false,
             api: None,
             call_type: None,
@@ -2644,7 +2595,6 @@ mod tests {
             tools: false,
             subagent_tools: false,
             heartbeat: false,
-            dreaming: false,
             events: false,
             api: None,
             call_type: None,
@@ -2720,7 +2670,6 @@ mod tests {
                 tools: false,
                 subagent_tools: false,
                 heartbeat: false,
-                dreaming: false,
                 events: false,
                 api: None,
                 call_type: None,
@@ -2741,7 +2690,6 @@ mod tests {
                 tools: false,
                 subagent_tools: false,
                 heartbeat: false,
-                dreaming: false,
                 events: false,
                 api: None,
                 call_type: None,
@@ -2761,7 +2709,6 @@ mod tests {
                 tools: false,
                 subagent_tools: false,
                 heartbeat: false,
-                dreaming: false,
                 events: false,
                 api: None,
                 call_type: None,
@@ -2779,7 +2726,6 @@ mod tests {
                 tools: false,
                 subagent_tools: false,
                 heartbeat: false,
-                dreaming: false,
                 events: false,
                 api: None,
                 call_type: None,

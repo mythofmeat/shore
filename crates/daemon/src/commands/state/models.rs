@@ -89,7 +89,6 @@ fn background_task_from_str(s: &str) -> Option<shore_common::config::app::Backgr
     match s {
         "heartbeat" => Some(BackgroundTask::Heartbeat),
         "compaction" => Some(BackgroundTask::Compaction),
-        "dreaming" => Some(BackgroundTask::Dreaming),
         _ => None,
     }
 }
@@ -99,7 +98,6 @@ fn background_task_label(task: shore_common::config::app::BackgroundTask) -> &'s
     match task {
         BackgroundTask::Heartbeat => "heartbeat",
         BackgroundTask::Compaction => "compaction",
-        BackgroundTask::Dreaming => "dreaming",
     }
 }
 
@@ -145,13 +143,13 @@ fn resolve_background_setting_target(
         let task = background_task_from_str(selector).ok_or((
             ErrorCode::InvalidRequest,
             format!(
-                "unknown background task: {selector}; expected all, heartbeat, compaction, or dreaming"
+                "unknown background task: {selector}; expected all, heartbeat, or compaction"
             ),
         ))?;
         return resolve_background_target_model(ctx, task);
     }
 
-    // Resolve all three; `all` only works when they collapse to one model. A
+    // Resolve both; `all` only works when they collapse to one model. A
     // fixed-size array lets the compiler prove the destructure below is total,
     // so there's no dead fallback branch and no panicking index.
     let resolved = [
@@ -162,10 +160,6 @@ fn resolve_background_setting_target(
         (
             BackgroundTask::Compaction,
             resolve_background_target_model(ctx, BackgroundTask::Compaction)?,
-        ),
-        (
-            BackgroundTask::Dreaming,
-            resolve_background_target_model(ctx, BackgroundTask::Dreaming)?,
         ),
     ];
     let [(_, first), ..] = &resolved;
@@ -220,18 +214,13 @@ fn resolve_setting_target(
 pub fn background_models(ctx: &CommandContext) -> CommandResult {
     use shore_common::config::app::BackgroundTask;
     let bg = &ctx.config.app.defaults.background;
-    let tasks = [
-        BackgroundTask::Heartbeat,
-        BackgroundTask::Compaction,
-        BackgroundTask::Dreaming,
-    ];
+    let tasks = [BackgroundTask::Heartbeat, BackgroundTask::Compaction];
     let mut rows = Vec::with_capacity(tasks.len());
     for task in tasks {
         let label = background_task_label(task);
         let per_task = match task {
             BackgroundTask::Heartbeat => bg.heartbeat.as_deref(),
             BackgroundTask::Compaction => bg.compaction.as_deref(),
-            BackgroundTask::Dreaming => bg.dreaming.as_deref(),
         };
         let (model, source) = if let Some(name) = per_task.or(bg.model.as_deref()) {
             let qualified = effective_catalog::find_effective_model(
