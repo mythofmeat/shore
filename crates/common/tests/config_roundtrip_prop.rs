@@ -10,8 +10,8 @@ use serde::Serialize;
 use shore_common::config::app::{
     AdvancedConfig, AppConfig, AutonomyConfig, BackgroundDefaultsConfig, BehaviorConfig,
     BudgetWeekday, CommandNotifyConfig, CompactionConfig, ConnectionsConfig, DaemonConfig,
-    DefaultsConfig, EmbeddedConfig, HeartbeatConfig, LlmSidecarConfig,
-    MatrixConfig, McpServerConfig, MemoryConfig, NotificationBackend, NotificationEventsConfig,
+    DefaultsConfig, EmbeddedConfig, HeartbeatConfig, LlmSidecarConfig, MatrixConfig,
+    McpServerConfig, MemoryConfig, NotificationBackend, NotificationEventsConfig,
     NotificationsConfig, NtfyConfig, RetrievalBinaryMode, RetrievalConfig, RetrievalMode,
     SearchConfig, SubagentConfig, ThinkingConfig, ToolOverride, ToolsConfig, UsageBudgetAction,
     UsageBudgetConfig, UsageBudgetPeriod, UsageConfig, UsageSpikeWarningsConfig, UserTimestampMode,
@@ -478,7 +478,6 @@ fn arb_compaction_config() -> impl Strategy<Value = CompactionConfig> {
             },
         )
 }
-
 
 fn arb_retrieval_mode() -> impl Strategy<Value = RetrievalMode> {
     prop_oneof![

@@ -1627,7 +1627,6 @@ mod tests {
                     crate::tool_rpc::AutonomyAction::CompactMaxTurns,
                     crate::tool_rpc::AutonomyAction::CompactIdle,
                     crate::tool_rpc::AutonomyAction::DeepArchive,
-                    crate::tool_rpc::AutonomyAction::Dream,
                 ],
                 // An action that worked and changed something, one that worked
                 // and changed nothing, and one that ran and failed. The empty

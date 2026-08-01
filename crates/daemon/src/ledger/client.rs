@@ -31,7 +31,6 @@ pub enum CallType {
     Keepalive,
     Heartbeat,
     Compaction,
-    Dreaming,
     MemoryQuery,
     /// Initial stream of a delegated sub-agent (`ask_<name>` tool). The
     /// agent's own tool-loop continuations are tagged `ToolLoop`, mirroring
@@ -48,7 +47,6 @@ impl CallType {
             CallType::Keepalive => "keepalive",
             CallType::Heartbeat => "heartbeat",
             CallType::Compaction => "compaction",
-            CallType::Dreaming => "dreaming",
             CallType::MemoryQuery => "memory_query",
             CallType::Subagent => "subagent",
         }
@@ -963,7 +961,6 @@ mod tests {
         assert_eq!(CallType::Keepalive.as_str(), "keepalive");
         assert_eq!(CallType::Heartbeat.as_str(), "heartbeat");
         assert_eq!(CallType::Compaction.as_str(), "compaction");
-        assert_eq!(CallType::Dreaming.as_str(), "dreaming");
         assert_eq!(CallType::MemoryQuery.as_str(), "memory_query");
     }
 
@@ -1034,7 +1031,6 @@ mod tests {
     #[test]
     fn keepalive_replies_parse() {
         let census = keepalive_census();
-
 
         let ping: PingNow = serde_json::from_value(census["ping_now_reply"].clone()).unwrap();
         assert_eq!(ping.status, "skipped");

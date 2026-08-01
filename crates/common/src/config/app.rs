@@ -183,7 +183,6 @@ pub struct BackgroundDefaultsConfig {
 
     /// Per-task override for memory compaction passes.
     pub compaction: Option<String>,
-
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -470,18 +469,21 @@ impl Default for CompactionConfig {
 
 /// Reject an idle threshold that is not a whole number of seconds.
 ///
-/// The two idle triggers round differently. Compaction truncates both sides to
-/// seconds before comparing, so an `idle_trigger` of `1.5s` fires at 1.2s of
-/// idleness; dreaming compares whole `Duration`s, so a `minimum_inactive_time`
-/// of `1.5s` waits the full 1.5. Same file, same shape of value, opposite
-/// rounding (#15).
+/// Compaction truncates both sides to seconds before comparing, so an
+/// `idle_trigger` of `1.5s` does not wait 1.5s — it fires at 1.2s of idleness.
+/// Rather than let a value mean something other than what it says, the range
+/// where the truncation is observable stops being representable. Nothing is
+/// lost: these are minutes-to-hours thresholds a human types into
+/// `config.toml`, and they mean nothing at millisecond resolution.
 ///
-/// Rather than pick a winner and silently change what one of them does, the
-/// range where they disagree stops being representable. Nothing is lost: these
-/// are minutes-to-hours thresholds a human types into `config.toml`, and
-/// neither means anything at millisecond resolution.
+/// This rule used to have a second half. Dreaming's `minimum_inactive_time`
+/// compared whole `Duration`s and so rounded the *opposite* way from
+/// compaction — same file, same shape of value, disagreeing thresholds (#15) —
+/// and the rule existed as much to stop the two diverging as to stop either
+/// one surprising a reader. Dreaming was deleted in `cf55dff4` and only the
+/// compaction half is left, which is still reason enough to keep it.
 ///
-/// Zero is a whole number of seconds and stays valid — it is how both fields
+/// Zero is a whole number of seconds and stays valid — it is how these fields
 /// spell "off".
 fn reject_fractional_seconds(field: &str, value: ConfigDuration) -> Result<(), String> {
     if value.as_millis().is_multiple_of(1000) {
@@ -489,8 +491,8 @@ fn reject_fractional_seconds(field: &str, value: ConfigDuration) -> Result<(), S
     }
     Err(format!(
         "{field} is {}ms. Idle thresholds must be a whole number of seconds: \
-         the compaction and dreaming triggers round fractions differently, so a \
-         value like `1.5s` means different things to each. Use `{}s` or `{}s`.",
+         the compaction triggers truncate to seconds before comparing, so a \
+         value like `1.5s` would fire early. Use `{}s` or `{}s`.",
         value.as_millis(),
         value.as_secs(),
         value.as_secs().saturating_add(1),
@@ -780,10 +782,6 @@ pub struct MemoryConfig {
     #[serde(default)]
     pub git_push: bool,
 }
-
-
-
-
 
 serde_default!(default_replay_prior_thinking -> ThinkingReplay { ThinkingReplay::All });
 
@@ -2319,10 +2317,7 @@ socket_path = "/tmp/shore-llm.sock"
             model: Some("chat".into()),
             ..Default::default()
         };
-        for task in [
-            BackgroundTask::Heartbeat,
-            BackgroundTask::Compaction,
-        ] {
+        for task in [BackgroundTask::Heartbeat, BackgroundTask::Compaction] {
             assert_eq!(d_only_chat.resolve_background_model_name(task), None);
         }
 
@@ -2336,10 +2331,7 @@ socket_path = "/tmp/shore-llm.sock"
             },
             ..Default::default()
         };
-        for task in [
-            BackgroundTask::Heartbeat,
-            BackgroundTask::Compaction,
-        ] {
+        for task in [BackgroundTask::Heartbeat, BackgroundTask::Compaction] {
             assert_eq!(d_split.resolve_background_model_name(task), Some("bg"));
         }
     }

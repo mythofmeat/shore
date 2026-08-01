@@ -925,7 +925,6 @@ fn validate_default_image_generation(
     validate_aux_provider(providers, "defaults.image_generation", provider_key)
 }
 
-
 /// Emit a warning if an optional default-model reference can't be reconciled
 /// with the static catalog or the provider registry's discovery surface.
 ///

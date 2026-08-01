@@ -142,9 +142,7 @@ fn resolve_background_setting_target(
     if selector != "all" {
         let task = background_task_from_str(selector).ok_or((
             ErrorCode::InvalidRequest,
-            format!(
-                "unknown background task: {selector}; expected all, heartbeat, or compaction"
-            ),
+            format!("unknown background task: {selector}; expected all, heartbeat, or compaction"),
         ))?;
         return resolve_background_target_model(ctx, task);
     }

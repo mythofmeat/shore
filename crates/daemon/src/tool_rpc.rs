@@ -32,8 +32,8 @@
 //! Tool calls belong to one in-flight request and are keyed by its `rid`.
 //! Autonomy calls ([`AutonomyRequest`]) belong to a *character* and outlive
 //! every request — the sidecar's tick loop decides a character should compact,
-//! archive, dream or run a heartbeat, and asks this side to do it, because all
-//! four reach the memory store, the tool registry and MCP.
+//! archive or run a heartbeat, and asks this side to do it, because all three
+//! reach the memory store, the tool registry and MCP.
 //!
 //! They share the socket and the connection handler, and nothing else: separate
 //! registries, separate reply types. A tool answers with output the model reads;
@@ -110,7 +110,7 @@ pub struct MessagesRequest {
 /// Flat, and the compaction reason is folded into the action name rather than
 /// riding beside it: "compact because the conversation is idle" is a different
 /// thing to ask for than "compact because it grew past `max_turns`", and the
-/// states that would otherwise be representable — a dream with a reason, a
+/// states that would otherwise be representable — a heartbeat with a reason, a
 /// compaction without one — are not worth being able to spell.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -123,8 +123,6 @@ pub enum AutonomyAction {
     CompactIdle,
     /// Archive what is left of a conversation nobody has returned to.
     DeepArchive,
-    /// Sweep memory while the character is idle.
-    Dream,
 }
 
 /// Do this for this character.
@@ -924,7 +922,7 @@ mod tests {
     #[tokio::test]
     async fn an_action_for_an_unloaded_character_is_refused() {
         let h = harness().await;
-        let outcome = autonomy_ok(&h.socket, &autonomy("ghost", AutonomyAction::Dream)).await;
+        let outcome = autonomy_ok(&h.socket, &autonomy("ghost", AutonomyAction::DeepArchive)).await;
         assert_eq!(
             outcome,
             AutonomyOutcome::Err(ToolCallError {
@@ -961,7 +959,7 @@ mod tests {
 
         let held = tokio::spawn({
             let socket = h.socket.clone();
-            async move { autonomy_ok(&socket, &autonomy("nova", AutonomyAction::Dream)).await }
+            async move { autonomy_ok(&socket, &autonomy("nova", AutonomyAction::DeepArchive)).await }
         });
         taken_rx
             .await
@@ -996,7 +994,7 @@ mod tests {
 
         for _attempt in 0..3 {
             assert_eq!(
-                autonomy_ok(&h.socket, &autonomy("nova", AutonomyAction::Dream)).await,
+                autonomy_ok(&h.socket, &autonomy("nova", AutonomyAction::DeepArchive)).await,
                 AutonomyOutcome::Ok(AutonomyResponse::default())
             );
         }
@@ -1014,10 +1012,10 @@ mod tests {
             }
         }));
 
-        let dropped = autonomy_ok(&h.socket, &autonomy("nova", AutonomyAction::Dream)).await;
+        let dropped = autonomy_ok(&h.socket, &autonomy("nova", AutonomyAction::DeepArchive)).await;
         assert!(matches!(dropped, AutonomyOutcome::Err(_)));
         assert_eq!(
-            autonomy_ok(&h.socket, &autonomy("nova", AutonomyAction::Dream)).await,
+            autonomy_ok(&h.socket, &autonomy("nova", AutonomyAction::DeepArchive)).await,
             AutonomyOutcome::Ok(AutonomyResponse::default())
         );
     }
@@ -1032,7 +1030,7 @@ mod tests {
             drop(actions.recv().await.expect("an action should arrive"));
         }));
 
-        let outcome = autonomy_ok(&h.socket, &autonomy("nova", AutonomyAction::Dream)).await;
+        let outcome = autonomy_ok(&h.socket, &autonomy("nova", AutonomyAction::DeepArchive)).await;
         assert_eq!(
             outcome,
             AutonomyOutcome::Err(ToolCallError {
@@ -1048,7 +1046,7 @@ mod tests {
         drop(actions);
         drop(registration);
 
-        let outcome = autonomy_ok(&h.socket, &autonomy("nova", AutonomyAction::Dream)).await;
+        let outcome = autonomy_ok(&h.socket, &autonomy("nova", AutonomyAction::DeepArchive)).await;
         assert_eq!(
             outcome,
             AutonomyOutcome::Err(ToolCallError {
@@ -1090,7 +1088,7 @@ mod tests {
             })
         );
 
-        let action = autonomy_ok(&h.socket, &autonomy("nova", AutonomyAction::Dream)).await;
+        let action = autonomy_ok(&h.socket, &autonomy("nova", AutonomyAction::DeepArchive)).await;
         assert_eq!(
             action,
             AutonomyOutcome::Ok(AutonomyResponse {

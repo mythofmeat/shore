@@ -1,4 +1,4 @@
-//! The four things an autonomy tick can decide to do — and nothing that
+//! The three things an autonomy tick can decide to do — and nothing that
 //! decides them.
 //!
 //! **This module does not compile, deliberately.** See below.
@@ -9,11 +9,14 @@
 //! Rust that used to do all of that by the frozen fixtures in
 //! `llm-sidecar/tests/autonomy_fixtures/`. That Rust is gone.
 //!
-//! What is left in `manager.rs` is the heartbeat tick, idle compaction, the
-//! deep-idle archive and the dream sweep, verbatim. They are next (#12), and
-//! until they land they are a *specification*: the port reads them, generates
-//! fixtures from them, replays those against TypeScript, and then this
-//! directory goes.
+//! What is left in `manager.rs` is the heartbeat tick, idle compaction and the
+//! deep-idle archive, verbatim. They are next (#12), and until they land they
+//! are a *specification*: the port reads them, generates fixtures from them,
+//! replays those against TypeScript, and then this directory goes.
+//!
+//! The dream sweep was a fourth. It is not being ported — dreaming was deleted
+//! outright in `cf55dff4`, and its paths here went with it rather than staying
+//! on as a specification for something nothing will build.
 //!
 //! ## Why it is left broken
 //!

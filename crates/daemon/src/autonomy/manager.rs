@@ -1,4 +1,4 @@
-//! The four things an autonomy tick can decide to do, and the machinery they
+//! The three things an autonomy tick can decide to do, and the machinery they
 //! need.
 //!
 //! **Nothing here decides anything.** The loop that does is TypeScript —
@@ -6,10 +6,10 @@
 //! the per-tick trigger decision, `autonomy_state.json` and `heartbeat.jsonl`,
 //! all of it pinned against the Rust that used to do it by the frozen fixtures
 //! in `llm-sidecar/tests/autonomy_fixtures/`. What is left is a heartbeat tick,
-//! idle compaction, the deep-idle archive and a dream sweep — plus the cached
-//! request the first three reuse to keep a warm cache prefix.
+//! idle compaction and the deep-idle archive — plus the cached request they
+//! reuse to keep a warm cache prefix.
 //!
-//! This is a way station, not a design. Every one of those four reaches into
+//! This is a way station, not a design. Every one of those three reaches into
 //! the conversation engine, the memory store, the tool registry, MCP and
 //! sub-agents, and they move to TypeScript when those do (#12). Do not build
 //! anything new against this module, and do not give it back the state it just
@@ -44,7 +44,7 @@ use crate::notifications::{NotificationEvent, NotificationService};
 use crate::tools as tool_system;
 use crate::tools::context::SharedToolContext;
 use crate::tools::{ToolContext, ToolError};
-use shore_common::config::app::{AutonomyConfig, CompactionConfig, DreamingConfig};
+use shore_common::config::app::{AutonomyConfig, CompactionConfig};
 use shore_common::config::LoadedConfig;
 use shore_common::config::{character_data_dir, character_memory_dir, character_workspace_dir};
 use shore_common::diagnostics::truncate_summary;
@@ -150,10 +150,10 @@ impl ToolContext for HeartbeatToolContext {
 ///
 /// It used to carry fourteen fields. Twelve of them described *when* to act —
 /// the clock, the tracker, the latches, the turn counts, the dirty bit — and
-/// they went to TypeScript with the decision that read them. These three
-/// survive because they belong to the acting rather than the deciding: a
-/// request body worth replaying, and how long to wait before retrying a sweep
-/// that failed.
+/// they went to TypeScript with the decision that read them. Two more were
+/// dreaming's retry backoff, and went with dreaming itself. This one survives
+/// because it belongs to the acting rather than the deciding: a request body
+/// worth replaying.
 #[derive(Debug, Default)]
 pub struct AutonomyState {
     /// Last LLM request, kept so background work can reuse its cache prefix.
@@ -162,32 +162,6 @@ pub struct AutonomyState {
     /// (`rebuild_request_from_disk`), which is what makes it safe to drop on a
     /// restart or invalidate on compaction.
     last_request: Option<LlmRequest>,
-    /// Next allowed scheduled dreaming attempt after a failure.
-    next_dream_attempt_at: Option<Instant>,
-    /// Consecutive scheduled dreaming failures.
-    dream_failure_count: u32,
-}
-
-/// Backoff for a repeatedly failing sweep: doubles from a minute, caps at an
-/// hour. The TypeScript has the same curve in `backgroundRetryDelayMs`, for the
-/// gate it applies on its side; this one governs the retry itself.
-fn background_retry_delay(failure_count: u32) -> Duration {
-    let exponent = failure_count.saturating_sub(1).min(6);
-    let secs = 60_u64.saturating_mul(1_u64 << exponent);
-    Duration::from_secs(secs.min(3_600))
-}
-/// Whether the dreaming inactivity window is satisfied: enough time has elapsed
-/// since the last user message that a scheduled sweep won't disturb an active
-/// conversation. `None` last-user means there's no inactivity timer to enforce.
-fn dream_inactivity_satisfied(
-    dreaming_cfg: Option<&DreamingConfig>,
-    last_user_at: Option<Instant>,
-    now: Instant,
-) -> bool {
-    dreaming_cfg.is_some_and(|cfg| match last_user_at {
-        Some(last_user) => now.duration_since(last_user) >= cfg.minimum_inactive_time.as_duration(),
-        None => true,
-    })
 }
 
 fn sanitize_compaction_config(mut compaction: CompactionConfig) -> CompactionConfig {
@@ -288,7 +262,6 @@ fn reprime_decision(rebuilt: Option<LlmRequest>) -> KeepaliveReprime {
 enum CachedRequestInvalidationReason {
     Compaction,
     IdleCompaction,
-    PreDreamCompaction,
     DeepIdleArchive,
     PromptReload,
 }
@@ -296,7 +269,7 @@ enum CachedRequestInvalidationReason {
 /// Single point of invalidation for `AutonomyState::last_request`.
 ///
 /// This is not the provider-side Anthropic cache itself. It is Shore's cached
-/// request body used by heartbeat, dreaming, compaction, and keepalive reuse.
+/// request body used by heartbeat, compaction, and keepalive reuse.
 /// Any new path that clears it should add a reason here so cache-sensitive
 /// behavior remains searchable and reviewable.
 fn invalidate_cached_request(
@@ -419,31 +392,12 @@ async fn execute_deep_archive_if_still_idle(character: &str, ctx: &TickContext) 
     }
 }
 
-/// Revalidate the inactivity gate, then run the scheduled dream. The
-/// keepalive/compaction awaits may have yielded long enough for a user message
-/// to land (updating last_user_at), and the dream gate was snapshotted before
-/// them — recheck now to avoid disturbing a freshly-active conversation.
-async fn execute_dream_if_still_inactive(character: &str, ctx: &TickContext) {
-    let still_inactive = {
-        let s = lock_state(&ctx.state);
-        let dreaming_cfg = ctx.loaded_config.as_ref().map(|lc| &lc.app.memory.dreaming);
-        dream_inactivity_satisfied(dreaming_cfg, s.heartbeat.last_user_at(), Instant::now())
-    };
-    if still_inactive {
-        execute_scheduled_dream(character, ctx).await;
-    } else {
-        debug!(
-            character,
-            "Dreaming: skipping scheduled sweep — user became active during tick"
-        );
-    }
-}
-
-/// Snapshot the per-tick actions while holding the state lock, then release it
-/// before any async work runs. Returns the heartbeat action and the
-/// compaction-needed / deep-archive / dream-needed gates.
+/// Run the idle-compaction action a tick decided on.
 ///
-/// The cache-keepalive decision used to be taken here too. It is the sidecar's
+/// The doc comment that used to sit here described the function that took that
+/// decision — snapshotting the gates under the state lock — which went to
+/// TypeScript with the rest of the deciding. It was left stranded on this one
+/// and is removed rather than reworded.
 async fn execute_idle_compaction(character: &str, ctx: &TickContext) {
     let Some(llm_client) = ctx.llm_client.as_ref() else {
         return;
@@ -793,211 +747,6 @@ async fn reload_engine_and_apply_deferred(
     }
 }
 
-async fn execute_scheduled_dream(character: &str, ctx: &TickContext) {
-    let Some(loaded_config) = ctx.loaded_config.as_deref() else {
-        return;
-    };
-    let Some(llm_client) = ctx.llm_client.as_ref() else {
-        return;
-    };
-    let dreaming_cfg = &loaded_config.app.memory.dreaming;
-
-    // The per-tick `dream_needed` gate only covers backoff and inactivity;
-    // the cron schedule is checked here, before any pre-sweep work. Without
-    // this, every sufficiently idle tick would run a pre-dream compaction
-    // only for the sweep itself to decline as not-due.
-    match crate::memory::dreaming::scheduled_sweep_due(loaded_config, &ctx.data_dir, character)
-        .await
-    {
-        Ok(true) => {}
-        not_due_or_err => {
-            // Not due (or dream state unreadable): route through the normal
-            // outcome bookkeeping — backoff reset on Ok, retry backoff on Err
-            // — without compacting.
-            record_scheduled_dream_outcome(character, ctx, not_due_or_err.map(|_| None));
-            return;
-        }
-    }
-
-    if !maybe_compact_before_dream(character, ctx, dreaming_cfg).await {
-        return;
-    }
-
-    let cached_request = {
-        let s = lock_state(&ctx.state);
-        s.last_request.clone()
-    };
-    let outcome = crate::memory::dreaming::run_librarian_sweep(
-        loaded_config,
-        &ctx.data_dir,
-        llm_client,
-        character,
-        cached_request.as_ref(),
-        false,
-        false,
-    )
-    .await;
-    record_scheduled_dream_outcome(character, ctx, outcome);
-}
-
-/// Bump the dream failure count and push the next attempt out with backoff.
-/// Returns the chosen delay and the new failure count.
-fn back_off_dream_retry(state: &Mutex<AutonomyState>) -> (Duration, u32) {
-    let now = Instant::now();
-    let mut s = lock_state(state);
-    s.dream_failure_count = s.dream_failure_count.saturating_add(1);
-    let delay = background_retry_delay(s.dream_failure_count);
-    s.next_dream_attempt_at = Some(now.checked_add(delay).unwrap_or(now));
-    s.mark_dirty();
-    (delay, s.dream_failure_count)
-}
-
-/// Run pre-dream compaction when configured and the turn count clears the
-/// floor. Failure records retry backoff and returns `false`, aborting the
-/// sweep this cycle so the librarian doesn't run against an oversized / stale
-/// prompt cache.
-async fn maybe_compact_before_dream(
-    character: &str,
-    ctx: &TickContext,
-    dreaming_cfg: &DreamingConfig,
-) -> bool {
-    // Gate on the sanitized compaction snapshot (ctx.compaction), not the raw
-    // loaded config — AutonomyManager::new / reload_runtime_config disable
-    // invalid compaction settings, and pre-dream compaction must honor that
-    // just like the idle-compaction path does.
-    let compaction_cfg = &ctx.compaction;
-    if !(dreaming_cfg.compact_before
-        && compaction_cfg.enabled
-        && lock_state(&ctx.state).active_turn_count >= compaction_cfg.min_turns)
-    {
-        return true;
-    }
-
-    let keep_override = if dreaming_cfg.compact_to_zero {
-        Some(0)
-    } else {
-        None
-    };
-    if let Err(e) = run_pre_dream_compaction(character, ctx, keep_override).await {
-        warn!(
-            character,
-            error = %e,
-            "Dreaming: pre-dream compaction failed; skipping sweep this cycle"
-        );
-        _ = back_off_dream_retry(&ctx.state);
-        return false;
-    }
-    true
-}
-
-/// Fold a scheduled sweep's outcome back into dream retry state: a completed
-/// or not-due sweep resets the backoff; a failure bumps it.
-fn record_scheduled_dream_outcome(
-    character: &str,
-    ctx: &TickContext,
-    outcome: Result<
-        Option<crate::memory::dreaming::DreamSweepResult>,
-        crate::memory::dreaming::DreamingError,
-    >,
-) {
-    match outcome {
-        Ok(Some(result)) => {
-            let mut s = lock_state(&ctx.state);
-            s.dream_failure_count = 0;
-            s.next_dream_attempt_at = None;
-            s.mark_dirty();
-            drop(s);
-            info!(
-                character,
-                tool_rounds = result.tool_rounds,
-                changed = result.changed.len(),
-                audit_appended = result.audit_appended,
-                "Dreaming: scheduled AI librarian pass complete"
-            );
-        }
-        Ok(None) => {
-            let mut s = lock_state(&ctx.state);
-            if s.dream_failure_count != 0 || s.next_dream_attempt_at.is_some() {
-                s.dream_failure_count = 0;
-                s.next_dream_attempt_at = None;
-                s.mark_dirty();
-            }
-        }
-        Err(e) => {
-            warn!(character, error = %e, "Dreaming: scheduled sweep failed");
-            let (delay, failure_count) = back_off_dream_retry(&ctx.state);
-            debug!(
-                character,
-                retry_in_secs = delay.as_secs(),
-                failure_count,
-                "Dreaming: scheduled retry backed off"
-            );
-        }
-    }
-}
-
-/// Run a background compaction immediately before a scheduled dreaming pass.
-/// Mirrors the post-success bookkeeping of `execute_idle_compaction` (engine
-/// reload, deferred-edit apply, cached-request invalidation, turn-count and
-/// activity updates) but does NOT touch the idle-compaction trigger flags —
-/// pre-dream compaction is not an idle trigger.
-async fn run_pre_dream_compaction(
-    character: &str,
-    ctx: &TickContext,
-    keep_turns_override: Option<usize>,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let llm_client = ctx
-        .llm_client
-        .as_ref()
-        .ok_or("no llm_client for pre-dream compaction")?;
-    let loaded_config = ctx
-        .loaded_config
-        .as_deref()
-        .ok_or("no loaded_config for pre-dream compaction")?;
-    let notifier = ctx
-        .notifier
-        .as_ref()
-        .ok_or("no notifier for pre-dream compaction")?;
-    let _registry = ctx
-        .registry
-        .as_ref()
-        .ok_or("no engine registry for pre-dream compaction")?;
-
-    info!(
-        character,
-        keep_turns_override = ?keep_turns_override,
-        "Dreaming: running pre-dream compaction"
-    );
-
-    let cached_request = lock_state(&ctx.state).last_request.clone();
-    let retained_count = crate::memory::compaction::run_compaction(
-        character,
-        loaded_config,
-        llm_client,
-        notifier,
-        cached_request,
-        keep_turns_override,
-        false,
-    )
-    .await?;
-
-    reload_engine_and_apply_deferred(character, ctx, loaded_config, "Pre-dream compaction").await;
-
-    let mut s = lock_state(&ctx.state);
-    invalidate_cached_request(
-        &mut s,
-        character,
-        CachedRequestInvalidationReason::PreDreamCompaction,
-    );
-    s.active_turn_count = retained_count;
-    s.covered_turn_count = retained_count;
-    s.last_compaction_activity = Instant::now();
-    s.mark_dirty();
-    info!(character, retained_count, "Pre-dream compaction complete");
-    drop(s);
-    reprime_keepalive_from_tick(character, ctx);
-    Ok(())
-}
 // ---------------------------------------------------------------------------
 // Heartbeat tick executor
 // ---------------------------------------------------------------------------
@@ -2653,8 +2402,6 @@ mod tests {
             covered_turn_count: 0,
             deep_archive_done: false,
             last_request: None,
-            next_dream_attempt_at: None,
-            dream_failure_count: 0,
         };
         save_state(data_dir, "alice", &mut state);
         assert!(!state.dirty);
@@ -2715,8 +2462,6 @@ mod tests {
             covered_turn_count: 0,
             deep_archive_done: false,
             last_request: None,
-            next_dream_attempt_at: None,
-            dream_failure_count: 0,
         };
         save_state(data_dir, "alice", &mut state);
 
@@ -2762,8 +2507,6 @@ mod tests {
             covered_turn_count: 0,
             deep_archive_done: false,
             last_request: None,
-            next_dream_attempt_at: None,
-            dream_failure_count: 0,
         };
         save_state(data_dir, "alice", &mut state);
 
@@ -2821,8 +2564,6 @@ mod tests {
             covered_turn_count: 0,
             deep_archive_done: false,
             last_request: None,
-            next_dream_attempt_at: None,
-            dream_failure_count: 0,
         }));
 
         {
@@ -3033,8 +2774,6 @@ mod tests {
             covered_turn_count: 0,
             deep_archive_done: false,
             last_request: None,
-            next_dream_attempt_at: None,
-            dream_failure_count: 0,
         }
     }
 
@@ -3886,34 +3625,6 @@ api_key_env = "{heartbeat_env}"
         std::env::remove_var(pin_env);
     }
 
-    /// Dreaming's failure backoff. Untested until the TypeScript port needed a
-    /// specification to match, and the shape matters: dreaming runs a full
-    /// tool loop, so a backoff that collapsed would retry an expensive failing
-    /// call every tick.
-    ///
-    /// 60s doubling per consecutive failure, capped at an hour. The cap is
-    /// reached at the 7th failure and the exponent is clamped there, so no
-    /// amount of further failure overflows the shift.
-    #[test]
-    fn dream_retry_backoff_doubles_then_caps_at_an_hour() {
-        let secs = |n| background_retry_delay(n).as_secs();
-
-        // The first failure is one minute, not two: the exponent is
-        // `count - 1`, so a saturating_sub keeps count 0 and count 1 together.
-        assert_eq!(secs(0), 60);
-        assert_eq!(secs(1), 60);
-        assert_eq!(secs(2), 120);
-        assert_eq!(secs(3), 240);
-        assert_eq!(secs(4), 480);
-        assert_eq!(secs(5), 960);
-        assert_eq!(secs(6), 1_920);
-        // 60 * 2^6 = 3840, clamped to the hour ceiling.
-        assert_eq!(secs(7), 3_600);
-        // And it stays there rather than shifting into overflow.
-        assert_eq!(secs(50), 3_600);
-        assert_eq!(secs(u32::MAX), 3_600);
-    }
-
     /// The gate in front of every heartbeat tick. Three switches, any of which
     /// suppresses it: autonomy off, heartbeat off, or the character paused.
     ///
@@ -3949,8 +3660,6 @@ api_key_env = "{heartbeat_env}"
                 covered_turn_count: 0,
                 deep_archive_done: false,
                 last_request: None,
-                next_dream_attempt_at: None,
-                dream_failure_count: 0,
             }));
             let ctx = TickContext {
                 state: Arc::clone(&state),
@@ -4433,37 +4142,6 @@ api_key_env = "{heartbeat_env}"
         );
     }
 
-    #[test]
-    fn dream_inactivity_gate_respects_minimum_inactive_time() {
-        let cfg = DreamingConfig {
-            minimum_inactive_time: shore_common::config::ConfigDuration::from_secs(300),
-            ..Default::default()
-        };
-        let now = Instant::now();
-
-        // No config: never satisfied.
-        assert!(!dream_inactivity_satisfied(None, Some(now), now));
-
-        // No prior user message: no timer to enforce, allow.
-        assert!(dream_inactivity_satisfied(Some(&cfg), None, now));
-
-        // User active 2min ago, 5min window: not satisfied.
-        let two_min_ago = now - Duration::from_mins(2);
-        assert!(!dream_inactivity_satisfied(
-            Some(&cfg),
-            Some(two_min_ago),
-            now
-        ));
-
-        // User active 6min ago: satisfied.
-        let six_min_ago = now - Duration::from_mins(6);
-        assert!(dream_inactivity_satisfied(
-            Some(&cfg),
-            Some(six_min_ago),
-            now
-        ));
-    }
-
     // -- inline compaction tests -----------------------------------------------
 
     #[test]
@@ -4720,8 +4398,6 @@ api_key_env = "{heartbeat_env}"
             covered_turn_count: 0,
             deep_archive_done: false,
             last_request: None,
-            next_dream_attempt_at: None,
-            dream_failure_count: 0,
         }));
 
         let tick_ctx = TickContext {
@@ -4774,8 +4450,6 @@ api_key_env = "{heartbeat_env}"
             covered_turn_count: 0,
             deep_archive_done,
             last_request: None,
-            next_dream_attempt_at: None,
-            dream_failure_count: 0,
         }));
         TickContext {
             state,
