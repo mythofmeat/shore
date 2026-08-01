@@ -60,7 +60,7 @@ interface Fixture {
 }
 
 const fixture = (await Bun.file(
-  new URL("../../crates/daemon/tests/fixtures/heartbeat_parity.json", import.meta.url),
+  new URL("./autonomy_fixtures/heartbeat_parity.json", import.meta.url),
 ).json()) as Fixture;
 
 describe("the fixture is real", () => {

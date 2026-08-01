@@ -34,7 +34,7 @@ interface Fixture {
 }
 
 const fixture = (await Bun.file(
-  new URL("../../crates/daemon/tests/fixtures/heartbeat_log_parity.json", import.meta.url),
+  new URL("./autonomy_fixtures/heartbeat_log_parity.json", import.meta.url),
 ).json()) as Fixture;
 
 function stamp(i: number): string {

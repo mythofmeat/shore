@@ -73,7 +73,7 @@ interface Fixture {
 }
 
 const fixture = (await Bun.file(
-  new URL("../../crates/daemon/tests/fixtures/activity_parity.json", import.meta.url),
+  new URL("./autonomy_fixtures/activity_parity.json", import.meta.url),
 ).json()) as Fixture;
 
 const WEEKDAYS: readonly Weekday[] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
