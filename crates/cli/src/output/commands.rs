@@ -270,7 +270,6 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "refresh_all_provider_models" => print_provider_refresh_all(data),
         "memory" => print_memory(data),
         "compact" => print_compact_result(data),
-        "memory_changelog" => print_changelog(data),
         "config" => print_config(data, false),
         "tools" => print_tools(data),
         "config_check" => print_config_check(data),
@@ -1273,63 +1272,6 @@ fn print_memory(data: &serde_json::Value) {
             "Breakdown",
             &format!("{curated} curated, {daily} daily, {images} images"),
         );
-    }
-    _ = writeln!(out);
-}
-
-/// Print memory changelog.
-fn print_changelog(data: &serde_json::Value) {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    let width = term_width();
-
-    let char_name = data["character"].as_str().unwrap_or("?");
-    write_section_header(&mut out, "Memory Changelog", char_name, width);
-
-    if let Some(entries) = data["changelog"].as_array() {
-        if entries.is_empty() {
-            if use_color() {
-                let _ignored = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-            }
-            _ = writeln!(out, "  (no entries)");
-            if use_color() {
-                _ = crossterm::execute!(out, ResetColor);
-            }
-        } else {
-            for entry in entries {
-                let ts = entry["timestamp"].as_str().unwrap_or("");
-                let op = entry["operation"].as_str().unwrap_or("?");
-                let desc = entry["description"].as_str().unwrap_or("");
-
-                let time_display = parse_timestamp(ts)
-                    .map_or_else(|| ts.to_owned(), |dt| dt.format("%b %d %H:%M").to_string());
-
-                if use_color() {
-                    let _ignored = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-                }
-                _ = write!(out, "  {time_display:<16}");
-
-                let op_color = match op {
-                    s if s.starts_with("create") || s.starts_with("compaction") => Color::Green,
-                    s if s.starts_with("update") => Color::DarkYellow,
-                    s if s.starts_with("supersede")
-                        || s.starts_with("delete")
-                        || s.starts_with("decay") =>
-                    {
-                        Color::Red
-                    }
-                    _ => Color::White,
-                };
-                if use_color() {
-                    _ = crossterm::execute!(out, SetForegroundColor(op_color));
-                }
-                _ = write!(out, "{op:<18}");
-                if use_color() {
-                    _ = crossterm::execute!(out, ResetColor);
-                }
-                _ = writeln!(out, "{desc}");
-            }
-        }
     }
     _ = writeln!(out);
 }

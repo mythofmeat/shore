@@ -644,22 +644,6 @@ async fn execute_deep_archive_pure(
 
     match archive_result {
         Ok(_) => {
-            if let Err(e) = crate::memory::dreams_log::append_dream_entry(
-                data_dir,
-                character,
-                chrono::Local::now().fixed_offset(),
-                "deep-idle archive",
-                &format!(
-                    "Archived {archivable} message(s) after extended idle; \
-                     all turns were already covered by memory. Retained {tail} \
-                     unanswered autonomous message(s)."
-                ),
-            )
-            .await
-            {
-                warn!(character, error = %e, "Deep-idle archive: failed to append dreams log entry");
-            }
-
             reload_engine_and_apply_deferred(character, ctx, loaded_config, "Deep-idle archive")
                 .await;
 

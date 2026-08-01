@@ -675,14 +675,6 @@ impl CompactionManager {
             .iter()
             .any(|write| write.memory_index_target);
         queue_memory_index_refresh(memory_index_updated, tool_ctx, data_dir, char_name);
-        append_compaction_dream_log(
-            data_dir,
-            char_name,
-            conversation_id,
-            compacted_turns,
-            &markdown_paths,
-        )
-        .await;
 
         info!(
             memory_files_written = markdown_paths.len(),
@@ -987,39 +979,6 @@ fn queue_memory_index_refresh(
             warn!(
                 "compaction: MEMORY.md updated but data_dir was unavailable for prompt refresh queue"
             );
-        }
-    }
-}
-
-/// Append a compaction entry to the character's dreams log summarising the
-/// archived turns and updated memory files.
-async fn append_compaction_dream_log(
-    data_dir: Option<&Path>,
-    char_name: &str,
-    conversation_id: &str,
-    compacted_turns: usize,
-    markdown_paths: &[String],
-) {
-    let dream_body = format!(
-        "Compacted {} turns from `{conversation_id}`.\n\nUpdated memory files:\n{}",
-        compacted_turns,
-        markdown_paths
-            .iter()
-            .map(|path| format!("- `{path}`"))
-            .collect::<Vec<_>>()
-            .join("\n")
-    );
-    if let Some(dir) = data_dir {
-        if let Err(e) = crate::memory::dreams_log::append_dream_entry(
-            dir,
-            char_name,
-            chrono::Local::now().fixed_offset(),
-            "compaction",
-            &dream_body,
-        )
-        .await
-        {
-            warn!(error = %e, "compaction: failed to append dreams log entry");
         }
     }
 }
@@ -1965,11 +1924,6 @@ mod tests {
 
         assert!(store.read("daily/2026-03-25.md").await.is_ok());
         assert!(store.read("preferences/beverages.md").await.is_ok());
-        let dreams = crate::memory::dreams_log::read_dreams_log(&data_dir, "TestChar")
-            .await
-            .unwrap()
-            .expect("dreams log should be written by compaction");
-        assert!(dreams.contains("Compacted 3 turns"));
     }
 
     #[tokio::test]

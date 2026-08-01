@@ -600,13 +600,6 @@ pub(crate) enum MemoryCommand {
     /// Optional positional: number of recent user turns to retain
     /// (0 = retain none — leaves only the prompt files and memory index).
     Compact { keep_turns: Option<u32> },
-
-    /// Show recent memory changelog entries
-    Changelog {
-        /// Number of entries to show
-        #[arg(short = 'n', long, default_value = "20")]
-        limit: u32,
-    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -819,7 +812,7 @@ pub(crate) fn to_swp_command(cmd: &CliCommand) -> Option<(&'static str, serde_js
 
         CliCommand::Provider { .. } => provider_to_swp(cmd),
 
-        // Memory: subcommands (compact/changelog) or status/query.
+        // Memory: the compact subcommand, or status/query.
         CliCommand::Memory { .. } => memory_to_swp(cmd),
 
         CliCommand::Config { reset: true, .. } => Some(("config_reset", json!({}))),
@@ -1011,7 +1004,7 @@ fn provider_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)
     }
 }
 
-/// `memory` subcommands (compact/changelog) or status/query.
+/// `memory` compact subcommand, or status/query.
 fn memory_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     use serde_json::{json, Map, Value};
     let CliCommand::Memory {
@@ -1027,9 +1020,6 @@ fn memory_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> 
                 let _ignored = args.insert("keep_turns".into(), json!(n));
             }
             Some(("compact", Value::Object(args)))
-        }
-        Some(MemoryCommand::Changelog { limit }) => {
-            Some(("memory_changelog", json!({ "limit": limit })))
         }
         None => Some(("memory", json!({ "query": query }))),
     }
@@ -1832,34 +1822,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn parse_memory_changelog() {
-        let cli = parse(&["memory", "changelog"]);
-        assert_variant!(
-            &cli.command,
-            CliCommand::Memory {
-                subcommand: Some(MemoryCommand::Changelog { limit }),
-                ..
-            } => {
-                assert_eq!(*limit, 20);
-            }
-        );
-    }
-
-    #[test]
-    fn parse_memory_changelog_with_limit() {
-        let cli = parse(&["memory", "changelog", "-n", "50"]);
-        assert_variant!(
-            &cli.command,
-            CliCommand::Memory {
-                subcommand: Some(MemoryCommand::Changelog { limit }),
-                ..
-            } => {
-                assert_eq!(*limit, 50);
-            }
-        );
-    }
-
     // ── Config ───────────────────────────────────────────────────────
 
     #[test]
@@ -2632,18 +2594,6 @@ mod tests {
     }
 
     #[test]
-    fn memory_changelog_maps_to_command() {
-        let cmd = CliCommand::Memory {
-            subcommand: Some(MemoryCommand::Changelog { limit: 20 }),
-            query: None,
-            json: false,
-        };
-        let (name, args) = to_swp_command(&cmd).unwrap();
-        assert_eq!(name, "memory_changelog");
-        assert_eq!(arg(&args, "limit"), 20);
-    }
-
-    #[test]
     fn all_non_message_commands_map() {
         // Every variant except Send, Regen, Notify, Character (no --info),
         // Config --path, and Completions should produce Some.
@@ -2845,11 +2795,6 @@ mod tests {
             },
             CliCommand::Memory {
                 subcommand: Some(MemoryCommand::Compact { keep_turns: None }),
-                query: None,
-                json: false,
-            },
-            CliCommand::Memory {
-                subcommand: Some(MemoryCommand::Changelog { limit: 20 }),
                 query: None,
                 json: false,
             },
