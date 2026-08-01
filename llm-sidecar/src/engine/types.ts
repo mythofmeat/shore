@@ -66,6 +66,13 @@ export interface MessageAlternative {
   timestamp: string;
   /** Provider that minted this alternative's content; see `Message.provider_key`. */
   provider_key?: string;
+  /**
+   * Model that minted it. Both this and `provider_key` fall back to the parent
+   * message's when absent — alternatives stored before per-alternative
+   * provenance tracking have neither, and the replay portability filter needs
+   * to know what actually produced the body it is about to send back.
+   */
+  model?: string;
 }
 
 export interface Message {
