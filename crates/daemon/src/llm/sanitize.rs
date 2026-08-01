@@ -1,5 +1,12 @@
 //! Defensive sanitization of tool_use / tool_result pairing in outbound LLM
 //! requests. See `sanitize_tool_pairs` for details.
+//!
+//! **Ported.** `llm-sidecar/src/llm/sanitize.ts` is the implementation now,
+//! pinned by `llm-sidecar/tests/llm_fixtures/sanitize_parity.json` (frozen;
+//! generated from this file at 9023b46d). Do not add behaviour here.
+//!
+//! Not deleted yet: `llm/mod.rs::preprocess_request` is its only caller and has
+//! not moved (#12, step 3). It goes with it.
 
 use crate::llm::types::{WireBlock, WireMessage, WireRole};
 
