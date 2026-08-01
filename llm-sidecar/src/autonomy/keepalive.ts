@@ -40,13 +40,10 @@ import type { GenerateResponse, SidecarRequest, Usage, WireMessage } from "../ll
  *  `TICK_INTERVAL`, which drove the schedule before it moved here. */
 export const KEEPALIVE_TICK_MS = 10_000;
 
-/** Ceiling on undrained events, so a daemon that stops draining cannot grow
- *  this without bound. Oldest go first; the newest are the ones worth keeping. */
-const MAX_PENDING_EVENTS = 256;
-
 /** `[behavior.autonomy].cache_keepalive_max`'s own default, for the window
  *  before any prefix has been pushed to carry the configured one. */
-const DEFAULT_MAX_IDLE_SECS = 12 * 60 * 60;
+export const DEFAULT_KEEPALIVE_MAX_SECS = 12 * 60 * 60;
+const DEFAULT_MAX_IDLE_SECS = DEFAULT_KEEPALIVE_MAX_SECS;
 
 /**
  * The body of `POST /v1/keepalive/prefix`: the request the daemon would send
@@ -70,15 +67,24 @@ export interface KeepalivePrefix extends SidecarRequest {
   keepalive_interval_ms?: number;
 }
 
-/** What a ping did, for the daemon's heartbeat log. */
+/** What a ping did, for the heartbeat log. */
 export interface KeepaliveEvent {
   character: string;
   outcome: "sent" | "cold" | "failed" | "skipped";
   /** Human-readable, already shaped for the heartbeat log line. */
   detail: string;
-  /** Wall-clock ms, so the daemon logs when it happened rather than when it drained. */
+  /** Wall-clock ms of the ping itself, which is what the log line should say. */
   at: number;
 }
+
+/**
+ * Where a ping's outcome goes. Handed in at construction so this file keeps
+ * knowing nothing about the heartbeat log it ends up in.
+ *
+ * Synchronous and fire-and-forget on purpose: a ping must not wait on a log
+ * write, and a log that loses a line costs nothing (see `heartbeat_log.ts`).
+ */
+export type KeepaliveEventSink = (event: KeepaliveEvent) => void;
 
 /** One character's armed schedule, as the daemon persists it. */
 export interface KeepaliveSchedule extends KeepaliveSnapshot {
@@ -210,13 +216,26 @@ export function buildKeepalivePing(prefix: KeepalivePrefix): SidecarRequest {
 
 export class KeepaliveService {
   readonly #entries = new Map<string, Entry>();
-  readonly #events: KeepaliveEvent[] = [];
   readonly #send: PingSender;
   readonly #now: () => number;
+  #sink: KeepaliveEventSink | undefined;
 
   constructor(send: PingSender, now: () => number = () => Date.now()) {
     this.#send = send;
     this.#now = now;
+  }
+
+  /**
+   * Point ping outcomes at the heartbeat log.
+   *
+   * Set after construction rather than taken as a constructor argument because
+   * the two services are mutually referential — autonomy needs the keepalive to
+   * read schedules off it, the keepalive needs autonomy to write events into.
+   * Until this is set, events are dropped, which is the right behaviour for a
+   * bare `KeepaliveService` in a unit test.
+   */
+  onEvent(sink: KeepaliveEventSink): void {
+    this.#sink = sink;
   }
 
   /**
@@ -328,44 +347,21 @@ export class KeepaliveService {
     await Promise.all(due.map((character) => this.#ping(character)));
   }
 
-  /**
-   * Hand the daemon what happened and what to persist, and forget the events.
-   *
-   * Draining clears: these are log lines, and the daemon appends them to the
-   * heartbeat log as it receives them. The schedules are not cleared — they are
-   * current state, reported in full each time.
-   *
-   * `character` scopes both, because the daemon drains from a per-character
-   * autonomy tick that can only reach its own state. Draining unscoped would
-   * hand one character's tick events belonging to another, which it would then
-   * drop on the floor — and they are already gone from here by then.
-   */
-  drain(character?: string): KeepaliveDrain {
-    const events: KeepaliveEvent[] = [];
-    const kept: KeepaliveEvent[] = [];
-    for (const event of this.#events) {
-      (character === undefined || event.character === character ? events : kept).push(event);
-    }
-    this.#events.length = 0;
-    this.#events.push(...kept);
-
-    const schedules: KeepaliveSchedule[] = [];
-    for (const [name, entry] of this.#entries) {
-      if (character !== undefined && name !== character) continue;
-      const snapshot = entry.keepalive.snapshot();
-      if (snapshot !== undefined) schedules.push({ character: name, ...snapshot });
-    }
-    return { events, schedules };
-  }
-
-  /** Re-arm a character from the daemon's persisted snapshot after a restart.
+  /** Re-arm a character from its persisted snapshot after a restart.
    *  Returns whether the schedule was taken up; the guard lives in `restore`. */
   restore(character: string, snapshot: KeepaliveSnapshot, maxIdleSecs: number): boolean {
     const entry = this.#entryFor(character, maxIdleSecs);
     return entry.keepalive.restore(snapshot, this.#now());
   }
 
-  /** Test seam: the live schedule for a character. */
+  /**
+   * The live schedule for a character, or undefined when there is nothing worth
+   * restoring — keepalive off, never warmed, or disarmed.
+   *
+   * Autonomy reads this on each tick to persist it. Undefined must *clear* the
+   * persisted copy rather than leave the old one, or a restart re-arms against
+   * a prefix that is already dead.
+   */
   scheduleFor(character: string): KeepaliveSnapshot | undefined {
     return this.#entries.get(character)?.keepalive.snapshot();
   }
@@ -397,10 +393,7 @@ export class KeepaliveService {
   }
 
   #push(event: KeepaliveEvent): void {
-    this.#events.push(event);
-    if (this.#events.length > MAX_PENDING_EVENTS) {
-      this.#events.splice(0, this.#events.length - MAX_PENDING_EVENTS);
-    }
+    this.#sink?.(event);
   }
 
   async #ping(character: string): Promise<void> {

@@ -29,19 +29,18 @@
 
 import { describe, expect, test } from "bun:test";
 
-import {
-  buildKeepalivePing,
-  type KeepaliveDrain,
-  type KeepaliveRestore,
-  type KeepaliveSchedule,
-  type PingNowOutcome,
-} from "../src/autonomy/keepalive.ts";
+import { buildKeepalivePing, type PingNowOutcome } from "../src/autonomy/keepalive.ts";
 
+/**
+ * `restore` and `drain_reply` used to live here too. Both endpoints were
+ * retired once `heartbeat.jsonl` and `autonomy_state.json` moved to this side —
+ * ping outcomes now go straight to the heartbeat log and schedules are read off
+ * the service — so there is no longer a boundary for them to be pinned across.
+ * Removing them is a contract ceasing to exist, not a fixture being updated to
+ * match a change.
+ */
 interface KeepaliveFixture {
   character_scoped: { character: string };
-  restore: KeepaliveRestore;
-  restore_reply: { rearmed: boolean };
-  drain_reply: KeepaliveDrain;
   ping_now_reply: PingNowOutcome;
 }
 
@@ -59,32 +58,13 @@ function assertKeys<T>(value: unknown, declared: Array<keyof T & string>, what: 
 
 describe("the fixture is real", () => {
   test("a silently unreadable fixture must not pass", () => {
-    expect(Object.keys(wire)).toHaveLength(5);
+    expect(Object.keys(wire)).toHaveLength(2);
   });
 });
 
 describe("requests the daemon sends", () => {
-  test("disarm, drain, and ping-now name a character and nothing else", () => {
+  test("disarm and ping-now name a character and nothing else", () => {
     assertKeys<{ character: string }>(wire.character_scoped, ["character"], "CharacterScoped");
-  });
-
-  test("restore carries a whole schedule plus the ceiling", () => {
-    // Flattened: the schedule's fields sit alongside `max_idle_secs` rather
-    // than nested, because the sidecar destructures the rest into a snapshot.
-    assertKeys<KeepaliveRestore>(
-      wire.restore,
-      ["character", "model", "interval", "last_warm_at", "last_active_at", "max_idle_secs"],
-      "KeepaliveRestore",
-    );
-    // Milliseconds on both timestamps and the cadence. Seconds here would read
-    // as a schedule ~1000x stale, fail the staleness guard, and stop re-arming
-    // after every restart — silently, because declining to re-arm is the safe
-    // path and therefore says nothing.
-    expect(wire.restore.interval).toBe(3_300_000);
-    expect(wire.restore.last_warm_at).toBeGreaterThan(1_700_000_000_000);
-    // The ceiling stays in seconds: it is `cache_keepalive_max`, which the
-    // daemon already sends as seconds on every CallContext.
-    expect(wire.restore.max_idle_secs).toBe(43_200);
   });
 
   test("the prefix push is an ordinary request plus a cadence", () => {
@@ -106,33 +86,6 @@ describe("requests the daemon sends", () => {
 });
 
 describe("replies the sidecar sends", () => {
-  test("restore reports whether it took the schedule up", () => {
-    assertKeys<{ rearmed: boolean }>(wire.restore_reply, ["rearmed"], "RestoreKeepaliveReply");
-  });
-
-  test("drain carries events and schedules", () => {
-    assertKeys<KeepaliveDrain>(wire.drain_reply, ["events", "schedules"], "KeepaliveDrain");
-
-    const event = wire.drain_reply.events[0];
-    expect(event, "the census carries an event").toBeDefined();
-    assertKeys<NonNullable<typeof event>>(
-      event,
-      ["character", "outcome", "detail", "at"],
-      "KeepaliveEvent",
-    );
-    // `character` routes the event to a heartbeat log; `detail` is the line
-    // itself. The daemon drops an event it cannot attribute.
-    expect(event!.outcome).toBe("cold");
-
-    const schedule = wire.drain_reply.schedules[0];
-    expect(schedule, "the census carries a schedule").toBeDefined();
-    assertKeys<KeepaliveSchedule>(
-      schedule,
-      ["character", "model", "interval", "last_warm_at", "last_active_at"],
-      "KeepaliveSchedule",
-    );
-  });
-
   test("ping-now reports a machine-readable cause, not just prose", () => {
     assertKeys<PingNowOutcome>(
       wire.ping_now_reply,

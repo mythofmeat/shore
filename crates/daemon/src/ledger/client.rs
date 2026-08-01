@@ -157,32 +157,6 @@ struct CharacterScoped<'req> {
     character: &'req str,
 }
 
-/// `POST /v1/keepalive/restore` — a schedule persisted before a restart. The
-/// ceiling rides along because a restored character may not have been armed
-/// yet, so there is no pushed prefix for the sidecar to read it from.
-#[derive(Serialize)]
-struct RestoreKeepaliveRequest<'req> {
-    #[serde(flatten)]
-    schedule: &'req KeepaliveSchedule,
-    max_idle_secs: u64,
-}
-
-#[derive(Deserialize)]
-struct RestoreKeepaliveReply {
-    /// False when the sidecar judged the schedule too stale to be provably
-    /// warm. Not an error — it is the guard doing its job.
-    rearmed: bool,
-}
-
-/// What a keepalive ping did, for the heartbeat log.
-#[derive(Debug, Clone, Deserialize)]
-pub struct KeepaliveEvent {
-    pub character: String,
-    /// `sent` | `cold` | `failed` | `skipped`.
-    pub outcome: String,
-    pub detail: String,
-}
-
 /// One character's armed schedule, as persisted across a restart. Times are
 /// wall-clock ms — the sidecar runs on `Date.now()`, because the prefix it
 /// protects expires on wall time and a monotonic clock stops during suspend.
@@ -220,16 +194,6 @@ pub struct PingNow {
     pub reason: Option<String>,
     /// Human-readable, for the command's output.
     pub detail: Option<String>,
-}
-
-/// `POST /v1/keepalive/drain` — everything the daemon still owns a copy of.
-#[derive(Debug, Clone, Default, Deserialize)]
-pub struct KeepaliveDrain {
-    /// Cleared by the drain, so whoever calls this must write them down.
-    pub events: Vec<KeepaliveEvent>,
-    /// Current state, reported in full each time. A character that is absent
-    /// has nothing worth restoring — which is how a persisted copy gets cleared.
-    pub schedules: Vec<KeepaliveSchedule>,
 }
 
 #[derive(Debug, Clone)]
@@ -504,30 +468,6 @@ impl LedgerClient {
         Ok(())
     }
 
-    /// Offer the sidecar a schedule persisted before a restart.
-    ///
-    /// The provider's cache does not cool when shore restarts, so a schedule
-    /// still inside its ping interval is provably warm and worth taking up. The
-    /// sidecar applies that guard; `Ok(false)` means it declined as too stale,
-    /// which is the safe outcome rather than an error.
-    pub async fn restore_keepalive(
-        &self,
-        schedule: &KeepaliveSchedule,
-        max_idle_secs: u64,
-    ) -> Result<bool, LlmError> {
-        let reply: RestoreKeepaliveReply = self
-            .inner
-            .control_call(
-                "/v1/keepalive/restore",
-                &RestoreKeepaliveRequest {
-                    schedule,
-                    max_idle_secs,
-                },
-            )
-            .await?;
-        Ok(reply.rearmed)
-    }
-
     /// Send a keepalive ping right now and report what it read, for the
     /// `keepalive_ping_now` diagnostic.
     ///
@@ -548,19 +488,6 @@ impl LedgerClient {
             .control_call("/v1/keepalive/disarm", &CharacterScoped { character })
             .await?;
         Ok(())
-    }
-
-    /// Collect what the keepalive did for `character` since the last drain, and
-    /// the schedule to persist.
-    ///
-    /// Draining clears the events, so the caller must be the one that writes
-    /// them down. Scoped to one character because the autonomy tick that calls
-    /// this can only reach its own state — an unscoped drain would hand it
-    /// events for characters it cannot log, and they are gone by then.
-    pub async fn drain_keepalive(&self, character: &str) -> Result<KeepaliveDrain, LlmError> {
-        self.inner
-            .control_call("/v1/keepalive/drain", &CharacterScoped { character })
-            .await
     }
 
     /// Passthrough to `LlmClient::build_request`.
@@ -1058,35 +985,11 @@ mod tests {
     // the sidecar sends those — same split, and same reason, as `call_complete`
     // in `llm/types.rs`.
 
-    fn census_schedule() -> KeepaliveSchedule {
-        KeepaliveSchedule {
-            character: "aria".to_owned(),
-            model: "claude-opus-4-6".to_owned(),
-            interval: 3_300_000,
-            last_warm_at: 1_785_600_000_000,
-            last_active_at: 1_785_599_940_000,
-        }
-    }
-
     fn keepalive_census() -> serde_json::Value {
         serde_json::json!({
             "character_scoped": CharacterScoped { character: "aria" },
-            "restore": RestoreKeepaliveRequest {
-                schedule: &census_schedule(),
-                max_idle_secs: 43_200,
-            },
             // Replies. Literals, because the sidecar authors these; the
             // assertions below are what pin this side's expectations to them.
-            "restore_reply": { "rearmed": true },
-            "drain_reply": {
-                "events": [{
-                    "character": "aria",
-                    "outcome": "cold",
-                    "detail": "Cache refresh ping (COLD — wrote cache, disarmed; cache_read: 0, input: 7)",
-                    "at": 1_785_600_000_000_u64,
-                }],
-                "schedules": [census_schedule()],
-            },
             "ping_now_reply": {
                 "status": "skipped",
                 "cold": false,
@@ -1132,19 +1035,6 @@ mod tests {
     fn keepalive_replies_parse() {
         let census = keepalive_census();
 
-        let restore: RestoreKeepaliveReply =
-            serde_json::from_value(census["restore_reply"].clone()).unwrap();
-        assert!(restore.rearmed);
-
-        let drain: KeepaliveDrain = serde_json::from_value(census["drain_reply"].clone()).unwrap();
-        assert_eq!(drain.events.len(), 1);
-        assert_eq!(drain.events[0].outcome, "cold");
-        assert_eq!(drain.events[0].character, "aria");
-        assert_eq!(drain.schedules.len(), 1);
-        // Milliseconds, not seconds: a schedule read back an hour stale would
-        // fail the sidecar's staleness guard and silently stop re-arming.
-        assert_eq!(drain.schedules[0].interval, 3_300_000);
-        assert_eq!(drain.schedules[0].last_warm_at, 1_785_600_000_000);
 
         let ping: PingNow = serde_json::from_value(census["ping_now_reply"].clone()).unwrap();
         assert_eq!(ping.status, "skipped");

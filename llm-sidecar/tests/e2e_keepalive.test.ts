@@ -286,7 +286,67 @@ async function run(opts: { cadence: string; idleMs: number; pingRead: number }):
 }
 
 const have = (p: string) => Bun.spawnSync(["test", "-x", p]).exitCode === 0;
-const ready = have(DAEMON) && have(SIDECAR);
+
+/**
+ * Newest mtime under a tree, or 0. Used to ask whether a binary is older than
+ * the source it was built from.
+ */
+function newestSource(dir: string, exts: string[]): number {
+  const out = Bun.spawnSync([
+    "find",
+    dir,
+    "-name",
+    "target",
+    "-prune",
+    "-o",
+    "-type",
+    "f",
+    ...exts.flatMap((e) => ["-name", e, "-o"]).slice(0, -1),
+    "-printf",
+    "%T@\n",
+  ]);
+  const stamps = out.stdout
+    .toString()
+    .split("\n")
+    .map(Number)
+    .filter((n) => Number.isFinite(n) && n > 0);
+  return stamps.length === 0 ? 0 : Math.max(...stamps) * 1000;
+}
+
+const mtime = (p: string): number => {
+  const s = Bun.spawnSync(["stat", "-c", "%Y", p]);
+  return s.exitCode === 0 ? Number(s.stdout.toString().trim()) * 1000 : 0;
+};
+
+/**
+ * Both binaries must exist **and be newer than their sources**.
+ *
+ * The staleness half is not fussiness. This suite proved a contract that had
+ * already been deleted: the daemon crate went red in `001c594d`, so
+ * `target/debug/shore-daemon` could not be rebuilt and stayed frozen at a build
+ * from seven hours earlier — one that still called `/v1/keepalive/drain`. The
+ * sidecar bundle was staler still. Two fossils agreed with each other and the
+ * suite went green while the real code had stopped writing keepalive outcomes
+ * to the heartbeat log entirely.
+ *
+ * A green end-to-end test is worth having only if it is testing the tree it
+ * sits in. Skipping loudly beats passing dishonestly, and this resumes on its
+ * own once the crate builds again and both sides are rebuilt.
+ */
+const daemonFresh = have(DAEMON) && mtime(DAEMON) > newestSource(`${ROOT}/crates`, ["*.rs"]);
+const sidecarFresh =
+  have(SIDECAR) && mtime(SIDECAR) > newestSource(`${ROOT}/llm-sidecar/src`, ["*.ts"]);
+const ready = daemonFresh && sidecarFresh;
+
+if (!ready) {
+  console.warn(
+    `shore: skipping e2e_keepalive — ${
+      !have(DAEMON) || !have(SIDECAR)
+        ? "a binary is missing"
+        : "a binary is older than its source; rebuild both"
+    } (cargo build -p shore-daemon && (cd llm-sidecar && bun run build))`,
+  );
+}
 
 /** The blocks of a message, whichever shape the adapter sent it in. */
 function blocksOf(content: Block[] | string): Block[] {

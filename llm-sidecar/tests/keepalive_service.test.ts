@@ -17,6 +17,7 @@ import {
   KeepaliveService,
   buildKeepalivePing,
   pingLandedCold,
+  type KeepaliveEvent,
   type KeepalivePrefix,
 } from "../src/autonomy/keepalive.ts";
 import { closeLedgers, setCallObserver } from "../src/ledger/record.ts";
@@ -105,7 +106,11 @@ function harness(replies: Array<GenerateResponse | Error> = []) {
     if (reply instanceof Error) throw reply;
     return reply;
   }, clock.now);
-  return { service, sent, clock };
+  // Collect through the sink, which is the only way out now — production wires
+  // this to the heartbeat log in `AutonomyService.attachKeepalive`.
+  const events: KeepaliveEvent[] = [];
+  service.onEvent((e) => events.push(e));
+  return { service, sent, clock, events };
 }
 
 /** Arm and warm, which is what a foreground turn does. */
@@ -218,10 +223,9 @@ describe("firing", () => {
     await h.service.tick();
     expect(h.sent).toHaveLength(1);
 
-    const { events } = h.service.drain();
-    expect(events).toHaveLength(1);
-    expect(events[0]!.outcome).toBe("cold");
-    expect(events[0]!.detail).toContain("COLD");
+    expect(h.events).toHaveLength(1);
+    expect(h.events[0]!.outcome).toBe("cold");
+    expect(h.events[0]!.detail).toContain("COLD");
   });
 
   test("read 0 with no write is not cold", () => {
@@ -249,9 +253,8 @@ describe("firing", () => {
     await h.service.tick();
     expect(h.sent).toHaveLength(2);
 
-    const { events } = h.service.drain();
-    expect(events[0]!.outcome).toBe("failed");
-    expect(events[0]!.detail).toContain("connection reset");
+    expect(h.events[0]!.outcome).toBe("failed");
+    expect(h.events[0]!.detail).toContain("connection reset");
   });
 
   test("no pushed prefix means no ping", async () => {
@@ -487,49 +490,54 @@ describe("the on-demand ping", () => {
   });
 });
 
-describe("what the daemon drains", () => {
-  test("events are reported once and then forgotten", async () => {
+describe("what reaches the heartbeat log and the state file", () => {
+  test("an outcome reaches the sink as it happens", async () => {
     const h = harness();
     armWarm(h);
     h.clock.advance(minutes(56));
     await h.service.tick();
 
-    const first = h.service.drain();
-    expect(first.events).toHaveLength(1);
-    expect(first.events[0]).toMatchObject({ character: CHARACTER, outcome: "sent" });
-    expect(first.events[0]!.at).toBe(h.clock.now());
-
-    expect(h.service.drain().events).toHaveLength(0);
+    expect(h.events).toHaveLength(1);
+    expect(h.events[0]).toMatchObject({ character: CHARACTER, outcome: "sent" });
+    // Stamped when the ping fired. The daemon's drain could only stamp events
+    // when it collected them, which is what this replaced.
+    expect(h.events[0]!.at).toBe(h.clock.now());
   });
 
-  test("schedules are current state, not a queue", () => {
+  test("no sink means events are dropped, not buffered", async () => {
+    // A bare service in a unit test has nowhere to put them, and a buffer that
+    // nothing reads is how they were lost in the first place.
+    const h = harness();
+    const loose = new KeepaliveService(async () => response(2200, 0), h.clock.now);
+    loose.arm(prefix());
+    loose.observe(CHARACTER, MODEL, "message");
+    h.clock.advance(minutes(56));
+    await expect(loose.tick()).resolves.toBeUndefined();
+  });
+
+  test("the schedule is current state, read the same every time", () => {
     const h = harness();
     armWarm(h);
 
-    const a = h.service.drain().schedules;
-    const b = h.service.drain().schedules;
+    const a = h.service.scheduleFor(CHARACTER);
+    const b = h.service.scheduleFor(CHARACTER);
     expect(a).toEqual(b);
-    expect(a).toHaveLength(1);
-    expect(a[0]).toMatchObject({
-      character: CHARACTER,
-      model: MODEL,
-      interval: INTERVAL_MS,
-    });
+    expect(a).toMatchObject({ model: MODEL, interval: INTERVAL_MS });
   });
 
   test("a disarmed character reports no schedule", () => {
-    // Absence is how the daemon learns to clear its persisted copy — a stale
-    // one would re-arm a dead prefix on the next restart.
+    // Absence is how the persisted copy gets cleared — a stale one would re-arm
+    // a dead prefix on the next restart.
     const h = harness();
     armWarm(h);
     h.service.disarm(CHARACTER);
-    expect(h.service.drain().schedules).toHaveLength(0);
+    expect(h.service.scheduleFor(CHARACTER)).toBeUndefined();
   });
 
   test("schedules survive a restart through restore", () => {
     const h = harness();
     armWarm(h);
-    const persisted = h.service.drain().schedules[0]!;
+    const persisted = h.service.scheduleFor(CHARACTER)!;
 
     const fresh = harness();
     fresh.clock.advance(minutes(10));

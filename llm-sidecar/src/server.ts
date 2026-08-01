@@ -146,6 +146,10 @@ export function createSidecarHandler(
   // registered and no tick timer running. The timer is `serveSidecar`'s.
   const autonomy =
     deps.autonomy ?? new AutonomyService(new RpcAutonomyExecutor(deps.toolSocketPath ?? ""));
+  // Both construction paths land here — `serveSidecar` builds the pair and
+  // passes them in — so this is the one place the two halves of the keepalive
+  // are joined: outcomes to the heartbeat log, schedules to the state file.
+  autonomy.attachKeepalive(keepalive);
 
   return async (request: Request, server?: RequestTimeoutServer): Promise<Response> => {
     const url = new URL(request.url);
@@ -268,16 +272,6 @@ export function createSidecarHandler(
       return jsonResponse({ ok: true });
     }
 
-    // Re-arm from the daemon's persisted copy at character startup. The
-    // provider's cache does not cool when shore restarts, so a schedule that is
-    // still provably warm is worth taking up; `restore` decides whether it is.
-    if (url.pathname === "/v1/keepalive/restore") {
-      const parsed = await readJson<KeepaliveRestore>(request);
-      if (!parsed.ok) return parsed.response;
-      const { character, max_idle_secs, ...snapshot } = parsed.value;
-      return jsonResponse({ rearmed: keepalive.restore(character, snapshot, max_idle_secs) });
-    }
-
     if (url.pathname === "/v1/keepalive/disarm") {
       const parsed = await readJson<{ character: string }>(request);
       if (!parsed.ok) return parsed.response;
@@ -285,21 +279,12 @@ export function createSidecarHandler(
       return jsonResponse({ ok: true });
     }
 
-    // Drained by the daemon's autonomy tick: it still owns the heartbeat log
-    // and the persisted state, so what happened here has to reach it. Scoped to
-    // the draining character, because that tick can only reach its own state.
     // The `keepalive_ping_now` diagnostic. Fires a real, billed, recorded call
     // but deliberately leaves the schedule alone — see `pingNow`.
     if (url.pathname === "/v1/keepalive/ping-now") {
       const parsed = await readJson<{ character: string }>(request);
       if (!parsed.ok) return parsed.response;
       return jsonResponse(await keepalive.pingNow(parsed.value.character));
-    }
-
-    if (url.pathname === "/v1/keepalive/drain") {
-      const parsed = await readJson<{ character?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      return jsonResponse(keepalive.drain(parsed.value.character));
     }
 
     // Autonomy: the heartbeat, compaction, the deep archive and dreaming. This

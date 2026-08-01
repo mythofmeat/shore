@@ -22,6 +22,8 @@ import { encodeState, STATE_FILENAME } from "../src/autonomy/state_file.ts";
 import type { AutonomyActionResult, AutonomyExecutor } from "../src/autonomy/runner.ts";
 import type { CompactionReason } from "../src/autonomy/tick.ts";
 import { createSidecarHandler } from "../src/server.ts";
+import type { KeepaliveEvent, KeepaliveService } from "../src/autonomy/keepalive.ts";
+import type { KeepaliveSnapshot } from "../src/autonomy/cache_keepalive.ts";
 
 const HOUR = 3_600_000;
 const START = 1_000_000_000_000;
@@ -564,6 +566,175 @@ describe("the endpoints", () => {
       await post("/v1/autonomy/register", registration("nova", characterDir(root, "nova")));
       await post("/v1/autonomy/unregister", { character: "nova" });
       expect((await post("/v1/autonomy/status", { character: "nova" })).status).toBe(404);
+    });
+  });
+});
+
+describe("the keepalive's two halves", () => {
+  /**
+   * Both were lost in `001c594d`, silently and in the allowing direction.
+   *
+   * That commit moved `heartbeat.jsonl` and `autonomy_state.json` to this side
+   * and deleted the daemon code that drove `/v1/keepalive/{drain,restore}` — but
+   * left the endpoints standing with nothing calling them. Ping outcomes went on
+   * accumulating in a ring buffer that no longer had a reader, and the persisted
+   * schedule was written on every save and read on every load without anything
+   * ever acting on it. Pings kept firing and kept being billed, so the only
+   * symptom was a heartbeat log that had quietly stopped mentioning them.
+   *
+   * These pin the two joins that replaced the round trip.
+   */
+
+  /** A keepalive stub with only the surface `attachKeepalive` uses. */
+  function fakeKeepalive() {
+    const schedules = new Map<string, KeepaliveSnapshot | undefined>();
+    let sink: ((e: KeepaliveEvent) => void) | undefined;
+    return {
+      schedules,
+      emit(e: KeepaliveEvent) {
+        sink?.(e);
+      },
+      service: {
+        onEvent(fn: (e: KeepaliveEvent) => void) {
+          sink = fn;
+        },
+        scheduleFor: (c: string) => schedules.get(c),
+        restore: (c: string, snapshot: KeepaliveSnapshot) => {
+          schedules.set(c, snapshot);
+          return true;
+        },
+      } as unknown as KeepaliveService,
+    };
+  }
+
+  const snapshot = (over: Partial<KeepaliveSnapshot> = {}): KeepaliveSnapshot => ({
+    model: "claude-opus-4-6",
+    interval: 3_300_000,
+    last_warm_at: START,
+    last_active_at: START - 60_000,
+    ...over,
+  });
+
+  test("a ping's outcome reaches the character's heartbeat log", async () => {
+    await inTempDir(async (root) => {
+      const dir = characterDir(root, "nova");
+      const { service } = build();
+      const ka = fakeKeepalive();
+      service.attachKeepalive(ka.service);
+      await service.register(registration("nova", dir));
+
+      ka.emit({
+        character: "nova",
+        outcome: "cold",
+        detail: "Cache refresh ping (COLD — wrote cache, disarmed)",
+        at: START + 5_000,
+      });
+      await service.tick();
+      await service.unregister("nova");
+
+      const lines = (await Bun.file(join(dir, HEARTBEAT_LOG_FILENAME)).text())
+        .trim()
+        .split("\n")
+        .map((l) => JSON.parse(l));
+      const ping = lines.find((l) => l.kind === "dormant_ping");
+      expect(ping, "the ping is in the log").toBeDefined();
+      expect(ping.detail).toContain("COLD");
+      // Stamped when the ping fired, not when the log was written. The daemon's
+      // drain could only ever say the latter.
+      expect(ping.timestamp).toBe(new Date(START + 5_000).toISOString().replace(/\.\d{3}Z$/, "+00:00"));
+    });
+  });
+
+  test("an event for a character nobody registered is dropped, not thrown", async () => {
+    await inTempDir(async (root) => {
+      const { service } = build();
+      const ka = fakeKeepalive();
+      service.attachKeepalive(ka.service);
+      await service.register(registration("nova", characterDir(root, "nova")));
+
+      expect(() =>
+        ka.emit({ character: "ghost", outcome: "sent", detail: "ping", at: START }),
+      ).not.toThrow();
+    });
+  });
+
+  test("the live schedule reaches the state file on tick", async () => {
+    await inTempDir(async (root) => {
+      const dir = characterDir(root, "nova");
+      const { service } = build();
+      const ka = fakeKeepalive();
+      service.attachKeepalive(ka.service);
+      await service.register(registration("nova", dir, COMPACTION_ONLY));
+
+      ka.schedules.set("nova", snapshot());
+      await service.tick();
+      await service.unregister("nova");
+
+      const saved = JSON.parse(await Bun.file(join(dir, STATE_FILENAME)).text());
+      expect(saved.keepalive_model).toBe("claude-opus-4-6");
+      // Milliseconds. Seconds here would read as a schedule ~1000x stale on the
+      // next restore and stop re-arming for good.
+      expect(saved.keepalive_interval_ms).toBe(3_300_000);
+    });
+  });
+
+  test("a schedule that goes away clears the persisted copy", async () => {
+    await inTempDir(async (root) => {
+      const dir = characterDir(root, "nova");
+      const { service } = build();
+      const ka = fakeKeepalive();
+      service.attachKeepalive(ka.service);
+      await service.register(registration("nova", dir, COMPACTION_ONLY));
+
+      ka.schedules.set("nova", snapshot());
+      await service.tick();
+      // Disarmed: keepalive off, or the prefix was invalidated. Leaving the old
+      // copy behind would re-arm against a dead prefix after a restart.
+      ka.schedules.set("nova", undefined);
+      await service.tick();
+      await service.unregister("nova");
+
+      const saved = JSON.parse(await Bun.file(join(dir, STATE_FILENAME)).text());
+      expect(saved.keepalive_model ?? null).toBeNull();
+      expect(saved.keepalive_interval_ms ?? null).toBeNull();
+    });
+  });
+
+  test("registering offers the persisted schedule back", async () => {
+    await inTempDir(async (root) => {
+      const dir = characterDir(root, "nova");
+      await Bun.write(
+        join(dir, STATE_FILENAME),
+        encodeState({
+          ticksWithoutUser: 0,
+          nextWakeAt: START + HOUR,
+          lastUserAt: START,
+          coveredTurnCount: 0,
+          keepalive: {
+            model: "claude-opus-4-6",
+            intervalMs: 3_300_000,
+            lastWarmAt: START,
+            lastActiveAt: START - 60_000,
+          },
+        }),
+      );
+
+      const { service } = build();
+      const ka = fakeKeepalive();
+      service.attachKeepalive(ka.service);
+      await service.register(registration("nova", dir));
+
+      // Handed over in the wire spelling, which is what the keepalive speaks.
+      expect(ka.schedules.get("nova")).toEqual(snapshot());
+    });
+  });
+
+  test("no keepalive attached is not a crash", async () => {
+    // Unit tests build a bare AutonomyService; it must tick without one.
+    await inTempDir(async (root) => {
+      const { service } = build();
+      await service.register(registration("nova", characterDir(root, "nova"), COMPACTION_ONLY));
+      await expect(service.tick()).resolves.toBeUndefined();
     });
   });
 });

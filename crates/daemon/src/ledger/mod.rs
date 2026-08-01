@@ -5,10 +5,7 @@ pub mod reports;
 pub mod store;
 mod sync;
 
-pub use client::{
-    CallType, CredentialFallbackEvent, KeepaliveDrain, KeepaliveEvent, KeepaliveSchedule,
-    LedgerClient,
-};
+pub use client::{CallType, CredentialFallbackEvent, KeepaliveSchedule, LedgerClient};
 pub use store::Ledger;
 
 /// Whether a provider is billed by a flat subscription rather than metered

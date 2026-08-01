@@ -2,36 +2,6 @@
   "character_scoped": {
     "character": "aria"
   },
-  "restore": {
-    "character": "aria",
-    "model": "claude-opus-4-6",
-    "interval": 3300000,
-    "last_warm_at": 1785600000000,
-    "last_active_at": 1785599940000,
-    "max_idle_secs": 43200
-  },
-  "restore_reply": {
-    "rearmed": true
-  },
-  "drain_reply": {
-    "events": [
-      {
-        "character": "aria",
-        "outcome": "cold",
-        "detail": "Cache refresh ping (COLD — wrote cache, disarmed; cache_read: 0, input: 7)",
-        "at": 1785600000000
-      }
-    ],
-    "schedules": [
-      {
-        "character": "aria",
-        "model": "claude-opus-4-6",
-        "interval": 3300000,
-        "last_warm_at": 1785600000000,
-        "last_active_at": 1785599940000
-      }
-    ]
-  },
   "ping_now_reply": {
     "status": "skipped",
     "cold": false,

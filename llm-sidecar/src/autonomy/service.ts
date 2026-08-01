@@ -32,8 +32,10 @@
 import type { ActivityStats } from "./activity.ts";
 import { HeartbeatClock, type HeartbeatClockConfig } from "./heartbeat.ts";
 import { HeartbeatLog, type HeartbeatEvent } from "./heartbeat_log.ts";
+import { DEFAULT_KEEPALIVE_MAX_SECS, type KeepaliveService } from "./keepalive.ts";
 import { CharacterAutonomy, type AutonomyExecutor, type AutonomyRunnerConfig } from "./runner.ts";
-import { loadState, STATE_FILENAME } from "./state_file.ts";
+import { loadState, STATE_FILENAME, type PersistedKeepalive } from "./state_file.ts";
+import type { KeepaliveSnapshot } from "./cache_keepalive.ts";
 
 /** How often every character's loop runs. Matches the Rust's `TICK_INTERVAL`. */
 export const AUTONOMY_TICK_MS = 10_000;
@@ -100,14 +102,65 @@ interface Entry {
   inFlight: boolean;
 }
 
+/**
+ * The keepalive's wire snapshot as the state file holds it.
+ *
+ * Two spellings of one thing: `KeepaliveSnapshot` is the shape the control
+ * bodies used across the language boundary, `PersistedKeepalive` is what
+ * `autonomy_state.json` reads back. Converting here keeps either free to change
+ * without dragging the other.
+ */
+function toPersisted(s: KeepaliveSnapshot | undefined): PersistedKeepalive | undefined {
+  return s === undefined
+    ? undefined
+    : {
+        model: s.model,
+        intervalMs: s.interval,
+        lastWarmAt: s.last_warm_at,
+        lastActiveAt: s.last_active_at,
+      };
+}
+
+function toSnapshot(p: PersistedKeepalive): KeepaliveSnapshot {
+  return {
+    model: p.model,
+    interval: p.intervalMs,
+    last_warm_at: p.lastWarmAt,
+    last_active_at: p.lastActiveAt,
+  };
+}
+
 export class AutonomyService {
   readonly #entries = new Map<string, Entry>();
   readonly #executor: AutonomyExecutor;
   readonly #now: () => number;
+  #keepalive: KeepaliveService | undefined;
 
   constructor(executor: AutonomyExecutor, now: () => number = () => Date.now()) {
     this.#executor = executor;
     this.#now = now;
+  }
+
+  /**
+   * Join the two halves of the keepalive: its ping outcomes come here to be
+   * logged, and its schedules are read from here to be persisted.
+   *
+   * This is what `/v1/keepalive/{drain,restore}` used to do the long way round,
+   * with the daemon in the middle owning `heartbeat.jsonl` and
+   * `autonomy_state.json`. Both files moved to this side in `001c594d`, and the
+   * endpoints were left behind with nothing calling them — so ping outcomes
+   * stopped reaching the log entirely, and the persisted schedule was written
+   * but never re-armed. This wires them back up on the near side, which is
+   * where the ledger port put this seam and where it belongs.
+   */
+  attachKeepalive(keepalive: KeepaliveService): void {
+    this.#keepalive = keepalive;
+    keepalive.onEvent((event) => {
+      // `event.at` rather than now: a ping's line should say when the ping
+      // happened. The Rust could not do this — it stamped events at drain time,
+      // which is why `KeepaliveEvent.at` existed and went unused.
+      this.#entries.get(event.character)?.runner.note("dormant_ping", event.detail, event.at);
+    });
   }
 
   /**
@@ -136,6 +189,26 @@ export class AutonomyService {
       now: this.#now,
     });
     this.#entries.set(character, { runner, inFlight: false });
+
+    // Offer the persisted schedule back. The provider's cache does not cool
+    // because shore restarted, so a schedule still provably warm is worth
+    // taking up; `CacheKeepalive.restore` decides, guarding on the ping
+    // interval rather than the ceiling.
+    //
+    // The ceiling passed here is the default, not the configured one: the
+    // register payload does not carry `cache_keepalive_max`, and inventing a
+    // field the daemon does not yet send would arrive as `undefined` and turn
+    // keepalive off silently — the exact failure this subsystem has already
+    // had once. It is provisional and self-correcting: the first real call
+    // pushes a prefix whose context carries the configured ceiling, and
+    // `KeepaliveService.arm` rebuilds the state machine with it, carrying the
+    // schedule across. The ceiling only bounds how long pinging continues
+    // without activity, and the restore guard has already established the
+    // prefix is less than one interval old.
+    const persisted = restored?.keepalive;
+    if (persisted !== undefined) {
+      this.#keepalive?.restore(character, toSnapshot(persisted), DEFAULT_KEEPALIVE_MAX_SECS);
+    }
   }
 
   /** Let a character go, writing down where it got to. */
@@ -156,6 +229,9 @@ export class AutonomyService {
   async tick(): Promise<void> {
     const due: [string, Entry][] = [];
     for (const pair of this.#entries) {
+      // Take the live schedule before ticking, so whatever the tick persists
+      // includes it. This is where the daemon's drain used to sit in the tick.
+      pair[1].runner.setKeepaliveSchedule(toPersisted(this.#keepalive?.scheduleFor(pair[0])));
       if (pair[1].inFlight) continue;
       pair[1].inFlight = true;
       due.push(pair);

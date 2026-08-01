@@ -435,6 +435,33 @@ export class CharacterAutonomy {
     this.#log.push(kind, detail, toRfc3339(now));
   }
 
+  /**
+   * Take the keepalive's current schedule so it reaches `autonomy_state.json`.
+   *
+   * `undefined` **clears** the persisted copy rather than leaving the last one
+   * standing — keepalive off, never warmed, or disarmed all mean there is
+   * nothing worth re-arming, and a stale copy would re-arm against a dead
+   * prefix on the next restart. That clearing behaviour is the whole reason
+   * this takes the value rather than reading a getter only when it is set.
+   *
+   * Dirty only on an actual change, because this runs every tick and marking it
+   * unconditionally would rewrite the file forever.
+   */
+  setKeepaliveSchedule(schedule: PersistedKeepalive | undefined): void {
+    const current = this.#state.keepalive;
+    const same =
+      current === schedule ||
+      (current !== undefined &&
+        schedule !== undefined &&
+        current.model === schedule.model &&
+        current.intervalMs === schedule.intervalMs &&
+        current.lastWarmAt === schedule.lastWarmAt &&
+        current.lastActiveAt === schedule.lastActiveAt);
+    if (same) return;
+    this.#state.keepalive = schedule;
+    this.#state.dirty = true;
+  }
+
   /** The inputs this tick's decision is taken from. */
   inputs(now: number): TickInputs {
     const c = this.#config;
