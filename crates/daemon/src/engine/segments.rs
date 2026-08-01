@@ -1,3 +1,17 @@
+//! Frozen conversation segments.
+//!
+//! **The reader is ported.** `llm-sidecar/src/engine/segments.ts` is the
+//! implementation, pinned against this one by
+//! `llm-sidecar/tests/engine_fixtures/engine_parity.json` (frozen; generated
+//! from this file at 9023b46d). Do not add behaviour here — add it there.
+//!
+//! This is not deleted yet, and the reason is the *writer*: `CompactionManifest`
+//! and `SegmentEntry` are the types `memory/compaction_impls.rs` writes through,
+//! and that lives in the memory module, which has not moved (#12, step 5).
+//! Deleting the reader would strand the writer on types it no longer has, which
+//! is churn the port throws away. Both halves go in the same commit that moves
+//! compaction.
+
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};

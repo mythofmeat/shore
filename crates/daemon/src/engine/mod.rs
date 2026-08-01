@@ -50,6 +50,14 @@ pub enum EngineError {
 /// in numbered segment files managed by `SegmentReader`.
 ///
 /// State changes are broadcast as `History` messages to all connected clients.
+///
+/// **Ported.** `llm-sidecar/src/engine/conversation.ts` is the implementation
+/// now, pinned by `llm-sidecar/tests/engine_fixtures/engine_parity.json`
+/// (frozen; generated from this file at 9023b46d). Do not add behaviour here.
+///
+/// It survives only because eleven files still hold one — the handler, the
+/// commands, `characters.rs` — and none of them have moved. It goes when they
+/// do, in the same commit, rather than behind a bridge.
 #[derive(Debug)]
 pub struct ConversationEngine {
     character_name: String,
