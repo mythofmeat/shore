@@ -14,6 +14,16 @@
 
 export type Role = "user" | "assistant" | "system";
 
+/**
+ * How a message entered the conversation.
+ *
+ * Only `autonomous` is actually persisted — it marks a heartbeat's
+ * `<sendMessage>` output, which compaction's deep-idle archive keeps visible
+ * across an archive boundary. Absent on ordinary turns, where the role already
+ * says it, and on anything stored before origin tracking.
+ */
+export type MessageOrigin = "user_input" | "assistant_reply" | "autonomous";
+
 export interface ImageRef {
   path: string;
   caption?: string;
@@ -79,4 +89,6 @@ export interface Message {
    * model families — the replay guard needs both.
    */
   model?: string;
+  /** See {@link MessageOrigin}. Absent unless this was an autonomous turn. */
+  origin?: MessageOrigin;
 }
