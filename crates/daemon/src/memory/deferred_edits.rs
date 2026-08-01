@@ -36,6 +36,10 @@ Use tools when they materially help.
 - Prefer concise, direct tool use over busywork.
 ";
 
+/// **Ported.** `normalize_workspace_path`, `normalize_protected_path`,
+/// `normalize_prompt_visible_path` and the active-prompt path helpers now live
+/// in `llm-sidecar/src/tools/workspace_path.ts`, pinned by
+/// `llm-sidecar/tests/engine_fixtures/subagent_parity.json`.
 fn normalize_workspace_path(path: &str) -> String {
     let mut normalized = path.trim().replace('\\', "/");
 

@@ -1,5 +1,16 @@
 //! Sub-agent delegation runtime.
 //!
+//! **Partly ported.** The prompt-assembly half — macro expansion, the history
+//! transcript, the tool subset, template vars and the model-resolution chain —
+//! now lives in `llm-sidecar/src/tools/subagent.ts`, pinned by
+//! `llm-sidecar/tests/engine_fixtures/subagent_parity.json`. Change behaviour
+//! there, not here.
+//!
+//! What remains here is bridge: [`run`] drives the nested loop through
+//! `StreamConsumer` and the daemon's ledger client, and [`spawn_forwarder`]
+//! relays frames over the NDJSON hop. Both disappear with the hop itself — the
+//! TypeScript daemon runs the nested loop in-process against `runToolLoop`.
+//!
 //! A `[subagents.<name>]` config entry surfaces to the primary model as a
 //! single `ask_<name>(query)` tool. Invoking it runs a *nested* tool loop on a
 //! (typically cheaper) model over a subset of the in-process tools, then

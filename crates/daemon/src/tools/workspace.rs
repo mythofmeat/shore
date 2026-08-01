@@ -176,6 +176,13 @@ fn discovery_tool_defs() -> Vec<ToolDef> {
 
 // ---------------------------------------------------------------------------
 // Path resolution
+//
+// **Ported.** `resolve_roots` and `resolve_path` now live in
+// `llm-sidecar/src/tools/workspace_path.ts`, pinned by
+// `llm-sidecar/tests/engine_fixtures/subagent_parity.json`. This is the
+// confinement boundary every filesystem tool routes through, so the two copies
+// must not drift: change the TypeScript, and treat a parity diff as a defect
+// rather than a fixture to refresh.
 // ---------------------------------------------------------------------------
 
 pub(crate) fn resolve_roots(
