@@ -1,5 +1,19 @@
 //! Provider model discovery and on-disk cache.
 //!
+//! **Ported.** `llm-sidecar/src/llm/discovery.ts` is the implementation now,
+//! pinned by `llm-sidecar/tests/llm_fixtures/discovery_parity.json` (frozen;
+//! generated from this file at 9023b46d).
+//!
+//! Do not add behaviour here — and note that the cache file is a *shared*
+//! artifact for as long as both sides exist. The serialized shape is pinned
+//! byte-for-byte by the fixture, so a change to `DiscoveredModel` or
+//! `ProviderModelsCache` on this side writes files the TypeScript reads as
+//! corrupt (and silently, since a bad cache reads as "no cache").
+//!
+//! Not deleted yet: `effective_catalog.rs`, `commands/providers.rs` and
+//! `auto_discovery.rs` are still Rust and still read these caches (#12,
+//! step 3). It goes when they do.
+//!
 //! OpenAI-compatible providers (OpenAI, OpenRouter, vLLM, Together, etc.)
 //! share one fetcher while native Anthropic discovery uses its required API
 //! headers. The Phase 5 layer is intentionally narrow:
