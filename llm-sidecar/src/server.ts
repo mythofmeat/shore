@@ -32,6 +32,7 @@ import { generateImage } from "./llm/image_generate.ts";
 import { GeminiProvider } from "./llm/providers/gemini.ts";
 import { AnthropicProvider } from "./llm/providers/anthropic.ts";
 import { anthropicToolLoopEvents } from "./llm/providers/anthropic_loop.ts";
+import { genericToolLoopEvents } from "./llm/providers/generic_loop.ts";
 import { OpenAIProvider } from "./llm/providers/openai.ts";
 import { OpenRouterProvider } from "./llm/providers/openrouter.ts";
 import { VercelProvider } from "./llm/providers/vercel.ts";
@@ -182,13 +183,19 @@ export function createSidecarHandler(
       const blocked = budgetBlockFor(req);
       if (blocked) return budgetRefusal(blocked);
       // `tool_rpc` is the switch: with it, this side drives the tool loop and
-      // calls back to run each tool. Anthropic only — the SDK tool runner this
-      // is built on has no equivalent elsewhere, so every other dialect keeps
-      // the daemon's loop, which still serves compaction and dreaming anyway.
+      // calls back to run each tool. Its absence still means the daemon drives,
+      // which is what compaction and dreaming do.
+      //
+      // Anthropic gets its own loop because that SDK's `toolRunner` gives the
+      // request/execute/continue cycle for free; every other dialect runs the
+      // ported control flow directly over the `SidecarProvider` interface. The
+      // two emit the same frames — see `generic_loop.ts`.
       const source =
-        req.tool_rpc !== undefined && req.sdk === "anthropic"
-          ? (signal: AbortSignal) => anthropicToolLoopEvents(req, signal)
-          : (signal: AbortSignal) => provider.stream(req, signal);
+        req.tool_rpc === undefined
+          ? (signal: AbortSignal) => provider.stream(req, signal)
+          : req.sdk === "anthropic"
+            ? (signal: AbortSignal) => anthropicToolLoopEvents(req, signal)
+            : (signal: AbortSignal) => genericToolLoopEvents(provider, req, signal);
       // Every provider call in the stream becomes a ledger row here, including
       // a loop's individual calls, which reach the daemon only as one summed
       // `done`. See `ledger/record.ts`.

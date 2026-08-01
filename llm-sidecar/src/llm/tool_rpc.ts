@@ -105,7 +105,7 @@ export interface ToolCallError {
 
 type ToolCallOutcome = ToolCallResponse | ToolCallError;
 
-const isTransportError = (outcome: ToolCallOutcome): outcome is ToolCallError =>
+export const isTransportError = (outcome: ToolCallOutcome): outcome is ToolCallError =>
   "error" in outcome;
 
 /** Raised when the daemon could not attempt a call. Never reaches the model. */
