@@ -1,3 +1,12 @@
+//! Retry and model-fallback decisions.
+//!
+//! **Ported.** `llm-sidecar/src/llm/retry.ts` is the implementation now,
+//! pinned by `llm-sidecar/tests/llm_fixtures/llm_decisions_parity.json`
+//! (frozen; generated from this file at 9023b46d). Do not add behaviour here.
+//!
+//! Not deleted yet: `engine/tools.rs`, `handler/generation.rs` and `llm/mod.rs`
+//! still call it and none of them have moved (#12, step 3). It goes with them.
+
 use tracing::warn;
 
 use super::credentials::classify_credential_failure;

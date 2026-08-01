@@ -1,5 +1,18 @@
 //! Credential failure classification for the multi-key fallback path.
 //!
+//! **Ported.** `llm-sidecar/src/llm/credentials.ts` is the implementation now,
+//! pinned by `llm-sidecar/tests/llm_fixtures/llm_decisions_parity.json`
+//! (frozen; generated from this file at 9023b46d). Do not add behaviour here.
+//!
+//! Not deleted yet: `handler/key_fallback.rs`, `ledger/client.rs`, `llm/mod.rs`
+//! and `retry.rs` still call it and none of them have moved (#12, step 3).
+//! It goes with them.
+//!
+//! One deliberate difference on the far side: `resolve_key_candidates` takes a
+//! whole `ProviderRegistry` here and a single normalized entry there. Nothing
+//! in the resolution needs the rest of the registry, and parsing the
+//! `[providers]` TOML section is the config module's job.
+//!
 //! Phase 4 of the provider/model rework introduces ordered named API keys
 //! per provider. When a request fails with a credential-specific signal
 //! (missing/invalid key, exhausted quota or budget, key-scoped rate limit),
