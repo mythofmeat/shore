@@ -1,3 +1,14 @@
+//! **Partly ported.** Request construction —
+//! `build_request*`, `provider_options_for`, `preprocess_request`,
+//! `default_base_url`, `requires_reasoning_replay` — now lives in
+//! `llm-sidecar/src/llm/request.ts`, pinned by
+//! `llm-sidecar/tests/llm_fixtures/request_parity.json` (frozen; generated
+//! from this file at 9023b46d). Do not add behaviour to those.
+//!
+//! `LlmClient` itself is not ported and will not be: it is the daemon half of
+//! the sidecar IPC, and the boundary it crosses disappears with the Rust
+//! daemon (#12, step 3).
+//!
 pub mod cache_forensics;
 mod convert;
 pub mod credentials;
