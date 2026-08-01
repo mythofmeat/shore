@@ -25,6 +25,13 @@
 //! * Secrets never leave this module. The dispatcher reads env vars
 //!   here; only friendly key names, status codes, and sanitized reason
 //!   strings are surfaced to clients or diagnostics.
+//! **Ported.** `llm-sidecar/src/llm/fallback.ts` is the implementation now,
+//! pinned by `llm-sidecar/tests/llm_fixtures/fallback_parity.json` (frozen;
+//! generated from this file at 9023b46d). Do not add behaviour here.
+//!
+//! Not deleted yet: the daemon-driven generation pipeline is still its caller
+//! (#12, step 3). It goes with it.
+//!
 
 use chrono::Utc;
 use tracing::{debug, error, warn};

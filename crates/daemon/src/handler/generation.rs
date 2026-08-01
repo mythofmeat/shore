@@ -1,4 +1,12 @@
-//! Stream retry and tool-phase execution for the generation pipeline.
+//! Stream retry and tool-phase execution for the generation pipeline.//!
+//! **Partly ported.** `stream_with_retry`'s retry loop and backoff schedule now
+//! live in `llm-sidecar/src/llm/fallback.ts`, pinned by
+//! `llm-sidecar/tests/llm_fixtures/fallback_parity.json` (frozen; generated at
+//! 9023b46d).
+//!
+//! The rest of this file is pipeline wiring around the sidecar IPC —
+//! `stream_with_sidecar_tool_loop`, `build_tool_context`, `run_tool_phase` —
+//! and disappears with the process boundary rather than moving (#12, step 3).
 
 use tracing::{debug, error, instrument, warn};
 
