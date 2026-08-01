@@ -184,8 +184,6 @@ pub struct BackgroundDefaultsConfig {
     /// Per-task override for memory compaction passes.
     pub compaction: Option<String>,
 
-    /// Per-task override for the AI librarian dreaming pass.
-    pub dreaming: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -198,7 +196,7 @@ pub struct DefaultsConfig {
     /// on the first chat model declared in the catalog.
     pub model: Option<String>,
 
-    /// Background-task model selectors (heartbeat, compaction, dreaming).
+    /// Background-task model selectors (heartbeat, compaction).
     #[serde(default)]
     pub background: BackgroundDefaultsConfig,
 
@@ -208,13 +206,6 @@ pub struct DefaultsConfig {
     /// new key is unset).
     #[serde(default)]
     pub heartbeat: Option<String>,
-
-    /// **Deprecated.** Old top-level shorthand for
-    /// `defaults.background.dreaming`. Parse-only — the loader logs a
-    /// warning and forwards into `background.dreaming` (only when the
-    /// new key is unset).
-    #[serde(default)]
-    pub dreaming: Option<String>,
 
     /// Default embedding profile name.
     pub embedding: Option<String>,
@@ -241,7 +232,6 @@ pub struct DefaultsConfig {
 pub enum BackgroundTask {
     Heartbeat,
     Compaction,
-    Dreaming,
 }
 
 impl DefaultsConfig {
@@ -264,7 +254,6 @@ impl DefaultsConfig {
         let per_task = match task {
             BackgroundTask::Heartbeat => self.background.heartbeat.as_deref(),
             BackgroundTask::Compaction => self.background.compaction.as_deref(),
-            BackgroundTask::Dreaming => self.background.dreaming.as_deref(),
         };
         per_task.or(self.background.model.as_deref())
     }
@@ -289,20 +278,6 @@ impl DefaultsConfig {
                 );
             }
         }
-        if let Some(value) = self.dreaming.take() {
-            if self.background.dreaming.is_none() {
-                tracing::warn!(
-                    "`defaults.dreaming = {value:?}` is deprecated; \
-                     move it under `[defaults.background]` as `dreaming`."
-                );
-                self.background.dreaming = Some(value);
-            } else {
-                tracing::warn!(
-                    "`defaults.dreaming` is deprecated and was ignored \
-                     because `defaults.background.dreaming` is already set."
-                );
-            }
-        }
     }
 }
 
@@ -312,7 +287,6 @@ impl Default for DefaultsConfig {
             model: None,
             background: BackgroundDefaultsConfig::default(),
             heartbeat: None,
-            dreaming: None,
             embedding: None,
             image_generation: None,
             subagent_model: None,
@@ -792,15 +766,12 @@ pub struct MemoryConfig {
     pub compaction: CompactionConfig,
 
     #[serde(default)]
-    pub dreaming: DreamingConfig,
-
-    #[serde(default)]
     pub thinking: ThinkingConfig,
 
     #[serde(default)]
     pub retrieval: RetrievalConfig,
 
-    /// After a successful compaction or dreaming pass, push the character's
+    /// After a successful compaction pass, push the character's
     /// workspace git repository to its configured remote (a plain `git push`
     /// honoring the repo's own upstream). Off by default: the daemon never
     /// invents a remote, and pushing is opt-in to one the operator set up. A
@@ -810,71 +781,9 @@ pub struct MemoryConfig {
     pub git_push: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct DreamingConfig {
-    /// Whether scheduled memory dreaming sweeps are enabled.
-    #[serde(default)]
-    pub enabled: bool,
 
-    /// Five-field cron schedule: minute hour day-of-month month day-of-week.
-    #[serde(default = "default_dreaming_frequency")]
-    pub frequency: String,
 
-    /// Minimum time since the last user message before a scheduled dreaming
-    /// sweep is allowed to fire. Heartbeat / autonomy turns do not reset this.
-    #[serde(default = "default_dreaming_minimum_inactive_time")]
-    pub minimum_inactive_time: ConfigDuration,
 
-    /// How long a scheduled cron occurrence stays eligible to fire after its
-    /// scheduled time. If the daemon misses the occurrence by more than this,
-    /// it is skipped and the next cron tick takes over (no late catch-up).
-    #[serde(default = "default_dreaming_max_lateness")]
-    pub max_lateness: ConfigDuration,
-
-    /// When true, run idle-style compaction (if eligible) before the
-    /// dreaming sweep. Aborts the sweep on compaction failure.
-    #[serde(default = "default_true")]
-    pub compact_before: bool,
-
-    /// When true (and `compact_before` is true), the pre-dream compaction
-    /// archives every chat turn instead of retaining the configured
-    /// `keep_recent_turns` tail.
-    #[serde(default)]
-    pub compact_to_zero: bool,
-}
-
-serde_default!(default_dreaming_frequency -> String { "0 3 * * *".to_owned() });
-serde_default!(default_dreaming_minimum_inactive_time -> ConfigDuration { ConfigDuration::from_secs(45 * 60) });
-serde_default!(default_dreaming_max_lateness -> ConfigDuration { ConfigDuration::from_secs(2 * 60 * 60) });
-
-impl Default for DreamingConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            frequency: default_dreaming_frequency(),
-            minimum_inactive_time: default_dreaming_minimum_inactive_time(),
-            max_lateness: default_dreaming_max_lateness(),
-            compact_before: true,
-            compact_to_zero: false,
-        }
-    }
-}
-
-impl DreamingConfig {
-    /// Reject an inactivity window carrying a fraction of a second — the other
-    /// half of the rule [`CompactionConfig::validate`] applies, and the reason
-    /// it exists is that these two disagreed. A disabled config is always valid.
-    pub fn validate(&self) -> Result<(), String> {
-        if !self.enabled {
-            return Ok(());
-        }
-        reject_fractional_seconds(
-            "memory.dreaming.minimum_inactive_time",
-            self.minimum_inactive_time,
-        )
-    }
-}
 
 serde_default!(default_replay_prior_thinking -> ThinkingReplay { ThinkingReplay::All });
 
@@ -1661,69 +1570,6 @@ mod tests {
     }
 
     #[test]
-    fn idle_thresholds_must_be_whole_seconds() {
-        // The range where compaction and dreaming round differently (#15) is
-        // rejected rather than resolved, on both fields of both triggers.
-        for millis in [1_u64, 500, 1_500, 90_500] {
-            let compaction = CompactionConfig {
-                idle_trigger: ConfigDuration::from_millis(millis),
-                ..CompactionConfig::default()
-            };
-            assert!(
-                compaction.validate().is_err(),
-                "idle_trigger of {millis}ms was accepted"
-            );
-
-            let archive = CompactionConfig {
-                archive_after: ConfigDuration::from_millis(millis),
-                ..CompactionConfig::default()
-            };
-            assert!(
-                archive.validate().is_err(),
-                "archive_after of {millis}ms was accepted"
-            );
-
-            let dreaming = DreamingConfig {
-                enabled: true,
-                minimum_inactive_time: ConfigDuration::from_millis(millis),
-                ..DreamingConfig::default()
-            };
-            assert!(
-                dreaming.validate().is_err(),
-                "minimum_inactive_time of {millis}ms was accepted"
-            );
-        }
-    }
-
-    #[test]
-    fn whole_seconds_and_zero_stay_valid() {
-        // Zero is how both triggers spell "off" and must survive the rule.
-        for millis in [0_u64, 1_000, 1_800_000] {
-            let compaction = CompactionConfig {
-                idle_trigger: ConfigDuration::from_millis(millis),
-                archive_after: ConfigDuration::from_millis(millis),
-                ..CompactionConfig::default()
-            };
-            assert!(compaction.validate().is_ok(), "{millis}ms was rejected");
-
-            let dreaming = DreamingConfig {
-                enabled: true,
-                minimum_inactive_time: ConfigDuration::from_millis(millis),
-                ..DreamingConfig::default()
-            };
-            assert!(dreaming.validate().is_ok(), "{millis}ms was rejected");
-        }
-
-        // A disabled trigger is never checked at all.
-        let disabled = DreamingConfig {
-            enabled: false,
-            minimum_inactive_time: ConfigDuration::from_millis(1_500),
-            ..DreamingConfig::default()
-        };
-        assert!(disabled.validate().is_ok());
-    }
-
-    #[test]
     fn the_rejection_says_which_two_values_would_work() {
         // An error that only says "no" leaves the user guessing at a field
         // they typed in seconds and got told about in milliseconds.
@@ -2476,7 +2322,6 @@ socket_path = "/tmp/shore-llm.sock"
         for task in [
             BackgroundTask::Heartbeat,
             BackgroundTask::Compaction,
-            BackgroundTask::Dreaming,
         ] {
             assert_eq!(d_only_chat.resolve_background_model_name(task), None);
         }
@@ -2494,7 +2339,6 @@ socket_path = "/tmp/shore-llm.sock"
         for task in [
             BackgroundTask::Heartbeat,
             BackgroundTask::Compaction,
-            BackgroundTask::Dreaming,
         ] {
             assert_eq!(d_split.resolve_background_model_name(task), Some("bg"));
         }
@@ -2515,26 +2359,19 @@ socket_path = "/tmp/shore-llm.sock"
 [defaults]
 model = "primary"
 heartbeat = "hb-old"
-dreaming = "dream-old"
 "#;
         let mut config: AppConfig = toml::from_str(toml_str).unwrap();
         // Pre-normalize: old keys still populated, background empty.
         assert_eq!(config.defaults.heartbeat.as_deref(), Some("hb-old"));
-        assert_eq!(config.defaults.dreaming.as_deref(), Some("dream-old"));
         assert!(config.defaults.background.heartbeat.is_none());
 
         config.defaults.normalize_deprecated_aliases();
 
         // Old keys cleared, background filled.
         assert!(config.defaults.heartbeat.is_none());
-        assert!(config.defaults.dreaming.is_none());
         assert_eq!(
             config.defaults.background.heartbeat.as_deref(),
             Some("hb-old")
-        );
-        assert_eq!(
-            config.defaults.background.dreaming.as_deref(),
-            Some("dream-old")
         );
     }
 

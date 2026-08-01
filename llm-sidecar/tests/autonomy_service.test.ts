@@ -90,8 +90,6 @@ function registration(
       idleTriggerSecs: 3600,
       archiveAfterSecs: 86_400,
       maxContextTokens: 0,
-      dreamingEnabled: false,
-      minimumInactiveMs: HOUR,
       ...config,
     },
     clock: clockConfig(),

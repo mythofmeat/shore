@@ -77,15 +77,12 @@ function config(overrides: Partial<AutonomyRunnerConfig> = {}): AutonomyRunnerCo
     idleTriggerSecs: 3600,
     archiveAfterSecs: 86_400,
     maxContextTokens: 0,
-
-    dreamingEnabled: true,
-    minimumInactiveMs: HOUR,
     ...overrides,
   };
 }
 
 /** Compaction as the only thing a tick can do, so a call list is unambiguous. */
-const COMPACTION_ONLY = { heartbeatEnabled: false, dreamingEnabled: false } as const;
+const COMPACTION_ONLY = { heartbeatEnabled: false } as const;
 
 function clockConfig(): HeartbeatClockConfig {
   return {
@@ -160,46 +157,19 @@ describe("a quiet tick", () => {
       expect(outcome.heartbeat).toBe("none");
       expect(outcome.compaction).toBeUndefined();
       expect(outcome.deepArchive).toBe(false);
-      expect(outcome.dream).toBe(false);
       expect(executor.calls).toEqual([]);
     });
   });
 
-  test("a character with no user on record dreams straight away", async () => {
-    // `msSinceUser` of undefined reads as "nobody to disturb", which is what
-    // lets a fresh character sweep the history it was seeded from. The daemon
-    // seeds the anchor at startup precisely so this does not fire against a
-    // conversation that has merely been quiet — see seedLastUserAtIfUnset.
-    await inTempDir(async (dir) => {
-      const { runner, executor } = build({ dir });
-      expect((await runner.tick()).dream).toBe(true);
-      expect(executor.calls).toEqual(["dream"]);
-    });
-  });
 });
 
 describe("ordering", () => {
-  test("compaction before dreaming", async () => {
-    // Not arbitrary: dreaming reads a conversation compaction may have just
-    // rewritten, so running it first would sweep what is about to move.
-    await inTempDir(async (dir) => {
-      const { runner, executor, time } = build({
-        dir,
-        config: { minimumInactiveMs: 0 },
-      });
-      runner.onUserMessage(50, time.now);
-      time.now += 3 * HOUR;
-
-      await runner.tick();
-      expect(executor.calls).toEqual(["heartbeat", "compaction:max_turns", "dream"]);
-    });
-  });
 
   test("a fired heartbeat runs before anything else and is logged", async () => {
     await inTempDir(async (dir) => {
       const { runner, executor, time } = build({
         dir,
-        config: { minimumInactiveMs: 0, maxTurns: 1, minTurns: 1 },
+        config: { maxTurns: 1, minTurns: 1 },
       });
       runner.onUserMessage(5, time.now);
       await driveToHeartbeat(runner, time);
@@ -217,7 +187,7 @@ describe("the single-flight latch", () => {
 
   test("a second tick does not re-fire compaction", async () => {
     await inTempDir(async (dir) => {
-      const { runner, executor, time } = build({ dir, config: { dreamingEnabled: false } });
+      const { runner, executor, time } = build({ dir, config: {} });
       // What a real compaction reports: the turns it retained. Without it the
       // conversation is still 50 turns long and `max_turns` fires again the
       // moment the latch releases — correctly, since nothing was compacted.
@@ -235,7 +205,7 @@ describe("the single-flight latch", () => {
     // A character the user has come back to is not mid-idle-period any more,
     // so a trigger that already fired for it must be able to fire again.
     await inTempDir(async (dir) => {
-      const { runner, executor, time } = build({ dir, config: { dreamingEnabled: false } });
+      const { runner, executor, time } = build({ dir, config: {} });
       runner.onUserMessage(50, time.now);
       time.now += 2 * HOUR;
       await runner.tick();
@@ -265,7 +235,6 @@ describe("rechecking before the slow work", () => {
         maxTurns: 0,
         idleTriggerSecs: 0,
         archiveAfterSecs: 5 * 3600,
-        dreamingEnabled: false,
       },
     });
     const { runner, time } = built;
@@ -287,7 +256,7 @@ describe("rechecking before the slow work", () => {
     await inTempDir(async (dir) => {
       const { runner, executor, time } = build({
         dir,
-        config: { maxTurns: 0, idleTriggerSecs: 0, archiveAfterSecs: 5, dreamingEnabled: false },
+        config: { maxTurns: 0, idleTriggerSecs: 0, archiveAfterSecs: 5 },
       });
       runner.onUserMessage(1, time.now);
       time.now += 10 * HOUR;
@@ -303,7 +272,7 @@ describe("rechecking before the slow work", () => {
     await inTempDir(async (dir) => {
       const { runner, executor, time } = build({
         dir,
-        config: { maxTurns: 0, idleTriggerSecs: 0, archiveAfterSecs: 5, dreamingEnabled: false },
+        config: { maxTurns: 0, idleTriggerSecs: 0, archiveAfterSecs: 5 },
       });
       runner.onUserMessage(1, time.now);
       time.now += 10 * HOUR;
@@ -379,37 +348,6 @@ describe("rechecking before the slow work", () => {
     });
   });
 
-  test("dreaming is abandoned if the user speaks during the heartbeat", async () => {
-    await inTempDir(async (dir) => {
-      const { runner, executor, time } = build({
-        dir,
-        config: { maxTurns: 0, idleTriggerSecs: 0, archiveAfterSecs: 0 },
-      });
-      runner.onUserMessage(1, time.now);
-      executor.onCall = (name) => {
-        if (name === "heartbeat") runner.onUserMessage(2, time.now);
-      };
-      await driveToHeartbeat(runner, time);
-
-      expect(executor.calls).toContain("heartbeat");
-      expect(executor.calls, "the user is back; do not dream at them").not.toContain("dream");
-    });
-  });
-
-  test("dreaming runs when the silence holds", async () => {
-    await inTempDir(async (dir) => {
-      const { runner, executor, time } = build({
-        dir,
-        config: { maxTurns: 0, idleTriggerSecs: 0, archiveAfterSecs: 0 },
-      });
-      runner.onUserMessage(1, time.now);
-      time.now += 4 * HOUR;
-
-      const outcome = await runner.tick();
-      expect(outcome.dream).toBe(true);
-      expect(executor.calls).toContain("dream");
-    });
-  });
 });
 
 describe("the abandonment guard", () => {
@@ -450,7 +388,7 @@ describe("the abandonment guard", () => {
     // those as dormancy would bury the one entry that means something under a
     // hundred that do not — the ring only holds a hundred.
     await inTempDir(async (dir) => {
-      const { runner, time } = build({ dir, config: { dreamingEnabled: false } });
+      const { runner, time } = build({ dir, config: {} });
       runner.onUserMessage(1, time.now);
       time.now += 60_000;
 
@@ -565,7 +503,7 @@ describe("the compaction the handler runs", () => {
 describe("forcing the heartbeat's hand", () => {
   test("a forced wake fires on the next tick and says whether it was dormant", async () => {
     await inTempDir(async (dir) => {
-      const { runner, executor, time } = build({ dir, config: { dreamingEnabled: false } });
+      const { runner, executor, time } = build({ dir, config: {} });
       runner.onUserMessage(1, time.now);
 
       expect(runner.forceHeartbeatNow(time.now), "not dormant").toBe(false);
@@ -576,7 +514,7 @@ describe("forcing the heartbeat's hand", () => {
 
   test("forcing dormant stops the ticks; forcing active starts them again", async () => {
     await inTempDir(async (dir) => {
-      const { runner, executor, time } = build({ dir, config: { dreamingEnabled: false } });
+      const { runner, executor, time } = build({ dir, config: {} });
       runner.onUserMessage(1, time.now);
 
       runner.forceDormant();
@@ -703,7 +641,7 @@ describe("a completed compaction", () => {
     await inTempDir(async (dir) => {
       const { runner, executor, time } = build({
         dir,
-        config: { maxTurns: 0, idleTriggerSecs: 0, archiveAfterSecs: 5, dreamingEnabled: false },
+        config: { maxTurns: 0, idleTriggerSecs: 0, archiveAfterSecs: 5 },
       });
       runner.onUserMessage(1, time.now);
       time.now += 10 * HOUR;
@@ -727,7 +665,7 @@ describe("a completed compaction", () => {
     await inTempDir(async (dir) => {
       const { runner, executor, time } = build({
         dir,
-        config: { maxTurns: 0, idleTriggerSecs: 0, archiveAfterSecs: 5, dreamingEnabled: false },
+        config: { maxTurns: 0, idleTriggerSecs: 0, archiveAfterSecs: 5 },
       });
       runner.onUserMessage(1, time.now);
       time.now += 10 * HOUR;
@@ -752,7 +690,7 @@ describe("a completed compaction", () => {
 
   test("lets a later compaction fire", async () => {
     await inTempDir(async (dir) => {
-      const { runner, executor, time } = build({ dir, config: { dreamingEnabled: false } });
+      const { runner, executor, time } = build({ dir, config: {} });
       runner.onUserMessage(50, time.now);
       time.now += 2 * HOUR;
       await runner.tick();
@@ -767,17 +705,17 @@ describe("a completed compaction", () => {
 
 describe("pausing", () => {
   test("stops the heartbeat and nothing else", async () => {
-    // A paused character still compacts, still archives, still dreams. Pause
-    // is a switch on speaking, not on housekeeping.
+    // A paused character still compacts and still archives. Pause is a switch
+    // on speaking, not on housekeeping.
     await inTempDir(async (dir) => {
-      const { runner, executor, time } = build({ dir, config: { minimumInactiveMs: 0 } });
+      const { runner, executor, time } = build({ dir, config: {} });
       runner.onUserMessage(50, time.now);
       time.now += 4 * HOUR;
       runner.pause();
 
       const outcome = await runner.tick();
       expect(outcome.heartbeat).toBe("none");
-      expect(executor.calls).toEqual(["compaction:max_turns", "dream"]);
+      expect(executor.calls).toEqual(["compaction:max_turns"]);
     });
   });
 
@@ -785,7 +723,7 @@ describe("pausing", () => {
     await inTempDir(async (dir) => {
       const { runner, time } = build({
         dir,
-        config: { maxTurns: 0, idleTriggerSecs: 0, dreamingEnabled: false },
+        config: { maxTurns: 0, idleTriggerSecs: 0 },
       });
       runner.onUserMessage(1, time.now);
       runner.pause();
@@ -819,7 +757,7 @@ describe("persistence", () => {
     await inTempDir(async (dir) => {
       const { runner, executor, time } = build({
         dir,
-        config: { maxTurns: 0, idleTriggerSecs: 0, archiveAfterSecs: 0, dreamingEnabled: false },
+        config: { maxTurns: 0, idleTriggerSecs: 0, archiveAfterSecs: 0 },
       });
       runner.onUserMessage(1, time.now);
       await runner.persist();
@@ -896,7 +834,7 @@ describe("when the daemon cannot be reached", () => {
     await inTempDir(async (dir) => {
       const { runner, executor, time } = build({
         dir,
-        config: { minimumInactiveMs: 0 },
+        config: {},
       });
       executor.unreachable.add("compaction:max_turns");
       runner.onUserMessage(50, time.now);
@@ -914,7 +852,7 @@ describe("when the daemon cannot be reached", () => {
     await inTempDir(async (dir) => {
       const { runner, executor, time } = build({
         dir,
-        config: { idleTriggerSecs: 0, dreamingEnabled: false },
+        config: { idleTriggerSecs: 0 },
       });
       executor.unreachable.add("compaction:max_turns");
       runner.onUserMessage(50, time.now);
@@ -933,7 +871,7 @@ describe("when the daemon cannot be reached", () => {
     await inTempDir(async (dir) => {
       const { runner, executor, time } = build({
         dir,
-        config: { maxTurns: 0, idleTriggerSecs: 0, dreamingEnabled: false },
+        config: { maxTurns: 0, idleTriggerSecs: 0 },
       });
       executor.unreachable.add("heartbeat");
       runner.onUserMessage(1, time.now);
@@ -957,7 +895,7 @@ describe("what an action reports back", () => {
     await inTempDir(async (dir) => {
       const { runner, executor, time } = build({
         dir,
-        config: { maxTurns: 0, idleTriggerSecs: 0, dreamingEnabled: false },
+        config: { maxTurns: 0, idleTriggerSecs: 0 },
       });
       executor.results.set("heartbeat", {
         events: [
@@ -984,7 +922,7 @@ describe("what an action reports back", () => {
     await inTempDir(async (dir) => {
       const { runner, executor, time } = build({
         dir,
-        config: { idleTriggerSecs: 0, dreamingEnabled: false },
+        config: { idleTriggerSecs: 0 },
       });
       executor.results.set("compaction:max_turns", { events: [], turnCount: 4 });
       runner.onUserMessage(50, time.now);
@@ -1006,7 +944,7 @@ describe("what an action reports back", () => {
     await inTempDir(async (dir) => {
       const { runner, executor, time } = build({
         dir,
-        config: { idleTriggerSecs: 0, dreamingEnabled: false },
+        config: { idleTriggerSecs: 0 },
       });
       executor.failing.add("compaction:max_turns");
       executor.results.set("compaction:max_turns", { events: [], turnCount: 4 });
@@ -1026,7 +964,7 @@ describe("what an action reports back", () => {
     await inTempDir(async (dir) => {
       const { runner, executor, time } = build({
         dir,
-        config: { maxTurns: 0, idleTriggerSecs: 0, archiveAfterSecs: 5, dreamingEnabled: false },
+        config: { maxTurns: 0, idleTriggerSecs: 0, archiveAfterSecs: 5 },
       });
       executor.failing.add("deep_archive");
       runner.onUserMessage(10, time.now);

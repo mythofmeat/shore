@@ -32,10 +32,6 @@ function quietTick(overrides: Partial<TickInputs> = {}): TickInputs {
     idleTriggerSecs: 3600,
     archiveAfterSecs: 86_400,
 
-    dreamingEnabled: true,
-    dreamBackoffElapsed: true,
-    msSinceUser: 0,
-    minimumInactiveMs: HOUR_MS,
     ...overrides,
   };
 }
@@ -46,7 +42,6 @@ describe("a quiet tick", () => {
     expect(d.heartbeatMayTick).toBe(true);
     expect(d.compaction).toBeUndefined();
     expect(d.deepArchive).toBe(false);
-    expect(d.dream).toBe(false);
   });
 });
 
@@ -121,49 +116,19 @@ describe("the deep archive", () => {
   });
 });
 
-describe("dreaming", () => {
-  test("waits out its backoff and the user's silence", () => {
-    const ready = quietTick({ msSinceUser: HOUR_MS });
-    expect(tickDecision(ready).dream).toBe(true);
-
-    expect(tickDecision(quietTick({ msSinceUser: HOUR_MS - 1 })).dream, "a hair short").toBe(false);
-    expect(
-      tickDecision(quietTick({ msSinceUser: HOUR_MS, dreamBackoffElapsed: false })).dream,
-      "still backing off from a failure",
-    ).toBe(false);
-    expect(tickDecision(quietTick({ msSinceUser: HOUR_MS, dreamingEnabled: false })).dream).toBe(
-      false,
-    );
-    expect(tickDecision(quietTick({ msSinceUser: HOUR_MS, autonomyEnabled: false })).dream).toBe(
-      false,
-    );
-  });
-
-  test("a character with no user on record is free to dream", () => {
-    // `undefined` reads as "nobody to disturb". A fresh character with history
-    // to sweep and no conversation yet is the case this exists for.
-    expect(
-      tickDecision(quietTick({ msSinceUser: undefined, minimumInactiveMs: Number.MAX_SAFE_INTEGER }))
-        .dream,
-    ).toBe(true);
-  });
-});
-
 describe("the master switches", () => {
   test("pausing stops the heartbeat and nothing else", () => {
-    // Easy to assume otherwise: a paused character still compacts, still
-    // archives, still dreams. Pause is a switch on speaking, not housekeeping.
+    // Easy to assume otherwise: a paused character still compacts and still
+    // archives. Pause is a switch on speaking, not on housekeeping.
     const d = tickDecision(
       quietTick({
         paused: true,
         activeTurnCount: 50,
         idleSecs: 10_000_000,
-        msSinceUser: Number.MAX_SAFE_INTEGER,
       }),
     );
     expect(d.heartbeatMayTick).toBe(false);
     expect(d.compaction).toBe("max_turns");
-    expect(d.dream).toBe(true);
   });
 
   test("disabling autonomy stops every trigger at once", () => {
@@ -172,28 +137,24 @@ describe("the master switches", () => {
         autonomyEnabled: false,
         activeTurnCount: 50,
         idleSecs: 10_000_000,
-        msSinceUser: undefined,
       }),
     );
     expect(d.heartbeatMayTick).toBe(false);
     expect(d.compaction).toBeUndefined();
     expect(d.deepArchive).toBe(false);
-    expect(d.dream).toBe(false);
   });
 
-  test("disabling compaction leaves the heartbeat and dreaming alone", () => {
+  test("disabling compaction leaves the heartbeat alone", () => {
     const d = tickDecision(
       quietTick({
         compactionEnabled: false,
         activeTurnCount: 50,
         idleSecs: 10_000_000,
-        msSinceUser: Number.MAX_SAFE_INTEGER,
       }),
     );
     expect(d.compaction).toBeUndefined();
     expect(d.deepArchive).toBe(false);
     expect(d.heartbeatMayTick).toBe(true);
-    expect(d.dream).toBe(true);
   });
 
   test("the heartbeat gate reads all three switches", () => {

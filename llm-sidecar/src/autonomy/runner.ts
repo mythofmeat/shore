@@ -9,26 +9,24 @@
  *
  * ## What it does not do
  *
- * Execute. Running a heartbeat's tool loop, compacting a conversation,
- * archiving it or dreaming over it all reach into the engine, the memory store,
- * the tool registry and MCP — none of which live on this side, and some of
- * which are not going to. So execution arrives as an {@link AutonomyExecutor},
- * and the four methods on it are the whole surface the daemon still has to
- * provide.
+ * Execute. Running a heartbeat's tool loop, compacting a conversation and
+ * archiving it all reach into the engine, the memory store, the tool registry
+ * and MCP — none of which live on this side, and some of which are not going
+ * to. So execution arrives as an {@link AutonomyExecutor}, and the three
+ * methods on it are the whole surface the daemon still has to provide.
  *
  * That interface is the shape of the remaining work, deliberately. When the
  * daemon's autonomy module is deleted, what is left in Rust is an
- * implementation of these four calls and nothing else.
+ * implementation of these three calls and nothing else.
  *
- * ## Why the gates are checked twice
+ * ## Why the deep archive checks its gate twice
  *
  * Executing anything means awaiting, and a user message can land mid-await. The
- * decision at the top of a tick was taken before that, so the deep archive and
- * dreaming re-check their gate immediately before running — otherwise a
- * character starts archiving a conversation the user has just rejoined, or
- * dreams into an active one. The Rust does the same, for the same reason, and
- * the recheck is why {@link tickDecision} is cheap and pure enough to call
- * twice.
+ * decision at the top of a tick was taken before that, so the deep archive
+ * re-checks its gate immediately before running — otherwise a character starts
+ * archiving a conversation the user has just rejoined. The Rust does the same,
+ * for the same reason, and the recheck is why {@link tickDecision} is cheap and
+ * pure enough to call twice.
  */
 
 import { ActivityTracker, weekdayOf, type ActivityStats } from "./activity.ts";
@@ -73,8 +71,6 @@ export interface AutonomyRunnerConfig {
    */
   readonly maxContextTokens: number;
 
-  readonly dreamingEnabled: boolean;
-  readonly minimumInactiveMs: number;
 }
 
 /**
@@ -126,7 +122,6 @@ export interface AutonomyExecutor {
   /** Archive what is left of a conversation nobody has returned to. */
   runDeepArchive(character: string): Promise<AutonomyActionResult>;
   /** Sweep memory while the character is idle. */
-  runDream(character: string): Promise<AutonomyActionResult>;
 }
 
 /** What one tick did, for the caller to log or assert on. */
@@ -134,9 +129,8 @@ export interface TickOutcome {
   readonly heartbeat: HeartbeatAction;
   readonly compaction: CompactionReason | undefined;
   readonly deepArchive: boolean;
-  readonly dream: boolean;
   /** Gates that passed at decision time and failed the recheck before running. */
-  readonly abandoned: readonly ("deep_archive" | "dream")[];
+  readonly abandoned: readonly "deep_archive"[];
 }
 
 /** Mutable state that is not the heartbeat clock's or the log's. */
@@ -401,8 +395,8 @@ export class CharacterAutonomy {
    * daemon side uses the offset that was actually in force at each instant.
    *
    * Seeding the silence anchor matters for a character bootstrapped from
-   * history: without it `lastUserAt` stays unset, which reads as "nobody to
-   * disturb", and dreaming would sweep a conversation the user left an hour ago.
+   * history: without it `lastUserAt` stays unset, which the heartbeat's
+   * abandonment guard reads as "never spoke to" rather than "left an hour ago".
    */
   backfillActivity(localTimestamps: readonly number[], latestUserAt: number | undefined): void {
     this.#activity.backfill(localTimestamps);
@@ -481,13 +475,6 @@ export class CharacterAutonomy {
       idleSecs: Math.trunc(Math.max(now - s.lastActivityAt, 0) / 1000),
       idleTriggerSecs: c.idleTriggerSecs,
       archiveAfterSecs: c.archiveAfterSecs,
-
-      dreamingEnabled: c.dreamingEnabled,
-      // Retry backoff is the executor's business: a failed dream throws, and
-      // the next tick's gate is unchanged. Nothing here to back off from.
-      dreamBackoffElapsed: true,
-      msSinceUser: lastUserAt === undefined ? undefined : Math.max(now - lastUserAt, 0),
-      minimumInactiveMs: c.minimumInactiveMs,
     };
   }
 
@@ -503,7 +490,7 @@ export class CharacterAutonomy {
   async tick(): Promise<TickOutcome> {
     const now = this.#now();
     const decision = tickDecision(this.inputs(now));
-    const abandoned: ("deep_archive" | "dream")[] = [];
+    const abandoned: "deep_archive"[] = [];
 
     // Both triggers share one latch, and taking it is what stops the next tick
     // firing the same work while this one is still awaiting it.
@@ -540,14 +527,6 @@ export class CharacterAutonomy {
         }
         this.#state.dirty = true;
       }
-
-      if (decision.dream) {
-        if (this.#stillQuietEnoughToDream()) {
-          this.#apply(await this.#executor.runDream(this.#character));
-        } else {
-          abandoned.push("dream");
-        }
-      }
     } catch (err) {
       // Nothing ran, so the single-flight latch this tick took has nothing left
       // to protect. Leaving it set would stop compaction and the deep archive
@@ -567,7 +546,6 @@ export class CharacterAutonomy {
       heartbeat,
       compaction: decision.compaction,
       deepArchive: decision.deepArchive && !abandoned.includes("deep_archive"),
-      dream: decision.dream && !abandoned.includes("dream"),
       abandoned,
     };
   }
@@ -610,18 +588,6 @@ export class CharacterAutonomy {
   #stillIdleEnoughToArchive(): boolean {
     const i = this.inputs(this.#now());
     return i.archiveAfterSecs > 0 && !i.deepArchiveDone && i.idleSecs >= i.archiveAfterSecs;
-  }
-
-  /**
-   * Has the user stayed away long enough that a sweep will not disturb them?
-   *
-   * Narrower than the decision for the same reason as above, though here it is
-   * only the silence window that can have moved. Mirrors
-   * `dream_inactivity_satisfied`.
-   */
-  #stillQuietEnoughToDream(): boolean {
-    const i = this.inputs(this.#now());
-    return i.msSinceUser === undefined || i.msSinceUser >= i.minimumInactiveMs;
   }
 
   /**

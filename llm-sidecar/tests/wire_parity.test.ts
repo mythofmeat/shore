@@ -332,7 +332,6 @@ describe("the autonomy protocol", () => {
       "compact_max_turns",
       "compact_idle",
       "deep_archive",
-      "dream",
     ];
     expect(wire.tool_rpc.autonomy_actions).toEqual(sendable);
   });
@@ -350,7 +349,7 @@ describe("the autonomy protocol", () => {
     // the normal case and has to read as "nothing to apply". A `turn_count`
     // read as 0 here would blank a count that is merely unknown.
     expect(wire.tool_rpc.autonomy_ran_quietly).toEqual({});
-    expect(decodeActionResult(wire.tool_rpc.autonomy_ran_quietly, "nova", "dream")).toEqual({
+    expect(decodeActionResult(wire.tool_rpc.autonomy_ran_quietly, "nova", "deep_archive")).toEqual({
       turnCount: undefined,
       events: [],
       failed: undefined,

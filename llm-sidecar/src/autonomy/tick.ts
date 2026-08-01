@@ -53,14 +53,6 @@ export interface TickInputs {
   readonly idleTriggerSecs: number;
   readonly archiveAfterSecs: number;
 
-  /** Dreaming is configured *and* switched on. */
-  readonly dreamingEnabled: boolean;
-  /** The retry backoff has expired, or there was never a failure. */
-  readonly dreamBackoffElapsed: boolean;
-  /** Since the last user message. `undefined` means no user message is on
-   *  record, which reads as "nobody to disturb" rather than "just spoke to". */
-  readonly msSinceUser: number | undefined;
-  readonly minimumInactiveMs: number;
 }
 
 /** What a tick may do, before anything is done about it. */
@@ -70,7 +62,6 @@ export interface TickDecision {
   readonly heartbeatMayTick: boolean;
   readonly compaction: CompactionReason | undefined;
   readonly deepArchive: boolean;
-  readonly dream: boolean;
 }
 
 /**
@@ -98,11 +89,6 @@ export function tickDecision(i: TickInputs): TickDecision {
       !i.compactionTriggered &&
       !i.deepArchiveDone &&
       i.idleSecs >= i.archiveAfterSecs,
-    dream:
-      i.dreamBackoffElapsed &&
-      i.autonomyEnabled &&
-      i.dreamingEnabled &&
-      (i.msSinceUser === undefined || i.msSinceUser >= i.minimumInactiveMs),
   };
 }
 

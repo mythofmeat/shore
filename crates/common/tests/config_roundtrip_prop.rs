@@ -10,7 +10,7 @@ use serde::Serialize;
 use shore_common::config::app::{
     AdvancedConfig, AppConfig, AutonomyConfig, BackgroundDefaultsConfig, BehaviorConfig,
     BudgetWeekday, CommandNotifyConfig, CompactionConfig, ConnectionsConfig, DaemonConfig,
-    DefaultsConfig, DreamingConfig, EmbeddedConfig, HeartbeatConfig, LlmSidecarConfig,
+    DefaultsConfig, EmbeddedConfig, HeartbeatConfig, LlmSidecarConfig,
     MatrixConfig, McpServerConfig, MemoryConfig, NotificationBackend, NotificationEventsConfig,
     NotificationsConfig, NtfyConfig, RetrievalBinaryMode, RetrievalConfig, RetrievalMode,
     SearchConfig, SubagentConfig, ThinkingConfig, ToolOverride, ToolsConfig, UsageBudgetAction,
@@ -241,7 +241,6 @@ fn arb_defaults_config() -> impl Strategy<Value = DefaultsConfig> {
         prop::option::of(arb_nonempty_text()),
         prop::option::of(arb_nonempty_text()),
         prop::option::of(arb_nonempty_text()),
-        prop::option::of(arb_nonempty_text()),
         any::<bool>(),
     )
         .prop_map(
@@ -250,7 +249,6 @@ fn arb_defaults_config() -> impl Strategy<Value = DefaultsConfig> {
                 background_model,
                 background_heartbeat,
                 background_compaction,
-                background_dreaming,
                 embedding,
                 image_generation,
                 subagent_model,
@@ -262,10 +260,8 @@ fn arb_defaults_config() -> impl Strategy<Value = DefaultsConfig> {
                     model: background_model,
                     heartbeat: background_heartbeat,
                     compaction: background_compaction,
-                    dreaming: background_dreaming,
                 },
                 heartbeat: None,
-                dreaming: None,
                 embedding,
                 image_generation,
                 subagent_model,
@@ -483,33 +479,6 @@ fn arb_compaction_config() -> impl Strategy<Value = CompactionConfig> {
         )
 }
 
-fn arb_dreaming_config() -> impl Strategy<Value = DreamingConfig> {
-    (
-        any::<bool>(),
-        Just("0 3 * * *".to_owned()),
-        arb_duration(),
-        arb_duration(),
-        any::<bool>(),
-        any::<bool>(),
-    )
-        .prop_map(
-            |(
-                enabled,
-                frequency,
-                minimum_inactive_time,
-                max_lateness,
-                compact_before,
-                compact_to_zero,
-            )| DreamingConfig {
-                enabled,
-                frequency,
-                minimum_inactive_time,
-                max_lateness,
-                compact_before,
-                compact_to_zero,
-            },
-        )
-}
 
 fn arb_retrieval_mode() -> impl Strategy<Value = RetrievalMode> {
     prop_oneof![
@@ -535,7 +504,6 @@ fn arb_thinking_replay() -> impl Strategy<Value = shore_common::config::app::Thi
 fn arb_memory_config() -> impl Strategy<Value = MemoryConfig> {
     (
         arb_compaction_config(),
-        arb_dreaming_config(),
         arb_thinking_replay(),
         arb_retrieval_mode(),
         0_u64..10_000_000,
@@ -548,7 +516,6 @@ fn arb_memory_config() -> impl Strategy<Value = MemoryConfig> {
         .prop_map(
             |(
                 compaction,
-                dreaming,
                 replay_prior_thinking,
                 mode,
                 max_file_bytes,
@@ -559,7 +526,6 @@ fn arb_memory_config() -> impl Strategy<Value = MemoryConfig> {
                 git_push,
             )| MemoryConfig {
                 compaction,
-                dreaming,
                 thinking: ThinkingConfig {
                     replay_prior_thinking,
                 },

@@ -76,11 +76,9 @@ describe("what goes out", () => {
       const executor = new RpcAutonomyExecutor(daemon.path);
       await executor.runHeartbeatTick("nova");
       await executor.runDeepArchive("nova");
-      await executor.runDream("nova");
       expect(daemon.seen.map((r) => (r as { action: string }).action)).toEqual([
         "heartbeat_tick",
         "deep_archive",
-        "dream",
       ]);
     } finally {
       daemon.stop();
@@ -131,7 +129,7 @@ describe("what comes back", () => {
     const daemon = fakeDaemon({ error: "character ghost is not loaded" });
     try {
       await expect(
-        new RpcAutonomyExecutor(daemon.path).runDream("ghost"),
+        new RpcAutonomyExecutor(daemon.path).runDeepArchive("ghost"),
       ).rejects.toThrow("character ghost is not loaded");
     } finally {
       daemon.stop();
@@ -140,12 +138,12 @@ describe("what comes back", () => {
 
   test("a socket nobody is listening on is a throw", async () => {
     const executor = new RpcAutonomyExecutor(join(tmpdir(), "shore-no-such-daemon.sock"));
-    await expect(executor.runDream("nova")).rejects.toBeInstanceOf(ToolRpcUnreachable);
+    await expect(executor.runDeepArchive("nova")).rejects.toBeInstanceOf(ToolRpcUnreachable);
   });
 });
 
 describe("reading the answer", () => {
-  const decode = (outcome: unknown) => decodeActionResult(outcome, "nova", "dream");
+  const decode = (outcome: unknown) => decodeActionResult(outcome, "nova", "deep_archive");
 
   test("an empty body is a plain success", () => {
     // What the daemon sends for an action that worked and changed nothing

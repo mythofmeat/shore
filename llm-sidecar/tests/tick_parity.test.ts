@@ -67,10 +67,6 @@ function inputsOf(f: FixtureInputs): TickInputs {
     idleSecs: f.idle_secs,
     idleTriggerSecs: f.idle_trigger_secs,
     archiveAfterSecs: f.archive_after_secs,
-    dreamingEnabled: f.dreaming_enabled,
-    dreamBackoffElapsed: f.dream_backoff_elapsed,
-    msSinceUser: f.ms_since_user ?? undefined,
-    minimumInactiveMs: f.minimum_inactive_ms,
   };
 }
 
@@ -115,7 +111,6 @@ describe("the sweep replays identically", () => {
       expect(got.heartbeatMayTick, `${where} heartbeat`).toBe(want.heartbeat_may_tick);
       expect(got.compaction ?? null, `${where} compaction`).toBe(want.compaction);
       expect(got.deepArchive, `${where} deep archive`).toBe(want.deep_archive);
-      expect(got.dream, `${where} dream`).toBe(want.dream);
     }
   });
 });

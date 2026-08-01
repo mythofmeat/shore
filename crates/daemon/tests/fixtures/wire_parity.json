@@ -183,8 +183,7 @@
       "heartbeat_tick",
       "compact_max_turns",
       "compact_idle",
-      "deep_archive",
-      "dream"
+      "deep_archive"
     ],
     "autonomy_ran": {
       "turn_count": 4,

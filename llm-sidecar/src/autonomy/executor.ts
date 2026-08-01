@@ -40,8 +40,7 @@ export type AutonomyAction =
   | "heartbeat_tick"
   | "compact_max_turns"
   | "compact_idle"
-  | "deep_archive"
-  | "dream";
+  | "deep_archive";
 
 /** The action a compaction reason asks for. */
 export function actionForCompaction(reason: CompactionReason): AutonomyAction {
@@ -81,10 +80,6 @@ export class RpcAutonomyExecutor implements AutonomyExecutor {
 
   async runDeepArchive(character: string): Promise<AutonomyActionResult> {
     return await this.#run(character, "deep_archive");
-  }
-
-  async runDream(character: string): Promise<AutonomyActionResult> {
-    return await this.#run(character, "dream");
   }
 
   /**

@@ -31,9 +31,6 @@ const SUBSCRIPTION_PROVIDERS = new Set(["opencode-go"]);
 export const isSubscriptionProvider = (provider: string): boolean =>
   SUBSCRIPTION_PROVIDERS.has(provider);
 
-/** Dreaming runs its own prefix and is excluded from cache tracking entirely. */
-const affectsCacheTracker = (callType: string): boolean => callType !== "dreaming";
-
 export interface Usage {
   input_tokens: number;
   output_tokens: number;
@@ -288,7 +285,6 @@ export class Ledger {
     const noCacheSignal =
       record.usage.cache_read_tokens === 0 && record.usage.cache_creation_tokens === 0;
     if (record.finish_reason === "error" && noCacheSignal) return [null, null];
-    if (!affectsCacheTracker(record.call_type)) return [null, null];
 
     this.#seedIfNeeded(record.character);
 
