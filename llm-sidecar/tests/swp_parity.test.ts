@@ -170,10 +170,13 @@ describe("framing", () => {
         } else {
           // Both sides must reject, at the same point in the stream.
           expect(got).toHaveProperty("err");
-          // The size gate is this transport's own message, so it is exact.
-          if (expected.err === "Message exceeds maximum size") {
-            expect((got as { err: string }).err).toBe("Message exceeds maximum size");
-          }
+          // The size gate is this transport's own message, so it is exact —
+          // and, just as importantly, a frame the Rust rejected for some
+          // *other* reason must not be rejected by the size gate here. Without
+          // the negative case an off-by-one in the bound passes, because
+          // "some error" is true either way.
+          const SIZE = "Message exceeds maximum size";
+          expect((got as { err: string }).err === SIZE).toBe(expected.err === SIZE);
         }
       }
     });
@@ -333,9 +336,22 @@ describe("route_client_message", () => {
 describe("handshake", () => {
   for (const c of fixture.handshake) {
     test(c.name, async () => {
+      // One case uses a provider whose snapshot names a character the client
+      // did not ask for, because `perform_handshake` registers the snapshot's
+      // answer rather than the one it resolved.
+      const overrides = c.name === "history overrides the resolved character";
       const provider: HandshakeProvider = {
         hello: () => Promise.resolve({ characters: c.characters.map((name) => ({ name })) }),
-        history: (selected) =>
+        history: overrides
+          ? () =>
+              Promise.resolve({
+                messages: [],
+                activeStart: 0,
+                config: {},
+                selectedCharacter: "forced-by-history",
+                revision: 1,
+              })
+          : (selected) =>
           Promise.resolve({
             // The Rust's provider stamps the selected character into the text,
             // using Rust's `{:?}` for an Option.

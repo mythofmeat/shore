@@ -227,6 +227,85 @@
       ]
     },
     {
+      "name": "message with every defaulted field absent",
+      "input_b64": "eyJ0eXBlIjoibWVzc2FnZSIsInRleHQiOiJoaSJ9Cg==",
+      "results": [
+        {
+          "ok": {
+            "type": "message",
+            "text": "hi",
+            "stream": false,
+            "images": []
+          }
+        },
+        {
+          "eof": true
+        }
+      ]
+    },
+    {
+      "name": "regen with stream absent",
+      "input_b64": "eyJ0eXBlIjoicmVnZW4ifQo=",
+      "results": [
+        {
+          "ok": {
+            "type": "regen",
+            "stream": false
+          }
+        },
+        {
+          "eof": true
+        }
+      ]
+    },
+    {
+      "name": "command with args absent",
+      "input_b64": "eyJ0eXBlIjoiY29tbWFuZCIsIm5hbWUiOiJzdGF0dXMifQo=",
+      "results": [
+        {
+          "ok": {
+            "type": "command",
+            "name": "status",
+            "args": null
+          }
+        },
+        {
+          "eof": true
+        }
+      ]
+    },
+    {
+      "name": "cancel carrying a stray rid it has no field for",
+      "input_b64": "eyJ0eXBlIjoiY2FuY2VsIiwicmlkIjoicjEifQo=",
+      "results": [
+        {
+          "ok": {
+            "type": "cancel"
+          }
+        },
+        {
+          "eof": true
+        }
+      ]
+    },
+    {
+      "name": "hello with capabilities absent",
+      "input_b64": "eyJ0eXBlIjoiaGVsbG8iLCJjbGllbnRfdHlwZSI6InR1aSIsImNsaWVudF9uYW1lIjoidCJ9Cg==",
+      "results": [
+        {
+          "ok": {
+            "type": "hello",
+            "client_type": "tui",
+            "client_name": "t",
+            "capabilities": []
+          }
+        },
+        {
+          "eof": true
+        }
+      ]
+    },
+    {
       "name": "payload of exactly MAX, plus newline, is over",
       "input_repeat": {
         "byte": 97,
@@ -1186,6 +1265,53 @@
         "err": "Client disconnected before hello"
       },
       "registered_clients": []
+    },
+    {
+      "name": "history overrides the resolved character",
+      "characters": [
+        "alice",
+        "bob"
+      ],
+      "client_hello_line": "{\"type\":\"hello\",\"client_type\":\"tui\",\"client_name\":\"t\",\"character\":\"alice\"}",
+      "server_frames": [
+        {
+          "type": "hello",
+          "v": 1,
+          "server_name": "shore-test",
+          "characters": [
+            {
+              "name": "alice"
+            },
+            {
+              "name": "bob"
+            }
+          ]
+        },
+        {
+          "type": "history",
+          "messages": [],
+          "config": {},
+          "selected_character": "forced-by-history",
+          "revision": 1
+        }
+      ],
+      "result": {
+        "client_id": 1,
+        "session_id": 1,
+        "client_type": "tui",
+        "client_name": "t",
+        "capabilities": [],
+        "selected_character": "forced-by-history"
+      },
+      "registered_clients": [
+        {
+          "id": 1,
+          "client_type": "tui",
+          "client_name": "t",
+          "capabilities": [],
+          "character": "forced-by-history"
+        }
+      ]
     }
   ]
 }
