@@ -15,32 +15,11 @@ const SHUTDOWN_GRACE: Duration = Duration::from_secs(5);
 const LLM_SIDECAR_HEALTH_STARTUP_TIMEOUT: Duration = Duration::from_secs(10);
 const LLM_SIDECAR_HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const LLM_SIDECAR_HEALTH_REQUEST_TIMEOUT: Duration = Duration::from_secs(1);
-const MATRIX_LOG_ENV: &str = "SHORE_MATRIX_RUST_LOG";
-const DEFAULT_MATRIX_LOG_FILTER: &str = "warn,shore_matrix=info,matrix_sdk_crypto::backups=error";
-const MATRIX_BINARY: &str = "shore-matrix";
 const LLM_SIDECAR_BINARY: &str = "shore-llm-sidecar";
-
-/// Handle to the supervisor's background task; `shutdown()` joins it.
-pub(crate) struct MatrixSupervisor {
-    handle: tokio::task::JoinHandle<()>,
-}
 
 /// Handle to the LLM sidecar supervisor's background task.
 pub(crate) struct LlmSidecarSupervisor {
     handle: tokio::task::JoinHandle<()>,
-}
-
-/// Spawn a supervisor that manages the lifecycle of `shore-matrix` as a
-/// child process. Returns `None` when no binary can be located (see
-/// [`shore_common::config::binaries`]) — the supervisor then becomes a no-op and
-/// the daemon continues without the Matrix bridge.
-pub(crate) fn spawn(shutdown_rx: watch::Receiver<()>) -> Option<MatrixSupervisor> {
-    let binary = locate_matrix_binary()?;
-    let handle = tokio::spawn(async move {
-        let mut rx = shutdown_rx;
-        supervise(binary, &mut rx).await;
-    });
-    Some(MatrixSupervisor { handle })
 }
 
 /// Spawn a supervisor that manages the Bun LLM sidecar child process.
@@ -60,28 +39,12 @@ pub(crate) fn spawn_llm_sidecar(
     Some(LlmSidecarSupervisor { handle })
 }
 
-impl MatrixSupervisor {
-    /// Wait up to `timeout` for the supervisor task to exit after a
-    /// shutdown signal has been sent on the watch channel.
-    pub(crate) async fn shutdown(self, timeout: Duration) {
-        let _ignored = tokio::time::timeout(timeout, self.handle).await;
-    }
-}
-
 impl LlmSidecarSupervisor {
     /// Wait up to `timeout` for the supervisor task to exit after a
     /// shutdown signal has been sent on the watch channel.
     pub(crate) async fn shutdown(self, timeout: Duration) {
         let _ignored = tokio::time::timeout(timeout, self.handle).await;
     }
-}
-
-fn locate_matrix_binary() -> Option<PathBuf> {
-    locate_helper_binary(
-        MATRIX_BINARY,
-        binaries::MATRIX_BIN_ENV,
-        "Matrix bridge disabled",
-    )
 }
 
 fn locate_llm_sidecar_binary() -> Option<PathBuf> {
@@ -110,76 +73,6 @@ fn locate_helper_binary(name: &str, env_var: &str, consequence: &str) -> Option<
         warn!("{name} binary not found via {searched}; {consequence}.");
     }
     resolved.path
-}
-
-async fn supervise(binary: PathBuf, shutdown_rx: &mut watch::Receiver<()>) {
-    let mut failures: u32 = 0;
-
-    loop {
-        if shutdown_rx.has_changed().unwrap_or(true) {
-            return;
-        }
-
-        info!(binary = %binary.display(), "spawning shore-matrix");
-        let started_at = Instant::now();
-        let mut command = Command::new(&binary);
-        let _ignored = command
-            .kill_on_drop(true)
-            .env("RUST_LOG", matrix_log_filter());
-        let mut child = match command.spawn() {
-            Ok(c) => c,
-            Err(e) => {
-                error!(error = %e, "failed to spawn shore-matrix");
-                failures = failures.saturating_add(1);
-                if failures >= MAX_CONSECUTIVE_FAILURES {
-                    error!(
-                        failures,
-                        "shore-matrix failed to spawn {MAX_CONSECUTIVE_FAILURES} \
-                         times consecutively; giving up. Daemon continuing \
-                         without Matrix bridge."
-                    );
-                    return;
-                }
-                if !sleep_or_shutdown(backoff(failures), shutdown_rx).await {
-                    return;
-                }
-                continue;
-            }
-        };
-
-        tokio::select! {
-            status = child.wait() => {
-                let runtime = started_at.elapsed();
-                if runtime >= STABLE_RUNTIME_THRESHOLD {
-                    failures = 0;
-                }
-                failures = failures.saturating_add(1);
-                warn!(
-                    ?status,
-                    runtime_secs = runtime.as_secs(),
-                    failures,
-                    "shore-matrix exited; will restart with backoff"
-                );
-                if failures >= MAX_CONSECUTIVE_FAILURES {
-                    error!(
-                        failures,
-                        "shore-matrix crashed {MAX_CONSECUTIVE_FAILURES} times \
-                         consecutively; giving up. Daemon continuing without \
-                         Matrix bridge."
-                    );
-                    return;
-                }
-                if !sleep_or_shutdown(backoff(failures), shutdown_rx).await {
-                    return;
-                }
-            }
-            _ = shutdown_rx.changed() => {
-                info!("shutdown requested; stopping shore-matrix");
-                graceful_shutdown(&mut child, SHUTDOWN_GRACE).await;
-                return;
-            }
-        }
-    }
 }
 
 async fn supervise_llm_sidecar(
@@ -544,16 +437,6 @@ fn backoff(failures: u32) -> Duration {
     Duration::from_secs(1_u64 << shift)
 }
 
-fn matrix_log_filter() -> String {
-    matrix_log_filter_from(std::env::var(MATRIX_LOG_ENV).ok())
-}
-
-fn matrix_log_filter_from(value: Option<String>) -> String {
-    value
-        .filter(|v| !v.trim().is_empty())
-        .unwrap_or_else(|| DEFAULT_MATRIX_LOG_FILTER.to_owned())
-}
-
 /// Sleep for `dur` unless a shutdown signal arrives first. Returns
 /// `true` if the sleep completed normally, `false` if interrupted by
 /// shutdown.
@@ -612,26 +495,6 @@ mod tests {
         // Not a real code path, but guards against a `saturating_sub`
         // regression turning 0 into the cap.
         assert_eq!(backoff(0), Duration::from_secs(1));
-    }
-
-    #[test]
-    fn matrix_log_filter_uses_quiet_default() {
-        assert_eq!(
-            matrix_log_filter_from(None),
-            "warn,shore_matrix=info,matrix_sdk_crypto::backups=error"
-        );
-        assert_eq!(
-            matrix_log_filter_from(Some("   ".into())),
-            "warn,shore_matrix=info,matrix_sdk_crypto::backups=error"
-        );
-    }
-
-    #[test]
-    fn matrix_log_filter_accepts_override() {
-        assert_eq!(
-            matrix_log_filter_from(Some("shore_matrix=debug".into())),
-            "shore_matrix=debug"
-        );
     }
 
     #[test]

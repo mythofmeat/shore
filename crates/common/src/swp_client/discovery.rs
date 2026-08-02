@@ -120,7 +120,7 @@ fn pid_state(_pid: u32) -> ProcessState {
 /// A selector is matched first against `InstanceEntry::id` (for callers
 /// that know the exact instance ID, e.g. `shore-mcp`) and then against
 /// `InstanceEntry::config_dir` (for callers that know the daemon by its
-/// config directory, e.g. `shore-matrix`). If `selector` is `None`,
+/// config directory, e.g. `shore-tui`). If `selector` is `None`,
 /// returns the first (default) entry.
 pub fn discover(selector: Option<&str>) -> Result<ServerAddr> {
     discover_from_path(&instances_path(), selector)

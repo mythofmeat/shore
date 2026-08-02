@@ -390,12 +390,6 @@ pub(crate) enum CliCommand {
         json: bool,
     },
 
-    /// External connector (bridge) setup and management
-    Connectors {
-        #[command(subcommand)]
-        subcommand: ConnectorsCommand,
-    },
-
     /// Generate shell completions
     Completions {
         /// Shell to generate completions for
@@ -447,32 +441,6 @@ impl BackgroundTarget {
             BackgroundTarget::Compaction => "compaction",
         }
     }
-}
-
-#[derive(Subcommand, Debug)]
-pub(crate) enum ConnectorsCommand {
-    /// Matrix bridge setup and management
-    Matrix {
-        #[command(subcommand)]
-        subcommand: MatrixCommand,
-    },
-}
-
-#[derive(Subcommand, Debug)]
-pub(crate) enum MatrixCommand {
-    /// Initialize embedded Synapse and provision all characters
-    Setup,
-
-    /// Register a user account on the embedded Synapse
-    Register {
-        /// Username (without @ or :server)
-        #[arg(long)]
-        username: String,
-
-        /// Password (prompted or auto-generated if omitted)
-        #[arg(long)]
-        password: Option<String>,
-    },
 }
 
 /// Message roles accepted by `shore log --role`.
@@ -757,7 +725,6 @@ pub(crate) fn to_swp_command(cmd: &CliCommand) -> Option<(&'static str, serde_js
         | CliCommand::Notify { .. }
         | CliCommand::Completions { .. }
         | CliCommand::Complete { .. }
-        | CliCommand::Connectors { .. }
         | CliCommand::Config {
             path: true,
             check: false,

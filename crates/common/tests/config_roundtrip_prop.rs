@@ -10,7 +10,7 @@ use serde::Serialize;
 use shore_common::config::app::{
     AdvancedConfig, AppConfig, AutonomyConfig, BackgroundDefaultsConfig, BehaviorConfig,
     BudgetWeekday, CommandNotifyConfig, CompactionConfig, ConnectionsConfig, DaemonConfig,
-    DefaultsConfig, EmbeddedConfig, HeartbeatConfig, LlmSidecarConfig, MatrixConfig,
+    DefaultsConfig, HeartbeatConfig, LlmSidecarConfig,
     McpServerConfig, MemoryConfig, NotificationBackend, NotificationEventsConfig,
     NotificationsConfig, NtfyConfig, RetrievalBinaryMode, RetrievalConfig, RetrievalMode,
     SearchConfig, SubagentConfig, ThinkingConfig, ToolOverride, ToolsConfig, UsageBudgetAction,
@@ -524,57 +524,8 @@ fn arb_memory_config() -> impl Strategy<Value = MemoryConfig> {
         )
 }
 
-fn arb_matrix_config() -> impl Strategy<Value = MatrixConfig> {
-    let embedded_strategy = (
-        arb_nonempty_text(),
-        arb_nonempty_text(),
-        1_u16..9000,
-        arb_nonempty_text(),
-        arb_nonempty_text(),
-        prop::option::of(arb_nonempty_text()),
-        prop::option::of(arb_nonempty_text()),
-    )
-        .prop_map(
-            |(server_name, bind_address, port, admin_user, admin_password, data_dir, binary)| {
-                EmbeddedConfig {
-                    server_name,
-                    bind_address,
-                    port,
-                    admin_user,
-                    admin_password,
-                    data_dir,
-                    binary,
-                }
-            },
-        );
-
-    (
-        any::<bool>(),
-        any::<bool>(),
-        prop::option::of(arb_nonempty_text()),
-        prop::option::of(arb_nonempty_text()),
-        prop::option::of(arb_nonempty_text()),
-        prop::option::of(arb_nonempty_text()),
-        prop::option::of(embedded_strategy),
-    )
-        .prop_map(
-            |(enabled, mirror_all, homeserver, user_id, room_id, trusted_user, embedded)| {
-                MatrixConfig {
-                    enabled,
-                    mirror_all,
-                    homeserver,
-                    user_id,
-                    room_id,
-                    trusted_user,
-                    embedded,
-                }
-            },
-        )
-}
-
 fn arb_connections_config() -> impl Strategy<Value = ConnectionsConfig> {
-    prop::option::of(arb_matrix_config()).prop_map(|matrix| ConnectionsConfig {
-        matrix,
+    Just(ConnectionsConfig {
         telegram: None,
         discord: None,
     })

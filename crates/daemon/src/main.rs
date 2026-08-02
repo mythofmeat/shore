@@ -712,16 +712,15 @@ async fn run_server(
 }
 
 /// Long-lived background tasks spawned alongside the server: config hot-reload,
-/// provider auto-discovery, and the optional LLM-sidecar / Matrix supervisors.
+/// provider auto-discovery, and the optional LLM-sidecar supervisor.
 struct BackgroundServices {
     hot_reload_handle: Option<tokio::task::JoinHandle<()>>,
     auto_discovery_handle: tokio::task::JoinHandle<()>,
     llm_sidecar_supervisor: Option<supervisor::LlmSidecarSupervisor>,
-    matrix_supervisor: Option<supervisor::MatrixSupervisor>,
 }
 
 /// Spawn the daemon's background services (config watcher, auto-discovery, and
-/// the LLM-sidecar / Matrix supervisors when configured).
+/// the LLM-sidecar supervisor when configured).
 fn spawn_background_services(
     loaded: &LoadedConfig,
     config_path: &Path,
@@ -750,20 +749,11 @@ fn spawn_background_services(
     let llm_sidecar_supervisor = llm_sidecar_socket
         .and_then(|socket_path| supervisor::spawn_llm_sidecar(socket_path, shutdown_rx.clone()));
 
-    // ── Spawn Matrix bridge supervisor (if configured) ───────────────
-    let matrix_supervisor = loaded
-        .app
-        .connections
-        .matrix
-        .as_ref()
-        .filter(|m| m.enabled)
-        .and_then(|_| supervisor::spawn(shutdown_rx.clone()));
 
     BackgroundServices {
         hot_reload_handle,
         auto_discovery_handle,
         llm_sidecar_supervisor,
-        matrix_supervisor,
     }
 }
 
@@ -779,14 +769,9 @@ async fn await_background_shutdown(
         hot_reload_handle,
         auto_discovery_handle,
         llm_sidecar_supervisor,
-        matrix_supervisor,
     } = services;
 
     if let Some(sup) = llm_sidecar_supervisor {
-        sup.shutdown(std::time::Duration::from_secs(6)).await;
-    }
-
-    if let Some(sup) = matrix_supervisor {
         sup.shutdown(std::time::Duration::from_secs(6)).await;
     }
 

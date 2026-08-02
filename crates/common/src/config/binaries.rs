@@ -1,7 +1,7 @@
 //! Locating the suite's helper binaries.
 //!
-//! `the daemon's llm module-sidecar` and `shore-matrix` are spawned by other Shore processes,
-//! never typed by a human, so packaged installs deliberately keep them out of
+//! `the daemon's llm module-sidecar` is spawned by another Shore process,
+//! never typed by a human, so packaged installs deliberately keep it out of
 //! `$PATH`. Every process that spawns one resolves it the same way:
 //!
 //! 1. the binary's `SHORE_*_BIN` environment override, set by the packaged
@@ -11,12 +11,9 @@
 //! 3. the packaged libexec directories ([`LIBEXEC_DIRS`]).
 //!
 //! A missing binary is not an error here: the daemon degrades to running
-//! without the sidecar or the bridge, so callers decide what absence means.
+//! without the sidecar, so callers decide what absence means.
 
 use std::path::{Path, PathBuf};
-
-/// Environment override naming the `shore-matrix` binary.
-pub const MATRIX_BIN_ENV: &str = "SHORE_MATRIX_BIN";
 
 /// Environment override naming the `the daemon's llm module-sidecar` binary.
 pub const LLM_SIDECAR_BIN_ENV: &str = "SHORE_LLM_SIDECAR_BIN";
@@ -161,10 +158,10 @@ mod tests {
 
     #[test]
     fn searched_locations_names_the_override_and_libexec_dirs() {
-        let described = searched_locations(MATRIX_BIN_ENV);
+        let described = searched_locations(LLM_SIDECAR_BIN_ENV);
 
         assert!(
-            described.contains(MATRIX_BIN_ENV),
+            described.contains(LLM_SIDECAR_BIN_ENV),
             "message should name the env var: {described}"
         );
         assert!(

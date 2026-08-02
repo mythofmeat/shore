@@ -311,7 +311,7 @@ mod tests {
         std::fs::create_dir_all(&qifei_dir).unwrap();
         std::fs::write(qifei_dir.join("SOUL.md"), "Qifei").unwrap();
 
-        for name in ["debug", "providers", "matrix-server", "matrix-store"] {
+        for name in ["debug", "providers"] {
             std::fs::create_dir_all(tmp.path().join(name)).unwrap();
         }
 

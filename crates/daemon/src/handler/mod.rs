@@ -753,9 +753,6 @@ pub(crate) fn restart_required_changes(
     if old.app.daemon != new.app.daemon {
         changes.push("[daemon]");
     }
-    if old.app.connections.matrix != new.app.connections.matrix {
-        changes.push("[connections.matrix]");
-    }
     if old.app.notifications != new.app.notifications {
         changes.push("[notifications]");
     }

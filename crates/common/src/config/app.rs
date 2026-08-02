@@ -921,99 +921,10 @@ impl Default for RetrievalConfig {
 #[serde(deny_unknown_fields)]
 pub struct ConnectionsConfig {
     #[serde(default)]
-    pub matrix: Option<MatrixConfig>,
-
-    #[serde(default)]
     pub telegram: Option<TelegramConfig>,
 
     #[serde(default)]
     pub discord: Option<DiscordConfig>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct MatrixConfig {
-    /// Whether the Matrix connection is enabled.
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-
-    /// Mirror the full conversation for each character into its bound Matrix
-    /// room — user prompts from any client, assistant replies, and autonomous
-    /// messages — routed by character. When false, only the room you are
-    /// actively chatting in sees responses (legacy behavior). Consumed by the
-    /// `shore-matrix` bridge; the daemon only stores it.
-    #[serde(default = "default_true")]
-    pub mirror_all: bool,
-
-    /// Homeserver URL. Required for external mode.
-    /// In embedded mode, auto-derived as http://localhost:{port}.
-    pub homeserver: Option<String>,
-
-    /// Matrix user ID (e.g. @shore:example.com). External mode only.
-    pub user_id: Option<String>,
-
-    /// Room ID to join. External mode only.
-    pub room_id: Option<String>,
-
-    /// Matrix user to trust for SAS auto-verification.
-    pub trusted_user: Option<String>,
-
-    /// Embedded homeserver configuration. Presence of this section
-    /// activates embedded mode (mutually exclusive with homeserver).
-    pub embedded: Option<EmbeddedConfig>,
-}
-
-/// Configuration for an embedded (shore-matrix-managed) Matrix homeserver.
-///
-/// Uses a conduwuit-compatible server (continuwuity, conduwuit, or tuwunel).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct EmbeddedConfig {
-    /// Matrix server_name (e.g. "shore.local"). Cannot be changed after first run.
-    #[serde(default = "default_server_name")]
-    pub server_name: String,
-
-    /// HTTP bind address. Default "127.0.0.1" (loopback only). Set to "0.0.0.0"
-    /// or "::" to expose the embedded homeserver to LAN/Tailscale clients.
-    #[serde(default = "default_bind_address")]
-    pub bind_address: String,
-
-    /// HTTP listener port.
-    #[serde(default = "default_homeserver_port")]
-    pub port: u16,
-
-    /// Admin username (without @ or :server).
-    #[serde(default = "default_admin_user")]
-    pub admin_user: String,
-
-    /// Admin account password.
-    pub admin_password: String,
-
-    /// Override data directory. Default: $XDG_DATA_HOME/shore/matrix-server/
-    pub data_dir: Option<String>,
-
-    /// Override the homeserver binary name.
-    /// Default: auto-detect (tries continuwuity, conduwuit, tuwunel).
-    pub binary: Option<String>,
-}
-
-serde_default!(default_server_name -> String { "localhost".into() });
-serde_default!(default_bind_address -> String { "127.0.0.1".into() });
-serde_default!(default_homeserver_port -> u16 { 6167 });
-serde_default!(default_admin_user -> String { "shore-admin".into() });
-
-impl Default for EmbeddedConfig {
-    fn default() -> Self {
-        Self {
-            server_name: default_server_name(),
-            bind_address: default_bind_address(),
-            port: default_homeserver_port(),
-            admin_user: default_admin_user(),
-            admin_password: String::new(),
-            data_dir: None,
-            binary: None,
-        }
-    }
 }
 
 /// Reserved for future use.
@@ -1986,108 +1897,21 @@ bogus_key = 42
         assert!(result.is_err());
     }
 
+    /// The Matrix bridge is gone; `deny_unknown_fields` on `[connections]`
+    /// turns a config that still configures it into a hard load error rather
+    /// than a table that parses and does nothing. Same reasoning as the
+    /// removed sandbox keys: a connection the daemon will never open should
+    /// say so at startup, not go quiet.
     #[test]
-    fn matrix_external_mode_parses() {
-        let toml_str = r#"
-[connections.matrix]
-homeserver = "https://matrix.example.com"
-user_id = "@shore:example.com"
-room_id = "!abc:example.com"
-trusted_user = "@user:example.com"
-"#;
-        let config: AppConfig = toml::from_str(toml_str).unwrap();
-        let mx = config.connections.matrix.unwrap();
-        assert!(mx.enabled);
-        assert_eq!(mx.homeserver.as_deref(), Some("https://matrix.example.com"));
-        assert_eq!(mx.user_id.as_deref(), Some("@shore:example.com"));
-        assert_eq!(mx.room_id.as_deref(), Some("!abc:example.com"));
-        assert_eq!(mx.trusted_user.as_deref(), Some("@user:example.com"));
-        assert!(mx.embedded.is_none());
-    }
-
-    #[test]
-    fn matrix_embedded_mode_parses() {
-        let toml_str = r#"
-[connections.matrix]
-trusted_user = "@user:shore.local"
-
-[connections.matrix.embedded]
-server_name = "shore.local"
-port = 9008
-admin_password = "secret"
-"#;
-        let config: AppConfig = toml::from_str(toml_str).unwrap();
-        let mx = config.connections.matrix.unwrap();
-        assert!(mx.enabled);
-        assert!(mx.homeserver.is_none());
-        assert_eq!(mx.trusted_user.as_deref(), Some("@user:shore.local"));
-        let emb = mx.embedded.unwrap();
-        assert_eq!(emb.server_name, "shore.local");
-        assert_eq!(emb.port, 9008);
-        assert_eq!(emb.admin_password, "secret");
-        assert_eq!(emb.admin_user, "shore-admin");
-        assert!(emb.data_dir.is_none());
-        assert!(emb.binary.is_none());
-    }
-
-    #[test]
-    fn matrix_embedded_defaults() {
-        let toml_str = r#"
-[connections.matrix.embedded]
-admin_password = "required"
-"#;
-        let config: AppConfig = toml::from_str(toml_str).unwrap();
-        let emb = config.connections.matrix.unwrap().embedded.unwrap();
-        assert_eq!(emb.server_name, "localhost");
-        assert_eq!(emb.bind_address, "127.0.0.1");
-        assert_eq!(emb.port, 6167);
-        assert_eq!(emb.admin_user, "shore-admin");
-    }
-
-    #[test]
-    fn matrix_embedded_with_all_fields() {
-        let toml_str = r#"
-[connections.matrix.embedded]
-server_name = "test.local"
-bind_address = "0.0.0.0"
-port = 9999
-admin_user = "admin"
-admin_password = "secret123"
-data_dir = "/tmp/test-matrix"
-binary = "tuwunel"
-"#;
-        let config: AppConfig = toml::from_str(toml_str).unwrap();
-        let emb = config.connections.matrix.unwrap().embedded.unwrap();
-        assert_eq!(emb.server_name, "test.local");
-        assert_eq!(emb.bind_address, "0.0.0.0");
-        assert_eq!(emb.port, 9999);
-        assert_eq!(emb.admin_user, "admin");
-        assert_eq!(emb.admin_password, "secret123");
-        assert_eq!(emb.data_dir.as_deref(), Some("/tmp/test-matrix"));
-        assert_eq!(emb.binary.as_deref(), Some("tuwunel"));
-    }
-
-    #[test]
-    fn matrix_rejects_unknown_embedded_field() {
-        let toml_str = r#"
-[connections.matrix.embedded]
-server_name = "localhost"
-bogus = true
-"#;
-        let result: Result<AppConfig, _> = toml::from_str(toml_str);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn matrix_disabled() {
-        let toml_str = r#"
-[connections.matrix]
-enabled = false
-homeserver = "https://matrix.example.com"
-"#;
-        let config: AppConfig = toml::from_str(toml_str).unwrap();
-        let mx = config.connections.matrix.unwrap();
-        assert!(!mx.enabled);
+    fn removed_matrix_connection_is_rejected() {
+        for toml_str in [
+            "[connections.matrix]\nenabled = true\n",
+            "[connections.matrix.embedded]\nadmin_password = \"x\"\n",
+        ] {
+            let err = toml::from_str::<AppConfig>(toml_str)
+                .expect_err("[connections.matrix] must not parse");
+            assert!(err.to_string().contains("matrix"), "{err}");
+        }
     }
 
     // ── resolve_display_name ────────────────────────────────────────
