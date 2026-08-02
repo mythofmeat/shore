@@ -8,6 +8,20 @@
 //! replaces text within one). `git` is the only process-spawning tool: the
 //! workspace is a git repository and the memory passes commit their own
 //! changes there.
+//!
+//! **Ported.** The handlers and their helpers now live in
+//! `llm-sidecar/src/tools/workspace.ts`, pinned by
+//! `llm-sidecar/tests/tools_fixtures/workspace_parity.json` — generated from
+//! this file at `9023b46d` and mutation-checked. Treat a parity diff as a
+//! defect rather than a fixture to refresh.
+//!
+//! One seam is deliberately left open. [`git_command`] consults
+//! [`crate::sandbox`], which is the one module staying in Rust: it applies
+//! Landlock and seccomp before exec. The port takes the plan as an injected
+//! argument and defaults to a direct spawn — the `SandboxPlan::Direct` path —
+//! so the tool is complete apart from that call. Wiring it is part of turning
+//! `sandbox.rs` into a standalone helper binary, which is the step that removes
+//! the `shore-daemon` binary entirely.
 
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
