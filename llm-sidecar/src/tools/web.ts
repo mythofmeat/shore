@@ -23,6 +23,21 @@ export class ToolHttpError extends Error {
 const REQUEST_TIMEOUT_MS = 30_000;
 
 /**
+ * The signal a request should actually carry.
+ *
+ * The 30-second cap is this module's own and always applies. A caller's signal
+ * — the tool deadline from `dispatch.ts` — is *added* to it rather than
+ * replacing it, so whichever fires first wins and neither can be lengthened by
+ * the other. Combining them is what makes the tool deadline able to interrupt
+ * a hung request at all: JavaScript cannot cancel a promise, only abort the
+ * fetch underneath it.
+ */
+function requestSignal(caller: AbortSignal | undefined): AbortSignal {
+  const own = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  return caller === undefined ? own : AbortSignal.any([caller, own]);
+}
+
+/**
  * The part of `fetch` these handlers use.
  *
  * Narrower than `typeof fetch` on purpose: Bun's `fetch` carries extras like
@@ -207,6 +222,7 @@ export async function handleWebSearch(
   searchConfig: SearchConfigView,
   env: Record<string, string | undefined> = process.env,
   fetchImpl: FetchLike = fetch,
+  signal?: AbortSignal,
 ): Promise<WebSearchResult> {
   const query = input["query"];
   if (typeof query !== "string") {
@@ -238,7 +254,7 @@ export async function handleWebSearch(
         search_depth: searchConfig.search_depth,
         include_answer: searchConfig.include_answer,
       }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: requestSignal(signal),
     });
   } catch (e) {
     throw new ToolHttpError(`Tavily request failed: ${String(e)}`);
@@ -295,6 +311,7 @@ export interface FetchUrlResult {
 export async function handleFetchUrl(
   input: Record<string, unknown>,
   fetchImpl: FetchLike = fetch,
+  signal?: AbortSignal,
 ): Promise<FetchUrlResult> {
   const url = input["url"];
   if (typeof url !== "string") {
@@ -306,7 +323,7 @@ export async function handleFetchUrl(
     resp = await fetchImpl(url, {
       headers: { "user-agent": "shore/2.0" },
       redirect: "follow",
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: requestSignal(signal),
     });
   } catch (e) {
     throw new ToolHttpError(`request failed: ${String(e)}`);

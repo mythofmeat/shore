@@ -28,3 +28,34 @@ export class ToolIoError extends Error {
     this.name = "ToolIoError";
   }
 }
+
+/**
+ * A tool name that reached dispatch without an arm, or whose backing wiring is
+ * absent on this path.
+ *
+ * The message is the bare name plus the suffix, with no `not_implemented:`
+ * prefix — the name *is* the message. Two different situations produce it and
+ * the model cannot tell them apart, which is deliberate: `frobnicate` (no such
+ * tool) and `ask_researcher` on a context with no sub-agent runtime are both
+ * "this is not something you can call here".
+ */
+export class NotImplemented extends Error {
+  constructor(name: string) {
+    super(`${name}: not yet implemented`);
+    this.name = "NotImplemented";
+  }
+}
+
+/**
+ * A tool that outlived its `[tools] timeout`.
+ *
+ * Reported as an ordinary failed tool rather than a transport error, so the
+ * model is told and the loop continues — it can narrow the request, try
+ * something else, or answer without it.
+ */
+export class ToolTimedOut extends Error {
+  constructor(seconds: number) {
+    super(`timed out after ${seconds}s and was cancelled`);
+    this.name = "ToolTimedOut";
+  }
+}
