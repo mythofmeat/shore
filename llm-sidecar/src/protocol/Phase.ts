@@ -3,4 +3,4 @@
 /**
  * Generation phase change.
  */
-export type Phase = { rid?: string | null, phase: string, model: string | null, };
+export type Phase = { rid?: string | null, phase: string, model?: string | null, };

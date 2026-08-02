@@ -17,13 +17,13 @@ pub struct ClientHello {
 #[derive(Serialize, Deserialize, Debug, Clone, Default, ts_rs::TS)]
 #[ts(export, export_to = "protocol/")]
 pub struct MessageOverrides {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub top_p: Option<f64>,
     /// Enable extended thinking with the given budget (in tokens).
     /// `Some(n)` enables thinking with budget `n`; omitted = use model default.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thinking_budget: Option<u32>,
 }
 
@@ -46,7 +46,7 @@ pub struct ImageUpload {
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
 #[ts(export, export_to = "protocol/")]
 pub struct ClientMessageBody {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
     pub text: String,
     #[serde(default)]
@@ -57,7 +57,7 @@ pub struct ClientMessageBody {
     /// Preferred: base64-encoded image data (works across machines).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub image_data: Vec<ImageUpload>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(type = "number")]
     pub absence_seconds: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -68,11 +68,11 @@ pub struct ClientMessageBody {
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
 #[ts(export, export_to = "protocol/")]
 pub struct Regen {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
     #[serde(default)]
     pub stream: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub guidance: Option<String>,
 }
 
@@ -80,7 +80,7 @@ pub struct Regen {
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
 #[ts(export, export_to = "protocol/")]
 pub struct Command {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
     pub name: String,
     #[serde(default)]

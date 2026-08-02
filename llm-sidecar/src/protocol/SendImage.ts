@@ -3,7 +3,7 @@
 /**
  * Server-generated image ready.
  */
-export type SendImage = { rid?: string | null, path: string, caption: string | null, 
+export type SendImage = { rid?: string | null, path: string, caption?: string | null, 
 /**
  * Base64-encoded image data for wire transfer.
  */

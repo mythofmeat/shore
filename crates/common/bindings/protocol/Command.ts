@@ -3,4 +3,4 @@
 /**
  * Execute a server command.
  */
-export type Command = { rid: string | null, name: string, args: unknown, };
+export type Command = { rid?: string | null, name: string, args: unknown, };

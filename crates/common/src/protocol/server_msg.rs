@@ -165,7 +165,7 @@ pub struct Phase {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
     pub phase: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
 }
 
@@ -231,7 +231,7 @@ pub struct SendImage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
     pub path: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub caption: Option<String>,
     /// Base64-encoded image data for wire transfer.
     #[serde(default, skip_serializing_if = "Option::is_none")]

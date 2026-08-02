@@ -3,7 +3,7 @@
 /**
  * Reference to an image file.
  */
-export type ImageRef = { path: string, caption: string | null, 
+export type ImageRef = { path: string, caption?: string | null, 
 /**
  * Base64-encoded image data for wire transfer. Stripped on disk storage.
  */

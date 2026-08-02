@@ -15,7 +15,7 @@ pub enum Role {
 #[ts(export, export_to = "protocol/")]
 pub struct ImageRef {
     pub path: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub caption: Option<String>,
     /// Base64-encoded image data for wire transfer. Stripped on disk storage.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -198,9 +198,9 @@ pub struct Message {
     pub images: Vec<ImageRef>,
     #[serde(default)]
     pub content_blocks: Vec<ContentBlock>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub alt_index: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub alt_count: Option<u32>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub alternatives: Vec<MessageAlternative>,

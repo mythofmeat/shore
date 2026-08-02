@@ -3,9 +3,9 @@
 /**
  * One-shot parameter overrides for a single message.
  */
-export type MessageOverrides = { temperature: number | null, top_p: number | null, 
+export type MessageOverrides = { temperature?: number | null, top_p?: number | null, 
 /**
  * Enable extended thinking with the given budget (in tokens).
  * `Some(n)` enables thinking with budget `n`; omitted = use model default.
  */
-thinking_budget: number | null, };
+thinking_budget?: number | null, };

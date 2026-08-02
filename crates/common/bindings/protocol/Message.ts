@@ -12,7 +12,7 @@ import type { Role } from "./Role";
  * `content` is a derived convenience field (human-readable text summary).
  * On disk, only `content_blocks` is stored; `content` is derived on load.
  */
-export type Message = { msg_id: string, role: Role, content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, alt_index: number | null, alt_count: number | null, alternatives?: Array<MessageAlternative>, timestamp: string, 
+export type Message = { msg_id: string, role: Role, content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, alt_index?: number | null, alt_count?: number | null, alternatives?: Array<MessageAlternative>, timestamp: string, 
 /**
  * Provider key that minted this message's content (e.g. `"anthropic"`,
  * `"openrouter-anthropic"`). Opaque thinking data — `thinking`

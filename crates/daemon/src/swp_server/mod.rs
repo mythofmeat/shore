@@ -1,3 +1,30 @@
+//! The SWP transport: accept client connections, handshake, route frames.
+//!
+//! **This is ported.** `llm-sidecar/src/swp/` is the implementation — framing,
+//! handshake, session routing, the broadcast fan-out and its lag policy —
+//! pinned against this file by `llm-sidecar/tests/swp_fixtures/swp_parity.json`
+//! (frozen; generated from this file at 9023b46d). Do not add behaviour here —
+//! add it there.
+//!
+//! It is not deleted, and not wired to a socket on the TypeScript side either.
+//! Both follow from the same fact: `handler/` consumes [`RoutedMessage`],
+//! [`SessionRouter`] and [`RequestMeta`], and `handler/` cannot move until
+//! `memory/` and `tools/` do (#12, step 5 — `handler/context.rs` is a
+//! coordinator over both). Having TypeScript own the socket while Rust still
+//! answers the frames would mean shipping every routed message back across the
+//! daemon/sidecar hop, which is the scaffolding shape #12 rules out. So the
+//! transport waits for its consumers rather than growing a bridge to them.
+//!
+//! `registry.rs` beside this file is deliberately *not* ported. It is instance
+//! discovery rather than SWP, and its only caller is daemon startup in
+//! `main.rs` — the exact thing that moves in the commit that wires TypeScript
+//! to the socket. Porting it now would be a leaf with no caller. One fact
+//! worth keeping for whoever does it: the Rust *clients* do not lock when
+//! reading `instances.json` (`common/swp_client/discovery.rs` is a plain
+//! `read_to_string`), so the `flock` here only serialises daemon instances
+//! against each other. A TypeScript writer needs the atomic rename, not the
+//! lock, to keep readers safe.
+
 pub mod registry;
 
 use std::collections::HashMap;

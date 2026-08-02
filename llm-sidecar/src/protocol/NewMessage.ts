@@ -13,7 +13,7 @@ import type { Role } from "./Role";
  * envelope-level `origin` field this struct carried historically — only the
  * Rust-side field moved.
  */
-export type NewMessage = { revision: number, character?: string | null, msg_id: string, role: Role, content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, alt_index: number | null, alt_count: number | null, alternatives?: Array<MessageAlternative>, timestamp: string, 
+export type NewMessage = { revision: number, character?: string | null, msg_id: string, role: Role, content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, alt_index?: number | null, alt_count?: number | null, alternatives?: Array<MessageAlternative>, timestamp: string, 
 /**
  * Provider key that minted this message's content (e.g. `"anthropic"`,
  * `"openrouter-anthropic"`). Opaque thinking data — `thinking`

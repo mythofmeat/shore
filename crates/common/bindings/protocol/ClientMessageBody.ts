@@ -5,7 +5,7 @@ import type { MessageOverrides } from "./MessageOverrides";
 /**
  * Send a user message.
  */
-export type ClientMessageBody = { rid: string | null, text: string, stream: boolean, 
+export type ClientMessageBody = { rid?: string | null, text: string, stream: boolean, 
 /**
  * Legacy: file paths (only works when client and server share a filesystem).
  */
@@ -13,4 +13,4 @@ images: Array<string>,
 /**
  * Preferred: base64-encoded image data (works across machines).
  */
-image_data?: Array<ImageUpload>, absence_seconds: number, overrides?: MessageOverrides | null, };
+image_data?: Array<ImageUpload>, absence_seconds?: number, overrides?: MessageOverrides | null, };
