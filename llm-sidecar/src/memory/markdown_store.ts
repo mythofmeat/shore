@@ -44,7 +44,7 @@ import {
 import { dirname, join, relative, sep } from "node:path";
 
 import { isInside, pathComponents } from "../tools/workspace_path";
-import { compareRustStrings, rustLines } from "./lines";
+import { compareRustStrings, rustLines, rustTrim, rustTrimStart, tokenizeQuery } from "./lines";
 
 /**
  * Top-level names retrieval never returns.
@@ -358,7 +358,7 @@ export class MarkdownMemoryStore {
 
   /** Reject the path, or return where it lands. */
   async #resolve(relPath: string): Promise<string> {
-    const rel = relPath.trim();
+    const rel = rustTrim(relPath);
     if (rel === "") throw traversal("empty path");
 
     for (const component of pathComponents(rel)) {
@@ -410,27 +410,6 @@ export class MarkdownMemoryStore {
 }
 
 /**
- * Split a lowercased query into scoring terms.
- *
- * Separators are everything that is neither alphanumeric nor `_`/`-`, so
- * `snake_case` and `kebab-case` survive as single terms.
- *
- * The length floor is two *bytes*, not two characters — Rust's `str::len()`.
- * That is not a typo carried across: it means a one-character multibyte term
- * like `é` passes the filter while a one-character ASCII term like `x` does
- * not, and the fixture pins a search on each.
- *
- * Exported because `markdown_query`'s excerpt picker tokenizes identically.
- * The Rust wrote the split out twice, in both files, and the two copies had to
- * agree for a hit's excerpt to contain the term it was ranked for.
- */
-export function tokenizeQuery(query: string): string[] {
-  return query
-    .split(/[^\p{Alphabetic}\p{Nd}\p{Nl}\p{No}_-]/u)
-    .filter((term) => Buffer.byteLength(term, "utf8") >= 2);
-}
-
-/**
  * Score one entry against a lowercased query and its terms.
  *
  * Path beats heading beats body, and the whole query counts for far more than
@@ -448,7 +427,7 @@ function entrySearchScore(entry: MarkdownEntry, query: string, terms: string[]):
   const path = entry.path.toLowerCase();
   const content = entry.content.toLowerCase();
   const title = (
-    rustLines(entry.content).find((line) => line.trimStart().startsWith("#")) ?? ""
+    rustLines(entry.content).find((line) => rustTrimStart(line).startsWith("#")) ?? ""
   ).toLowerCase();
 
   let score = 0;

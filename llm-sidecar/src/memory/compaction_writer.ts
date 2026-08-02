@@ -28,11 +28,12 @@
  * directory instead would make the two halves disagree about what exists.
  */
 
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
+import { atomicWrite } from "../engine/atomic";
 import type { CompactionManifest, SegmentEntry } from "../engine/segments";
-import { rustLines } from "./lines";
+import { rustLines, rustTrim } from "./lines";
 
 /** Matches `shore_common::config` — the three paths this module owns. */
 const ACTIVE_JSONL_FILE = "active.jsonl";
@@ -79,7 +80,7 @@ export interface RetentionParams {
  * newline — is invisible here, since the blank filter would have removed it.
  */
 function messageLines(content: string): string[] {
-  return rustLines(content).filter((l) => l.trim() !== "");
+  return rustLines(content).filter((l) => rustTrim(l) !== "");
 }
 
 /**
@@ -147,15 +148,6 @@ function parseManifest(raw: string, path: string): CompactionManifest {
     segments: obj.segments as SegmentEntry[],
     total_compacted_messages: obj.total_compacted_messages,
   };
-}
-
-/** Write through a same-directory temp file and a rename. */
-async function atomicWrite(path: string, data: string): Promise<void> {
-  const dir = dirname(path);
-  await mkdir(dir, { recursive: true });
-  const tmp = join(dir, `.${crypto.randomUUID()}.tmp`);
-  await writeFile(tmp, data, "utf8");
-  await rename(tmp, path);
 }
 
 /**

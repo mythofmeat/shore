@@ -10,8 +10,7 @@
  * file.
  */
 
-import { rustLines } from "./lines";
-import { tokenizeQuery } from "./markdown_store";
+import { rustLines, rustTrim, tokenizeQuery } from "./lines";
 import type { MarkdownEntry, MarkdownMemoryStore } from "./markdown_store";
 
 /** How many hits `formatDirectResponse` will render. */
@@ -85,7 +84,7 @@ export function truncateChars(text: string, limit: number): string {
  * when nothing matches, or when the window collapses to nothing.
  */
 export function excerptForQuery(text: string, query: string, limit: number): string {
-  const normalizedQuery = query.trim().toLowerCase();
+  const normalizedQuery = rustTrim(query).toLowerCase();
   if (normalizedQuery === "") return excerpt(text, limit);
 
   // The store's scorer tokenizes the same way, two-*byte* floor included.
@@ -95,7 +94,7 @@ export function excerptForQuery(text: string, query: string, limit: number): str
   const lines = rustLines(text);
 
   for (let idx = 0; idx < lines.length; idx += 1) {
-    const line = lines[idx]!.trim();
+    const line = rustTrim(lines[idx]!);
     // Kept for what it says, not for what it does: the query is non-empty by
     // the check above and every term is at least two bytes, so a blank line
     // could never have matched anyway. Mutation testing confirms removing it
@@ -116,7 +115,7 @@ export function excerptForQuery(text: string, query: string, limit: number): str
     // built, rather than by accident downstream.
     const window = lines
       .slice(start, end)
-      .map((l) => l.trim())
+      .map(rustTrim)
       .filter((l) => l !== "")
       .join(" ");
 
@@ -140,7 +139,7 @@ export function excerptForQuery(text: string, query: string, limit: number): str
  */
 function excerpt(text: string, limit: number): string {
   const normalized = rustLines(text)
-    .map((l) => l.trim())
+    .map(rustTrim)
     .join(" ");
   if ([...normalized].length > limit) {
     return `${truncateChars(normalized, limit)}...`;

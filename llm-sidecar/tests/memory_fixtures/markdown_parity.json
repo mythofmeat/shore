@@ -4729,6 +4729,66 @@
         ]
       },
       "returns": "Top memory matches for 'tea':\n- a.md\n  padding line tea appears in this long line that keeps going on and on and on and on and on and on and on and on and on and on and on and on and on and on and on and on and on and on and on and on and on and on until well...\n- b.md\n  # Tea short"
+    },
+    {
+      "name": "a byte-order mark is not trimmed off a line",
+      "op": {
+        "fn": "excerpt_for_query",
+        "text": "b25lCu+7vyAgdGVhICAKdGhyZWU=",
+        "query": "tea",
+        "limit": 200
+      },
+      "returns": "one ﻿  tea three"
+    },
+    {
+      "name": "a NEL is trimmed off a line",
+      "op": {
+        "fn": "excerpt_for_query",
+        "text": "b25lCsKFICB0ZWEgIAp0aHJlZQ==",
+        "query": "tea",
+        "limit": 200
+      },
+      "returns": "one tea three"
+    },
+    {
+      "name": "a line holding only a byte-order mark is not blank",
+      "op": {
+        "fn": "excerpt_for_query",
+        "text": "b25lCu+7vwp0ZWEKdGhyZWU=",
+        "query": "tea",
+        "limit": 200
+      },
+      "returns": "﻿ tea three"
+    },
+    {
+      "name": "a line holding only a NEL is blank",
+      "op": {
+        "fn": "excerpt_for_query",
+        "text": "b25lCsKFCnRlYQp0aHJlZQ==",
+        "query": "tea",
+        "limit": 200
+      },
+      "returns": "tea three"
+    },
+    {
+      "name": "a byte-order mark around the query is not trimmed off it",
+      "op": {
+        "fn": "excerpt_for_query",
+        "text": "b25lCnRlYQp0aHJlZQ==",
+        "query": "﻿tea﻿",
+        "limit": 200
+      },
+      "returns": "one tea three"
+    },
+    {
+      "name": "a NEL around the query is trimmed off it",
+      "op": {
+        "fn": "excerpt_for_query",
+        "text": "b25lCnRlYQp0aHJlZQ==",
+        "query": "tea",
+        "limit": 200
+      },
+      "returns": "one tea three"
     }
   ]
 }
