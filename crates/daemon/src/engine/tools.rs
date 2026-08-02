@@ -707,7 +707,6 @@ async fn stream_tool_loop_continuation(
 ) -> Result<StreamResult, ToolLoopError> {
     let policy = RetryPolicy {
         max_retries: retry.max_retries,
-        fallback_model: None,
     };
     let mut attempt: u32 = 0;
 
@@ -722,8 +721,7 @@ async fn stream_tool_loop_continuation(
 
         match stream_result {
             Ok(result) => return Ok(result),
-            // Only `Retry` loops; `Fail` (and the unreachable `FallbackModel`,
-            // since we set no fallback) surface the error to the loop caller.
+            // Only `Retry` loops; `Fail` surfaces the error to the loop caller.
             Err(e) => match should_retry_error(&e, attempt, &policy) {
                 RetryDecision::Retry => {
                     let delay = Duration::from_millis(
@@ -740,7 +738,7 @@ async fn stream_tool_loop_continuation(
                     tokio::time::sleep(delay).await;
                     attempt = attempt.saturating_add(1);
                 }
-                RetryDecision::FallbackModel(_) | RetryDecision::Fail => return Err(e.into()),
+                RetryDecision::Fail => return Err(e.into()),
             },
         }
     }

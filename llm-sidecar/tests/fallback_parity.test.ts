@@ -71,7 +71,6 @@ const ERRORS: Record<string, LlmError> = {
   provider_long: { kind: "provider", message: "x".repeat(500) },
   provider_multibyte: { kind: "provider", message: `${"x".repeat(199)}世${"y".repeat(400)}` },
   provider_exactly_200: { kind: "provider", message: "x".repeat(200) },
-  refusal: { kind: "refusal" },
   incomplete: { kind: "incomplete_stream" },
   stream_errored: { kind: "stream_errored", message: "upstream closed" },
 };

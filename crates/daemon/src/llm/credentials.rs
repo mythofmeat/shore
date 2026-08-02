@@ -123,12 +123,11 @@ pub fn classify_credential_failure(_provider_key: &str, error: &LlmError) -> Cre
             CredentialFailureKind::NotCredentialFailure
         }
 
-        // Network / transport / serde / refusal — none of these are
-        // credential failures. Let retry.rs decide what to do.
-        LlmError::Request(_)
-        | LlmError::Serialize(_)
-        | LlmError::Deserialize(_)
-        | LlmError::Refusal => CredentialFailureKind::NotCredentialFailure,
+        // Network / transport / serde — none of these are credential
+        // failures. Let retry.rs decide what to do.
+        LlmError::Request(_) | LlmError::Serialize(_) | LlmError::Deserialize(_) => {
+            CredentialFailureKind::NotCredentialFailure
+        }
 
         // Generic provider errors are too vague to confidently rotate on.
         LlmError::Provider { .. } => CredentialFailureKind::NotCredentialFailure,
@@ -452,14 +451,6 @@ mod tests {
     fn incomplete_stream_is_not_credential() {
         assert_eq!(
             classify_credential_failure("openai", &LlmError::IncompleteStream),
-            CredentialFailureKind::NotCredentialFailure
-        );
-    }
-
-    #[test]
-    fn refusal_is_not_credential() {
-        assert_eq!(
-            classify_credential_failure("openai", &LlmError::Refusal),
             CredentialFailureKind::NotCredentialFailure
         );
     }

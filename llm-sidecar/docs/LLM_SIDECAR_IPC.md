@@ -199,13 +199,13 @@ single completion.
   This matches today exactly: `StreamEvent` has **no** error variant, so we do
   NOT add one (that would touch the daemon). Granularity is unchanged from
   status quo.
-- **Refusal**: NOT a wire concern. `LlmError::Refusal` is never produced by the
-  providers — it's a *post-response* decision in the Rust retry layer:
-  `is_refusal(content, finish_reason)` (`retry.rs:156`) checks
-  `finish_reason == "content_filter" | "refusal"` or refusal phrases in
-  <500-char content, and `should_retry_refusal` acts on the completed
-  `StreamResult`. The sidecar just passes `finish_reason` through faithfully.
-  Zero sidecar work, zero daemon change.
+- **Refusal**: NOT a wire concern, and no longer an error at all. `LlmError::Refusal`
+  was never produced by the providers — it fed a post-response phrase-matching
+  detector in the retry layer that had no production caller, and #16 deleted the
+  detector, the error variant and the model-fallback arm it drove. The sidecar
+  still passes `finish_reason` through faithfully, including `content_filter` and
+  `refusal`, and a declined turn is persisted and shown like any other completed
+  turn.
 
 ## SDK coverage (`Sdk` enum: Anthropic, Openrouter, Openai, Zai, Gemini)
 

@@ -27,8 +27,7 @@ export type LlmError =
    */
   | { kind: "stream_errored"; message: string }
   | { kind: "missing_api_key"; var: string }
-  | { kind: "provider"; message: string }
-  | { kind: "refusal" };
+  | { kind: "provider"; message: string };
 
 /** The `Display` text the Rust's `#[error(...)]` attributes produce. */
 export function describeLlmError(error: LlmError): string {
@@ -49,7 +48,5 @@ export function describeLlmError(error: LlmError): string {
       return `API key environment variable ${error.var} is not set`;
     case "provider":
       return `provider error: ${error.message}`;
-    case "refusal":
-      return "model refusal detected";
   }
 }

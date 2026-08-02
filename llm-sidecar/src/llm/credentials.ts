@@ -67,12 +67,11 @@ export function classifyCredentialFailure(
     case "incomplete_stream":
     case "stream_errored":
       return "not_credential_failure";
-    // Transport, serde and refusals are not credential failures. A generic
-    // provider error is too vague to rotate on.
+    // Transport and serde are not credential failures. A generic provider
+    // error is too vague to rotate on.
     case "transport":
     case "serialize":
     case "deserialize":
-    case "refusal":
     case "provider":
       return "not_credential_failure";
   }
