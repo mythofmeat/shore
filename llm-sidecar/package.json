@@ -13,6 +13,7 @@
     "@ai-sdk/moonshotai": "^2.0.40",
     "@anthropic-ai/sdk": "^0.100.1",
     "@google/genai": "^2.15.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@openrouter/sdk": "^0.12.79",
     "ai": "^6.0.238",
     "openai": "^6.49.0"
