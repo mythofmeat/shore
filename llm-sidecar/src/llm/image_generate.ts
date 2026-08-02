@@ -2,7 +2,10 @@ import OpenAI from "openai";
 import type { ChatCompletionCreateParams } from "openai/resources/chat/completions";
 import type { ImageGenerateParams } from "openai/resources/images";
 
+import { readCandidateEnv, resolveKeyCandidates, type ProviderEntry } from "./credentials.ts";
+import { hardcodedProviderBaseUrl } from "./request.ts";
 import type { ImageRequest, ImageResponse } from "./types.ts";
+import { compareRustStrings } from "../memory/lines.ts";
 
 type RequestOptions = { signal?: AbortSignal };
 type ImageSize = NonNullable<ImageGenerateParams["size"]>;
@@ -137,4 +140,143 @@ function providerError(message: string): HttpishError {
   const err = new Error(message) as HttpishError;
   err.status = 502;
   return err;
+}
+
+// ── Configuration ───────────────────────────────────────────────────────
+
+/**
+ * Per-model image-generation settings, from `[image_generation."provider:model_id"]`.
+ */
+export interface ImageGenSettings {
+  /** Default size for the OpenAI path (e.g. `"1024x1024"`). */
+  size?: string;
+  /** Optional quality hint for the OpenAI path (e.g. `"hd"`). */
+  quality?: string;
+  /** OpenRouter aspect ratio (e.g. `"1:1"`, `"16:9"`). */
+  aspect_ratio?: string;
+  /** OpenRouter image size (e.g. `"1K"`, `"2K"`, `"4K"`). */
+  image_size?: string;
+}
+
+/** Image generation, fully resolved: identity, transport and credential. */
+export interface ImageGenConfig {
+  provider: string;
+  model_id: string;
+  api_key: string;
+  base_url?: string;
+  size: string;
+  quality?: string;
+  aspect_ratio?: string;
+  image_size?: string;
+}
+
+export interface ResolveImageGenOptions {
+  /** `defaults.image_generation` — a `provider:model_id` identity. */
+  defaultRef?: string;
+  /** `[image_generation.*]`, keyed by the same identity. */
+  imageGen: Record<string, ImageGenSettings>;
+  /** `[providers.*]`, keyed by provider. */
+  providers: Record<string, { entry?: ProviderEntry; baseUrl?: string }>;
+  /** Injected for tests; production reads the real environment. */
+  env?: NodeJS.ProcessEnv;
+}
+
+const DEFAULT_IMAGE_SIZE = "1024x1024";
+
+/**
+ * Resolve image generation from the model catalog.
+ *
+ * Lived in `memory/compaction_impls.rs` for historical reasons only — it has
+ * nothing to do with compaction, and its callers are the tool-context builders
+ * in `autonomy` and `handler`. It belongs beside the thing it configures.
+ *
+ * Every failure is a plain sentence rather than an exception the caller must
+ * classify: this is shown to whoever has to fix the config, and the only thing
+ * a caller does with it is give up on image generation for the session.
+ *
+ * Identity is the configured default, or the sole settings-overlay key when
+ * there is exactly one. Two overlay entries with no default is an error rather
+ * than a pick: the choice would be `BTreeMap` order, which is not a decision
+ * anyone made.
+ */
+export function resolveImageGenConfig(
+  opts: ResolveImageGenOptions,
+): { ok: ImageGenConfig } | { err: string } {
+  let target: string;
+  if (opts.defaultRef !== undefined) {
+    target = opts.defaultRef;
+  } else {
+    const keys = Object.keys(opts.imageGen).sort(compareRustStrings);
+    if (keys.length === 1) {
+      target = keys[0]!;
+    } else if (keys.length > 1) {
+      return {
+        err:
+          'multiple [image_generation."provider:model_id"] entries are configured but ' +
+          "defaults.image_generation is unset; set defaults.image_generation to choose one",
+      };
+    } else {
+      return {
+        err:
+          "no image generation model configured; set defaults.image_generation = " +
+          '"provider:model_id" and configure [providers.<provider>] (see CONFIGURATION.md).',
+      };
+    }
+  }
+
+  const colon = target.indexOf(":");
+  if (colon < 0) {
+    return {
+      err:
+        `image generation model '${target}' must be a \`provider:model_id\` identity ` +
+        "with transport under [providers.<provider>]",
+    };
+  }
+  const providerKey = target.slice(0, colon);
+  const modelId = target.slice(colon + 1);
+  if (providerKey === "" || modelId === "") {
+    return {
+      err: `image generation model '${target}' is not a valid \`provider:model_id\` identity`,
+    };
+  }
+
+  // Transport: the registry's own `base_url`, else the hardcoded default, else
+  // the SDK's endpoint.
+  const provider = opts.providers[providerKey];
+  const baseUrl = provider?.baseUrl ?? hardcodedProviderBaseUrl(providerKey);
+
+  // Credentials: the `[providers.<p>].keys[]` fallback chain, first env-set
+  // candidate wins.
+  const candidates = resolveKeyCandidates(providerKey, provider?.entry);
+  if (candidates.length === 0) {
+    return {
+      err: `image generation provider '${providerKey}' is disabled in [providers.${providerKey}]`,
+    };
+  }
+  let apiKey: string | undefined;
+  for (const candidate of candidates) {
+    apiKey = readCandidateEnv(candidate, opts.env);
+    if (apiKey !== undefined) break;
+  }
+  if (apiKey === undefined) {
+    return {
+      err:
+        `image generation API key not set for provider '${providerKey}'; ` +
+        `set one of these env vars: ${candidates.map((c) => c.env).join(", ")}`,
+    };
+  }
+
+  const settings = opts.imageGen[target];
+  return {
+    ok: {
+      provider: providerKey,
+      model_id: modelId,
+      api_key: apiKey,
+      ...(baseUrl === undefined ? {} : { base_url: baseUrl }),
+      size: settings?.size ?? DEFAULT_IMAGE_SIZE,
+      ...(settings?.quality === undefined ? {} : { quality: settings.quality }),
+      ...(settings?.aspect_ratio === undefined ? {} : { aspect_ratio: settings.aspect_ratio }),
+      ...(settings?.image_size === undefined ? {} : { image_size: settings.image_size }),
+    },
+  };
 }

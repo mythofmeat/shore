@@ -144,6 +144,44 @@ export function defaultBaseUrl(providerKey: string): string | undefined {
 }
 
 /**
+ * The `base_url` column of Rust's `hardcoded_provider_defaults`.
+ *
+ * **Not** the same table as {@link defaultBaseUrl} above, and merging them
+ * would be a bug in both directions. That one is the discovery/chat endpoint;
+ * this one is what the *category* resolvers fall back to — embeddings, image
+ * generation, and the preferences overlay all reach `hardcoded_provider_defaults`
+ * and none of them reach the other table. They genuinely disagree: `deepseek`
+ * carries a `/v1` suffix here and not there, `zhipuai` and `nanogpt` have an
+ * endpoint here and none there, and `anthropic` and `zai` are the other way
+ * around. `tests/memory_fixtures/workspace_index_parity.json` pins the
+ * disagreement itself, so a future merge fails loudly.
+ *
+ * An absent answer is not a failure: it means the OpenAI-compatible default
+ * endpoint, which is what an unrecognised self-hosted provider wants.
+ */
+export function hardcodedProviderBaseUrl(providerKey: string): string | undefined {
+  switch (providerKey) {
+    case "openrouter":
+      return "https://openrouter.ai/api/v1";
+    case "deepseek":
+      return "https://api.deepseek.com/v1";
+    case "moonshot":
+    case "moonshotai":
+      return "https://api.moonshot.ai/v1";
+    case "xai":
+      return "https://api.x.ai/v1";
+    case "zhipuai":
+      return "https://open.bigmodel.cn/api/paas/v4";
+    case "nanogpt":
+      return "https://nano-gpt.com/api/v1";
+    case "opencode-go":
+      return "https://opencode.ai/zen/go/v1";
+    default:
+      return undefined;
+  }
+}
+
+/**
  * Whether the provider's thinking-mode API rejects requests that omit
  * `reasoning_content` from prior assistant turns.
  *

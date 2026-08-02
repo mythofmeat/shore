@@ -63,11 +63,11 @@ import {
 } from "../src/memory/workspace_index";
 import { tokenizeQuery } from "../src/memory/lines";
 import {
-  embeddingProviderBaseUrl,
   resolveEmbedder,
   type EmbeddingProvider,
   type EmbeddingSettings,
 } from "../src/memory/retrieval";
+import { defaultBaseUrl, hardcodedProviderBaseUrl } from "../src/llm/request";
 
 const fixture = JSON.parse(
   readFileSync(new URL("./memory_fixtures/workspace_index_parity.json", import.meta.url), "utf8"),
@@ -592,17 +592,18 @@ describe("bodyPreview", () => {
 
 // ── embedder resolution ─────────────────────────────────────────────────
 
-describe("embeddingProviderBaseUrl", () => {
+describe("hardcodedProviderBaseUrl", () => {
   for (const c of fixture.retrieval.hardcoded_base_url) {
     test(c.provider_key || "(empty)", () => {
-      expect(embeddingProviderBaseUrl(c.provider_key)).toBe(c.base_url ?? undefined);
+      expect(hardcodedProviderBaseUrl(c.provider_key)).toBe(c.base_url ?? undefined);
     });
   }
 
-  test("it is not the same table chat uses", async () => {
+  test("it is not the same table chat uses", () => {
     // Merging the two would be a silent bug: they genuinely disagree, and the
-    // Rust kept them apart on purpose.
-    const { defaultBaseUrl } = await import("../src/llm/request");
+    // Rust kept them apart on purpose. Embeddings were the first caller of
+    // this column; image generation and the preferences overlay are the other
+    // two, which is why it now lives beside the table it must not become.
     const disagreements = fixture.retrieval.hardcoded_base_url.filter(
       (c: any) => (c.base_url ?? undefined) !== defaultBaseUrl(c.provider_key),
     );

@@ -18,6 +18,7 @@
 
 import { readCandidateEnv, resolveKeyCandidates, type ProviderEntry } from "../llm/credentials";
 import { cacheOrBuild, OpenAIEmbedder, type Embedder } from "../llm/embed";
+import { hardcodedProviderBaseUrl } from "../llm/request";
 
 /** Per-model embedding settings, from `[embedding."provider:model_id"]`. */
 export interface EmbeddingSettings {
@@ -43,41 +44,6 @@ export interface ResolveEmbedderOptions {
   fetchImpl?: typeof fetch;
 }
 
-/**
- * The conventional endpoint for a provider, used when its entry sets no
- * `base_url`.
- *
- * This is **not** the same table as `llm/request.ts`'s `defaultBaseUrl`, and
- * merging them would be a bug in both directions: that one answers "where does
- * chat go", this one answers "where do embeddings go", and the Rust kept them
- * as separate tables that genuinely disagree — `deepseek` carries a `/v1`
- * suffix here and not there, `zhipuai` and `nanogpt` have an endpoint here and
- * none there, and `anthropic` is the other way around.
- *
- * An absent answer is not a failure: it means the OpenAI-compatible default
- * endpoint, which is what an unrecognised self-hosted provider wants.
- */
-export function embeddingProviderBaseUrl(providerKey: string): string | undefined {
-  switch (providerKey) {
-    case "openrouter":
-      return "https://openrouter.ai/api/v1";
-    case "deepseek":
-      return "https://api.deepseek.com/v1";
-    case "moonshot":
-    case "moonshotai":
-      return "https://api.moonshot.ai/v1";
-    case "xai":
-      return "https://api.x.ai/v1";
-    case "zhipuai":
-      return "https://open.bigmodel.cn/api/paas/v4";
-    case "nanogpt":
-      return "https://nano-gpt.com/api/v1";
-    case "opencode-go":
-      return "https://opencode.ai/zen/go/v1";
-    default:
-      return undefined;
-  }
-}
 
 /**
  * The embedding identity to use: the configured default, else the sole
@@ -173,7 +139,7 @@ export function resolveEmbedder(options: ResolveEmbedderOptions): Embedder {
   const dimensions = embedding[target]?.dimensions;
 
   const provider = providers[providerKey];
-  const baseUrl = provider?.baseUrl ?? embeddingProviderBaseUrl(providerKey);
+  const baseUrl = provider?.baseUrl ?? hardcodedProviderBaseUrl(providerKey);
   const apiKey = resolveApiKey(providerKey, provider?.entry);
 
   const cacheKey = [
