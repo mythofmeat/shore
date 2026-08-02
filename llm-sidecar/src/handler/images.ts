@@ -37,8 +37,8 @@ export interface ImageUpload {
  * Resize hook. Returns the replacement bytes and media type, or `undefined` to
  * send the original.
  *
- * Injected rather than imported so this module stays free of an image codec —
- * the resize ladder is `handler/resize.rs` and lands separately.
+ * Injected rather than imported so this module stays free of an image codec.
+ * `handler/resize.ts` supplies the real one; leaving it out sends originals.
  */
 export type CachedResize = (
   path: string,
@@ -46,7 +46,7 @@ export type CachedResize = (
   mediaType: string,
   maxBytes: number,
   cacheDir: string,
-) => { bytes: Uint8Array; mediaType: string } | undefined;
+) => Promise<{ bytes: Uint8Array; mediaType: string } | undefined>;
 
 // ── Media types ─────────────────────────────────────────────────────────
 
@@ -458,7 +458,7 @@ export async function encodeImageBlock(
     return undefined;
   }
 
-  const resized = resize?.(img.path, bytes, mediaType, maxImageSize, cacheDir);
+  const resized = await resize?.(img.path, bytes, mediaType, maxImageSize, cacheDir);
   const final = resized ?? { bytes, mediaType };
 
   return {

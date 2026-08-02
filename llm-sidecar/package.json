@@ -16,7 +16,8 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openrouter/sdk": "^0.12.79",
     "ai": "^6.0.238",
-    "openai": "^6.49.0"
+    "openai": "^6.49.0",
+    "sharp": "^0.35.3"
   },
   "devDependencies": {
     "@types/bun": "latest",
