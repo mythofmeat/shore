@@ -26,6 +26,10 @@
  * The comparison is done on *resolved* paths on both sides. Comparing the
  * literal strings would be defeated by any of `..`, a symlinked workspace
  * root, or a `/tmp` → `/private/tmp` style platform alias.
+ *
+ * `pathComponents` and `isInside` — the two pieces of the rule that are not
+ * about *this* base directory — are exported for `memory/markdown_store.ts`,
+ * which confines the markdown memory store the same way.
  */
 
 import { realpathSync } from "node:fs";
@@ -156,8 +160,12 @@ export function resolvePath(workspaceDir: string, relative: string): string {
  * do. That is deliberate and one-directional: it can only cause more paths to
  * be refused, never fewer, and a filename containing a literal backslash is
  * not worth the ambiguity at a confinement boundary.
+ *
+ * Exported for `memory/markdown_store.ts`, which confines against a different
+ * base and reports different messages but applies the same rule. Two copies of
+ * this would be two chances to get it wrong.
  */
-function pathComponents(p: string): string[] {
+export function pathComponents(p: string): string[] {
   const out: string[] = [];
   if (isAbsolute(p)) out.push("/");
   for (const part of p.split(/[/\\]/)) {
@@ -172,7 +180,7 @@ function pathComponents(p: string): string[] {
  * string prefix. `startsWith` would accept `/ws-secrets` as living inside
  * `/ws`, which is exactly the kind of near-miss this boundary exists to stop.
  */
-function isInside(candidate: string, base: string): boolean {
+export function isInside(candidate: string, base: string): boolean {
   if (candidate === base) return true;
   const withSep = base.endsWith(sep) ? base : base + sep;
   return candidate.startsWith(withSep);

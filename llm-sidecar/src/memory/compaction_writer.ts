@@ -32,6 +32,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import type { CompactionManifest, SegmentEntry } from "../engine/segments";
+import { rustLines } from "./lines";
 
 /** Matches `shore_common::config` — the three paths this module owns. */
 const ACTIVE_JSONL_FILE = "active.jsonl";
@@ -71,22 +72,14 @@ export interface RetentionParams {
  * The message lines of an `active.jsonl`, matching the Rust's
  * `.lines().filter(|l| !l.trim().is_empty())`.
  *
- * A plain `split("\n")` is wrong here: it leaves a `\r` on every line of a
- * CRLF file, and Rust's `lines()` strips it. That difference is not cosmetic —
- * an unstripped `\r` would be written through into the segment file. Pinned by
- * the fixture's CRLF case.
- *
- * `lines()` also yields no empty final element for a trailing newline. That
- * part needs no separate handling because the blank filter removes it anyway;
- * an explicit pop was dropped after mutation testing showed nothing could
- * observe it.
+ * The `\r` stripping in {@link rustLines} is what makes this correct on a CRLF
+ * file: a plain `split("\n")` leaves the `\r` attached, and it would be
+ * written straight through into the segment. Pinned by the fixture's CRLF
+ * case. `rustLines`' other rule — no empty final element for a trailing
+ * newline — is invisible here, since the blank filter would have removed it.
  */
 function messageLines(content: string): string[] {
-  if (content === "") return [];
-  return content
-    .split("\n")
-    .map((l) => (l.endsWith("\r") ? l.slice(0, -1) : l))
-    .filter((l) => l.trim() !== "");
+  return rustLines(content).filter((l) => l.trim() !== "");
 }
 
 /**
