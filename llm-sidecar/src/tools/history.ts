@@ -32,6 +32,7 @@ import { join } from "node:path";
 import { deriveContentFromBlocks, MessageStore } from "../engine/message_store";
 import { SegmentReader } from "../engine/segments";
 import type { ContentBlock, Message, MessageAlternative } from "../engine/types";
+import { InvalidArgs, ToolIoError } from "./errors";
 
 const ACTIVE_JSONL_FILE = "active.jsonl";
 
@@ -55,21 +56,10 @@ const PHRASE_BONUS = 25;
  */
 const RECENCY_WEIGHT = 15.0;
 
-/** An argument the caller got wrong. Reported to the model as a failed tool. */
-export class InvalidArgs extends Error {
-  constructor(message: string) {
-    super(`invalid args: ${message}`);
-    this.name = "InvalidArgs";
-  }
-}
-
-/** The transcript could not be read. */
-export class ToolIoError extends Error {
-  constructor(message: string) {
-    super(`io: ${message}`);
-    this.name = "ToolIoError";
-  }
-}
+// The two `ToolError` variants this module reports in. They were declared here
+// when this was the only ported tool and moved to `errors.ts` when the second
+// one needed them; re-exported so this module's surface is unchanged.
+export { InvalidArgs, ToolIoError };
 
 // ── Argument parsing ────────────────────────────────────────────────────
 
