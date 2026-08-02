@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 /// Client hello — sent once after connect.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
 pub struct ClientHello {
     pub client_type: String,
     pub client_name: String,
@@ -13,20 +14,22 @@ pub struct ClientHello {
 }
 
 /// One-shot parameter overrides for a single message.
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, ts_rs::TS)]
+#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
 pub struct MessageOverrides {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub top_p: Option<f64>,
     /// Enable extended thinking with the given budget (in tokens).
     /// `Some(n)` enables thinking with budget `n`; omitted = use model default.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thinking_budget: Option<u32>,
 }
 
 /// A base64-encoded image uploaded by the client.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
 pub struct ImageUpload {
     pub filename: String,
     /// Base64-encoded image file bytes.
@@ -40,9 +43,10 @@ pub struct ImageUpload {
 }
 
 /// Send a user message.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
 pub struct ClientMessageBody {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
     pub text: String,
     #[serde(default)]
@@ -53,39 +57,45 @@ pub struct ClientMessageBody {
     /// Preferred: base64-encoded image data (works across machines).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub image_data: Vec<ImageUpload>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(type = "number")]
     pub absence_seconds: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub overrides: Option<MessageOverrides>,
 }
 
 /// Regenerate last response.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
 pub struct Regen {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
     #[serde(default)]
     pub stream: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub guidance: Option<String>,
 }
 
 /// Execute a server command.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
 pub struct Command {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
     pub name: String,
     #[serde(default)]
+    #[ts(type = "unknown")]
     pub args: serde_json::Value,
 }
 
 /// Cancel an in-progress generation.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
 pub struct Cancel {}
 
 /// All client → server message types, tagged by "type".
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientMessage {
     Hello(ClientHello),
