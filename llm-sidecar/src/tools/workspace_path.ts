@@ -26,10 +26,20 @@
  * The comparison is done on *resolved* paths on both sides. Comparing the
  * literal strings would be defeated by any of `..`, a symlinked workspace
  * root, or a `/tmp` → `/private/tmp` style platform alias.
+ *
+ * `pathComponents` and `isInside` — the two pieces of the rule that are not
+ * about *this* base directory — are exported for `memory/markdown_store.ts`,
+ * which confines the markdown memory store the same way.
  */
 
 import { realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, parse, sep } from "node:path";
+
+// Rust's `str::trim`, not JavaScript's. The two disagree on the byte-order
+// mark (JS strips it, Rust does not) and on U+0085 (Rust strips it, JS does
+// not), and both of those spellings reach here from a model-supplied path. A
+// BOM-led `SOUL.md` looked protected to the port and unprotected to the Rust.
+import { rustTrim } from "../memory/lines";
 
 /** A rejected path, carrying the same message the Rust `ToolError` rendered. */
 export class PathError extends Error {
@@ -61,7 +71,7 @@ const ACTIVE_PROMPT_DIR = "active_prompt";
 export function resolveRoots(workspaceDir: string, relativeRaw: string): [string, string] {
   if (workspaceDir === "") throw new PathError("invalid args: workspace not configured");
 
-  const relative = relativeRaw.trim();
+  const relative = rustTrim(relativeRaw);
   if (relative === "") throw new PathError("invalid args: path is empty");
 
   if (relative === "workspace") return [workspaceDir, ""];
@@ -156,8 +166,12 @@ export function resolvePath(workspaceDir: string, relative: string): string {
  * do. That is deliberate and one-directional: it can only cause more paths to
  * be refused, never fewer, and a filename containing a literal backslash is
  * not worth the ambiguity at a confinement boundary.
+ *
+ * Exported for `memory/markdown_store.ts`, which confines against a different
+ * base and reports different messages but applies the same rule. Two copies of
+ * this would be two chances to get it wrong.
  */
-function pathComponents(p: string): string[] {
+export function pathComponents(p: string): string[] {
   const out: string[] = [];
   if (isAbsolute(p)) out.push("/");
   for (const part of p.split(/[/\\]/)) {
@@ -172,7 +186,7 @@ function pathComponents(p: string): string[] {
  * string prefix. `startsWith` would accept `/ws-secrets` as living inside
  * `/ws`, which is exactly the kind of near-miss this boundary exists to stop.
  */
-function isInside(candidate: string, base: string): boolean {
+export function isInside(candidate: string, base: string): boolean {
   if (candidate === base) return true;
   const withSep = base.endsWith(sep) ? base : base + sep;
   return candidate.startsWith(withSep);
@@ -208,7 +222,7 @@ function tryRealpath(p: string): string | undefined {
  * protected-file guard does not recognize.
  */
 export function normalizeWorkspacePath(path: string): string {
-  let normalized = path.trim().replaceAll("\\", "/");
+  let normalized = rustTrim(path).replaceAll("\\", "/");
   for (;;) {
     const before = normalized.length;
     while (normalized.startsWith("/")) normalized = normalized.slice(1);

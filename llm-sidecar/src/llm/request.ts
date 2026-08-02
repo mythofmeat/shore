@@ -35,7 +35,16 @@
 import { defaultApiKeyEnv, readCandidateEnv, resolveKeyCandidates } from "./credentials";
 import type { ProviderEntry } from "./credentials";
 import { sanitizeToolPairs } from "./sanitize";
-import type { ProviderOptions, Sdk, SidecarRequest, ThinkingReplay, WireMessage } from "./types";
+import type {
+  GenerateResponse,
+  ProviderOptions,
+  Sdk,
+  SidecarRequest,
+  ThinkingReplay,
+  WireMessage,
+} from "./types";
+import type { ContentBlock } from "../engine/types";
+import { rustTrim } from "../memory/lines";
 
 /** Wire default when a model declares no output cap. */
 const DEFAULT_MAX_TOKENS = 4096;
@@ -353,4 +362,62 @@ export function preprocessRequest(request: SidecarRequest): SidecarRequest {
       `(${request.messages.length} messages -> ${cleaned.length})`,
   );
   return { ...request, messages: cleaned };
+}
+
+// ── Appending turns ─────────────────────────────────────────────────────
+
+/**
+ * Append a completed assistant turn, stamped with the provenance of the model
+ * that produced it.
+ *
+ * Every tool loop in the daemon — chat, heartbeat, compaction, dreaming —
+ * needs this between rounds, and each had its own copy. They had already
+ * drifted: the heartbeat's lacked the `content` fallback, so a response that
+ * arrived as plain text with no blocks vanished from its own history. One
+ * implementation, so a fifth loop cannot drift again.
+ *
+ * A turn with neither blocks nor text is not appended at all: the API rejects
+ * an empty content array, which would fail every later call in the loop. The
+ * emptiness test is Rust's `trim`, not JavaScript's — see `memory/lines.ts`.
+ *
+ * The Rust also projected each stored `ContentBlock` onto a wire `WireBlock`
+ * here, which is where a thinking block's opaque `orrd:`/`zair:` signature was
+ * decoded into the field its provider actually reads. There is nothing to
+ * project on this side: the adapters produce blocks with `reasoning_details` /
+ * `reasoning_content` already populated, and `ContentBlock` is the one type
+ * both halves use.
+ */
+export function pushAssistantTurn(request: SidecarRequest, resp: GenerateResponse): void {
+  let content: ContentBlock[];
+  if (resp.content_blocks.length === 0) {
+    if (rustTrim(resp.content) === "") return;
+    content = [{ type: "text", text: resp.content }];
+  } else {
+    content = resp.content_blocks;
+  }
+  // The spread is how an absent provider key stays absent rather than becoming
+  // an explicit `undefined`. Nothing can tell the two apart today — the field
+  // is `skip_serializing_if = "Option::is_none"` on the Rust side and
+  // `JSON.stringify` drops `undefined` on this one, so both spellings produce
+  // the same bytes, and mutation testing duly finds the difference unkillable.
+  // It stays because `exactOptionalPropertyTypes` is on: writing the key
+  // unconditionally needs a cast, and a cast here would be a cast that outlives
+  // the reason for it.
+  request.messages.push({
+    role: "assistant",
+    content,
+    ...(request.provider_key === undefined ? {} : { provider_key: request.provider_key }),
+    model: request.model,
+  });
+}
+
+/**
+ * Append an inline `role:"system"` turn at the tail.
+ *
+ * Used where an instruction has to sit at a fixed slot in the message list
+ * rather than in the system prompt — compaction's, which must stay byte-stable
+ * across its tool loop so chat's cache prefix keeps extending.
+ */
+export function pushInlineSystem(request: SidecarRequest, content: string): void {
+  request.messages.push({ role: "system", content: [{ type: "text", text: content }] });
 }

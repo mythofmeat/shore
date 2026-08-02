@@ -90,12 +90,22 @@ export class SegmentReader {
     } catch (e) {
       throw new JsonParseError(manifestPath, (e as Error).message);
     }
-    // `#[serde(default)]` on both fields: a manifest missing either is read as
-    // empty rather than rejected.
-    return new SegmentReader(segmentsDir, {
-      segments: manifest.segments ?? [],
-      total_compacted_messages: manifest.total_compacted_messages ?? 0,
-    });
+    // `CompactionManifest` derives `Default` but carries no `#[serde(default)]`
+    // on either field, so serde rejects a manifest missing one. An earlier
+    // version of this file coalesced both to empty on the strength of a comment
+    // claiming otherwise; `engine_parity.json` had no case covering it, and the
+    // memory-writer fixture caught it. Reading a truncated manifest as "no
+    // history" is the exact failure this function's doc-comment says it avoids.
+    if (!Array.isArray(manifest.segments)) {
+      throw new JsonParseError(manifestPath, "missing field `segments`");
+    }
+    if (typeof manifest.total_compacted_messages !== "number") {
+      throw new JsonParseError(
+        manifestPath,
+        "missing field `total_compacted_messages`",
+      );
+    }
+    return new SegmentReader(segmentsDir, manifest);
   }
 
   /** Number of frozen segments. */
