@@ -73,9 +73,6 @@ pub enum LlmError {
 
     #[error("provider error: {message}")]
     Provider { message: String },
-
-    #[error("model refusal detected")]
-    Refusal,
 }
 
 /// Truncate a string for log preview, respecting UTF-8 char boundaries.

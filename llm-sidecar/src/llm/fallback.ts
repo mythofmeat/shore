@@ -76,8 +76,6 @@ export function sanitizeReason(error: LlmError): string {
       return `env ${debugString(error.var)} not set`;
     case "provider":
       return `provider error: ${truncateBytes(error.message, MAX_REASON_BYTES)}`;
-    case "refusal":
-      return "model refusal";
     case "incomplete_stream":
       return "stream ended without done event";
     case "stream_errored":
@@ -226,9 +224,6 @@ export async function streamWithRetry<T>(
  * classifier stays the single place that decides what "transient" means.
  */
 function defaultShouldRetry(error: LlmError, attempt: number, maxRetries: number): boolean {
-  // `fallback_model` is the third arm and is unreachable in production — no
-  // construction site ever sets one (#16). It is treated as "stop" here, which
-  // is what the Rust's caller did with it too.
   return shouldRetryError(error, attempt, { max_retries: maxRetries }).decision === "retry";
 }
 

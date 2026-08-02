@@ -59,7 +59,6 @@ pub(super) async fn stream_with_retry(
             .advanced
             .max_retries
             .unwrap_or(RetryPolicy::default().max_retries),
-        ..RetryPolicy::default()
     };
     debug!(
         character = char_name,
@@ -111,10 +110,6 @@ pub(super) async fn stream_with_retry(
                     );
                     tokio::time::sleep(delay).await;
                     attempt = attempt.saturating_add(1);
-                }
-                RetryDecision::FallbackModel(_model) => {
-                    error!(error = %e, "stream_with_retry failed — fallback model requested");
-                    return Err(e);
                 }
                 RetryDecision::Fail => {
                     error!(attempts = attempt.saturating_add(1), error = %e, "stream_with_retry exhausted retries");

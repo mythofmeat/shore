@@ -5,6 +5,12 @@
  * 9023b46d — the last commit where the daemon crate builds — and is frozen. A
  * diff against it is a defect, not a fixture to regenerate.
  *
+ * Removing a *feature* is the exception, and #16 is the only one so far: refusal
+ * detection and model fallback were deleted from both languages, so their cases
+ * were deleted too rather than left recording behaviour that no longer exists.
+ * The fixture header names what went and why; the "it was frozen" test below
+ * requires that note to be there, so a quiet trim still fails.
+ *
  * Both of these fail silently, and in opposite directions:
  *
  * - A **retry decision** that gives up too early loses a turn the user paid
@@ -29,7 +35,7 @@ import {
   type ProviderEntry,
 } from "../src/llm/credentials";
 import type { LlmError } from "../src/llm/errors";
-import { isRefusal, shouldRetryError, shouldRetryRefusal, type RetryDecision } from "../src/llm/retry";
+import { shouldRetryError, type RetryDecision } from "../src/llm/retry";
 
 interface EncodedError {
   kind: string;
@@ -41,6 +47,12 @@ interface EncodedError {
 
 interface PolicyJson {
   max_retries: number;
+  /**
+   * Recorded, no longer an input. `RetryPolicy` carried a fallback model when
+   * the fixture was taken; #16 removed it along with refusal handling, and the
+   * cases whose decision depended on it went with it. It stays in the records
+   * because they are recordings, and is ignored by {@link policyOf}.
+   */
   fallback_model: string | null;
 }
 
@@ -54,19 +66,6 @@ interface Fixture {
   }[];
   should_retry_error: {
     error: EncodedError;
-    attempt: number;
-    policy: PolicyJson;
-    expect: RetryDecision;
-  }[];
-  is_refusal: {
-    content: string;
-    content_len_bytes: number;
-    finish_reason: string;
-    expect: boolean;
-  }[];
-  should_retry_refusal: {
-    content: string;
-    finish_reason: string;
     attempt: number;
     policy: PolicyJson;
     expect: RetryDecision;
@@ -98,18 +97,13 @@ function decodeError(e: EncodedError): LlmError {
       return { kind: "stream_errored", message: e.message ?? "" };
     case "provider":
       return { kind: "provider", message: e.message ?? "" };
-    case "refusal":
-      return { kind: "refusal" };
     default:
       throw new Error(`fixture carries an error kind the replay cannot rebuild: ${e.kind}`);
   }
 }
 
 function policyOf(p: PolicyJson) {
-  return {
-    max_retries: p.max_retries,
-    ...(p.fallback_model !== null ? { fallback_model: p.fallback_model } : {}),
-  };
+  return { max_retries: p.max_retries };
 }
 
 function label(e: EncodedError): string {
@@ -121,19 +115,22 @@ describe("the fixture is real", () => {
     const header = fixture._header.join(" ");
     expect(header).toContain("9023b46d");
     expect(header).toContain("nothing regenerates this file");
+    // The one sanctioned way a case may leave: named, counted, and attributed
+    // to the issue that deleted the feature. Anything trimmed quietly to make a
+    // failure go away has no such line, and this is what makes that visible.
+    expect(header).toContain("REMOVED by #16");
   });
 
   test("a silently empty fixture must not pass", () => {
     expect(fixture.classify_credential_failure.length).toBeGreaterThanOrEqual(20);
     expect(fixture.should_retry_error.length).toBeGreaterThanOrEqual(300);
-    expect(fixture.is_refusal.length).toBeGreaterThanOrEqual(20);
-    expect(fixture.should_retry_refusal.length).toBeGreaterThanOrEqual(40);
     expect(fixture.resolve_key_candidates.length).toBeGreaterThanOrEqual(6);
   });
 
   test("the sweep reaches every decision and every classification", () => {
     const decisions = new Set(fixture.should_retry_error.map((c) => c.expect.decision));
-    expect(decisions).toEqual(new Set(["retry", "fallback_model", "fail"]));
+    // Two arms, not three: `fallback_model` went with #16.
+    expect(decisions).toEqual(new Set(["retry", "fail"]));
 
     const kinds = new Set(fixture.classify_credential_failure.map((c) => c.kind));
     // `unknown` is unreachable from the current classifier — no branch emits
@@ -148,19 +145,6 @@ describe("the fixture is real", () => {
         "not_credential_failure",
       ]),
     );
-  });
-
-  test("the refusal cases straddle the byte limit, not the character limit", () => {
-    // The whole point of the byte-vs-UTF-16 distinction: a case must exist
-    // whose byte length is over 500 while its `.length` is under.
-    const multibyte = fixture.is_refusal.filter(
-      (c) => c.content_len_bytes > 500 && c.content.length <= 500,
-    );
-    expect(multibyte.length, "a multi-byte case past the byte limit").toBeGreaterThan(0);
-    // And one exactly on the boundary each way.
-    const lengths = new Set(fixture.is_refusal.map((c) => c.content_len_bytes));
-    expect(lengths.has(500)).toBe(true);
-    expect(lengths.has(501)).toBe(true);
   });
 });
 
@@ -197,8 +181,7 @@ describe("shouldRetryError", () => {
         const got = shouldRetryError(decodeError(c.error), c.attempt, policyOf(c.policy));
         expect(
           got,
-          `${label(c.error)} attempt=${String(c.attempt)} ` +
-            `max=${String(c.policy.max_retries)} fallback=${String(c.policy.fallback_model)}`,
+          `${label(c.error)} attempt=${String(c.attempt)} max=${String(c.policy.max_retries)}`,
         ).toEqual(c.expect);
       }
     } finally {
@@ -213,35 +196,6 @@ describe("shouldRetryError", () => {
     });
     expect(warned.length).toBe(rotating.length);
     expect(rotating.length).toBeGreaterThan(0);
-  });
-});
-
-describe("isRefusal", () => {
-  for (const [i, c] of fixture.is_refusal.entries()) {
-    const shown = c.content.length > 40 ? `${c.content.slice(0, 40)}…` : c.content;
-    test(`#${String(i)} (${String(c.content_len_bytes)} bytes, ${c.finish_reason}) ${JSON.stringify(shown)}`, () => {
-      // Guard the fixture's own claim: if these disagree the generator and the
-      // replay are not looking at the same string.
-      expect(Buffer.byteLength(c.content, "utf8")).toBe(c.content_len_bytes);
-      expect(isRefusal(c.content, c.finish_reason)).toBe(c.expect);
-    });
-  }
-});
-
-describe("shouldRetryRefusal", () => {
-  test(`all ${String(fixture.should_retry_refusal.length)} recorded decisions`, () => {
-    for (const c of fixture.should_retry_refusal) {
-      const got = shouldRetryRefusal(
-        { content: c.content, finish_reason: c.finish_reason },
-        c.attempt,
-        policyOf(c.policy),
-      );
-      expect(
-        got,
-        `${JSON.stringify(c.content)} / ${c.finish_reason} attempt=${String(c.attempt)} ` +
-          `max=${String(c.policy.max_retries)} fallback=${String(c.policy.fallback_model)}`,
-      ).toEqual(c.expect);
-    }
   });
 });
 

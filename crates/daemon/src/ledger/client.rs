@@ -897,7 +897,6 @@ fn sanitize_fallback_reason(err: &LlmError) -> String {
             };
             format!("provider error: {truncated}")
         }
-        LlmError::Refusal => "model refusal".into(),
         LlmError::IncompleteStream => "stream ended without done event".into(),
         LlmError::StreamErrored { message, .. } => format!("stream errored: {message}"),
         LlmError::Request(_) => "transport error".into(),
