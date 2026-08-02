@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 /// Client hello — sent once after connect.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "protocol/")]
+#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
 pub struct ClientHello {
     pub client_type: String,
     pub client_name: String,
@@ -15,7 +15,7 @@ pub struct ClientHello {
 
 /// One-shot parameter overrides for a single message.
 #[derive(Serialize, Deserialize, Debug, Clone, Default, ts_rs::TS)]
-#[ts(export, export_to = "protocol/")]
+#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
 pub struct MessageOverrides {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f64>,
@@ -29,7 +29,7 @@ pub struct MessageOverrides {
 
 /// A base64-encoded image uploaded by the client.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "protocol/")]
+#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
 pub struct ImageUpload {
     pub filename: String,
     /// Base64-encoded image file bytes.
@@ -44,7 +44,7 @@ pub struct ImageUpload {
 
 /// Send a user message.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "protocol/")]
+#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
 pub struct ClientMessageBody {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -66,7 +66,7 @@ pub struct ClientMessageBody {
 
 /// Regenerate last response.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "protocol/")]
+#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
 pub struct Regen {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -78,7 +78,7 @@ pub struct Regen {
 
 /// Execute a server command.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "protocol/")]
+#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
 pub struct Command {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -90,12 +90,12 @@ pub struct Command {
 
 /// Cancel an in-progress generation.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "protocol/")]
+#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
 pub struct Cancel {}
 
 /// All client → server message types, tagged by "type".
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "protocol/")]
+#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientMessage {
     Hello(ClientHello),

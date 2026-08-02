@@ -12,12 +12,21 @@ bindings describe the shape, that file pins the bytes.
 ## Regenerating
 
 ```
-TS_RS_EXPORT_DIR=/absolute/path/to/llm-sidecar/src cargo test -p shore-common --lib export_bindings
+cargo test -p shore-common --lib export_bindings
 ```
 
-`TS_RS_EXPORT_DIR` is resolved relative to the *crate manifest* (`crates/common/`), not the
-working directory, so it has to be absolute. `crates/common` builds even while the daemon crate
-is red, so this works at any commit on the rewrite branch.
+No environment variable, and that is deliberate. ts-rs resolves `export_to` against
+`TS_RS_EXPORT_DIR`, which defaults to `crates/common/bindings/`, so the derives carry the full
+relative path (`../../../llm-sidecar/src/protocol/`) instead. Setting the destination in the
+derive rather than the environment means the *only* place these can land is this directory.
+
+The first version of this did use `TS_RS_EXPORT_DIR`, and it was a trap: the export tests are
+ordinary `#[test]`s, so any plain `cargo test -p shore-common` — running the suite, checking one
+unrelated case — silently wrote a second, drifting copy of all 38 files into
+`crates/common/bindings/`. One of those copies got committed before anyone noticed.
+
+`crates/common` builds even while the daemon crate is red, so this works at any commit on the
+rewrite branch.
 
 ## Deliberate type overrides
 

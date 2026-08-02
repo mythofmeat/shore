@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 /// SWP error codes per §3.6.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, ts_rs::TS)]
-#[ts(export, export_to = "protocol/")]
+#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorCode {
     ProtocolError,
