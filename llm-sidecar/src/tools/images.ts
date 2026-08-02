@@ -104,7 +104,7 @@ const B64_ALPHABET = /^[A-Za-z0-9+/]$/;
  *   explain.
  * - `Invalid padding` — the remaining `n % 4` of 2 or 3.
  */
-function base64Rejection(b64: string): string | undefined {
+export function base64Rejection(b64: string): string | undefined {
   // An empty payload needs no special case: it has no symbols to reject and a
   // length of 0, so it falls through as the valid zero-byte image it is.
   const firstPad = b64.indexOf("=");
