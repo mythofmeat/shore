@@ -1,0 +1,561 @@
+{
+  "_generated_by": "crates/daemon/tests/gen_web_images_fixture.rs at 9023b46d, driving the real strip_html / truncate_to_bytes / decode_data_url. FROZEN: the generator is not committed and nothing regenerates this. A later diff against this file is a defect in the TypeScript, not a fixture to update.",
+  "_note": "The HTTP is not covered: both handlers call fixed remote hosts. What is driven here is everything around the wire — strip_html, the byte-accurate fetch_url truncation, and decode_data_url including the base64 crate's exact rejection messages, which reach the model through the tool result. The handler shells (argument validation, response reshaping) are asserted directly in web_images_parity.test.ts against the Rust read side by side, and are marked as such there.",
+  "strip_html": [
+    {
+      "label": "empty",
+      "input": "",
+      "output": ""
+    },
+    {
+      "label": "plain_text",
+      "input": "hello world",
+      "output": "hello world"
+    },
+    {
+      "label": "simple_tags",
+      "input": "<p>hello</p><p>world</p>",
+      "output": "hello world"
+    },
+    {
+      "label": "tag_becomes_a_space",
+      "input": "a<b>c",
+      "output": "a c"
+    },
+    {
+      "label": "attributes_are_dropped",
+      "input": "<a href=\"http://x\">link</a>",
+      "output": "link"
+    },
+    {
+      "label": "script_removed",
+      "input": "<p>a</p><script>var x = 1;</script><p>b</p>",
+      "output": "a b"
+    },
+    {
+      "label": "style_removed",
+      "input": "<style>p{color:red}</style>text",
+      "output": "text"
+    },
+    {
+      "label": "head_removed",
+      "input": "<head><title>T</title></head><body>b</body>",
+      "output": "b"
+    },
+    {
+      "label": "uppercase_script",
+      "input": "<P>a</P><SCRIPT>evil()</SCRIPT><P>b</P>",
+      "output": "a b"
+    },
+    {
+      "label": "mixed_case_script",
+      "input": "<ScRiPt>x</ScRiPt>after",
+      "output": "after"
+    },
+    {
+      "label": "script_with_attributes",
+      "input": "<script type=\"text/javascript\">x</script>y",
+      "output": "y"
+    },
+    {
+      "label": "nested_script_in_head",
+      "input": "<head><script>x</script></head>body",
+      "output": "body"
+    },
+    {
+      "label": "unclosed_script_drops_the_rest",
+      "input": "before<script>after",
+      "output": "before"
+    },
+    {
+      "label": "unclosed_style_drops_the_rest",
+      "input": "before<style>after",
+      "output": "before"
+    },
+    {
+      "label": "unclosed_tag_at_end",
+      "input": "text<div",
+      "output": "text<div"
+    },
+    {
+      "label": "lone_lt",
+      "input": "a < b",
+      "output": "a < b"
+    },
+    {
+      "label": "lone_gt",
+      "input": "a > b",
+      "output": "a > b"
+    },
+    {
+      "label": "empty_tag",
+      "input": "a<>b",
+      "output": "a b"
+    },
+    {
+      "label": "entity_amp",
+      "input": "a &amp; b",
+      "output": "a & b"
+    },
+    {
+      "label": "entity_lt_gt",
+      "input": "&lt;tag&gt;",
+      "output": "<tag>"
+    },
+    {
+      "label": "entity_quot",
+      "input": "&quot;quoted&quot;",
+      "output": "\"quoted\""
+    },
+    {
+      "label": "entity_apos_forms",
+      "input": "&#39;a&apos;b&#x27;c",
+      "output": "'a'b'c"
+    },
+    {
+      "label": "entity_nbsp",
+      "input": "a&nbsp;b",
+      "output": "a b"
+    },
+    {
+      "label": "entity_slash",
+      "input": "a&#x2F;b",
+      "output": "a/b"
+    },
+    {
+      "label": "unknown_entity_is_left",
+      "input": "a&copy;b",
+      "output": "a&copy;b"
+    },
+    {
+      "label": "double_decode_amp_lt",
+      "input": "&amp;lt;",
+      "output": "<"
+    },
+    {
+      "label": "double_decode_amp_amp",
+      "input": "&amp;amp;",
+      "output": "&amp;"
+    },
+    {
+      "label": "decoded_lt_is_not_a_tag",
+      "input": "&lt;script&gt;alert(1)&lt;/script&gt;",
+      "output": "<script>alert(1)</script>"
+    },
+    {
+      "label": "collapses_runs",
+      "input": "a    b",
+      "output": "a b"
+    },
+    {
+      "label": "collapses_newlines_and_tabs",
+      "input": "a\n\n\tb",
+      "output": "a b"
+    },
+    {
+      "label": "trims_both_ends",
+      "input": "   a b   ",
+      "output": "a b"
+    },
+    {
+      "label": "tag_spacing_collapses",
+      "input": "<p>a</p>   <p>b</p>",
+      "output": "a b"
+    },
+    {
+      "label": "only_whitespace",
+      "input": "   \n\t  ",
+      "output": ""
+    },
+    {
+      "label": "only_tags",
+      "input": "<p></p><div></div>",
+      "output": ""
+    },
+    {
+      "label": "unicode_text",
+      "input": "héllo wörld",
+      "output": "héllo wörld"
+    },
+    {
+      "label": "unicode_in_tags",
+      "input": "<p>祈飛</p><p>レン</p>",
+      "output": "祈飛 レン"
+    },
+    {
+      "label": "unicode_nbsp_char",
+      "input": "a b",
+      "output": "a b"
+    },
+    {
+      "label": "unicode_ideographic_space",
+      "input": "a　b",
+      "output": "a b"
+    },
+    {
+      "label": "emoji",
+      "input": "<p>🎵</p>",
+      "output": "🎵"
+    },
+    {
+      "label": "multibyte_before_tag",
+      "input": "é<b>x</b>",
+      "output": "é x"
+    },
+    {
+      "label": "multibyte_inside_removed_block",
+      "input": "<script>é</script>after",
+      "output": "after"
+    },
+    {
+      "label": "fullwidth_s_is_not_script",
+      "input": "<ｓcript>x</ｓcript>y",
+      "output": "x y"
+    },
+    {
+      "label": "script_with_dotted_capital_i",
+      "input": "<script>İ</script>after",
+      "output": "after"
+    },
+    {
+      "label": "text_with_dotted_capital_i",
+      "input": "<p>İ</p>tail",
+      "output": "İ tail"
+    },
+    {
+      "label": "nel_is_whitespace",
+      "input": "ab",
+      "output": "a b"
+    },
+    {
+      "label": "bom_is_not_whitespace",
+      "input": "a﻿b",
+      "output": "a﻿b"
+    },
+    {
+      "label": "bom_at_start_is_not_trimmed",
+      "input": "﻿text",
+      "output": "﻿text"
+    }
+  ],
+  "truncate_to_bytes": [
+    {
+      "label": "under_limit",
+      "input": "abc",
+      "max_bytes": 10,
+      "content": "abc",
+      "truncated": false
+    },
+    {
+      "label": "exactly_at_limit",
+      "input": "abcde",
+      "max_bytes": 5,
+      "content": "abcde",
+      "truncated": false
+    },
+    {
+      "label": "one_over",
+      "input": "abcdef",
+      "max_bytes": 5,
+      "content": "abcde",
+      "truncated": true
+    },
+    {
+      "label": "zero_limit",
+      "input": "abc",
+      "max_bytes": 0,
+      "content": "",
+      "truncated": true
+    },
+    {
+      "label": "empty_input",
+      "input": "",
+      "max_bytes": 5,
+      "content": "",
+      "truncated": false
+    },
+    {
+      "label": "two_byte_split",
+      "input": "ééééé",
+      "max_bytes": 5,
+      "content": "éé",
+      "truncated": true
+    },
+    {
+      "label": "two_byte_exact",
+      "input": "ééééé",
+      "max_bytes": 10,
+      "content": "ééééé",
+      "truncated": false
+    },
+    {
+      "label": "three_byte_split",
+      "input": "祈飛祈飛",
+      "max_bytes": 5,
+      "content": "祈",
+      "truncated": true
+    },
+    {
+      "label": "three_byte_exact",
+      "input": "祈飛",
+      "max_bytes": 6,
+      "content": "祈飛",
+      "truncated": false
+    },
+    {
+      "label": "four_byte_split",
+      "input": "🎵🎵",
+      "max_bytes": 5,
+      "content": "🎵",
+      "truncated": true
+    },
+    {
+      "label": "four_byte_exact",
+      "input": "🎵",
+      "max_bytes": 4,
+      "content": "🎵",
+      "truncated": false
+    },
+    {
+      "label": "four_byte_one_short",
+      "input": "🎵",
+      "max_bytes": 3,
+      "content": "",
+      "truncated": true
+    },
+    {
+      "label": "mixed_cut_0",
+      "input": "a🎵b",
+      "max_bytes": 1,
+      "content": "a",
+      "truncated": true
+    },
+    {
+      "label": "mixed_cut_1",
+      "input": "a🎵b",
+      "max_bytes": 2,
+      "content": "a",
+      "truncated": true
+    },
+    {
+      "label": "mixed_cut_2",
+      "input": "a🎵b",
+      "max_bytes": 3,
+      "content": "a",
+      "truncated": true
+    },
+    {
+      "label": "mixed_cut_3",
+      "input": "a🎵b",
+      "max_bytes": 4,
+      "content": "a",
+      "truncated": true
+    },
+    {
+      "label": "mixed_cut_4",
+      "input": "a🎵b",
+      "max_bytes": 5,
+      "content": "a🎵",
+      "truncated": true
+    },
+    {
+      "label": "mixed_cut_5",
+      "input": "a🎵b",
+      "max_bytes": 6,
+      "content": "a🎵b",
+      "truncated": false
+    }
+  ],
+  "truncate_at_real_limit": {
+    "input_bytes": 50005,
+    "input_chars": 50004,
+    "content_bytes": 49999,
+    "content_chars": 49999,
+    "truncated": true,
+    "ends_with": "aaa"
+  },
+  "decode_data_url": [
+    {
+      "label": "png",
+      "input": "data:image/png;base64,aGVsbG8=",
+      "ok": {
+        "bytes": [
+          104,
+          101,
+          108,
+          108,
+          111
+        ],
+        "extension": "png"
+      }
+    },
+    {
+      "label": "jpeg_maps_to_jpg",
+      "input": "data:image/jpeg;base64,aGVsbG8=",
+      "ok": {
+        "bytes": [
+          104,
+          101,
+          108,
+          108,
+          111
+        ],
+        "extension": "jpg"
+      }
+    },
+    {
+      "label": "jpg_stays_jpg",
+      "input": "data:image/jpg;base64,aGVsbG8=",
+      "ok": {
+        "bytes": [
+          104,
+          101,
+          108,
+          108,
+          111
+        ],
+        "extension": "jpg"
+      }
+    },
+    {
+      "label": "webp",
+      "input": "data:image/webp;base64,aGVsbG8=",
+      "ok": {
+        "bytes": [
+          104,
+          101,
+          108,
+          108,
+          111
+        ],
+        "extension": "webp"
+      }
+    },
+    {
+      "label": "gif",
+      "input": "data:image/gif;base64,aGVsbG8=",
+      "ok": {
+        "bytes": [
+          104,
+          101,
+          108,
+          108,
+          111
+        ],
+        "extension": "gif"
+      }
+    },
+    {
+      "label": "svg_xml_subtype_used_verbatim",
+      "input": "data:image/svg+xml;base64,aGVsbG8=",
+      "ok": {
+        "bytes": [
+          104,
+          101,
+          108,
+          108,
+          111
+        ],
+        "extension": "svg+xml"
+      }
+    },
+    {
+      "label": "empty_payload",
+      "input": "data:image/png;base64,",
+      "ok": {
+        "bytes": [],
+        "extension": "png"
+      }
+    },
+    {
+      "label": "not_a_data_url",
+      "input": "https://example.com/x.png",
+      "err": "io: data URL is not an image"
+    },
+    {
+      "label": "data_but_not_image",
+      "input": "data:text/plain;base64,aGVsbG8=",
+      "err": "io: data URL is not an image"
+    },
+    {
+      "label": "missing_base64_marker",
+      "input": "data:image/png,aGVsbG8=",
+      "err": "io: data URL missing ;base64, separator"
+    },
+    {
+      "label": "missing_comma",
+      "input": "data:image/png;base64",
+      "err": "io: data URL missing ;base64, separator"
+    },
+    {
+      "label": "invalid_base64",
+      "input": "data:image/png;base64,!!!not-base64!!!",
+      "err": "io: failed to decode base64 image: Invalid symbol 33, offset 0."
+    },
+    {
+      "label": "base64_bad_padding",
+      "input": "data:image/png;base64,aGVsbG8",
+      "err": "io: failed to decode base64 image: Invalid padding"
+    },
+    {
+      "label": "uppercase_prefix_is_not_matched",
+      "input": "DATA:IMAGE/PNG;base64,aGVsbG8=",
+      "err": "io: data URL is not an image"
+    },
+    {
+      "label": "b64_len1",
+      "input": "data:image/png;base64,a",
+      "err": "io: failed to decode base64 image: Invalid input length: 1"
+    },
+    {
+      "label": "b64_len2",
+      "input": "data:image/png;base64,aG",
+      "err": "io: failed to decode base64 image: Invalid padding"
+    },
+    {
+      "label": "b64_len3",
+      "input": "data:image/png;base64,aGV",
+      "err": "io: failed to decode base64 image: Invalid padding"
+    },
+    {
+      "label": "b64_len5",
+      "input": "data:image/png;base64,aGVsb",
+      "err": "io: failed to decode base64 image: Invalid input length: 5"
+    },
+    {
+      "label": "b64_symbol_at_0",
+      "input": "data:image/png;base64,!GVsbG8=",
+      "err": "io: failed to decode base64 image: Invalid symbol 33, offset 0."
+    },
+    {
+      "label": "b64_symbol_at_2",
+      "input": "data:image/png;base64,aG!sbG8=",
+      "err": "io: failed to decode base64 image: Invalid symbol 33, offset 2."
+    },
+    {
+      "label": "b64_symbol_space",
+      "input": "data:image/png;base64,aGV bG8=",
+      "err": "io: failed to decode base64 image: Invalid symbol 32, offset 3."
+    },
+    {
+      "label": "b64_symbol_dash",
+      "input": "data:image/png;base64,aGV-bG8=",
+      "err": "io: failed to decode base64 image: Invalid symbol 45, offset 3."
+    },
+    {
+      "label": "b64_trailing_padding_excess",
+      "input": "data:image/png;base64,aGVsbG8===",
+      "err": "io: failed to decode base64 image: Invalid symbol 61, offset 7."
+    },
+    {
+      "label": "b64_padding_in_middle",
+      "input": "data:image/png;base64,aG=sbG8=",
+      "err": "io: failed to decode base64 image: Invalid symbol 61, offset 2."
+    },
+    {
+      "label": "b64_newline",
+      "input": "data:image/png;base64,aGVs\nbG8=",
+      "err": "io: failed to decode base64 image: Invalid symbol 10, offset 4."
+    }
+  ]
+}
