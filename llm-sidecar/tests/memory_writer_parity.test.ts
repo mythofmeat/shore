@@ -157,6 +157,9 @@ describe("compaction writer parity", () => {
           // serde's inner text is not reproducible, but the failure and its
           // `conversation:` prefix are this port's contract.
           expect(threw).toBeInstanceOf(ConversationManagerError);
+          // The Rust's variant, which the command surface branches on. Carried
+          // by the class rather than recovered from the message prefix.
+          expect((threw as ConversationManagerError).kind).toBe("conversation");
           expect((threw as Error).message).toStartWith("conversation:");
           expect(c.outcome.err).toStartWith("conversation:");
         }

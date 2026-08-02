@@ -33,6 +33,7 @@ import { join } from "node:path";
 
 import { atomicWrite } from "../engine/atomic";
 import type { CompactionManifest, SegmentEntry } from "../engine/segments";
+import { CompactionError } from "./compaction/types";
 import { rustLines, rustTrim } from "./lines";
 
 /** Matches `shore_common::config` — the three paths this module owns. */
@@ -44,13 +45,15 @@ const COMPACTION_MANIFEST_FILE = "compaction.json";
  * A failure inside archive-and-retain.
  *
  * The Rust wrapped every one of these in `CompactionError::ConversationManager`,
- * whose Display is `conversation: {message}`. Kept, because the compaction
- * manager above this distinguishes error variants when deciding whether a pass
- * may archive.
+ * whose Display is `conversation: {message}` — so this *is* a `CompactionError`,
+ * and now says so. A compaction pass propagates it unchanged after rolling its
+ * writes back, and the command surface branches on the variant when deciding
+ * how to report a failed pass; without the shared base that branch would have
+ * to match on a message prefix.
  */
-export class ConversationManagerError extends Error {
+export class ConversationManagerError extends CompactionError {
   constructor(message: string) {
-    super(`conversation: ${message}`);
+    super("conversation", `conversation: ${message}`);
     this.name = "ConversationManagerError";
   }
 }

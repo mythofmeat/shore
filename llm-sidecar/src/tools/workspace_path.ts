@@ -35,6 +35,12 @@
 import { realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, parse, sep } from "node:path";
 
+// Rust's `str::trim`, not JavaScript's. The two disagree on the byte-order
+// mark (JS strips it, Rust does not) and on U+0085 (Rust strips it, JS does
+// not), and both of those spellings reach here from a model-supplied path. A
+// BOM-led `SOUL.md` looked protected to the port and unprotected to the Rust.
+import { rustTrim } from "../memory/lines";
+
 /** A rejected path, carrying the same message the Rust `ToolError` rendered. */
 export class PathError extends Error {
   constructor(message: string) {
@@ -65,7 +71,7 @@ const ACTIVE_PROMPT_DIR = "active_prompt";
 export function resolveRoots(workspaceDir: string, relativeRaw: string): [string, string] {
   if (workspaceDir === "") throw new PathError("invalid args: workspace not configured");
 
-  const relative = relativeRaw.trim();
+  const relative = rustTrim(relativeRaw);
   if (relative === "") throw new PathError("invalid args: path is empty");
 
   if (relative === "workspace") return [workspaceDir, ""];
@@ -216,7 +222,7 @@ function tryRealpath(p: string): string | undefined {
  * protected-file guard does not recognize.
  */
 export function normalizeWorkspacePath(path: string): string {
-  let normalized = path.trim().replaceAll("\\", "/");
+  let normalized = rustTrim(path).replaceAll("\\", "/");
   for (;;) {
     const before = normalized.length;
     while (normalized.startsWith("/")) normalized = normalized.slice(1);
