@@ -153,18 +153,6 @@ enum StartupError {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Sandbox-helper mode: when re-executed as `<exe> __sandbox-exec ...` by the
-    // exec tool, apply the Landlock/seccomp sandbox and `execve` the real
-    // program. This MUST run before the async runtime starts — the restrictions
-    // are applied single-threaded, before any tokio worker threads exist.
-    if std::env::args_os()
-        .nth(1)
-        .is_some_and(|arg| arg == shore_daemon::sandbox::HELPER_ARG)
-    {
-        // Only returns on failure (success replaces the process via execve).
-        return Err(Box::new(shore_daemon::sandbox::run_sandbox_child()));
-    }
-
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
@@ -199,9 +187,6 @@ async fn run_daemon() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     create_runtime_dirs(&loaded)?;
-
-    // Install the exec-tool sandbox policy before any tool can run.
-    shore_daemon::sandbox::init_policy(loaded.app.tools.sandbox.clone());
 
     // ── Notification service ──────────────────────────────────────────
     let notifier = NotificationService::new(loaded.app.notifications.clone());

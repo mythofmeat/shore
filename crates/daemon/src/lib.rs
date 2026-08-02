@@ -55,7 +55,6 @@ pub mod notifications;
 pub mod preferences;
 pub mod prompts;
 pub mod runtime_state;
-pub mod sandbox;
 pub mod swp_server;
 mod sync;
 pub mod templates;

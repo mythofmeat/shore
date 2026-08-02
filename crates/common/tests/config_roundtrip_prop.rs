@@ -310,20 +310,6 @@ fn arb_tool_override() -> impl Strategy<Value = ToolOverride> {
         })
 }
 
-fn arb_sandbox_config() -> impl Strategy<Value = shore_common::config::app::SandboxConfig> {
-    use shore_common::config::app::SandboxMode;
-    (
-        prop::sample::select(vec![SandboxMode::Auto, SandboxMode::On, SandboxMode::Off]),
-        any::<bool>(),
-    )
-        .prop_map(
-            |(mode, allow_network)| shore_common::config::app::SandboxConfig {
-                mode,
-                allow_network,
-            },
-        )
-}
-
 fn arb_tools_config() -> impl Strategy<Value = ToolsConfig> {
     (
         prop::collection::vec(arb_nonempty_text(), 0..5),
@@ -336,7 +322,6 @@ fn arb_tools_config() -> impl Strategy<Value = ToolsConfig> {
             arb_nonempty_text(),
             any::<bool>(),
         ),
-        arb_sandbox_config(),
         prop::collection::vec((arb_nonempty_text(), arb_tool_override()), 0..3),
     )
         .prop_map(
@@ -346,7 +331,6 @@ fn arb_tools_config() -> impl Strategy<Value = ToolsConfig> {
                 max_result_chars,
                 timeout,
                 search,
-                sandbox,
                 per_tool_entries,
             )| {
                 let (api_key_env, result_limit, search_depth, include_answer) = search;
@@ -362,7 +346,6 @@ fn arb_tools_config() -> impl Strategy<Value = ToolsConfig> {
                         search_depth,
                         include_answer,
                     },
-                    sandbox,
                     config,
                 }
             },

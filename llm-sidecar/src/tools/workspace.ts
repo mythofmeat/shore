@@ -1410,10 +1410,8 @@ export function validateGitSubcommand(sub: string[]): void {
       throw new InvalidArgs(
         "git push is not allowed (the daemon pushes after a pass when [memory] git_push is enabled)",
       );
-    // Remote access is the daemon's job, the same way `push` is. These would
-    // also fail opaquely under the sandbox — seccomp blocks `socket(AF_INET)`
-    // unless `allow_network` is set — so deny them here, where the refusal can
-    // explain itself.
+    // Remote access is the daemon's job, the same way `push` is: the model
+    // works in the local repo.
     case "fetch":
     case "pull":
     case "clone":
@@ -1451,31 +1449,12 @@ export function characterGitIdentity(character: string): [string, string] {
 }
 
 /**
- * How a git invocation is confined.
- *
- * `sandbox.rs` is the one file staying in Rust — it applies Landlock and seccomp
- * before exec, which is kernel work TypeScript has no business doing — so the
- * plan arrives from outside rather than being computed here. The default is a
- * direct spawn, which is what `SandboxPlan::Direct` does and what
- * `sandbox = "off"` selects.
- */
-export type SandboxPlan =
-  | { kind: "direct" }
-  | { kind: "wrapped"; helper: string; prefixArgs: string[] }
-  | { kind: "unavailable"; reason: string };
-
-/** Chooses a plan for a workspace. Injected so the git tool stays testable. */
-export type SandboxPlanner = (workspaceDir: string) => SandboxPlan;
-
-const DIRECT_SANDBOX: SandboxPlanner = () => ({ kind: "direct" });
-
-/**
  * Run a git subcommand in the character's workspace repository.
  *
- * The only tool that spawns a process. Everything it can do is bounded by three
- * checks: the subcommand must not be a global flag, it must not be destructive
- * or history-rewriting, and every path-like argument must stay inside the
- * workspace.
+ * The only tool that spawns a process, and it is spawned directly. Everything
+ * it can do is bounded by three checks: the subcommand must not be a global
+ * flag, it must not be destructive or history-rewriting, and every path-like
+ * argument must stay inside the workspace.
  *
  * Initializes the workspace repository when it is missing. The memory passes do
  * the same before they run, but they used to be the only ones: on the chat path
@@ -1486,7 +1465,6 @@ export async function handleGit(
   input: ToolInput,
   workspaceDir: string,
   character: string,
-  planSandbox: SandboxPlanner = DIRECT_SANDBOX,
 ): Promise<unknown> {
   const rawSubcommand = asStr(input, "subcommand");
   if (rawSubcommand === undefined) {
@@ -1533,16 +1511,6 @@ export async function handleGit(
   }
 
   const spawnArgs = [...GIT_SAFETY_FLAGS, ...subSlice];
-  const plan = planSandbox(workspaceDir);
-  if (plan.kind === "unavailable") {
-    // `sandbox = "on"` requires enforcement we cannot provide: fail closed
-    // rather than run git unsandboxed.
-    throw new ToolIoError(`git sandbox required but unavailable: ${plan.reason}`);
-  }
-  const [program, programArgs] =
-    plan.kind === "direct"
-      ? ["git", spawnArgs]
-      : [plan.helper, [...plan.prefixArgs, "--", "git", ...spawnArgs]];
 
   // git runs as the character: attribute commits to it, keeping them distinct
   // from operator commits in the same repo.
@@ -1552,7 +1520,7 @@ export async function handleGit(
 
   let output;
   try {
-    output = await runProcess(program, programArgs, {
+    output = await runProcess("git", spawnArgs, {
       cwd,
       env: {
         ...process.env,

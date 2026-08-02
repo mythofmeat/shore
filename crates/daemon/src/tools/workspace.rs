@@ -15,13 +15,11 @@
 //! this file at `9023b46d` and mutation-checked. Treat a parity diff as a
 //! defect rather than a fixture to refresh.
 //!
-//! One seam is deliberately left open. [`git_command`] consults
-//! [`crate::sandbox`], which is the one module staying in Rust: it applies
-//! Landlock and seccomp before exec. The port takes the plan as an injected
-//! argument and defaults to a direct spawn — the `SandboxPlan::Direct` path —
-//! so the tool is complete apart from that call. Wiring it is part of turning
-//! `sandbox.rs` into a standalone helper binary, which is the step that removes
-//! the `shore-daemon` binary entirely.
+//! The port is complete: the seam [`git_command`] used to hold open — a
+//! Landlock/seccomp plan from `crate::sandbox` — is gone with the sandbox
+//! itself, so git is spawned directly on both sides. What bounds the tool now
+//! is what always did the load-bearing work: the subcommand allowlist, the
+//! destructive-operation denylist, and the workspace path check.
 
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -1587,9 +1585,7 @@ fn validate_git_subcommand(sub: &[String]) -> Result<(), ToolError> {
             "git push is not allowed (the daemon pushes after a pass when [memory] git_push is enabled)".into(),
         )),
         // Remote access is the daemon's job, the same way `push` is: the model
-        // works in the local repo. These would also fail opaquely under the
-        // sandbox — seccomp blocks `socket(AF_INET)` unless `allow_network` is
-        // set — so deny them here, where the refusal can explain itself.
+        // works in the local repo.
         "fetch" | "pull" | "clone" => Err(ToolError::InvalidArgs(format!(
             "git {cmd} is not allowed (the daemon owns remote access)"
         ))),
@@ -1603,41 +1599,11 @@ fn validate_git_subcommand(sub: &[String]) -> Result<(), ToolError> {
     }
 }
 
-/// Build the `git` invocation for `sub_slice`, applying the sandbox when it is
-/// enabled.
-///
-/// git is the only tool that spawns a process, and it can still run
-/// repo-supplied code (hooks), so it keeps the containment the exec tool had:
-/// the program is re-executed through the daemon's hidden helper mode, which
-/// applies Landlock + seccomp before running it. Falls back to a direct spawn
-/// when the sandbox is disabled or unavailable under `auto`.
-fn git_command(
-    workspace_dir: &str,
-    sub_slice: &[String],
-) -> Result<tokio::process::Command, ToolError> {
-    match crate::sandbox::plan_for(workspace_dir) {
-        crate::sandbox::SandboxPlan::Direct => {
-            let mut cmd = tokio::process::Command::new("git");
-            let _ignored = cmd.args(sub_slice);
-            Ok(cmd)
-        }
-        crate::sandbox::SandboxPlan::Wrapped {
-            helper,
-            prefix_args,
-        } => {
-            let mut cmd = tokio::process::Command::new(helper);
-            let _prefix = cmd.args(&prefix_args);
-            let _sep = cmd.arg("--");
-            let _prog = cmd.arg("git");
-            let _args = cmd.args(sub_slice);
-            Ok(cmd)
-        }
-        // `sandbox = "on"` requires enforcement we cannot provide here: fail
-        // closed rather than run git unsandboxed.
-        crate::sandbox::SandboxPlan::Unavailable { reason } => Err(ToolError::Io(format!(
-            "git sandbox required but unavailable: {reason}"
-        ))),
-    }
+/// Build the `git` invocation for `sub_slice`.
+fn git_command(sub_slice: &[String]) -> tokio::process::Command {
+    let mut cmd = tokio::process::Command::new("git");
+    let _ignored = cmd.args(sub_slice);
+    cmd
 }
 
 /// Run a git subcommand in the character's workspace repository.
@@ -1722,7 +1688,7 @@ pub async fn handle_git(
     let mut spawn_args: Vec<String> = GIT_SAFETY_FLAGS.iter().map(|f| (*f).to_owned()).collect();
     spawn_args.extend(sub_slice.iter().cloned());
 
-    let mut cmd = git_command(workspace_dir, &spawn_args)?;
+    let mut cmd = git_command(&spawn_args);
 
     // git runs as the character: attribute commits to it, keeping them
     // distinct from operator commits in the same repo.

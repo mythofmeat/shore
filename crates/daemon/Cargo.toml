@@ -71,12 +71,6 @@ rmcp = { workspace = true }
 rusqlite = { workspace = true }
 zstd = { workspace = true }
 
-# Exec-tool sandbox (Linux only): Landlock for filesystem confinement and
-# seccomp for syscall cuts. Other platforms fall back to denylist-only exec.
-[target.'cfg(target_os = "linux")'.dependencies]
-landlock = "0.4"
-seccompiler = "0.5"
-
 [dev-dependencies]
 # Self-referential dev-dependency, purely to enable `test-stub` while building
 # tests. This is how a bin can be gated off for release yet still built by
