@@ -27,15 +27,13 @@ import compactPromptRaw from "../../../../crates/daemon/prompts/memory/compactio
 import compactSystemRaw from "../../../../crates/daemon/prompts/memory/compaction/compact_system.md" with { type: "text" };
 
 /**
- * Drop one trailing newline, and only one.
- *
- * `include_prompt!` does this at compile time so a template file can end the
- * way text files are supposed to without the newline riding into the prompt. A
- * file ending in two newlines keeps one.
+ * Re-exported for the callers that already import it from here; the helper
+ * itself lives in `engine/prompt.ts` now, beside the rest of the prompt-text
+ * handling.
  */
-export function stripOneTrailingNewline(raw: string): string {
-  return raw.endsWith("\n") ? raw.slice(0, -1) : raw;
-}
+import { stripOneTrailingNewline } from "../../engine/prompt.ts";
+
+export { stripOneTrailingNewline };
 
 /**
  * The compaction system prompt template.

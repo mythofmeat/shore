@@ -292,6 +292,21 @@ export function xmlTagFromName(name: string, fallback: string): string {
   return tag === "" ? fallback : tag;
 }
 
+/**
+ * Drop one trailing newline, and only one.
+ *
+ * `include_prompt!` does this at compile time so a prompt file can end the way
+ * text files are supposed to without the newline riding into the prompt — and
+ * into the cache key, which hashes the exact bytes. A file ending in two
+ * newlines keeps one.
+ *
+ * Lives here rather than beside any one caller: every `.md` imported with
+ * `{ type: "text" }` needs it, and they are no longer all compaction's.
+ */
+export function stripOneTrailingNewline(raw: string): string {
+  return raw.endsWith("\n") ? raw.slice(0, -1) : raw;
+}
+
 /** UTF-8 byte length. See the note at the top of this file. */
 function byteLength(text: string): number {
   return Buffer.byteLength(text, "utf8");
