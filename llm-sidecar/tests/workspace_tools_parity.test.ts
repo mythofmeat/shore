@@ -13,7 +13,7 @@
  * through a list of edits is defined by the file it *didn't* write, and
  * `delete` is defined by the file it moved rather than removed.
  *
- * Two values cannot be pinned literally and are handled explicitly rather than
+ * Three values cannot be pinned literally and are handled explicitly rather than
  * waved through:
  *
  * - The trash directory's name is a millisecond timestamp. The replay reads the
@@ -24,6 +24,13 @@
  * - File mtimes drive the search ordering, so every file in a search tree
  *   carries an explicit `mtime_secs` that both sides set. Two files in the
  *   `tie-` pair deliberately share one, to pin the path-order tiebreak.
+ * - A listing's `size` for a *directory* is the size of the directory inode,
+ *   which is a property of the filesystem and not of either implementation:
+ *   4096 on the ext4 the generator ran on, 60 on a tmpfs. Both sides pass the
+ *   raw value straight through (Rust `meta.len()`, TypeScript `meta.size`), so
+ *   the fixture froze a number no other machine can reproduce. The replay
+ *   blanks it on both sides and pins the pass-through separately, in
+ *   "directory size is the filesystem's".
  *
  * The offsets `findCaseInsensitiveMatch` hands `excerptLine` are byte offsets
  * in the Rust and code-point offsets here (see the module header in
@@ -226,10 +233,47 @@ describe("read", () => {
     test(c.name, async () => {
       const { workspace } = await makeCase(c.tree, c.workspace_missing === true);
       const ws = c.workspace_unset === true ? "" : workspace;
-      expect(await outcome(() => handleRead(c.input, ws))).toEqual(c.result);
+      expect(blankDirectorySizes(await outcome(() => handleRead(c.input, ws)))).toEqual(
+        blankDirectorySizes(c.result),
+      );
     });
   }
+
+  // What the blanking above gives up, taken back directly: the number is the
+  // filesystem's, but *which* number is the port's decision, and a listing that
+  // reported 0, or the target's size, or a recursive total would still pass a
+  // blanked comparison. Symlinks are unaffected — a link to a directory is
+  // reported as a file whose size is the length of its target, which is
+  // portable and stays pinned in the fixture.
+  test("directory size is the filesystem's", async () => {
+    const { workspace } = await makeCase([
+      { path: "sub", kind: "dir" },
+      { path: "sub/deep.md", kind: "file", content: "deep file" },
+    ]);
+    const listing = (await handleRead({}, workspace)) as { entries: { name: string; size: number }[] };
+    const sub = listing.entries.find((e) => e.name === "sub");
+    expect(sub?.size).toBe((await lstat(join(workspace, "sub"))).size);
+  });
 });
+
+/**
+ * Drop `size` from every `type: "directory"` entry in a listing outcome.
+ *
+ * See the third bullet in the module header: the value is the directory
+ * inode's size, so it is the filesystem's answer rather than either
+ * implementation's, and the frozen fixture carries the generator's ext4 4096.
+ * Everything else about the entry — name, type, ordering, and every file's
+ * size — still compares literally.
+ */
+function blankDirectorySizes(o: Outcome): Outcome {
+  if (!("ok" in o)) return o;
+  const ok = o.ok as Record<string, unknown> | null;
+  if (ok === null || typeof ok !== "object" || !Array.isArray(ok.entries)) return o;
+  const entries = (ok.entries as Record<string, unknown>[]).map((e) =>
+    e.type === "directory" ? { ...e, size: null } : e,
+  );
+  return { ok: { ...ok, entries } };
+}
 
 // ── edit ────────────────────────────────────────────────────────────────
 
