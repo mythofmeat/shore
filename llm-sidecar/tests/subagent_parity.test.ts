@@ -155,6 +155,14 @@ const histories = new Map<string, Message[]>(
 
 const exfilHistory = (fixture.exfil_history as FixtureMessage[]).map(toMessage);
 
+describe("the fixture is real", () => {
+  test("it was frozen, and says so", () => {
+    const header = fixture._header.join(" ");
+    expect(header).toContain("9023b46d");
+    expect(header).toContain("nothing regenerates this file");
+  });
+});
+
 // ── Workspace confinement ───────────────────────────────────────────────
 
 describe("resolvePath: workspace confinement", () => {

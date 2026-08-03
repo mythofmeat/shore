@@ -59,6 +59,14 @@ type Row = Record<string, unknown>;
 
 const f = fixture as unknown as Record<string, Row[]> & { append_in_place: Row };
 
+describe("the fixture is real", () => {
+  test("it was frozen, and says so", () => {
+    const header = fixture._header.join(" ");
+    expect(header).toContain("9023b46d");
+    expect(header).toContain("nothing regenerates this file");
+  });
+});
+
 // ── truncate_summary ────────────────────────────────────────────────────
 
 describe("truncate_summary", () => {

@@ -1,4 +1,30 @@
 {
+  "_header": [
+    "Parity fixture for sub-agent prompt assembly and workspace path confinement.",
+    "",
+    "GENERATED from crates/daemon/src/tools/subagent.rs, the resolve_roots /",
+    "resolve_path confinement boundary in tools/workspace.rs, and the",
+    "prompt-visible normalization in memory/deferred_edits.rs, by driving the",
+    "real Rust in a throwaway worktree at 9023b46d - the last commit where the",
+    "daemon crate still compiles. Ports to llm-sidecar/src/tools/subagent.ts",
+    "and src/tools/workspace_path.ts. The generator is not committed.",
+    "",
+    "This file is FROZEN: nothing regenerates this file. A later diff against it is a defect in the TypeScript, not a fixture that needs updating.",
+    "",
+    "Run-specific temp directories are recorded as the placeholders <WS>,",
+    "<OUTSIDE> and <DATA>; the replay rebuilds the same on-disk layout rather",
+    "than replaying against paths that no longer exist.",
+    "",
+    "Two groups carry security weight rather than behavioural weight. The",
+    "resolve_path cases pin confinement, because a {{file:}} target that",
+    "escapes the workspace is exfiltration to an external provider. The expand",
+    "cases pin that macro output is terminal and never re-scanned, so",
+    "conversation text containing macro syntax stays inert.",
+    "",
+    "Mutation-checked at 66 of 67. The survivor is equivalent: a zero count",
+    "already yields an empty window through the slice arithmetic. It is noted",
+    "at the source."
+  ],
   "resolve_path": [
     {
       "input": "SOUL.md",

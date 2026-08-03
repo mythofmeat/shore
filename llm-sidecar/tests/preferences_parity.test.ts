@@ -311,6 +311,14 @@ function catchError<T extends Error>(ctor: new (...args: never[]) => T, fn: () =
   throw new Error(`expected a ${ctor.name}`);
 }
 
+describe("the fixture is real", () => {
+  test("it was frozen, and says so", () => {
+    const header = fixture._header.join(" ");
+    expect(header).toContain("9023b46d");
+    expect(header).toContain("nothing regenerates this file");
+  });
+});
+
 // ── glob and visibility ──────────────────────────────────────────────────────
 
 describe("globMatches", () => {

@@ -155,6 +155,14 @@ function configOf(raw: Record<string, unknown>): RetrievalConfig {
   };
 }
 
+describe("the fixture is real", () => {
+  test("it was frozen, and says so", () => {
+    const header = (fixture._header as string[]).join(" ");
+    expect(header).toContain("9023b46d");
+    expect(header).toContain("nothing regenerates this file");
+  });
+});
+
 // ── end-to-end scripts ──────────────────────────────────────────────────
 
 describe("hybridSearch", () => {

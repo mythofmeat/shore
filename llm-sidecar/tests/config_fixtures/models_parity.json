@@ -1,4 +1,33 @@
 {
+  "_header": [
+    "Parity fixture for the model catalog, its cascade, and the duration and",
+    "applicability types it resolves against.",
+    "",
+    "GENERATED from `main`, NOT from the 9023b46d worktree that every other",
+    "fixture in this series uses. crates/common still compiles, so this pins",
+    "current behaviour rather than behaviour from the last green daemon commit.",
+    "Do not copy a 9023b46d provenance onto this file.",
+    "",
+    "Driven against the real shore_common::config - config/models.rs (the",
+    "[chat.<provider>.<model>] catalog, the cascade, the hardcoded provider",
+    "defaults), config/duration.rs, and the applicability / default_value half",
+    "of config/capabilities.rs. Ports to llm-sidecar/src/config/models.ts,",
+    "src/config/duration.ts and src/llm/capabilities.ts. The generator is not",
+    "committed.",
+    "",
+    "This file is FROZEN: nothing regenerates this file. A later diff against it is a defect in the TypeScript, not a fixture that needs updating.",
+    "",
+    "Mutation-checked at 74 of 77. Three survivors are documented at their",
+    "sites in the catalog.",
+    "",
+    "Two properties here are load-bearing and were only caught by generating",
+    "against the real Rust. The final catalog sort is not a formality: walking",
+    "providers in BTreeMap order and inserting as you go does not produce a",
+    "sorted catalog, because `-` (0x2D) precedes `.` (0x2E), so chat.a-b.m",
+    "sorts before chat.a.m while a sorts before a-b. And provider iteration",
+    "order is observable through which config error fires first, since [chat]",
+    "is a BTreeMap and a document listing zzz before aaa reports aaa."
+  ],
   "duration_parse": [
     {
       "raw": "0",

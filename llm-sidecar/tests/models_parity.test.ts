@@ -263,6 +263,20 @@ function catchCatalogError(fn: () => unknown): CatalogError {
   throw new Error("expected a CatalogError");
 }
 
+describe("the fixture is real", () => {
+  test("it was frozen, and says so", () => {
+    const header = fixture._header.join(" ");
+    expect(header).toContain("nothing regenerates this file");
+  });
+
+  // Every other fixture in this series was generated from the 9023b46d
+  // worktree, and this one was not. Asserting the provenance it actually has
+  // is what stops a later edit from copying a neighbour's header onto it.
+  test("it names `main` as its source, not the worktree", () => {
+    expect(fixture._header.join(" ")).toContain("GENERATED from `main`");
+  });
+});
+
 // ── duration ─────────────────────────────────────────────────────────────────
 
 describe("ConfigDuration.parse", () => {
