@@ -228,9 +228,173 @@ export function modelOverrideRejectsSampling(model: string): boolean {
 
 /** Whether the model's wire rejects sampler knobs (`temperature` / `top_p`),
  *  from the Claude >=4.7 cutoff OR a per-model override. Mirrors Rust
- *  `rejects_sampling`. Exported for the cross-language parity fixture; the
- *  sidecar receives requests with samplers already stripped by the daemon, so no
- *  adapter calls this. */
+ *  `rejects_sampling`. No adapter calls this — requests arrive with samplers
+ *  already stripped, because {@link applicability} strips them during catalog
+ *  resolution, which is the caller. */
 export function rejectsSampling(model: string): boolean {
   return claudeRejectsSampling(model) || modelOverrideRejectsSampling(model);
+}
+
+// ── The applicability matrix ─────────────────────────────────────────────────
+
+/** How an sdk treats a config field. Mirrors Rust `Applicability`. */
+export type Applicability =
+  /** Accepted and acted on. */
+  | "honored"
+  /** Silently dropped upstream: harmless, but not useful. */
+  | "ignored"
+  /** Sending it is an upstream 400; catalog resolution drops it first. */
+  | "rejected";
+
+/**
+ * The settable knobs — the non-transport subset of `ModelConfigFields`.
+ *
+ * Rust models this as an enum with a `key()` returning the TOML name; here the
+ * TOML name *is* the type, so `key()` is the identity and `from_key` is
+ * {@link fieldFromKey}.
+ */
+export type Field =
+  | "max_context_tokens"
+  | "max_output_tokens"
+  | "temperature"
+  | "top_p"
+  | "reasoning_effort"
+  | "budget_tokens"
+  | "cache_ttl"
+  | "cache_keepalive"
+  | "openrouter_provider"
+  | "gemini_generation"
+  | "zai_clear_thinking"
+  | "zai_subscription"
+  | "replay_prior_thinking";
+
+const FIELDS: readonly Field[] = [
+  "max_context_tokens",
+  "max_output_tokens",
+  "temperature",
+  "top_p",
+  "reasoning_effort",
+  "budget_tokens",
+  "cache_ttl",
+  "cache_keepalive",
+  "openrouter_provider",
+  "gemini_generation",
+  "zai_clear_thinking",
+  "zai_subscription",
+  "replay_prior_thinking",
+];
+
+/** A TOML key as a {@link Field}, or `undefined` for keys the matrix has no
+ *  opinion about (Shore-only behaviors like `max_tool_iterations`, or transport
+ *  like `sdk`) — which callers treat as "always applicable". */
+export function fieldFromKey(key: string): Field | undefined {
+  return (FIELDS as readonly string[]).includes(key) ? (key as Field) : undefined;
+}
+
+/** `honored` on the owning sdk, `ignored` everywhere else. */
+function vendorField(sdk: Sdk, owner: Sdk): Applicability {
+  return sdk === owner ? "honored" : "ignored";
+}
+
+/**
+ * How `sdk` (resolving `modelId`) treats `field`. Mirrors Rust `applicability`.
+ *
+ * `modelId` matters only for the Claude sampler cutoff; every other rule
+ * ignores it.
+ */
+export function applicability(sdk: Sdk, modelId: string, field: Field): Applicability {
+  switch (field) {
+    // Generic knobs every sdk understands. `cache_keepalive` is a daemon-side
+    // scheduling cadence rather than a wire field, so it is meaningful for any
+    // provider with a cache; the sdk only changes its default.
+    case "max_context_tokens":
+    case "max_output_tokens":
+    case "cache_keepalive":
+      return "honored";
+
+    // Honored on every sdk, but the accepted value set differs — Moonshot and
+    // Z.AI only take an on/off toggle. See `reasoningDomain`.
+    case "reasoning_effort":
+      return "honored";
+
+    // The cutoff follows the model id, not the sdk: the same model is reachable
+    // through several sdks and every adapter forwards these verbatim.
+    case "temperature":
+    case "top_p":
+      return rejectsSampling(modelId) ? "rejected" : "honored";
+
+    // Read by the Anthropic, Gemini and Moonshot wires only. On Anthropic it
+    // follows the same Claude >=4.7 cutoff as the samplers.
+    case "budget_tokens":
+      return budgetTokensApplicability(sdk, modelId);
+
+    // `cache_ttl` only produces `cache_control` blocks on the Anthropic sdk.
+    case "cache_ttl":
+      return vendorField(sdk, "anthropic");
+
+    case "openrouter_provider":
+      return vendorField(sdk, "openrouter");
+
+    case "gemini_generation":
+      return vendorField(sdk, "gemini");
+
+    case "zai_clear_thinking":
+    case "zai_subscription":
+      return vendorField(sdk, "zai");
+
+    // Honored wherever an adapter puts surviving thinking blocks on the wire.
+    // Ignored on Gemini (no reasoning-replay surface) and on native
+    // DeepSeek/Moonshot, where the provider contract forces full replay
+    // regardless, so the knob can change nothing.
+    case "replay_prior_thinking":
+      return replayApplicability(sdk);
+  }
+}
+
+function budgetTokensApplicability(sdk: Sdk, modelId: string): Applicability {
+  switch (sdk) {
+    case "anthropic":
+      return claudeRejectsSampling(modelId) ? "rejected" : "honored";
+    case "gemini":
+    case "moonshot":
+      return "honored";
+    case "openai":
+    case "openrouter":
+    case "zai":
+    case "deepseek":
+      return "ignored";
+  }
+}
+
+function replayApplicability(sdk: Sdk): Applicability {
+  switch (sdk) {
+    case "anthropic":
+    case "openai":
+    case "zai":
+    case "openrouter":
+      return "honored";
+    case "gemini":
+    case "deepseek":
+    case "moonshot":
+      return "ignored";
+  }
+}
+
+/**
+ * The code-level default for `field` under `sdk` in its TOML string form, or
+ * `undefined` when the sdk has no default. Mirrors Rust `default_value`.
+ *
+ * This is the **lowest** tier of the cascade: it fills a field only when
+ * nothing above it did.
+ */
+export function defaultValue(sdk: Sdk, field: Field): string | undefined {
+  if (sdk !== "anthropic") return undefined;
+  // Prompt caching is opt-in on the wire, and defaulting it on means users get
+  // caching without explicit config (`cache_ttl = ""` disables). The paid 1h
+  // tier is then worth keeping warm. Every other sdk leaves both off: their
+  // cache lifetimes are opaque and carry no write surcharge to amortize, so a
+  // default ping would be pure spend.
+  if (field === "cache_ttl") return "1h";
+  if (field === "cache_keepalive") return "55m";
+  return undefined;
 }

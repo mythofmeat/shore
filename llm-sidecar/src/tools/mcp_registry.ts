@@ -14,6 +14,7 @@
 
 import { toolPatternMatches } from "./registry.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
+import { compareByCodePoint } from "../sort.ts";
 import type { ToolDefinition } from "../llm/types.ts";
 import type { McpClient, McpServerSpec } from "../mcp/client.ts";
 
@@ -120,30 +121,6 @@ export function toSpec(
 }
 
 // ── The registry ────────────────────────────────────────────────────────
-
-/**
- * Compare by Unicode code point, which is the order Rust's `String::cmp` used:
- * it compares UTF-8 bytes, and UTF-8 byte order and code-point order agree for
- * every valid scalar.
- *
- * JavaScript's default string sort does not agree — it compares UTF-16 code
- * units, so anything outside the BMP sorts below U+E000–U+FFFF instead of
- * above. Two MCP servers named `🎵drum` and `ﬀute` come out in opposite orders
- * under the two rules, which reorders the pinned surface and invalidates the
- * cache prefix from that point on. Same trap as the sub-agent sort in
- * `registry.ts`.
- */
-function compareByCodePoint(a: string, b: string): number {
-  const ac = [...a];
-  const bc = [...b];
-  const shared = Math.min(ac.length, bc.length);
-  for (let i = 0; i < shared; i += 1) {
-    const x = (ac[i] as string).codePointAt(0) as number;
-    const y = (bc[i] as string).codePointAt(0) as number;
-    if (x !== y) return x - y;
-  }
-  return ac.length - bc.length;
-}
 
 /** Live MCP connections plus the pinned, sorted tool surface they expose. */
 export class McpRegistry {

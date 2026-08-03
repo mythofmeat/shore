@@ -39,6 +39,7 @@
  */
 
 import { renderTemplate, stripOneTrailingNewline } from "../engine/prompt.ts";
+import { compareByCodePoint } from "../sort.ts";
 import type { ToolDefinition } from "../llm/types.ts";
 
 import activityHeatmapDesc from "../../../crates/daemon/prompts/tools/activity/activity_heatmap.md" with { type: "text" };
@@ -455,32 +456,6 @@ export function renderToolDefs(
     description: renderTemplate(t.description, vars),
     input_schema: t.parameters,
   }));
-}
-
-/**
- * Compare by Unicode code point, which is the order Rust's `BTreeMap<String>`
- * used: it sorts by UTF-8 bytes, and UTF-8 byte order and code-point order
- * agree for every valid scalar.
- *
- * JavaScript's default string comparison does **not** agree. It compares UTF-16
- * code units, so anything outside the BMP — an emoji in a sub-agent name — is
- * a surrogate pair starting at 0xD800 and sorts *below* the 0xE000–0xFFFF
- * range instead of above it. A sub-agent named `🎵drum` and one named `ﬀute`
- * come out in opposite orders under the two rules, which reorders the tool
- * surface and invalidates the cache prefix from that point on.
- */
-function compareByCodePoint(a: string, b: string): number {
-  const ac = [...a];
-  const bc = [...b];
-  const shared = Math.min(ac.length, bc.length);
-  for (let i = 0; i < shared; i += 1) {
-    // Safe: `i < shared <= ac.length`, and every element of a spread string is
-    // a non-empty code point, so `codePointAt(0)` is defined.
-    const x = (ac[i] as string).codePointAt(0) as number;
-    const y = (bc[i] as string).codePointAt(0) as number;
-    if (x !== y) return x - y;
-  }
-  return ac.length - bc.length;
 }
 
 /**
