@@ -14,6 +14,7 @@ import {
   type Sdk,
 } from "./models.ts";
 import { compareByCodePoint, sortedKeys } from "../sort.ts";
+import type { ProviderEntry as CredentialsProviderEntry } from "../llm/credentials.ts";
 
 // ── Errors ──────────────────────────────────────────────────────────────
 
@@ -212,6 +213,31 @@ export function defaultProviderEntry(): ProviderEntry {
 /** Only the enabled keys, in configured order. */
 export function enabledKeys(entry: ProviderEntry): ProviderKeyEntry[] {
   return entry.keys.filter((k) => k.enabled);
+}
+
+/**
+ * The same entry in the shape `llm/credentials.ts` reads.
+ *
+ * The twin of `toRequestModel` in `./models.ts`, for the same reason and with
+ * the same rule: the credential resolver was ported against the sidecar's
+ * snake_case mirror before this module existed, so there are two spellings of
+ * one Rust type. Convert here, never at a call site.
+ *
+ * The credentials side models only `enabled` and `keys` — deliberately, since
+ * nothing about resolving a key needs transport or discovery — so this drops
+ * the rest rather than renaming it. `warnOnFallback` is the single field whose
+ * spelling actually differs.
+ */
+export function toCredentialsEntry(entry: ProviderEntry): CredentialsProviderEntry {
+  return {
+    enabled: entry.enabled,
+    keys: entry.keys.map((k) => ({
+      name: k.name,
+      env: k.env,
+      enabled: k.enabled,
+      warn_on_fallback: k.warnOnFallback,
+    })),
+  };
 }
 
 // ── Registry ────────────────────────────────────────────────────────────

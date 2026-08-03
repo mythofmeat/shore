@@ -16,6 +16,7 @@ import { applicability, defaultValue, type Field, type Sdk } from "../llm/capabi
 import { ConfigDuration, type ParseResult } from "./duration.ts";
 import { compareByCodePoint, sortedKeys } from "../sort.ts";
 import type { ThinkingReplay } from "../llm/types.ts";
+import type { ResolvedModel as RequestResolvedModel } from "../llm/request.ts";
 
 export type { Sdk };
 
@@ -291,6 +292,61 @@ export function resolvedReplayPriorThinking(
   globalDefault: ThinkingReplay,
 ): ThinkingReplay {
   return model.replayPriorThinking ?? globalDefault;
+}
+
+/**
+ * The same model in the shape `llm/request.ts` reads.
+ *
+ * Rust has one `ResolvedModel`. Here there are two, because the request builder
+ * was ported against the sidecar's snake_case wire mirror months before the
+ * catalog itself moved and grew this camelCase one. They describe the same
+ * struct and the split is a port artefact rather than a design — but collapsing
+ * them touches every adapter, so until that happens the conversion lives here,
+ * in the module that owns the catalog spelling, and nowhere else. Do not
+ * open-code it at a call site.
+ *
+ * Two fields are not a rename. `cacheKeepalive` is parsed here and stringly
+ * over there, so it goes back through {@link ConfigDuration.toString}, which is
+ * documented to round-trip through `parse` — the request builder re-parses it
+ * immediately. `replayPriorThinking` and `maxToolIterations` have no
+ * counterpart at all: the builder takes the replay policy as an explicit
+ * argument, and nothing about a tool loop reaches a single request.
+ */
+export function toRequestModel(model: ResolvedModel): RequestResolvedModel {
+  return {
+    name: model.name,
+    qualified_name: model.qualifiedName,
+    category: model.category,
+    provider_key: model.providerKey,
+    sdk: model.sdk,
+    model_id: model.modelId,
+    ...opt("api_key_env", model.apiKeyEnv),
+    ...opt("base_url", model.baseUrl),
+    ...opt("max_context_tokens", model.maxContextTokens),
+    ...opt("max_output_tokens", model.maxOutputTokens),
+    ...opt("temperature", model.temperature),
+    ...opt("top_p", model.topP),
+    ...opt("reasoning_effort", model.reasoningEffort),
+    ...opt("budget_tokens", model.budgetTokens),
+    ...opt("cache_ttl", model.cacheTtl),
+    ...opt("cache_keepalive", keepaliveString(model.cacheKeepalive)),
+    ...opt("openrouter_provider", model.openrouterProvider),
+    ...opt("gemini_generation", model.geminiGeneration),
+    ...opt("zai_clear_thinking", model.zaiClearThinking),
+    ...opt("zai_subscription", model.zaiSubscription),
+    ...opt("max_tool_iterations", model.maxToolIterations),
+  };
+}
+
+/** `exactOptionalPropertyTypes` means an absent field and a `undefined` one are
+ * different types, so an absent one has to be spread in rather than assigned. */
+function opt<K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } {
+  return (value === undefined ? {} : { [key]: value }) as { [P in K]?: V };
+}
+
+function keepaliveString(setting: CacheKeepaliveSetting | undefined): string | undefined {
+  if (setting === undefined) return undefined;
+  return setting.kind === "off" ? "off" : setting.interval.toString();
 }
 
 /**
