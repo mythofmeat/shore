@@ -1,0 +1,892 @@
+{
+  "_header": [
+    "Parity fixture for the config directory layout and the config-file loader.",
+    "",
+    "GENERATED from `main`, NOT from the 9023b46d worktree most of this series",
+    "uses. `shore-common` compiles at HEAD, so this pins current behaviour rather",
+    "than behaviour from the last green daemon commit — same provenance as",
+    "models_parity.json. Do not copy a 9023b46d provenance onto this file.",
+    "",
+    "Driven against the real shore_common::config: ShoreDirs::resolve, the path",
+    "helpers, deep_merge, load_raw_config_table, discover_characters,",
+    "load_character_definition, resolve_user_definition and",
+    "resolve_prompt_template. Ports to llm-sidecar/src/config/dirs.ts and",
+    "src/config/loader.ts. The generator is not committed.",
+    "",
+    "This file is FROZEN: nothing regenerates this file. A later diff against it",
+    "is a defect in the TypeScript, not a fixture that needs updating.",
+    "",
+    "`passwd_home` is the getpwuid home directory of the account that ran the",
+    "generator. It is recorded because the `dirs` crate falls back to it when",
+    "HOME is unset, which makes the no-environment case machine-specific; the",
+    "replay injects this value instead of reading its own.",
+    "",
+    "The `~/.config` literal fallback in resolve_xdg_dir is very nearly dead",
+    "code and the fixture shows why: clearing the entire environment still",
+    "resolves through getpwuid, so the config directory is <passwd_home>/.config",
+    "and not a relative directory named `~`. Only an account with no passwd",
+    "entry would reach the literal.",
+    "",
+    "The paths section pins that an absolute character name swallows the base:",
+    "character_data_dir(\"/base\", \"/etc\") is \"/etc\", because PathBuf::push",
+    "replaces on an absolute component where node:path's join concatenates. A",
+    "name can arrive over the wire, so this one has security weight and the",
+    "replay asserts it separately."
+  ],
+  "passwd_home": "/root",
+  "shore_dirs": [
+    {
+      "name": "SHORE_* overrides win and are used verbatim, with no /shore suffix",
+      "env": {
+        "SHORE_CONFIG_DIR": "/o/cfg",
+        "SHORE_DATA_DIR": "/o/data",
+        "SHORE_RUNTIME_DIR": "/o/run",
+        "SHORE_CACHE_DIR": "/o/cache",
+        "XDG_CONFIG_HOME": "/x/cfg",
+        "HOME": "/home/u"
+      },
+      "config": "/o/cfg",
+      "data": "/o/data",
+      "runtime": "/o/run",
+      "cache": "/o/cache"
+    },
+    {
+      "name": "absolute XDG vars get /shore appended",
+      "env": {
+        "XDG_CONFIG_HOME": "/x/cfg",
+        "XDG_DATA_HOME": "/x/data",
+        "XDG_RUNTIME_DIR": "/x/run",
+        "XDG_CACHE_HOME": "/x/cache",
+        "HOME": "/home/u"
+      },
+      "config": "/x/cfg/shore",
+      "data": "/x/data/shore",
+      "runtime": "/x/run/shore",
+      "cache": "/x/cache/shore"
+    },
+    {
+      "name": "an empty XDG var is Ok(\"\") and short-circuits the platform lookup",
+      "env": {
+        "XDG_CONFIG_HOME": "",
+        "HOME": "/home/u"
+      },
+      "config": "shore",
+      "data": "/home/u/.local/share/shore",
+      "runtime": "/tmp/shore",
+      "cache": "/home/u/.cache/shore"
+    },
+    {
+      "name": "a relative XDG var is taken as-is, though the dirs crate would reject it",
+      "env": {
+        "XDG_CONFIG_HOME": "cfg",
+        "HOME": "/home/u"
+      },
+      "config": "cfg/shore",
+      "data": "/home/u/.local/share/shore",
+      "runtime": "/tmp/shore",
+      "cache": "/home/u/.cache/shore"
+    },
+    {
+      "name": "an unnormalized XDG var stays unnormalized",
+      "env": {
+        "XDG_CONFIG_HOME": "/x/a/../b",
+        "HOME": "/home/u"
+      },
+      "config": "/x/a/../b/shore",
+      "data": "/home/u/.local/share/shore",
+      "runtime": "/tmp/shore",
+      "cache": "/home/u/.cache/shore"
+    },
+    {
+      "name": "HOME only: platform defaults",
+      "env": {
+        "HOME": "/home/u"
+      },
+      "config": "/home/u/.config/shore",
+      "data": "/home/u/.local/share/shore",
+      "runtime": "/tmp/shore",
+      "cache": "/home/u/.cache/shore"
+    },
+    {
+      "name": "nothing set: getpwuid answers, so the ~ literal is not reached",
+      "env": {},
+      "config": "/root/.config/shore",
+      "data": "/root/.local/share/shore",
+      "runtime": "/tmp/shore",
+      "cache": "/root/.cache/shore"
+    },
+    {
+      "name": "an empty HOME is treated as unset and falls through to getpwuid",
+      "env": {
+        "HOME": ""
+      },
+      "config": "/root/.config/shore",
+      "data": "/root/.local/share/shore",
+      "runtime": "/tmp/shore",
+      "cache": "/root/.cache/shore"
+    },
+    {
+      "name": "XDG_RUNTIME_DIR has no platform fallback, so runtime lands in the temp dir",
+      "env": {
+        "XDG_CONFIG_HOME": "/x/cfg",
+        "HOME": "/home/u"
+      },
+      "config": "/x/cfg/shore",
+      "data": "/home/u/.local/share/shore",
+      "runtime": "/tmp/shore",
+      "cache": "/home/u/.cache/shore"
+    }
+  ],
+  "deep_merge": [
+    {
+      "name": "overlay scalar overwrites base scalar",
+      "base": "a = 1\nb = 2",
+      "overlay": "a = 9",
+      "merged": {
+        "a": 9,
+        "b": 2
+      }
+    },
+    {
+      "name": "new keys are added",
+      "base": "a = 1",
+      "overlay": "b = 2",
+      "merged": {
+        "a": 1,
+        "b": 2
+      }
+    },
+    {
+      "name": "tables recurse rather than replace",
+      "base": "[t]\na = 1\nb = 2",
+      "overlay": "[t]\nb = 9\nc = 3",
+      "merged": {
+        "t": {
+          "a": 1,
+          "b": 9,
+          "c": 3
+        }
+      }
+    },
+    {
+      "name": "arrays are replaced wholesale, not concatenated",
+      "base": "a = [1, 2, 3]",
+      "overlay": "a = [9]",
+      "merged": {
+        "a": [
+          9
+        ]
+      }
+    },
+    {
+      "name": "an empty overlay changes nothing",
+      "base": "[t]\na = 1",
+      "overlay": "",
+      "merged": {
+        "t": {
+          "a": 1
+        }
+      }
+    },
+    {
+      "name": "a table in the overlay replaces a scalar in the base",
+      "base": "a = 1",
+      "overlay": "[a]\nb = 2",
+      "merged": {
+        "a": {
+          "b": 2
+        }
+      }
+    },
+    {
+      "name": "a scalar in the overlay replaces a table in the base",
+      "base": "[a]\nb = 2",
+      "overlay": "a = 1",
+      "merged": {
+        "a": 1
+      }
+    },
+    {
+      "name": "recursion goes all the way down",
+      "base": "[a.b.c]\nx = 1\ny = 2",
+      "overlay": "[a.b.c]\ny = 9\nz = 3",
+      "merged": {
+        "a": {
+          "b": {
+            "c": {
+              "x": 1,
+              "y": 9,
+              "z": 3
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "an array of tables is a value, not a table",
+      "base": "[[a]]\nx = 1",
+      "overlay": "[[a]]\ny = 2",
+      "merged": {
+        "a": [
+          {
+            "y": 2
+          }
+        ]
+      }
+    }
+  ],
+  "raw_config": [
+    {
+      "name": "config.toml alone",
+      "files": [
+        {
+          "path": "config.toml",
+          "content": "a = 1\n[t]\nb = 2"
+        }
+      ],
+      "config_path": null,
+      "ok": {
+        "table": {
+          "a": 1,
+          "t": {
+            "b": 2
+          }
+        },
+        "config_dir_rel": ""
+      }
+    },
+    {
+      "name": "no config.toml at all yields an empty table",
+      "files": [],
+      "config_path": null,
+      "ok": {
+        "table": {},
+        "config_dir_rel": ""
+      }
+    },
+    {
+      "name": "include is removed from the table and its file merged over it",
+      "files": [
+        {
+          "path": "config.toml",
+          "content": "include = [\"extra.toml\"]\na = 1\nb = 1"
+        },
+        {
+          "path": "extra.toml",
+          "content": "b = 2\nc = 3"
+        }
+      ],
+      "config_path": null,
+      "ok": {
+        "table": {
+          "a": 1,
+          "b": 2,
+          "c": 3
+        },
+        "config_dir_rel": ""
+      }
+    },
+    {
+      "name": "includes merge in written order, last wins",
+      "files": [
+        {
+          "path": "config.toml",
+          "content": "include = [\"one.toml\", \"two.toml\"]\nv = 0"
+        },
+        {
+          "path": "one.toml",
+          "content": "v = 1"
+        },
+        {
+          "path": "two.toml",
+          "content": "v = 2"
+        }
+      ],
+      "config_path": null,
+      "ok": {
+        "table": {
+          "v": 2
+        },
+        "config_dir_rel": ""
+      }
+    },
+    {
+      "name": "a missing include is skipped, not an error",
+      "files": [
+        {
+          "path": "config.toml",
+          "content": "include = [\"nope.toml\"]\na = 1"
+        }
+      ],
+      "config_path": null,
+      "ok": {
+        "table": {
+          "a": 1
+        },
+        "config_dir_rel": ""
+      }
+    },
+    {
+      "name": "an include that does not parse is fatal",
+      "files": [
+        {
+          "path": "config.toml",
+          "content": "include = [\"bad.toml\"]"
+        },
+        {
+          "path": "bad.toml",
+          "content": "this is not toml"
+        }
+      ],
+      "config_path": null,
+      "error_kind": "parse_include"
+    },
+    {
+      "name": "a non-string include entry is skipped",
+      "files": [
+        {
+          "path": "config.toml",
+          "content": "include = [42]\na = 1"
+        }
+      ],
+      "config_path": null,
+      "ok": {
+        "table": {
+          "a": 1
+        },
+        "config_dir_rel": ""
+      }
+    },
+    {
+      "name": "conf.d merges in sorted filename order and beats include",
+      "files": [
+        {
+          "path": "config.toml",
+          "content": "include = [\"inc.toml\"]\nv = 0"
+        },
+        {
+          "path": "inc.toml",
+          "content": "v = 1"
+        },
+        {
+          "path": "conf.d/20-b.toml",
+          "content": "v = 3"
+        },
+        {
+          "path": "conf.d/10-a.toml",
+          "content": "v = 2"
+        }
+      ],
+      "config_path": null,
+      "ok": {
+        "table": {
+          "v": 3
+        },
+        "config_dir_rel": ""
+      }
+    },
+    {
+      "name": "conf.d skips non-.toml, .TOML, and a bare .toml dotfile",
+      "files": [
+        {
+          "path": "config.toml",
+          "content": "v = 0"
+        },
+        {
+          "path": "conf.d/a.toml",
+          "content": "v = 1"
+        },
+        {
+          "path": "conf.d/b.txt",
+          "content": "skipped_txt = 1"
+        },
+        {
+          "path": "conf.d/c.TOML",
+          "content": "skipped_upper = 1"
+        },
+        {
+          "path": "conf.d/.toml",
+          "content": "skipped_dotfile = 1"
+        },
+        {
+          "path": "conf.d/notatoml",
+          "content": "skipped_no_dot = 1"
+        },
+        {
+          "path": "conf.d/a.xtoml",
+          "content": "skipped_suffix_only = 1"
+        },
+        {
+          "path": "conf.d/d.b.toml",
+          "content": "w = 5"
+        }
+      ],
+      "config_path": null,
+      "ok": {
+        "table": {
+          "v": 1,
+          "w": 5
+        },
+        "config_dir_rel": ""
+      }
+    },
+    {
+      "name": "conf.d order is by code point, and beats directory order",
+      "files": [
+        {
+          "path": "config.toml",
+          "content": "v = 0"
+        },
+        {
+          "path": "conf.d/z.toml",
+          "content": "v = 1"
+        },
+        {
+          "path": "conf.d/a.toml",
+          "content": "v = 2"
+        },
+        {
+          "path": "conf.d/🎵.toml",
+          "content": "u = 1"
+        },
+        {
+          "path": "conf.d/ﬀ.toml",
+          "content": "u = 2"
+        }
+      ],
+      "config_path": null,
+      "ok": {
+        "table": {
+          "u": 1,
+          "v": 1
+        },
+        "config_dir_rel": ""
+      }
+    },
+    {
+      "name": "conf.d that is a file, not a directory, is fatal",
+      "files": [
+        {
+          "path": "config.toml",
+          "content": "v = 0"
+        },
+        {
+          "path": "conf.d",
+          "content": "not a directory"
+        }
+      ],
+      "config_path": null,
+      "error_kind": "read_file"
+    },
+    {
+      "name": "a conf.d file that does not parse is fatal",
+      "files": [
+        {
+          "path": "config.toml",
+          "content": "v = 0"
+        },
+        {
+          "path": "conf.d/bad.toml",
+          "content": "= nope"
+        }
+      ],
+      "config_path": null,
+      "error_kind": "conf_d"
+    },
+    {
+      "name": "conf.d deep-merges rather than replacing whole tables",
+      "files": [
+        {
+          "path": "config.toml",
+          "content": "[t]\na = 1\nb = 2"
+        },
+        {
+          "path": "conf.d/z.toml",
+          "content": "[t]\nb = 9\nc = 3"
+        }
+      ],
+      "config_path": null,
+      "ok": {
+        "table": {
+          "t": {
+            "a": 1,
+            "b": 9,
+            "c": 3
+          }
+        },
+        "config_dir_rel": ""
+      }
+    },
+    {
+      "name": "an explicit config path re-homes the config dir to its parent",
+      "files": [
+        {
+          "path": "nested/other.toml",
+          "content": "include = [\"sib.toml\"]\na = 1"
+        },
+        {
+          "path": "nested/sib.toml",
+          "content": "b = 2"
+        },
+        {
+          "path": "nested/conf.d/x.toml",
+          "content": "c = 3"
+        },
+        {
+          "path": "conf.d/should-not-load.toml",
+          "content": "d = 4"
+        }
+      ],
+      "config_path": "nested/other.toml",
+      "ok": {
+        "table": {
+          "a": 1,
+          "b": 2,
+          "c": 3
+        },
+        "config_dir_rel": "nested"
+      }
+    },
+    {
+      "name": "config.toml that does not parse is fatal",
+      "files": [
+        {
+          "path": "config.toml",
+          "content": "this is not toml"
+        }
+      ],
+      "config_path": null,
+      "error_kind": "parse_app"
+    }
+  ],
+  "discovery": [
+    {
+      "name": "workspace SOUL.md, legacy character.md, and a directory with neither",
+      "files": [
+        {
+          "path": "characters/aria/workspace/SOUL.md",
+          "content": "aria soul"
+        },
+        {
+          "path": "characters/legacy/character.md",
+          "content": "legacy soul"
+        },
+        {
+          "path": "characters/empty/notes.txt",
+          "content": "x"
+        }
+      ],
+      "dirs": [
+        "characters/empty"
+      ],
+      "probe": "aria",
+      "discovered": [
+        "aria",
+        "legacy"
+      ],
+      "definition": "aria soul",
+      "user": null,
+      "prompt_compaction": null
+    },
+    {
+      "name": "names sort by code point, not UTF-16 order",
+      "files": [
+        {
+          "path": "characters/🎵drum/workspace/SOUL.md",
+          "content": "a"
+        },
+        {
+          "path": "characters/ﬀute/workspace/SOUL.md",
+          "content": "b"
+        },
+        {
+          "path": "characters/zed/workspace/SOUL.md",
+          "content": "c"
+        }
+      ],
+      "dirs": [],
+      "probe": "zed",
+      "discovered": [
+        "zed",
+        "ﬀute",
+        "🎵drum"
+      ],
+      "definition": "c",
+      "user": null,
+      "prompt_compaction": null
+    },
+    {
+      "name": "an empty SOUL.md is a definition and stops the legacy fallback",
+      "files": [
+        {
+          "path": "characters/hollow/workspace/SOUL.md",
+          "content": ""
+        },
+        {
+          "path": "characters/hollow/character.md",
+          "content": "legacy"
+        }
+      ],
+      "dirs": [],
+      "probe": "hollow",
+      "discovered": [
+        "hollow"
+      ],
+      "definition": "",
+      "user": null,
+      "prompt_compaction": null
+    },
+    {
+      "name": "the legacy user.md fallback, and a character prompt override",
+      "files": [
+        {
+          "path": "characters/u/workspace/SOUL.md",
+          "content": "s"
+        },
+        {
+          "path": "characters/u/user.md",
+          "content": "legacy user"
+        },
+        {
+          "path": "characters/u/prompts/compaction.md",
+          "content": "char prompt"
+        },
+        {
+          "path": "prompts/compaction.md",
+          "content": "global prompt"
+        }
+      ],
+      "dirs": [],
+      "probe": "u",
+      "discovered": [
+        "u"
+      ],
+      "definition": "s",
+      "user": "legacy user",
+      "prompt_compaction": "char prompt"
+    },
+    {
+      "name": "the global prompt is used when the character has none",
+      "files": [
+        {
+          "path": "characters/g/workspace/SOUL.md",
+          "content": "s"
+        },
+        {
+          "path": "characters/g/workspace/USER.md",
+          "content": "ws user"
+        },
+        {
+          "path": "prompts/compaction.md",
+          "content": "global prompt"
+        }
+      ],
+      "dirs": [],
+      "probe": "g",
+      "discovered": [
+        "g"
+      ],
+      "definition": "s",
+      "user": "ws user",
+      "prompt_compaction": "global prompt"
+    },
+    {
+      "name": "an absent characters/ directory yields no names and no definitions",
+      "files": [
+        {
+          "path": "unrelated.txt",
+          "content": "x"
+        }
+      ],
+      "dirs": [],
+      "probe": "nobody",
+      "discovered": [],
+      "definition": null,
+      "user": null,
+      "prompt_compaction": null
+    }
+  ],
+  "parent_of": [
+    {
+      "input": "/a/config.toml",
+      "parent": "/a"
+    },
+    {
+      "input": "config.toml",
+      "parent": ""
+    },
+    {
+      "input": "/config.toml",
+      "parent": "/"
+    },
+    {
+      "input": "a/b/",
+      "parent": "a"
+    },
+    {
+      "input": "/",
+      "parent": "."
+    },
+    {
+      "input": "a",
+      "parent": ""
+    },
+    {
+      "input": "./config.toml",
+      "parent": "."
+    }
+  ],
+  "char_config": [
+    {
+      "name": "no override file yields None",
+      "global": "[defaults]\nstream = true",
+      "overlay": null,
+      "merged": null
+    },
+    {
+      "name": "the overlay deep-merges over the global raw table",
+      "global": "[defaults]\nstream = true\n[behavior]\nuser_message_timestamps = \"always\"",
+      "overlay": "[defaults]\nstream = false",
+      "merged": {
+        "behavior": {
+          "user_message_timestamps": "always"
+        },
+        "defaults": {
+          "stream": false
+        }
+      }
+    },
+    {
+      "name": "a table the overlay does not mention keeps every global key",
+      "global": "[tools]\nmax_result_chars = 100\nenabled_tools = [\"read\"]\n[memory]\n",
+      "overlay": "[tools]\nmax_result_chars = 200",
+      "merged": {
+        "memory": {},
+        "tools": {
+          "enabled_tools": [
+            "read"
+          ],
+          "max_result_chars": 200
+        }
+      }
+    },
+    {
+      "name": "an array in the overlay replaces rather than extends",
+      "global": "[tools]\nenabled_tools = [\"read\", \"write\"]",
+      "overlay": "[tools]\nenabled_tools = [\"read\"]",
+      "merged": {
+        "tools": {
+          "enabled_tools": [
+            "read"
+          ]
+        }
+      }
+    }
+  ],
+  "paths": [
+    {
+      "base": "/base",
+      "name": "aria",
+      "character_config_dir": "/base/characters/aria",
+      "character_workspace_dir": "/base/characters/aria/workspace",
+      "character_workspace_file": "/base/characters/aria/workspace/SOUL.md",
+      "character_memory_dir": "/base/characters/aria/workspace/memory",
+      "character_data_dir": "/base/aria",
+      "character_active_jsonl": "/base/aria/active.jsonl",
+      "character_segments_dir": "/base/aria/segments",
+      "character_compaction_manifest": "/base/aria/compaction.json",
+      "plugins_dir": "/base/plugins"
+    },
+    {
+      "base": "/base",
+      "name": "..",
+      "character_config_dir": "/base/characters/..",
+      "character_workspace_dir": "/base/characters/../workspace",
+      "character_workspace_file": "/base/characters/../workspace/SOUL.md",
+      "character_memory_dir": "/base/characters/../workspace/memory",
+      "character_data_dir": "/base/..",
+      "character_active_jsonl": "/base/../active.jsonl",
+      "character_segments_dir": "/base/../segments",
+      "character_compaction_manifest": "/base/../compaction.json",
+      "plugins_dir": "/base/plugins"
+    },
+    {
+      "base": "/base",
+      "name": "a/b",
+      "character_config_dir": "/base/characters/a/b",
+      "character_workspace_dir": "/base/characters/a/b/workspace",
+      "character_workspace_file": "/base/characters/a/b/workspace/SOUL.md",
+      "character_memory_dir": "/base/characters/a/b/workspace/memory",
+      "character_data_dir": "/base/a/b",
+      "character_active_jsonl": "/base/a/b/active.jsonl",
+      "character_segments_dir": "/base/a/b/segments",
+      "character_compaction_manifest": "/base/a/b/compaction.json",
+      "plugins_dir": "/base/plugins"
+    },
+    {
+      "base": "/base",
+      "name": "/etc",
+      "character_config_dir": "/etc",
+      "character_workspace_dir": "/etc/workspace",
+      "character_workspace_file": "/etc/workspace/SOUL.md",
+      "character_memory_dir": "/etc/workspace/memory",
+      "character_data_dir": "/etc",
+      "character_active_jsonl": "/etc/active.jsonl",
+      "character_segments_dir": "/etc/segments",
+      "character_compaction_manifest": "/etc/compaction.json",
+      "plugins_dir": "/base/plugins"
+    },
+    {
+      "base": "/base",
+      "name": "",
+      "character_config_dir": "/base/characters/",
+      "character_workspace_dir": "/base/characters/workspace",
+      "character_workspace_file": "/base/characters/workspace/SOUL.md",
+      "character_memory_dir": "/base/characters/workspace/memory",
+      "character_data_dir": "/base/",
+      "character_active_jsonl": "/base/active.jsonl",
+      "character_segments_dir": "/base/segments",
+      "character_compaction_manifest": "/base/compaction.json",
+      "plugins_dir": "/base/plugins"
+    },
+    {
+      "base": "/base",
+      "name": "🎵",
+      "character_config_dir": "/base/characters/🎵",
+      "character_workspace_dir": "/base/characters/🎵/workspace",
+      "character_workspace_file": "/base/characters/🎵/workspace/SOUL.md",
+      "character_memory_dir": "/base/characters/🎵/workspace/memory",
+      "character_data_dir": "/base/🎵",
+      "character_active_jsonl": "/base/🎵/active.jsonl",
+      "character_segments_dir": "/base/🎵/segments",
+      "character_compaction_manifest": "/base/🎵/compaction.json",
+      "plugins_dir": "/base/plugins"
+    },
+    {
+      "base": "rel/base",
+      "name": "aria",
+      "character_config_dir": "rel/base/characters/aria",
+      "character_workspace_dir": "rel/base/characters/aria/workspace",
+      "character_workspace_file": "rel/base/characters/aria/workspace/SOUL.md",
+      "character_memory_dir": "rel/base/characters/aria/workspace/memory",
+      "character_data_dir": "rel/base/aria",
+      "character_active_jsonl": "rel/base/aria/active.jsonl",
+      "character_segments_dir": "rel/base/aria/segments",
+      "character_compaction_manifest": "rel/base/aria/compaction.json",
+      "plugins_dir": "rel/base/plugins"
+    },
+    {
+      "base": "/base/",
+      "name": "aria",
+      "character_config_dir": "/base/characters/aria",
+      "character_workspace_dir": "/base/characters/aria/workspace",
+      "character_workspace_file": "/base/characters/aria/workspace/SOUL.md",
+      "character_memory_dir": "/base/characters/aria/workspace/memory",
+      "character_data_dir": "/base/aria",
+      "character_active_jsonl": "/base/aria/active.jsonl",
+      "character_segments_dir": "/base/aria/segments",
+      "character_compaction_manifest": "/base/aria/compaction.json",
+      "plugins_dir": "/base/plugins"
+    }
+  ]
+}

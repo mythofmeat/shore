@@ -45,6 +45,13 @@ import {
 import { join } from "node:path";
 
 import {
+  characterConfigDir,
+  characterMemoryDir,
+  characterWorkspaceDir,
+  characterWorkspaceFile,
+} from "../config/dirs.ts";
+
+import {
   activePromptDir,
   activePromptFile,
   normalizePromptVisiblePath,
@@ -68,8 +75,6 @@ const PROTECTED_PATHS = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md"] as const
 export const MEMORY_INDEX_FILE = "MEMORY.md";
 
 const QUEUE_FILE = "deferred_edits.jsonl";
-const CHARACTER_WORKSPACE_DIR = "workspace";
-const MEMORY_DIR = "memory";
 
 /**
  * Snapshots left behind by prompt files that no longer exist: the pre-rename
@@ -89,15 +94,13 @@ Use tools when they materially help.
 `;
 
 // --- config layout ---------------------------------------------------------
-
-const characterConfigDir = (configDir: string, name: string) =>
-  join(configDir, "characters", name);
-const characterWorkspaceDir = (configDir: string, name: string) =>
-  join(characterConfigDir(configDir, name), CHARACTER_WORKSPACE_DIR);
-const characterWorkspaceFile = (configDir: string, name: string, file: string) =>
-  join(characterWorkspaceDir(configDir, name), file);
-const characterMemoryDir = (configDir: string, name: string) =>
-  join(characterWorkspaceDir(configDir, name), MEMORY_DIR);
+//
+// These four were private copies here until `config/dirs.ts` landed the layout
+// they duplicate. They now come from there, so a change to where a character's
+// files live is made once. The shared versions join like `PathBuf::push` rather
+// than like `node:path`, which differs only for a character name that is
+// absolute or carries redundant separators — the frozen fixture below uses
+// neither, and still passes unchanged.
 
 export const memoryIndexPath = (configDir: string, charName: string) =>
   join(characterWorkspaceDir(configDir, charName), MEMORY_INDEX_FILE);
