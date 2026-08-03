@@ -1003,7 +1003,8 @@ function tomlValueRepr(value: unknown): string {
   return typeof value === "string" ? `"${value}"` : `\`${String(value)}\``;
 }
 
-function invalidType(value: unknown, expected: string): string {
+/** The serde phrasing for a value of the wrong type. */
+export function invalidType(value: unknown, expected: string): string {
   return `invalid type: ${tomlTypeName(value)} ${tomlValueRepr(value)}, expected ${expected}`;
 }
 
@@ -1049,7 +1050,7 @@ function readF64(table: Record<string, unknown>, key: string): ParseResult<numbe
 }
 
 /** Read the shared config fields out of a table, ignoring anything else. */
-function readModelConfigFields(table: Record<string, unknown>): ParseResult<ModelConfigFields> {
+export function readModelConfigFields(table: Record<string, unknown>): ParseResult<ModelConfigFields> {
   const out: ModelConfigFields = {};
 
   const sdkRaw = readString(table, "sdk");

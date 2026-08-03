@@ -39,6 +39,7 @@
  */
 
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 /**
@@ -119,7 +120,31 @@ export async function readCache(path: string): Promise<ProviderModelsCache | und
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw err;
   }
+  return decodeCache(bytes, path);
+}
 
+/**
+ * The synchronous twin of {@link readCache}, for the model-resolution path.
+ *
+ * `find_effective_model` is synchronous in the Rust and is called from
+ * preference resolution, which is itself synchronous; making the whole chain
+ * async to read one small cached file would be a much larger change than the
+ * behaviour warrants. Both readers share {@link decodeCache}, so the version
+ * and shape checks cannot drift apart.
+ */
+export function readCacheSync(path: string): ProviderModelsCache | undefined {
+  let bytes: string;
+  try {
+    bytes = readFileSync(path, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw err;
+  }
+  return decodeCache(bytes, path);
+}
+
+/** Validate raw cache bytes. Everything recoverable resolves to "no cache". */
+function decodeCache(bytes: string, path: string): ProviderModelsCache | undefined {
   let parsed: unknown;
   try {
     parsed = JSON.parse(bytes);
