@@ -37,6 +37,7 @@ import { compareByCodePoint, sortedKeys } from "../sort.ts";
 import type { ThinkingReplay } from "../llm/types.ts";
 import type { ProviderRegistry } from "./providers.ts";
 import { loadActiveModel } from "./runtime_state.ts";
+import { resolveBackgroundModelName, type DefaultsConfig } from "./app.ts";
 
 const PREFERENCES_DIR = "preferences";
 const PREFERENCES_FILE = "models.toml";
@@ -513,9 +514,11 @@ export function findStaticModel(
 /**
  * The config surface the resolver needs.
  *
- * Declared here rather than imported so this module does not depend on the
- * whole `LoadedConfig` loader, which has not been ported. `app` carries only
- * the two `[defaults]` keys the chain reads.
+ * Declared here rather than imported because this module predates the loader:
+ * when it landed there was no `LoadedConfig` on this side to depend on. There is
+ * now — see {@link configView}, which is how a real config gets in — but the
+ * narrowing has earned its keep and stays. `app` carries only the two
+ * `[defaults]` keys the chain reads.
  */
 export interface LoadedConfigView {
   models: ModelCatalog;
@@ -531,6 +534,34 @@ export interface LoadedConfigView {
 }
 
 export type BackgroundTask = "heartbeat" | "compaction";
+
+/**
+ * A real config, narrowed to what the resolver reads.
+ *
+ * Everything structurally matches already except `backgroundModelName`, which is
+ * a *function* here and two plain fields on `DefaultsConfig` — the view names
+ * the two-level `background.<task> → background.model` fallback so no caller can
+ * resolve it a fourth way. The Rust had one type throughout and did that
+ * fallback at each call site; this is the same fallback, resolved once.
+ */
+export function configView(config: {
+  models: ModelCatalog;
+  providers: ProviderRegistry;
+  dirs: { data: string; cache: string };
+  app: { defaults: DefaultsConfig };
+}): LoadedConfigView {
+  return {
+    models: config.models,
+    providers: config.providers,
+    dirs: config.dirs,
+    app: {
+      defaults: {
+        ...(config.app.defaults.model === undefined ? {} : { model: config.app.defaults.model }),
+        backgroundModelName: (task) => resolveBackgroundModelName(config.app.defaults, task),
+      },
+    },
+  };
+}
 
 /** Injected so preferences does not import the effective catalog, which
  *  imports preferences' own types. Mirrors the Rust module boundary. */
