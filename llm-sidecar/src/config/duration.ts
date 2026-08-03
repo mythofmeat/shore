@@ -29,8 +29,11 @@ export type ParseResult<T> = { ok: T } | { err: string };
  * (which Rust keeps, making the string an invalid duration) and keeps U+0085
  * (which Rust strips, making the string a valid one). Both are reachable from a
  * hand-edited config file.
+ *
+ * Exported because `validateConfig` trims budget names before comparing them
+ * for uniqueness, and a name is exactly as hand-edited as a duration is.
  */
-function rustTrim(s: string): string {
+export function rustTrim(s: string): string {
   return s.replace(/^\p{White_Space}+/u, "").replace(/\p{White_Space}+$/u, "");
 }
 
