@@ -998,14 +998,23 @@ function tomlTypeName(value: unknown): string {
 /**
  * How `serde::de::Unexpected` renders a value: strings in double quotes,
  * every other scalar in backticks.
+ *
+ * Sequences and maps render as the bare type name with no value — serde's
+ * `Unexpected::Seq` and `Unexpected::Map` carry nothing to print. Nothing in
+ * the model catalog reaches either (its fields are all scalars), but `AppConfig`
+ * does, and `[defaults] model = []` must say `invalid type: sequence, expected
+ * a string` rather than inventing a rendering of the array.
  */
-function tomlValueRepr(value: unknown): string {
+function tomlValueRepr(value: unknown): string | undefined {
+  if (Array.isArray(value) || isTable(value)) return undefined;
   return typeof value === "string" ? `"${value}"` : `\`${String(value)}\``;
 }
 
 /** The serde phrasing for a value of the wrong type. */
 export function invalidType(value: unknown, expected: string): string {
-  return `invalid type: ${tomlTypeName(value)} ${tomlValueRepr(value)}, expected ${expected}`;
+  const repr = tomlValueRepr(value);
+  const got = repr === undefined ? tomlTypeName(value) : `${tomlTypeName(value)} ${repr}`;
+  return `invalid type: ${got}, expected ${expected}`;
 }
 
 function readString(table: Record<string, unknown>, key: string): ParseResult<string | undefined> {
