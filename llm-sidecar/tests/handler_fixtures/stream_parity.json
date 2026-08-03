@@ -1,0 +1,4173 @@
+{
+  "truncate_summary": [
+    {
+      "input": "",
+      "max": 200,
+      "output": ""
+    },
+    {
+      "input": "short",
+      "max": 200,
+      "output": "short"
+    },
+    {
+      "input": "exactly-five",
+      "max": 12,
+      "output": "exactly-five"
+    },
+    {
+      "input": "exactly-five!",
+      "max": 12,
+      "output": "exactly-five…"
+    },
+    {
+      "input": "ééééé",
+      "max": 10,
+      "output": "ééééé"
+    },
+    {
+      "input": "ééééé",
+      "max": 9,
+      "output": "éééé…"
+    },
+    {
+      "input": "ééééé",
+      "max": 8,
+      "output": "éééé…"
+    },
+    {
+      "input": "aéb",
+      "max": 2,
+      "output": "a…"
+    },
+    {
+      "input": "aéb",
+      "max": 3,
+      "output": "aé…"
+    },
+    {
+      "input": "🎵🎵🎵",
+      "max": 12,
+      "output": "🎵🎵🎵"
+    },
+    {
+      "input": "🎵🎵🎵",
+      "max": 11,
+      "output": "🎵🎵…"
+    },
+    {
+      "input": "🎵🎵🎵",
+      "max": 9,
+      "output": "🎵🎵…"
+    },
+    {
+      "input": "🎵🎵🎵",
+      "max": 4,
+      "output": "🎵…"
+    },
+    {
+      "input": "🎵🎵🎵",
+      "max": 3,
+      "output": "…"
+    },
+    {
+      "input": "🎵🎵🎵",
+      "max": 0,
+      "output": "…"
+    },
+    {
+      "input": "abc",
+      "max": 0,
+      "output": "…"
+    },
+    {
+      "input": "🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵",
+      "max": 200,
+      "output": "🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵…"
+    },
+    {
+      "input": "éx",
+      "max": 1,
+      "output": "e…"
+    },
+    {
+      "input": "éx",
+      "max": 2,
+      "output": "e…"
+    },
+    {
+      "input": "éx",
+      "max": 3,
+      "output": "é…"
+    }
+  ],
+  "shell_escape": [
+    {
+      "input": "",
+      "output": ""
+    },
+    {
+      "input": "plain text",
+      "output": "plain text"
+    },
+    {
+      "input": "Alice's message",
+      "output": "Alice'\\''s message"
+    },
+    {
+      "input": "it's Bob's turn, isn't it",
+      "output": "it'\\''s Bob'\\''s turn, isn'\\''t it"
+    },
+    {
+      "input": "`whoami`",
+      "output": "whoami"
+    },
+    {
+      "input": "``",
+      "output": ""
+    },
+    {
+      "input": "$(whoami)",
+      "output": "(whoami)"
+    },
+    {
+      "input": "$(whoami) and $(id)",
+      "output": "(whoami) and (id)"
+    },
+    {
+      "input": "$ ( not a substitution",
+      "output": "$ ( not a substitution"
+    },
+    {
+      "input": "${HOME}",
+      "output": "${HOME}"
+    },
+    {
+      "input": "$(echo `id`) 'quoted'",
+      "output": "(echo id) '\\''quoted'\\''"
+    },
+    {
+      "input": "; rm -rf / & echo done | cat > out",
+      "output": "; rm -rf / & echo done | cat > out"
+    },
+    {
+      "input": "line one\nline two",
+      "output": "line one\nline two"
+    },
+    {
+      "input": "back\\slash",
+      "output": "back\\slash"
+    },
+    {
+      "input": "$`(",
+      "output": "("
+    },
+    {
+      "input": "'$('",
+      "output": "'\\''('\\''"
+    },
+    {
+      "input": "🎵 unicode 🎵",
+      "output": "🎵 unicode 🎵"
+    }
+  ],
+  "command_template": [
+    {
+      "template": "echo '{title}: {body}'",
+      "title": "Shore — Test",
+      "body": "hello world",
+      "rendered": "echo 'Shore — Test: hello world'"
+    },
+    {
+      "template": "echo '{title}'",
+      "title": "Alice's",
+      "body": "unused",
+      "rendered": "echo 'Alice'\\''s'"
+    },
+    {
+      "template": "notify {body}",
+      "title": "t",
+      "body": "$(id)",
+      "rendered": "notify (id)"
+    },
+    {
+      "template": "echo hi",
+      "title": "t",
+      "body": "b",
+      "rendered": "echo hi"
+    },
+    {
+      "template": "echo '{body}' '{body}' '{title}'",
+      "title": "T",
+      "body": "B",
+      "rendered": "echo 'B' 'B' 'T'"
+    },
+    {
+      "template": "echo '{title}'",
+      "title": "{body}",
+      "body": "SUBSTITUTED",
+      "rendered": "echo 'SUBSTITUTED'"
+    },
+    {
+      "template": "echo '{body}'",
+      "title": "T",
+      "body": "{title}",
+      "rendered": "echo '{title}'"
+    }
+  ],
+  "gating": [
+    {
+      "name": "defaults",
+      "enabled": false,
+      "events": [
+        {
+          "event": "autonomous_message",
+          "event_enabled": true,
+          "would_notify": false
+        },
+        {
+          "event": "cache_warning",
+          "event_enabled": true,
+          "would_notify": false
+        },
+        {
+          "event": "compaction_complete",
+          "event_enabled": true,
+          "would_notify": false
+        },
+        {
+          "event": "error",
+          "event_enabled": true,
+          "would_notify": false
+        },
+        {
+          "event": "message_complete",
+          "event_enabled": false,
+          "would_notify": false
+        },
+        {
+          "event": "usage_warning",
+          "event_enabled": true,
+          "would_notify": false
+        }
+      ]
+    },
+    {
+      "name": "enabled_defaults",
+      "enabled": true,
+      "events": [
+        {
+          "event": "autonomous_message",
+          "event_enabled": true,
+          "would_notify": true
+        },
+        {
+          "event": "cache_warning",
+          "event_enabled": true,
+          "would_notify": true
+        },
+        {
+          "event": "compaction_complete",
+          "event_enabled": true,
+          "would_notify": true
+        },
+        {
+          "event": "error",
+          "event_enabled": true,
+          "would_notify": true
+        },
+        {
+          "event": "message_complete",
+          "event_enabled": false,
+          "would_notify": false
+        },
+        {
+          "event": "usage_warning",
+          "event_enabled": true,
+          "would_notify": true
+        }
+      ]
+    },
+    {
+      "name": "enabled_all_on",
+      "enabled": true,
+      "events": [
+        {
+          "event": "autonomous_message",
+          "event_enabled": true,
+          "would_notify": true
+        },
+        {
+          "event": "cache_warning",
+          "event_enabled": true,
+          "would_notify": true
+        },
+        {
+          "event": "compaction_complete",
+          "event_enabled": true,
+          "would_notify": true
+        },
+        {
+          "event": "error",
+          "event_enabled": true,
+          "would_notify": true
+        },
+        {
+          "event": "message_complete",
+          "event_enabled": true,
+          "would_notify": true
+        },
+        {
+          "event": "usage_warning",
+          "event_enabled": true,
+          "would_notify": true
+        }
+      ]
+    },
+    {
+      "name": "enabled_all_off",
+      "enabled": true,
+      "events": [
+        {
+          "event": "autonomous_message",
+          "event_enabled": false,
+          "would_notify": false
+        },
+        {
+          "event": "cache_warning",
+          "event_enabled": false,
+          "would_notify": false
+        },
+        {
+          "event": "compaction_complete",
+          "event_enabled": false,
+          "would_notify": false
+        },
+        {
+          "event": "error",
+          "event_enabled": false,
+          "would_notify": false
+        },
+        {
+          "event": "message_complete",
+          "event_enabled": false,
+          "would_notify": false
+        },
+        {
+          "event": "usage_warning",
+          "event_enabled": false,
+          "would_notify": false
+        }
+      ]
+    },
+    {
+      "name": "disabled_all_on",
+      "enabled": false,
+      "events": [
+        {
+          "event": "autonomous_message",
+          "event_enabled": true,
+          "would_notify": false
+        },
+        {
+          "event": "cache_warning",
+          "event_enabled": true,
+          "would_notify": false
+        },
+        {
+          "event": "compaction_complete",
+          "event_enabled": true,
+          "would_notify": false
+        },
+        {
+          "event": "error",
+          "event_enabled": true,
+          "would_notify": false
+        },
+        {
+          "event": "message_complete",
+          "event_enabled": true,
+          "would_notify": false
+        },
+        {
+          "event": "usage_warning",
+          "event_enabled": true,
+          "would_notify": false
+        }
+      ]
+    },
+    {
+      "name": "mixed",
+      "enabled": true,
+      "events": [
+        {
+          "event": "autonomous_message",
+          "event_enabled": true,
+          "would_notify": true
+        },
+        {
+          "event": "cache_warning",
+          "event_enabled": false,
+          "would_notify": false
+        },
+        {
+          "event": "compaction_complete",
+          "event_enabled": true,
+          "would_notify": true
+        },
+        {
+          "event": "error",
+          "event_enabled": false,
+          "would_notify": false
+        },
+        {
+          "event": "message_complete",
+          "event_enabled": true,
+          "would_notify": true
+        },
+        {
+          "event": "usage_warning",
+          "event_enabled": false,
+          "would_notify": false
+        }
+      ]
+    }
+  ],
+  "generation_threshold": [
+    {
+      "name": "zero",
+      "threshold_ms": "0",
+      "cases": [
+        {
+          "total_ms": 0,
+          "meets_threshold": true
+        },
+        {
+          "total_ms": 1,
+          "meets_threshold": true
+        },
+        {
+          "total_ms": 999,
+          "meets_threshold": true
+        },
+        {
+          "total_ms": 1000,
+          "meets_threshold": true
+        },
+        {
+          "total_ms": 4999,
+          "meets_threshold": true
+        },
+        {
+          "total_ms": 5000,
+          "meets_threshold": true
+        },
+        {
+          "total_ms": 4294967295,
+          "meets_threshold": true
+        }
+      ]
+    },
+    {
+      "name": "one_ms",
+      "threshold_ms": "1",
+      "cases": [
+        {
+          "total_ms": 0,
+          "meets_threshold": false
+        },
+        {
+          "total_ms": 1,
+          "meets_threshold": true
+        },
+        {
+          "total_ms": 999,
+          "meets_threshold": true
+        },
+        {
+          "total_ms": 1000,
+          "meets_threshold": true
+        },
+        {
+          "total_ms": 4999,
+          "meets_threshold": true
+        },
+        {
+          "total_ms": 5000,
+          "meets_threshold": true
+        },
+        {
+          "total_ms": 4294967295,
+          "meets_threshold": true
+        }
+      ]
+    },
+    {
+      "name": "five_s",
+      "threshold_ms": "5000",
+      "cases": [
+        {
+          "total_ms": 0,
+          "meets_threshold": false
+        },
+        {
+          "total_ms": 1,
+          "meets_threshold": false
+        },
+        {
+          "total_ms": 999,
+          "meets_threshold": false
+        },
+        {
+          "total_ms": 1000,
+          "meets_threshold": false
+        },
+        {
+          "total_ms": 4999,
+          "meets_threshold": false
+        },
+        {
+          "total_ms": 5000,
+          "meets_threshold": true
+        },
+        {
+          "total_ms": 4294967295,
+          "meets_threshold": true
+        }
+      ]
+    },
+    {
+      "name": "huge",
+      "threshold_ms": "18446744073709551615",
+      "cases": [
+        {
+          "total_ms": 0,
+          "meets_threshold": false
+        },
+        {
+          "total_ms": 1,
+          "meets_threshold": false
+        },
+        {
+          "total_ms": 999,
+          "meets_threshold": false
+        },
+        {
+          "total_ms": 1000,
+          "meets_threshold": false
+        },
+        {
+          "total_ms": 4999,
+          "meets_threshold": false
+        },
+        {
+          "total_ms": 5000,
+          "meets_threshold": false
+        },
+        {
+          "total_ms": 4294967295,
+          "meets_threshold": false
+        }
+      ]
+    }
+  ],
+  "config_parse": [
+    {
+      "name": "empty",
+      "toml": "",
+      "ok": {
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "0",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
+      }
+    },
+    {
+      "name": "threshold_float",
+      "toml": "generation_threshold = 1.5\n",
+      "ok": {
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "1500",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
+      }
+    },
+    {
+      "name": "threshold_float_negative",
+      "toml": "generation_threshold = -1.5\n",
+      "err": "duration cannot be negative"
+    },
+    {
+      "name": "threshold_int_negative",
+      "toml": "generation_threshold = -30\n",
+      "err": "duration cannot be negative"
+    },
+    {
+      "name": "threshold_zero_int",
+      "toml": "generation_threshold = 0\n",
+      "ok": {
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "0",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
+      }
+    },
+    {
+      "name": "threshold_bool",
+      "toml": "generation_threshold = true\n",
+      "err": "invalid type: boolean `true`, expected a duration string (e.g. \"30s\", \"2m\"), or a number (seconds)"
+    },
+    {
+      "name": "threshold_array",
+      "toml": "generation_threshold = [1]\n",
+      "err": "invalid type: sequence, expected a duration string (e.g. \"30s\", \"2m\"), or a number (seconds)"
+    },
+    {
+      "name": "threshold_float_tiny",
+      "toml": "generation_threshold = 0.0005\n",
+      "ok": {
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "0",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
+      }
+    },
+    {
+      "name": "threshold_i64_max",
+      "toml": "generation_threshold = 9223372036854775807\n",
+      "ok": {
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "18446744073709551615",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
+      }
+    },
+    {
+      "name": "threshold_float_whole",
+      "toml": "generation_threshold = 1.0\n",
+      "ok": {
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "1000",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
+      }
+    },
+    {
+      "name": "threshold_float_half_ms",
+      "toml": "generation_threshold = 0.0015\n",
+      "ok": {
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "1",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
+      }
+    },
+    {
+      "name": "unknown_order_desc",
+      "toml": "zzz = 1\naaa = 2\n",
+      "err": "unknown field `zzz`, expected one of `enabled`, `backend`, `ntfy`, `command`, `generation_threshold`, `events`"
+    },
+    {
+      "name": "unknown_order_asc",
+      "toml": "aaa = 1\nzzz = 2\n",
+      "err": "unknown field `aaa`, expected one of `enabled`, `backend`, `ntfy`, `command`, `generation_threshold`, `events`"
+    },
+    {
+      "name": "unknown_after_known",
+      "toml": "enabled = true\nzzz = 1\naaa = 2\n",
+      "err": "unknown field `zzz`, expected one of `enabled`, `backend`, `ntfy`, `command`, `generation_threshold`, `events`"
+    },
+    {
+      "name": "ntfy_unknown_order_asc",
+      "toml": "[ntfy]\naaa = 1\nzzz = 2\n",
+      "err": "unknown field `aaa`, expected one of `url`, `topic`, `token`"
+    },
+    {
+      "name": "events_unknown_order_asc",
+      "toml": "[events]\naaa = 1\nzzz = 2\n",
+      "err": "unknown field `aaa`, expected one of `autonomous_message`, `cache_warning`, `compaction_complete`, `error`, `message_complete`, `usage_warning`"
+    },
+    {
+      "name": "enabled_only",
+      "toml": "enabled = true\n",
+      "ok": {
+        "enabled": true,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "0",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
+      }
+    },
+    {
+      "name": "backend_ntfy",
+      "toml": "backend = \"ntfy\"\n",
+      "ok": {
+        "enabled": false,
+        "backend": "ntfy",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "0",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
+      }
+    },
+    {
+      "name": "backend_command",
+      "toml": "backend = \"command\"\n",
+      "ok": {
+        "enabled": false,
+        "backend": "command",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "0",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
+      }
+    },
+    {
+      "name": "backend_notify_send",
+      "toml": "backend = \"notify_send\"\n",
+      "ok": {
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "0",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
+      }
+    },
+    {
+      "name": "backend_unknown",
+      "toml": "backend = \"telegram\"\n",
+      "err": "unknown variant `telegram`, expected one of `notify_send`, `ntfy`, `command`"
+    },
+    {
+      "name": "backend_wrong_type",
+      "toml": "backend = 3\n",
+      "err": "wanted string or table"
+    },
+    {
+      "name": "ntfy_full",
+      "toml": "[ntfy]\nurl = \"https://push.example\"\ntopic = \"shore\"\ntoken = \"tk\"\n",
+      "ok": {
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://push.example",
+          "topic": "shore",
+          "token": "tk"
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "0",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
+      }
+    },
+    {
+      "name": "ntfy_partial",
+      "toml": "[ntfy]\ntopic = \"shore\"\n",
+      "ok": {
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "shore",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "0",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
+      }
+    },
+    {
+      "name": "ntfy_empty_table",
+      "toml": "[ntfy]\n",
+      "ok": {
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "0",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
+      }
+    },
+    {
+      "name": "ntfy_unknown_field",
+      "toml": "[ntfy]\nurl = \"u\"\nzzz = 1\naaa = 2\n",
+      "err": "unknown field `zzz`, expected one of `url`, `topic`, `token`"
+    },
+    {
+      "name": "ntfy_wrong_type",
+      "toml": "[ntfy]\ntopic = 5\n",
+      "err": "invalid type: integer `5`, expected a string"
+    },
+    {
+      "name": "command_template",
+      "toml": "[command]\ntemplate = \"echo {body}\"\n",
+      "ok": {
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": "echo {body}"
+        },
+        "generation_threshold_ms": "0",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
+      }
+    },
+    {
+      "name": "command_unknown",
+      "toml": "[command]\nshell = \"zsh\"\n",
+      "err": "unknown field `shell`, expected `template`"
+    },
+    {
+      "name": "threshold_secs",
+      "toml": "generation_threshold = \"30s\"\n",
+      "ok": {
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "30000",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
+      }
+    },
+    {
+      "name": "threshold_ms",
+      "toml": "generation_threshold = \"1500ms\"\n",
+      "ok": {
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "1500",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
+      }
+    },
+    {
+      "name": "threshold_bare_int",
+      "toml": "generation_threshold = \"45\"\n",
+      "ok": {
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "45000",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
+      }
+    },
+    {
+      "name": "threshold_invalid",
+      "toml": "generation_threshold = \"soon\"\n",
+      "err": "invalid duration suffix: soon"
+    },
+    {
+      "name": "threshold_negative",
+      "toml": "generation_threshold = \"-5s\"\n",
+      "err": "duration cannot be negative"
+    },
+    {
+      "name": "threshold_wrong_type",
+      "toml": "generation_threshold = 30\n",
+      "ok": {
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "30000",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
+      }
+    },
+    {
+      "name": "events_partial",
+      "toml": "[events]\nmessage_complete = true\nerror = false\n",
+      "ok": {
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "0",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": false,
+          "message_complete": true,
+          "usage_warning": true
+        }
+      }
+    },
+    {
+      "name": "events_empty",
+      "toml": "[events]\n",
+      "ok": {
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://ntfy.sh",
+          "topic": "",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "0",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
+      }
+    },
+    {
+      "name": "events_unknown",
+      "toml": "[events]\ncompaction = true\n",
+      "err": "unknown field `compaction`, expected one of `autonomous_message`, `cache_warning`, `compaction_complete`, `error`, `message_complete`, `usage_warning`"
+    },
+    {
+      "name": "events_wrong_type",
+      "toml": "[events]\nerror = \"yes\"\n",
+      "err": "invalid type: string \"yes\", expected a boolean"
+    },
+    {
+      "name": "unknown_two_keys",
+      "toml": "zebra = 1\napple = 2\n",
+      "err": "unknown field `zebra`, expected one of `enabled`, `backend`, `ntfy`, `command`, `generation_threshold`, `events`"
+    },
+    {
+      "name": "unknown_top_level",
+      "toml": "verbosity = 3\n",
+      "err": "unknown field `verbosity`, expected one of `enabled`, `backend`, `ntfy`, `command`, `generation_threshold`, `events`"
+    },
+    {
+      "name": "enabled_wrong_type",
+      "toml": "enabled = \"yes\"\n",
+      "err": "invalid type: string \"yes\", expected a boolean"
+    },
+    {
+      "name": "ntfy_wrong_shape",
+      "toml": "ntfy = \"https://ntfy.sh\"\n",
+      "err": "invalid type: string \"https://ntfy.sh\", expected struct NtfyConfig"
+    },
+    {
+      "name": "events_wrong_shape",
+      "toml": "events = true\n",
+      "err": "invalid type: boolean `true`, expected struct NotificationEventsConfig"
+    },
+    {
+      "name": "ntfy_trailing_slashes",
+      "toml": "[ntfy]\nurl = \"https://n.sh///\"\ntopic = \"t\"\n",
+      "ok": {
+        "enabled": false,
+        "backend": "notify_send",
+        "ntfy": {
+          "url": "https://n.sh///",
+          "topic": "t",
+          "token": ""
+        },
+        "command": {
+          "template": ""
+        },
+        "generation_threshold_ms": "0",
+        "events": {
+          "autonomous_message": true,
+          "cache_warning": true,
+          "compaction_complete": true,
+          "error": true,
+          "message_complete": false,
+          "usage_warning": true
+        }
+      }
+    }
+  ],
+  "ntfy_url": [
+    {
+      "url": "https://ntfy.sh",
+      "topic": "shore",
+      "rendered": "https://ntfy.sh/shore",
+      "topic_empty": false
+    },
+    {
+      "url": "https://ntfy.sh/",
+      "topic": "shore",
+      "rendered": "https://ntfy.sh/shore",
+      "topic_empty": false
+    },
+    {
+      "url": "https://ntfy.sh///",
+      "topic": "shore",
+      "rendered": "https://ntfy.sh/shore",
+      "topic_empty": false
+    },
+    {
+      "url": "https://ntfy.sh/base/",
+      "topic": "shore",
+      "rendered": "https://ntfy.sh/base/shore",
+      "topic_empty": false
+    },
+    {
+      "url": "",
+      "topic": "shore",
+      "rendered": "/shore",
+      "topic_empty": false
+    },
+    {
+      "url": "/",
+      "topic": "shore",
+      "rendered": "/shore",
+      "topic_empty": false
+    },
+    {
+      "url": "///",
+      "topic": "",
+      "rendered": "/",
+      "topic_empty": true
+    },
+    {
+      "url": "https://ntfy.sh",
+      "topic": "",
+      "rendered": "https://ntfy.sh/",
+      "topic_empty": true
+    }
+  ],
+  "streams": [
+    {
+      "name": "empty_stream",
+      "lines": [],
+      "regen": false,
+      "rid": null,
+      "frames": [],
+      "outcome": {
+        "err": {
+          "kind": "incomplete_stream"
+        }
+      }
+    },
+    {
+      "name": "start_then_eof",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "err": {
+          "kind": "incomplete_stream"
+        }
+      }
+    },
+    {
+      "name": "simple",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"claude-test\"}",
+        "{\"type\":\"text\",\"text\":\"Hello \"}",
+        "{\"type\":\"text\",\"text\":\"world\"}",
+        "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "Hello ",
+          "content_type": "text",
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "world",
+          "content_type": "text",
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "ok": {
+          "content": "C",
+          "model": "claude-test",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_read_tokens": 8,
+            "cache_creation_tokens": 2,
+            "total_cost_usd": null
+          },
+          "timing": {
+            "total_ms": 150,
+            "time_to_first_token_ms": 50
+          },
+          "tool_uses": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "Hello world"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "regen_and_rid",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}",
+        "{\"type\":\"text\",\"text\":\"x\"}",
+        "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
+      ],
+      "regen": true,
+      "rid": "r-1",
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": "r-1",
+          "regen": true,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": "r-1",
+          "text": "x",
+          "content_type": "text",
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "ok": {
+          "content": "C",
+          "model": "m",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_read_tokens": 8,
+            "cache_creation_tokens": 2,
+            "total_cost_usd": null
+          },
+          "timing": {
+            "total_ms": 150,
+            "time_to_first_token_ms": 50
+          },
+          "tool_uses": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "x"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "done_without_start",
+      "lines": [
+        "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [],
+      "outcome": {
+        "ok": {
+          "content": "C",
+          "model": "",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_read_tokens": 8,
+            "cache_creation_tokens": 2,
+            "total_cost_usd": null
+          },
+          "timing": {
+            "total_ms": 150,
+            "time_to_first_token_ms": 50
+          },
+          "tool_uses": [],
+          "content_blocks": []
+        }
+      }
+    },
+    {
+      "name": "blank_lines",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}",
+        "",
+        "   ",
+        "\t",
+        "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "ok": {
+          "content": "C",
+          "model": "m",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_read_tokens": 8,
+            "cache_creation_tokens": 2,
+            "total_cost_usd": null
+          },
+          "timing": {
+            "total_ms": 150,
+            "time_to_first_token_ms": 50
+          },
+          "tool_uses": [],
+          "content_blocks": []
+        }
+      }
+    },
+    {
+      "name": "pings_ignored",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}",
+        "{\"type\":\"ping\"}",
+        "{\"type\":\"text\",\"text\":\"Hi\"}",
+        "{\"type\":\"ping\"}",
+        "{\"type\":\"ping\"}",
+        "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "Hi",
+          "content_type": "text",
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "ok": {
+          "content": "C",
+          "model": "m",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_read_tokens": 8,
+            "cache_creation_tokens": 2,
+            "total_cost_usd": null
+          },
+          "timing": {
+            "total_ms": 150,
+            "time_to_first_token_ms": 50
+          },
+          "tool_uses": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "Hi"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "call_complete_ignored",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}",
+        "{\"type\":\"call_complete\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"cache_read_tokens\":0,\"cache_creation_tokens\":0},\"timing\":{\"total_ms\":1,\"time_to_first_token_ms\":1},\"finish_reason\":\"tool_use\",\"continuation\":false}",
+        "{\"type\":\"text\",\"text\":\"Hi\"}",
+        "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "Hi",
+          "content_type": "text",
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "ok": {
+          "content": "C",
+          "model": "m",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_read_tokens": 8,
+            "cache_creation_tokens": 2,
+            "total_cost_usd": null
+          },
+          "timing": {
+            "total_ms": 150,
+            "time_to_first_token_ms": 50
+          },
+          "tool_uses": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "Hi"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "interleaved_text_thinking",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}",
+        "{\"type\":\"thinking\",\"text\":\"t1\"}",
+        "{\"type\":\"text\",\"text\":\"a\"}",
+        "{\"type\":\"thinking\",\"text\":\"t2\"}",
+        "{\"type\":\"text\",\"text\":\"b\"}",
+        "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "t1",
+          "content_type": "thinking",
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "a",
+          "content_type": "text",
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "t2",
+          "content_type": "thinking",
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "b",
+          "content_type": "text",
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "ok": {
+          "content": "C",
+          "model": "m",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_read_tokens": 8,
+            "cache_creation_tokens": 2,
+            "total_cost_usd": null
+          },
+          "timing": {
+            "total_ms": 150,
+            "time_to_first_token_ms": 50
+          },
+          "tool_uses": [],
+          "content_blocks": [
+            {
+              "type": "thinking",
+              "thinking": "t1",
+              "stored_signature": null,
+              "signature": null,
+              "reasoning_details": null,
+              "reasoning_content": null
+            },
+            {
+              "type": "text",
+              "text": "a"
+            },
+            {
+              "type": "thinking",
+              "thinking": "t2",
+              "stored_signature": null,
+              "signature": null,
+              "reasoning_details": null,
+              "reasoning_content": null
+            },
+            {
+              "type": "text",
+              "text": "b"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "thinking_signature",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}",
+        "{\"type\":\"thinking\",\"text\":\"t\"}",
+        "{\"type\":\"thinking_signature\",\"signature\":\"sig-abc\"}",
+        "{\"type\":\"text\",\"text\":\"a\"}",
+        "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "t",
+          "content_type": "thinking",
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "a",
+          "content_type": "text",
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "ok": {
+          "content": "C",
+          "model": "m",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_read_tokens": 8,
+            "cache_creation_tokens": 2,
+            "total_cost_usd": null
+          },
+          "timing": {
+            "total_ms": 150,
+            "time_to_first_token_ms": 50
+          },
+          "tool_uses": [],
+          "content_blocks": [
+            {
+              "type": "thinking",
+              "thinking": "t",
+              "stored_signature": "sig-abc",
+              "signature": "sig-abc",
+              "reasoning_details": null,
+              "reasoning_content": null
+            },
+            {
+              "type": "text",
+              "text": "a"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "signature_before_thinking",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}",
+        "{\"type\":\"thinking_signature\",\"signature\":\"early\"}",
+        "{\"type\":\"thinking\",\"text\":\"t\"}",
+        "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "t",
+          "content_type": "thinking",
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "ok": {
+          "content": "C",
+          "model": "m",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_read_tokens": 8,
+            "cache_creation_tokens": 2,
+            "total_cost_usd": null
+          },
+          "timing": {
+            "total_ms": 150,
+            "time_to_first_token_ms": 50
+          },
+          "tool_uses": [],
+          "content_blocks": [
+            {
+              "type": "thinking",
+              "thinking": "t",
+              "stored_signature": "early",
+              "signature": "early",
+              "reasoning_details": null,
+              "reasoning_content": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "two_carriers_reverse_order",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}",
+        "{\"type\":\"reasoning_content\",\"reasoning\":\"zai-text\"}",
+        "{\"type\":\"thinking_signature\",\"signature\":\"sig\"}",
+        "{\"type\":\"thinking\",\"text\":\"t\"}",
+        "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "t",
+          "content_type": "thinking",
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "ok": {
+          "content": "C",
+          "model": "m",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_read_tokens": 8,
+            "cache_creation_tokens": 2,
+            "total_cost_usd": null
+          },
+          "timing": {
+            "total_ms": 150,
+            "time_to_first_token_ms": 50
+          },
+          "tool_uses": [],
+          "content_blocks": [
+            {
+              "type": "thinking",
+              "thinking": "t",
+              "stored_signature": "sig",
+              "signature": "sig",
+              "reasoning_details": null,
+              "reasoning_content": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "two_carriers_last_wins",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}",
+        "{\"type\":\"thinking_signature\",\"signature\":\"sig\"}",
+        "{\"type\":\"reasoning_content\",\"reasoning\":\"zai-text\"}",
+        "{\"type\":\"thinking\",\"text\":\"t\"}",
+        "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "t",
+          "content_type": "thinking",
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "ok": {
+          "content": "C",
+          "model": "m",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_read_tokens": 8,
+            "cache_creation_tokens": 2,
+            "total_cost_usd": null
+          },
+          "timing": {
+            "total_ms": 150,
+            "time_to_first_token_ms": 50
+          },
+          "tool_uses": [],
+          "content_blocks": [
+            {
+              "type": "thinking",
+              "thinking": "t",
+              "stored_signature": "zair:zai-text",
+              "signature": null,
+              "reasoning_details": null,
+              "reasoning_content": "zai-text"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "reasoning_details",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}",
+        "{\"type\":\"thinking\",\"text\":\"t\"}",
+        "{\"type\":\"reasoning_details\",\"details\":[{\"type\":\"reasoning.text\",\"text\":\"r\"}]}",
+        "{\"type\":\"text\",\"text\":\"a\"}",
+        "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "t",
+          "content_type": "thinking",
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "a",
+          "content_type": "text",
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "ok": {
+          "content": "C",
+          "model": "m",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_read_tokens": 8,
+            "cache_creation_tokens": 2,
+            "total_cost_usd": null
+          },
+          "timing": {
+            "total_ms": 150,
+            "time_to_first_token_ms": 50
+          },
+          "tool_uses": [],
+          "content_blocks": [
+            {
+              "type": "thinking",
+              "thinking": "t",
+              "stored_signature": "orrd:[{\"type\":\"reasoning.text\",\"text\":\"r\"}]",
+              "signature": null,
+              "reasoning_details": [
+                {
+                  "type": "reasoning.text",
+                  "text": "r"
+                }
+              ],
+              "reasoning_content": null
+            },
+            {
+              "type": "text",
+              "text": "a"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "reasoning_content",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}",
+        "{\"type\":\"thinking\",\"text\":\"t\"}",
+        "{\"type\":\"reasoning_content\",\"reasoning\":\"why\"}",
+        "{\"type\":\"text\",\"text\":\"a\"}",
+        "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "t",
+          "content_type": "thinking",
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "a",
+          "content_type": "text",
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "ok": {
+          "content": "C",
+          "model": "m",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_read_tokens": 8,
+            "cache_creation_tokens": 2,
+            "total_cost_usd": null
+          },
+          "timing": {
+            "total_ms": 150,
+            "time_to_first_token_ms": 50
+          },
+          "tool_uses": [],
+          "content_blocks": [
+            {
+              "type": "thinking",
+              "thinking": "t",
+              "stored_signature": "zair:why",
+              "signature": null,
+              "reasoning_details": null,
+              "reasoning_content": "why"
+            },
+            {
+              "type": "text",
+              "text": "a"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "carrier_without_thinking",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}",
+        "{\"type\":\"thinking_signature\",\"signature\":\"orphan\"}",
+        "{\"type\":\"text\",\"text\":\"a\"}",
+        "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "a",
+          "content_type": "text",
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "ok": {
+          "content": "C",
+          "model": "m",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_read_tokens": 8,
+            "cache_creation_tokens": 2,
+            "total_cost_usd": null
+          },
+          "timing": {
+            "total_ms": 150,
+            "time_to_first_token_ms": 50
+          },
+          "tool_uses": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "a"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "signature_attaches_to_first_flush",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}",
+        "{\"type\":\"thinking_signature\",\"signature\":\"s\"}",
+        "{\"type\":\"thinking\",\"text\":\"t1\"}",
+        "{\"type\":\"text\",\"text\":\"a\"}",
+        "{\"type\":\"thinking\",\"text\":\"t2\"}",
+        "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "t1",
+          "content_type": "thinking",
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "a",
+          "content_type": "text",
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "t2",
+          "content_type": "thinking",
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "ok": {
+          "content": "C",
+          "model": "m",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_read_tokens": 8,
+            "cache_creation_tokens": 2,
+            "total_cost_usd": null
+          },
+          "timing": {
+            "total_ms": 150,
+            "time_to_first_token_ms": 50
+          },
+          "tool_uses": [],
+          "content_blocks": [
+            {
+              "type": "thinking",
+              "thinking": "t1",
+              "stored_signature": "s",
+              "signature": "s",
+              "reasoning_details": null,
+              "reasoning_content": null
+            },
+            {
+              "type": "text",
+              "text": "a"
+            },
+            {
+              "type": "thinking",
+              "thinking": "t2",
+              "stored_signature": null,
+              "signature": null,
+              "reasoning_details": null,
+              "reasoning_content": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "redacted_thinking",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}",
+        "{\"type\":\"text\",\"text\":\"a\"}",
+        "{\"type\":\"thinking\",\"text\":\"t\"}",
+        "{\"type\":\"redacted_thinking\",\"data\":\"blob\"}",
+        "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "a",
+          "content_type": "text",
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "t",
+          "content_type": "thinking",
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "ok": {
+          "content": "C",
+          "model": "m",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_read_tokens": 8,
+            "cache_creation_tokens": 2,
+            "total_cost_usd": null
+          },
+          "timing": {
+            "total_ms": 150,
+            "time_to_first_token_ms": 50
+          },
+          "tool_uses": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "a"
+            },
+            {
+              "type": "thinking",
+              "thinking": "t",
+              "stored_signature": null,
+              "signature": null,
+              "reasoning_details": null,
+              "reasoning_content": null
+            },
+            {
+              "type": "redacted_thinking",
+              "data": "blob"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "tool_use_flushes_both",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}",
+        "{\"type\":\"thinking\",\"text\":\"t\"}",
+        "{\"type\":\"text\",\"text\":\"a\"}",
+        "{\"type\":\"tool_use\",\"id\":\"tu_1\",\"name\":\"memory\",\"input\":{\"q\":\"x\"}}",
+        "{\"type\":\"tool_use\",\"id\":\"tu_2\",\"name\":\"web\",\"input\":null}",
+        "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "t",
+          "content_type": "thinking",
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "a",
+          "content_type": "text",
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "ok": {
+          "content": "C",
+          "model": "m",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_read_tokens": 8,
+            "cache_creation_tokens": 2,
+            "total_cost_usd": null
+          },
+          "timing": {
+            "total_ms": 150,
+            "time_to_first_token_ms": 50
+          },
+          "tool_uses": [
+            {
+              "id": "tu_1",
+              "name": "memory",
+              "input": {
+                "q": "x"
+              }
+            },
+            {
+              "id": "tu_2",
+              "name": "web",
+              "input": null
+            }
+          ],
+          "content_blocks": [
+            {
+              "type": "thinking",
+              "thinking": "t",
+              "stored_signature": null,
+              "signature": null,
+              "reasoning_details": null,
+              "reasoning_content": null
+            },
+            {
+              "type": "text",
+              "text": "a"
+            },
+            {
+              "type": "tool_use",
+              "id": "tu_1",
+              "name": "memory",
+              "input": {
+                "q": "x"
+              }
+            },
+            {
+              "type": "tool_use",
+              "id": "tu_2",
+              "name": "web",
+              "input": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "content_blocks_override",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}",
+        "{\"type\":\"text\",\"text\":\"intermediate\"}",
+        "{\"type\":\"done\",\"content\":\"final\",\"finish_reason\":\"end_turn\",\"content_blocks\":[{\"type\":\"text\",\"text\":\"only-this\"}],\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"cache_read_tokens\":0,\"cache_creation_tokens\":0},\"timing\":{\"total_ms\":1,\"time_to_first_token_ms\":1}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "intermediate",
+          "content_type": "text",
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "ok": {
+          "content": "final",
+          "model": "m",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "cache_read_tokens": 0,
+            "cache_creation_tokens": 0,
+            "total_cost_usd": null
+          },
+          "timing": {
+            "total_ms": 1,
+            "time_to_first_token_ms": 1
+          },
+          "tool_uses": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "only-this"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "content_blocks_override_empty",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}",
+        "{\"type\":\"text\",\"text\":\"gone\"}",
+        "{\"type\":\"done\",\"content\":\"final\",\"finish_reason\":\"end_turn\",\"content_blocks\":[],\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"cache_read_tokens\":0,\"cache_creation_tokens\":0},\"timing\":{\"total_ms\":1,\"time_to_first_token_ms\":1}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "gone",
+          "content_type": "text",
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "ok": {
+          "content": "final",
+          "model": "m",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "cache_read_tokens": 0,
+            "cache_creation_tokens": 0,
+            "total_cost_usd": null
+          },
+          "timing": {
+            "total_ms": 1,
+            "time_to_first_token_ms": 1
+          },
+          "tool_uses": [],
+          "content_blocks": []
+        }
+      }
+    },
+    {
+      "name": "error_carries_partial_usage",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"claude-opus-4-8\"}",
+        "{\"type\":\"text\",\"text\":\"partial\"}",
+        "{\"type\":\"error\",\"message\":\"connection reset\",\"usage\":{\"input_tokens\":2,\"output_tokens\":0,\"cache_read_tokens\":0,\"cache_creation_tokens\":19188},\"timing\":{\"total_ms\":800,\"time_to_first_token_ms\":0}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "partial",
+          "content_type": "text",
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "err": {
+          "kind": "stream_errored",
+          "message": "connection reset",
+          "usage": {
+            "input_tokens": 2,
+            "output_tokens": 0,
+            "cache_read_tokens": 0,
+            "cache_creation_tokens": 19188
+          },
+          "timing": {
+            "total_ms": 800,
+            "time_to_first_token_ms": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "error_bare",
+      "lines": [
+        "{\"type\":\"error\"}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [],
+      "outcome": {
+        "err": {
+          "kind": "stream_errored",
+          "message": "",
+          "usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_tokens": 0,
+            "cache_creation_tokens": 0
+          },
+          "timing": {
+            "total_ms": 0,
+            "time_to_first_token_ms": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "trailing_after_done",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}",
+        "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}",
+        "{\"type\":\"text\",\"text\":\"never\"}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "ok": {
+          "content": "C",
+          "model": "m",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_read_tokens": 8,
+            "cache_creation_tokens": 2,
+            "total_cost_usd": null
+          },
+          "timing": {
+            "total_ms": 150,
+            "time_to_first_token_ms": 50
+          },
+          "tool_uses": [],
+          "content_blocks": []
+        }
+      }
+    },
+    {
+      "name": "unknown_event_type",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}",
+        "{\"type\":\"whoops\"}",
+        "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "err": {
+          "kind": "deserialize",
+          "message": "unknown variant `whoops`, expected one of `start`, `text`, `thinking`, `thinking_signature`, `reasoning_details`, `reasoning_content`, `redacted_thinking`, `tool_use`, `done`, `call_complete`, `ping`, `error` at line 1 column 16"
+        }
+      }
+    },
+    {
+      "name": "malformed_json",
+      "lines": [
+        "{\"type\":\"start\""
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [],
+      "outcome": {
+        "err": {
+          "kind": "deserialize",
+          "message": "EOF while parsing an object at line 1 column 15"
+        }
+      }
+    },
+    {
+      "name": "usage_with_cost",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}",
+        "{\"type\":\"done\",\"content\":\"c\",\"finish_reason\":\"stop\",\"usage\":{\"input_tokens\":1,\"output_tokens\":2,\"cache_read_tokens\":3,\"cache_creation_tokens\":4,\"total_cost_usd\":0.0125},\"timing\":{\"total_ms\":9,\"time_to_first_token_ms\":3}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "ok": {
+          "content": "c",
+          "model": "m",
+          "finish_reason": "stop",
+          "usage": {
+            "input_tokens": 1,
+            "output_tokens": 2,
+            "cache_read_tokens": 3,
+            "cache_creation_tokens": 4,
+            "total_cost_usd": 0.0125
+          },
+          "timing": {
+            "total_ms": 9,
+            "time_to_first_token_ms": 3
+          },
+          "tool_uses": [],
+          "content_blocks": []
+        }
+      }
+    },
+    {
+      "name": "empty_text_chunks",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}",
+        "{\"type\":\"text\",\"text\":\"\"}",
+        "{\"type\":\"text\",\"text\":\"\"}",
+        "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "",
+          "content_type": "text",
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "",
+          "content_type": "text",
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "ok": {
+          "content": "C",
+          "model": "m",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_read_tokens": 8,
+            "cache_creation_tokens": 2,
+            "total_cost_usd": null
+          },
+          "timing": {
+            "total_ms": 150,
+            "time_to_first_token_ms": 50
+          },
+          "tool_uses": [],
+          "content_blocks": []
+        }
+      }
+    },
+    {
+      "name": "multibyte_text",
+      "lines": [
+        "{\"type\":\"start\",\"model\":\"m\"}",
+        "{\"type\":\"text\",\"text\":\"🎵\"}",
+        "{\"type\":\"text\",\"text\":\"é\"}",
+        "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
+      ],
+      "regen": false,
+      "rid": null,
+      "frames": [
+        {
+          "type": "stream_start",
+          "rid": null,
+          "regen": false,
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "🎵",
+          "content_type": "text",
+          "subagent": null
+        },
+        {
+          "type": "stream_chunk",
+          "rid": null,
+          "text": "é",
+          "content_type": "text",
+          "subagent": null
+        }
+      ],
+      "outcome": {
+        "ok": {
+          "content": "C",
+          "model": "m",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_read_tokens": 8,
+            "cache_creation_tokens": 2,
+            "total_cost_usd": null
+          },
+          "timing": {
+            "total_ms": 150,
+            "time_to_first_token_ms": 50
+          },
+          "tool_uses": [],
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "🎵é"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "stream_end": [
+    {
+      "name": "final_with_ids",
+      "result": {
+        "content": "hello",
+        "model": "claude-test",
+        "finish_reason": "end_turn",
+        "usage": {
+          "input_tokens": 10,
+          "output_tokens": 5,
+          "cache_read_tokens": 8,
+          "cache_creation_tokens": 2,
+          "total_cost_usd": 0.5
+        },
+        "timing": {
+          "total_ms": 150,
+          "time_to_first_token_ms": 50
+        },
+        "tool_uses": [],
+        "content_blocks": []
+      },
+      "is_final": true,
+      "rid": "rid-1",
+      "msg_id": "m_abc",
+      "revision": 7,
+      "frame": {
+        "type": "stream_end",
+        "rid": "rid-1",
+        "msg_id": "m_abc",
+        "revision": 7,
+        "content": "hello",
+        "finish_reason": "end_turn",
+        "is_final": true,
+        "subagent": null,
+        "metadata": {
+          "tokens": {
+            "input": 10,
+            "output": 5,
+            "cache_read": 8,
+            "cache_write": 2
+          },
+          "timing": {
+            "total_ms": 150,
+            "ttft_ms": 50
+          },
+          "model": "claude-test"
+        }
+      },
+      "frame_json": {
+        "type": "stream_end",
+        "rid": "rid-1",
+        "msg_id": "m_abc",
+        "revision": 7,
+        "content": "hello",
+        "metadata": {
+          "tokens": {
+            "input": 10,
+            "output": 5,
+            "cache_read": 8,
+            "cache_write": 2
+          },
+          "timing": {
+            "total_ms": 150,
+            "ttft_ms": 50
+          },
+          "model": "claude-test"
+        },
+        "finish_reason": "end_turn",
+        "is_final": true
+      }
+    },
+    {
+      "name": "intermediate_no_ids",
+      "result": {
+        "content": "",
+        "model": "",
+        "finish_reason": "tool_use",
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_creation_tokens": 0,
+          "total_cost_usd": null
+        },
+        "timing": {
+          "total_ms": 0,
+          "time_to_first_token_ms": 0
+        },
+        "tool_uses": [],
+        "content_blocks": []
+      },
+      "is_final": false,
+      "rid": null,
+      "msg_id": null,
+      "revision": null,
+      "frame": {
+        "type": "stream_end",
+        "rid": null,
+        "msg_id": null,
+        "revision": null,
+        "content": "",
+        "finish_reason": "tool_use",
+        "is_final": false,
+        "subagent": null,
+        "metadata": {
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "cache_read": 0,
+            "cache_write": 0
+          },
+          "timing": {
+            "total_ms": 0,
+            "ttft_ms": 0
+          },
+          "model": ""
+        }
+      },
+      "frame_json": {
+        "type": "stream_end",
+        "content": "",
+        "metadata": {
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "cache_read": 0,
+            "cache_write": 0
+          },
+          "timing": {
+            "total_ms": 0,
+            "ttft_ms": 0
+          },
+          "model": ""
+        },
+        "finish_reason": "tool_use",
+        "is_final": false
+      }
+    },
+    {
+      "name": "revision_zero",
+      "result": {
+        "content": "c",
+        "model": "m",
+        "finish_reason": "stop",
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_creation_tokens": 0,
+          "total_cost_usd": null
+        },
+        "timing": {
+          "total_ms": 0,
+          "time_to_first_token_ms": 0
+        },
+        "tool_uses": [],
+        "content_blocks": []
+      },
+      "is_final": true,
+      "rid": null,
+      "msg_id": "m_1",
+      "revision": 0,
+      "frame": {
+        "type": "stream_end",
+        "rid": null,
+        "msg_id": "m_1",
+        "revision": 0,
+        "content": "c",
+        "finish_reason": "stop",
+        "is_final": true,
+        "subagent": null,
+        "metadata": {
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "cache_read": 0,
+            "cache_write": 0
+          },
+          "timing": {
+            "total_ms": 0,
+            "ttft_ms": 0
+          },
+          "model": "m"
+        }
+      },
+      "frame_json": {
+        "type": "stream_end",
+        "msg_id": "m_1",
+        "revision": 0,
+        "content": "c",
+        "metadata": {
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "cache_read": 0,
+            "cache_write": 0
+          },
+          "timing": {
+            "total_ms": 0,
+            "ttft_ms": 0
+          },
+          "model": "m"
+        },
+        "finish_reason": "stop",
+        "is_final": true
+      }
+    }
+  ],
+  "completed_messages": [
+    {
+      "name": "empty_everything",
+      "result": {
+        "content": "",
+        "model": "m",
+        "finish_reason": "end_turn",
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_creation_tokens": 0,
+          "total_cost_usd": null
+        },
+        "timing": {
+          "total_ms": 0,
+          "time_to_first_token_ms": 0
+        },
+        "tool_uses": [],
+        "content_blocks": []
+      },
+      "content_blocks_for_result": [],
+      "completed": [],
+      "notify_content": ""
+    },
+    {
+      "name": "text_only_no_blocks",
+      "result": {
+        "content": "hello",
+        "model": "m",
+        "finish_reason": "end_turn",
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_creation_tokens": 0,
+          "total_cost_usd": null
+        },
+        "timing": {
+          "total_ms": 0,
+          "time_to_first_token_ms": 0
+        },
+        "tool_uses": [],
+        "content_blocks": []
+      },
+      "content_blocks_for_result": [
+        {
+          "type": "text",
+          "text": "hello"
+        }
+      ],
+      "completed": [
+        {
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "hello"
+            }
+          ]
+        }
+      ],
+      "notify_content": "hello"
+    },
+    {
+      "name": "blocks_only_no_text",
+      "result": {
+        "content": "",
+        "model": "m",
+        "finish_reason": "end_turn",
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_creation_tokens": 0,
+          "total_cost_usd": null
+        },
+        "timing": {
+          "total_ms": 0,
+          "time_to_first_token_ms": 0
+        },
+        "tool_uses": [],
+        "content_blocks": [
+          {
+            "type": "text",
+            "text": "b"
+          }
+        ]
+      },
+      "content_blocks_for_result": [
+        {
+          "type": "text",
+          "text": "b"
+        }
+      ],
+      "completed": [
+        {
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "b"
+            }
+          ]
+        }
+      ],
+      "notify_content": "b"
+    },
+    {
+      "name": "both_blocks_win",
+      "result": {
+        "content": "ignored",
+        "model": "m",
+        "finish_reason": "end_turn",
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_creation_tokens": 0,
+          "total_cost_usd": null
+        },
+        "timing": {
+          "total_ms": 0,
+          "time_to_first_token_ms": 0
+        },
+        "tool_uses": [],
+        "content_blocks": [
+          {
+            "type": "text",
+            "text": "b"
+          }
+        ]
+      },
+      "content_blocks_for_result": [
+        {
+          "type": "text",
+          "text": "b"
+        }
+      ],
+      "completed": [
+        {
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "b"
+            }
+          ]
+        }
+      ],
+      "notify_content": "b"
+    },
+    {
+      "name": "whitespace_content",
+      "result": {
+        "content": "   ",
+        "model": "m",
+        "finish_reason": "end_turn",
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_creation_tokens": 0,
+          "total_cost_usd": null
+        },
+        "timing": {
+          "total_ms": 0,
+          "time_to_first_token_ms": 0
+        },
+        "tool_uses": [],
+        "content_blocks": []
+      },
+      "content_blocks_for_result": [
+        {
+          "type": "text",
+          "text": "   "
+        }
+      ],
+      "completed": [
+        {
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "   "
+            }
+          ]
+        }
+      ],
+      "notify_content": ""
+    },
+    {
+      "name": "tool_use_only",
+      "result": {
+        "content": "",
+        "model": "m",
+        "finish_reason": "end_turn",
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_creation_tokens": 0,
+          "total_cost_usd": null
+        },
+        "timing": {
+          "total_ms": 0,
+          "time_to_first_token_ms": 0
+        },
+        "tool_uses": [],
+        "content_blocks": [
+          {
+            "type": "tool_use",
+            "id": "tu",
+            "name": "n",
+            "input": {}
+          }
+        ]
+      },
+      "content_blocks_for_result": [
+        {
+          "type": "tool_use",
+          "id": "tu",
+          "name": "n",
+          "input": {}
+        }
+      ],
+      "completed": [
+        {
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "tool_use",
+              "id": "tu",
+              "name": "n",
+              "input": {}
+            }
+          ]
+        }
+      ],
+      "notify_content": ""
+    },
+    {
+      "name": "thinking_only",
+      "result": {
+        "content": "",
+        "model": "m",
+        "finish_reason": "end_turn",
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_creation_tokens": 0,
+          "total_cost_usd": null
+        },
+        "timing": {
+          "total_ms": 0,
+          "time_to_first_token_ms": 0
+        },
+        "tool_uses": [],
+        "content_blocks": [
+          {
+            "type": "thinking",
+            "thinking": "t",
+            "stored_signature": "sig",
+            "signature": "sig",
+            "reasoning_details": null,
+            "reasoning_content": null
+          }
+        ]
+      },
+      "content_blocks_for_result": [
+        {
+          "type": "thinking",
+          "thinking": "t",
+          "stored_signature": "sig",
+          "signature": "sig",
+          "reasoning_details": null,
+          "reasoning_content": null
+        }
+      ],
+      "completed": [
+        {
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "thinking",
+              "thinking": "t",
+              "stored_signature": "sig",
+              "signature": "sig",
+              "reasoning_details": null,
+              "reasoning_content": null
+            }
+          ]
+        }
+      ],
+      "notify_content": ""
+    }
+  ],
+  "notify_content": [
+    {
+      "name": "none",
+      "messages": [],
+      "notify_content": ""
+    },
+    {
+      "name": "one_assistant",
+      "messages": [
+        {
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "  hi  "
+            }
+          ]
+        }
+      ],
+      "notify_content": "hi"
+    },
+    {
+      "name": "two_assistant_joined",
+      "messages": [
+        {
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "a"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "b"
+            }
+          ]
+        }
+      ],
+      "notify_content": "a\nb"
+    },
+    {
+      "name": "fallback_to_user",
+      "messages": [
+        {
+          "role": "user",
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "u"
+            }
+          ]
+        }
+      ],
+      "notify_content": "u"
+    },
+    {
+      "name": "assistant_blank_falls_back",
+      "messages": [
+        {
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "tool_use",
+              "id": "t",
+              "name": "n",
+              "input": {}
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "u"
+            }
+          ]
+        }
+      ],
+      "notify_content": "u"
+    },
+    {
+      "name": "whitespace_assistant",
+      "messages": [
+        {
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "   "
+            },
+            {
+              "type": "tool_result",
+              "tool_use_id": "t",
+              "content": "tool said this",
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "notify_content": "tool said this"
+    },
+    {
+      "name": "tool_result_contributes",
+      "messages": [
+        {
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t",
+              "content": "out",
+              "is_error": true
+            }
+          ]
+        }
+      ],
+      "notify_content": "out"
+    },
+    {
+      "name": "all_blank",
+      "messages": [
+        {
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "\n\t "
+            }
+          ]
+        }
+      ],
+      "notify_content": ""
+    },
+    {
+      "name": "assistant_wins_over_user",
+      "messages": [
+        {
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "assistant"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "user"
+            }
+          ]
+        }
+      ],
+      "notify_content": "assistant"
+    },
+    {
+      "name": "bom_tool_result_is_not_blank",
+      "messages": [
+        {
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t",
+              "content": "﻿",
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "notify_content": "﻿"
+    },
+    {
+      "name": "next_line_tool_result_is_blank",
+      "messages": [
+        {
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t",
+              "content": "",
+              "is_error": false
+            }
+          ]
+        }
+      ],
+      "notify_content": ""
+    },
+    {
+      "name": "unicode_next_line_is_blank",
+      "messages": [
+        {
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        }
+      ],
+      "notify_content": ""
+    },
+    {
+      "name": "bom_is_not_blank",
+      "messages": [
+        {
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "﻿"
+            }
+          ]
+        }
+      ],
+      "notify_content": "﻿"
+    }
+  ],
+  "message_from_response": [
+    {
+      "name": "text",
+      "input": {
+        "role": "assistant",
+        "content_blocks": [
+          {
+            "type": "text",
+            "text": "hello"
+          }
+        ]
+      },
+      "provider_key": "anthropic",
+      "model": "claude-opus-4-6",
+      "message": {
+        "msg_id_len": 38,
+        "role": "assistant",
+        "content": "hello",
+        "images": [],
+        "content_blocks": [
+          {
+            "type": "text",
+            "text": "hello"
+          }
+        ],
+        "msg_id_prefix": "m_",
+        "provider_key": "anthropic",
+        "model": "claude-opus-4-6"
+      }
+    },
+    {
+      "name": "empty_model_stays_none",
+      "input": {
+        "role": "assistant",
+        "content_blocks": [
+          {
+            "type": "text",
+            "text": "hello"
+          }
+        ]
+      },
+      "provider_key": "anthropic",
+      "model": "",
+      "message": {
+        "msg_id_len": 38,
+        "role": "assistant",
+        "content": "hello",
+        "images": [],
+        "content_blocks": [
+          {
+            "type": "text",
+            "text": "hello"
+          }
+        ],
+        "msg_id_prefix": "m_",
+        "provider_key": "anthropic"
+      }
+    },
+    {
+      "name": "empty_provider_is_kept",
+      "input": {
+        "role": "assistant",
+        "content_blocks": [
+          {
+            "type": "text",
+            "text": "hello"
+          }
+        ]
+      },
+      "provider_key": "",
+      "model": "m",
+      "message": {
+        "msg_id_len": 38,
+        "role": "assistant",
+        "content": "hello",
+        "images": [],
+        "content_blocks": [
+          {
+            "type": "text",
+            "text": "hello"
+          }
+        ],
+        "msg_id_prefix": "m_",
+        "provider_key": "",
+        "model": "m"
+      }
+    },
+    {
+      "name": "derived_content",
+      "input": {
+        "role": "assistant",
+        "content_blocks": [
+          {
+            "type": "thinking",
+            "thinking": "not shown",
+            "stored_signature": null,
+            "signature": null,
+            "reasoning_details": null,
+            "reasoning_content": null
+          },
+          {
+            "type": "text",
+            "text": " a "
+          },
+          {
+            "type": "tool_result",
+            "tool_use_id": "t",
+            "content": " b ",
+            "is_error": false
+          }
+        ]
+      },
+      "provider_key": "p",
+      "model": "m",
+      "message": {
+        "msg_id_len": 38,
+        "role": "assistant",
+        "content": "a\nb",
+        "images": [],
+        "content_blocks": [
+          {
+            "type": "thinking",
+            "thinking": "not shown"
+          },
+          {
+            "type": "text",
+            "text": " a "
+          },
+          {
+            "type": "tool_result",
+            "tool_use_id": "t",
+            "content": " b ",
+            "is_error": false
+          }
+        ],
+        "msg_id_prefix": "m_",
+        "provider_key": "p",
+        "model": "m"
+      }
+    }
+  ],
+  "last_request": [
+    {
+      "name": "no_response",
+      "sent": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q1"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "t1",
+              "signature": "s1"
+            },
+            {
+              "type": "text",
+              "text": "a1"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q2"
+            }
+          ]
+        }
+      ],
+      "provider_key": "anthropic",
+      "response": [],
+      "messages_after": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q1"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "t1",
+              "signature": "s1"
+            },
+            {
+              "type": "text",
+              "text": "a1"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q2"
+            }
+          ]
+        }
+      ],
+      "prefix_unchanged": true
+    },
+    {
+      "name": "appends_without_touching_prefix",
+      "sent": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q1"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "t1",
+              "signature": "s1"
+            },
+            {
+              "type": "text",
+              "text": "a1"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q2"
+            }
+          ]
+        }
+      ],
+      "provider_key": "anthropic",
+      "response": [
+        {
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "thinking",
+              "thinking": "t2",
+              "stored_signature": "s2",
+              "signature": "s2",
+              "reasoning_details": null,
+              "reasoning_content": null
+            },
+            {
+              "type": "text",
+              "text": "a2"
+            }
+          ]
+        }
+      ],
+      "messages_after": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q1"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "t1",
+              "signature": "s1"
+            },
+            {
+              "type": "text",
+              "text": "a1"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q2"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "t2",
+              "signature": "s2"
+            },
+            {
+              "type": "text",
+              "text": "a2"
+            }
+          ],
+          "provider_key": "anthropic",
+          "model": "claude-opus-5"
+        }
+      ],
+      "prefix_unchanged": true
+    },
+    {
+      "name": "empty_turn_skipped",
+      "sent": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q1"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "t1",
+              "signature": "s1"
+            },
+            {
+              "type": "text",
+              "text": "a1"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q2"
+            }
+          ]
+        }
+      ],
+      "provider_key": "anthropic",
+      "response": [
+        {
+          "role": "assistant",
+          "content_blocks": []
+        },
+        {
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "kept"
+            }
+          ]
+        }
+      ],
+      "messages_after": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q1"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "t1",
+              "signature": "s1"
+            },
+            {
+              "type": "text",
+              "text": "a1"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q2"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "kept"
+            }
+          ],
+          "provider_key": "anthropic",
+          "model": "claude-opus-5"
+        }
+      ],
+      "prefix_unchanged": true
+    },
+    {
+      "name": "no_provider_key",
+      "sent": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q1"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "t1",
+              "signature": "s1"
+            },
+            {
+              "type": "text",
+              "text": "a1"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q2"
+            }
+          ]
+        }
+      ],
+      "provider_key": null,
+      "response": [
+        {
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "a"
+            }
+          ]
+        }
+      ],
+      "messages_after": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q1"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "t1",
+              "signature": "s1"
+            },
+            {
+              "type": "text",
+              "text": "a1"
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "q2"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "a"
+            }
+          ],
+          "model": "claude-opus-5"
+        }
+      ],
+      "prefix_unchanged": true
+    },
+    {
+      "name": "user_role_response",
+      "sent": [],
+      "provider_key": "p",
+      "response": [
+        {
+          "role": "user",
+          "content_blocks": [
+            {
+              "type": "text",
+              "text": "u"
+            }
+          ]
+        }
+      ],
+      "messages_after": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "u"
+            }
+          ],
+          "provider_key": "p",
+          "model": "claude-opus-5"
+        }
+      ],
+      "prefix_unchanged": true
+    },
+    {
+      "name": "carrier_projection",
+      "sent": [],
+      "provider_key": "p",
+      "response": [
+        {
+          "role": "assistant",
+          "content_blocks": [
+            {
+              "type": "thinking",
+              "thinking": "opaque",
+              "stored_signature": "plain-sig",
+              "signature": "plain-sig",
+              "reasoning_details": null,
+              "reasoning_content": null
+            },
+            {
+              "type": "thinking",
+              "thinking": "openrouter",
+              "stored_signature": "orrd:[{\"type\":\"reasoning.text\",\"text\":\"r\"}]",
+              "signature": null,
+              "reasoning_details": [
+                {
+                  "type": "reasoning.text",
+                  "text": "r"
+                }
+              ],
+              "reasoning_content": null
+            },
+            {
+              "type": "thinking",
+              "thinking": "zai",
+              "stored_signature": "zair:why",
+              "signature": null,
+              "reasoning_details": null,
+              "reasoning_content": "why"
+            },
+            {
+              "type": "thinking",
+              "thinking": "corrupt-openrouter",
+              "stored_signature": "orrd:not json",
+              "signature": null,
+              "reasoning_details": null,
+              "reasoning_content": null
+            },
+            {
+              "type": "thinking",
+              "thinking": "no-signature",
+              "stored_signature": null,
+              "signature": null,
+              "reasoning_details": null,
+              "reasoning_content": null
+            }
+          ]
+        }
+      ],
+      "messages_after": [
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "opaque",
+              "signature": "plain-sig"
+            },
+            {
+              "type": "thinking",
+              "thinking": "openrouter",
+              "reasoning_details": [
+                {
+                  "type": "reasoning.text",
+                  "text": "r"
+                }
+              ]
+            },
+            {
+              "type": "thinking",
+              "thinking": "zai",
+              "reasoning_content": "why"
+            },
+            {
+              "type": "thinking",
+              "thinking": "corrupt-openrouter"
+            },
+            {
+              "type": "thinking",
+              "thinking": "no-signature"
+            }
+          ],
+          "provider_key": "p",
+          "model": "claude-opus-5"
+        }
+      ],
+      "prefix_unchanged": true
+    }
+  ],
+  "append_in_place": {
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "q"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "a"
+          }
+        ],
+        "provider_key": "p",
+        "model": "claude-opus-5"
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "a"
+          }
+        ],
+        "provider_key": "p",
+        "model": "claude-opus-5"
+      }
+    ],
+    "count": 3
+  }
+}

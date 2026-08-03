@@ -80,6 +80,34 @@ export class ConfigDuration {
     return { ok: new ConfigDuration(millis.ok) };
   }
 
+  /**
+   * Read a duration from a parsed config value — the `Deserialize` impl, not
+   * just `parse`.
+   *
+   * A string goes through {@link ConfigDuration.parse}. A **number is
+   * seconds**, which is easy to miss: `generation_threshold = 30` is thirty
+   * seconds, not thirty milliseconds, and it is accepted without quotes.
+   *
+   * The Rust splits numbers by TOML type — `visit_i64` saturates, `visit_f64`
+   * goes through `Duration::try_from_secs_f64` and errors out of range. A
+   * parsed TOML value on this side is a JavaScript `number` either way, so the
+   * split is redrawn on `Number.isInteger`. The two rules agree on every value
+   * below 2^53, which is where a JS number is still exact; above that a TOML
+   * *float* with no fractional part (`1e18`) saturates here where the Rust
+   * would report "duration is too large". That is 585 million years of
+   * threshold, and no representation of the parsed value can tell the two
+   * spellings apart, so the difference is recorded rather than papered over.
+   */
+  static deserialize(value: unknown): ParseResult<ConfigDuration> {
+    if (typeof value === "string") return ConfigDuration.parse(value);
+    if (typeof value === "number") {
+      if (value < 0) return { err: "duration cannot be negative" };
+      if (Number.isInteger(value)) return { ok: ConfigDuration.fromSecs(BigInt(value)) };
+      return millisFromSecsFloat(value);
+    }
+    return { err: invalidDurationType(value) };
+  }
+
   /** Saturating, like the Rust `const fn`: a seconds count whose milliseconds
    *  would exceed `u64` clamps rather than wrapping. */
   static fromSecs(secs: bigint | number): ConfigDuration {
@@ -232,4 +260,38 @@ function millisFromFractionalDigits(
   const fractionalMillis = scaled / scale;
   if (fractionalMillis > U64_MAX) return { err: `duration too large: ${raw}` };
   return { ok: fractionalMillis };
+}
+
+/** The expectation text the `ConfigDuration` visitor prints. */
+const DURATION_EXPECTING = 'a duration string (e.g. "30s", "2m"), or a number (seconds)';
+
+/**
+ * `millis_from_secs_f64`: seconds as a float, via `Duration::try_from_secs_f64`.
+ *
+ * Two distinct errors, and which one fires is observable. `try_from_secs_f64`
+ * rejects NaN, infinities and negatives outright; a finite value that survives
+ * it can still exceed `u64` milliseconds afterwards. Sub-millisecond values
+ * truncate to zero rather than rounding, because `as_millis` truncates.
+ */
+function millisFromSecsFloat(secs: number): ParseResult<ConfigDuration> {
+  const RANGE_ERR = { err: "duration must be finite, non-negative, and in range" };
+  if (!Number.isFinite(secs) || secs < 0) return RANGE_ERR;
+  // `Duration` tops out just under 2^64 seconds; past that `try_from_secs_f64`
+  // itself fails, before any millisecond conversion.
+  if (secs >= 18446744073709551616) return RANGE_ERR;
+  const millis = BigInt(Math.floor(secs * 1000));
+  if (millis > (1n << 64n) - 1n) return { err: "duration is too large" };
+  return { ok: ConfigDuration.fromMillis(millis) };
+}
+
+/** How serde renders a value that is neither a string nor a number here. */
+function invalidDurationType(value: unknown): string {
+  if (Array.isArray(value)) return `invalid type: sequence, expected ${DURATION_EXPECTING}`;
+  if (typeof value === "boolean") {
+    return `invalid type: boolean \`${value}\`, expected ${DURATION_EXPECTING}`;
+  }
+  if (value !== null && typeof value === "object") {
+    return `invalid type: map, expected ${DURATION_EXPECTING}`;
+  }
+  return `invalid type: ${String(value)}, expected ${DURATION_EXPECTING}`;
 }

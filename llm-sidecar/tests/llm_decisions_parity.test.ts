@@ -23,6 +23,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { emptyTiming, emptyUsage } from "../src/llm/stream.ts";
 
 import {
   classifyCredentialFailure,
@@ -94,7 +95,12 @@ function decodeError(e: EncodedError): LlmError {
     case "incomplete_stream":
       return { kind: "incomplete_stream" };
     case "stream_errored":
-      return { kind: "stream_errored", message: e.message ?? "" };
+      return {
+        kind: "stream_errored",
+        message: e.message ?? "",
+        usage: emptyUsage(),
+        timing: emptyTiming(),
+      };
     case "provider":
       return { kind: "provider", message: e.message ?? "" };
     default:

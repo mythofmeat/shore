@@ -12,6 +12,8 @@
  * even though both classifiers happen to treat them alike today.
  */
 
+import type { Timing, Usage } from "./types.ts";
+
 export type LlmError =
   /** `LlmError::Request` — the request never produced a status. */
   | { kind: "transport"; message: string }
@@ -21,11 +23,14 @@ export type LlmError =
   /** The stream ended without a terminal event. */
   | { kind: "incomplete_stream" }
   /**
-   * The stream failed after some usage had already accrued. The Rust carries
-   * that usage and timing so the partial call can still be billed; neither
-   * classifier reads them, so they are omitted until a caller needs them.
+   * The stream failed after some usage had already accrued. `usage` and
+   * `timing` are what the provider had reported by then — notably the Anthropic
+   * cache write announced in `message_start`, before any output — so the
+   * partial call is billed for what it actually cost instead of zeros. Neither
+   * classifier reads them; the stream accumulator that produces this error and
+   * the ledger that consumes it both do.
    */
-  | { kind: "stream_errored"; message: string }
+  | { kind: "stream_errored"; message: string; usage: Usage; timing: Timing }
   | { kind: "missing_api_key"; var: string }
   | { kind: "provider"; message: string };
 

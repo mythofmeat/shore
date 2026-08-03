@@ -17,6 +17,7 @@
 import { rename, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
+import { rustTrim } from "../memory/lines.ts";
 import { mergeToolLoopMessages } from "./merge";
 import type { ContentBlock, ImageRef, Message, MessageAlternative, Role } from "./types";
 
@@ -63,6 +64,12 @@ export interface AltSelection {
  *
  * Mirrors `derive_content_from_blocks_with`. Thinking and tool_use never
  * contribute — the first is not for the reader and the second is not prose.
+ *
+ * The trim is Rust's, not JavaScript's. The two disagree at both ends: `.trim()`
+ * strips U+FEFF, which Rust keeps, and keeps U+0085, which Rust strips. A block
+ * whose text is only one of those is dropped by one and preserved by the other,
+ * and this function decides both what a message reads as and whether a
+ * completion notification has anything to say.
  */
 export function deriveContentFromBlocks(
   blocks: ContentBlock[],
@@ -71,11 +78,11 @@ export function deriveContentFromBlocks(
   const parts: string[] = [];
   for (const b of blocks) {
     if (b.type === "text") {
-      const t = b.text.trim();
+      const t = rustTrim(b.text);
       if (t !== "") parts.push(t);
     } else if (b.type === "tool_result" && includeToolResults) {
       const raw = typeof b.content === "string" ? b.content : JSON.stringify(b.content);
-      const t = raw.trim();
+      const t = rustTrim(raw);
       if (t !== "") parts.push(t);
     }
   }

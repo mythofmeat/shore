@@ -22,6 +22,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { emptyTiming, emptyUsage } from "../src/llm/stream.ts";
 
 import {
   backoffDelayMs,
@@ -72,7 +73,12 @@ const ERRORS: Record<string, LlmError> = {
   provider_multibyte: { kind: "provider", message: `${"x".repeat(199)}世${"y".repeat(400)}` },
   provider_exactly_200: { kind: "provider", message: "x".repeat(200) },
   incomplete: { kind: "incomplete_stream" },
-  stream_errored: { kind: "stream_errored", message: "upstream closed" },
+  stream_errored: {
+    kind: "stream_errored",
+    message: "upstream closed",
+    usage: emptyUsage(),
+    timing: emptyTiming(),
+  },
 };
 
 const cand = (name: string, env: string, warn = false): KeyCandidate => ({
