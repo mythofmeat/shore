@@ -13,6 +13,8 @@
 // Bun resolves this `.toml` import at build time and inlines the parsed object.
 import rawCaps from "../../../crates/common/capabilities.toml";
 
+import { parseCacheKeepalive } from "../config/models.ts";
+
 export type Sdk =
   | "anthropic"
   | "openai"
@@ -396,5 +398,79 @@ export function defaultValue(sdk: Sdk, field: Field): string | undefined {
   // default ping would be pure spend.
   if (field === "cache_ttl") return "1h";
   if (field === "cache_keepalive") return "55m";
+  return undefined;
+}
+
+// ── the write boundary ───────────────────────────────────────────────────────
+
+/**
+ * Whether the `reasoning_effort = "off"` sentinel is HONORED for this sdk —
+ * i.e. some adapter actually suppresses reasoning when it sees it.
+ *
+ * - `anthropic` — omitting the thinking params yields a non-thinking request.
+ * - `deepseek` / `moonshot` / `zai` — `thinking.type = "disabled"`.
+ * - `openrouter` — `reasoning.effort = "none"`, a real off-switch for the
+ *   always-on vendors it fronts. A few thinking-only endpoints reject it at
+ *   runtime; a documented limitation.
+ *
+ * `openai` and `gemini` have no disable path — reasoning is model-mandatory or
+ * left at the model default — so `"off"` there would be a silent no-op.
+ * {@link validate} uses this to reject it at the boundary instead, which the
+ * plain domain check cannot do: `"off"` is absent from the graded domains, so
+ * without this it would be rejected everywhere including the sdks that honor it.
+ */
+export function supportsReasoningOff(sdk: Sdk): boolean {
+  return sdk === "anthropic" || sdk === "deepseek" || sdk === "moonshot" || sdk === "openrouter" || sdk === "zai";
+}
+
+/** Why a setting was rejected at the boundary. Mirrors Rust `CapabilityError`. */
+export class CapabilityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CapabilityError";
+  }
+}
+
+/**
+ * Reject a setting the model's resolved sdk cannot honor, before it reaches the
+ * preferences file and later the wire.
+ *
+ * `probe` is the caller's value **already collapsed**: the string itself when
+ * the domain matters, or `true` standing in for "some non-string value". That
+ * collapse belongs to the caller (Rust built a `toml::Value` for the same
+ * reason), and it has one visible consequence the fixture pins — a non-string
+ * `cache_keepalive` is reported as being the value `"true"`, because the message
+ * prints the probe rather than what the user typed.
+ *
+ * A field the sdk ignores or rejects is inapplicable: you cannot usefully set
+ * something that will be dropped. Only `reasoning_effort` and `cache_keepalive`
+ * have a value domain; every other honored field accepts any well-typed value.
+ */
+export function validate(
+  sdk: Sdk,
+  modelId: string,
+  field: Field,
+  probe: string | true,
+): CapabilityError | undefined {
+  if (applicability(sdk, modelId, field) !== "honored") {
+    return new CapabilityError(`\`${field}\` is not applicable to the \`${sdk}\` sdk for this model`);
+  }
+
+  const outOfDomain = (value: string, allowed: string) =>
+    new CapabilityError(`\`${field}\` value ${JSON.stringify(value)} is out of domain; allowed: ${allowed}`);
+
+  if (field === "reasoning_effort" && probe !== true) {
+    const domain = reasoningDomain(sdk, modelId);
+    if (!domain.includes(probe)) return outOfDomain(probe, domain.join(", "));
+  }
+
+  if (field === "cache_keepalive") {
+    const allowed = "off, or a duration string like 55m / 6h / 30s";
+    // A non-string only fails at the next config load, so reject it here rather
+    // than persisting a setting the daemon cannot read back.
+    if (probe === true) return outOfDomain("true", allowed);
+    if ("err" in parseCacheKeepalive(probe)) return outOfDomain(probe, allowed);
+  }
+
   return undefined;
 }

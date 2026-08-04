@@ -120,7 +120,14 @@ const SAMPLER_FIELDS = [
   ["zaiSubscription", "zai_subscription"],
 ] as const satisfies readonly (readonly [keyof SamplerSettings, string])[];
 
-const SAMPLER_KEYS = SAMPLER_FIELDS.map(([, key]) => key);
+/** Every settable sampler key, in the order the Rust listed them — the order
+ *  matters because `set_model_setting` joins it into its rejection message. */
+export const SAMPLER_KEYS: readonly string[] = SAMPLER_FIELDS.map(([, key]) => key);
+
+/** The TOML key -> settings-property map, for callers that write one key. */
+export const SAMPLER_FIELD_BY_KEY: ReadonlyMap<string, keyof SamplerSettings> = new Map(
+  SAMPLER_FIELDS.map(([field, key]) => [key, field]),
+);
 
 /** Apply `overlay` on top of `target`: each field set in `overlay` replaces
  *  the corresponding field. Absent overlay fields leave `target` alone. */
