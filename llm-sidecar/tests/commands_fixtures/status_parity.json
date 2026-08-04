@@ -1,0 +1,3234 @@
+{
+  "_header": [
+    "Generated from crates/daemon/src/commands/state/status.rs at 9023b46d. FROZEN.",
+    "A diff against this file is a defect in the TypeScript, not a fixture to regenerate.",
+    "Setups are named here and re-declared in the replay; `<tmp>` stands for the",
+    "temporary root each side resolved its directories under.",
+    "`volatile` names what the setup arranged for the four clock-derived fields: the",
+    "stamps as offsets from now, and the counts `duration_since` reports for them.",
+    "Null means the key must be absent. The values in `ok` for those four are what",
+    "one run produced and are not comparable directly."
+  ],
+  "tolerance_secs": 2,
+  "status": [
+    {
+      "case": "unregistered",
+      "ok": {
+        "character": "poppy",
+        "message_count": 0,
+        "turn_count": 0,
+        "active_model": null,
+        "config_dir": "<tmp>/config",
+        "data_dir": "<tmp>/data",
+        "cache_dir": "<tmp>/cache",
+        "memory_mode": "markdown",
+        "pending_deferred_edit_count": 0,
+        "pending_deferred_edits": [],
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "cache_read": 0,
+          "cache_write": 0
+        },
+        "autonomy": null,
+        "activity": null
+      },
+      "volatile": {
+        "wake_at_secs": null,
+        "wake_until_secs": null,
+        "user_at_secs": null,
+        "user_since_secs": null
+      }
+    },
+    {
+      "case": "fresh",
+      "ok": {
+        "character": "poppy",
+        "message_count": 0,
+        "turn_count": 0,
+        "active_model": null,
+        "config_dir": "<tmp>/config",
+        "data_dir": "<tmp>/data",
+        "cache_dir": "<tmp>/cache",
+        "memory_mode": "markdown",
+        "pending_deferred_edit_count": 0,
+        "pending_deferred_edits": [],
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "cache_read": 0,
+          "cache_write": 0
+        },
+        "autonomy": {
+          "paused": false,
+          "heartbeat_state": "Active",
+          "ticks_without_user": 0,
+          "dormant_after_heartbeat_turns": 3,
+          "effective_interval_secs": 3600,
+          "minimum_heartbeat_latency_secs": 3600,
+          "dormant_after_idle_time_secs": 172800,
+          "recent_events": []
+        },
+        "activity": {
+          "hour_histogram": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "hour_classifications": [
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal"
+          ],
+          "has_sufficient_heatmap": false,
+          "engagement_score": 0.2,
+          "sessions_per_day": 0.0,
+          "message_count": 0,
+          "turn_count": 0
+        }
+      },
+      "volatile": {
+        "wake_at_secs": null,
+        "wake_until_secs": null,
+        "user_at_secs": null,
+        "user_since_secs": null
+      }
+    },
+    {
+      "case": "restored",
+      "ok": {
+        "character": "poppy",
+        "message_count": 0,
+        "turn_count": 0,
+        "active_model": null,
+        "config_dir": "<tmp>/config",
+        "data_dir": "<tmp>/data",
+        "cache_dir": "<tmp>/cache",
+        "memory_mode": "markdown",
+        "pending_deferred_edit_count": 0,
+        "pending_deferred_edits": [],
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "cache_read": 0,
+          "cache_write": 0
+        },
+        "autonomy": {
+          "paused": false,
+          "heartbeat_state": "Active",
+          "ticks_without_user": 2,
+          "dormant_after_heartbeat_turns": 3,
+          "effective_interval_secs": 3600,
+          "next_wake_at": "2026-08-04T11:26:56.378977001+00:00",
+          "seconds_until_wake": 3599,
+          "last_user_at": "2026-08-04T10:24:51.378976533+00:00",
+          "seconds_since_user": 125,
+          "minimum_heartbeat_latency_secs": 3600,
+          "dormant_after_idle_time_secs": 172800,
+          "recent_events": [
+            {
+              "timestamp": "2026-01-15T09:20:00+00:00",
+              "kind": "tick_fired",
+              "detail": "event 20"
+            },
+            {
+              "timestamp": "2026-01-15T09:21:00+00:00",
+              "kind": "tool_use",
+              "detail": "event 21"
+            },
+            {
+              "timestamp": "2026-01-15T09:22:00+00:00",
+              "kind": "message_sent",
+              "detail": "event 22"
+            },
+            {
+              "timestamp": "2026-01-15T09:23:00+00:00",
+              "kind": "tick_fired",
+              "detail": "event 23"
+            },
+            {
+              "timestamp": "2026-01-15T09:24:00+00:00",
+              "kind": "message_skipped",
+              "detail": "event 24"
+            }
+          ]
+        },
+        "activity": {
+          "hour_histogram": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "hour_classifications": [
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal"
+          ],
+          "has_sufficient_heatmap": false,
+          "engagement_score": 0.2,
+          "sessions_per_day": 0.0,
+          "message_count": 0,
+          "turn_count": 0
+        }
+      },
+      "volatile": {
+        "wake_at_secs": 3600,
+        "wake_until_secs": 3600,
+        "user_at_secs": -125,
+        "user_since_secs": 125
+      }
+    },
+    {
+      "case": "overdue",
+      "ok": {
+        "character": "poppy",
+        "message_count": 0,
+        "turn_count": 0,
+        "active_model": null,
+        "config_dir": "<tmp>/config",
+        "data_dir": "<tmp>/data",
+        "cache_dir": "<tmp>/cache",
+        "memory_mode": "markdown",
+        "pending_deferred_edit_count": 0,
+        "pending_deferred_edits": [],
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "cache_read": 0,
+          "cache_write": 0
+        },
+        "autonomy": {
+          "paused": false,
+          "heartbeat_state": "Active",
+          "ticks_without_user": 1,
+          "dormant_after_heartbeat_turns": 3,
+          "effective_interval_secs": 3600,
+          "next_wake_at": "2026-08-04T10:26:11.380481267+00:00",
+          "seconds_until_wake": -45,
+          "last_user_at": "2026-08-04T08:26:56.380480894+00:00",
+          "seconds_since_user": 7200,
+          "minimum_heartbeat_latency_secs": 3600,
+          "dormant_after_idle_time_secs": 172800,
+          "recent_events": []
+        },
+        "activity": {
+          "hour_histogram": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "hour_classifications": [
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal"
+          ],
+          "has_sufficient_heatmap": false,
+          "engagement_score": 0.2,
+          "sessions_per_day": 0.0,
+          "message_count": 0,
+          "turn_count": 0
+        }
+      },
+      "volatile": {
+        "wake_at_secs": -45,
+        "wake_until_secs": -45,
+        "user_at_secs": -7200,
+        "user_since_secs": 7200
+      }
+    },
+    {
+      "case": "restored_no_times",
+      "ok": {
+        "character": "poppy",
+        "message_count": 0,
+        "turn_count": 0,
+        "active_model": null,
+        "config_dir": "<tmp>/config",
+        "data_dir": "<tmp>/data",
+        "cache_dir": "<tmp>/cache",
+        "memory_mode": "markdown",
+        "pending_deferred_edit_count": 0,
+        "pending_deferred_edits": [],
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "cache_read": 0,
+          "cache_write": 0
+        },
+        "autonomy": {
+          "paused": false,
+          "heartbeat_state": "Dormant",
+          "ticks_without_user": 5,
+          "dormant_after_heartbeat_turns": 3,
+          "effective_interval_secs": 3600,
+          "minimum_heartbeat_latency_secs": 3600,
+          "dormant_after_idle_time_secs": 172800,
+          "recent_events": []
+        },
+        "activity": {
+          "hour_histogram": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "hour_classifications": [
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal"
+          ],
+          "has_sufficient_heatmap": false,
+          "engagement_score": 0.2,
+          "sessions_per_day": 0.0,
+          "message_count": 0,
+          "turn_count": 0
+        }
+      },
+      "volatile": {
+        "wake_at_secs": null,
+        "wake_until_secs": null,
+        "user_at_secs": null,
+        "user_since_secs": null
+      }
+    },
+    {
+      "case": "dormant",
+      "ok": {
+        "character": "poppy",
+        "message_count": 0,
+        "turn_count": 0,
+        "active_model": null,
+        "config_dir": "<tmp>/config",
+        "data_dir": "<tmp>/data",
+        "cache_dir": "<tmp>/cache",
+        "memory_mode": "markdown",
+        "pending_deferred_edit_count": 0,
+        "pending_deferred_edits": [],
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "cache_read": 0,
+          "cache_write": 0
+        },
+        "autonomy": {
+          "paused": false,
+          "heartbeat_state": "Dormant",
+          "ticks_without_user": 3,
+          "dormant_after_heartbeat_turns": 3,
+          "effective_interval_secs": 3600,
+          "last_user_at": "2026-08-04T10:25:56.382859160+00:00",
+          "seconds_since_user": 60,
+          "minimum_heartbeat_latency_secs": 3600,
+          "dormant_after_idle_time_secs": 172800,
+          "recent_events": []
+        },
+        "activity": {
+          "hour_histogram": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "hour_classifications": [
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal"
+          ],
+          "has_sufficient_heatmap": false,
+          "engagement_score": 0.2,
+          "sessions_per_day": 0.0,
+          "message_count": 0,
+          "turn_count": 0
+        }
+      },
+      "volatile": {
+        "wake_at_secs": null,
+        "wake_until_secs": null,
+        "user_at_secs": -60,
+        "user_since_secs": 60
+      }
+    },
+    {
+      "case": "paused",
+      "ok": {
+        "character": "poppy",
+        "message_count": 0,
+        "turn_count": 0,
+        "active_model": null,
+        "config_dir": "<tmp>/config",
+        "data_dir": "<tmp>/data",
+        "cache_dir": "<tmp>/cache",
+        "memory_mode": "markdown",
+        "pending_deferred_edit_count": 0,
+        "pending_deferred_edits": [],
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "cache_read": 0,
+          "cache_write": 0
+        },
+        "autonomy": {
+          "paused": true,
+          "heartbeat_state": "Active",
+          "ticks_without_user": 0,
+          "dormant_after_heartbeat_turns": 3,
+          "effective_interval_secs": 3600,
+          "minimum_heartbeat_latency_secs": 3600,
+          "dormant_after_idle_time_secs": 172800,
+          "recent_events": []
+        },
+        "activity": {
+          "hour_histogram": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "hour_classifications": [
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal"
+          ],
+          "has_sufficient_heatmap": false,
+          "engagement_score": 0.2,
+          "sessions_per_day": 0.0,
+          "message_count": 0,
+          "turn_count": 0
+        }
+      },
+      "volatile": {
+        "wake_at_secs": null,
+        "wake_until_secs": null,
+        "user_at_secs": null,
+        "user_since_secs": null
+      }
+    },
+    {
+      "case": "custom_bounds",
+      "ok": {
+        "character": "poppy",
+        "message_count": 0,
+        "turn_count": 0,
+        "active_model": null,
+        "config_dir": "<tmp>/config",
+        "data_dir": "<tmp>/data",
+        "cache_dir": "<tmp>/cache",
+        "memory_mode": "markdown",
+        "pending_deferred_edit_count": 0,
+        "pending_deferred_edits": [],
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "cache_read": 0,
+          "cache_write": 0
+        },
+        "autonomy": {
+          "paused": false,
+          "heartbeat_state": "Active",
+          "ticks_without_user": 0,
+          "dormant_after_heartbeat_turns": 7,
+          "effective_interval_secs": 2700,
+          "minimum_heartbeat_latency_secs": 1,
+          "dormant_after_idle_time_secs": 90000,
+          "recent_events": []
+        },
+        "activity": {
+          "hour_histogram": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "hour_classifications": [
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal"
+          ],
+          "has_sufficient_heatmap": false,
+          "engagement_score": 0.2,
+          "sessions_per_day": 0.0,
+          "message_count": 0,
+          "turn_count": 0
+        }
+      },
+      "volatile": {
+        "wake_at_secs": null,
+        "wake_until_secs": null,
+        "user_at_secs": null,
+        "user_since_secs": null
+      }
+    },
+    {
+      "case": "model_override",
+      "ok": {
+        "character": "poppy",
+        "message_count": 0,
+        "turn_count": 0,
+        "active_model": "claude-sonnet",
+        "config_dir": "<tmp>/config",
+        "data_dir": "<tmp>/data",
+        "cache_dir": "<tmp>/cache",
+        "memory_mode": "markdown",
+        "pending_deferred_edit_count": 0,
+        "pending_deferred_edits": [],
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "cache_read": 0,
+          "cache_write": 0
+        },
+        "autonomy": {
+          "paused": false,
+          "heartbeat_state": "Active",
+          "ticks_without_user": 0,
+          "dormant_after_heartbeat_turns": 3,
+          "effective_interval_secs": 3600,
+          "minimum_heartbeat_latency_secs": 3600,
+          "dormant_after_idle_time_secs": 172800,
+          "recent_events": []
+        },
+        "activity": {
+          "hour_histogram": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "hour_classifications": [
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal"
+          ],
+          "has_sufficient_heatmap": false,
+          "engagement_score": 0.2,
+          "sessions_per_day": 0.0,
+          "message_count": 0,
+          "turn_count": 0
+        }
+      },
+      "volatile": {
+        "wake_at_secs": null,
+        "wake_until_secs": null,
+        "user_at_secs": null,
+        "user_since_secs": null
+      }
+    },
+    {
+      "case": "model_from_config",
+      "ok": {
+        "character": "poppy",
+        "message_count": 0,
+        "turn_count": 0,
+        "active_model": "claude-opus",
+        "config_dir": "<tmp>/config",
+        "data_dir": "<tmp>/data",
+        "cache_dir": "<tmp>/cache",
+        "memory_mode": "markdown",
+        "pending_deferred_edit_count": 0,
+        "pending_deferred_edits": [],
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "cache_read": 0,
+          "cache_write": 0
+        },
+        "autonomy": {
+          "paused": false,
+          "heartbeat_state": "Active",
+          "ticks_without_user": 0,
+          "dormant_after_heartbeat_turns": 3,
+          "effective_interval_secs": 3600,
+          "minimum_heartbeat_latency_secs": 3600,
+          "dormant_after_idle_time_secs": 172800,
+          "recent_events": []
+        },
+        "activity": {
+          "hour_histogram": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "hour_classifications": [
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal"
+          ],
+          "has_sufficient_heatmap": false,
+          "engagement_score": 0.2,
+          "sessions_per_day": 0.0,
+          "message_count": 0,
+          "turn_count": 0
+        }
+      },
+      "volatile": {
+        "wake_at_secs": null,
+        "wake_until_secs": null,
+        "user_at_secs": null,
+        "user_since_secs": null
+      }
+    },
+    {
+      "case": "model_none",
+      "ok": {
+        "character": "poppy",
+        "message_count": 0,
+        "turn_count": 0,
+        "active_model": null,
+        "config_dir": "<tmp>/config",
+        "data_dir": "<tmp>/data",
+        "cache_dir": "<tmp>/cache",
+        "memory_mode": "markdown",
+        "pending_deferred_edit_count": 0,
+        "pending_deferred_edits": [],
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "cache_read": 0,
+          "cache_write": 0
+        },
+        "autonomy": {
+          "paused": false,
+          "heartbeat_state": "Active",
+          "ticks_without_user": 0,
+          "dormant_after_heartbeat_turns": 3,
+          "effective_interval_secs": 3600,
+          "minimum_heartbeat_latency_secs": 3600,
+          "dormant_after_idle_time_secs": 172800,
+          "recent_events": []
+        },
+        "activity": {
+          "hour_histogram": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "hour_classifications": [
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal"
+          ],
+          "has_sufficient_heatmap": false,
+          "engagement_score": 0.2,
+          "sessions_per_day": 0.0,
+          "message_count": 0,
+          "turn_count": 0
+        }
+      },
+      "volatile": {
+        "wake_at_secs": null,
+        "wake_until_secs": null,
+        "user_at_secs": null,
+        "user_since_secs": null
+      }
+    },
+    {
+      "case": "future_user",
+      "ok": {
+        "character": "poppy",
+        "message_count": 0,
+        "turn_count": 0,
+        "active_model": null,
+        "config_dir": "<tmp>/config",
+        "data_dir": "<tmp>/data",
+        "cache_dir": "<tmp>/cache",
+        "memory_mode": "markdown",
+        "pending_deferred_edit_count": 0,
+        "pending_deferred_edits": [],
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "cache_read": 0,
+          "cache_write": 0
+        },
+        "autonomy": {
+          "paused": false,
+          "heartbeat_state": "Active",
+          "ticks_without_user": 0,
+          "dormant_after_heartbeat_turns": 3,
+          "effective_interval_secs": 3600,
+          "last_user_at": "2026-08-04T10:36:56.389546437+00:00",
+          "seconds_since_user": 0,
+          "minimum_heartbeat_latency_secs": 3600,
+          "dormant_after_idle_time_secs": 172800,
+          "recent_events": []
+        },
+        "activity": {
+          "hour_histogram": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "hour_classifications": [
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal"
+          ],
+          "has_sufficient_heatmap": false,
+          "engagement_score": 0.2,
+          "sessions_per_day": 0.0,
+          "message_count": 0,
+          "turn_count": 0
+        }
+      },
+      "volatile": {
+        "wake_at_secs": null,
+        "wake_until_secs": null,
+        "user_at_secs": 600,
+        "user_since_secs": 0
+      }
+    },
+    {
+      "case": "turns_and_tokens",
+      "ok": {
+        "character": "poppy",
+        "message_count": 3,
+        "turn_count": 3,
+        "active_model": null,
+        "config_dir": "<tmp>/config",
+        "data_dir": "<tmp>/data",
+        "cache_dir": "<tmp>/cache",
+        "memory_mode": "markdown",
+        "pending_deferred_edit_count": 0,
+        "pending_deferred_edits": [],
+        "tokens": {
+          "input": 1200,
+          "output": 340,
+          "cache_read": 9000,
+          "cache_write": 512
+        },
+        "autonomy": {
+          "paused": false,
+          "heartbeat_state": "Active",
+          "ticks_without_user": 0,
+          "dormant_after_heartbeat_turns": 3,
+          "effective_interval_secs": 3600,
+          "minimum_heartbeat_latency_secs": 3600,
+          "dormant_after_idle_time_secs": 172800,
+          "recent_events": []
+        },
+        "activity": {
+          "hour_histogram": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "hour_classifications": [
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal"
+          ],
+          "has_sufficient_heatmap": false,
+          "engagement_score": 0.2,
+          "sessions_per_day": 0.0,
+          "message_count": 0,
+          "turn_count": 0
+        }
+      },
+      "volatile": {
+        "wake_at_secs": null,
+        "wake_until_secs": null,
+        "user_at_secs": null,
+        "user_since_secs": null
+      }
+    },
+    {
+      "case": "deferred_edits",
+      "ok": {
+        "character": "poppy",
+        "message_count": 0,
+        "turn_count": 0,
+        "active_model": null,
+        "config_dir": "<tmp>/config",
+        "data_dir": "<tmp>/data",
+        "cache_dir": "<tmp>/cache",
+        "memory_mode": "markdown",
+        "pending_deferred_edit_count": 3,
+        "pending_deferred_edits": [
+          "AGENTS.md",
+          "MEMORY.md",
+          "SOUL.md"
+        ],
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "cache_read": 0,
+          "cache_write": 0
+        },
+        "autonomy": {
+          "paused": false,
+          "heartbeat_state": "Active",
+          "ticks_without_user": 0,
+          "dormant_after_heartbeat_turns": 3,
+          "effective_interval_secs": 3600,
+          "minimum_heartbeat_latency_secs": 3600,
+          "dormant_after_idle_time_secs": 172800,
+          "recent_events": []
+        },
+        "activity": {
+          "hour_histogram": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "hour_classifications": [
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal"
+          ],
+          "has_sufficient_heatmap": false,
+          "engagement_score": 0.2,
+          "sessions_per_day": 0.0,
+          "message_count": 0,
+          "turn_count": 0
+        }
+      },
+      "volatile": {
+        "wake_at_secs": null,
+        "wake_until_secs": null,
+        "user_at_secs": null,
+        "user_since_secs": null
+      }
+    },
+    {
+      "case": "activity_week",
+      "ok": {
+        "character": "poppy",
+        "message_count": 0,
+        "turn_count": 0,
+        "active_model": null,
+        "config_dir": "<tmp>/config",
+        "data_dir": "<tmp>/data",
+        "cache_dir": "<tmp>/cache",
+        "memory_mode": "markdown",
+        "pending_deferred_edit_count": 0,
+        "pending_deferred_edits": [],
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "cache_read": 0,
+          "cache_write": 0
+        },
+        "autonomy": {
+          "paused": false,
+          "heartbeat_state": "Active",
+          "ticks_without_user": 0,
+          "dormant_after_heartbeat_turns": 3,
+          "effective_interval_secs": 3600,
+          "last_user_at": "2026-08-04T10:21:56.393763463+00:00",
+          "seconds_since_user": 300,
+          "minimum_heartbeat_latency_secs": 3600,
+          "dormant_after_idle_time_secs": 172800,
+          "recent_events": []
+        },
+        "activity": {
+          "hour_histogram": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.2,
+            0.2,
+            0.0,
+            0.0,
+            0.0,
+            0.2,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.2,
+            0.2,
+            0.0,
+            0.0
+          ],
+          "hour_classifications": [
+            "trough",
+            "trough",
+            "trough",
+            "trough",
+            "trough",
+            "trough",
+            "trough",
+            "trough",
+            "trough",
+            "normal",
+            "normal",
+            "trough",
+            "trough",
+            "trough",
+            "normal",
+            "trough",
+            "trough",
+            "trough",
+            "trough",
+            "trough",
+            "normal",
+            "normal",
+            "trough",
+            "trough"
+          ],
+          "has_sufficient_heatmap": true,
+          "engagement_score": 0.8,
+          "sessions_per_day": 5.0,
+          "message_count": 140,
+          "turn_count": 140
+        }
+      },
+      "volatile": {
+        "wake_at_secs": null,
+        "wake_until_secs": null,
+        "user_at_secs": -300,
+        "user_since_secs": 300
+      }
+    },
+    {
+      "case": "activity_thin",
+      "ok": {
+        "character": "poppy",
+        "message_count": 0,
+        "turn_count": 0,
+        "active_model": null,
+        "config_dir": "<tmp>/config",
+        "data_dir": "<tmp>/data",
+        "cache_dir": "<tmp>/cache",
+        "memory_mode": "markdown",
+        "pending_deferred_edit_count": 0,
+        "pending_deferred_edits": [],
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "cache_read": 0,
+          "cache_write": 0
+        },
+        "autonomy": {
+          "paused": false,
+          "heartbeat_state": "Active",
+          "ticks_without_user": 0,
+          "dormant_after_heartbeat_turns": 3,
+          "effective_interval_secs": 3600,
+          "last_user_at": "2026-08-04T10:21:56.395188579+00:00",
+          "seconds_since_user": 300,
+          "minimum_heartbeat_latency_secs": 3600,
+          "dormant_after_idle_time_secs": 172800,
+          "recent_events": []
+        },
+        "activity": {
+          "hour_histogram": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.5,
+            0.0,
+            0.25,
+            0.0,
+            0.0,
+            0.25,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "hour_classifications": [
+            "trough",
+            "trough",
+            "trough",
+            "trough",
+            "trough",
+            "trough",
+            "trough",
+            "trough",
+            "trough",
+            "trough",
+            "trough",
+            "trough",
+            "trough",
+            "normal",
+            "trough",
+            "normal",
+            "trough",
+            "trough",
+            "normal",
+            "trough",
+            "trough",
+            "trough",
+            "trough",
+            "trough"
+          ],
+          "has_sufficient_heatmap": false,
+          "engagement_score": 0.8716714796701572,
+          "sessions_per_day": 3.0,
+          "message_count": 4,
+          "turn_count": 4
+        }
+      },
+      "volatile": {
+        "wake_at_secs": null,
+        "wake_until_secs": null,
+        "user_at_secs": -300,
+        "user_since_secs": 300
+      }
+    },
+    {
+      "case": "log_only",
+      "ok": {
+        "character": "poppy",
+        "message_count": 0,
+        "turn_count": 0,
+        "active_model": null,
+        "config_dir": "<tmp>/config",
+        "data_dir": "<tmp>/data",
+        "cache_dir": "<tmp>/cache",
+        "memory_mode": "markdown",
+        "pending_deferred_edit_count": 0,
+        "pending_deferred_edits": [],
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "cache_read": 0,
+          "cache_write": 0
+        },
+        "autonomy": {
+          "paused": false,
+          "heartbeat_state": "Active",
+          "ticks_without_user": 0,
+          "dormant_after_heartbeat_turns": 3,
+          "effective_interval_secs": 3600,
+          "minimum_heartbeat_latency_secs": 3600,
+          "dormant_after_idle_time_secs": 172800,
+          "recent_events": [
+            {
+              "timestamp": "2026-01-15T09:20:00+00:00",
+              "kind": "tick_fired",
+              "detail": "event 20"
+            },
+            {
+              "timestamp": "2026-01-15T09:21:00+00:00",
+              "kind": "tool_use",
+              "detail": "event 21"
+            },
+            {
+              "timestamp": "2026-01-15T09:22:00+00:00",
+              "kind": "message_sent",
+              "detail": "event 22"
+            },
+            {
+              "timestamp": "2026-01-15T09:23:00+00:00",
+              "kind": "tick_fired",
+              "detail": "event 23"
+            },
+            {
+              "timestamp": "2026-01-15T09:24:00+00:00",
+              "kind": "message_skipped",
+              "detail": "event 24"
+            }
+          ]
+        },
+        "activity": {
+          "hour_histogram": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "hour_classifications": [
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal",
+            "normal"
+          ],
+          "has_sufficient_heatmap": false,
+          "engagement_score": 0.2,
+          "sessions_per_day": 0.0,
+          "message_count": 0,
+          "turn_count": 0
+        }
+      },
+      "volatile": {
+        "wake_at_secs": null,
+        "wake_until_secs": null,
+        "user_at_secs": null,
+        "user_since_secs": null
+      }
+    }
+  ],
+  "diagnostics": [
+    {
+      "case": "default",
+      "setup": "diagnostics_seeded",
+      "args": {},
+      "ok": {
+        "api_calls": {
+          "count": 12,
+          "recent": [
+            {
+              "timestamp": "2026-01-15T12:00:02+00:00",
+              "model": "m2",
+              "provider": "anthropic",
+              "input_tokens": 2,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:03+00:00",
+              "model": "m3",
+              "provider": "anthropic",
+              "input_tokens": 3,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:04+00:00",
+              "model": "m4",
+              "provider": "anthropic",
+              "input_tokens": 4,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:05+00:00",
+              "model": "m5",
+              "provider": "anthropic",
+              "input_tokens": 5,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:06+00:00",
+              "model": "m6",
+              "provider": "anthropic",
+              "input_tokens": 6,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:07+00:00",
+              "model": "m7",
+              "provider": "anthropic",
+              "input_tokens": 7,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:08+00:00",
+              "model": "m8",
+              "provider": "anthropic",
+              "input_tokens": 8,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:09+00:00",
+              "model": "m9",
+              "provider": "anthropic",
+              "input_tokens": 9,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:10+00:00",
+              "model": "m10",
+              "provider": "anthropic",
+              "input_tokens": 10,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:11+00:00",
+              "model": "m11",
+              "provider": "anthropic",
+              "input_tokens": 11,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "count_3",
+      "setup": "diagnostics_seeded",
+      "args": {
+        "count": 3
+      },
+      "ok": {
+        "api_calls": {
+          "count": 12,
+          "recent": [
+            {
+              "timestamp": "2026-01-15T12:00:09+00:00",
+              "model": "m9",
+              "provider": "anthropic",
+              "input_tokens": 9,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:10+00:00",
+              "model": "m10",
+              "provider": "anthropic",
+              "input_tokens": 10,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:11+00:00",
+              "model": "m11",
+              "provider": "anthropic",
+              "input_tokens": 11,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "count_12",
+      "setup": "diagnostics_seeded",
+      "args": {
+        "count": 12
+      },
+      "ok": {
+        "api_calls": {
+          "count": 12,
+          "recent": [
+            {
+              "timestamp": "2026-01-15T12:00:00+00:00",
+              "model": "m0",
+              "provider": "anthropic",
+              "input_tokens": 0,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:01+00:00",
+              "model": "m1",
+              "provider": "anthropic",
+              "input_tokens": 1,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:02+00:00",
+              "model": "m2",
+              "provider": "anthropic",
+              "input_tokens": 2,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:03+00:00",
+              "model": "m3",
+              "provider": "anthropic",
+              "input_tokens": 3,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:04+00:00",
+              "model": "m4",
+              "provider": "anthropic",
+              "input_tokens": 4,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:05+00:00",
+              "model": "m5",
+              "provider": "anthropic",
+              "input_tokens": 5,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:06+00:00",
+              "model": "m6",
+              "provider": "anthropic",
+              "input_tokens": 6,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:07+00:00",
+              "model": "m7",
+              "provider": "anthropic",
+              "input_tokens": 7,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:08+00:00",
+              "model": "m8",
+              "provider": "anthropic",
+              "input_tokens": 8,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:09+00:00",
+              "model": "m9",
+              "provider": "anthropic",
+              "input_tokens": 9,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:10+00:00",
+              "model": "m10",
+              "provider": "anthropic",
+              "input_tokens": 10,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:11+00:00",
+              "model": "m11",
+              "provider": "anthropic",
+              "input_tokens": 11,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "count_50",
+      "setup": "diagnostics_seeded",
+      "args": {
+        "count": 50
+      },
+      "ok": {
+        "api_calls": {
+          "count": 12,
+          "recent": [
+            {
+              "timestamp": "2026-01-15T12:00:00+00:00",
+              "model": "m0",
+              "provider": "anthropic",
+              "input_tokens": 0,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:01+00:00",
+              "model": "m1",
+              "provider": "anthropic",
+              "input_tokens": 1,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:02+00:00",
+              "model": "m2",
+              "provider": "anthropic",
+              "input_tokens": 2,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:03+00:00",
+              "model": "m3",
+              "provider": "anthropic",
+              "input_tokens": 3,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:04+00:00",
+              "model": "m4",
+              "provider": "anthropic",
+              "input_tokens": 4,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:05+00:00",
+              "model": "m5",
+              "provider": "anthropic",
+              "input_tokens": 5,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:06+00:00",
+              "model": "m6",
+              "provider": "anthropic",
+              "input_tokens": 6,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:07+00:00",
+              "model": "m7",
+              "provider": "anthropic",
+              "input_tokens": 7,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:08+00:00",
+              "model": "m8",
+              "provider": "anthropic",
+              "input_tokens": 8,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:09+00:00",
+              "model": "m9",
+              "provider": "anthropic",
+              "input_tokens": 9,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:10+00:00",
+              "model": "m10",
+              "provider": "anthropic",
+              "input_tokens": 10,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:11+00:00",
+              "model": "m11",
+              "provider": "anthropic",
+              "input_tokens": 11,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "count_0",
+      "setup": "diagnostics_seeded",
+      "args": {
+        "count": 0
+      },
+      "ok": {
+        "api_calls": {
+          "count": 12,
+          "recent": []
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "count_negative",
+      "setup": "diagnostics_seeded",
+      "args": {
+        "count": -1
+      },
+      "ok": {
+        "api_calls": {
+          "count": 12,
+          "recent": [
+            {
+              "timestamp": "2026-01-15T12:00:02+00:00",
+              "model": "m2",
+              "provider": "anthropic",
+              "input_tokens": 2,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:03+00:00",
+              "model": "m3",
+              "provider": "anthropic",
+              "input_tokens": 3,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:04+00:00",
+              "model": "m4",
+              "provider": "anthropic",
+              "input_tokens": 4,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:05+00:00",
+              "model": "m5",
+              "provider": "anthropic",
+              "input_tokens": 5,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:06+00:00",
+              "model": "m6",
+              "provider": "anthropic",
+              "input_tokens": 6,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:07+00:00",
+              "model": "m7",
+              "provider": "anthropic",
+              "input_tokens": 7,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:08+00:00",
+              "model": "m8",
+              "provider": "anthropic",
+              "input_tokens": 8,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:09+00:00",
+              "model": "m9",
+              "provider": "anthropic",
+              "input_tokens": 9,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:10+00:00",
+              "model": "m10",
+              "provider": "anthropic",
+              "input_tokens": 10,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:11+00:00",
+              "model": "m11",
+              "provider": "anthropic",
+              "input_tokens": 11,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "count_string",
+      "setup": "diagnostics_seeded",
+      "args": {
+        "count": "3"
+      },
+      "ok": {
+        "api_calls": {
+          "count": 12,
+          "recent": [
+            {
+              "timestamp": "2026-01-15T12:00:02+00:00",
+              "model": "m2",
+              "provider": "anthropic",
+              "input_tokens": 2,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:03+00:00",
+              "model": "m3",
+              "provider": "anthropic",
+              "input_tokens": 3,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:04+00:00",
+              "model": "m4",
+              "provider": "anthropic",
+              "input_tokens": 4,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:05+00:00",
+              "model": "m5",
+              "provider": "anthropic",
+              "input_tokens": 5,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:06+00:00",
+              "model": "m6",
+              "provider": "anthropic",
+              "input_tokens": 6,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:07+00:00",
+              "model": "m7",
+              "provider": "anthropic",
+              "input_tokens": 7,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:08+00:00",
+              "model": "m8",
+              "provider": "anthropic",
+              "input_tokens": 8,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:09+00:00",
+              "model": "m9",
+              "provider": "anthropic",
+              "input_tokens": 9,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:10+00:00",
+              "model": "m10",
+              "provider": "anthropic",
+              "input_tokens": 10,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:11+00:00",
+              "model": "m11",
+              "provider": "anthropic",
+              "input_tokens": 11,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "count_float",
+      "setup": "diagnostics_seeded",
+      "args": {
+        "count": 1.5
+      },
+      "ok": {
+        "api_calls": {
+          "count": 12,
+          "recent": [
+            {
+              "timestamp": "2026-01-15T12:00:02+00:00",
+              "model": "m2",
+              "provider": "anthropic",
+              "input_tokens": 2,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:03+00:00",
+              "model": "m3",
+              "provider": "anthropic",
+              "input_tokens": 3,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:04+00:00",
+              "model": "m4",
+              "provider": "anthropic",
+              "input_tokens": 4,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:05+00:00",
+              "model": "m5",
+              "provider": "anthropic",
+              "input_tokens": 5,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:06+00:00",
+              "model": "m6",
+              "provider": "anthropic",
+              "input_tokens": 6,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:07+00:00",
+              "model": "m7",
+              "provider": "anthropic",
+              "input_tokens": 7,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:08+00:00",
+              "model": "m8",
+              "provider": "anthropic",
+              "input_tokens": 8,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:09+00:00",
+              "model": "m9",
+              "provider": "anthropic",
+              "input_tokens": 9,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:10+00:00",
+              "model": "m10",
+              "provider": "anthropic",
+              "input_tokens": 10,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:11+00:00",
+              "model": "m11",
+              "provider": "anthropic",
+              "input_tokens": 11,
+              "output_tokens": 1,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 5,
+              "total_ms": 10,
+              "finish_reason": "end_turn"
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "empty",
+      "setup": "fresh",
+      "args": {},
+      "ok": {
+        "api_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    }
+  ],
+  "heartbeat_log": [
+    {
+      "case": "default",
+      "setup": "log_only",
+      "args": {},
+      "ok": {
+        "events": [
+          {
+            "timestamp": "2026-01-15T09:05:00+00:00",
+            "kind": "dormant",
+            "detail": "event 5"
+          },
+          {
+            "timestamp": "2026-01-15T09:06:00+00:00",
+            "kind": "wake",
+            "detail": "event 6"
+          },
+          {
+            "timestamp": "2026-01-15T09:07:00+00:00",
+            "kind": "timeout",
+            "detail": "event 7"
+          },
+          {
+            "timestamp": "2026-01-15T09:08:00+00:00",
+            "kind": "dormant_ping",
+            "detail": "event 8"
+          },
+          {
+            "timestamp": "2026-01-15T09:09:00+00:00",
+            "kind": "recap_written",
+            "detail": "event 9"
+          },
+          {
+            "timestamp": "2026-01-15T09:10:00+00:00",
+            "kind": "tick_fired",
+            "detail": "event 10"
+          },
+          {
+            "timestamp": "2026-01-15T09:11:00+00:00",
+            "kind": "tool_use",
+            "detail": "event 11"
+          },
+          {
+            "timestamp": "2026-01-15T09:12:00+00:00",
+            "kind": "message_sent",
+            "detail": "event 12"
+          },
+          {
+            "timestamp": "2026-01-15T09:13:00+00:00",
+            "kind": "tick_fired",
+            "detail": "event 13"
+          },
+          {
+            "timestamp": "2026-01-15T09:14:00+00:00",
+            "kind": "message_skipped",
+            "detail": "event 14"
+          },
+          {
+            "timestamp": "2026-01-15T09:15:00+00:00",
+            "kind": "dormant",
+            "detail": "event 15"
+          },
+          {
+            "timestamp": "2026-01-15T09:16:00+00:00",
+            "kind": "wake",
+            "detail": "event 16"
+          },
+          {
+            "timestamp": "2026-01-15T09:17:00+00:00",
+            "kind": "timeout",
+            "detail": "event 17"
+          },
+          {
+            "timestamp": "2026-01-15T09:18:00+00:00",
+            "kind": "dormant_ping",
+            "detail": "event 18"
+          },
+          {
+            "timestamp": "2026-01-15T09:19:00+00:00",
+            "kind": "recap_written",
+            "detail": "event 19"
+          },
+          {
+            "timestamp": "2026-01-15T09:20:00+00:00",
+            "kind": "tick_fired",
+            "detail": "event 20"
+          },
+          {
+            "timestamp": "2026-01-15T09:21:00+00:00",
+            "kind": "tool_use",
+            "detail": "event 21"
+          },
+          {
+            "timestamp": "2026-01-15T09:22:00+00:00",
+            "kind": "message_sent",
+            "detail": "event 22"
+          },
+          {
+            "timestamp": "2026-01-15T09:23:00+00:00",
+            "kind": "tick_fired",
+            "detail": "event 23"
+          },
+          {
+            "timestamp": "2026-01-15T09:24:00+00:00",
+            "kind": "message_skipped",
+            "detail": "event 24"
+          }
+        ]
+      }
+    },
+    {
+      "case": "count_3",
+      "setup": "log_only",
+      "args": {
+        "count": 3
+      },
+      "ok": {
+        "events": [
+          {
+            "timestamp": "2026-01-15T09:22:00+00:00",
+            "kind": "message_sent",
+            "detail": "event 22"
+          },
+          {
+            "timestamp": "2026-01-15T09:23:00+00:00",
+            "kind": "tick_fired",
+            "detail": "event 23"
+          },
+          {
+            "timestamp": "2026-01-15T09:24:00+00:00",
+            "kind": "message_skipped",
+            "detail": "event 24"
+          }
+        ]
+      }
+    },
+    {
+      "case": "count_7",
+      "setup": "log_only",
+      "args": {
+        "count": 7
+      },
+      "ok": {
+        "events": [
+          {
+            "timestamp": "2026-01-15T09:18:00+00:00",
+            "kind": "dormant_ping",
+            "detail": "event 18"
+          },
+          {
+            "timestamp": "2026-01-15T09:19:00+00:00",
+            "kind": "recap_written",
+            "detail": "event 19"
+          },
+          {
+            "timestamp": "2026-01-15T09:20:00+00:00",
+            "kind": "tick_fired",
+            "detail": "event 20"
+          },
+          {
+            "timestamp": "2026-01-15T09:21:00+00:00",
+            "kind": "tool_use",
+            "detail": "event 21"
+          },
+          {
+            "timestamp": "2026-01-15T09:22:00+00:00",
+            "kind": "message_sent",
+            "detail": "event 22"
+          },
+          {
+            "timestamp": "2026-01-15T09:23:00+00:00",
+            "kind": "tick_fired",
+            "detail": "event 23"
+          },
+          {
+            "timestamp": "2026-01-15T09:24:00+00:00",
+            "kind": "message_skipped",
+            "detail": "event 24"
+          }
+        ]
+      }
+    },
+    {
+      "case": "count_0",
+      "setup": "log_only",
+      "args": {
+        "count": 0
+      },
+      "ok": {
+        "events": []
+      }
+    },
+    {
+      "case": "count_string",
+      "setup": "log_only",
+      "args": {
+        "count": "3"
+      },
+      "ok": {
+        "events": [
+          {
+            "timestamp": "2026-01-15T09:05:00+00:00",
+            "kind": "dormant",
+            "detail": "event 5"
+          },
+          {
+            "timestamp": "2026-01-15T09:06:00+00:00",
+            "kind": "wake",
+            "detail": "event 6"
+          },
+          {
+            "timestamp": "2026-01-15T09:07:00+00:00",
+            "kind": "timeout",
+            "detail": "event 7"
+          },
+          {
+            "timestamp": "2026-01-15T09:08:00+00:00",
+            "kind": "dormant_ping",
+            "detail": "event 8"
+          },
+          {
+            "timestamp": "2026-01-15T09:09:00+00:00",
+            "kind": "recap_written",
+            "detail": "event 9"
+          },
+          {
+            "timestamp": "2026-01-15T09:10:00+00:00",
+            "kind": "tick_fired",
+            "detail": "event 10"
+          },
+          {
+            "timestamp": "2026-01-15T09:11:00+00:00",
+            "kind": "tool_use",
+            "detail": "event 11"
+          },
+          {
+            "timestamp": "2026-01-15T09:12:00+00:00",
+            "kind": "message_sent",
+            "detail": "event 12"
+          },
+          {
+            "timestamp": "2026-01-15T09:13:00+00:00",
+            "kind": "tick_fired",
+            "detail": "event 13"
+          },
+          {
+            "timestamp": "2026-01-15T09:14:00+00:00",
+            "kind": "message_skipped",
+            "detail": "event 14"
+          },
+          {
+            "timestamp": "2026-01-15T09:15:00+00:00",
+            "kind": "dormant",
+            "detail": "event 15"
+          },
+          {
+            "timestamp": "2026-01-15T09:16:00+00:00",
+            "kind": "wake",
+            "detail": "event 16"
+          },
+          {
+            "timestamp": "2026-01-15T09:17:00+00:00",
+            "kind": "timeout",
+            "detail": "event 17"
+          },
+          {
+            "timestamp": "2026-01-15T09:18:00+00:00",
+            "kind": "dormant_ping",
+            "detail": "event 18"
+          },
+          {
+            "timestamp": "2026-01-15T09:19:00+00:00",
+            "kind": "recap_written",
+            "detail": "event 19"
+          },
+          {
+            "timestamp": "2026-01-15T09:20:00+00:00",
+            "kind": "tick_fired",
+            "detail": "event 20"
+          },
+          {
+            "timestamp": "2026-01-15T09:21:00+00:00",
+            "kind": "tool_use",
+            "detail": "event 21"
+          },
+          {
+            "timestamp": "2026-01-15T09:22:00+00:00",
+            "kind": "message_sent",
+            "detail": "event 22"
+          },
+          {
+            "timestamp": "2026-01-15T09:23:00+00:00",
+            "kind": "tick_fired",
+            "detail": "event 23"
+          },
+          {
+            "timestamp": "2026-01-15T09:24:00+00:00",
+            "kind": "message_skipped",
+            "detail": "event 24"
+          }
+        ]
+      }
+    },
+    {
+      "case": "count_negative",
+      "setup": "log_only",
+      "args": {
+        "count": -1
+      },
+      "ok": {
+        "events": [
+          {
+            "timestamp": "2026-01-15T09:05:00+00:00",
+            "kind": "dormant",
+            "detail": "event 5"
+          },
+          {
+            "timestamp": "2026-01-15T09:06:00+00:00",
+            "kind": "wake",
+            "detail": "event 6"
+          },
+          {
+            "timestamp": "2026-01-15T09:07:00+00:00",
+            "kind": "timeout",
+            "detail": "event 7"
+          },
+          {
+            "timestamp": "2026-01-15T09:08:00+00:00",
+            "kind": "dormant_ping",
+            "detail": "event 8"
+          },
+          {
+            "timestamp": "2026-01-15T09:09:00+00:00",
+            "kind": "recap_written",
+            "detail": "event 9"
+          },
+          {
+            "timestamp": "2026-01-15T09:10:00+00:00",
+            "kind": "tick_fired",
+            "detail": "event 10"
+          },
+          {
+            "timestamp": "2026-01-15T09:11:00+00:00",
+            "kind": "tool_use",
+            "detail": "event 11"
+          },
+          {
+            "timestamp": "2026-01-15T09:12:00+00:00",
+            "kind": "message_sent",
+            "detail": "event 12"
+          },
+          {
+            "timestamp": "2026-01-15T09:13:00+00:00",
+            "kind": "tick_fired",
+            "detail": "event 13"
+          },
+          {
+            "timestamp": "2026-01-15T09:14:00+00:00",
+            "kind": "message_skipped",
+            "detail": "event 14"
+          },
+          {
+            "timestamp": "2026-01-15T09:15:00+00:00",
+            "kind": "dormant",
+            "detail": "event 15"
+          },
+          {
+            "timestamp": "2026-01-15T09:16:00+00:00",
+            "kind": "wake",
+            "detail": "event 16"
+          },
+          {
+            "timestamp": "2026-01-15T09:17:00+00:00",
+            "kind": "timeout",
+            "detail": "event 17"
+          },
+          {
+            "timestamp": "2026-01-15T09:18:00+00:00",
+            "kind": "dormant_ping",
+            "detail": "event 18"
+          },
+          {
+            "timestamp": "2026-01-15T09:19:00+00:00",
+            "kind": "recap_written",
+            "detail": "event 19"
+          },
+          {
+            "timestamp": "2026-01-15T09:20:00+00:00",
+            "kind": "tick_fired",
+            "detail": "event 20"
+          },
+          {
+            "timestamp": "2026-01-15T09:21:00+00:00",
+            "kind": "tool_use",
+            "detail": "event 21"
+          },
+          {
+            "timestamp": "2026-01-15T09:22:00+00:00",
+            "kind": "message_sent",
+            "detail": "event 22"
+          },
+          {
+            "timestamp": "2026-01-15T09:23:00+00:00",
+            "kind": "tick_fired",
+            "detail": "event 23"
+          },
+          {
+            "timestamp": "2026-01-15T09:24:00+00:00",
+            "kind": "message_skipped",
+            "detail": "event 24"
+          }
+        ]
+      }
+    },
+    {
+      "case": "no_events",
+      "setup": "fresh",
+      "args": {},
+      "ok": {
+        "events": []
+      }
+    },
+    {
+      "case": "unregistered",
+      "setup": "unregistered",
+      "args": {},
+      "ok": {
+        "events": []
+      }
+    }
+  ],
+  "controls": [
+    {
+      "case": "tick_now_active",
+      "command": "heartbeat_tick_now",
+      "setup": "fresh",
+      "ok": {
+        "status": "scheduled",
+        "character": "poppy"
+      },
+      "after": {
+        "heartbeat_state": "Active",
+        "ticks_without_user": 0,
+        "wake_armed": true
+      }
+    },
+    {
+      "case": "tick_now_dormant",
+      "command": "heartbeat_tick_now",
+      "setup": "dormant",
+      "ok": {
+        "status": "scheduled",
+        "character": "poppy",
+        "warning": "Heartbeat is dormant. The scheduled tick will be suppressed by the abandonment guard. Run `shore debug heartbeat_status_active` first to wake the clock."
+      },
+      "after": {
+        "heartbeat_state": "Dormant",
+        "ticks_without_user": 3,
+        "wake_armed": true
+      }
+    },
+    {
+      "case": "tick_now_unregistered",
+      "command": "heartbeat_tick_now",
+      "setup": "unregistered",
+      "err": {
+        "code": "invalid_request",
+        "message": "No autonomy state for character 'poppy'"
+      },
+      "after": null
+    },
+    {
+      "case": "set_dormant",
+      "command": "heartbeat_set_dormant",
+      "setup": "fresh",
+      "ok": {
+        "status": "dormant",
+        "character": "poppy"
+      },
+      "after": {
+        "heartbeat_state": "Dormant",
+        "ticks_without_user": 3,
+        "wake_armed": false
+      }
+    },
+    {
+      "case": "set_dormant_already",
+      "command": "heartbeat_set_dormant",
+      "setup": "dormant",
+      "ok": {
+        "status": "dormant",
+        "character": "poppy"
+      },
+      "after": {
+        "heartbeat_state": "Dormant",
+        "ticks_without_user": 3,
+        "wake_armed": false
+      }
+    },
+    {
+      "case": "set_dormant_unregistered",
+      "command": "heartbeat_set_dormant",
+      "setup": "unregistered",
+      "err": {
+        "code": "invalid_request",
+        "message": "No autonomy state for character 'poppy'"
+      },
+      "after": null
+    },
+    {
+      "case": "set_active",
+      "command": "heartbeat_set_active",
+      "setup": "dormant",
+      "ok": {
+        "status": "active",
+        "character": "poppy"
+      },
+      "after": {
+        "heartbeat_state": "Active",
+        "ticks_without_user": 0,
+        "wake_armed": true
+      }
+    },
+    {
+      "case": "set_active_already",
+      "command": "heartbeat_set_active",
+      "setup": "fresh",
+      "ok": {
+        "status": "active",
+        "character": "poppy"
+      },
+      "after": {
+        "heartbeat_state": "Active",
+        "ticks_without_user": 0,
+        "wake_armed": true
+      }
+    },
+    {
+      "case": "set_active_unregistered",
+      "command": "heartbeat_set_active",
+      "setup": "unregistered",
+      "err": {
+        "code": "invalid_request",
+        "message": "No autonomy state for character 'poppy'"
+      },
+      "after": null
+    }
+  ]
+}
