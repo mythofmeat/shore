@@ -35,6 +35,7 @@ import { atomicWrite } from "../engine/atomic";
 import type { CompactionManifest, SegmentEntry } from "../engine/segments";
 import { CompactionError } from "./compaction/types";
 import { rustLines, rustTrim } from "./lines";
+import { localRfc3339 } from "../time.ts";
 
 /** Matches `shore_common::config` — the three paths this module owns. */
 const ACTIVE_JSONL_FILE = "active.jsonl";
@@ -86,27 +87,6 @@ function messageLines(content: string): string[] {
   return rustLines(content).filter((l) => rustTrim(l) !== "");
 }
 
-/**
- * RFC 3339 with the local UTC offset, matching `chrono::Local::now().to_rfc3339()`.
- *
- * Deliberate divergence: the Rust emits nanosecond precision, JavaScript only
- * has milliseconds, so this writes three fractional digits where the Rust
- * wrote nine. Padding with six zeros would claim a precision that is not
- * there. Nothing reads this field — `engine/segments.ts` carries it as an
- * opaque string and never parses it — so the shape is what matters.
- */
-function localRfc3339(now: Date): string {
-  const offsetMin = -now.getTimezoneOffset();
-  const sign = offsetMin < 0 ? "-" : "+";
-  const abs = Math.abs(offsetMin);
-  const pad = (n: number, w = 2) => String(n).padStart(w, "0");
-  return (
-    `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}` +
-    `T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}` +
-    `.${pad(now.getMilliseconds(), 3)}` +
-    `${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`
-  );
-}
 
 /**
  * Parse `compaction.json` the way serde did — strictly.

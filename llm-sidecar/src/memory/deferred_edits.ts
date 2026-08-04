@@ -56,6 +56,7 @@ import {
   activePromptFile,
   normalizePromptVisiblePath,
 } from "../tools/workspace_path";
+import { localRfc3339 } from "../time.ts";
 
 /** Workspace-root files that are editable now but prompt-active only later. */
 const PROTECTED_PATHS = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md"] as const;
@@ -243,23 +244,6 @@ export async function queueDeferredEdit(
 /** Queue a deferred refresh of the memory index. */
 export const noteMemoryIndexDeferred = (characterDataDir: string) =>
   queueDeferredEdit(characterDataDir, MEMORY_INDEX_FILE);
-
-/**
- * RFC 3339 with the local UTC offset, matching `chrono::Local::now()`.
- * Milliseconds where the Rust wrote nanoseconds — nothing parses this field.
- */
-function localRfc3339(now: Date): string {
-  const offsetMin = -now.getTimezoneOffset();
-  const sign = offsetMin < 0 ? "-" : "+";
-  const abs = Math.abs(offsetMin);
-  const pad = (n: number, w = 2) => String(n).padStart(w, "0");
-  return (
-    `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}` +
-    `T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}` +
-    `.${pad(now.getMilliseconds(), 3)}` +
-    `${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`
-  );
-}
 
 /**
  * Which prompt-visible files would change if the snapshot were refreshed now.
