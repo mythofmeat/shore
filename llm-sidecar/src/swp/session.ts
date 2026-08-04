@@ -142,6 +142,17 @@ export class SessionRouter {
   }
 
   /**
+   * The direct sender for a session, or `undefined` once it has gone.
+   *
+   * For callers that hold a sender rather than writing through the router each
+   * time: `handler/lease.ts` resolves the recipients of a generation's stream
+   * once and writes to them for the length of the turn.
+   */
+  senderFor(sessionId: number): DirectSender | undefined {
+    return this.#senders.get(sessionId);
+  }
+
+  /**
    * Send a request-scoped response to one session.
    *
    * Sending to a session that has already gone is not an error. The Rust
