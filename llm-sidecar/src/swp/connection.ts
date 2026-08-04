@@ -187,12 +187,27 @@ export async function performHandshake(
   };
   ctx.router.registerSession(client, (msg) => writeMessage(sink, msg));
 
-  // Field order and omission both follow serde. `active_start` is skipped at
-  // zero (`skip_serializing_if = "is_zero"`), not just when absent, and a
-  // handshake snapshot is always zero — so the field is normally not on the
-  // wire at all.
-  await writeMessage(sink, {
+  await writeMessage(sink, historyMessage(history));
+
+  return sessionMetaOf(client);
+}
+
+/**
+ * A snapshot as the frame that carries it.
+ *
+ * Field order and omission both follow serde. `active_start` is skipped at zero
+ * (`skip_serializing_if = "is_zero"`), not just when absent, and a handshake
+ * snapshot is always zero — so the field is normally not on the wire at all.
+ *
+ * Shared with `handler/command_dispatch.ts`, which pushes one of these after a
+ * `switch_character` so the session sees the new character's conversation
+ * rather than the old one's. That push carries the command's `rid`; the
+ * handshake's does not, because nothing asked for it.
+ */
+export function historyMessage(history: HistorySnapshot, rid?: string): ServerMessage {
+  return {
     type: "history",
+    ...(rid === undefined ? {} : { rid }),
     messages: history.messages as Message[],
     ...(history.activeStart === 0 ? {} : { active_start: history.activeStart }),
     config: history.config,
@@ -200,9 +215,7 @@ export async function performHandshake(
       ? {}
       : { selected_character: history.selectedCharacter }),
     revision: history.revision,
-  });
-
-  return sessionMetaOf(client);
+  };
 }
 
 /**

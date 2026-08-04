@@ -324,9 +324,11 @@ export async function configReload(ctx: ConfigContext, args: Args): Promise<unkn
   const characterDataDir = join(ctx.config.dirs.data, character);
   const changed = await changedPromptFiles(characterDataDir, fresh.dirs.config, character);
 
-  // `restart_required` is the dispatcher's annotation, not this command's: it
-  // compares global to global, and this context holds the character-merged
-  // config, which would make every overlay look like a restart.
+  // `restart_required` is annotated by `handler/command_dispatch.ts`, not by
+  // this command: it compares global to global, and this context holds the
+  // character-merged config, which would make every overlay look like a
+  // restart. The `invalidated` map `configReset` returns is added to there for
+  // the same reason — what a reload turns out to move is the handler's answer.
   if (!apply) {
     return {
       applied: false,
