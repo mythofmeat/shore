@@ -276,7 +276,17 @@ function isDir(path: string): boolean {
   }
 }
 
-function fileExists(path: string): boolean {
+/** `Path::is_file`: follows symlinks, false on any error — including a directory. */
+export function isFile(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/** `Path::exists`: whether anything is there at all, false on any error. */
+export function pathExists(path: string): boolean {
   try {
     statSync(path);
     return true;
@@ -286,7 +296,7 @@ function fileExists(path: string): boolean {
 }
 
 /** File content, or `undefined` for any read error. Mirrors `read_to_string(..).ok()`. */
-function readOrUndefined(path: string): string | undefined {
+export function readOrUndefined(path: string): string | undefined {
   try {
     return readFileSync(path, "utf8");
   } catch {
@@ -320,13 +330,13 @@ export function discoverCharacters(config: string): string[] {
   for (const name of entries) {
     const dir = join(charsDir, name);
     // Redundant, and knowingly kept: a marker file can only exist *under* a
-    // directory, so the two `fileExists` calls below already imply this. Deleting
+    // directory, so the two `pathExists` calls below already imply this. Deleting
     // it is an unkillable mutant. It stays because it is the Rust's own guard and
     // because it says what a character is — a directory — at the point that is
     // decided, rather than leaving it implied by two path probes.
     if (!isDir(dir)) continue;
-    if (fileExists(join(dir, CHARACTER_WORKSPACE_DIR, SOUL_FILE)) ||
-      fileExists(join(dir, LEGACY_CHARACTER_FILE))) {
+    if (pathExists(join(dir, CHARACTER_WORKSPACE_DIR, SOUL_FILE)) ||
+      pathExists(join(dir, LEGACY_CHARACTER_FILE))) {
       names.push(name);
     }
   }
