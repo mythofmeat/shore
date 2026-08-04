@@ -32,6 +32,10 @@ export const notFound = (message: string): CommandError => new CommandError("not
 export const internalError = (message: string): CommandError =>
   new CommandError("internal_error", message);
 
+/** The provider said no, or could not be asked. Raised only by discovery. */
+export const providerError = (message: string): CommandError =>
+  new CommandError("provider_error", message);
+
 /**
  * Map an engine failure onto a command error, as `commands::engine_err` did.
  *

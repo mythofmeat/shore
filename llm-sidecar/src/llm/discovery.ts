@@ -38,6 +38,7 @@
  * serialization or I/O failure leaves the previous catalog intact.
  */
 
+import { toRfc3339 } from "../ledger/zoned.ts";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -520,7 +521,12 @@ export function parseModelsResponse(
   baseUrl: string,
   sdk: string,
   body: string,
-  now: string = new Date().toISOString(),
+  // chrono's `to_rfc3339`, not `toISOString`: the Rust writes the numeric
+  // offset and no `Z`, and this string is written into the cache file and
+  // shown to clients verbatim. The default was never pinned before —
+  // every test injected it — so the two sides had been spelling the same
+  // instant differently.
+  now: string = toRfc3339(Date.now()),
 ): DiscoveryResult<DiscoveredModel[]> {
   let envelope: unknown;
   try {
