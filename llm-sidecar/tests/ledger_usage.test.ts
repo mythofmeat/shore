@@ -2,14 +2,16 @@
  * The `shore usage` paths the cross-language fixture cannot reach.
  *
  * `ledger_usage_parity.test.ts` pins every mode that is answerable from a
- * ledger alone. Three are not, and they are here:
+ * ledger alone. Two are not, and they are here:
  *
  *   - **`recalculate`** drives the pricing catalog, and a fixture that fetched
  *     OpenRouter would not be a fixture.
- *   - **`refresh_pricing`** exists to invalidate a cache, so the only thing
- *     worth asserting is that the next lookup misses.
  *   - **`budgetWarnings`** writes as it reads: the dedup marker is what makes a
  *     threshold announce once per window, so the second call is the test.
+ *
+ * **`refresh_pricing`** was a third. It invalidates a cache, and the clearing
+ * moved to `commands/usage.ts` when the daemon's half of it arrived there — so
+ * the test that watches the next lookup miss is in `commands_usage.test.ts`.
  *
  * The catalog fetch is stubbed at `globalThis.fetch` rather than injected,
  * because `PricingEngine` resolves it per call — which means the production
@@ -211,30 +213,6 @@ test.skipIf(!haveDaemon)("recalculate leaves already-costed rows alone unless fo
   expect(costOf(ledger, 3), "a flat-plan row must not start accruing cost").toBe(0);
 });
 
-// ── refresh_pricing ──────────────────────────────────────────────────────────
-
-test.skipIf(!haveDaemon)("refresh_pricing drops the in-memory catalog", async () => {
-  const ledger = ledgerWith([{}]);
-  priceInStore(ledger, "anthropic/claude-opus-4.6", 0.00001);
-
-  // Prime the engine's memory from the store.
-  const engine = ledgerFor(ledger)!.pricing;
-  expect(engine.cached("anthropic", "claude-opus-4-6")).toBeDefined();
-
-  // The daemon empties the table, then calls in here. Without the second half
-  // the engine would keep answering from the copy it already read.
-  const db = openLedger(ledger);
-  db.run("DELETE FROM pricing");
-  db.run("PRAGMA wal_checkpoint(TRUNCATE)");
-  db.close();
-  expect(engine.cached("anthropic", "claude-opus-4-6"), "still memoised").toBeDefined();
-
-  const result = await usageReport({ ledger, args: { refresh_pricing: true } });
-
-  expect(result).toEqual({ mode: "refresh_pricing" } as never);
-  expect(engine.cached("anthropic", "claude-opus-4-6")).toBeUndefined();
-});
-
 // ── budget warnings ──────────────────────────────────────────────────────────
 
 const OVER_BUDGET: UsageConfig = {
@@ -345,6 +323,34 @@ test.skipIf(!haveDaemon)("the usage routes are wired", async () => {
   const models = await handler(post("/v1/usage/models", { ledger, character: "poppy" }));
   expect(models.status).toBe(200);
   expect(((await models.json()) as { models: unknown[] }).models.length).toBe(1);
+});
+
+test.skipIf(!haveDaemon)("the usage route refreshes the pricing caches", async () => {
+  // The route does what `commands/usage.ts` does, because the daemon calling it
+  // is still the Rust one: it empties the `pricing` table on its side and this
+  // endpoint is where the rest of the refresh has to happen. What the command
+  // does with the flag is covered in `commands_usage.test.ts`; this is only
+  // that the endpoint does it too.
+  const ledger = ledgerWith([{}]);
+  priceInStore(ledger, "anthropic/claude-opus-4.6", 0.00001);
+  const engine = ledgerFor(ledger)!.pricing;
+  expect(engine.cached("anthropic", "claude-opus-4-6")).toBeDefined();
+
+  const handler = createSidecarHandler();
+  const res = await handler(post("/v1/usage", { ledger, args: { refresh_pricing: true } }));
+
+  expect(res.status).toBe(200);
+  expect(((await res.json()) as { mode: string }).mode).toBe("refresh_pricing");
+  expect(engine.cached("anthropic", "claude-opus-4-6")).toBeUndefined();
+
+  // And a non-boolean is not the flag: the daemon read this with `as_bool`,
+  // which answers `None` to a string, so `"true"` asks for a summary.
+  priceInStore(ledger, "anthropic/claude-opus-4.6", 0.00002);
+  const soft = await handler(
+    post("/v1/usage", { ledger, args: { refresh_pricing: "true", last: "all" } }),
+  );
+  expect(((await soft.json()) as { mode: string }).mode).toBe("summary");
+  expect(engine.cached("anthropic", "claude-opus-4-6")).toBeDefined();
 });
 
 test("a usage request naming an unopenable ledger fails rather than reporting zero", async () => {

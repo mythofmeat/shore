@@ -22,6 +22,7 @@ import {
 } from "./ledger/record.ts";
 import {
   budgetWarnings,
+  clearPricingCache,
   modelHistory,
   usageReport,
   type BudgetWarningsRequest,
@@ -235,6 +236,14 @@ export function createSidecarHandler(
       const parsed = await readJson<UsageRequest>(request);
       if (!parsed.ok) return parsed.response;
       try {
+        // The same two lines as `commands/usage.ts`, and for as long as the
+        // daemon calling this is the Rust one they are the whole of its
+        // refresh reaching this side. It emptied the `pricing` table before
+        // sending; this clears it again, harmlessly, and drops the memory in
+        // front of it, which is the half that used to go missing.
+        if (parsed.value.args?.["refresh_pricing"] === true) {
+          clearPricingCache(parsed.value.ledger);
+        }
         return jsonResponse(await usageReport(parsed.value));
       } catch (e) {
         return errorResponse(e);

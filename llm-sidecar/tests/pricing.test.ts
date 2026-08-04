@@ -29,6 +29,7 @@ function memoryStore(seed: Record<string, ModelPricing> = {}): PricingStore {
   return {
     get: (id) => map.get(id),
     put: (id, pricing) => void map.set(id, pricing),
+    clear: () => map.clear(),
   };
 }
 
@@ -146,6 +147,24 @@ describe("the engine", () => {
       cache_write_tokens: 0,
     });
     close(cost!.input, 0.0015);
+  });
+
+  test("clearing empties the store and the memory in front of it", () => {
+    const map = new Map<string, ModelPricing>([["anthropic/claude-opus-4.6", anthropicPricing()]]);
+    const engine = new PricingEngine({
+      get: (id) => map.get(id),
+      put: (id, pricing) => void map.set(id, pricing),
+      clear: () => map.clear(),
+    });
+    expect(engine.cached("anthropic", "claude-opus-4-6"), "primes the memory").toBeDefined();
+
+    engine.clearCache();
+
+    expect(map.size, "the table").toBe(0);
+    // And the memory: re-price the model and ask again. An engine that cleared
+    // only the store would still be answering from what it read a moment ago.
+    map.set("anthropic/claude-opus-4.6", { ...anthropicPricing(), input_per_token: 1 });
+    expect(engine.cached("anthropic", "claude-opus-4-6")?.input_per_token).toBe(1);
   });
 
   test("a catalog fetch caches every model, not just the one asked for", async () => {

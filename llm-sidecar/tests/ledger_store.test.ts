@@ -19,7 +19,7 @@ import { daemonMadeLedger, haveDaemon, rowsIn } from "./support/ledger_fixture.t
 
 function fixedPricing(entry: ModelPricing): PricingEngine {
   const map = new Map<string, ModelPricing>([["anthropic/claude-opus-4.6", entry]]);
-  const store: PricingStore = { get: (id) => map.get(id), put: () => {} };
+  const store: PricingStore = { get: (id) => map.get(id), put: () => {}, clear: () => map.clear() };
   return new PricingEngine(store, async () => {
     throw new Error("no network in tests");
   });

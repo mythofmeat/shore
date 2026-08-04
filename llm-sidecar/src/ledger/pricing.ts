@@ -138,6 +138,8 @@ export type CatalogFetch = (url: string) => Promise<Response>;
 export interface PricingStore {
   get(modelId: string): ModelPricing | undefined;
   put(modelId: string, pricing: ModelPricing): void;
+  /** Forget every cached price. `shore usage --refresh-pricing` is the caller. */
+  clear(): void;
 }
 
 /**
@@ -178,15 +180,19 @@ export class PricingEngine {
   }
 
   /**
-   * Drop the in-memory catalog so the next lookup re-reads the store.
+   * Empty both caches, so the next lookup fetches the catalog again.
    *
-   * `shore usage --refresh-pricing` empties the `pricing` table from the daemon,
-   * which is the only copy the daemon has. This process keeps its own memory in
-   * front of that table, and it survives the delete — a refresh that did not
-   * reach here would clear the store and go on pricing calls from the stale
-   * catalog it already read, for the life of the sidecar. See `usage.ts`.
+   * The table first and the memory second, which is the only order that holds
+   * under a concurrent read: clearing memory first leaves a window where a
+   * lookup can repopulate it from the rows that are about to be deleted.
+   *
+   * This was two methods in two processes — the daemon deleted the table, and
+   * the sidecar dropped the memory it kept in front of that table when the
+   * `refresh_pricing` report reached it. Both halves are here now, and a
+   * refresh that ran only one of them was the bug that split them.
    */
-  clearMemory(): void {
+  clearCache(): void {
+    this.#store.clear();
     this.#memory.clear();
   }
 

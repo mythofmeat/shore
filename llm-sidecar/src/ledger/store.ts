@@ -427,5 +427,8 @@ export function sqlitePricingStore(db: Database): PricingStore {
         $at: new Date().toISOString(),
       });
     },
+    clear() {
+      db.run("DELETE FROM pricing");
+    },
   };
 }

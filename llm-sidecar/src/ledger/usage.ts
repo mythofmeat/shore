@@ -12,18 +12,17 @@
  * field for field, in the same order, and pinned by a parity fixture generated
  * from the Rust.
  *
- * Two things stay in the daemon:
+ * One thing stays with the command: **the `shore usage` argument vocabulary**,
+ * which is the CLI's protocol rather than the ledger's. `commands/usage.ts`
+ * takes the args as given and passes them through verbatim; which flag wins
+ * when several are set is decided here, in the order the Rust checked them.
  *
- *   - **`refresh_pricing`**, which empties the `pricing` table the daemon's own
- *     `PricingEngine` caches. It still runs there, and then calls in here with
- *     `refresh_pricing` so this process drops its in-memory catalog too. Before
- *     this endpoint existed, that second half did not happen: the table was
- *     emptied and the sidecar went on pricing calls from the copy it had already
- *     read. See {@link PricingEngine.clearMemory}.
- *   - **Choosing the mode.** The daemon still owns the `shore usage` argument
- *     vocabulary — it is the CLI's protocol, not the ledger's — and sends the
- *     args through verbatim. Which flag wins when several are set is decided
- *     here, in the order the Rust checked them.
+ * `refresh_pricing` used to be split across the two processes — the daemon
+ * emptied the `pricing` table and this side dropped the memory in front of it —
+ * and the two halves ran under different conditions, so `--budget
+ * --refresh-pricing` cleared one and not the other. It is one call in
+ * {@link PricingEngine.clearCache} now, made by the command before it asks for
+ * any report at all.
  */
 
 import type { Database } from "bun:sqlite";
@@ -290,10 +289,9 @@ export async function usageReport(
     return anomaliesPayload(db, filter, last, timezone, opts, now);
   }
   if (flag(args, "refresh_pricing")) {
-    // The daemon has already emptied the `pricing` table; drop the copy of it
-    // this process is holding so the next call reprices from an empty catalog
-    // rather than from what it read before the refresh.
-    ledger.pricing.clearMemory();
+    // The clearing happened in `commands/usage.ts`, before this ran and whatever
+    // else the args asked for. This arm is the mode's place in the precedence
+    // chain and the answer it gives when it wins.
     return { mode: "refresh_pricing" };
   }
   if (flag(args, "recalculate")) {
@@ -539,6 +537,18 @@ export function modelHistory(request: ModelHistoryRequest): unknown {
       character: request.character,
     }),
   };
+}
+
+/**
+ * Empty the pricing caches in front of the ledger at `path`.
+ *
+ * Exported for `commands/usage.ts`, which runs it before any report — see the
+ * module note on why `refresh_pricing` clears from there and not from its own
+ * arm of the mode chain. Throws what every other entry point here throws when
+ * the ledger will not open.
+ */
+export function clearPricingCache(path: string): void {
+  openOrThrow(path).pricing.clearCache();
 }
 
 function openOrThrow(path: string): Ledger {
