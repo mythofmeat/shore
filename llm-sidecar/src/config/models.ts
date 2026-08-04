@@ -1244,3 +1244,42 @@ function readImageGenSettings(table: Record<string, unknown>): ParseResult<Image
   }
   return { ok: out };
 }
+
+/**
+ * `ResolvedModel` as serde wrote it, for the command surface that ships one to
+ * a client.
+ *
+ * Not {@link toRequestModel}, and the differences are deliberate rather than
+ * incidental: this writes **every** field, spelling absent as `null` where the
+ * request builder omits it, and it carries `replay_prior_thinking`, which the
+ * request builder drops because the wire takes the replay policy as a separate
+ * argument. Field order follows the Rust struct so a diff against a recorded
+ * payload reads in the same order as the declaration.
+ */
+export function resolvedModelToWire(model: ResolvedModel): Record<string, unknown> {
+  const or = <T>(v: T | undefined): T | null => v ?? null;
+  return {
+    name: model.name,
+    qualified_name: model.qualifiedName,
+    category: model.category,
+    provider_key: model.providerKey,
+    sdk: model.sdk,
+    model_id: model.modelId,
+    api_key_env: or(model.apiKeyEnv),
+    base_url: or(model.baseUrl),
+    max_context_tokens: or(model.maxContextTokens),
+    max_output_tokens: or(model.maxOutputTokens),
+    temperature: or(model.temperature),
+    top_p: or(model.topP),
+    reasoning_effort: or(model.reasoningEffort),
+    budget_tokens: or(model.budgetTokens),
+    cache_ttl: or(model.cacheTtl),
+    cache_keepalive: or(keepaliveString(model.cacheKeepalive)),
+    openrouter_provider: or(model.openrouterProvider),
+    gemini_generation: or(model.geminiGeneration),
+    zai_clear_thinking: or(model.zaiClearThinking),
+    zai_subscription: or(model.zaiSubscription),
+    replay_prior_thinking: or(model.replayPriorThinking),
+    max_tool_iterations: or(model.maxToolIterations),
+  };
+}
