@@ -835,13 +835,95 @@ export function resolveChatModelForCharacter(
   character: string,
   findEffective: FindEffectiveModel,
 ): ResolvedModel | undefined {
+  const { global, charPrefs, resolved } = activeSelection(
+    config,
+    character,
+    findEffective,
+    "resolve_chat_model",
+  );
+  if (resolved === undefined) return undefined;
+
+  // `resolved` as the static default, as the Rust had it. It changes nothing
+  // at this call site — the overlay goes straight back onto the model it was
+  // read from, and it sits at the lowest layer — but callers here want one
+  // merged model and never see the overlay, so there is nothing to gain by
+  // dropping it. `resolveActiveModelAndOverlay`, which returns the overlay,
+  // does gain something and passes `undefined`.
+  const overlay = resolveSamplerSettings(
+    global,
+    charPrefs,
+    resolved.providerKey,
+    resolved.modelId,
+    resolved,
+  );
+  return applySamplerOverlay(resolved, overlay);
+}
+
+/**
+ * The active model for a chat turn, and its overlay, kept apart.
+ *
+ * Ported from `resolve_active_model_and_overlay` in
+ * `crates/daemon/src/handler/mod.rs`. The pair goes straight to
+ * `resolveGenerationModel` in `handler/setup.ts`, which decides what to do
+ * when there is no model and applies the overlay itself.
+ *
+ * Same chain as {@link resolveChatModelForCharacter} — that is why they share
+ * {@link activeSelection} — and it differs in exactly one argument: the static
+ * default is `undefined`, so the overlay carries *only* what preferences say.
+ *
+ * The catalog's own values would change no field, since the overlay is applied
+ * to the model they came from and they sit at the lowest layer. What they would
+ * change is whether the overlay is *empty*, because
+ * {@link samplerFromResolvedModel} always contributes `sdk` — and emptiness is
+ * read twice. It is what lets the request keep the catalog entry itself as its
+ * model instead of a copy, and it is what the generation log means by an
+ * overlay being active. Fold the catalog in and both are true forever.
+ */
+export function resolveActiveModelAndOverlay(
+  config: LoadedConfigView,
+  character: string,
+  findEffective: FindEffectiveModel,
+): { model: ResolvedModel | undefined; overlay: SamplerSettings } {
+  const { global, charPrefs, resolved } = activeSelection(
+    config,
+    character,
+    findEffective,
+    "resolve_active_model",
+  );
+  if (resolved === undefined) return { model: undefined, overlay: {} };
+
+  return {
+    model: resolved,
+    overlay: resolveSamplerSettings(
+      global,
+      charPrefs,
+      resolved.providerKey,
+      resolved.modelId,
+      undefined,
+    ),
+  };
+}
+
+/**
+ * The preferences a character resolves under, and the model they select.
+ *
+ * A preferences file that cannot be read is a warning and empty defaults, not
+ * a failure: it would otherwise take a character's chat down over a file that
+ * only holds overrides, and the chain below still has four more steps.
+ */
+function activeSelection(
+  config: LoadedConfigView,
+  character: string,
+  findEffective: FindEffectiveModel,
+  op: string,
+): { global: ModelPreferences; charPrefs: ModelPreferences; resolved: ResolvedModel | undefined } {
   let global = emptyPreferences();
   let charPrefs = emptyPreferences();
   try {
     [global, charPrefs] = loadForCharacter(config.dirs.data, character);
   } catch (e) {
     console.warn(
-      `shore: preferences load failed for ${character} (resolve_chat_model); ` +
+      `shore: preferences load failed for ${character} (${op}); ` +
         `using empty defaults: ${(e as Error).message}`,
     );
   }
@@ -855,16 +937,7 @@ export function resolveChatModelForCharacter(
     config.app.defaults.model,
     findEffective,
   );
-  if (resolved === undefined) return undefined;
-
-  const overlay = resolveSamplerSettings(
-    global,
-    charPrefs,
-    resolved.providerKey,
-    resolved.modelId,
-    resolved,
-  );
-  return applySamplerOverlay(resolved, overlay);
+  return { global, charPrefs, resolved };
 }
 
 

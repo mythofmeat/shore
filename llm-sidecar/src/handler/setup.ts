@@ -66,6 +66,10 @@ export class NoModelError extends Error {
  * Resolve the model this generation runs on, and apply any per-model sampler
  * overlay.
  *
+ * `activeModel` and `overlay` are the pair `resolveActiveModelAndOverlay` returns
+ * — kept apart there rather than merged, so the overlay reaching
+ * {@link applySamplerOverlay} here holds only what preferences set.
+ *
  * `activeModel` is the model preference resolution already picked, and it is
  * passed through rather than re-resolved on purpose: a discovered-only model has
  * a synthetic `chat.<provider>.<model_id>` qualified name that
