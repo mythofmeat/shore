@@ -1,0 +1,1074 @@
+{
+  "_generated_by": "crates/daemon/src/handler/gen_turn_fixture.rs at 9023b46d (uncommitted), driving the real append_user_turn, ensure_and_backfill_autonomy, context_tokens_for and emit_post_persist_stream_end",
+  "_note": "FROZEN. Driven against the real append_user_turn, ensure_and_backfill_autonomy, context_tokens_for and emit_post_persist_stream_end in a worktree at 9023b46d. Nothing regenerates this; a later diff is a defect. Generated under TZ=America/New_York; the replay passes that zone explicitly. Normalisation, in the OUTPUTS only: a `msg_id` is replaced by <minted_id> only when it parses as `m_<uuid v4>` (a seeded id is part of the case and is left alone, so 'the last message' and 'the first' stay distinguishable); a `timestamp` only when it is within 60s of this run's clock; an attachment `path` keeps its filename as `<attachment>/<filename>`, dropping the per-run temp root and the `<YYYYmmdd_HHMMSS>_` stamp. One real sample of each is under `_observed`. The backfill cases' INPUT timestamps are not normalised at all: they are what those cases vary. `generated_at` is the single clock reading every relative timestamp was derived from. Not covered, deliberately: the exact 90-day cutoff boundary. `ensure_and_backfill_autonomy` reads `Local::now()` itself, so its cutoff is always milliseconds later than any timestamp this generator can compute, and a case claiming to sit on the boundary would freeze whichever side of that skew the run happened to land on.",
+  "timezone": "America/New_York",
+  "generated_at": "2026-08-04T11:24:40.586049067-04:00",
+  "append_user_turn": [
+    {
+      "name": "a plain text turn is appended and broadcast",
+      "note": "the baseline: one text block, origin user_input on the wire but not on disk, and the revision advances",
+      "input": {
+        "history": [],
+        "body": {
+          "text": "hello",
+          "stream": true,
+          "images": []
+        },
+        "note_paths": "legacy image paths are rewritten to absolute temp paths before the call",
+        "regen": false
+      },
+      "output": {
+        "regen_alt": null,
+        "engine_messages": [
+          {
+            "msg_id": "<minted_id>",
+            "role": "user",
+            "content": "hello",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "hello"
+              }
+            ],
+            "timestamp": "<minted_timestamp>"
+          }
+        ],
+        "revision": 1,
+        "events": [
+          {
+            "type": "new_message",
+            "revision": 1,
+            "character": "ada",
+            "msg_id": "<minted_id>",
+            "role": "user",
+            "content": "hello",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "hello"
+              }
+            ],
+            "timestamp": "<minted_timestamp>",
+            "origin": "user_input"
+          }
+        ]
+      },
+      "_observed": {
+        "msg_id": "m_aa024007-3495-4c6b-8e18-8db5ca805175",
+        "timestamp": "2026-08-04T11:24:40.587961183-04:00"
+      }
+    },
+    {
+      "name": "an image-only turn carries no empty text block",
+      "note": "an empty text block persists into history and later fails an Anthropic request when a cache breakpoint lands on it \u2014 cache_control cannot be set for empty text blocks. The turn is content_blocks-empty and image-bearing, which is the shape the wire builder has to recognise later",
+      "input": {
+        "history": [],
+        "body": {
+          "text": "",
+          "stream": true,
+          "images": [
+            "red.png"
+          ]
+        },
+        "note_paths": "legacy image paths are rewritten to absolute temp paths before the call",
+        "regen": false
+      },
+      "output": {
+        "regen_alt": null,
+        "engine_messages": [
+          {
+            "msg_id": "<minted_id>",
+            "role": "user",
+            "content": "",
+            "images": [
+              {
+                "path": "<attachment>/red.png"
+              }
+            ],
+            "content_blocks": [],
+            "timestamp": "<minted_timestamp>"
+          }
+        ],
+        "revision": 1,
+        "events": [
+          {
+            "type": "new_message",
+            "revision": 1,
+            "character": "ada",
+            "msg_id": "<minted_id>",
+            "role": "user",
+            "content": "",
+            "images": [
+              {
+                "path": "<attachment>/red.png",
+                "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+              }
+            ],
+            "content_blocks": [],
+            "timestamp": "<minted_timestamp>",
+            "origin": "user_input"
+          }
+        ]
+      },
+      "_observed": {
+        "msg_id": "m_86ceaa9d-6e40-4e0a-ac4e-c00f6108e4b4",
+        "timestamp": "2026-08-04T11:24:40.589403460-04:00"
+      }
+    },
+    {
+      "name": "text plus an image keeps the image out of the content blocks",
+      "note": "ingest_images returns an empty block list \u2014 the attachment travels in `images` and the text block is the only content block, so the persisted turn has both without the image being inlined twice",
+      "input": {
+        "history": [],
+        "body": {
+          "text": "look",
+          "stream": true,
+          "images": [
+            "red.png"
+          ]
+        },
+        "note_paths": "legacy image paths are rewritten to absolute temp paths before the call",
+        "regen": false
+      },
+      "output": {
+        "regen_alt": null,
+        "engine_messages": [
+          {
+            "msg_id": "<minted_id>",
+            "role": "user",
+            "content": "look",
+            "images": [
+              {
+                "path": "<attachment>/red.png"
+              }
+            ],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "look"
+              }
+            ],
+            "timestamp": "<minted_timestamp>"
+          }
+        ],
+        "revision": 1,
+        "events": [
+          {
+            "type": "new_message",
+            "revision": 1,
+            "character": "ada",
+            "msg_id": "<minted_id>",
+            "role": "user",
+            "content": "look",
+            "images": [
+              {
+                "path": "<attachment>/red.png",
+                "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+              }
+            ],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "look"
+              }
+            ],
+            "timestamp": "<minted_timestamp>",
+            "origin": "user_input"
+          }
+        ]
+      },
+      "_observed": {
+        "msg_id": "m_b7efdbb0-e906-4653-b94e-7c76fa96d75b",
+        "timestamp": "2026-08-04T11:24:40.590694997-04:00"
+      }
+    },
+    {
+      "name": "an empty body appends nothing",
+      "note": "no text, no images, no image_data \u2014 there is no turn to record and no frame to emit",
+      "input": {
+        "history": [
+          {
+            "msg_id": "m_seed_earlier",
+            "role": "user",
+            "content": "earlier",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "earlier"
+              }
+            ],
+            "timestamp": "2026-01-01T10:00:00-05:00"
+          }
+        ],
+        "body": {
+          "text": "",
+          "stream": true,
+          "images": []
+        },
+        "note_paths": "legacy image paths are rewritten to absolute temp paths before the call",
+        "regen": false
+      },
+      "output": {
+        "regen_alt": null,
+        "engine_messages": [
+          {
+            "msg_id": "m_seed_earlier",
+            "role": "user",
+            "content": "earlier",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "earlier"
+              }
+            ],
+            "timestamp": "2026-01-01T10:00:00-05:00"
+          }
+        ],
+        "revision": 0,
+        "events": []
+      },
+      "_observed": {
+        "msg_id": "m_seed_earlier",
+        "timestamp": "2026-01-01T10:00:00-05:00"
+      }
+    },
+    {
+      "name": "a regen returns the pending alternatives and appends nothing",
+      "note": "the body is ignored entirely on a regen \u2014 even a non-empty one \u2014 because the user turn it would append is already there",
+      "input": {
+        "history": [
+          {
+            "msg_id": "m_seed_question",
+            "role": "user",
+            "content": "question",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "question"
+              }
+            ],
+            "timestamp": "2026-01-01T10:00:00-05:00"
+          },
+          {
+            "msg_id": "m_seed_first answer",
+            "role": "assistant",
+            "content": "first answer",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "first answer"
+              }
+            ],
+            "timestamp": "2026-01-01T10:00:01-05:00"
+          }
+        ],
+        "body": {
+          "text": "ignored",
+          "stream": true,
+          "images": []
+        },
+        "note_paths": "legacy image paths are rewritten to absolute temp paths before the call",
+        "regen": true
+      },
+      "output": {
+        "regen_alt": [
+          {
+            "content": "first answer",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "first answer"
+              }
+            ],
+            "timestamp": "2026-01-01T10:00:01-05:00"
+          }
+        ],
+        "engine_messages": [
+          {
+            "msg_id": "m_seed_question",
+            "role": "user",
+            "content": "question",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "question"
+              }
+            ],
+            "timestamp": "2026-01-01T10:00:00-05:00"
+          },
+          {
+            "msg_id": "m_seed_first answer",
+            "role": "assistant",
+            "content": "first answer",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "first answer"
+              }
+            ],
+            "timestamp": "2026-01-01T10:00:01-05:00"
+          }
+        ],
+        "revision": 0,
+        "events": []
+      },
+      "_observed": {
+        "msg_id": "m_seed_first answer",
+        "timestamp": "2026-01-01T10:00:01-05:00"
+      }
+    },
+    {
+      "name": "a regen with no prior assistant turn yields empty alternatives",
+      "note": "pending_regen_alt is None, and the fallback is an empty alternatives list rather than None \u2014 persistence distinguishes the two",
+      "input": {
+        "history": [
+          {
+            "msg_id": "m_seed_question",
+            "role": "user",
+            "content": "question",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "question"
+              }
+            ],
+            "timestamp": "2026-01-01T10:00:00-05:00"
+          }
+        ],
+        "body": {
+          "text": "",
+          "stream": true,
+          "images": []
+        },
+        "note_paths": "legacy image paths are rewritten to absolute temp paths before the call",
+        "regen": true
+      },
+      "output": {
+        "regen_alt": [],
+        "engine_messages": [
+          {
+            "msg_id": "m_seed_question",
+            "role": "user",
+            "content": "question",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "question"
+              }
+            ],
+            "timestamp": "2026-01-01T10:00:00-05:00"
+          }
+        ],
+        "revision": 0,
+        "events": []
+      },
+      "_observed": {
+        "msg_id": "m_seed_question",
+        "timestamp": "2026-01-01T10:00:00-05:00"
+      }
+    },
+    {
+      "name": "inline image_data alone counts as content",
+      "note": "the empty-body check reads all three fields; image_data on its own must not be mistaken for an empty turn",
+      "input": {
+        "history": [],
+        "body": {
+          "text": "",
+          "stream": true,
+          "images": [],
+          "image_data": [
+            {
+              "filename": "inline.png",
+              "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+            }
+          ]
+        },
+        "note_paths": "legacy image paths are rewritten to absolute temp paths before the call",
+        "regen": false
+      },
+      "output": {
+        "regen_alt": null,
+        "engine_messages": [
+          {
+            "msg_id": "<minted_id>",
+            "role": "user",
+            "content": "",
+            "images": [
+              {
+                "path": "<attachment>/inline.png"
+              }
+            ],
+            "content_blocks": [],
+            "timestamp": "<minted_timestamp>"
+          }
+        ],
+        "revision": 1,
+        "events": [
+          {
+            "type": "new_message",
+            "revision": 1,
+            "character": "ada",
+            "msg_id": "<minted_id>",
+            "role": "user",
+            "content": "",
+            "images": [
+              {
+                "path": "<attachment>/inline.png",
+                "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+              }
+            ],
+            "content_blocks": [],
+            "timestamp": "<minted_timestamp>",
+            "origin": "user_input"
+          }
+        ]
+      },
+      "_observed": {
+        "msg_id": "m_272e3338-d476-4a4d-a4cd-a35a75e54aa4",
+        "timestamp": "2026-08-04T11:24:40.595408472-04:00"
+      }
+    },
+    {
+      "name": "inline uploads win and legacy paths are ignored entirely",
+      "note": "not a merge \u2014 `ingest_images` only walks the legacy list when `image_data` is empty, so a client that sends both gets one attachment, not two",
+      "input": {
+        "history": [],
+        "body": {
+          "text": "both",
+          "stream": true,
+          "images": [
+            "red.png"
+          ],
+          "image_data": [
+            {
+              "filename": "inline.png",
+              "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+            }
+          ]
+        },
+        "note_paths": "legacy image paths are rewritten to absolute temp paths before the call",
+        "regen": false
+      },
+      "output": {
+        "regen_alt": null,
+        "engine_messages": [
+          {
+            "msg_id": "<minted_id>",
+            "role": "user",
+            "content": "both",
+            "images": [
+              {
+                "path": "<attachment>/inline.png"
+              }
+            ],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "both"
+              }
+            ],
+            "timestamp": "<minted_timestamp>"
+          }
+        ],
+        "revision": 1,
+        "events": [
+          {
+            "type": "new_message",
+            "revision": 1,
+            "character": "ada",
+            "msg_id": "<minted_id>",
+            "role": "user",
+            "content": "both",
+            "images": [
+              {
+                "path": "<attachment>/inline.png",
+                "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+              }
+            ],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "both"
+              }
+            ],
+            "timestamp": "<minted_timestamp>",
+            "origin": "user_input"
+          }
+        ]
+      },
+      "_observed": {
+        "msg_id": "m_afc63349-c194-4d22-9c0e-bdd0c818f266",
+        "timestamp": "2026-08-04T11:24:40.596635460-04:00"
+      }
+    },
+    {
+      "name": "whitespace-only text still gets a text block",
+      "note": "the emptiness check is `is_empty()`, not a trim \u2014 a turn of spaces is a turn the user sent, and the block it carries is not the empty block the cache-breakpoint rule is about",
+      "input": {
+        "history": [],
+        "body": {
+          "text": "   ",
+          "stream": true,
+          "images": []
+        },
+        "note_paths": "legacy image paths are rewritten to absolute temp paths before the call",
+        "regen": false
+      },
+      "output": {
+        "regen_alt": null,
+        "engine_messages": [
+          {
+            "msg_id": "<minted_id>",
+            "role": "user",
+            "content": "   ",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "   "
+              }
+            ],
+            "timestamp": "<minted_timestamp>"
+          }
+        ],
+        "revision": 1,
+        "events": [
+          {
+            "type": "new_message",
+            "revision": 1,
+            "character": "ada",
+            "msg_id": "<minted_id>",
+            "role": "user",
+            "content": "   ",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "   "
+              }
+            ],
+            "timestamp": "<minted_timestamp>",
+            "origin": "user_input"
+          }
+        ]
+      },
+      "_observed": {
+        "msg_id": "m_51e21a6f-1366-407a-bfa2-fbd14968b517",
+        "timestamp": "2026-08-04T11:24:40.597818234-04:00"
+      }
+    }
+  ],
+  "ensure_and_backfill_autonomy": [
+    {
+      "name": "recent user turns are collected, old ones are not",
+      "note": "the cutoff is 90 days before now; a turn at 120 days is dropped and one at 89 days is kept",
+      "input": {
+        "active": [
+          {
+            "msg_id": "m_seed_recent",
+            "role": "user",
+            "content": "recent",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "recent"
+              }
+            ],
+            "timestamp": "2026-08-01T11:24:40.586049067-04:00"
+          },
+          {
+            "msg_id": "m_seed_ancient",
+            "role": "user",
+            "content": "ancient",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "ancient"
+              }
+            ],
+            "timestamp": "2026-04-06T11:24:40.586049067-04:00"
+          },
+          {
+            "msg_id": "m_seed_edge",
+            "role": "user",
+            "content": "edge",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "edge"
+              }
+            ],
+            "timestamp": "2026-05-07T11:24:40.586049067-04:00"
+          }
+        ],
+        "archived": [],
+        "state_exists": false,
+        "now": "2026-08-04T11:24:40.586049067-04:00"
+      },
+      "output": {
+        "backfill_calls": [
+          {
+            "character": "ada",
+            "timestamps": [
+              "2026-08-01 11:24:40.586049067",
+              "2026-05-07 11:24:40.586049067"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "assistant turns are not activity",
+      "note": "only user turns count \u2014 the tracker models when the user was present",
+      "input": {
+        "active": [
+          {
+            "msg_id": "m_seed_mine",
+            "role": "user",
+            "content": "mine",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "mine"
+              }
+            ],
+            "timestamp": "2026-08-01T11:24:40.586049067-04:00"
+          },
+          {
+            "msg_id": "m_seed_theirs",
+            "role": "assistant",
+            "content": "theirs",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "theirs"
+              }
+            ],
+            "timestamp": "2026-08-01T11:24:40.586049067-04:00"
+          }
+        ],
+        "archived": [],
+        "state_exists": false,
+        "now": "2026-08-04T11:24:40.586049067-04:00"
+      },
+      "output": {
+        "backfill_calls": [
+          {
+            "character": "ada",
+            "timestamps": [
+              "2026-08-01 11:24:40.586049067"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a tool-result-only user turn is not activity either",
+      "note": "the tool loop writes user-role turns carrying nothing but tool_result blocks; counting them would make a long tool loop look like a busy user",
+      "input": {
+        "active": [
+          {
+            "msg_id": "m_seed_mine",
+            "role": "user",
+            "content": "mine",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "mine"
+              }
+            ],
+            "timestamp": "2026-08-01T11:24:40.586049067-04:00"
+          },
+          {
+            "msg_id": "m_seed_",
+            "role": "user",
+            "content": "",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "tool_result",
+                "tool_use_id": "toolu_1",
+                "content": "ok",
+                "is_error": false
+              }
+            ],
+            "timestamp": "2026-08-01T11:24:40.586049067-04:00"
+          }
+        ],
+        "archived": [],
+        "state_exists": false,
+        "now": "2026-08-04T11:24:40.586049067-04:00"
+      },
+      "output": {
+        "backfill_calls": [
+          {
+            "character": "ada",
+            "timestamps": [
+              "2026-08-01 11:24:40.586049067"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "archived segments are collected too",
+      "note": "the live window is the tail; a character with history has most of its activity in segments, and seeding from the tail alone would report a quiet user",
+      "input": {
+        "active": [
+          {
+            "msg_id": "m_seed_live",
+            "role": "user",
+            "content": "live",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "live"
+              }
+            ],
+            "timestamp": "2026-08-01T11:24:40.586049067-04:00"
+          }
+        ],
+        "archived": [
+          {
+            "msg_id": "m_seed_archived",
+            "role": "user",
+            "content": "archived",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "archived"
+              }
+            ],
+            "timestamp": "2026-07-05T11:24:40.586049067-04:00"
+          }
+        ],
+        "state_exists": false,
+        "now": "2026-08-04T11:24:40.586049067-04:00"
+      },
+      "output": {
+        "backfill_calls": [
+          {
+            "character": "ada",
+            "timestamps": [
+              "2026-08-01 11:24:40.586049067",
+              "2026-07-05 11:24:40.586049067"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "an existing autonomy state is left alone",
+      "note": "backfill runs once, when the state is first created; re-running it on every turn would double-count",
+      "input": {
+        "active": [
+          {
+            "msg_id": "m_seed_recent",
+            "role": "user",
+            "content": "recent",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "recent"
+              }
+            ],
+            "timestamp": "2026-08-01T11:24:40.586049067-04:00"
+          }
+        ],
+        "archived": [],
+        "state_exists": true,
+        "now": "2026-08-04T11:24:40.586049067-04:00"
+      },
+      "output": {
+        "backfill_calls": []
+      }
+    },
+    {
+      "name": "no qualifying timestamps means no backfill call at all",
+      "note": "an empty list is not passed down \u2014 the tracker is left untouched rather than seeded with nothing",
+      "input": {
+        "active": [
+          {
+            "msg_id": "m_seed_ancient",
+            "role": "user",
+            "content": "ancient",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "ancient"
+              }
+            ],
+            "timestamp": "2026-04-06T11:24:40.586049067-04:00"
+          }
+        ],
+        "archived": [],
+        "state_exists": false,
+        "now": "2026-08-04T11:24:40.586049067-04:00"
+      },
+      "output": {
+        "backfill_calls": []
+      }
+    },
+    {
+      "name": "an unparseable timestamp is skipped",
+      "note": "a hand-edited or pre-RFC3339 history must not abort the backfill for the turns around it",
+      "input": {
+        "active": [
+          {
+            "msg_id": "m_seed_good",
+            "role": "user",
+            "content": "good",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "good"
+              }
+            ],
+            "timestamp": "2026-08-01T11:24:40.586049067-04:00"
+          },
+          {
+            "msg_id": "m_seed_bad",
+            "role": "user",
+            "content": "bad",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "bad"
+              }
+            ],
+            "timestamp": "not a timestamp"
+          }
+        ],
+        "archived": [],
+        "state_exists": false,
+        "now": "2026-08-04T11:24:40.586049067-04:00"
+      },
+      "output": {
+        "backfill_calls": [
+          {
+            "character": "ada",
+            "timestamps": [
+              "2026-08-01 11:24:40.586049067"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "context_tokens": [
+    {
+      "name": "all three sources add up",
+      "note": "the gate compares against the whole prompt, and a cached prompt still occupies the context window \u2014 counting only input_tokens would never fire on a warm cache",
+      "input": {
+        "input_tokens": 1000,
+        "cache_read_tokens": 20000,
+        "cache_creation_tokens": 500
+      },
+      "output": {
+        "context_tokens": 21500
+      }
+    },
+    {
+      "name": "a cold call has no cache components",
+      "note": "the common first turn",
+      "input": {
+        "input_tokens": 5000,
+        "cache_read_tokens": 0,
+        "cache_creation_tokens": 0
+      },
+      "output": {
+        "context_tokens": 5000
+      }
+    },
+    {
+      "name": "a fully cached call is almost all cache_read",
+      "note": "the case that motivates including it: input_tokens is tiny and the context is large",
+      "input": {
+        "input_tokens": 12,
+        "cache_read_tokens": 180000,
+        "cache_creation_tokens": 0
+      },
+      "output": {
+        "context_tokens": 180012
+      }
+    },
+    {
+      "name": "the sum saturates rather than wrapping",
+      "note": "u64 counts are cast to usize and added saturating; a nonsense provider number must not wrap to a small one and silently disable compaction",
+      "input": {
+        "input_tokens": 18446744073709551615,
+        "cache_read_tokens": 18446744073709551615,
+        "cache_creation_tokens": 18446744073709551615
+      },
+      "output": {
+        "context_tokens": 18446744073709551615
+      }
+    }
+  ],
+  "emit_post_persist_stream_end": [
+    {
+      "name": "the frame carries the last message's id and the current revision",
+      "note": "clients use these to attach the finished turn to what they already rendered",
+      "input": {
+        "history": [
+          {
+            "msg_id": "m_seed_q",
+            "role": "user",
+            "content": "q",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "q"
+              }
+            ],
+            "timestamp": "2026-01-01T10:00:00-05:00"
+          },
+          {
+            "msg_id": "m_seed_a",
+            "role": "assistant",
+            "content": "a",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "a"
+              }
+            ],
+            "timestamp": "2026-01-01T10:00:01-05:00"
+          }
+        ],
+        "rid": "r-1"
+      },
+      "output": {
+        "direct": [
+          {
+            "type": "stream_end",
+            "rid": "r-1",
+            "msg_id": "m_seed_a",
+            "revision": 0,
+            "content": "answer",
+            "metadata": {
+              "tokens": {
+                "input": 0,
+                "output": 0,
+                "cache_read": 0,
+                "cache_write": 0
+              },
+              "timing": {
+                "total_ms": 0,
+                "ttft_ms": 0
+              },
+              "model": "test-model"
+            },
+            "finish_reason": "stop",
+            "is_final": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "an empty conversation sends no message id",
+      "note": "there is nothing to attach to; the revision is still reported",
+      "input": {
+        "history": [],
+        "rid": "r-2"
+      },
+      "output": {
+        "direct": [
+          {
+            "type": "stream_end",
+            "rid": "r-2",
+            "revision": 0,
+            "content": "answer",
+            "metadata": {
+              "tokens": {
+                "input": 0,
+                "output": 0,
+                "cache_read": 0,
+                "cache_write": 0
+              },
+              "timing": {
+                "total_ms": 0,
+                "ttft_ms": 0
+              },
+              "model": "test-model"
+            },
+            "finish_reason": "stop",
+            "is_final": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "no rid still emits",
+      "note": "an autonomous generation has no request to attribute the frame to",
+      "input": {
+        "history": [
+          {
+            "msg_id": "m_seed_a",
+            "role": "assistant",
+            "content": "a",
+            "images": [],
+            "content_blocks": [
+              {
+                "type": "text",
+                "text": "a"
+              }
+            ],
+            "timestamp": "2026-01-01T10:00:01-05:00"
+          }
+        ],
+        "rid": null
+      },
+      "output": {
+        "direct": [
+          {
+            "type": "stream_end",
+            "msg_id": "m_seed_a",
+            "revision": 0,
+            "content": "answer",
+            "metadata": {
+              "tokens": {
+                "input": 0,
+                "output": 0,
+                "cache_read": 0,
+                "cache_write": 0
+              },
+              "timing": {
+                "total_ms": 0,
+                "ttft_ms": 0
+              },
+              "model": "test-model"
+            },
+            "finish_reason": "stop",
+            "is_final": true
+          }
+        ]
+      }
+    }
+  ]
+}

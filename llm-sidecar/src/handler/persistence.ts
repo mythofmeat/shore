@@ -325,7 +325,12 @@ async function emitUsageBudgetWarnings(ctx: PersistContext, rid: string | undefi
   }
 }
 
-function emitNewMessageEvent(
+/**
+ * Emit one `new_message`, with the origin the wire copy carries and the stored
+ * copy does not. Shared with the turn driver, which announces the *user* turn
+ * the same way this announces the assistant's.
+ */
+export function emitNewMessageEvent(
   emitEvent: (message: ServerMessage) => void,
   character: string,
   origin: MessageOrigin,
