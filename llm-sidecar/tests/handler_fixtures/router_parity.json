@@ -1,0 +1,413 @@
+{
+  "_generated_by": "crates/daemon/src/handler/gen_router_fixture.rs at 9023b46d (uncommitted), driving the real MessageHandler plus with_rid, the rid filter and the Regen normalisation",
+  "_note": "FROZEN. Driven against the real MessageHandler in a worktree at 9023b46d, through the same harness handler/tests.rs uses. Nothing regenerates this; a later diff is a defect. `routed` drives handle_routed_message / handle_engine_message and records the frames a session received plus whether a generation is running, read off the handler's own session state. `with_rid`, `rid_filter` and `regen_body` are the pure decisions those paths make, driven directly. The two rid cases read `first_frame_rid` off the generation's opening stream_start, which is the only place the sanitised rid becomes observable without reaching an LLM; the replay reads the same decision off the params it hands its own generation. Deliberately not covered: a generation that runs to completion — handle_generation reaches an LLM. That is the right cut anyway: what this layer decides is whether to launch, who receives the stream, and what happens when one fails, not what a generation does. Also not covered: config hot-reload (HandlerControl / apply_reloaded_config), which drives the autonomy manager and the character registry's runtime reload, neither of them ported.",
+  "timezone": "America/New_York",
+  "routed": [
+    {
+      "name": "a cancel with nothing running sends no frame",
+      "note": "a second stream_end would make a client render an ending twice",
+      "input": {
+        "routed": "cancel",
+        "rid": "r1",
+        "running_before": false
+      },
+      "output": {
+        "frames": [],
+        "generation_running": false
+      }
+    },
+    {
+      "name": "a cancel ends the running generation with a cancelled stream_end",
+      "note": "the frame carries the CANCEL's rid, not the generation's",
+      "input": {
+        "routed": "message then cancel",
+        "message_rid": "r1",
+        "cancel_rid": "r2"
+      },
+      "output": {
+        "launched": true,
+        "lease_taken": true,
+        "cancel_frame": {
+          "type": "stream_end",
+          "rid": "r2",
+          "content": "",
+          "metadata": {
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "cache_read": 0,
+              "cache_write": 0
+            },
+            "timing": {
+              "total_ms": 0,
+              "ttft_ms": 0
+            },
+            "model": ""
+          },
+          "finish_reason": "cancelled",
+          "is_final": true
+        },
+        "generation_running": false
+      }
+    },
+    {
+      "name": "a regen launches without taking the lease",
+      "note": "the lease is a guess at where the human is sitting, and only typing proves it",
+      "input": {
+        "routed": "regen",
+        "rid": "r1"
+      },
+      "output": {
+        "generation_running": true,
+        "lease_taken": false
+      }
+    },
+    {
+      "name": "an unknown character is an error frame and no launch",
+      "note": "the rid rides on the error so the client knows which request failed",
+      "input": {
+        "routed": "message",
+        "selected_character": "Nobody",
+        "rid": "r1"
+      },
+      "output": {
+        "frames": [
+          {
+            "type": "error",
+            "rid": "r1",
+            "code": "invalid_request",
+            "message": "character \"Nobody\" not found (available: [\"Alice\"])"
+          }
+        ],
+        "generation_running": false
+      }
+    },
+    {
+      "name": "all clients disconnected cancels every session",
+      "note": "and clears the leases: a lease names a session, and there are none",
+      "input": {
+        "routed": "all_clients_disconnected",
+        "sessions": 2
+      },
+      "output": {
+        "running_before": [
+          true,
+          true
+        ],
+        "running_after": [
+          false,
+          false
+        ],
+        "leases_after": 0,
+        "last_frame_1": {
+          "type": "stream_end",
+          "content": "",
+          "metadata": {
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "cache_read": 0,
+              "cache_write": 0
+            },
+            "timing": {
+              "total_ms": 0,
+              "ttft_ms": 0
+            },
+            "model": ""
+          },
+          "finish_reason": "cancelled",
+          "is_final": true
+        },
+        "last_frame_2": {
+          "type": "stream_end",
+          "content": "",
+          "metadata": {
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "cache_read": 0,
+              "cache_write": 0
+            },
+            "timing": {
+              "total_ms": 0,
+              "ttft_ms": 0
+            },
+            "model": ""
+          },
+          "finish_reason": "cancelled",
+          "is_final": true
+        }
+      }
+    },
+    {
+      "name": "a hello on the engine path is ignored",
+      "note": "routing sends it elsewhere; the catch-all arm returns rather than erroring",
+      "input": {
+        "routed": "hello",
+        "rid": "r1"
+      },
+      "output": {
+        "frames": [],
+        "generation_running": false
+      }
+    },
+    {
+      "name": "a request from a vanished session launches nothing",
+      "note": "it asked, then hung up; there is nobody to stream to",
+      "input": {
+        "routed": "message",
+        "session_registered": false
+      },
+      "output": {
+        "generation_running": false
+      }
+    },
+    {
+      "name": "an ascii rid reaches the generation",
+      "note": "the ordinary case, and the control for the one below",
+      "input": {
+        "routed": "message",
+        "rid": "r-ok"
+      },
+      "output": {
+        "first_frame_rid": "r-ok"
+      }
+    },
+    {
+      "name": "a non-ascii rid is dropped before the generation sees it",
+      "note": "the frames still go out, they just carry no correlation id",
+      "input": {
+        "routed": "message",
+        "rid": "réq"
+      },
+      "output": {
+        "first_frame_rid": null
+      }
+    },
+    {
+      "name": "a second message supersedes the first on the same session",
+      "note": "one generation per session; the handle is replaced, not queued",
+      "input": {
+        "routed": "message, message",
+        "session": 1
+      },
+      "output": {
+        "generation_running": true
+      }
+    }
+  ],
+  "with_rid": [
+    {
+      "name": "the cancelled stream_end, with a rid",
+      "note": "zeroed rather than omitted: a cancel has to look like an ending or the client waits",
+      "input": {
+        "before": {
+          "type": "stream_end",
+          "content": "",
+          "metadata": {
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "cache_read": 0,
+              "cache_write": 0
+            },
+            "timing": {
+              "total_ms": 0,
+              "ttft_ms": 0
+            },
+            "model": ""
+          },
+          "finish_reason": "cancelled",
+          "is_final": true
+        },
+        "rid": "r1"
+      },
+      "output": {
+        "type": "stream_end",
+        "rid": "r1",
+        "content": "",
+        "metadata": {
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "cache_read": 0,
+            "cache_write": 0
+          },
+          "timing": {
+            "total_ms": 0,
+            "ttft_ms": 0
+          },
+          "model": ""
+        },
+        "finish_reason": "cancelled",
+        "is_final": true
+      }
+    },
+    {
+      "name": "the cancelled stream_end, with none",
+      "note": "`skip_serializing_if` leaves the field off rather than sending null",
+      "input": {
+        "before": {
+          "type": "stream_end",
+          "content": "",
+          "metadata": {
+            "tokens": {
+              "input": 0,
+              "output": 0,
+              "cache_read": 0,
+              "cache_write": 0
+            },
+            "timing": {
+              "total_ms": 0,
+              "ttft_ms": 0
+            },
+            "model": ""
+          },
+          "finish_reason": "cancelled",
+          "is_final": true
+        },
+        "rid": null
+      },
+      "output": {
+        "type": "stream_end",
+        "content": "",
+        "metadata": {
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "cache_read": 0,
+            "cache_write": 0
+          },
+          "timing": {
+            "total_ms": 0,
+            "ttft_ms": 0
+          },
+          "model": ""
+        },
+        "finish_reason": "cancelled",
+        "is_final": true
+      }
+    },
+    {
+      "name": "the character-resolution error",
+      "note": "invalid_request, and the message is the registry's own",
+      "input": {
+        "before": {
+          "type": "error",
+          "code": "invalid_request",
+          "message": "no such character"
+        },
+        "rid": "r1"
+      },
+      "output": {
+        "type": "error",
+        "rid": "r1",
+        "code": "invalid_request",
+        "message": "no such character"
+      }
+    },
+    {
+      "name": "a stream_start",
+      "note": "the same call site stamps a rid onto frames it did not mint",
+      "input": {
+        "before": {
+          "type": "stream_start",
+          "regen": false
+        },
+        "rid": "r1"
+      },
+      "output": {
+        "type": "stream_start",
+        "rid": "r1",
+        "regen": false
+      }
+    },
+    {
+      "name": "a frame with no rid field is untouched",
+      "note": "the variants without one are a list, and getting it wrong invents a key",
+      "input": {
+        "before": {
+          "type": "ping"
+        },
+        "rid": "r1"
+      },
+      "output": {
+        "type": "ping"
+      }
+    }
+  ],
+  "rid_filter": [
+    {
+      "name": "a plain ascii rid survives",
+      "note": "the ordinary case",
+      "input": "req-1",
+      "output": "req-1"
+    },
+    {
+      "name": "an empty rid survives",
+      "note": "empty is ascii and has no NUL; it is not absent",
+      "input": "",
+      "output": ""
+    },
+    {
+      "name": "an absent rid stays absent",
+      "note": "nothing to sanitise",
+      "input": null,
+      "output": null
+    },
+    {
+      "name": "a non-ascii rid is dropped",
+      "note": "a rid reaches log lines and a client's correlation table",
+      "input": "réq",
+      "output": null
+    },
+    {
+      "name": "an emoji rid is dropped",
+      "note": "beyond the BMP, so this also pins that the check is per code point",
+      "input": "r🙂",
+      "output": null
+    },
+    {
+      "name": "an embedded NUL is dropped",
+      "note": "NUL is ascii, so this is a second condition rather than a narrower range",
+      "input": "r\u00001",
+      "output": null
+    },
+    {
+      "name": "a DEL byte survives",
+      "note": "0x7F is the top of ascii and is not excluded",
+      "input": "r",
+      "output": "r"
+    }
+  ],
+  "regen_body": [
+    {
+      "name": "a regen with stream=true carries no user content",
+      "note": "only rid and stream survive; the turn it would append is already stored",
+      "input": {
+        "rid": "r1",
+        "stream": true
+      },
+      "output": {
+        "rid": "r1",
+        "text": "",
+        "stream": true,
+        "images": []
+      }
+    },
+    {
+      "name": "a regen with stream=false carries no user content",
+      "note": "only rid and stream survive; the turn it would append is already stored",
+      "input": {
+        "rid": "r1",
+        "stream": false
+      },
+      "output": {
+        "rid": "r1",
+        "text": "",
+        "stream": false,
+        "images": []
+      }
+    }
+  ]
+}
