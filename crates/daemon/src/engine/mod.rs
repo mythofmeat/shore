@@ -1,7 +1,6 @@
 pub(crate) mod atomic;
 pub mod segments;
 pub mod tool_loop;
-pub mod tools;
 
 use std::path::PathBuf;
 

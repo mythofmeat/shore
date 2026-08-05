@@ -247,7 +247,6 @@ async fn main() -> ExitCode {
         rid: Some(format!("live-reasoning-replay-{name}")),
         forensic_character: None,
         retain_long: false,
-        tool_rpc: None,
         max_tool_iterations: None,
         keepalive_interval: None,
     };

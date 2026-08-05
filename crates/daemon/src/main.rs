@@ -576,28 +576,11 @@ async fn build_llm_client(
             "LLM sidecar transport enabled"
         );
 
-        // The reverse direction: a sidecar-driven tool loop calls back here to
-        // run each tool, because the executors live on this side. Failing to
-        // bind is not fatal — without it no loop registers, so every request
-        // keeps the daemon's own tool loop.
-        let tool_socket = shore_daemon::tool_rpc::socket_path_for(socket_path);
-        match shore_daemon::tool_rpc::bind(&tool_socket).await {
-            Ok(listener) => {
-                let registry = Arc::new(shore_daemon::tool_rpc::ToolRpcRegistry::new());
-                raw_llm_client.set_tool_rpc(Arc::clone(&registry));
-                drop(tokio::spawn(shore_daemon::tool_rpc::serve(
-                    listener, registry,
-                )));
-                info!(socket = %tool_socket.display(), "Tool RPC transport enabled");
-            }
-            Err(e) => {
-                warn!(
-                    socket = %tool_socket.display(),
-                    error = %e,
-                    "Tool RPC socket unavailable; tool loops stay daemon-side"
-                );
-            }
-        }
+        // The reverse direction — a sidecar-driven tool loop calling back here
+        // to run each tool — is gone. Tools are function calls in the process
+        // that decides to make them, so there is nothing to bind and nothing to
+        // register. The autonomy actions that shared this socket go the same
+        // way when `autonomy/manager.rs` ports; until then they have no server.
     }
 
     let cache_forensics_path = loaded.dirs.cache.join("cache_forensics.jsonl");

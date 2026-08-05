@@ -3,8 +3,9 @@
  *
  * Uses the SDK's `toolRunner`, which is the reason this move is worth doing:
  * the request → execute → continue cycle, the iteration cap, and cancellation
- * all come from the SDK instead of being reimplemented. Tools execute in the
- * daemon over the tool socket — see `llm/tool_rpc.ts`.
+ * all come from the SDK instead of being reimplemented. Tools run in this
+ * process, through the {@link ToolPhase} the caller supplies — see
+ * `tools/execute.ts`.
  *
  * # Breakpoints have to be re-placed every turn
  *
@@ -40,12 +41,9 @@ import type {
   BetaTextBlockParam,
 } from "@anthropic-ai/sdk/resources/beta/messages";
 
-import {
-  daemonTools,
-  reportMessages,
-  type ReportedMessage,
-  type ToolRpcUnreachable,
-} from "../tool_rpc.ts";
+import { runnableTools } from "./anthropic_tools.ts";
+import type { ToolPhase } from "../../tools/execute.ts";
+import type { ContentBlock } from "../../engine/types.ts";
 import type { SidecarRequest, StreamEvent, SystemContent, Usage } from "../types.ts";
 import {
   anthropicContentEvents,
@@ -55,7 +53,7 @@ import {
   placeContinuationBreakpoints,
 } from "./anthropic.ts";
 
-/** One call's usage, in the daemon's shape. */
+/** One call's usage, in Shore's shape. */
 function callUsage(message: BetaMessage): Usage {
   const u = message.usage;
   return {
@@ -79,18 +77,17 @@ function addUsage(total: Usage, one: Usage): Usage {
 /**
  * Run the whole loop, emitting one flat stream of events.
  *
- * The daemon sees a single `start` … `done` regardless of how many model calls
- * the loop made; usage is the sum across all of them. Per-tool events reach the
- * client from the daemon's own side of the socket, where the executors are.
+ * The caller sees a single `start` … `done` regardless of how many model calls
+ * the loop made; usage is the sum across all of them. The per-tool frames a
+ * client renders are emitted by `executeToolUse` as each tool runs, on the
+ * requesting session's channel — not on this stream.
  */
 export async function* anthropicToolLoopEvents(
   req: SidecarRequest,
+  tools: ToolPhase,
   signal?: AbortSignal,
   now: () => number = Date.now,
 ): AsyncIterable<StreamEvent> {
-  const rpc = req.tool_rpc;
-  if (!rpc) throw new Error("anthropicToolLoopEvents requires tool_rpc on the request");
-
   const startedAt = now();
   let firstTokenAt = 0;
   // Per-call, so each ledger row gets its own timing rather than the loop's.
@@ -111,31 +108,22 @@ export async function* anthropicToolLoopEvents(
   const labelled: SystemContent = req.system ?? [];
   const cacheTtl = req.provider_options?.cache_ttl ?? "";
 
-  // A tool the daemon could not even attempt is not something to tell the model
-  // about; it ends the turn. Aborting is the only way to do that from inside a
-  // tool — see `llm/tool_rpc.ts`.
-  // One controller drives everything the loop owns: the model calls, the tool
-  // socket, and the runner itself. The transport's signal feeds into it, so a
-  // client that hangs up stops the whole loop rather than only its next call.
+  // One controller drives the model calls and the runner itself. The caller's
+  // signal feeds into it, so a client that hangs up stops the whole loop rather
+  // than only its next call. A running tool is not on it — it is bounded by its
+  // own `[tools] timeout`, which `dispatchWithinDeadline` owns.
   const abort = new AbortController();
   if (signal?.aborted) abort.abort();
   signal?.addEventListener("abort", () => abort.abort(), { once: true });
-  let unreachable: ToolRpcUnreachable | undefined;
 
   // A round's tools run concurrently, so results arrive in a race. They are
-  // collected here and emitted in the order the model asked for them, because
-  // completion order must not decide what the daemon stores.
-  const results = new Map<string, { output: string; is_error: boolean }>();
+  // collected here and recorded in the order the model asked for them, because
+  // completion order must not decide what gets stored.
+  const results = new Map<string, ContentBlock>();
   let pendingToolIds: string[] = [];
 
-  const tools = daemonTools(
-    req.tools ?? [],
-    rpc,
-    (error) => {
-      unreachable ??= error;
-      abort.abort();
-    },
-    (toolId, output, isError) => results.set(toolId, { output, is_error: isError }),
+  const runnable = runnableTools(req.tools ?? [], tools, (toolId, block) =>
+    results.set(toolId, block),
   );
 
   /**
@@ -143,24 +131,24 @@ export async function* anthropicToolLoopEvents(
    *
    * Empty until a round's tools have run. Drains, so a round is reported once.
    */
-  const drainResults = (): ReportedMessage[] => {
-    if (pendingToolIds.length === 0) return [];
-    const blocks = pendingToolIds.map((id) => {
-      const r = results.get(id);
-      return {
-        type: "tool_result",
-        tool_use_id: id,
-        content: r?.output ?? "",
-        is_error: r?.is_error ?? false,
-      };
-    });
+  const recordResults = (): void => {
+    if (pendingToolIds.length === 0) return;
+    const blocks = pendingToolIds.map(
+      (id) =>
+        results.get(id) ?? {
+          type: "tool_result" as const,
+          tool_use_id: id,
+          content: "",
+          is_error: false,
+        },
+    );
     pendingToolIds = [];
-    return [{ role: "user", content_blocks: blocks }];
+    tools.recordTurn("user", blocks);
   };
 
   const runner = client.beta.messages.toolRunner({
     ...params,
-    tools,
+    tools: runnable,
     stream: true,
     ...(req.max_tool_iterations !== undefined
       ? { max_iterations: req.max_tool_iterations }
@@ -178,7 +166,7 @@ export async function* anthropicToolLoopEvents(
   };
   let text = "";
   let finishReason = "end_turn";
-  /** The last turn's blocks — what the daemon should persist as this response. */
+  /** The last turn's blocks — what the caller persists as this response. */
   let terminalBlocks: unknown[] = [];
   /** How many provider calls have completed, which is what makes the next one
    *  a continuation. The calls themselves are not held: each is emitted as a
@@ -221,8 +209,8 @@ export async function* anthropicToolLoopEvents(
       completedCalls += 1;
       callStartedAt = callEnd;
       callFirstTokenAt = 0;
-      // The daemon persists this one from the `done` event rather than from its
-      // own stream accumulator, which cannot tell one turn from the next.
+      // Persisted from the `done` event rather than from a stream accumulator,
+      // which cannot tell one turn from the next.
       terminalBlocks = message.content;
 
       // The model stopped asking for tools. Break here rather than letting the
@@ -230,21 +218,14 @@ export async function* anthropicToolLoopEvents(
       // first. See the module doc.
       if (message.stop_reason !== "tool_use") break;
 
-      // The daemon persists the turns a loop produced, and this side is now the
-      // only one that knows where each ended. Reported before the tools it
-      // asked for run, on the same channel, so the daemon has it recorded by
-      // the time they dispatch.
-      // One report, in conversation order: the previous round's results (their
-      // tools ran while the runner was producing this turn), then this turn.
-      // Sent before this turn's tools dispatch, so the daemon has it recorded
-      // in time for `attach_generated_image`.
-      const prior = drainResults();
+      // The loop is the only thing that knows where each turn ended, so it
+      // records them. In conversation order: the previous round's results
+      // (their tools ran while the runner was producing this turn), then this
+      // turn — and before this turn's tools dispatch, so the assistant turn is
+      // in the list in time for the generated-image side channel to find it.
+      recordResults();
       pendingToolIds = message.content.flatMap((b) => (b.type === "tool_use" ? [b.id] : []));
-      await reportMessages(
-        rpc,
-        [...prior, { role: "assistant", content_blocks: message.content }],
-        abort.signal,
-      );
+      tools.recordTurn("assistant", message.content as ContentBlock[]);
 
       // Appending the assistant turn is now this side's job, and re-placing the
       // breakpoints over the grown conversation is the point of doing so.
@@ -267,28 +248,12 @@ export async function* anthropicToolLoopEvents(
     }
     // The last round's results: after a terminal turn, and after an
     // iteration cap, whose final round ran its tools with no turn following.
-    await reportMessages(rpc, drainResults(), abort.signal);
-  } catch (error) {
-    // An unreachable daemon surfaces as an abort; report the real cause.
-    const cause = unreachable ?? error;
+    recordResults();
+  } catch (cause) {
     const total = now() - startedAt;
     yield {
       type: "error",
       message: String(cause instanceof Error ? cause.message : cause),
-      usage,
-      timing: {
-        total_ms: total,
-        time_to_first_token_ms: firstTokenAt === 0 ? total : firstTokenAt - startedAt,
-      },
-    };
-    return;
-  }
-
-  if (unreachable) {
-    const total = now() - startedAt;
-    yield {
-      type: "error",
-      message: unreachable.message,
       usage,
       timing: {
         total_ms: total,
@@ -303,9 +268,9 @@ export async function* anthropicToolLoopEvents(
     type: "done",
     content: text,
     finish_reason: finishReason,
-    // Only the terminal turn. The daemon's stream accumulator sees every turn's
-    // blocks in one flat stream and cannot tell where one ended, so it would
-    // otherwise persist a final message replaying the whole loop.
+    // Only the terminal turn. The stream accumulator sees every turn's blocks
+    // in one flat stream and cannot tell where one ended, so it would otherwise
+    // persist a final message replaying the whole loop.
     content_blocks: terminalBlocks,
     usage,
     timing: {

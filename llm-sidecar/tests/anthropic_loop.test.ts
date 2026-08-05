@@ -23,6 +23,9 @@ import {
   buildAnthropicParams,
 } from "../src/llm/providers/anthropic.ts";
 import { anthropicToolLoopEvents } from "../src/llm/providers/anthropic_loop.ts";
+import type { ToolPhase } from "../src/tools/execute.ts";
+import type { ContentBlock, Message, Role } from "../src/engine/types.ts";
+import type { ToolUseEvent } from "../src/engine/tool_loop.ts";
 import type { SidecarRequest, StreamEvent, SystemContent } from "../src/llm/types.ts";
 
 // ── breakpoint re-placement ────────────────────────────────────────────────
@@ -188,45 +191,46 @@ function fakeAnthropic(turns: Turn[]): FakeAnthropic {
   return { url: `http://localhost:${server.port}`, requests, stop: () => server.stop(true) };
 }
 
-/** A daemon that answers every tool call with the same output. */
-function fakeToolDaemon(output: string) {
-  const dir = `/tmp/shore-loop-${Math.random().toString(36).slice(2)}`;
-  Bun.spawnSync(["mkdir", "-p", dir]);
-  const path = `${dir}/tools.sock`;
-  const calls: Array<Record<string, unknown>> = [];
-  const server = Bun.listen<{ buf: string }>({
-    unix: path,
-    socket: {
-      // Buffered per connection, like the real daemon's `BufReader::lines`. A
-      // request can arrive split across reads, and parsing a partial chunk
-      // throws — leaving the caller waiting for a reply that never comes,
-      // because nothing in the tool RPC has a timeout. Buffering in a shared
-      // variable is not enough either: a loop opens one connection per call and
-      // they can overlap, so the partial reads interleave.
-      open(socket) {
-        socket.data = { buf: "" };
-      },
-      data(socket, chunk) {
-        socket.data.buf += new TextDecoder().decode(chunk);
-        const nl = socket.data.buf.indexOf("\n");
-        if (nl < 0) return;
-        const line = socket.data.buf.slice(0, nl).trim();
-        socket.data.buf = "";
-        if (!line) return;
-        calls.push(JSON.parse(line) as Record<string, unknown>);
-        socket.write(`${JSON.stringify({ output, is_error: false })}\n`);
-        socket.end();
-      },
+/**
+ * A tool phase that answers every call with the same output.
+ *
+ * `order` interleaves recorded turns and dispatched tools: the assistant turn
+ * has to be in the list before the tools it asked for run, because the
+ * generated-image side channel hangs its ref off that turn.
+ */
+function fakePhase(output: string, failing: readonly string[] = []) {
+  const messages: Message[] = [];
+  const order: string[] = [];
+  const runs: ToolUseEvent[] = [];
+  let minted = 0;
+
+  const phase: ToolPhase = {
+    messages,
+    recordTurn: (role: Role, blocks: ContentBlock[]) => {
+      order.push(`record:${role}`);
+      minted += 1;
+      messages.push({
+        msg_id: `m_${minted}`,
+        role,
+        content: "",
+        images: [],
+        content_blocks: blocks,
+        timestamp: "2026-01-01T00:00:00-05:00",
+      });
     },
-  });
-  return {
-    path,
-    calls,
-    stop: () => {
-      server.stop(true);
-      Bun.spawnSync(["rm", "-rf", dir]);
+    runTool: (use: ToolUseEvent): Promise<ContentBlock> => {
+      order.push(`run:${use.name}`);
+      runs.push(use);
+      return Promise.resolve({
+        type: "tool_result",
+        tool_use_id: use.id,
+        content: output,
+        is_error: failing.includes(use.name),
+      });
     },
   };
+
+  return { phase, messages, order, runs };
 }
 
 const stops: Array<() => void> = [];
@@ -234,7 +238,7 @@ afterEach(() => {
   for (const stop of stops.splice(0)) stop();
 });
 
-function request(anthropic: FakeAnthropic, socketPath: string): SidecarRequest {
+function request(anthropic: FakeAnthropic): SidecarRequest {
   return {
     sdk: "anthropic",
     model: "claude-opus-4-8",
@@ -247,7 +251,6 @@ function request(anthropic: FakeAnthropic, socketPath: string): SidecarRequest {
     max_tokens: 1024,
     replay_prior_thinking: "all",
     provider_options: { cache_ttl: "5m" },
-    tool_rpc: { socket_path: socketPath, rid: "rid_1" },
   };
 }
 
@@ -263,10 +266,10 @@ describe("driving a tool loop", () => {
       { kind: "tool", id: "tu_1", name: "read", input: { path: "/tmp/x" } },
       { kind: "text", text: "the file says hello" },
     ]);
-    const daemon = fakeToolDaemon("hello");
-    stops.push(anthropic.stop, daemon.stop);
+    const tools = fakePhase("hello");
+    stops.push(anthropic.stop);
 
-    const events = await collect(anthropicToolLoopEvents(request(anthropic, daemon.path)));
+    const events = await collect(anthropicToolLoopEvents(request(anthropic), tools.phase));
     const types = events.map((e) => e.type);
 
     // One start, one done, whatever the loop did in between.
@@ -300,36 +303,31 @@ describe("driving a tool loop", () => {
     // makes a mid-loop failure keep the rows that were already billed.
     expect(types.lastIndexOf("call_complete")).toBeLessThan(types.indexOf("done"));
 
-    // The tool actually ran, in the daemon, with the loop's rid — and the
-    // assistant turn that asked for it was reported first, on the same channel,
-    // so the daemon has it recorded before dispatching. The round's results
-    // follow once it completes, as one message rather than one per tool.
-    expect(daemon.calls.map((c) => c["kind"])).toEqual(["messages", "tool", "messages"]);
-    expect(daemon.calls[1]).toMatchObject({ rid: "rid_1", tool_id: "tu_1", name: "read" });
+    // The tool actually ran — and the assistant turn that asked for it was
+    // recorded first, so the generated-image side channel has somewhere to
+    // attach. The round's results follow once it completes, as one turn rather
+    // than one per tool.
+    expect(tools.order).toEqual(["record:assistant", "run:read", "record:user"]);
+    expect(tools.runs[0]).toMatchObject({ id: "tu_1", name: "read" });
   });
 
-  test("the messages reported to the daemon carry the blocks they produced", async () => {
-    // The daemon persists what a loop produced, and once the loop runs here it
-    // is the only side that knows what the conversation became — the whole loop
-    // reaches the daemon as one flat stream carrying no per-turn structure.
+  test("the recorded turns carry the blocks they produced", async () => {
+    // The loop is the only thing that knows what the conversation became: it
+    // reaches its caller as one flat stream carrying no per-turn structure, so
+    // the grouping has to be written down as it happens.
     const anthropic = fakeAnthropic([
       { kind: "tool", id: "tu_1", name: "read", input: {} },
       { kind: "text", text: "done" },
     ]);
-    const daemon = fakeToolDaemon("ok");
-    stops.push(anthropic.stop, daemon.stop);
+    const tools = fakePhase("ok");
+    stops.push(anthropic.stop);
 
-    await collect(anthropicToolLoopEvents(request(anthropic, daemon.path)));
+    await collect(anthropicToolLoopEvents(request(anthropic), tools.phase));
 
-    const reports = daemon.calls.filter((c) => c["kind"] === "messages") as Array<{
-      messages: Array<{ role: string; content_blocks: Array<{ type: string }> }>;
-    }>;
     // The assistant turn that asked for the tool, then the round's results.
-    expect(reports).toHaveLength(2);
-    expect(reports[0]!.messages.map((m) => m.role)).toEqual(["assistant"]);
-    expect(reports[0]!.messages[0]!.content_blocks.map((b) => b.type)).toEqual(["tool_use"]);
-    expect(reports[1]!.messages.map((m) => m.role)).toEqual(["user"]);
-    expect(reports[1]!.messages[0]!.content_blocks.map((b) => b.type)).toEqual(["tool_result"]);
+    expect(tools.messages.map((m) => m.role)).toEqual(["assistant", "user"]);
+    expect(tools.messages[0]!.content_blocks.map((b) => b.type)).toEqual(["tool_use"]);
+    expect(tools.messages[1]!.content_blocks.map((b) => b.type)).toEqual(["tool_result"]);
   });
 
   test("the assistant turn is appended exactly once", async () => {
@@ -340,10 +338,10 @@ describe("driving a tool loop", () => {
       { kind: "tool", id: "tu_1", name: "read", input: {} },
       { kind: "text", text: "done" },
     ]);
-    const daemon = fakeToolDaemon("ok");
-    stops.push(anthropic.stop, daemon.stop);
+    const tools = fakePhase("ok");
+    stops.push(anthropic.stop);
 
-    await collect(anthropicToolLoopEvents(request(anthropic, daemon.path)));
+    await collect(anthropicToolLoopEvents(request(anthropic), tools.phase));
 
     const second = anthropic.requests[1] as { messages: Array<{ role: string }> };
     const roles = second.messages.map((m) => m.role);
@@ -358,10 +356,10 @@ describe("driving a tool loop", () => {
       { kind: "tool", id: "tu_1", name: "read", input: {} },
       { kind: "text", text: "done" },
     ]);
-    const daemon = fakeToolDaemon("ok");
-    stops.push(anthropic.stop, daemon.stop);
+    const tools = fakePhase("ok");
+    stops.push(anthropic.stop);
 
-    await collect(anthropicToolLoopEvents(request(anthropic, daemon.path)));
+    await collect(anthropicToolLoopEvents(request(anthropic), tools.phase));
     expect(anthropic.requests).toHaveLength(2);
   });
 
@@ -373,10 +371,10 @@ describe("driving a tool loop", () => {
       { kind: "tool", id: "tu_1", name: "read", input: {} },
       { kind: "text", text: "done" },
     ]);
-    const daemon = fakeToolDaemon("ok");
-    stops.push(anthropic.stop, daemon.stop);
+    const tools = fakePhase("ok");
+    stops.push(anthropic.stop);
 
-    await collect(anthropicToolLoopEvents(request(anthropic, daemon.path)));
+    await collect(anthropicToolLoopEvents(request(anthropic), tools.phase));
 
     const second = anthropic.requests[1] as {
       messages: Array<{ content: Array<Record<string, unknown>> }>;
@@ -389,32 +387,44 @@ describe("driving a tool loop", () => {
     expect(Math.max(...markedIdx)).toBeGreaterThanOrEqual(1);
   });
 
-  test("a daemon that cannot run the tool ends the turn instead of telling the model", async () => {
-    const anthropic = fakeAnthropic([{ kind: "tool", id: "tu_1", name: "read", input: {} }]);
+  test("a tool that failed is told to the model and the loop continues", async () => {
+    const anthropic = fakeAnthropic([
+      { kind: "tool", id: "tu_1", name: "read", input: {} },
+      { kind: "text", text: "that file is missing, then" },
+    ]);
+    const tools = fakePhase("no such file", ["read"]);
     stops.push(anthropic.stop);
 
-    const events = await collect(
-      anthropicToolLoopEvents(request(anthropic, "/nonexistent/shore.sock")),
-    );
-    const last = events.at(-1);
-    expect(last?.type).toBe("error");
-    // Never presented as a tool result the model could reason about.
-    expect(events.map((e) => e.type)).not.toContain("done");
+    const events = await collect(anthropicToolLoopEvents(request(anthropic), tools.phase));
+
+    // There is no second failure channel any more. Over the socket, a call the
+    // daemon could not attempt ended the turn without telling the model — a
+    // distinction that only existed because the transport could fail
+    // separately from the tool. In one process every tool answers, and the
+    // runner is handed a `ToolError` so the model reads the tool's own text
+    // rather than an "Error: " prefix.
+    expect(tools.messages[1]!.content_blocks[0]).toMatchObject({
+      type: "tool_result",
+      content: "no such file",
+      is_error: true,
+    });
+    expect(anthropic.requests).toHaveLength(2);
+    expect(events.at(-1)?.type).toBe("done");
   });
 
   test("an aborted transport stops the loop", async () => {
-    // The signal the sidecar's HTTP layer passes in feeds the controller that
-    // owns the model calls, the tool socket, and the runner — so a client that
-    // hangs up stops the whole loop, not just its next call.
+    // The caller's signal feeds the controller that owns the model calls and
+    // the runner — so a client that hangs up stops the whole loop, not just its
+    // next call.
     const anthropic = fakeAnthropic([
       { kind: "tool", id: "tu_1", name: "read", input: {} },
       { kind: "text", text: "done" },
     ]);
-    const daemon = fakeToolDaemon("ok");
-    stops.push(anthropic.stop, daemon.stop);
+    const tools = fakePhase("ok");
+    stops.push(anthropic.stop);
 
     const events = await collect(
-      anthropicToolLoopEvents(request(anthropic, daemon.path), AbortSignal.abort()),
+      anthropicToolLoopEvents(request(anthropic), tools.phase, AbortSignal.abort()),
     );
     expect(events.at(-1)?.type).toBe("error");
     expect(anthropic.requests).toHaveLength(0);
@@ -423,11 +433,11 @@ describe("driving a tool loop", () => {
   test("the initial request is the same one the non-loop path would send", async () => {
     // The loop changes who drives, not what the first call looks like.
     const anthropic = fakeAnthropic([{ kind: "text", text: "hi" }]);
-    const daemon = fakeToolDaemon("ok");
-    stops.push(anthropic.stop, daemon.stop);
+    const tools = fakePhase("ok");
+    stops.push(anthropic.stop);
 
-    const req = request(anthropic, daemon.path);
-    await collect(anthropicToolLoopEvents(req));
+    const req = request(anthropic);
+    await collect(anthropicToolLoopEvents(req, tools.phase));
 
     const sent = anthropic.requests[0] as Record<string, unknown>;
     const expected = buildAnthropicParams(req);

@@ -16,10 +16,10 @@ import { join } from "node:path";
 
 import {
   actionForCompaction,
+  DaemonUnreachable,
   decodeActionResult,
   RpcAutonomyExecutor,
 } from "../src/autonomy/executor.ts";
-import { ToolRpcUnreachable } from "../src/llm/tool_rpc.ts";
 
 interface FakeDaemon {
   path: string;
@@ -138,7 +138,7 @@ describe("what comes back", () => {
 
   test("a socket nobody is listening on is a throw", async () => {
     const executor = new RpcAutonomyExecutor(join(tmpdir(), "shore-no-such-daemon.sock"));
-    await expect(executor.runDeepArchive("nova")).rejects.toBeInstanceOf(ToolRpcUnreachable);
+    await expect(executor.runDeepArchive("nova")).rejects.toBeInstanceOf(DaemonUnreachable);
   });
 });
 
@@ -181,7 +181,7 @@ describe("reading the answer", () => {
   });
 
   test("an answer that is not an object at all is a throw", () => {
-    expect(() => decode("ok")).toThrow(ToolRpcUnreachable);
-    expect(() => decode(null)).toThrow(ToolRpcUnreachable);
+    expect(() => decode("ok")).toThrow(DaemonUnreachable);
+    expect(() => decode(null)).toThrow(DaemonUnreachable);
   });
 });

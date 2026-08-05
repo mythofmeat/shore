@@ -6,14 +6,22 @@
  * below it already have their own suites, and going through one of them would
  * test its wire parsing again rather than the loop.
  *
- * The bar is `anthropic_loop.test.ts`: the daemon parses one stream shape and
+ * The bar is `anthropic_loop.test.ts`: the caller parses one stream shape and
  * must not be able to tell which loop produced it. Several cases here are
  * deliberate mirrors of one there.
+ *
+ * Tools are a {@link ToolPhase} rather than a Unix socket. That is the whole of
+ * what the rewiring changed here — the loop's decisions are identical, and the
+ * cases that used to assert them through a fake daemon assert them through a
+ * fake phase.
  */
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 
 import { genericToolLoopEvents } from "../src/llm/providers/generic_loop.ts";
+import type { ToolPhase } from "../src/tools/execute.ts";
+import type { ContentBlock, Message, Role } from "../src/engine/types.ts";
+import type { ToolUseEvent } from "../src/engine/tool_loop.ts";
 import type {
   SidecarProvider,
   SidecarRequest,
@@ -101,93 +109,63 @@ class FakeProvider implements SidecarProvider {
   }
 }
 
-interface DaemonCall {
-  kind: string;
-  name?: string;
-  tool_id?: string;
-  messages?: Array<{ role: string; content_blocks: unknown[] }>;
-}
-
 /**
- * A daemon that answers tool calls, optionally slowly.
+ * A tool phase that answers every call, optionally slowly.
  *
  * `delays` keyed by tool name lets a round's results land out of the order the
  * model asked for them, which is the only way to prove the loop reorders.
+ *
+ * `order` interleaves recorded turns and dispatched tools, because the
+ * relationship between the two is a real invariant: the generated-image side
+ * channel hangs its ref off the assistant turn that asked for the tool, so a
+ * turn recorded after its tools dispatched would have nothing to attach to.
  */
-function fakeToolDaemon(opts: {
-  output?: (name: string) => string;
-  delays?: Record<string, number>;
-  unreachable?: boolean;
-}) {
-  const dir = `/tmp/shore-genloop-${Math.random().toString(36).slice(2)}`;
-  Bun.spawnSync(["mkdir", "-p", dir]);
-  const path = `${dir}/tools.sock`;
-  const calls: DaemonCall[] = [];
+function fakePhase(
+  opts: {
+    output?: (name: string) => string;
+    failing?: readonly string[];
+    delays?: Record<string, number>;
+  } = {},
+) {
+  const messages: Message[] = [];
+  const order: string[] = [];
   const completionOrder: string[] = [];
+  const runs: ToolUseEvent[] = [];
+  let minted = 0;
 
-  const server = Bun.listen<{ buf: string }>({
-    unix: path,
-    socket: {
-      // Buffered per connection, like the real daemon's `BufReader::lines`; a
-      // loop opens one connection per call and they overlap.
-      open(socket) {
-        socket.data = { buf: "" };
-      },
-      data(socket, chunk) {
-        socket.data.buf += new TextDecoder().decode(chunk);
-        const nl = socket.data.buf.indexOf("\n");
-        if (nl < 0) return;
-        const line = socket.data.buf.slice(0, nl).trim();
-        socket.data.buf = "";
-        if (!line) return;
-        const call = JSON.parse(line) as DaemonCall;
-        calls.push(call);
-
-        if (call.kind === "messages") {
-          socket.write(`${JSON.stringify({ output: "", is_error: false })}\n`);
-          socket.end();
-          return;
-        }
-        if (opts.unreachable) {
-          socket.write(`${JSON.stringify({ error: "no executor for this rid" })}\n`);
-          socket.end();
-          return;
-        }
-
-        const name = call.name ?? "";
-        const reply = () => {
-          completionOrder.push(name);
-          socket.write(
-            `${JSON.stringify({ output: opts.output?.(name) ?? `ran ${name}`, is_error: false })}\n`,
-          );
-          socket.end();
-        };
-        const delay = opts.delays?.[name] ?? 0;
-        if (delay > 0) setTimeout(reply, delay);
-        else reply();
-      },
+  const phase: ToolPhase = {
+    messages,
+    recordTurn: (role: Role, blocks: ContentBlock[]) => {
+      order.push(`record:${role}`);
+      minted += 1;
+      messages.push({
+        msg_id: `m_${minted}`,
+        role,
+        content: "",
+        images: [],
+        content_blocks: blocks,
+        timestamp: "2026-01-01T00:00:00-05:00",
+      });
     },
-  });
-
-  return {
-    path,
-    calls,
-    completionOrder,
-    toolCalls: () => calls.filter((c) => c.kind === "tool"),
-    reports: () => calls.filter((c) => c.kind === "messages"),
-    stop: () => {
-      server.stop(true);
-      Bun.spawnSync(["rm", "-rf", dir]);
+    runTool: async (use: ToolUseEvent): Promise<ContentBlock> => {
+      order.push(`run:${use.name}`);
+      runs.push(use);
+      const delay = opts.delays?.[use.name] ?? 0;
+      if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+      completionOrder.push(use.name);
+      return {
+        type: "tool_result",
+        tool_use_id: use.id,
+        content: opts.output?.(use.name) ?? `ran ${use.name}`,
+        is_error: opts.failing?.includes(use.name) ?? false,
+      };
     },
   };
+
+  return { phase, messages, order, runs, completionOrder };
 }
 
-const stops: Array<() => void> = [];
-afterEach(() => {
-  for (const stop of stops.splice(0)) stop();
-});
-
-function request(socketPath: string, overrides: Partial<SidecarRequest> = {}): SidecarRequest {
+function request(overrides: Partial<SidecarRequest> = {}): SidecarRequest {
   return {
     sdk: "deepseek",
     model: "deepseek-chat",
@@ -198,7 +176,6 @@ function request(socketPath: string, overrides: Partial<SidecarRequest> = {}): S
     tools: [{ name: "read", description: "Read a file.", input_schema: { type: "object" } }],
     max_tokens: 1024,
     replay_prior_thinking: "all",
-    tool_rpc: { socket_path: socketPath, rid: "rid_1" },
     ...overrides,
   };
 }
@@ -213,22 +190,21 @@ const typesOf = (events: StreamEvent[]) => events.map((e) => e.type);
 
 describe("driving a tool loop for a non-Anthropic dialect", () => {
   test("runs the tool, continues, and reports one flat stream", async () => {
-    const daemon = fakeToolDaemon({});
-    stops.push(daemon.stop);
+    const tools = fakePhase();
     const provider = new FakeProvider([
       { kind: "tools", calls: [{ id: "tu_1", name: "read", input: { path: "/tmp/x" } }] },
       { kind: "text", text: "the file says hello" },
     ]);
 
-    const events = await collect(genericToolLoopEvents(provider, request(daemon.path)));
+    const events = await collect(genericToolLoopEvents(provider, request(), tools.phase));
 
     // One start, one done, no matter how many calls happened.
     expect(typesOf(events).filter((t) => t === "start")).toEqual(["start"]);
     expect(typesOf(events).filter((t) => t === "done")).toEqual(["done"]);
     expect(provider.requests.length).toBe(2);
 
-    expect(daemon.toolCalls().length).toBe(1);
-    expect(daemon.toolCalls()[0]?.name).toBe("read");
+    expect(tools.runs.length).toBe(1);
+    expect(tools.runs[0]?.name).toBe("read");
 
     const done = events.at(-1);
     expect(done?.type).toBe("done");
@@ -241,15 +217,14 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
   });
 
   test("every call gets its own row, and only the first is not a continuation", async () => {
-    const daemon = fakeToolDaemon({});
-    stops.push(daemon.stop);
+    const tools = fakePhase();
     const provider = new FakeProvider([
       { kind: "tools", calls: [{ id: "tu_1", name: "read", input: {} }] },
       { kind: "tools", calls: [{ id: "tu_2", name: "read", input: {} }] },
       { kind: "text", text: "done" },
     ]);
 
-    const events = await collect(genericToolLoopEvents(provider, request(daemon.path)));
+    const events = await collect(genericToolLoopEvents(provider, request(), tools.phase));
     const completes = events.filter((e) => e.type === "call_complete");
 
     expect(completes.length).toBe(3);
@@ -267,14 +242,13 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
   });
 
   test("done carries only the terminal turn's blocks", async () => {
-    const daemon = fakeToolDaemon({});
-    stops.push(daemon.stop);
+    const tools = fakePhase();
     const provider = new FakeProvider([
       { kind: "tools", calls: [{ id: "tu_1", name: "read", input: {} }], text: "let me look" },
       { kind: "text", text: "the answer" },
     ]);
 
-    const events = await collect(genericToolLoopEvents(provider, request(daemon.path)));
+    const events = await collect(genericToolLoopEvents(provider, request(), tools.phase));
     const done = events.at(-1);
     if (done?.type !== "done") throw new Error("expected done");
 
@@ -283,15 +257,14 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
   });
 
   test("the conversation grows by exactly one assistant turn and one result turn per round", async () => {
-    const daemon = fakeToolDaemon({});
-    stops.push(daemon.stop);
+    const tools = fakePhase();
     const provider = new FakeProvider([
       { kind: "tools", calls: [{ id: "tu_1", name: "read", input: {} }] },
       { kind: "text", text: "done" },
     ]);
-    const req = request(daemon.path);
+    const req = request();
 
-    await collect(genericToolLoopEvents(provider, req));
+    await collect(genericToolLoopEvents(provider, req, tools.phase));
 
     // The second request the provider saw: original user turn, the assistant
     // turn that asked, then the results.
@@ -305,30 +278,25 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
     expect(req.messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
   });
 
-  test("the assistant turn reaches the daemon before the tools it asked for run", async () => {
-    const daemon = fakeToolDaemon({});
-    stops.push(daemon.stop);
+  test("the assistant turn is recorded before the tools it asked for run", async () => {
+    const tools = fakePhase();
     const provider = new FakeProvider([
       { kind: "tools", calls: [{ id: "tu_1", name: "read", input: {} }] },
       { kind: "text", text: "done" },
     ]);
 
-    await collect(genericToolLoopEvents(provider, request(daemon.path)));
+    await collect(genericToolLoopEvents(provider, request(), tools.phase));
 
-    // Ordering, not just presence: the daemon attaches generated images to the
-    // assistant turn that requested the tool, so a report arriving after the
+    // Ordering, not just presence: `executeToolUse` hangs a generated image off
+    // the assistant turn that requested the tool, so a turn recorded after the
     // dispatch would have nothing to attach to.
-    const kinds = daemon.calls.map((c) => c.kind);
-    expect(kinds.indexOf("messages")).toBeLessThan(kinds.indexOf("tool"));
-
-    const firstReport = daemon.reports()[0];
-    expect(firstReport?.messages?.[0]?.role).toBe("assistant");
+    expect(tools.order).toEqual(["record:assistant", "run:read", "record:user"]);
+    expect(tools.messages[0]?.role).toBe("assistant");
   });
 
   test("a round's results are stored in ask order, not completion order", async () => {
     // `read` finishes last despite being asked for first.
-    const daemon = fakeToolDaemon({ delays: { read: 40 } });
-    stops.push(daemon.stop);
+    const tools = fakePhase({ delays: { read: 40 } });
     const provider = new FakeProvider([
       {
         kind: "tools",
@@ -339,12 +307,12 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
       },
       { kind: "text", text: "done" },
     ]);
-    const req = request(daemon.path);
+    const req = request();
 
-    await collect(genericToolLoopEvents(provider, req));
+    await collect(genericToolLoopEvents(provider, req, tools.phase));
 
     // The race actually happened, otherwise this proves nothing.
-    expect(daemon.completionOrder).toEqual(["grep", "read"]);
+    expect(tools.completionOrder).toEqual(["grep", "read"]);
 
     const results = req.messages[2]?.content;
     expect(results).toEqual([
@@ -353,35 +321,36 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
     ]);
   });
 
-  test("a daemon that cannot run the tool ends the turn instead of telling the model", async () => {
-    const daemon = fakeToolDaemon({ unreachable: true });
-    stops.push(daemon.stop);
+  test("a tool that failed is told to the model and the loop continues", async () => {
+    const tools = fakePhase({ failing: ["read"] });
     const provider = new FakeProvider([
       { kind: "tools", calls: [{ id: "tu_1", name: "read", input: {} }] },
-      { kind: "text", text: "never reached" },
+      { kind: "text", text: "that file is missing, then" },
     ]);
+    const req = request();
 
-    const events = await collect(genericToolLoopEvents(provider, request(daemon.path)));
+    const events = await collect(genericToolLoopEvents(provider, req, tools.phase));
 
-    const last = events.at(-1);
-    expect(last?.type).toBe("error");
-    if (last?.type !== "error") throw new Error("unreachable");
-    expect(last.message).toContain("no executor");
-    // The model was never asked to continue, and never saw a failed result.
-    expect(provider.requests.length).toBe(1);
-    // The call that did happen is still billed.
-    expect(last.usage.input_tokens).toBe(USAGE.input_tokens);
+    // There is no second failure channel any more. Over the socket, a call the
+    // daemon could not attempt ended the turn without telling the model — a
+    // distinction that only existed because there was a transport that could
+    // fail separately from the tool. In one process every tool answers, and a
+    // failure answers with `is_error`.
+    expect(req.messages[2]?.content).toEqual([
+      { type: "tool_result", tool_use_id: "tu_1", content: "ran read", is_error: true },
+    ]);
+    expect(provider.requests.length).toBe(2);
+    expect(events.at(-1)?.type).toBe("done");
   });
 
   test("a provider error mid-loop surfaces with the usage already billed", async () => {
-    const daemon = fakeToolDaemon({});
-    stops.push(daemon.stop);
+    const tools = fakePhase();
     const provider = new FakeProvider([
       { kind: "tools", calls: [{ id: "tu_1", name: "read", input: {} }] },
       { kind: "error", message: "upstream exploded" },
     ]);
 
-    const events = await collect(genericToolLoopEvents(provider, request(daemon.path)));
+    const events = await collect(genericToolLoopEvents(provider, request(), tools.phase));
     const last = events.at(-1);
     if (last?.type !== "error") throw new Error("expected error");
     expect(last.message).toBe("upstream exploded");
@@ -390,8 +359,7 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
   });
 
   test("the iteration cap spends a closing call so the model answers with its results", async () => {
-    const daemon = fakeToolDaemon({});
-    stops.push(daemon.stop);
+    const tools = fakePhase();
     const provider = new FakeProvider([
       { kind: "tools", calls: [{ id: "tu_1", name: "read", input: {} }] },
       { kind: "tools", calls: [{ id: "tu_2", name: "read", input: {} }] },
@@ -399,34 +367,32 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
     ]);
 
     await collect(
-      genericToolLoopEvents(provider, request(daemon.path, { max_tool_iterations: 1 })),
+      genericToolLoopEvents(provider, request({ max_tool_iterations: 1 }), tools.phase),
     );
 
     // One dispatch round, then a closing call. `stopWhen: stepCountIs(1)` would
     // have made one call and handed the user a tool request as their reply.
-    expect(daemon.toolCalls().length).toBe(1);
+    expect(tools.runs.length).toBe(1);
     expect(provider.requests.length).toBe(2);
   });
 
   test("a cap of zero dispatches nothing", async () => {
-    const daemon = fakeToolDaemon({});
-    stops.push(daemon.stop);
+    const tools = fakePhase();
     const provider = new FakeProvider([
       { kind: "tools", calls: [{ id: "tu_1", name: "read", input: {} }] },
       { kind: "text", text: "unreached" },
     ]);
 
     await collect(
-      genericToolLoopEvents(provider, request(daemon.path, { max_tool_iterations: 0 })),
+      genericToolLoopEvents(provider, request({ max_tool_iterations: 0 }), tools.phase),
     );
 
-    expect(daemon.toolCalls().length).toBe(0);
+    expect(tools.runs.length).toBe(0);
     expect(provider.requests.length).toBe(1);
   });
 
   test("prior-turn reasoning is replayed to the next call in the loop", async () => {
-    const daemon = fakeToolDaemon({});
-    stops.push(daemon.stop);
+    const tools = fakePhase();
     const provider = new FakeProvider([
       {
         kind: "tools",
@@ -438,7 +404,7 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
       { kind: "text", text: "done" },
     ]);
 
-    await collect(genericToolLoopEvents(provider, request(daemon.path)));
+    await collect(genericToolLoopEvents(provider, request(), tools.phase));
 
     // DeepSeek and Kimi hard-require prior-turn reasoning across a tool loop,
     // and the carriers are what the adapters replay from. Dropping any of them

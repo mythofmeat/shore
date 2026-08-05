@@ -136,21 +136,6 @@ impl ToolDefinition {
     }
 }
 
-/// Where the sidecar calls back to run a tool, when it drives the loop.
-///
-/// The sidecar decides which tools to run; the daemon runs them, because the
-/// executors hold the filesystem, the memory store, MCP, and sub-agents. Its
-/// presence on a request is the switch between the two loop owners. The mirror
-/// type is `ToolRpc` in `llm-sidecar/src/llm/types.ts`; the protocol is in
-/// `crate::tool_rpc`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ToolRpc {
-    /// Unix socket the daemon serves tool calls on.
-    pub socket_path: String,
-    /// Identifies this in-flight loop to the daemon's registry.
-    pub rid: String,
-}
-
 /// Where a `thinking` block's replay payload rides on the wire.
 ///
 /// One stored `ThinkingSignature` projects to exactly one of these fields, named
@@ -500,17 +485,8 @@ pub struct LlmRequest {
     #[serde(skip)]
     pub retain_long: bool,
 
-    /// Resolved per-model cache-keepalive interval (`cache_keepalive` in
-    /// `[models.*]`): `Some(interval)` to ping the prompt cache every
-    /// `interval` while idle, `None` when keepalive is off for this model.
-    /// Set when the sidecar drives the tool loop for this request. See
-    /// [`ToolRpc`].
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tool_rpc: Option<ToolRpc>,
-
-    /// Dispatch rounds a sidecar-driven loop may run. `None` is unlimited, so
-    /// the model ending cleanly is the only exit. Mirrors the cap the daemon's
-    /// own loop enforces.
+    /// Dispatch rounds a tool loop may run. `None` is unlimited, so the model
+    /// ending cleanly is the only exit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_tool_iterations: Option<u32>,
 
@@ -541,7 +517,6 @@ impl std::fmt::Debug for LlmRequest {
             .field("rid", &self.rid)
             .field("forensic_character", &self.forensic_character)
             .field("retain_long", &self.retain_long)
-            .field("tool_rpc", &self.tool_rpc)
             .field("max_tool_iterations", &self.max_tool_iterations)
             .field("keepalive_interval", &self.keepalive_interval)
             .finish()
@@ -1041,7 +1016,6 @@ mod tests {
             rid: None,
             forensic_character: None,
             retain_long: false,
-            tool_rpc: None,
             max_tool_iterations: None,
             keepalive_interval: None,
         };
@@ -1078,7 +1052,6 @@ mod tests {
             rid: None,
             forensic_character: None,
             retain_long: false,
-            tool_rpc: None,
             max_tool_iterations: None,
             keepalive_interval: None,
         };
@@ -1133,7 +1106,6 @@ mod tests {
             rid: None,
             forensic_character: None,
             retain_long: false,
-            tool_rpc: None,
             max_tool_iterations: None,
             keepalive_interval: None,
         };
@@ -1489,9 +1461,9 @@ mod tests {
             ),
             // The event the sidecar emits per provider call, and writes the
             // ledger row from. `StreamEvent` is deserialize-only, so unlike the
-            // types above this is a hand-written literal — same as `tool_rpc`
-            // below. `call_complete_parses` asserts the daemon accepts exactly
-            // this, so the two halves of the pin cannot drift apart silently.
+            // types above this is a hand-written literal. `call_complete_parses`
+            // asserts the daemon accepts exactly this, so the two halves of the
+            // pin cannot drift apart silently.
             "call_complete": {
                 "type": "call_complete",
                 "usage": {
@@ -1555,109 +1527,6 @@ mod tests {
                 "signature": carrier_signature(),
                 "openrouter": carrier_openrouter(),
                 "zai": carrier_zai(),
-            },
-            // The tool-call protocol is hand-written on both sides, so it is
-            // pinned here for the same reason the wire types are.
-            "tool_rpc": {
-                // Tagged: confusing a turn for a tool result would persist an
-                // assistant turn as tool output.
-                "request_tool": crate::tool_rpc::SidecarRequest::Tool(
-                    crate::tool_rpc::ToolCallRequest {
-                        rid: "rid_1".into(),
-                        tool_id: "tu_1".into(),
-                        name: "read".into(),
-                        input: json!({"path": "/tmp/x"}),
-                    },
-                ),
-                // Both message shapes a loop reports: the assistant turn that
-                // asked for tools, and the round's results as one message.
-                "request_messages": crate::tool_rpc::SidecarRequest::Messages(
-                    crate::tool_rpc::MessagesRequest {
-                        rid: "rid_1".into(),
-                        messages: vec![
-                            crate::tool_rpc::ReportedMessage {
-                                role: shore_common::protocol::types::Role::Assistant,
-                                content_blocks: vec![ContentBlock::Text {
-                                    text: "let me look".into(),
-                                }],
-                            },
-                            crate::tool_rpc::ReportedMessage {
-                                role: shore_common::protocol::types::Role::User,
-                                content_blocks: vec![ContentBlock::ToolResult {
-                                    tool_use_id: "tu_1".into(),
-                                    content: "ok".into(),
-                                    is_error: false,
-                                }],
-                            },
-                        ],
-                    },
-                ),
-                // A tool that ran, and a call that never reached a loop. The
-                // outcome is untagged, so these two shapes are the only thing
-                // distinguishing them on the wire.
-                "outcome_ran": crate::tool_rpc::ToolCallOutcome::Ok(
-                    crate::tool_rpc::ToolCallResponse {
-                        output: "file body".into(),
-                        is_error: false,
-                    },
-                ),
-                "outcome_failed": crate::tool_rpc::ToolCallOutcome::Ok(
-                    crate::tool_rpc::ToolCallResponse {
-                        output: "no such file".into(),
-                        is_error: true,
-                    },
-                ),
-                "outcome_unreachable": crate::tool_rpc::ToolCallOutcome::Err(
-                    crate::tool_rpc::ToolCallError {
-                        error: "no in-flight loop for rid rid_1".into(),
-                    },
-                ),
-                // Autonomy shares the socket and routes by character instead of
-                // by rid. Every action, because the reason a compaction fired
-                // is spelled into the action name rather than sent beside it,
-                // and a name the far side does not know is silently no action.
-                "request_autonomy": crate::tool_rpc::SidecarRequest::Autonomy(
-                    crate::tool_rpc::AutonomyRequest {
-                        character: "nova".into(),
-                        action: crate::tool_rpc::AutonomyAction::HeartbeatTick,
-                    },
-                ),
-                "autonomy_actions": [
-                    crate::tool_rpc::AutonomyAction::HeartbeatTick,
-                    crate::tool_rpc::AutonomyAction::CompactMaxTurns,
-                    crate::tool_rpc::AutonomyAction::CompactIdle,
-                    crate::tool_rpc::AutonomyAction::DeepArchive,
-                ],
-                // An action that worked and changed something, one that worked
-                // and changed nothing, and one that ran and failed. The empty
-                // case is the shape that matters: both optional fields are
-                // omitted, so the far side must read absence as "nothing to
-                // apply" rather than as zero.
-                "autonomy_ran": crate::tool_rpc::AutonomyOutcome::Ok(
-                    crate::tool_rpc::AutonomyResponse {
-                        turn_count: Some(4),
-                        events: vec![crate::tool_rpc::AutonomyEvent {
-                            kind: "message_sent".into(),
-                            detail: "Autonomous message sent: hello".into(),
-                        }],
-                        failed: None,
-                    },
-                ),
-                "autonomy_ran_quietly": crate::tool_rpc::AutonomyOutcome::Ok(
-                    crate::tool_rpc::AutonomyResponse::default(),
-                ),
-                "autonomy_failed": crate::tool_rpc::AutonomyOutcome::Ok(
-                    crate::tool_rpc::AutonomyResponse {
-                        turn_count: None,
-                        events: Vec::new(),
-                        failed: Some("no conversation to compact".into()),
-                    },
-                ),
-                "autonomy_unreachable": crate::tool_rpc::AutonomyOutcome::Err(
-                    crate::tool_rpc::ToolCallError {
-                        error: "character nova is not loaded".into(),
-                    },
-                ),
             },
             "wire_block": wire_block_census(),
             "wire_message": {

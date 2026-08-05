@@ -31,16 +31,10 @@ import { replayableMessages } from "../src/llm/replay.ts";
 import { buildAnthropicParams } from "../src/llm/providers/anthropic.ts";
 import {
   decodeActionResult,
+  DaemonUnreachable,
   type AutonomyAction,
   type AutonomyRequest,
 } from "../src/autonomy/executor.ts";
-import type {
-  ToolCallError,
-  ToolCallRequest,
-  ToolCallResponse,
-  MessagesRequest,
-} from "../src/llm/tool_rpc.ts";
-import { ToolRpcUnreachable } from "../src/llm/tool_rpc.ts";
 import {
   systemToText,
   toolResultText,
@@ -64,12 +58,13 @@ type CallComplete = Extract<StreamEvent, { type: "call_complete" }>;
  * that feed it to real code stop compiling.
  */
 interface WireFixture {
+  /**
+   * Named for the socket these all shared. The tool and message arms are gone
+   * — the loop runs its tools in this process — and the fixture is frozen, so
+   * the key keeps the name the Rust gave it and only the autonomy arm is still
+   * read.
+   */
   tool_rpc: {
-    request_tool: { kind: "tool" } & ToolCallRequest;
-    request_messages: { kind: "messages" } & MessagesRequest;
-    outcome_ran: ToolCallResponse;
-    outcome_failed: ToolCallResponse;
-    outcome_unreachable: ToolCallError;
     request_autonomy: { kind: "autonomy" } & AutonomyRequest;
     autonomy_actions: AutonomyAction[];
     autonomy_ran: unknown;
@@ -243,77 +238,12 @@ describe("scalar mirrors carry exactly the declared fields", () => {
   });
 });
 
-describe("the tool-call protocol", () => {
-  // Hand-written on both sides — the daemon parses what this side writes and
-  // this side parses what the daemon answers, with nothing in between to catch
-  // a rename. Same reason the wire types are pinned.
-  test("a tool call carries exactly the fields the daemon reads", () => {
-    assertKeys<{ kind: string } & ToolCallRequest>(
-      wire.tool_rpc.request_tool,
-      ["kind", "rid", "tool_id", "name", "input"],
-      "ToolCallRequest",
-    );
-    expect(wire.tool_rpc.request_tool.kind).toBe("tool");
-  });
-
-  test("reported messages are a different request, not a tool result", () => {
-    // Untagged, a message report and a tool call would be told apart only by
-    // field presence — and persisting one as the other would record an
-    // assistant turn as tool output.
-    assertKeys<{ kind: string } & MessagesRequest>(
-      wire.tool_rpc.request_messages,
-      ["kind", "rid", "messages"],
-      "MessagesRequest",
-    );
-    expect(wire.tool_rpc.request_messages.kind).toBe("messages");
-    // Each message carries its own role: the daemon stores what it is told
-    // rather than inferring a turn's role from where it arrived.
-    for (const message of wire.tool_rpc.request_messages.messages) {
-      assertKeys<MessagesRequest["messages"][number]>(
-        message,
-        ["role", "content_blocks"],
-        "ReportedMessage",
-      );
-    }
-    expect(wire.tool_rpc.request_messages.messages.map((m) => m.role)).toEqual([
-      "assistant",
-      "user",
-    ]);
-  });
-
-  test("a tool that ran, whether or not it succeeded", () => {
-    assertKeys<ToolCallResponse>(
-      wire.tool_rpc.outcome_ran,
-      ["output", "is_error"],
-      "ToolCallResponse",
-    );
-    assertKeys<ToolCallResponse>(
-      wire.tool_rpc.outcome_failed,
-      ["output", "is_error"],
-      "ToolCallResponse (failed)",
-    );
-    expect(wire.tool_rpc.outcome_failed.is_error).toBe(true);
-  });
-
-  test("a call that never reached a loop is a different shape entirely", () => {
-    // The outcome is untagged, so these two shapes are the only thing telling
-    // "your tool failed" from "the daemon could not attempt it" — and this side
-    // discriminates on the presence of `error`.
-    assertKeys<ToolCallError>(
-      wire.tool_rpc.outcome_unreachable,
-      ["error"],
-      "ToolCallError",
-    );
-    expect("error" in wire.tool_rpc.outcome_ran).toBe(false);
-    expect("output" in wire.tool_rpc.outcome_unreachable).toBe(false);
-  });
-});
-
 describe("the autonomy protocol", () => {
-  // Shares the socket with tool calls and nothing else. A rename here is the
-  // quiet kind: an action the daemon does not recognise is a character that
-  // stops compacting, with no error anywhere — the same failure mode the
-  // keepalive's `keepalive_interval_secs` rename produced.
+  // The last thing on the daemon socket, now that tools are function calls.
+  // Hand-written on both sides, so a rename is the quiet kind: an action the
+  // daemon does not recognise is a character that stops compacting, with no
+  // error anywhere — the same failure mode the keepalive's
+  // `keepalive_interval_secs` rename produced.
   test("an action carries exactly the fields the daemon reads", () => {
     assertKeys<{ kind: string } & AutonomyRequest>(
       wire.tool_rpc.request_autonomy,
@@ -364,7 +294,7 @@ describe("the autonomy protocol", () => {
     expect(failed.failed).toBe("no conversation to compact");
     expect(() =>
       decodeActionResult(wire.tool_rpc.autonomy_unreachable, "nova", "compact_idle"),
-    ).toThrow(ToolRpcUnreachable);
+    ).toThrow(DaemonUnreachable);
   });
 });
 

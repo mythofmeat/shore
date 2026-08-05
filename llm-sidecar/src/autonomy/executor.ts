@@ -5,14 +5,17 @@
  * heartbeat is a private turn with the whole tool surface, compaction and the
  * deep archive rewrite the conversation on disk, and dreaming sweeps the memory
  * store — all of which reach the filesystem, MCP and sub-agents, none of which
- * live on this side. So each one becomes a call back over the daemon's tool
- * socket, the same channel and the same line-delimited JSON the tool loop
- * already uses.
+ * live on this side. So each one becomes a call back over the daemon's socket,
+ * as line-delimited JSON.
  *
- * It routes differently, though, and that is the point: a tool call belongs to
- * one in-flight request and is keyed by its `rid`, while an action belongs to a
- * *character* and outlives every request. Two registries, one socket. See
- * `crates/daemon/src/tool_rpc.rs`.
+ * # The last thing on this socket
+ *
+ * It used to share it with the tool loop, which is why the transport below
+ * looks like a general-purpose client rather than a caller of one endpoint.
+ * The tool loop runs its tools in this process now, so the request union is
+ * down to one arm and the transport moved here from `llm/tool_rpc.ts` with it.
+ * It goes the same way when `autonomy/manager.rs` ports: a heartbeat is a turn,
+ * and a turn is already this side's.
  *
  * # What the answer has to carry
  *
@@ -24,7 +27,6 @@
  * the turn count wrong until the next user turn.
  */
 
-import { callDaemonTool, ToolRpcUnreachable } from "../llm/tool_rpc.ts";
 import { decodeEvent, type HeartbeatEventKind } from "./heartbeat_log.ts";
 import type { AutonomyActionResult, AutonomyExecutor } from "./runner.ts";
 import type { CompactionReason } from "./tick.ts";
@@ -34,7 +36,7 @@ import type { CompactionReason } from "./tick.ts";
  *
  * The compaction reason is folded into the action rather than riding beside it:
  * the two reasons are different requests, and it makes "a dream with a reason"
- * unspellable. Mirrors `AutonomyAction` in `tool_rpc.rs`.
+ * unspellable. Mirrors `AutonomyAction` in the daemon.
  */
 export type AutonomyAction =
   | "heartbeat_tick"
@@ -53,12 +55,89 @@ export interface AutonomyRequest {
   action: AutonomyAction;
 }
 
+/** The daemon could not attempt the call at all. Never reaches a model. */
+export class DaemonUnreachable extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DaemonUnreachable";
+  }
+}
+
 /**
- * Run autonomy actions by asking the daemon over its tool socket.
+ * Make one call over the daemon's socket.
  *
- * The socket path is the daemon's, resolved from the sidecar socket the same
- * way the tool loop resolves it, and it is passed in rather than derived here
- * so a test can point at its own.
+ * Line-delimited JSON, one connection per call: write a request and a newline,
+ * read an answer and a newline, close. A connection *is* the correlation, so
+ * there is no framing, keep-alive, or request id.
+ *
+ * Resolves with whatever the daemon answered, including an action that failed —
+ * telling those apart is {@link decodeActionResult}'s job, because the wire is
+ * where the distinction lives. Rejects only when no answer arrived: the socket
+ * refused, the connection closed first, or the answer was not JSON.
+ */
+export async function callDaemon(
+  socketPath: string,
+  request: { kind: "autonomy" } & AutonomyRequest,
+): Promise<unknown> {
+  return await new Promise<unknown>((resolve, reject) => {
+    let buffer = "";
+    let settled = false;
+    let close: (() => void) | undefined;
+
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      close?.();
+      fn();
+    };
+
+    Bun.connect({
+      unix: socketPath,
+      socket: {
+        open(socket) {
+          close = () => socket.end();
+          socket.write(`${JSON.stringify(request)}\n`);
+        },
+        data(_socket, chunk) {
+          buffer += new TextDecoder().decode(chunk);
+          const newline = buffer.indexOf("\n");
+          if (newline === -1) return;
+          const line = buffer.slice(0, newline);
+          finish(() => {
+            try {
+              resolve(JSON.parse(line));
+            } catch (cause) {
+              reject(
+                new DaemonUnreachable(
+                  `daemon answered with something that is not JSON: ${String(cause)}`,
+                ),
+              );
+            }
+          });
+        },
+        error(_socket, error) {
+          finish(() => reject(new DaemonUnreachable(String(error))));
+        },
+        close() {
+          // Only reached before an answer — the success path settles first.
+          finish(() =>
+            reject(new DaemonUnreachable("daemon closed the socket before answering")),
+          );
+        },
+      },
+    }).catch((cause: unknown) => {
+      finish(() =>
+        reject(new DaemonUnreachable(`cannot reach the daemon socket: ${String(cause)}`)),
+      );
+    });
+  });
+}
+
+/**
+ * Run autonomy actions by asking the daemon over its socket.
+ *
+ * The socket path is passed in rather than derived here so a test can point at
+ * its own.
  */
 export class RpcAutonomyExecutor implements AutonomyExecutor {
   readonly #socketPath: string;
@@ -92,7 +171,7 @@ export class RpcAutonomyExecutor implements AutonomyExecutor {
    * tick start it again on top.
    */
   async #run(character: string, action: AutonomyAction): Promise<AutonomyActionResult> {
-    const outcome = await callDaemonTool<unknown>(this.#socketPath, {
+    const outcome = await callDaemon(this.#socketPath, {
       kind: "autonomy",
       character,
       action,
@@ -116,12 +195,12 @@ export function decodeActionResult(
   action: AutonomyAction,
 ): AutonomyActionResult {
   if (outcome === null || typeof outcome !== "object") {
-    throw new ToolRpcUnreachable(
+    throw new DaemonUnreachable(
       `daemon answered ${action} for ${character} with something that is not an object`,
     );
   }
   const o = outcome as Record<string, unknown>;
-  if (typeof o["error"] === "string") throw new ToolRpcUnreachable(o["error"]);
+  if (typeof o["error"] === "string") throw new DaemonUnreachable(o["error"]);
 
   const turnCount = o["turn_count"];
   const failed = o["failed"];

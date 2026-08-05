@@ -177,21 +177,6 @@ export interface ProviderOptions {
 }
 
 /**
- * Where to call back when the sidecar drives the tool loop.
- *
- * The sidecar decides which tools to run; the daemon runs them, because the
- * executors hold the filesystem, the memory store, MCP, and sub-agents. Its
- * presence is the switch — a request without it is one the daemon is looping
- * over itself. See `llm/tool_rpc.ts` and `crates/daemon/src/tool_rpc.rs`.
- */
-export interface ToolRpc {
-  /** Unix socket the daemon serves tool calls on. */
-  socket_path: string;
-  /** Identifies this in-flight loop to the daemon's registry. */
-  rid: string;
-}
-
-/**
  * Per-call labels from the daemon — mirrors Rust `CallContext`
  * (`crates/daemon/src/llm/types.rs`). The two must change together, and the
  * shape is pinned in `wire_parity.json`.
@@ -266,8 +251,6 @@ export interface SidecarRequest {
   /** Per-call labels for the ledger row and the forensic log. Absent only for
    * callers with no ledger behind them. See {@link CallContext}. */
   context?: CallContext;
-  /** Present when this side drives the tool loop. See {@link ToolRpc}. */
-  tool_rpc?: ToolRpc;
   /** Dispatch rounds the loop may run. Absent means unlimited — the model
    * ending cleanly is then the only exit. Mirrors the daemon's resolved
    * per-model `max_tool_iterations`. */

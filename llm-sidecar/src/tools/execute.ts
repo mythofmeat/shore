@@ -269,3 +269,40 @@ export function recordReportedMessage(
     timestamp: exec.now(),
   });
 }
+
+/**
+ * The tool half of one turn: run a tool, record a turn, keep the list.
+ *
+ * This is what a tool loop is handed instead of a socket. It exists because the
+ * two calls above share the message list — the loop records the assistant turn
+ * that asked for a tool, and running that tool may hang a generated image off
+ * it — and because a loop should not have to hold a `ToolContext`, a
+ * diagnostics ring and a frame sink to ask for one tool.
+ *
+ * # There is no failure this cannot express
+ *
+ * {@link runTool} does not reject. `executeToolUse` turns every way a tool can
+ * fail into a `tool_result` with `is_error` set, which is the shape the model
+ * can act on. That is the whole of what `tool_rpc.ts` needed a second failure
+ * channel for: over a socket, "the tool failed" and "the call never arrived"
+ * are different events, and reporting the second as the first would describe a
+ * plumbing problem as something the model did. In one process the second cannot
+ * happen.
+ */
+export interface ToolPhase {
+  /** The turns this loop produced, in order, for the caller to persist. */
+  readonly messages: Message[];
+  /** Run one tool. Emits its frames and returns the `tool_result` block. */
+  runTool: (toolUse: ToolUseEvent) => Promise<ContentBlock>;
+  /** Record a turn the loop produced. Must precede the tools it asked for. */
+  recordTurn: (role: Role, blocks: ContentBlock[]) => void;
+}
+
+/** Bind an execution context and a message list into a {@link ToolPhase}. */
+export function toolPhase(exec: ToolExecution, messages: Message[] = []): ToolPhase {
+  return {
+    messages,
+    runTool: (toolUse) => executeToolUse(toolUse, exec, messages),
+    recordTurn: (role, blocks) => recordReportedMessage(messages, role, blocks, exec),
+  };
+}

@@ -20,14 +20,22 @@
  * dispatch rounds and which never spends the closing call that lets a capped
  * loop answer with its last tool results in hand. See that fixture's header.
  *
- * # What the daemon sees
+ * # What the caller sees
  *
  * One flat `start` … `done`, regardless of how many model calls happened, with
  * usage summed across all of them and `content_blocks` carrying only the
  * terminal turn. Each individual call is announced as it lands via
  * `call_complete`, so its ledger row exists whether or not the loop ever
- * reaches `done`. This matches `anthropic_loop.ts` exactly; the daemon cannot
- * tell the two apart, and `wire_parity.json` is what says so.
+ * reaches `done`. This matches `anthropic_loop.ts` exactly.
+ *
+ * # Tools are function calls
+ *
+ * They used to be one Unix-socket round trip each, because the executors lived
+ * in the daemon and the loop lived here. Both are this process now, so the loop
+ * is handed a {@link ToolPhase} and calls it — and the failure taxonomy
+ * collapses with the transport. There is no longer a "the daemon could not
+ * attempt this" that has to end the turn without telling the model, because
+ * there is no attempt that can fail to arrive.
  */
 
 import type { ContentBlock } from "../../engine/types.ts";
@@ -36,19 +44,12 @@ import {
   type ToolLoopDriver,
   type ToolUseEvent,
 } from "../../engine/tool_loop.ts";
-import {
-  callDaemonTool,
-  isTransportError,
-  reportMessages,
-  ToolRpcUnreachable,
-  type ReportedMessage,
-} from "../tool_rpc.ts";
+import type { ToolPhase } from "../../tools/execute.ts";
 import type {
   SidecarProvider,
   SidecarRequest,
   StreamEvent,
   Timing,
-  ToolRpc,
   Usage,
 } from "../types.ts";
 import { marksFirstToken } from "./anthropic.ts";
@@ -79,7 +80,7 @@ function addUsage(total: Usage, one: Usage): Usage {
  * A one-slot handoff from the loop to the generator draining it.
  *
  * The loop has to be a plain async function — `runToolLoop` is pinned against a
- * fixture and takes a driver, not a generator — but the daemon has to see
+ * fixture and takes a driver, not a generator — but the caller has to see
  * tokens as they arrive, so the events cannot be buffered until it returns.
  *
  * Capacity one, not a queue: `yield` in the Anthropic path suspends the
@@ -233,7 +234,6 @@ class ProviderLoopDriver implements ToolLoopDriver<ProviderTurn> {
   terminalFinishReason = "end_turn";
   completedCalls = 0;
   firstTokenAt = 0;
-  unreachable: ToolRpcUnreachable | undefined;
 
   /** This round's results, in the order the model asked for them. */
   private pendingResults: ContentBlock[] = [];
@@ -242,7 +242,7 @@ class ProviderLoopDriver implements ToolLoopDriver<ProviderTurn> {
   constructor(
     private readonly provider: SidecarProvider,
     private readonly req: SidecarRequest,
-    private readonly rpc: ToolRpc,
+    private readonly tools: ToolPhase,
     private readonly channel: EventChannel,
     private readonly abort: AbortController,
     private readonly now: () => number,
@@ -313,115 +313,75 @@ class ProviderLoopDriver implements ToolLoopDriver<ProviderTurn> {
 
   async dispatch(turn: ProviderTurn, uses: ToolUseEvent[]): Promise<void> {
     // Appending the assistant turn is the driver's job — see the
-    // `ToolLoopDriver` contract. The next call has to see it, and the daemon
+    // `ToolLoopDriver` contract. The next call has to see it, and the caller
     // has to persist it.
     this.req.messages.push({ role: "assistant", content: turn.blocks });
 
-    // Reported BEFORE the tools run, on the same channel they run over: the
-    // daemon's generated-image handling attaches to the assistant turn that
-    // requested the tool, so that turn must already be recorded. Carries the
-    // previous round's results with it, in conversation order, so a round costs
-    // one report rather than two.
-    const prior = this.drainResults();
-    await reportMessages(
-      this.rpc,
-      [...prior, { role: "assistant", content_blocks: turn.blocks }],
-      this.abort.signal,
-    );
+    // Recorded BEFORE the tools run, and in conversation order: the
+    // generated-image side channel hangs its `ImageRef` off the assistant turn
+    // that asked for the tool, so that turn has to be in the list by the time
+    // the tool dispatches. The previous round's results go first because they
+    // came first, not because anything downstream sorts them.
+    this.recordPriorResults();
+    this.tools.recordTurn("assistant", turn.blocks);
 
     // Concurrent, but collected in ask-order: `Promise.all` preserves input
-    // order, so completion order never decides what the daemon stores. The
-    // Anthropic path needs a record-as-they-land callback for this because the
-    // SDK owns the scheduling; here the loop does, so it falls out.
-    const outcomes = await Promise.all(
-      uses.map(async (use) => {
-        const outcome = await callDaemonTool(
-          this.rpc.socket_path,
-          {
-            kind: "tool",
-            rid: this.rpc.rid,
-            tool_id: use.id,
-            name: use.name,
-            input: use.input,
-          },
-          this.abort.signal,
-        ).catch((cause: unknown) => {
-          throw cause instanceof ToolRpcUnreachable
-            ? cause
-            : new ToolRpcUnreachable(String(cause));
-        });
-        if (isTransportError(outcome)) throw new ToolRpcUnreachable(outcome.error);
-        return outcome;
-      }),
-    ).catch((cause: unknown) => {
-      // A tool the daemon could not even attempt is not something to tell the
-      // model about; it ends the turn.
-      const error =
-        cause instanceof ToolRpcUnreachable ? cause : new ToolRpcUnreachable(String(cause));
-      this.unreachable ??= error;
-      this.abort.abort();
-      throw error;
-    });
-
-    this.pendingResults = uses.map((use, i) => ({
-      type: "tool_result",
-      tool_use_id: use.id,
-      content: outcomes[i]?.output ?? "",
-      is_error: outcomes[i]?.is_error ?? false,
-    }));
+    // order, so completion order never decides what gets stored. The Anthropic
+    // path needs a record-as-they-land callback for this because the SDK owns
+    // the scheduling; here the loop does, so it falls out.
+    this.pendingResults = await Promise.all(uses.map((use) => this.tools.runTool(use)));
   }
 
   appendToolResults(): void {
     this.req.messages.push({ role: "user", content: this.pendingResults });
   }
 
-  /** The finished round's results as one message. Drains, so it reports once. */
-  drainResults(): ReportedMessage[] {
-    if (this.pendingResults.length === 0) return [];
+  /** Record the finished round's results as one turn. Drains, so once. */
+  private recordPriorResults(): void {
+    if (this.pendingResults.length === 0) return;
     const blocks = this.pendingResults;
     this.pendingResults = [];
-    return [{ role: "user", content_blocks: blocks }];
+    this.tools.recordTurn("user", blocks);
   }
 
   /** The last round's results: after a terminal turn, and after a cap whose
    *  final round ran its tools with no turn following. */
-  async reportFinalResults(): Promise<void> {
-    await reportMessages(this.rpc, this.drainResults(), this.abort.signal);
+  recordFinalResults(): void {
+    this.recordPriorResults();
   }
 }
 
 /**
  * Run the whole loop, emitting one flat stream of events.
  *
- * Mirrors `anthropicToolLoopEvents` frame for frame — the daemon parses one
+ * Mirrors `anthropicToolLoopEvents` frame for frame — the caller parses one
  * stream shape and does not know which produced it.
  */
 export async function* genericToolLoopEvents(
   provider: SidecarProvider,
   req: SidecarRequest,
+  tools: ToolPhase,
   signal?: AbortSignal,
   now: () => number = Date.now,
 ): AsyncIterable<StreamEvent> {
-  const rpc = req.tool_rpc;
-  if (!rpc) throw new Error("genericToolLoopEvents requires tool_rpc on the request");
-
   const startedAt = now();
 
-  // One controller drives everything the loop owns: the model calls and the
-  // tool socket. The transport's signal feeds into it, so a client that hangs
-  // up stops the whole loop rather than only its next call.
+  // One controller drives the model calls. The caller's signal feeds into it,
+  // so a client that hangs up stops the whole loop rather than only its next
+  // call. Tools are not on it: a running tool is bounded by its own
+  // `[tools] timeout`, which `dispatchWithinDeadline` owns.
   const abort = new AbortController();
   if (signal?.aborted) abort.abort();
   signal?.addEventListener("abort", () => abort.abort(), { once: true });
 
   const channel = new EventChannel();
-  const driver = new ProviderLoopDriver(provider, req, rpc, channel, abort, now, startedAt);
+  const driver = new ProviderLoopDriver(provider, req, tools, channel, abort, now, startedAt);
 
   let failure: unknown;
   const running = (async () => {
     try {
       await runToolLoop(driver, undefined, req.max_tool_iterations, "close_with_final_turn");
-      await driver.reportFinalResults();
+      driver.recordFinalResults();
     } catch (error) {
       failure = error;
     } finally {
@@ -449,12 +409,10 @@ export async function* genericToolLoopEvents(
     };
   };
 
-  // An unreachable daemon surfaces as an abort; report the real cause.
-  const cause = driver.unreachable ?? failure;
-  if (cause !== undefined) {
+  if (failure !== undefined) {
     yield {
       type: "error",
-      message: String(cause instanceof Error ? cause.message : cause),
+      message: String(failure instanceof Error ? failure.message : failure),
       usage: driver.usage,
       timing: timing(),
     };
@@ -465,9 +423,9 @@ export async function* genericToolLoopEvents(
     type: "done",
     content: driver.text,
     finish_reason: driver.terminalFinishReason,
-    // Only the terminal turn. The daemon's stream accumulator sees every turn's
-    // blocks in one flat stream and cannot tell where one ended, so it would
-    // otherwise persist a final message replaying the whole loop.
+    // Only the terminal turn. A stream accumulator sees every turn's blocks in
+    // one flat stream and cannot tell where one ended, so it would otherwise
+    // persist a final message replaying the whole loop.
     content_blocks: driver.terminalBlocks,
     usage: driver.usage,
     timing: timing(),

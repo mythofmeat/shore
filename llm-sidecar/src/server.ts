@@ -32,8 +32,6 @@ import {
 import { generateImage } from "./llm/image_generate.ts";
 import { GeminiProvider } from "./llm/providers/gemini.ts";
 import { AnthropicProvider } from "./llm/providers/anthropic.ts";
-import { anthropicToolLoopEvents } from "./llm/providers/anthropic_loop.ts";
-import { genericToolLoopEvents } from "./llm/providers/generic_loop.ts";
 import { OpenAIProvider } from "./llm/providers/openai.ts";
 import { OpenRouterProvider } from "./llm/providers/openrouter.ts";
 import { VercelProvider } from "./llm/providers/vercel.ts";
@@ -63,7 +61,7 @@ export interface SidecarDeps {
    */
   autonomy?: AutonomyService;
   /**
-   * The daemon's tool socket, which autonomy actions call back over.
+   * The daemon socket autonomy actions call back over.
    *
    * `serveSidecar` derives it; a handler built without one has nowhere to send
    * an action, which only matters once a character is registered.
@@ -187,25 +185,14 @@ export function createSidecarHandler(
       if (!provider) return textError(501, `unsupported sdk: ${req.sdk}`);
       const blocked = budgetBlockFor(req);
       if (blocked) return budgetRefusal(blocked);
-      // `tool_rpc` is the switch: with it, this side drives the tool loop and
-      // calls back to run each tool. Its absence still means the daemon drives,
-      // which is what compaction and dreaming do.
-      //
-      // Anthropic gets its own loop because that SDK's `toolRunner` gives the
-      // request/execute/continue cycle for free; every other dialect runs the
-      // ported control flow directly over the `SidecarProvider` interface. The
-      // two emit the same frames — see `generic_loop.ts`.
-      const source =
-        req.tool_rpc === undefined
-          ? (signal: AbortSignal) => provider.stream(req, signal)
-          : req.sdk === "anthropic"
-            ? (signal: AbortSignal) => anthropicToolLoopEvents(req, signal)
-            : (signal: AbortSignal) => genericToolLoopEvents(provider, req, signal);
-      // Every provider call in the stream becomes a ledger row here, including
-      // a loop's individual calls, which reach the daemon only as one summed
-      // `done`. See `ledger/record.ts`.
+      // One turn, no loop. A tool loop needs a `ToolPhase` — a tool context, a
+      // frame sink, a message list — and none of that can cross an HTTP
+      // boundary, which is the point: `anthropicToolLoopEvents` and
+      // `genericToolLoopEvents` are in-process calls now, made by whoever is
+      // driving the turn. This endpoint is the hop they no longer take, and it
+      // goes when `swp_server` is wired (#18, step 5).
       return streamResponse(
-        (signal) => recordingStream(req.context, req, source(signal)),
+        (signal) => recordingStream(req.context, req, provider.stream(req, signal)),
         request.signal,
         heartbeatMs,
       );
@@ -511,11 +498,12 @@ export function serveSidecar(socketPath: string): ReturnType<typeof Bun.serve> {
 }
 
 /**
- * Where the daemon serves tool calls, given where it serves this one.
+ * Where the daemon answers autonomy actions, given where it serves this one.
  *
- * Derived rather than configured, mirroring `tool_rpc::socket_path_for`: the
- * two sockets belong to the same daemon instance, and a second setting is a
- * second thing to get wrong.
+ * Derived rather than configured: the two sockets belong to the same daemon
+ * instance, and a second setting is a second thing to get wrong. It kept its
+ * `.tools` suffix and its name because the daemon it talks to is unchanged —
+ * tool calls simply stopped being one of the things that travel over it.
  */
 export function toolSocketPathFor(sidecarSocket: string): string {
   return `${sidecarSocket}.tools`;
