@@ -33,11 +33,10 @@
  *
  * # What is not here yet
  *
- * `spawn_background_services` has three tasks. The config watcher has ported —
- * see `hot_reload.ts`. The provider auto-discovery loop (`auto_discovery.rs`)
- * has not, so provider model lists are whatever discovery cached at startup.
- * The sidecar supervisor does not move at all, because it supervises the
- * process this port is being written into.
+ * `spawn_background_services` had three tasks. Two have ported and start
+ * below: the config watcher (`hot_reload.ts`) and provider auto-discovery
+ * (`auto_discovery.ts`). The third, the sidecar supervisor, does not move at
+ * all — it supervises the process this port is being written into.
  */
 
 import { randomUUID } from "node:crypto";
@@ -57,6 +56,7 @@ import type { Logger } from "../swp/connection.ts";
 import { buildHandshakeProvider } from "../swp/handshake.ts";
 import { Server } from "../swp/server.ts";
 import { localRfc3339 } from "../time.ts";
+import { startAutoDiscovery } from "./auto_discovery.ts";
 import { startConfigWatcher } from "./hot_reload.ts";
 import { parseArgs, resolveStartup, sourceLabel, StartupError } from "./startup.ts";
 
@@ -88,6 +88,13 @@ export interface DaemonOptions {
    * a temp directory turns every file the test writes into a config reload.
    */
   watchConfig?: boolean | undefined;
+  /**
+   * Refresh provider model lists on a schedule. On by default.
+   *
+   * Off is for a test, which must not make a network request to be told a
+   * provider it invented is unreachable.
+   */
+  autoDiscovery?: boolean | undefined;
 }
 
 /** A daemon that is serving. */
@@ -243,8 +250,16 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
         ...(log === undefined ? {} : { log }),
       });
 
-  // `auto_discovery.rs` is still unported, so provider model lists are
-  // whatever discovery cached at startup.
+  // Reads the registry's config per pass rather than this one, so a provider
+  // added to `config.toml` is picked up by the watcher above and discovered on
+  // the next tick.
+  const discovery =
+    options.autoDiscovery === false
+      ? undefined
+      : startAutoDiscovery({
+          config: () => runtime.registry.globalConfig(),
+          ...(log === undefined ? {} : { log }),
+        });
 
   const served = server.serve();
 
@@ -253,6 +268,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     // Stopped first, and before anything is torn down: a reload that landed
     // after the registry had been let go would be adopting into nothing.
     watcher?.stop();
+    discovery?.stop();
     // Ordered, and each step waits for the one before it. The server closing
     // its route queue is what ends the handler; the handler finishing is what
     // guarantees no turn is still writing when autonomy persists its state.

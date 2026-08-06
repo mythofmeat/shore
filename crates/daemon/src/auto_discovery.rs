@@ -9,6 +9,17 @@
 //! daemon from starting. The atomic write semantics in
 //! `discovery::write_cache` already preserve the previous cache on
 //! serialization or I/O failure.
+//!
+//! **Ported.** `llm-sidecar/src/daemon/auto_discovery.ts`, pinned by
+//! `tests/daemon_auto_discovery.test.ts` and
+//! `scripts/mutate_daemon_auto_discovery.py`.
+//!
+//! One divergence: **the config is read per pass rather than captured when the
+//! loop starts.** Here, enabling a provider — or turning its discovery on — did
+//! nothing until the daemon was restarted, which was true of everything on the
+//! reload path before `hot_reload.ts` landed. Over there the pass reads through
+//! the character registry, so a provider added to `config.toml` is picked up by
+//! the watcher and discovered on the next tick.
 
 use std::path::PathBuf;
 use std::time::Duration;
