@@ -156,6 +156,12 @@ export class CompactionError extends Error {
   static markdownStore(detail: string): CompactionError {
     return new CompactionError("markdown_store", `markdown store: ${detail}`);
   }
+
+  /** The archive or the retained write failed. `conversation: ` in the Rust's
+   *  `Display`, which is what reaches an operator through `shore compact`. */
+  static conversationManager(detail: string): CompactionError {
+    return new CompactionError("conversation", `conversation: ${detail}`);
+  }
 }
 
 /**
