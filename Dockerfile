@@ -18,6 +18,10 @@ COPY --from=rust    /src/target/release/shore /usr/bin/shore
 COPY --from=rust    /src/target/release/shore-tui /usr/bin/shore-tui
 COPY --from=bun     /src/llm-sidecar/dist/shore-llm-sidecar /usr/lib/shore/shore-llm-sidecar
 
+RUN groupadd --gid 1000 shore \
+    && useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash shore
+RUN mkdir -p /home/shore/.config/nvim /home/shore/.local/share/nvim /shared
+
 RUN pacman -Syu --noconfirm neovim
 RUN pacman -Syu --noconfirm yazi
 RUN pacman -Syu --noconfirm fd
@@ -30,6 +34,10 @@ RUN pacman -Syu --noconfirm bun
 RUN pacman -Syu --noconfirm unzip
 ENV EDITOR=nvim
 
+ENV HOME=/home/shore
+RUN chown -R 1000:1000 /home/shore /shared
+WORKDIR /shared
+
 ENV SHORE_CONFIG_DIR=/config
 ENV SHORE_DATA_DIR=/data
 ENV SHORE_CACHE_DIR=/cache
@@ -38,5 +46,4 @@ ENV SHORE_ADDR=0.0.0.0:7320
 
 EXPOSE 7320
 
-WORKDIR /shared
 CMD ["shore-daemon"]
