@@ -9,10 +9,10 @@
 //! Rust that used to do all of that by the frozen fixtures in
 //! `llm-sidecar/tests/autonomy_fixtures/`. That Rust is gone.
 //!
-//! What is left in `manager.rs` is the heartbeat tick and idle compaction,
-//! verbatim. They are next (#12), and until they land they are a
-//! *specification*: the port reads them, generates fixtures from them, replays
-//! those against TypeScript, and then this directory goes.
+//! What is left in `manager.rs` is the heartbeat tick, verbatim. It is the last
+//! one (#12), and until it lands the rest of this module is a *specification*:
+//! the port reads it, generates fixtures from it, replays those against
+//! TypeScript, and then this directory goes.
 //!
 //! ## What in it has already ported
 //!
@@ -41,12 +41,35 @@
 //! finished after a pass that had archived nothing. It is reported explicitly
 //! now — see `AutonomyActionResult.deepArchiveDone`.
 //!
+//! **Idle compaction** — `execute_idle_compaction` — is
+//! `llm-sidecar/src/autonomy/idle_compaction.ts`. It is the one port in this
+//! module with no parity fixture, and the reason is worth keeping: the pass it
+//! runs, the bookkeeping it ends on and the state writes it made are each
+//! already pinned somewhere else, so what remained to carry across was which
+//! pieces it calls and in what order. A generated fixture would have recorded
+//! nothing a test double does not. `tests/idle_compaction.test.ts` and
+//! `scripts/mutate_idle_compaction.py` hold it instead.
+//!
+//! The four steps it and the deep archive both end on — reload the engine, drain
+//! the deferred edits, invalidate the cached body, re-point the keepalive — ran
+//! from two separate bodies here and are one function there
+//! (`autonomy/post_archive.ts`). Two copies of the same four steps is how a fix
+//! to one silently misses the other.
+//!
+//! Two differences from `execute_idle_compaction`, both argued for rather than
+//! engineered around. A missing engine no longer refuses the pass: the Rust
+//! required a `registry` so the post-pass reload could happen, and a compaction
+//! that happened but did not reload beats one that did not happen. And missing
+//! LLM dependencies report a failure instead of returning early — the early
+//! return left `compaction_triggered` set, so nothing compacted that character
+//! again until a user message cleared it, and reproducing a latch leak reachable
+//! only from a context with no model wired is not worth it.
+//!
 //! None of it is **deleted here**, and that is deliberate rather than an
-//! oversight: the two remaining actions call the shared pieces, and a
-//! specification with holes in it is a worse specification. They go with the
-//! last of the two. `POST /v1/keepalive/prefix` and its client half *are*
-//! deleted, on both sides — that was the bridge, and the bridge is what had to
-//! die.
+//! oversight: the heartbeat tick calls the shared pieces, and a specification
+//! with holes in it is a worse specification. They go with it. `POST
+//! /v1/keepalive/prefix` and its client half *are* deleted, on both sides — that
+//! was the bridge, and the bridge is what had to die.
 //!
 //! The dream sweep was a fourth. It is not being ported — dreaming was deleted
 //! outright in `cf55dff4`, and its paths here went with it rather than staying

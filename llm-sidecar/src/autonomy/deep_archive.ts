@@ -1,10 +1,12 @@
 /**
  * The deep-idle archive: what happens to a conversation nobody came back to.
  *
- * Ported from `execute_deep_idle_archive`, `execute_deep_archive_pure`,
- * `execute_deep_archive_compaction` and `reload_engine_and_apply_deferred` in
- * `crates/daemon/src/autonomy/manager.rs`, pinned by
- * `tests/autonomy_fixtures/deep_archive_parity.json`.
+ * Ported from `execute_deep_idle_archive`, `execute_deep_archive_pure` and
+ * `execute_deep_archive_compaction` in `crates/daemon/src/autonomy/manager.rs`,
+ * pinned by `tests/autonomy_fixtures/deep_archive_parity.json`. The bookkeeping
+ * both arms end on — `reload_engine_and_apply_deferred` and the
+ * invalidate-then-reprime pair — is `post_archive.ts`, shared with idle
+ * compaction because the Rust ran the same four steps from both.
  *
  * After `archive_after` of silence, whatever is left of the active conversation
  * is moved out so the next exchange starts clean. `runner.ts` decides *when*;
@@ -57,16 +59,13 @@
 
 import { join } from "node:path";
 
-import type { LoadedConfig } from "../config/loader.ts";
 import { MessageStore, isToolResultOnly } from "../engine/message_store.ts";
 import type { Message } from "../engine/types.ts";
-import { applyDeferredEdits } from "../memory/deferred_edits.ts";
 import { conversationManager } from "../memory/compaction/archive.ts";
 import { tryBeginCompaction } from "../memory/compaction/manager.ts";
 import { runCompaction, type CompactionRunDeps } from "../memory/compaction/run.ts";
+import { reloadAndApplyDeferred, repoint, type PostArchiveDeps } from "./post_archive.ts";
 import type { AutonomyActionResult } from "./runner.ts";
-import type { LastRequestCache } from "./last_request.ts";
-import type { RebuildDeps } from "./rebuild.ts";
 
 const ACTIVE_JSONL_FILE = "active.jsonl";
 
@@ -123,17 +122,8 @@ export function deepArchiveNotification(
   };
 }
 
-/** The conversation engine, for the reload that follows an archive. */
-export interface DeepArchiveEngine {
-  reload(character: string): Promise<void>;
-}
-
-/** What the action needs beyond the config. */
-export interface DeepArchiveDeps {
-  /** The character-effective config. `dirs.data` is the root it reads and locks under. */
-  config: LoadedConfig;
-  /** The cached request body, which this invalidates and then re-points. */
-  cache: LastRequestCache;
+/** What the action needs beyond {@link PostArchiveDeps}. */
+export interface DeepArchiveDeps extends PostArchiveDeps {
   /**
    * The LLM arm's dependencies. Absent means the arm cannot run — the Rust
    * returned early on a missing client, config or notifier — and the trigger is
@@ -142,10 +132,6 @@ export interface DeepArchiveDeps {
   run?: Omit<CompactionRunDeps, "config" | "cachedRequest">;
   /** A desktop notification. */
   notify?: (title: string, body: string) => void;
-  /** Reloaded after an archive, so the cached prompt is not the pre-archive one. */
-  engine?: DeepArchiveEngine;
-  /** What the keepalive reprime rebuilds with. */
-  rebuild?: RebuildDeps & { keepaliveIntervalMs?: number };
   /** Injected so a replay can pin the manifest's stamp and the new id. */
   now?: () => string;
   newId?: () => string;
@@ -247,7 +233,7 @@ async function pureArchive(
     `shore: deep-idle archive complete for ${character} (pure archive, ` +
       `archivable=${archivable}, tail=${tail})`,
   );
-  await repoint(character, deps);
+  await repoint(character, deps, "deep_idle_archive");
 
   // Zero on both counts: the conversation is empty of anything memory does not
   // already hold, so the next turn starts from nothing and covers nothing.
@@ -308,61 +294,9 @@ async function compactionArchive(
   console.info(
     `shore: deep-idle archive complete for ${character} (compaction pass, retained=${retained})`,
   );
-  await repoint(character, deps);
+  await repoint(character, deps, "deep_idle_archive");
 
   return { turnCount: retained, events: [], deepArchiveDone: false };
-}
-
-/**
- * Reload the engine and drain the deferred prompt edits.
- *
- * `reload_engine_and_apply_deferred`, and both halves warn rather than fail: the
- * archive already happened, and a background action has nobody to report a
- * reload failure to. That is the one difference from the `compact` command's
- * completion, where a failed reload *is* the command's answer.
- *
- * The order is the Rust's and it matters — the reload is what busts the cached
- * prompt those edits would otherwise be written behind.
- */
-async function reloadAndApplyDeferred(
-  character: string,
-  deps: DeepArchiveDeps,
-  context: string,
-): Promise<void> {
-  if (deps.engine !== undefined) {
-    try {
-      await deps.engine.reload(character);
-    } catch (e) {
-      console.warn(`shore: ${context}: engine reload failed for ${character}: ${String(e)}`);
-    }
-  }
-
-  try {
-    await applyDeferredEdits(
-      join(deps.config.dirs.data, character),
-      deps.config.dirs.config,
-      character,
-    );
-  } catch (e) {
-    console.warn(`shore: ${context}: failed to apply deferred edits for ${character}: ${String(e)}`);
-  }
-}
-
-/**
- * Drop the cached body and point the keepalive at what is on disk now.
- *
- * Two calls rather than one because the rebuild has to read the file the archive
- * just rewrote — the Rust did the invalidation under the state lock and the
- * reprime after releasing it, for the same reason.
- */
-async function repoint(character: string, deps: DeepArchiveDeps): Promise<void> {
-  deps.cache.invalidate(character, "deep_idle_archive");
-  await deps.cache.reprimeFromDisk(
-    character,
-    deps.config.dirs.data,
-    deps.config,
-    deps.rebuild ?? {},
-  );
 }
 
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));

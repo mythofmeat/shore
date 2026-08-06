@@ -27,6 +27,10 @@ A mutant is KILLED if `bun test tests/deep_archive_parity.test.ts
 tests/autonomy_runner.test.ts` fails with it applied — two files, because what
 the archive *reports* is only behaviour once the runner folds it in.
 
+Four mutants land in `post_archive.ts`, which idle compaction shares. They are
+still the archive's mutants: the bookkeeping is the archive's last four steps,
+and the sharing is why breaking it in one place has to fail here too.
+
 Run from the repository root:
     python3 llm-sidecar/scripts/mutate_deep_archive.py
 """
@@ -36,6 +40,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 D = "src/autonomy/deep_archive.ts"
+P = "src/autonomy/post_archive.ts"
 R = "src/autonomy/runner.ts"
 
 # (label, file, find, replace)
@@ -158,11 +163,11 @@ MUTANTS = [
      "  } finally {\n    guard.release();\n  }",
      "  } finally {\n    void guard;\n  }"),
     ("bookkeeping: the cached body survives the archive",
-     D,
-     '  deps.cache.invalidate(character, "deep_idle_archive");',
-     "  void character;"),
+     P,
+     "  deps.cache.invalidate(character, reason);",
+     "  void reason;"),
     ("bookkeeping: the keepalive is never re-pointed after the archive",
-     D,
+     P,
      "  await deps.cache.reprimeFromDisk(",
      "  if (false) await deps.cache.reprimeFromDisk("),
     ("bookkeeping: the pure arm sends no notification",
@@ -178,7 +183,7 @@ MUTANTS = [
      "  await reloadAndApplyDeferred(character, deps, \"Deep-idle archive\");\n\n  const { title",
      "  void 0;\n\n  const { title"),
     ("bookkeeping: a failed reload aborts the archive it already did",
-     D,
+     P,
      "      console.warn(`shore: ${context}: engine reload failed for ${character}: ${String(e)}`);",
      "      throw e;"),
     ("notification: the count is dropped from the body",

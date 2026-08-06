@@ -5,16 +5,15 @@
 //! `llm-sidecar/src/autonomy/` holds the heartbeat clock, the activity tracker,
 //! the per-tick trigger decision, `autonomy_state.json` and `heartbeat.jsonl`,
 //! all of it pinned against the Rust that used to do it by the frozen fixtures
-//! in `llm-sidecar/tests/autonomy_fixtures/`. What is left is a heartbeat tick
-//! and idle compaction — plus the cached request and the deep-idle archive they
-//! share, both of which have ported and stay here as the specification the two
-//! remaining actions still read. `mod.rs` says which is which.
+//! in `llm-sidecar/tests/autonomy_fixtures/`. What is left unported is **the
+//! heartbeat tick**, and nothing else. Everything around it — the cached
+//! request, the deep-idle archive, idle compaction — has gone, and stays here as
+//! the specification the tick still reads. `mod.rs` says which is which.
 //!
-//! This is a way station, not a design. Every one of those three reaches into
-//! the conversation engine, the memory store, the tool registry, MCP and
-//! sub-agents, and they move to TypeScript when those do (#12). Do not build
-//! anything new against this module, and do not give it back the state it just
-//! lost.
+//! This is a way station, not a design. The tick reaches into the conversation
+//! engine, the memory store, the tool registry, MCP and sub-agents, and it moves
+//! to TypeScript when those do (#12). Do not build anything new against this
+//! module, and do not give it back the state it just lost.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -394,6 +393,12 @@ async fn execute_deep_archive_if_still_idle(character: &str, ctx: &TickContext) 
 }
 
 /// Run the idle-compaction action a tick decided on.
+///
+/// **Ported.** `llm-sidecar/src/autonomy/idle_compaction.ts`. There is no parity
+/// fixture: the pass, the bookkeeping and the state writes are each pinned
+/// somewhere else already, and what was left to carry across was which of them
+/// this calls and in what order. `tests/idle_compaction.test.ts` and
+/// `scripts/mutate_idle_compaction.py` are what hold it.
 ///
 /// The doc comment that used to sit here described the function that took that
 /// decision — snapshotting the gates under the state lock — which went to
