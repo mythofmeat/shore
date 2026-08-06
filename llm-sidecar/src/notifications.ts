@@ -61,7 +61,7 @@ export interface NotificationsConfig {
   command: CommandNotifyConfig;
   /** Only fire `message_complete` when generation took longer than this.
    *  Zero means always. */
-  generationThreshold: ConfigDuration;
+  generation_threshold: ConfigDuration;
   events: NotificationEventsConfig;
 }
 
@@ -86,7 +86,7 @@ export function defaultNotificationsConfig(): NotificationsConfig {
     backend: "notify_send",
     ntfy: defaultNtfyConfig(),
     command: { template: "" },
-    generationThreshold: ConfigDuration.fromSecs(0),
+    generation_threshold: ConfigDuration.fromSecs(0),
     events: defaultNotificationEvents(),
   };
 }
@@ -267,7 +267,7 @@ export function readNotificationsConfig(value: unknown): ParseResult<Notificatio
     // Not `parse`: the field takes a bare number too, and it means *seconds*.
     const parsed = ConfigDuration.deserialize(value["generation_threshold"]);
     if ("err" in parsed) return parsed;
-    out.generationThreshold = parsed.ok;
+    out.generation_threshold = parsed.ok;
   }
 
   if (value["events"] !== undefined) {
@@ -464,7 +464,7 @@ export class NotificationService {
    * notify". Mutation testing duly finds it unkillable.
    */
   meetsGenerationThreshold(totalMs: number): boolean {
-    const thresholdMs = this.#config.generationThreshold.asMillisExact();
+    const thresholdMs = this.#config.generation_threshold.asMillisExact();
     return thresholdMs === 0n || BigInt(totalMs) >= thresholdMs;
   }
 

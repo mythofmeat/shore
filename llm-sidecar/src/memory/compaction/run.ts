@@ -44,6 +44,21 @@
  * character with nothing to compact and the slot already taken is refused as
  * busy, not as empty. `commands_fixtures/compact_parity.json` records both
  * orderings so the two cannot be swapped quietly.
+ *
+ * # Unported: the `compaction_complete` notification
+ *
+ * `handle_compaction_outcome` in `crates/daemon/src/memory/compaction/
+ * background.rs` fires one, and it fires a *different* one for each outcome —
+ * "N entries from M turns" when the pass wrote memory, and "ran but wrote no
+ * memory, will retry" when it did not. Nothing here does.
+ *
+ * It belongs here rather than at a caller, and that is the reason it is still
+ * missing: the no-memory-writes text needs the tool-round count and the
+ * rejected paths, which only the outcome carries. A caller notifying on
+ * "compaction returned" would send the wrong sentence for the outcome that most
+ * needs the right one — the silent failure where the conversation is *not*
+ * archived and the user is waiting for it to be. `runtime.ts` deliberately
+ * wires no compaction notifier for the same reason.
  */
 
 import { join } from "node:path";

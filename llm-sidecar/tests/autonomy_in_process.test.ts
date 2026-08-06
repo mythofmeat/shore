@@ -403,11 +403,18 @@ describe("running a heartbeat", () => {
 // ── compaction and the archive ──────────────────────────────────────────
 
 describe("the other two actions", () => {
-  function executorFor(config: LoadedConfig): InProcessAutonomyExecutor {
+  function executorFor(
+    config: LoadedConfig,
+    notifications: {
+      notifyAutonomousMessage?: (title: string, body: string) => void;
+      notifyCompactionComplete?: (title: string, body: string) => void;
+    } = {},
+  ): InProcessAutonomyExecutor {
     return new InProcessAutonomyExecutor({
       registry: registryFor(config),
       cache: new LastRequestCache(),
       providers: { anthropic: scriptedProvider([]) },
+      ...notifications,
     });
   }
 
@@ -437,5 +444,21 @@ describe("the other two actions", () => {
 
     expect(result.failed).toBeUndefined();
     expect(result.deepArchiveDone).toBe(true);
+  });
+
+  test("the deep archive notifies as a compaction, not as an autonomous message", async () => {
+    // Two different toggles in `[notifications.events]`, so this is not a
+    // cosmetic difference: a user who turned off their character speaking
+    // unprompted did not thereby ask to stop hearing that a conversation was
+    // archived, and vice versa.
+    const spoke: string[] = [];
+    const compacted: string[] = [];
+    await executorFor(await world(), {
+      notifyAutonomousMessage: (title) => spoke.push(title),
+      notifyCompactionComplete: (title) => compacted.push(title),
+    }).runDeepArchive("ada", 1);
+
+    expect(compacted).toEqual(["Shore — ada"]);
+    expect(spoke).toEqual([]);
   });
 });

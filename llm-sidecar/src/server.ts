@@ -1,24 +1,12 @@
 import { chmodSync, existsSync, lstatSync, unlinkSync } from "node:fs";
 
-import { RpcAutonomyExecutor } from "./autonomy/executor.ts";
-import {
-  KeepaliveService,
-  startKeepaliveTimer,
-  type KeepaliveRestore,
-} from "./autonomy/keepalive.ts";
-import {
-  AutonomyService,
-  startAutonomyTimer,
-  type RegisterCharacter,
-} from "./autonomy/service.ts";
+import { KeepaliveService } from "./autonomy/keepalive.ts";
+import type { AutonomyActionResult, AutonomyExecutor } from "./autonomy/runner.ts";
+import { AutonomyService, type RegisterCharacter } from "./autonomy/service.ts";
+import { createRuntime, startRuntimeClocks } from "./runtime.ts";
 import type { BudgetBlock } from "./ledger/budget.ts";
 import { budgetBlockFor } from "./ledger/gate.ts";
-import {
-  recordGenerate,
-  recordGenerateError,
-  recordingStream,
-  setCallObserver,
-} from "./ledger/record.ts";
+import { recordGenerate, recordGenerateError, recordingStream } from "./ledger/record.ts";
 import {
   budgetWarnings,
   clearPricingCache,
@@ -59,13 +47,26 @@ export interface SidecarDeps {
    * its own so a test starts with no characters and no clock running.
    */
   autonomy?: AutonomyService;
-  /**
-   * The daemon socket autonomy actions call back over.
-   *
-   * `serveSidecar` derives it; a handler built without one has nowhere to send
-   * an action, which only matters once a character is registered.
-   */
-  toolSocketPath?: string;
+}
+
+/**
+ * The executor a handler gets when nobody assembled a runtime.
+ *
+ * Every action a tick can decide on needs the character registry, the
+ * conversation engines and the tool surface — the things {@link createRuntime}
+ * builds — so a handler without one can track the schedule and cannot act on
+ * it. It refuses rather than throws, because a refusal is a result: the latch
+ * releases, the retry window restarts, and the reason lands in `heartbeat.jsonl`
+ * where someone will read it.
+ */
+export const unassembledExecutor: AutonomyExecutor = {
+  runHeartbeatTick: () => Promise.resolve(refusal("heartbeat tick")),
+  runCompaction: () => Promise.resolve(refusal("compaction")),
+  runDeepArchive: () => Promise.resolve(refusal("deep archive")),
+};
+
+function refusal(action: string): AutonomyActionResult {
+  return { events: [], failed: `${action} needs a runtime, and this handler was built without one` };
 }
 
 interface HttpishError {
@@ -142,8 +143,7 @@ export function createSidecarHandler(
     });
   // Owned per handler for the same reason: a test starts with no characters
   // registered and no tick timer running. The timer is `serveSidecar`'s.
-  const autonomy =
-    deps.autonomy ?? new AutonomyService(new RpcAutonomyExecutor(deps.toolSocketPath ?? ""));
+  const autonomy = deps.autonomy ?? new AutonomyService(unassembledExecutor);
   // Both construction paths land here — `serveSidecar` builds the pair and
   // passes them in — so this is the one place the two halves of the keepalive
   // are joined: outcomes to the heartbeat log, schedules to the state file.
@@ -461,7 +461,23 @@ export function createSidecarHandler(
   };
 }
 
-export function serveSidecar(socketPath: string): ReturnType<typeof Bun.serve> {
+/**
+ * Assemble the runtime, start its clocks, and serve.
+ *
+ * The keepalive and the autonomy service used to be built here, with a comment
+ * saying they belong to a real server rather than to anything that merely
+ * builds a handler. That reasoning was right and has simply moved: it is the
+ * whole split between {@link createRuntime} and {@link startRuntimeClocks}, and
+ * this is the one caller that wants both halves.
+ *
+ * Config now loads on this side. A config that will not parse is fatal, which
+ * is what `main.rs` did — and the daemon it is starting beside would already
+ * have refused for the same reason.
+ */
+export async function serveSidecar(
+  socketPath: string,
+  options: { configPath?: string } = {},
+): Promise<ReturnType<typeof Bun.serve>> {
   if (existsSync(socketPath)) {
     const stat = lstatSync(socketPath);
     if (!stat.isSocket()) {
@@ -469,43 +485,19 @@ export function serveSidecar(socketPath: string): ReturnType<typeof Bun.serve> {
     }
     unlinkSync(socketPath);
   }
-  // The live keepalive: built here so its two effects — observing every
-  // recorded call, and running a clock — belong to a real server rather than to
-  // anything that merely builds a handler.
-  const keepalive = new KeepaliveService((req, signal) => {
-    const provider = DEFAULT_PROVIDERS[req.sdk];
-    if (!provider) throw new Error(`unsupported sdk: ${req.sdk}`);
-    return provider.generate(req, signal);
-  });
-  setCallObserver((ctx, model, callType) => {
-    keepalive.observe(ctx.character, model, callType, ctx.keepalive_max_secs);
-  });
-  startKeepaliveTimer(keepalive);
 
-  // Built here for the same reason as the keepalive: it runs a clock, and a
-  // handler that merely exists should not.
-  const toolSocketPath = toolSocketPathFor(socketPath);
-  const autonomy = new AutonomyService(new RpcAutonomyExecutor(toolSocketPath));
-  startAutonomyTimer(autonomy);
+  const runtime = await createRuntime({
+    providers: DEFAULT_PROVIDERS,
+    ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
+  });
+  startRuntimeClocks(runtime);
 
   const server = Bun.serve({
     unix: socketPath,
-    fetch: createSidecarHandler({ keepalive, autonomy, toolSocketPath }),
+    fetch: createSidecarHandler({ keepalive: runtime.keepalive, autonomy: runtime.autonomy }),
   });
   chmodSync(socketPath, 0o600);
   return server;
-}
-
-/**
- * Where the daemon answers autonomy actions, given where it serves this one.
- *
- * Derived rather than configured: the two sockets belong to the same daemon
- * instance, and a second setting is a second thing to get wrong. It kept its
- * `.tools` suffix and its name because the daemon it talks to is unchanged —
- * tool calls simply stopped being one of the things that travel over it.
- */
-export function toolSocketPathFor(sidecarSocket: string): string {
-  return `${sidecarSocket}.tools`;
 }
 
 async function streamResponse(
@@ -682,12 +674,19 @@ function socketPathFromArgs(args: string[]): string | undefined {
   return process.env["SHORE_LLM_SOCKET"];
 }
 
+/** `--config`, the same flag `shore-daemon` takes and for the same reason. */
+function configPathFromArgs(args: string[]): string | undefined {
+  const idx = args.indexOf("--config");
+  return idx >= 0 ? args[idx + 1] : undefined;
+}
+
 if (import.meta.main) {
   const socketPath = socketPathFromArgs(process.argv.slice(2));
   if (!socketPath) {
     console.error("usage: bun run src/server.ts --socket <path>");
     process.exit(2);
   }
-  const server = serveSidecar(socketPath);
+  const configPath = configPathFromArgs(process.argv.slice(2));
+  await serveSidecar(socketPath, configPath === undefined ? {} : { configPath });
   console.error(`shore llm sidecar listening on ${socketPath}`);
 }

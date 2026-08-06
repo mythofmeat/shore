@@ -50,8 +50,17 @@ export interface InProcessExecutorDeps {
   providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
   /** Push a delivered autonomous message to connected clients. */
   emit?: (character: string, revision: number, msg: Message) => void;
-  /** Desktop notification. */
-  notify?: (title: string, body: string) => void;
+  /**
+   * Desktop notifications, one hook per event rather than one hook.
+   *
+   * `[notifications.events]` has a toggle per event, so which event an action
+   * files under is the difference between a switch the user set doing what they
+   * meant and doing nothing. The Rust chose per call site —
+   * `AutonomousMessage` at `manager.rs:1837`, `CompactionComplete` at
+   * `manager.rs:625` — and this is the same choice made in the same place.
+   */
+  notifyAutonomousMessage?: (title: string, body: string) => void;
+  notifyCompactionComplete?: (title: string, body: string) => void;
   /** The curated `shore log --heartbeat` view. */
   callStore?: Pick<CallStore, "recordTranscript">;
   /** What the tool context needs beyond the config. */
@@ -153,7 +162,9 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
 
       engine: async (name) => await this.#deps.registry.getOrCreate(name),
       ...(this.#deps.emit === undefined ? {} : { emit: this.#deps.emit }),
-      ...(this.#deps.notify === undefined ? {} : { notify: this.#deps.notify }),
+      ...(this.#deps.notifyAutonomousMessage === undefined
+        ? {}
+        : { notify: this.#deps.notifyAutonomousMessage }),
     });
   }
 
@@ -174,7 +185,12 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
       cache: this.#deps.cache,
       run: this.#compactionDeps(config),
       engine: { reload: async (name: string) => void (await this.#deps.registry.getOrCreate(name)) },
-      ...(this.#deps.notify === undefined ? {} : { notify: this.#deps.notify }),
+      // No notification hook, and not an oversight. The Rust's
+      // `compaction_complete` for this path is fired from *inside* the pass,
+      // where the "ran but wrote no memory" outcome exists; that half has not
+      // ported (see `memory/compaction/run.ts`). Notifying from here would send
+      // "compaction complete" for the outcome that most needs a different
+      // sentence — the one where the conversation was not archived.
     });
   }
 
@@ -188,7 +204,9 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
       cache: this.#deps.cache,
       run: this.#compactionDeps(config),
       engine: { reload: async (name: string) => void (await this.#deps.registry.getOrCreate(name)) },
-      ...(this.#deps.notify === undefined ? {} : { notify: this.#deps.notify }),
+      ...(this.#deps.notifyCompactionComplete === undefined
+        ? {}
+        : { notify: this.#deps.notifyCompactionComplete }),
     }, coveredTurnCount);
   }
 

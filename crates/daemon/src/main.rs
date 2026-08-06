@@ -33,6 +33,31 @@ use tracing_subscriber::EnvFilter;
 
 mod supervisor;
 
+// The assembly half of this file has **ported**: `llm-sidecar/src/runtime.ts`,
+// pinned by `tests/runtime.test.ts` and `scripts/mutate_runtime.py`.
+//
+// What went: `create_runtime_dirs`, `build_llm_client`'s store and ledger
+// opening, `build_autonomy_manager`, the `CharacterRegistry` and `McpRegistry`
+// construction inside `build_server_and_handler`, and
+// `spawn_call_store_rotation`. `serveSidecar` is the caller, and the split
+// between `createRuntime` and `startRuntimeClocks` is this file's own split
+// between `build_server_and_handler` and `spawn_background_services`.
+//
+// What has not: everything that is a *server* rather than a runtime — argument
+// parsing, `resolve_startup` and its remote-access policy, the listener bind,
+// `instances.json` registration, the signal listener, and the shutdown ordering
+// in `await_background_shutdown`. Those land with `swp_server`.
+//
+// Two pieces are deliberately absent from the port rather than pending:
+//
+// - **The sidecar supervisor.** `supervisor::spawn_llm_sidecar` starts the
+//   process the port is being written *into*. It has nothing to supervise once
+//   there is one process, and it goes rather than moves.
+// - **Cache-forensics enablement.** Already a no-op on this side; the tracker
+//   moved with the ledger writer and seeds itself lazily, which is why the
+//   comment at `build_llm_client` says startup ordering between the two
+//   processes stopped mattering.
+
 // `shore_daemon` covers the llm, ledger and swp_server modules too, since
 // tracing targets are module paths and those now live inside this crate.
 const DEFAULT_LOG_FILTER: &str = "warn,shore_daemon=info";

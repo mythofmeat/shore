@@ -219,7 +219,7 @@ describe("generation threshold", () => {
     const svc = new NotificationService(
       configWith({
         enabled: true,
-        generationThreshold: ConfigDuration.fromMillis(thresholdMs),
+        generation_threshold: ConfigDuration.fromMillis(thresholdMs),
         events: { ...defaultNotificationsConfig().events, message_complete: true },
       }),
     );
@@ -237,7 +237,7 @@ describe("generation threshold", () => {
     const svc = new NotificationService(
       configWith({
         enabled: true,
-        generationThreshold: ConfigDuration.fromMillis(1000n),
+        generation_threshold: ConfigDuration.fromMillis(1000n),
         events: { ...defaultNotificationsConfig().events, message_complete: true },
       }),
       recordingSink(sent),
@@ -265,7 +265,7 @@ function configToFixtureShape(config: NotificationsConfig): Row {
     backend: config.backend,
     ntfy: { url: config.ntfy.url, topic: config.ntfy.topic, token: config.ntfy.token },
     command: { template: config.command.template },
-    generation_threshold_ms: config.generationThreshold.asMillisExact().toString(),
+    generation_threshold_ms: config.generation_threshold.asMillisExact().toString(),
     events: { ...config.events },
   };
 }
@@ -313,7 +313,7 @@ describe("[notifications] parsing", () => {
 
   test("a bare number on generation_threshold is seconds", () => {
     const parsed = readNotificationsConfig(Bun.TOML.parse("generation_threshold = 30\n"));
-    expect("ok" in parsed && parsed.ok.generationThreshold.asMillis()).toBe(30_000);
+    expect("ok" in parsed && parsed.ok.generation_threshold.asMillis()).toBe(30_000);
   });
 });
 

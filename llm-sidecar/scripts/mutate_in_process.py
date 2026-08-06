@@ -91,6 +91,18 @@ MUTANTS = [
      "        const used = hooks.scheduleNextWake(hours, reason);",
      '        const used = hooks.scheduleNextWake(hours, "");'),
 
+    # --- which toggle a notification obeys ------------------------------------
+    ("notify: the deep archive announces itself as an autonomous message",
+     P,
+     "        : { notify: this.#deps.notifyCompactionComplete }),",
+     "        : { notify: this.#deps.notifyAutonomousMessage }),"),
+    ("notify: the deep archive announces nothing at all",
+     P,
+     "      ...(this.#deps.notifyCompactionComplete === undefined\n"
+     "        ? {}\n"
+     "        : { notify: this.#deps.notifyCompactionComplete }),",
+     "      ...({} as Record<string, never>),"),
+
     # --- the tool surface -----------------------------------------------------
     ("tools: a tool failure is reported to the model as a success",
      P,

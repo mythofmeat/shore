@@ -14,6 +14,15 @@
 //! *specification* the wiring reads: which arguments each ported piece is called
 //! with, and in what order. It goes when that lands (#12).
 //!
+//! **The wiring has landed.** `llm-sidecar/src/autonomy/in_process.ts` runs each
+//! action as a function call, and `llm-sidecar/src/runtime.ts` assembles what it
+//! needs at startup — the registry, the cached request, the tool surface, the
+//! stores. The daemon socket the actions used to travel over is gone with the
+//! last client of it, so `AutonomyAction`, its NDJSON transport and the
+//! `tool_rpc` half of `wire_parity.json` are deleted rather than pending: a
+//! hand-mirrored wire format with nothing on either end of it is a rename
+//! waiting to happen silently.
+//!
 //! The one function with no port is `build_tool_context`, and it needs none —
 //! `llm-sidecar/src/handler/tool_context.ts` already builds every field it sets.
 //! What is left of it here is the call site: which arguments a heartbeat passes,
