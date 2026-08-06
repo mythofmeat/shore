@@ -134,6 +134,25 @@ MUTANTS = [
      "      this.#service.onAssistantMessage(character, turnCount);\n    });",
      "  onAssistantMessage(character: string, turnCount: number): void {\n"
      "    void this.#after;\n    void turnCount;\n    void character;"),
+    # --- the reload -----------------------------------------------------------
+    ("reload: one character's config is pushed to all of them, as the Rust's shared copy was",
+     R,
+     "        this.#service.setCompactionConfig(\n"
+     "          character,\n"
+     "          compactionConfigFor(effectiveConfig(character)),\n        );",
+     "        this.#service.setCompactionConfig(\n"
+     "          character,\n"
+     '          compactionConfigFor(effectiveConfig("ada")),\n        );'),
+    ("reload: nobody is told, so an edited threshold waits for a restart",
+     R,
+     "    for (const character of [...this.#registered.keys()]) {",
+     "    for (const character of [] as string[]) {"),
+    ("reload: the push runs before the registration it belongs to",
+     R,
+     "      this.#after(character, () => {\n"
+     "        this.#service.setCompactionConfig(",
+     "      ((fn: () => void) => fn())(() => {\n"
+     "        this.#service.setCompactionConfig("),
     ("user: the timestamp is taken when the queue drains, not when the user spoke",
      R,
      "    const at = this.#now();\n    this.#after(character, () => {\n"

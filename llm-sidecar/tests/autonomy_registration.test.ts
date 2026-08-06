@@ -62,6 +62,9 @@ function recordingService(registerDelay?: Promise<void>) {
     onAssistantMessage: (_c: string, turns: number) => {
       calls.push(`assistant:${turns}`);
     },
+    setCompactionConfig: (_c: string, cfg: { maxTurns: number }) => {
+      calls.push(`compaction:${cfg.maxTurns}`);
+    },
     shouldCompactNow: () => undefined,
     onCompactionComplete: (_c: string, retained: number) => {
       calls.push(`compacted:${retained}`);
@@ -287,6 +290,62 @@ describe("seeding the activity tracker", () => {
 
     await bridge.settled("ada");
     expect(service.calls).toEqual(["register", "backfill:3:9000"]);
+  });
+});
+
+describe("a config reload", () => {
+  test("reaches every character the bridge has taken up, and no one else", async () => {
+    const service = recordingService();
+    const bridge = new TurnAutonomyBridge(service);
+    bridge.ensureState("ada", configWith());
+    bridge.ensureState("nova", configWith());
+
+    const asked: string[] = [];
+    bridge.reloadConfig((name) => {
+      asked.push(name);
+      return configWith((app) => {
+        // Each character is asked for its own effective config. Pushing one
+        // config to all of them is what the Rust did — its `[memory.compaction]`
+        // was shared — and it means a `config` set made against Ada governs
+        // Nova's compaction too.
+        app.memory.compaction.max_turns = name === "ada" ? 11 : 22;
+      });
+    });
+
+    await bridge.settled("ada");
+    await bridge.settled("nova");
+    expect(asked.sort()).toEqual(["ada", "nova"]);
+    expect(service.calls.filter((c) => c.startsWith("compaction"))).toEqual([
+      "compaction:11",
+      "compaction:22",
+    ]);
+  });
+
+  test("tells nobody when nothing is registered", () => {
+    const service = recordingService();
+    const bridge = new TurnAutonomyBridge(service);
+
+    bridge.reloadConfig(() => configWith());
+    // A character registered afterwards reads the fresh config at registration.
+    expect(service.calls).toEqual([]);
+  });
+
+  test("waits for a registration still in flight", async () => {
+    let release!: () => void;
+    const slow = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const service = recordingService(slow);
+    const bridge = new TurnAutonomyBridge(service);
+
+    bridge.ensureState("ada", configWith());
+    bridge.reloadConfig(() => configWith((app) => (app.memory.compaction.max_turns = 3)));
+
+    // Pushing early would configure a runner the service has not built.
+    expect(service.calls).toEqual(["register"]);
+    release();
+    await bridge.settled("ada");
+    expect(service.calls).toEqual(["register", "compaction:3"]);
   });
 });
 

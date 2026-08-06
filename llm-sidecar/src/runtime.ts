@@ -89,6 +89,15 @@ export interface RuntimeOptions {
 
 export interface ShoreRuntime {
   readonly config: LoadedConfig;
+  /**
+   * The file the daemon was pointed at, which every reload re-reads exactly.
+   *
+   * Resolved rather than passed through: `--config` re-homes the whole config
+   * directory, so with no flag this is `<config>/config.toml` *after* the
+   * loader has decided where `<config>` is. A reload that guessed instead would
+   * quietly re-resolve XDG and could read a different file than startup did.
+   */
+  readonly configPath: string;
   readonly registry: CharacterRegistry;
   readonly cache: LastRequestCache;
   readonly mcp: McpRegistry;
@@ -158,6 +167,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
 
   return {
     config,
+    configPath: options.configPath ?? rustJoin(config.dirs.config, "config.toml"),
     registry,
     cache,
     mcp,

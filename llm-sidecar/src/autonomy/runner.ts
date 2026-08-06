@@ -53,11 +53,16 @@ export const TICK_INTERVAL_MS = 10_000;
 const MIN_WAKE_HOURS = 1;
 const MAX_WAKE_HOURS = 48;
 
-/** The config a tick reads, already resolved from `config.toml`. */
-export interface AutonomyRunnerConfig {
-  readonly autonomyEnabled: boolean;
-  readonly heartbeatEnabled: boolean;
-
+/**
+ * The `[memory.compaction]` half, which a config reload replaces in place.
+ *
+ * Split out because its lifetime differs from the two gates beside it. In the
+ * Rust these six lived on the manager's shared `self.compaction`, and
+ * `should_compact_now` read that field directly — so a reload changed when
+ * every character compacts, at once, with no restart. See
+ * {@link CharacterAutonomy.setCompactionConfig}.
+ */
+export interface CompactionRunnerConfig {
   readonly compactionEnabled: boolean;
   readonly minTurns: number;
   readonly maxTurns: number;
@@ -70,7 +75,20 @@ export interface AutonomyRunnerConfig {
    * token count to compare against, because nothing has just been sent.
    */
   readonly maxContextTokens: number;
+}
 
+/** The config a tick reads, already resolved from `config.toml`. */
+export interface AutonomyRunnerConfig extends CompactionRunnerConfig {
+  /**
+   * The two `[behavior.autonomy]` gates, fixed for as long as this runner is.
+   *
+   * The Rust snapshotted them into the spawned tick task, so a reload never
+   * reached an already-running character; that is reproduced rather than
+   * improved, because the clock beside them holds a live deadline the state
+   * file has already recorded, and moving it mid-flight is a different change.
+   */
+  readonly autonomyEnabled: boolean;
+  readonly heartbeatEnabled: boolean;
 }
 
 /**
@@ -194,7 +212,8 @@ interface RunnerState {
 
 export class CharacterAutonomy {
   readonly #character: string;
-  readonly #config: AutonomyRunnerConfig;
+  /** Not readonly: {@link setCompactionConfig} replaces its compaction half. */
+  #config: AutonomyRunnerConfig;
   readonly #executor: AutonomyExecutor;
   readonly #statePath: string;
 
@@ -361,6 +380,36 @@ export class CharacterAutonomy {
    * over unchanged: a port is the wrong place to tighten a gate, and the daemon
    * refuses a concurrent action on its own side anyway.
    */
+  /**
+   * Adopt new `[memory.compaction]` settings without restarting the runner.
+   *
+   * The Rust's `reload_runtime_config` swapped a shared `Arc` that
+   * `should_compact_now` read on every call, so an edited threshold governed
+   * every character from the next turn. Re-registering would get there too, but
+   * it shuts the runner down, re-reads `autonomy_state.json` and re-runs the
+   * keepalive restore — a lot of moving parts for six numbers, on a command
+   * (`shore config`) people run casually.
+   *
+   * **One divergence, deliberate.** In the Rust the *tick* held its own
+   * `Arc::clone` and therefore kept the old values until restart, so an inline
+   * compaction and the idle trigger could disagree about `max_turns`
+   * indefinitely. That was an artifact of how the task was spawned rather than
+   * a decision, and reproducing it here would mean carrying two copies of one
+   * config section on purpose. Both read this one, so a reload reaches both.
+   */
+  setCompactionConfig(compaction: CompactionRunnerConfig): void {
+    this.#config = {
+      autonomyEnabled: this.#config.autonomyEnabled,
+      heartbeatEnabled: this.#config.heartbeatEnabled,
+      compactionEnabled: compaction.compactionEnabled,
+      minTurns: compaction.minTurns,
+      maxTurns: compaction.maxTurns,
+      idleTriggerSecs: compaction.idleTriggerSecs,
+      archiveAfterSecs: compaction.archiveAfterSecs,
+      maxContextTokens: compaction.maxContextTokens,
+    };
+  }
+
   shouldCompactNow(turnCount: number, contextTokens: number): boolean {
     const c = this.#config;
     if (!c.compactionEnabled || turnCount < c.minTurns) return false;

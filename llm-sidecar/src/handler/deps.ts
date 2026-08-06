@@ -26,13 +26,35 @@
  * new values in on every reload; reading through the registry is the same
  * values with nothing to forget to push. The registry's global config is what a
  * reload replaces, so a budget added at runtime is in force on the next turn.
+ *
+ * That is also why the two setters below are no-ops rather than gaps.
+ *
+ * # The command path, and the one thing it does not do
+ *
+ * {@link buildCommandPathDeps} supplies `handler/commands.ts`, which needs two
+ * more surfaces nothing had implemented: `ConfigRuntime` — what a `config`
+ * command pushes outward — and `DispatchRuntime`, what the four
+ * post-processing hooks reach into.
+ *
+ * **`[mcp]` is not reconnected on reload.** The Rust's `apply_reloaded_config`
+ * compares the section and rebuilds the registry when it moved. Doing that here
+ * means `ShoreRuntime.mcp` becoming a holder both this path *and* the autonomy
+ * executor read through, because a chat turn and a heartbeat must offer the
+ * same tool surface — a background tick with fewer tools writes a prefix the
+ * next chat turn cannot reuse, and the keepalive then pays for a cache write
+ * and buys nothing. Swapping only the copy chat sees would cause exactly that,
+ * so this does nothing rather than half of it: edits to `[mcp]` need a restart,
+ * and everything else in a reload lands.
  */
 
 import { compactionGenerate } from "../autonomy/in_process.ts";
 import type { LastRequestCache } from "../autonomy/last_request.ts";
 import type { TurnAutonomyBridge } from "../autonomy/registration.ts";
 import type { CharacterRegistry } from "../characters.ts";
+import type { CommandDeps } from "../commands/dispatch.ts";
+import type { ConfigRuntime } from "../commands/config.ts";
 import { characterDataDir, rustJoin } from "../config/dirs.ts";
+import { loadConfig } from "../config/loader.ts";
 import type { Diagnostics } from "../diagnostics.ts";
 import {
   newlyCrossedBudgetWarnings,
@@ -46,7 +68,11 @@ import { queueDeferredEdit } from "../memory/deferred_edits.ts";
 import { compactionRunner } from "../memory/compaction/run.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import { sharedToolDeps, type ShoreRuntime } from "../runtime.ts";
+import { historyMessage, type HandshakeProvider } from "../swp/connection.ts";
+import type { SessionRouter } from "../swp/session.ts";
 import { deferEditTo } from "../tools/dispatch.ts";
+import type { CommandPathDeps, SessionCache } from "./commands.ts";
+import type { DispatchRuntime } from "./command_dispatch.ts";
 import {
   generationEngine,
   type GenerationDeps,
@@ -243,5 +269,229 @@ export function usageBudgetWarnings(
     const ledger = ledgerFor(ledgerPath);
     if (ledger === null) return Promise.resolve([]);
     return Promise.resolve(newlyCrossedBudgetWarnings(ledger.database, config, clock()));
+  };
+}
+
+// ── the command path ────────────────────────────────────────────────────
+
+/** What a command needs that the runtime does not already hold. */
+export interface CommandAssembly {
+  runtime: ShoreRuntime;
+  /** Shared with the turn: the same registrations, the same queue. */
+  autonomy: TurnAutonomyBridge;
+  sessionTokens: SessionTokens;
+  diagnostics: Diagnostics;
+  /** Direct sends and session metadata — a `switch_character` moves a session. */
+  router: SessionRouter;
+  /** What answers a pushed history snapshot. */
+  handshake: HandshakeProvider;
+  providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
+  env?: NodeJS.ProcessEnv | undefined;
+}
+
+/** Everything `makeDispatchCommand` asks for. */
+export function buildCommandPathDeps(a: CommandAssembly): CommandPathDeps {
+  const { runtime } = a;
+  const sessions = new ProcessSessionCache();
+  return {
+    registry: runtime.registry,
+    globalConfig: () => runtime.registry.globalConfig(),
+    configPath: runtime.configPath,
+    dataDir: runtime.config.dirs.data,
+    sessions,
+    commands: commandDeps(a),
+    runtime: configRuntime(a),
+    dispatchRuntime: dispatchRuntime(a, sessions),
+    router: a.router,
+    handshake: a.handshake,
+    ...(a.env === undefined ? {} : { env: a.env }),
+  };
+}
+
+/**
+ * The per-session active-model cache, for the daemon's lifetime.
+ *
+ * The Rust kept one active model on the handler's single `CommandContext`, so
+ * every session shared it and a `switch_model` in one window moved another's.
+ * Per session here, which is what the field means — and it is why
+ * {@link clear} exists: `config_reset` sets the Rust's single copy to `None`,
+ * and the same reset has to reach every session's.
+ */
+export class ProcessSessionCache implements SessionCache {
+  readonly #models = new Map<number, string>();
+
+  activeModel(sessionId: number): string | undefined {
+    return this.#models.get(sessionId);
+  }
+
+  setActiveModel(sessionId: number, model: string | undefined): void {
+    if (model === undefined) this.#models.delete(sessionId);
+    else this.#models.set(sessionId, model);
+  }
+
+  /** Forget every session's, which is what a `config_reset` does. */
+  clear(): void {
+    this.#models.clear();
+  }
+}
+
+/**
+ * What a `config` command pushes outward once it has written to disk.
+ *
+ * Two of the four are no-ops, and both for the same reason rather than as an
+ * omission: `[usage]` and `cache_keepalive_max` are read live off the
+ * registry's global config (see the module doc), which the same command
+ * replaces. There is nothing left to push, and a holder here would be a second
+ * copy of a value that already has one authority.
+ */
+export function configRuntime(a: CommandAssembly): ConfigRuntime {
+  const { runtime } = a;
+  return {
+    // Every registered character adopts the new `[memory.compaction]`, read
+    // through the registry. At this moment the registry may still be holding
+    // the pre-reload global — `adopt` runs inside the command and
+    // `applyReloadedConfig` adopts it just afterwards — but that hook pushes
+    // again once the registry has taken it, and nothing can run a turn in
+    // between. So the transient staleness is not observable, and the
+    // alternative is a second derivation of "this character's effective
+    // config" that has to agree with the registry's forever.
+    reloadRuntimeConfig: () => {
+      a.autonomy.reloadConfig((name) => runtime.registry.effectiveConfig(name));
+    },
+    setUsageConfig: () => {},
+    setCacheKeepaliveCeiling: () => {},
+    notifyPromptSnapshotRefreshed: (character) => {
+      // The cached body still carries the pre-refresh system prompt bytes, so
+      // replaying it for keepalive would keep a dead prefix warm.
+      runtime.cache.invalidate(character, "prompt_reload");
+      // Re-arming reads `active.jsonl`, which the Rust deliberately did after
+      // releasing its state lock; here that is the same as not awaiting it. A
+      // rebuild that fails leaves the keepalive disarmed, which is the safe
+      // side: nothing is pinged rather than the wrong thing.
+      void runtime.cache
+        .reprimeFromDisk(character, runtime.config.dirs.data, runtime.registry.effectiveConfig(character), {
+          mcpRegistry: runtime.mcp,
+        })
+        .catch((e: unknown) => {
+          console.warn(`shore: keepalive reprime failed for ${character}: ${String(e)}`);
+        });
+    },
+  };
+}
+
+/**
+ * The handler-owned state the four post-processing hooks reach into.
+ *
+ * `applyReloadedConfig` is the interesting one: it is the whole of what a
+ * reload turns out to move, and the order is the Rust's — adopt into the
+ * registry first, because everything after it reads the registry.
+ */
+export function dispatchRuntime(
+  a: CommandAssembly,
+  sessions: ProcessSessionCache,
+): DispatchRuntime {
+  const { runtime } = a;
+  return {
+    globalConfig: () => runtime.registry.globalConfig(),
+
+    reloadGlobalConfig: () => {
+      try {
+        return loadConfig(runtime.configPath, a.env === undefined ? {} : { env: a.env });
+      } catch (e) {
+        // The annotation is dropped rather than the command failed: it already
+        // succeeded, and an edit that broke the file since only costs the
+        // `restart_required` list.
+        console.warn(`shore: could not re-read ${runtime.configPath}: ${String(e)}`);
+        return undefined;
+      }
+    },
+
+    setEffectiveConfig: (character, config) => {
+      runtime.registry.setRuntimeEffectiveConfig(character, config);
+      return Promise.resolve();
+    },
+
+    reloadRuntimeConfig: () => {
+      a.autonomy.reloadConfig((name) => runtime.registry.effectiveConfig(name));
+    },
+
+    applyReloadedConfig: async (config) => {
+      // First, because it is what every read below goes through: the registry
+      // holds the global config, re-scans the character list, drops the
+      // per-character config cache and discards engines that no longer exist.
+      const summary = await runtime.registry.reloadRuntimeState(config);
+      // `[mcp]` is not reconnected here — see the module doc.
+      a.autonomy.reloadConfig((name) => runtime.registry.effectiveConfig(name));
+      await pushHistorySnapshots(a);
+      return {
+        characterDiscoveryChanged: summary.characterDiscoveryChanged,
+        droppedEngines: summary.droppedEngines,
+      };
+    },
+
+    clearActiveModel: () => {
+      sessions.clear();
+    },
+  };
+}
+
+/**
+ * Hand every session the conversation it is now looking at.
+ *
+ * A reload can have moved a character's merged config, replaced its engine, or
+ * removed it outright, and a session that is not told keeps rendering what it
+ * last received until something else makes it reload. A session with nothing
+ * selected gets the empty snapshot, which is what its next handshake would say.
+ */
+async function pushHistorySnapshots(a: CommandAssembly): Promise<void> {
+  for (const [sessionId, character] of a.router.sessions()) {
+    if (character === null) continue;
+    try {
+      const snapshot = await a.handshake.history(character);
+      // No rid: nobody asked for this one.
+      await a.router.sendToSession(sessionId, historyMessage(snapshot, undefined));
+    } catch (e) {
+      // One session that has gone away must not stop the rest being told.
+      console.warn(`shore: could not push history to session ${sessionId}: ${String(e)}`);
+    }
+  }
+}
+
+/**
+ * What the command table needs beyond the session.
+ *
+ * `autonomy` is the *service*, not the turn's bridge: these commands ask
+ * questions (`status`, `log`, `heartbeat_now`) about a character the loop is
+ * already running, rather than reporting a turn's events into it.
+ */
+export function commandDeps(a: CommandAssembly): CommandDeps {
+  const { runtime } = a;
+  const ledgerPath = rustJoin(runtime.config.dirs.data, "ledger.db");
+  return {
+    sessionTokens: a.sessionTokens,
+    autonomy: runtime.autonomy,
+    diagnostics: a.diagnostics,
+    callStore: runtime.callStore,
+    ledgerPath,
+    compaction: {
+      run: {
+        generate: compactionGenerate({
+          providers: a.providers,
+          config: runtime.config,
+          ...(a.env === undefined ? {} : { env: a.env }),
+        }),
+        tools: sharedToolDeps(runtime.config, runtime.mcp),
+      },
+      // `shore compact` extends the body that character last sent, the same one
+      // an inline or idle pass would — otherwise the manual pass rebuilds a
+      // colder prefix than the automatic one and the two disagree about what
+      // was in context.
+      cachedRequest: (character) => runtime.cache.get(character),
+    },
+    keepalive: {
+      keepalive: runtime.keepalive,
+      lastRequest: runtime.cache,
+      rebuild: { mcpRegistry: runtime.mcp },
+    },
   };
 }

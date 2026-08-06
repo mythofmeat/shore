@@ -30,7 +30,7 @@
  */
 
 import type { LoadedConfig } from "../config/loader.ts";
-import type { AutonomyRunnerConfig } from "./runner.ts";
+import type { AutonomyRunnerConfig, CompactionRunnerConfig } from "./runner.ts";
 import type { HeartbeatClockConfig } from "./heartbeat.ts";
 import type { AutonomyService, RegisterCharacter } from "./service.ts";
 
@@ -44,10 +44,20 @@ import type { AutonomyService, RegisterCharacter } from "./service.ts";
  */
 export function runnerConfigFor(config: LoadedConfig): AutonomyRunnerConfig {
   const autonomy = config.app.behavior.autonomy;
-  const compaction = config.app.memory.compaction;
   return {
     autonomyEnabled: autonomy.enabled,
     heartbeatEnabled: autonomy.heartbeat.enabled,
+    ...compactionConfigFor(config),
+  };
+}
+
+/**
+ * The `[memory.compaction]` half on its own, because a reload replaces it
+ * without touching anything else — see {@link TurnAutonomyBridge.reloadConfig}.
+ */
+export function compactionConfigFor(config: LoadedConfig): CompactionRunnerConfig {
+  const compaction = config.app.memory.compaction;
+  return {
     compactionEnabled: compaction.enabled,
     minTurns: compaction.min_turns,
     maxTurns: compaction.max_turns,
@@ -92,6 +102,7 @@ export function registrationFor(character: string, config: LoadedConfig): Regist
 type ServiceSlice = Pick<
   AutonomyService,
   | "register"
+  | "setCompactionConfig"
   | "backfillActivity"
   | "onUserMessage"
   | "onAssistantMessage"
@@ -165,6 +176,36 @@ export class TurnAutonomyBridge {
     this.#after(character, () => {
       this.#service.onUserMessage(character, turnCount, at);
     });
+  }
+
+  /**
+   * A config reload: tell every character it is running under new compaction
+   * settings.
+   *
+   * `effectiveConfig` is asked per character rather than one config being
+   * pushed to all of them, and that is a divergence worth naming. The Rust kept
+   * one shared `[memory.compaction]` for the whole daemon, so a runtime
+   * `config` set made against Ada — whose argument is Ada's *merged* config —
+   * also governed Nova's compaction. Runners are per character here, so
+   * reproducing that would mean deliberately writing one character's overlay
+   * into another's runner. Each gets its own, which is what the config file
+   * says.
+   *
+   * Only characters this bridge has taken up are told. A character registered
+   * afterwards reads the fresh config at registration anyway.
+   */
+  reloadConfig(effectiveConfig: (character: string) => LoadedConfig): void {
+    // Snapshotted: `#after` writes back into the same map. Re-setting an
+    // existing key mid-iteration is well defined and does not re-yield it, but
+    // nobody reading this should have to know that.
+    for (const character of [...this.#registered.keys()]) {
+      this.#after(character, () => {
+        this.#service.setCompactionConfig(
+          character,
+          compactionConfigFor(effectiveConfig(character)),
+        );
+      });
+    }
   }
 
   /**

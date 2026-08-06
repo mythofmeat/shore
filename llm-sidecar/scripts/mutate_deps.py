@@ -94,12 +94,14 @@ MUTANTS = [
     # --- the inline compaction ------------------------------------------------
     ("compaction: the pass is never given a cached body, so every one rebuilds from disk",
      D,
-     "    cachedRequest: (character) => runtime.cache.get(character),",
-     "    cachedRequest: () => undefined,"),
+     "    cachedRequest: (character) => runtime.cache.get(character),\n"
+     "    tools: sharedToolDeps(",
+     "    cachedRequest: () => undefined,\n    tools: sharedToolDeps("),
     ("compaction: every pass extends the same character's body",
      D,
-     "    cachedRequest: (character) => runtime.cache.get(character),",
-     '    cachedRequest: () => runtime.cache.get("ada"),'),
+     "    cachedRequest: (character) => runtime.cache.get(character),\n"
+     "    tools: sharedToolDeps(",
+     '    cachedRequest: () => runtime.cache.get("ada"),\n    tools: sharedToolDeps('),
 
     # --- what is read live ----------------------------------------------------
     ("live: the usage config is captured at assembly, so a new budget never applies",
@@ -140,6 +142,68 @@ MUTANTS = [
      D,
      "    if (ledger === null) return Promise.resolve([]);",
      '    if (ledger === null) throw new Error("no ledger");'),
+
+    # --- the command path -----------------------------------------------------
+    ("config: reloads guess the path instead of re-reading the file startup read",
+     D,
+     "        return loadConfig(runtime.configPath, a.env === undefined ? {} : { env: a.env });",
+     "        return loadConfig(undefined, a.env === undefined ? {} : { env: a.env });"),
+    ("config: a file that stopped parsing fails the command that already succeeded",
+     D,
+     "      try {\n"
+     "        return loadConfig(runtime.configPath, a.env === undefined ? {} : { env: a.env });\n"
+     "      } catch (e) {",
+     "      try {\n"
+     "        return loadConfig(runtime.configPath, a.env === undefined ? {} : { env: a.env });\n"
+     "      } catch (e) {\n"
+     "        throw e;\n      }\n      // eslint-disable-next-line\n      try {\n"
+     "        throw new Error();\n      } catch (e) {"),
+    ("reset: only one session forgets its active model",
+     D,
+     "    clearActiveModel: () => {\n      sessions.clear();\n    },",
+     "    clearActiveModel: () => {\n      sessions.setActiveModel(1, undefined);\n    },"),
+    ("set: the runtime override never reaches the registry, so the loop reads the old one",
+     D,
+     "      runtime.registry.setRuntimeEffectiveConfig(character, config);",
+     "      void character;\n      void config;"),
+    ("set: the loop is never told, so an edited threshold waits for a restart",
+     D,
+     "    reloadRuntimeConfig: () => {\n"
+     "      a.autonomy.reloadConfig((name) => runtime.registry.effectiveConfig(name));\n    },\n\n"
+     "    applyReloadedConfig:",
+     "    reloadRuntimeConfig: () => {},\n\n    applyReloadedConfig:"),
+    ("adopt: the registry never re-scans, so a character added at runtime stays invisible",
+     D,
+     "      const summary = await runtime.registry.reloadRuntimeState(config);",
+     "      const summary = {\n"
+     "        characterDiscoveryChanged: false,\n"
+     "        droppedEngines: 0,\n      };\n      void config;"),
+    ("adopt: discovery changes are reported as engine drops and the client invalidates the wrong cache",
+     D,
+     "        characterDiscoveryChanged: summary.characterDiscoveryChanged,\n"
+     "        droppedEngines: summary.droppedEngines,",
+     "        characterDiscoveryChanged: summary.droppedEngines > 0,\n"
+     "        droppedEngines: summary.droppedEngines,"),
+    ("prompt: the cached body survives a prompt refresh, keeping a dead prefix warm",
+     D,
+     '      runtime.cache.invalidate(character, "prompt_reload");',
+     "      void character;"),
+    ("compact: `shore compact` rebuilds from disk rather than extending the live body",
+     D,
+     "      cachedRequest: (character) => runtime.cache.get(character),\n    },\n    keepalive: {",
+     "      cachedRequest: () => undefined,\n    },\n    keepalive: {"),
+    ("keepalive: the ping diagnostic is armed against a second, empty cache",
+     D,
+     "      lastRequest: runtime.cache,",
+     "      lastRequest: { get: () => undefined, set: () => {} } as never,"),
+    ("commands: the ledger is the data root, so `shore usage` reports nothing",
+     D,
+     '  const ledgerPath = rustJoin(runtime.config.dirs.data, "ledger.db");',
+     "  const ledgerPath = runtime.config.dirs.data;"),
+    ("commands: payload capture is hidden from `shore log`",
+     D,
+     "    callStore: runtime.callStore,",
+     "    callStore: undefined,"),
 ]
 
 

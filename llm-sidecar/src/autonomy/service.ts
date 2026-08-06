@@ -33,7 +33,12 @@ import type { ActivityStats } from "./activity.ts";
 import { HeartbeatClock, type HeartbeatClockConfig } from "./heartbeat.ts";
 import { HeartbeatLog, type HeartbeatEvent } from "./heartbeat_log.ts";
 import { DEFAULT_KEEPALIVE_MAX_SECS, type KeepaliveService } from "./keepalive.ts";
-import { CharacterAutonomy, type AutonomyExecutor, type AutonomyRunnerConfig } from "./runner.ts";
+import {
+  CharacterAutonomy,
+  type AutonomyExecutor,
+  type AutonomyRunnerConfig,
+  type CompactionRunnerConfig,
+} from "./runner.ts";
 import { loadState, STATE_FILENAME, type PersistedKeepalive } from "./state_file.ts";
 import type { KeepaliveSnapshot } from "./cache_keepalive.ts";
 
@@ -209,6 +214,16 @@ export class AutonomyService {
     if (persisted !== undefined) {
       this.#keepalive?.restore(character, toSnapshot(persisted), DEFAULT_KEEPALIVE_MAX_SECS);
     }
+  }
+
+  /**
+   * Hand a character's runner new `[memory.compaction]` settings.
+   *
+   * A no-op for a character nobody registered, like every other call here: the
+   * settings arrive with the next registration anyway.
+   */
+  setCompactionConfig(character: string, compaction: CompactionRunnerConfig): void {
+    this.#entries.get(character)?.runner.setCompactionConfig(compaction);
   }
 
   /** Let a character go, writing down where it got to. */

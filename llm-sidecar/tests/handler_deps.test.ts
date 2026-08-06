@@ -30,13 +30,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  buildCommandPathDeps,
   buildGenerationDeps,
   chatCompactionRunner,
   chatToolDeps,
   generationRegistry,
   turnAutonomy,
   usageBudgetWarnings,
+  type CommandAssembly,
 } from "../src/handler/deps.ts";
+import { SessionRouter } from "../src/swp/session.ts";
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
 import { createRuntime, type ShoreRuntime } from "../src/runtime.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
@@ -66,6 +69,29 @@ function configFor(
       runtime: join(root, "runtime"),
     },
     rawTable: undefined,
+  };
+}
+
+/**
+ * `config` with `[memory.compaction]` overridden.
+ *
+ * Spread all the way down rather than cloned: the config carries
+ * `ConfigDuration` instances, and `structuredClone` reduces them to plain
+ * objects that no longer answer `asSecs()`.
+ */
+function withCompaction(
+  config: LoadedConfig,
+  overrides: Partial<LoadedConfig["app"]["memory"]["compaction"]>,
+): LoadedConfig {
+  return {
+    ...config,
+    app: {
+      ...config.app,
+      memory: {
+        ...config.app.memory,
+        compaction: { ...config.app.memory.compaction, ...overrides },
+      },
+    },
   };
 }
 
@@ -100,6 +126,7 @@ function recordingService(gate?: Promise<void>) {
     backfillActivity: () => calls.push("backfill"),
     onUserMessage: () => calls.push("user"),
     onAssistantMessage: (_c: string, turns: number) => calls.push(`assistant:${turns}`),
+    setCompactionConfig: () => calls.push("compaction"),
     shouldCompactNow: () => undefined,
     onCompactionComplete: () => calls.push("compacted"),
     onCompactionFailed: () => calls.push("failed"),
@@ -358,10 +385,20 @@ describe("what the assembly hands the driver", () => {
       // A reload replaces the registry's global config. Copied at assembly,
       // both of these would still be answering with what the daemon started
       // with and nothing would say so.
-      const fresh = structuredClone(config.app);
-      fresh.behavior.autonomy.cache_keepalive_max = ConfigDuration.fromSecs(60);
-      fresh.usage.budgets = [{ ...(config.app.usage.budgets[0] ?? {}), cost_usd: 9 } as never];
-      runtime.registry.setGlobalConfig({ ...config, app: fresh });
+      runtime.registry.setGlobalConfig({
+        ...config,
+        app: {
+          ...config.app,
+          behavior: {
+            ...config.app.behavior,
+            autonomy: {
+              ...config.app.behavior.autonomy,
+              cache_keepalive_max: ConfigDuration.fromSecs(60),
+            },
+          },
+          usage: { ...config.app.usage, budgets: [{ cost_usd: 9 } as never] },
+        },
+      });
 
       expect(deps.keepaliveMaxSecs?.()).toBe(60);
       expect(deps.usageConfig?.()?.budgets?.[0]?.cost_usd).toBe(9);
@@ -381,6 +418,190 @@ describe("what the assembly hands the driver", () => {
       // `segmentCount()` and the engine exposes the reader that has it.
       expect(engine.segmentCount()).toBe(0);
       expect(registry.effectiveConfig("ada").dirs.data).toBe(runtime.config.dirs.data);
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("the command path", () => {
+  function commandAssembly(runtime: ShoreRuntime, extra: Partial<CommandAssembly> = {}) {
+    return {
+      runtime,
+      autonomy: new TurnAutonomyBridge(recordingService()),
+      sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+      diagnostics: { api_calls: { push: () => {} } } as never,
+      router: new SessionRouter(),
+      handshake: { hello: () => ({}) as never, history: () => Promise.resolve({} as never) },
+      providers: {},
+      ...extra,
+    } satisfies CommandAssembly;
+  }
+
+  test("the reload path names the file the daemon was started from", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-cmd-path-");
+    try {
+      const deps = buildCommandPathDeps(commandAssembly(runtime));
+      // Not guessed from the environment on each reload: a re-resolve could
+      // land on a different file than startup read.
+      expect(deps.configPath).toBe(join(root, "config", "config.toml"));
+      expect(deps.dispatchRuntime.reloadGlobalConfig()).toBeDefined();
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a config that stopped parsing drops the annotation rather than failing", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-cmd-broken-");
+    try {
+      await mkdir(join(root, "config"), { recursive: true });
+      await writeFile(join(root, "config", "config.toml"), "definitely = not [ toml", "utf8");
+
+      const deps = buildCommandPathDeps(commandAssembly(runtime));
+      const warned: string[] = [];
+      const real = console.warn;
+      console.warn = (msg: unknown) => warned.push(String(msg));
+      try {
+        // The command that asked has already succeeded; all this costs is the
+        // `restart_required` list.
+        expect(deps.dispatchRuntime.reloadGlobalConfig()).toBeUndefined();
+      } finally {
+        console.warn = real;
+      }
+      expect(warned.join(" ")).toContain("could not re-read");
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("adopting a reloaded config re-scans, and tells every registered character", async () => {
+    const { root, config, runtime } = await runtimeUnder(
+      "shore-deps-cmd-adopt-",
+      () => {},
+      ["ada"],
+    );
+    try {
+      const bridge = new TurnAutonomyBridge(recordingService());
+      const deps = buildCommandPathDeps(commandAssembly(runtime, { autonomy: bridge }));
+
+      bridge.ensureState("ada", config);
+      await bridge.settled("ada");
+
+      await writeCharacter(root, "nova");
+      const summary = await deps.dispatchRuntime.applyReloadedConfig(config);
+      await bridge.settled("ada");
+
+      // The registry re-scanned, so a character added while the daemon was up
+      // is discoverable without a restart.
+      expect(summary.characterDiscoveryChanged).toBe(true);
+      expect(runtime.registry.availableCharacters()).toEqual(["ada", "nova"]);
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a reset forgets every session's active model, not just the one that asked", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-cmd-reset-");
+    try {
+      const deps = buildCommandPathDeps(commandAssembly(runtime));
+      deps.sessions.setActiveModel(1, "anthropic:a");
+      deps.sessions.setActiveModel(2, "openai:b");
+
+      deps.dispatchRuntime.clearActiveModel();
+
+      // The Rust kept one active model on the handler's single command context,
+      // so `config_reset` cleared it for everyone. Per session here, and the
+      // reset still has to reach all of them.
+      expect(deps.sessions.activeModel(1)).toBeUndefined();
+      expect(deps.sessions.activeModel(2)).toBeUndefined();
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a refreshed prompt snapshot drops the cached body", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-cmd-prompt-");
+    try {
+      const deps = buildCommandPathDeps(commandAssembly(runtime));
+      runtime.cache.set("ada", { model: "m", messages: [] } as never);
+      expect(runtime.cache.get("ada")).toBeDefined();
+
+      deps.runtime.notifyPromptSnapshotRefreshed("ada");
+
+      // The cached body still carries the pre-refresh system prompt bytes;
+      // replaying it for keepalive would keep a dead prefix warm.
+      expect(runtime.cache.get("ada")).toBeUndefined();
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a `config` set reaches the registry and the loop", async () => {
+    const { root, config, runtime } = await runtimeUnder("shore-deps-cmd-set-", () => {}, ["ada"]);
+    try {
+      const service = recordingService();
+      const bridge = new TurnAutonomyBridge(service);
+      const deps = buildCommandPathDeps(commandAssembly(runtime, { autonomy: bridge }));
+
+      bridge.ensureState("ada", config);
+      await bridge.settled("ada");
+
+      // Spread rather than `structuredClone`: the config holds `ConfigDuration`
+      // instances, and a structured clone turns them into plain objects that no
+      // longer answer `asSecs()`.
+      const overridden = withCompaction(config, { max_turns: 77 });
+      await deps.dispatchRuntime.setEffectiveConfig("ada", overridden);
+      deps.dispatchRuntime.reloadRuntimeConfig(overridden);
+      await bridge.settled("ada");
+
+      // Read back through the registry rather than from the argument, so the
+      // override the set just installed is the one the loop adopts.
+      expect(runtime.registry.effectiveConfig("ada").app.memory.compaction.max_turns).toBe(77);
+      expect(service.calls).toContain("compaction");
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("the two setters with a live reader behind them are no-ops", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-cmd-noop-");
+    try {
+      const deps = buildCommandPathDeps(commandAssembly(runtime));
+      // `[usage]` and `cache_keepalive_max` are read off the registry's global
+      // config per call, which the same command replaces. A holder here would
+      // be a second copy of a value that already has one authority.
+      expect(() => {
+        deps.runtime.setUsageConfig(runtime.config);
+        deps.runtime.setCacheKeepaliveCeiling(ConfigDuration.fromSecs(1));
+      }).not.toThrow();
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("the compaction a command runs extends this character's body", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-cmd-compact-");
+    try {
+      runtime.cache.set("ada", { model: "m", messages: [] } as never);
+      const deps = buildCommandPathDeps(commandAssembly(runtime));
+
+      // `shore compact` and an inline pass must not disagree about what was in
+      // context: a manual pass that rebuilt from disk would carry a colder
+      // prefix than the automatic one.
+      expect(deps.commands.compaction?.cachedRequest?.("ada")).toBeDefined();
+      expect(deps.commands.compaction?.cachedRequest?.("nova")).toBeUndefined();
+      expect(deps.commands.keepalive?.lastRequest).toBe(runtime.cache);
+      expect(deps.commands.keepalive?.keepalive).toBe(runtime.keepalive);
+      expect(deps.commands.callStore).toBe(runtime.callStore);
+      expect(deps.commands.ledgerPath).toBe(join(root, "data", "ledger.db"));
     } finally {
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });

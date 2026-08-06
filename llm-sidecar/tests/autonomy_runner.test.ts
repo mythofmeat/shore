@@ -458,6 +458,36 @@ describe("the compaction the handler runs", () => {
     });
   });
 
+  test("a reload changes when it fires, without restarting the runner", async () => {
+    await inTempDir(async (dir) => {
+      const { runner } = build({
+        dir,
+        config: { autonomyEnabled: true, maxTurns: 20, maxContextTokens: 0 },
+      });
+      expect(runner.shouldCompactNow(10, 0)).toBe(false);
+
+      runner.setCompactionConfig({
+        compactionEnabled: true,
+        minTurns: 2,
+        maxTurns: 10,
+        idleTriggerSecs: 5,
+        archiveAfterSecs: 6,
+        maxContextTokens: 0,
+      });
+
+      // The Rust read these off a shared `Arc` that `reload_runtime_config`
+      // swapped, so an edited threshold governed the next turn with no restart.
+      expect(runner.shouldCompactNow(10, 0)).toBe(true);
+      // The tick reads the same object, which is the one divergence: the Rust's
+      // tick held its own clone and kept the old values until restart.
+      expect(runner.inputs(0).maxTurns).toBe(10);
+      expect(runner.inputs(0).idleTriggerSecs).toBe(5);
+      // The two `[behavior.autonomy]` gates are not the reload's to move —
+      // they were snapshotted at registration there and are here too.
+      expect(runner.inputs(0).autonomyEnabled).toBe(true);
+    });
+  });
+
   test("saying yes takes the latch, so the next tick does not compact too", async () => {
     // The whole reason this is asked here rather than decided by the daemon
     // from config it also holds: one latch, one owner. Two would have the
