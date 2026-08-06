@@ -1,3 +1,18 @@
+//! **Ported.** `llm-sidecar/src/instances.ts`, pinned by
+//! `tests/instances.test.ts` and `scripts/mutate_instances.py`. Filed at the
+//! root over there rather than under `swp/`: this is daemon discovery, not part
+//! of the SWP protocol, and "registry" is already three other things in that
+//! tree.
+//!
+//! One mechanism differs. There is no portable `flock` on the other side, so
+//! the read-modify-write is guarded by an exclusively-created lock file whose
+//! *existence* is the lock. The kernel releases a `flock` when its holder dies
+//! and does not release a lock file, so that port carries a staleness timeout —
+//! a lock older than ten seconds is assumed abandoned and broken. Without it, a
+//! daemon killed mid-write would wedge every later reader forever.
+//!
+//! The atomic write is unchanged: sibling temp file, `fsync`, rename.
+
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
