@@ -7,6 +7,23 @@
 //! never blocks on LLM streaming. Commands (status, log, etc.) are processed
 //! inline and always return immediately.
 
+// **Ported.** `llm-sidecar/src/handler/`, and as of this commit it is supplied
+// as well as written: `deps.ts` turns a `ShoreRuntime` into `MessageHandlerDeps`
+// — pinned by `tests/handler_deps.test.ts` and `scripts/mutate_deps.py`.
+//
+// `MessageHandlerDeps` here is a struct of live handles; over there it is a set
+// of narrow interfaces, one per thing the handler actually asks for, each
+// adapted at the wiring. `registry` is the difference in miniature: this file
+// holds an `Arc<Mutex<CharacterRegistry>>` and calls `resolve_character` on it,
+// while the router over there declares "something that turns a selection into a
+// name or a message" and `handlerRegistry` is the four lines that make the
+// registry one.
+//
+// `apply_reloaded_config` below has ported into `dispatchRuntime` except for
+// the `[mcp]` reconnect, which is #28 — doing it needs the MCP registry to
+// become a holder the autonomy executor reads through too, so that a heartbeat
+// and a chat turn cannot end up with different tool surfaces.
+
 mod command_dispatch;
 mod context;
 mod generation;

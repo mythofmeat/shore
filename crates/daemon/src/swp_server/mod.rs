@@ -6,24 +6,25 @@
 //! (frozen; generated from this file at 9023b46d). Do not add behaviour here —
 //! add it there.
 //!
-//! It is not deleted, and not wired to a socket on the TypeScript side either.
-//! Both follow from the same fact: `handler/` consumes [`RoutedMessage`],
-//! [`SessionRouter`] and [`RequestMeta`], and `handler/` cannot move until
-//! `memory/` and `tools/` do (#12, step 5 — `handler/context.rs` is a
-//! coordinator over both). Having TypeScript own the socket while Rust still
-//! answers the frames would mean shipping every routed message back across the
-//! daemon/sidecar hop, which is the scaffolding shape #12 rules out. So the
-//! transport waits for its consumers rather than growing a bridge to them.
+//! It is not deleted, and the consumer it was waiting for has landed:
+//! `llm-sidecar/src/handler/deps.ts` assembles `MessageHandlerDeps`, so
+//! `MessageHandler.run` has something to drain [`RoutedMessage`] into.
+//! `Server::set_handshake_provider` ported with it — `swp/server.ts`, pinned by
+//! `tests/swp_server.test.ts` and `scripts/mutate_swp_server.py` — and it
+//! exists for the reason it does here: the provider answers out of the
+//! character registry, and the registry is built with the server's broadcast.
 //!
-//! `registry.rs` beside this file is deliberately *not* ported. It is instance
-//! discovery rather than SWP, and its only caller is daemon startup in
-//! `main.rs` — the exact thing that moves in the commit that wires TypeScript
-//! to the socket. Porting it now would be a leaf with no caller. One fact
-//! worth keeping for whoever does it: the Rust *clients* do not lock when
-//! reading `instances.json` (`common/swp_client/discovery.rs` is a plain
-//! `read_to_string`), so the `flock` here only serialises daemon instances
-//! against each other. A TypeScript writer needs the atomic rename, not the
-//! lock, to keep readers safe.
+//! What is left on the TypeScript side is the *startup* that calls all of it:
+//! argument parsing, `resolve_startup`, the listener bind, `instances.json`
+//! registration and the shutdown ordering, all of which are `main.rs`.
+//!
+//! `registry.rs` beside this file **has** ported — `llm-sidecar/src/instances.ts`
+//! — ahead of that startup rather than after it. One fact worth keeping: the
+//! Rust *clients* do not lock when reading `instances.json`
+//! (`common/swp_client/discovery.rs` is a plain `read_to_string`), so the
+//! `flock` here only serialises daemon instances against each other. The
+//! TypeScript writer relies on the atomic rename, not the lock, to keep
+//! readers safe.
 
 pub mod registry;
 

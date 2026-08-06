@@ -5,23 +5,22 @@
  * Ported from the `Server` half of `crates/daemon/src/swp_server/mod.rs`,
  * pinned by `tests/swp_fixtures/swp_parity.json`.
  *
- * # Not yet serving real clients
+ * # The order everything else is built in
  *
- * Nothing constructs this in production yet, and the missing piece is now the
- * *consumer* rather than the downstream. `MessageHandler` (`handler/router.ts`)
- * takes what {@link Server.routes} yields, and `buildHandshakeProvider`
- * (`swp/handshake.ts`) answers what a connection asks for on the way in. What
- * is still unassembled is `MessageHandlerDeps` — its `dispatchCommand` and
- * `runGeneration`, each an assembly of its own.
+ * This is the first thing built and the last thing started, and both ends of
+ * that are forced:
  *
- * Listening before that exists would be worse than not listening: connections
- * would hand-shake, queue their messages in {@link RouteQueue}, and never be
- * answered. So this stays unwired until the thing that drains the queue does.
+ * - **First**, because the character registry is constructed with this server's
+ *   broadcast as its history listener, and the autonomy executor pushes
+ *   delivered messages through the same channel.
+ * - **Last**, because a connection that hand-shakes before `MessageHandler` is
+ *   draining {@link Server.routes} queues its messages in {@link RouteQueue}
+ *   and is never answered. `bind` and `serve` are separate for this: binding
+ *   resolves a port-zero address without accepting anything.
  *
- * When it is wired, `handshake` will need to arrive after construction. The
- * Rust has `set_handshake_provider` for it, because the provider needs the
- * character registry and the registry needs this server's broadcast — one of
- * the two has to be built first, and it is this one.
+ * Between the two, {@link Server.setHandshakeProvider} closes the cycle — the
+ * provider needs the registry that needed this server's broadcast. The Rust
+ * has `set_handshake_provider` for exactly the same reason.
  */
 
 import { createServer, type Server as NetServer, type Socket } from "node:net";
@@ -102,6 +101,7 @@ export class Server {
   readonly #events = new Broadcast();
   readonly #routes = new RouteQueue();
   readonly #connections = new Set<Promise<void>>();
+  #handshake: HandshakeProvider | undefined;
   #nextId = 1;
   #listener: NetServer | null = null;
   #shutdown!: () => void;
@@ -109,9 +109,29 @@ export class Server {
 
   constructor(config: ServerConfig) {
     this.#config = config;
+    this.#handshake = config.handshake;
     this.#shutdownSignal = new Promise<void>((resolve) => {
       this.#shutdown = resolve;
     });
+  }
+
+  /**
+   * Supply the handshake after construction, which is the only order there is.
+   *
+   * The provider answers out of the character registry, and the registry is
+   * built with this server's broadcast — so one of the two has to exist first,
+   * and it is this one. The Rust broke the same cycle the same way, with
+   * `set_handshake_provider`.
+   *
+   * Safe up to {@link serve}, and pointless after {@link bind}: binding opens
+   * the socket but accepts nothing, so no connection can have read the field
+   * yet. A connection that arrives with none set gets {@link DEFAULT_HANDSHAKE},
+   * which names no characters and hands back an empty conversation — a client
+   * would render an empty window rather than fail, which is why this is set
+   * before serving rather than checked for.
+   */
+  setHandshakeProvider(handshake: HandshakeProvider): void {
+    this.#handshake = handshake;
   }
 
   /** Direct sends and session-metadata mutation. */
@@ -211,7 +231,9 @@ export class Server {
         serverName: this.#config.serverName,
         router: this.#router,
         events: this.#events.subscribe(),
-        handshake: this.#config.handshake ?? DEFAULT_HANDSHAKE,
+        // Read per connection, not captured at construction: this is what
+        // `setHandshakeProvider` moves.
+        handshake: this.#handshake ?? DEFAULT_HANDSHAKE,
         route: async (msg) => {
           this.#routes.push(msg);
         },

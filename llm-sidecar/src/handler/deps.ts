@@ -1,13 +1,17 @@
 /**
- * The daemon's chat turn, assembled from a {@link ShoreRuntime}.
+ * The daemon's message handler, assembled from a {@link ShoreRuntime}.
  *
- * Ported from the `GenContext` half of `build_server_and_handler` and
- * `build_command_context` in `crates/daemon/src/main.rs`.
+ * Ported from the `MessageHandlerDeps` and `GenContext` halves of
+ * `build_server_and_handler`, and from `build_command_context`, in
+ * `crates/daemon/src/main.rs`.
  *
- * `handler/generation.ts` is a complete turn driver that takes every collaborator
- * as an argument, and nothing has ever supplied them. This is the supply. What
- * it mostly does is name which of the runtime's pieces answers each question,
- * and the two places it does more than that are the two places the Rust did:
+ * {@link buildMessageHandlerDeps} is the whole of it; the two `build*Deps`
+ * calls underneath it are separable and separately tested. Every module they
+ * supply — the turn driver, the command table, the router — was written to take
+ * its collaborators as arguments, and nothing has ever supplied them.
+ *
+ * What this mostly does is name which of the runtime's pieces answers each
+ * question. The places it does more than that are the places the Rust did:
  *
  * - **Two of the tool backends are per character.** `deferEdit` writes into one
  *   character's queue and `activityStats` reads one character's tracker, so the
@@ -36,7 +40,7 @@
  * command pushes outward — and `DispatchRuntime`, what the four
  * post-processing hooks reach into.
  *
- * **`[mcp]` is not reconnected on reload.** The Rust's `apply_reloaded_config`
+ * **`[mcp]` is not reconnected on reload** — issue #28. The Rust's `apply_reloaded_config`
  * compares the section and rebuilds the registry when it moved. Doing that here
  * means `ShoreRuntime.mcp` becoming a holder both this path *and* the autonomy
  * executor read through, because a chat turn and a heartbeat must offer the
@@ -50,7 +54,7 @@
 import { compactionGenerate } from "../autonomy/in_process.ts";
 import type { LastRequestCache } from "../autonomy/last_request.ts";
 import type { TurnAutonomyBridge } from "../autonomy/registration.ts";
-import type { CharacterRegistry } from "../characters.ts";
+import { CharacterError, type CharacterRegistry } from "../characters.ts";
 import type { CommandDeps } from "../commands/dispatch.ts";
 import type { ConfigRuntime } from "../commands/config.ts";
 import { characterDataDir, rustJoin } from "../config/dirs.ts";
@@ -66,18 +70,26 @@ import { ledgerFor } from "../ledger/record.ts";
 import type { SidecarProvider, SidecarRequest } from "../llm/types.ts";
 import { queueDeferredEdit } from "../memory/deferred_edits.ts";
 import { compactionRunner } from "../memory/compaction/run.ts";
+import type { NotificationService } from "../notifications.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import { sharedToolDeps, type ShoreRuntime } from "../runtime.ts";
 import { historyMessage, type HandshakeProvider } from "../swp/connection.ts";
 import type { SessionRouter } from "../swp/session.ts";
 import { deferEditTo } from "../tools/dispatch.ts";
-import type { CommandPathDeps, SessionCache } from "./commands.ts";
+import { makeDispatchCommand, type CommandPathDeps, type SessionCache } from "./commands.ts";
 import type { DispatchRuntime } from "./command_dispatch.ts";
 import {
   generationEngine,
+  makeRunGeneration,
   type GenerationDeps,
   type GenerationRegistry,
 } from "./generation.ts";
+import { StreamLeases } from "./lease.ts";
+import type {
+  HandlerNotifier,
+  HandlerRegistry,
+  MessageHandlerDeps,
+} from "./router.ts";
 import type { SessionTokens } from "./persistence.ts";
 import type { ToolContextDeps } from "./tool_context.ts";
 
@@ -272,6 +284,88 @@ export function usageBudgetWarnings(
   };
 }
 
+// ── the whole handler ───────────────────────────────────────────────────
+
+/** What the message handler needs that neither half already carries. */
+export interface HandlerAssembly
+  extends Omit<GenerationAssembly, "emitEvent">,
+    Omit<CommandAssembly, "runtime" | "autonomy" | "sessionTokens" | "diagnostics" | "providers" | "env"> {
+  runtime: ShoreRuntime;
+  /**
+   * The SWP broadcast, and the only reason this takes a `Server` rather than
+   * its parts: a broadcast frame goes to every session, a routed reply goes to
+   * one, and the two are separate channels on the same object.
+   */
+  emitEvent: (message: ServerMessage) => void;
+  log?: MessageHandlerDeps["log"];
+}
+
+/**
+ * The handler, assembled.
+ *
+ * Everything below the two `build*Deps` calls is an adapter of a few lines,
+ * and each exists because this module reads a runtime piece more narrowly than
+ * the piece is written — a registry that answers with a message instead of
+ * throwing, a notifier that only ever files an error.
+ */
+export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps {
+  return {
+    router: a.router,
+    // Fresh, and never shared with anything: a lease names a session on this
+    // server, and a second daemon's sessions are different numbers.
+    leases: new StreamLeases(),
+    registry: handlerRegistry(a.runtime.registry),
+    notifier: handlerNotifier(a.runtime.notifier),
+    dispatchCommand: makeDispatchCommand(buildCommandPathDeps(a)),
+    runGeneration: makeRunGeneration(buildGenerationDeps(a)),
+    ...(a.log === undefined ? {} : { log: a.log }),
+  };
+}
+
+/**
+ * The registry as the router reads it: a message instead of a throw.
+ *
+ * The Rust returned `Result<String, _>` and the caller turned the error into an
+ * `invalid_request` frame. {@link CharacterError} already carries the sentence
+ * — which character was asked for and which exist — so this only changes how it
+ * travels. Anything that is not a `CharacterError` is stringified rather than
+ * rethrown: the router's only move either way is to answer the client, and a
+ * throw here would take down the loop draining every other session's messages.
+ */
+export function handlerRegistry(
+  registry: Pick<CharacterRegistry, "resolveCharacter">,
+): HandlerRegistry {
+  return {
+    resolveCharacter: (selected) => {
+      try {
+        // `null` is "none selected" and `undefined` is what the registry spells
+        // that as; an empty string is a *request* for a character called "",
+        // and stays one.
+        return { name: registry.resolveCharacter(selected ?? undefined) };
+      } catch (e) {
+        return { error: e instanceof CharacterError ? e.message : String(e) };
+      }
+    },
+  };
+}
+
+/**
+ * Desktop notifications, for a generation that failed outright.
+ *
+ * Narrowed to the one event the router files, so the `[notifications.events]`
+ * toggle this obeys is `error` and cannot quietly become another — the same
+ * reason `runtime.ts` names its two autonomy hooks separately.
+ */
+export function handlerNotifier(
+  notifier: Pick<NotificationService, "notify">,
+): HandlerNotifier {
+  return {
+    notify: (event, title, body) => {
+      notifier.notify(event, title, body);
+    },
+  };
+}
+
 // ── the command path ────────────────────────────────────────────────────
 
 /** What a command needs that the runtime does not already hold. */
@@ -420,7 +514,7 @@ export function dispatchRuntime(
       // holds the global config, re-scans the character list, drops the
       // per-character config cache and discards engines that no longer exist.
       const summary = await runtime.registry.reloadRuntimeState(config);
-      // `[mcp]` is not reconnected here — see the module doc.
+      // `[mcp]` is not reconnected here — see the module doc, and #28.
       a.autonomy.reloadConfig((name) => runtime.registry.effectiveConfig(name));
       await pushHistorySnapshots(a);
       return {

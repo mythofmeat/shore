@@ -32,15 +32,20 @@ import { join } from "node:path";
 import {
   buildCommandPathDeps,
   buildGenerationDeps,
+  buildMessageHandlerDeps,
   chatCompactionRunner,
   chatToolDeps,
   generationRegistry,
+  handlerNotifier,
+  handlerRegistry,
   turnAutonomy,
   usageBudgetWarnings,
   type CommandAssembly,
+  type HandlerAssembly,
 } from "../src/handler/deps.ts";
 import { SessionRouter } from "../src/swp/session.ts";
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
+import { CharacterError } from "../src/characters.ts";
 import { createRuntime, type ShoreRuntime } from "../src/runtime.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
@@ -422,6 +427,117 @@ describe("what the assembly hands the driver", () => {
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe("the handler, whole", () => {
+  function handlerAssembly(runtime: ShoreRuntime): HandlerAssembly {
+    return {
+      runtime,
+      autonomy: new TurnAutonomyBridge(recordingService()),
+      sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+      diagnostics: { api_calls: { push: () => {} } } as never,
+      router: new SessionRouter(),
+      handshake: {
+        hello: () => Promise.resolve({} as never),
+        history: () => Promise.resolve({} as never),
+      },
+      providers: {},
+      emitEvent: () => {},
+    };
+  }
+
+  test("every field the router reads is present", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-handler-");
+    try {
+      const a = handlerAssembly(runtime);
+      const deps = buildMessageHandlerDeps(a);
+
+      expect(deps.router).toBe(a.router);
+      expect(typeof deps.dispatchCommand).toBe("function");
+      expect(typeof deps.runGeneration).toBe("function");
+      expect(deps.leases).toBeDefined();
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("each handler gets its own leases", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-leases-");
+    try {
+      // A lease names a session id on one server, and two servers number their
+      // sessions from 1 independently — a shared map would hand one daemon's
+      // stream to the other's session.
+      const first = buildMessageHandlerDeps(handlerAssembly(runtime));
+      const second = buildMessageHandlerDeps(handlerAssembly(runtime));
+      expect(first.leases).not.toBe(second.leases);
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("resolving a character for the router", () => {
+  test("the only character is chosen when none was selected", () => {
+    const registry = handlerRegistry({ resolveCharacter: (r) => r ?? "ada" });
+    expect(registry.resolveCharacter(null)).toEqual({ name: "ada" });
+  });
+
+  test("`null` is asked as an absence, not as a character called that", () => {
+    const seen: (string | undefined)[] = [];
+    const registry = handlerRegistry({
+      resolveCharacter: (r) => {
+        seen.push(r);
+        return "ada";
+      },
+    });
+    registry.resolveCharacter(null);
+    registry.resolveCharacter("");
+    // An empty string is a *request* for a character named "", which the
+    // registry fails as not-found. `undefined` is "nobody chose".
+    expect(seen).toEqual([undefined, ""]);
+  });
+
+  test("the registry's own sentence travels as a message rather than a throw", () => {
+    const registry = handlerRegistry({
+      resolveCharacter: () => {
+        throw CharacterError.notFound("zed", ["ada", "nova"]);
+      },
+    });
+
+    const answer = registry.resolveCharacter("zed");
+    expect(answer).toHaveProperty("error");
+    // The client can fix this by choosing, so it needs to be told what there
+    // was to choose from.
+    expect((answer as { error: string }).error).toContain("zed");
+    expect((answer as { error: string }).error).toContain("ada");
+  });
+
+  test("anything else is stringified, not rethrown", () => {
+    const registry = handlerRegistry({
+      resolveCharacter: () => {
+        throw new Error("the disk went away");
+      },
+    });
+    // A throw here takes down the loop draining every other session's messages,
+    // and the router's only move either way is to answer this one client.
+    expect(registry.resolveCharacter("ada")).toEqual({ error: "Error: the disk went away" });
+  });
+});
+
+describe("the router's notifier", () => {
+  test("files under the event whose toggle it obeys", () => {
+    const filed: string[] = [];
+    const notifier = handlerNotifier({
+      notify: (event, title, body) => filed.push(`${event}:${title}:${body}`),
+    });
+
+    notifier.notify("error", "Shore - ada", "the model refused");
+    // Narrowed to one event so `[notifications.events].error` is the switch
+    // this obeys and cannot quietly become another.
+    expect(filed).toEqual(["error:Shore - ada:the model refused"]);
   });
 });
 

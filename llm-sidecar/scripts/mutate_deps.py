@@ -204,6 +204,29 @@ MUTANTS = [
      D,
      "    callStore: runtime.callStore,",
      "    callStore: undefined,"),
+
+    # --- the handler ----------------------------------------------------------
+    ("leases: one map is shared by every handler, so a lease names another daemon's session",
+     D,
+     "    leases: new StreamLeases(),",
+     "    leases: ((globalThis as Record<string, unknown>)[\"__leases\"] ??= new StreamLeases()) as StreamLeases,"),
+    ("resolve: `null` is asked for as a character named that rather than as an absence",
+     D,
+     "        return { name: registry.resolveCharacter(selected ?? undefined) };",
+     '        return { name: registry.resolveCharacter(selected ?? "") };'),
+    ("resolve: the registry's sentence is replaced by one that names nothing",
+     D,
+     "        return { error: e instanceof CharacterError ? e.message : String(e) };",
+     '        void e;\n        return { error: "no character" };'),
+    ("resolve: an unexpected failure is rethrown, taking the route loop with it",
+     D,
+     "        return { error: e instanceof CharacterError ? e.message : String(e) };",
+     "        if (!(e instanceof CharacterError)) throw e;\n        return { error: e.message };"),
+    ("notify: a failed generation is filed under the wrong event's toggle",
+     D,
+     "    notify: (event, title, body) => {\n      notifier.notify(event, title, body);\n    },",
+     "    notify: (_event, title, body) => {\n"
+     '      notifier.notify("message_complete", title, body);\n    },'),
 ]
 
 
