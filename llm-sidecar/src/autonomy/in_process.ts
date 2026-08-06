@@ -218,41 +218,51 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
     };
   }
 
-  /**
-   * The compaction seam's `generate`, which is told its model rather than
-   * resolving one.
-   *
-   * Passed through rather than re-derived: the pass built the request against
-   * that exact model, and `resolveModelForRequest` would have to find it again
-   * in the static catalog — which a discovered model or a `provider:model_id`
-   * pin is never in. Re-resolving would silently drop those passes to a single
-   * key.
-   */
   #compactionDeps(config: LoadedConfig): {
-    generate: (
-      request: SidecarRequest,
-      model: { provider_key: string; api_key_env?: string | undefined },
-      character: string,
-    ) => Promise<GenerateResponse>;
+    generate: CompactionGenerate;
     tools?: Omit<ToolContextDeps, "runSubagent">;
   } {
     return {
-      generate: async (request, model, character) => {
-        request.context = { ...request.context, character } as never;
-        const { response, fallbacks } = await generateWithCredentialFallback(
-          request,
-          { providerKey: model.provider_key, apiKeyEnv: model.api_key_env },
-          this.#generateDeps(config),
-        );
-        for (const event of fallbacks) {
-          console.warn(
-            `shore: compaction for ${character} rotated ${event.from.name} → ` +
-              `${event.to?.name ?? "(none)"}: ${event.reason}`,
-          );
-        }
-        return response;
-      },
+      generate: compactionGenerate(this.#generateDeps(config)),
       ...(this.#deps.tools === undefined ? {} : { tools: this.#deps.tools }),
     };
   }
+}
+
+/** The provider call a compaction pass makes, however it was triggered. */
+export type CompactionGenerate = (
+  request: SidecarRequest,
+  model: { provider_key: string; api_key_env?: string | undefined },
+  character: string,
+) => Promise<GenerateResponse>;
+
+/**
+ * The compaction seam's `generate`, which is told its model rather than
+ * resolving one.
+ *
+ * Passed through rather than re-derived: the pass built the request against
+ * that exact model, and `resolveModelForRequest` would have to find it again in
+ * the static catalog — which a discovered model or a `provider:model_id` pin is
+ * never in. Re-resolving would silently drop those passes to a single key.
+ *
+ * Exported because a chat turn's inline compaction is the same pass with a
+ * different trigger, and `handler/deps.ts` needs the same call. Two spellings of
+ * it would be two credential-rotation policies for one operation.
+ */
+export function compactionGenerate(deps: GenerateDeps): CompactionGenerate {
+  return async (request, model, character) => {
+    request.context = { ...request.context, character } as never;
+    const { response, fallbacks } = await generateWithCredentialFallback(
+      request,
+      { providerKey: model.provider_key, apiKeyEnv: model.api_key_env },
+      deps,
+    );
+    for (const event of fallbacks) {
+      console.warn(
+        `shore: compaction for ${character} rotated ${event.from.name} → ` +
+          `${event.to?.name ?? "(none)"}: ${event.reason}`,
+      );
+    }
+    return response;
+  };
 }

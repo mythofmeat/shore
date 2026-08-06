@@ -127,6 +127,13 @@ MUTANTS = [
      R,
      "    if (pending === undefined) {",
      "    if (false as boolean) {"),
+    ("assistant: the character's own turn is never reported, so the heartbeat thinks it is silent",
+     R,
+     "  onAssistantMessage(character: string, turnCount: number): void {\n"
+     "    this.#after(character, () => {\n"
+     "      this.#service.onAssistantMessage(character, turnCount);\n    });",
+     "  onAssistantMessage(character: string, turnCount: number): void {\n"
+     "    void this.#after;\n    void turnCount;\n    void character;"),
     ("user: the timestamp is taken when the queue drains, not when the user spoke",
      R,
      "    const at = this.#now();\n    this.#after(character, () => {\n"

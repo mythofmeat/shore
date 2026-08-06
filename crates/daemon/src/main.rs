@@ -43,6 +43,17 @@ mod supervisor;
 // between `createRuntime` and `startRuntimeClocks` is this file's own split
 // between `build_server_and_handler` and `spawn_background_services`.
 //
+// The `GenContext` half has **ported** too: `llm-sidecar/src/handler/deps.ts`,
+// pinned by `tests/handler_deps.test.ts` and `scripts/mutate_deps.py`. That is
+// what `build_command_context` assembled plus the `Diagnostics`/`SessionTokens`
+// pair beside it, supplying the turn driver that has never had a caller. Two
+// things read differently over there and both are noted in that file: the
+// per-character tool backends are built per turn rather than once, because
+// `defer_edit` and `activity_stats` name a character; and `[usage]` and
+// `cache_keepalive_max` are read off the registry's global config per call
+// rather than pushed in by `set_usage_config`/`set_cache_keepalive_ceiling`,
+// which is the same values with nothing left to forget to push.
+//
 // What has not: everything that is a *server* rather than a runtime — argument
 // parsing, `resolve_startup` and its remote-access policy, the listener bind,
 // `instances.json` registration, the signal listener, and the shutdown ordering

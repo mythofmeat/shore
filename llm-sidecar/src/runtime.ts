@@ -146,7 +146,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       registry,
       cache,
       providers: options.providers,
-      tools: backgroundToolDeps(config, mcp),
+      tools: sharedToolDeps(config, mcp),
       ...(callStore === undefined ? {} : { callStore }),
       ...(options.emit === undefined ? {} : { emit: options.emit }),
       ...(options.env === undefined ? {} : { env: options.env }),
@@ -295,19 +295,25 @@ async function connectMcpRegistry(
 }
 
 /**
- * The tool backends a background turn gets, which is not all of them.
+ * The tool backends that do not depend on which character is talking.
  *
- * Three fields the chat path will want are deliberately absent, and each for
- * its own reason rather than as a batch:
+ * Exported because this *is* the background turn's whole tool context and it is
+ * also the base a chat turn extends (`handler/deps.ts` adds the two
+ * per-character ones). Shared rather than written twice: the two paths' tool
+ * surfaces have to agree, and the cheapest way for them to disagree is for one
+ * of them to grow a backend the other did not.
+ *
+ * Three fields a chat turn wants are absent here, and each for its own reason
+ * rather than as a batch:
  *
  * - **`runSubagent`** is unported — the nested loop driver is still
  *   `crates/daemon/src/tools/subagent.rs`. `ask_*` is uncallable until it
  *   lands, which is what a daemon without the runtime did.
  * - **`activityStats` and `deferEdit`** are per-character, and this object is
  *   shared. The Rust's `build_tool_context` for a heartbeat set neither, so
- *   their absence here is the port rather than a gap.
+ *   their absence from a background tick is the port rather than a gap.
  */
-function backgroundToolDeps(config: LoadedConfig, mcp: McpRegistry): ToolContextDeps {
+export function sharedToolDeps(config: LoadedConfig, mcp: McpRegistry): ToolContextDeps {
   return {
     mcpRegistry: mcp,
     // `generateImage` speaks the sidecar's request shape; the tool speaks its

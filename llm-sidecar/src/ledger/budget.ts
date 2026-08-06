@@ -27,6 +27,8 @@
 
 import type { Database } from "bun:sqlite";
 
+import type { UsageConfig as AppUsageConfig } from "../config/app.ts";
+
 import { isSubscriptionProvider } from "./store.ts";
 import { usageTotals, type QueryFilter } from "./query.ts";
 import {
@@ -92,6 +94,35 @@ export interface UsageConfig {
   allow_compaction_over_budget?: boolean;
   budgets?: UsageBudgetConfig[];
   spike_warnings?: UsageSpikeWarningsConfig;
+}
+
+/**
+ * `[usage]` as this gate reads it.
+ *
+ * A rename in the other direction to the rest of the config port: the parsed
+ * config spells an unset filter `undefined` because it is a struct field, and
+ * the gate spells it *absent* because it came from the wire, where the daemon
+ * omitted it. Dropping the undefined-valued keys is the whole translation.
+ *
+ * It lives here rather than at either caller because both of them — `shore
+ * usage` and the per-turn budget check — need the same one, and two spellings
+ * of "which filters this budget has" would be two different sets of budgets
+ * matching the same call.
+ */
+export function usageConfigView(cfg: AppUsageConfig): UsageConfig {
+  return {
+    timezone: cfg.timezone,
+    allow_compaction_over_budget: cfg.allow_compaction_over_budget,
+    budgets: cfg.budgets.map(
+      (b) => defined(b as unknown as Record<string, unknown>) as unknown as UsageBudgetConfig,
+    ),
+    spike_warnings: cfg.spike_warnings,
+  };
+}
+
+/** The record without its undefined-valued keys. */
+function defined(v: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(v).filter(([, val]) => val !== undefined));
 }
 
 /** Serde defaults, applied here so a partially-specified config behaves as the

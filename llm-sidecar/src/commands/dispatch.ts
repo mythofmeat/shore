@@ -82,7 +82,7 @@ import {
 } from "./status.ts";
 import { usage } from "./usage.ts";
 import type { SessionTokens } from "../handler/persistence.ts";
-import type { UsageBudgetConfig, UsageConfig } from "../ledger/budget.ts";
+import { usageConfigView } from "../ledger/budget.ts";
 
 /**
  * The dispatcher's own state, shared by every arm and written by four of them.
@@ -365,29 +365,5 @@ function usageContext(
       "provider error: usage reports need a ledger on disk; this client has none configured",
     );
   }
-  return { ledger: deps.ledgerPath, usage: usageView(session.config.app.usage) };
-}
-
-/**
- * `[usage]` as the budget gate reads it.
- *
- * A rename in the other direction to the rest of this file: the parsed config
- * spells an unset filter `undefined` because it is a struct field, and the
- * gate spells it *absent* because it came from the wire, where the daemon
- * omitted it. Dropping the undefined keys is the whole translation.
- */
-function usageView(cfg: LoadedConfig["app"]["usage"]): UsageConfig {
-  return {
-    timezone: cfg.timezone,
-    allow_compaction_over_budget: cfg.allow_compaction_over_budget,
-    budgets: cfg.budgets.map(
-      (b) => defined(b as unknown as Record<string, unknown>) as unknown as UsageBudgetConfig,
-    ),
-    spike_warnings: cfg.spike_warnings,
-  };
-}
-
-/** The record without its undefined-valued keys. */
-function defined(v: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(v).filter(([, val]) => val !== undefined));
+  return { ledger: deps.ledgerPath, usage: usageConfigView(session.config.app.usage) };
 }

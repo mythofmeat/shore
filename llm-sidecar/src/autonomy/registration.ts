@@ -94,6 +94,7 @@ type ServiceSlice = Pick<
   | "register"
   | "backfillActivity"
   | "onUserMessage"
+  | "onAssistantMessage"
   | "shouldCompactNow"
   | "onCompactionComplete"
   | "onCompactionFailed"
@@ -163,6 +164,21 @@ export class TurnAutonomyBridge {
     const at = this.#now();
     this.#after(character, () => {
       this.#service.onUserMessage(character, turnCount, at);
+    });
+  }
+
+  /**
+   * The character answered, in the foreground.
+   *
+   * Queued like the rest, and it is the one most likely to need the queue: it
+   * fires at the *end* of a turn, so the registration it waits on is the one
+   * the same turn started. A dropped call leaves the heartbeat believing the
+   * character has been silent since before this turn, and it wakes to say
+   * something into a conversation that is already going.
+   */
+  onAssistantMessage(character: string, turnCount: number): void {
+    this.#after(character, () => {
+      this.#service.onAssistantMessage(character, turnCount);
     });
   }
 

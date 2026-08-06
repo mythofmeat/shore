@@ -19,6 +19,7 @@ import fixture from "./handler_fixtures/stream_parity.json" with { type: "json" 
 import { ConfigDuration } from "../src/config/duration.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
 import type { PendingAlt } from "../src/engine/message_store.ts";
+import type { ApiCallEntry } from "../src/diagnostics.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import {
   consumeStream,
@@ -934,11 +935,13 @@ function makeContext(): {
   direct: ServerMessage[];
   notified: string[];
   lastRequests: WireRequest[];
+  apiCalls: ApiCallEntry[];
 } {
   const events: ServerMessage[] = [];
   const direct: ServerMessage[] = [];
   const notified: string[] = [];
   const lastRequests: WireRequest[] = [];
+  const apiCalls: ApiCallEntry[] = [];
   let n = 0;
 
   const ctx: PersistContext = {
@@ -956,12 +959,14 @@ function makeContext(): {
       recordingSink(notified),
     ),
     sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
-    diagnostics: { api_calls: [] },
+    // The real ring only pushes, so the context's type says only that; the
+    // array behind it is what the assertions read.
+    diagnostics: { api_calls: apiCalls },
     newlyCrossedUsageBudgetWarnings: () => Promise.resolve([]),
     now: () => "2026-08-03T00:00:00+00:00",
     newMessageId: () => `m_${(n += 1)}`,
   };
-  return { ctx, events, direct, notified, lastRequests };
+  return { ctx, events, direct, notified, lastRequests, apiCalls };
 }
 
 function resultWith(content: string, blocks: ContentBlock[]): StreamResult {
@@ -983,7 +988,7 @@ function resultWith(content: string, blocks: ContentBlock[]): StreamResult {
 
 describe("persist_and_notify", () => {
   test("appends the response, emits one new_message, and notifies", async () => {
-    const { ctx, events, notified, lastRequests } = makeContext();
+    const { ctx, apiCalls, events, notified, lastRequests } = makeContext();
     const engine = new FakeEngine();
     await persistAndNotify(ctx, engine, {
       charName: "Alice",
@@ -1002,12 +1007,12 @@ describe("persist_and_notify", () => {
     expect(notified).toEqual(["notify_send:Shore — Alice:hi"]);
     expect(lastRequests[0]?.messages).toHaveLength(1);
     expect(ctx.sessionTokens).toEqual({ input: 10, output: 5, cache_read: 3, cache_write: 1 });
-    expect(ctx.diagnostics.api_calls).toHaveLength(1);
-    expect(ctx.diagnostics.api_calls[0]?.provider).toBe("anthropic");
+    expect(apiCalls).toHaveLength(1);
+    expect(apiCalls[0]?.provider).toBe("anthropic");
   });
 
   test("a provider-reported cost reaches the diagnostics row, and its absence is a missing key", async () => {
-    const { ctx } = makeContext();
+    const { ctx, apiCalls } = makeContext();
     const withCost = resultWith("hi", [{ type: "text", text: "hi" }]);
     withCost.usage.total_cost_usd = 0.0125;
     await persistAndNotify(ctx, new FakeEngine(), {
@@ -1026,14 +1031,14 @@ describe("persist_and_notify", () => {
       toolIntermediateMessages: [],
       wallClockMs: 1,
     });
-    expect(ctx.diagnostics.api_calls[0]?.total_cost_usd).toBe(0.0125);
+    expect(apiCalls[0]?.total_cost_usd).toBe(0.0125);
     // `skip_serializing_if = "Option::is_none"`: a provider that reports no
     // cost leaves the key off rather than writing zero.
-    expect(Object.hasOwn(ctx.diagnostics.api_calls[1] as object, "total_cost_usd")).toBe(false);
+    expect(Object.hasOwn(apiCalls[1] as object, "total_cost_usd")).toBe(false);
   });
 
   test("a result with nothing in it persists nothing and emits nothing", async () => {
-    const { ctx, events, notified } = makeContext();
+    const { ctx, apiCalls, events, notified } = makeContext();
     const engine = new FakeEngine();
     await persistAndNotify(ctx, engine, {
       charName: "Alice",
@@ -1049,7 +1054,7 @@ describe("persist_and_notify", () => {
     // gate it on there being anything to say.
     expect(notified).toEqual(["notify_send:Shore — Alice:"]);
     // And the diagnostics row is recorded regardless.
-    expect(ctx.diagnostics.api_calls).toHaveLength(1);
+    expect(apiCalls).toHaveLength(1);
   });
 
   test("tool-loop turns are appended before the response and raise no events", async () => {
@@ -1154,7 +1159,7 @@ describe("persist_and_notify", () => {
   });
 
   test("the request's provider key wins over the resolved model's", async () => {
-    const { ctx } = makeContext();
+    const { ctx, apiCalls } = makeContext();
     const engine = new FakeEngine();
     await persistAndNotify(ctx, engine, {
       charName: "Alice",
@@ -1165,11 +1170,11 @@ describe("persist_and_notify", () => {
       wallClockMs: 1,
     });
     expect(engine.messages[0]?.provider_key).toBe("from-request");
-    expect(ctx.diagnostics.api_calls[0]?.provider).toBe("from-request");
+    expect(apiCalls[0]?.provider).toBe("from-request");
   });
 
   test("an empty reported model falls back to the requested one", async () => {
-    const { ctx } = makeContext();
+    const { ctx, apiCalls } = makeContext();
     const engine = new FakeEngine();
     const result = resultWith("hi", [{ type: "text", text: "hi" }]);
     result.model = "";
@@ -1184,7 +1189,7 @@ describe("persist_and_notify", () => {
     expect(engine.messages[0]?.model).toBe("requested-model");
     // The diagnostics row keeps the reported value, empty or not — it records
     // what the provider said, not what was asked for.
-    expect(ctx.diagnostics.api_calls[0]?.model).toBe("");
+    expect(apiCalls[0]?.model).toBe("");
   });
 
   test("budget warnings go to the session and to the notifier", async () => {

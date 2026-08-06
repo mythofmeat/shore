@@ -27,13 +27,15 @@
  *
  * # What is injected rather than held
  *
- * `runGeneration` — `handler/generation.rs`, still Rust. This module owns the
- * orchestration *around* a generation (which session, which recipients, what
- * happens when it throws), which is separable from the generation itself and is
- * what the fixture pins. Config hot-reload (`HandlerControl`, the
- * `apply_reloaded_config` path) is deliberately not here: it drives the
- * autonomy manager and the character registry's runtime reload, and neither has
- * been ported.
+ * `runGeneration` — `handler/generation.ts`, and `handler/deps.ts` is what
+ * supplies it. This module owns the orchestration *around* a generation (which
+ * session, which recipients, what happens when it throws), which is separable
+ * from the generation itself and is what the fixture pins.
+ *
+ * Config hot-reload (`HandlerControl`, the `apply_reloaded_config` path) is
+ * still deliberately not here. It drives the character registry's runtime
+ * reload and the schedulers; `handler/command_dispatch.ts` names the calls it
+ * makes as `DispatchRuntime`, and nothing implements that interface yet.
  */
 
 import type { ClientMessage } from "../protocol/ClientMessage.ts";

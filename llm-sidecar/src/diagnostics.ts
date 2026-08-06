@@ -71,7 +71,16 @@ export interface ApiCallEntry {
   finish_reason: string;
   /** Provider-reported total cost when available (e.g. OpenRouter's `cost`). */
   total_cost_usd?: number | undefined;
-  error?: string | undefined;
+  /**
+   * `Option<String>` in the Rust, and both spellings of "none" arrive.
+   *
+   * `handler/persistence.ts` writes an explicit `null` on the success path
+   * because it builds the row in one literal; a failure path that never set the
+   * field leaves it absent. {@link omitAbsent} erases the difference before
+   * anything reads it, so the two are the same row — accepting both here is
+   * what says that out loud rather than making one caller pick.
+   */
+  error?: string | null | undefined;
 }
 
 export interface ToolCallEntry {

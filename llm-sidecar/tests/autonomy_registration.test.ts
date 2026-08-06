@@ -59,6 +59,9 @@ function recordingService(registerDelay?: Promise<void>) {
     onUserMessage: (_c: string, turns: number, at: number) => {
       calls.push(`user:${turns}:${at}`);
     },
+    onAssistantMessage: (_c: string, turns: number) => {
+      calls.push(`assistant:${turns}`);
+    },
     shouldCompactNow: () => undefined,
     onCompactionComplete: (_c: string, retained: number) => {
       calls.push(`compacted:${retained}`);
@@ -205,6 +208,7 @@ describe("updates that can wait", () => {
 
     bridge.ensureState("ada", configWith());
     bridge.onUserMessage("ada", 1);
+    bridge.onAssistantMessage("ada", 2);
     bridge.onCompactionComplete("ada", 2);
     bridge.onCompactionFailed("ada");
 
@@ -212,7 +216,33 @@ describe("updates that can wait", () => {
     await bridge.settled("ada");
     // A user message landing after the compaction that followed it restarts an
     // idle clock the compaction had just reset.
-    expect(service.calls).toEqual(["register", "user:1:7", "compacted:2", "failed"]);
+    expect(service.calls).toEqual([
+      "register",
+      "user:1:7",
+      "assistant:2",
+      "compacted:2",
+      "failed",
+    ]);
+  });
+
+  test("the character's own turn is one of them", async () => {
+    let release!: () => void;
+    const slow = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const service = recordingService(slow);
+    const bridge = new TurnAutonomyBridge(service);
+
+    bridge.ensureState("ada", configWith());
+    bridge.onAssistantMessage("ada", 9);
+
+    // It fires at the *end* of a turn, so the registration it waits on is the
+    // one the same turn started. Dropped, the heartbeat believes the character
+    // has been silent since before this turn and wakes to talk over it.
+    expect(service.calls).toEqual(["register"]);
+    release();
+    await bridge.settled("ada");
+    expect(service.calls).toEqual(["register", "assistant:9"]);
   });
 
   test("the user's timestamp is when they spoke, not when the queue drained", async () => {

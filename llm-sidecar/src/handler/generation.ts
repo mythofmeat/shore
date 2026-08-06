@@ -152,7 +152,7 @@ export interface GenerationRegistry {
 
 /** The diagnostics rings this path appends to. Narrow: it only ever pushes. */
 export interface GenerationDiagnostics {
-  api_calls: ApiCallEntry[];
+  api_calls: { push: (entry: ApiCallEntry) => void };
   tool_calls: { push: (entry: ToolCallEntry) => void };
   key_fallbacks: { push: (entry: KeyFallbackEntry) => void };
 }
@@ -200,8 +200,16 @@ export interface GenerationDeps {
   usageConfig?: () => UsageConfig | undefined;
   /** `[behavior.autonomy].cache_keepalive_max`, in seconds. */
   keepaliveMaxSecs?: () => number | undefined;
-  /** What the tool context needs that the config does not carry. */
-  tools?: ToolContextDeps;
+  /**
+   * What the tool context needs that the config does not carry.
+   *
+   * Per character rather than one shared object, because two of its fields are:
+   * `deferEdit` writes into *this* character's queue and `activityStats` reads
+   * *this* character's tracker. A process-wide table could only leave both out,
+   * which is a heartbeat's tool context — see `runtime.ts` — and not a chat
+   * turn's.
+   */
+  tools?: (charName: string) => ToolContextDeps;
   /** RFC 3339 with offset. Injected so a replay can pin it. */
   now?: () => string;
   /** `format!("m_{}", Uuid::new_v4())` in the Rust. */
@@ -434,7 +442,7 @@ async function streamTurn(
   const toolsOn = anyEnabled(config.app.tools) && (request.tools?.length ?? 0) > 0;
 
   const toolCtx = toolsOn
-    ? await buildToolContext(config, deps.dataDir, charName, deps.tools ?? {})
+    ? await buildToolContext(config, deps.dataDir, charName, deps.tools?.(charName) ?? {})
     : undefined;
 
   const retry = {

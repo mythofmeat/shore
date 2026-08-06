@@ -376,12 +376,27 @@ export function characterDir(dataDir: string, character: string): string {
  * character-effective config for the turn it is finishing, and handing that one
  * over is what keeps an inline pass running under the same settings the turn
  * did.
+ *
+ * `cachedRequest` is a lookup for the same reason one runner serves every
+ * character: the body worth extending is the one *this* character last sent.
+ * Holding a single request here would hand Ada's conversation to Nova's pass —
+ * same shape, entirely the wrong bytes, and the pass would notice nothing.
  */
 export function compactionRunner(
-  deps: Omit<CompactionRunDeps, "config">,
+  deps: Omit<CompactionRunDeps, "config" | "cachedRequest"> & {
+    cachedRequest?: (character: string) => SidecarRequest | undefined;
+  },
 ): CompactionRunner {
   return {
-    run: (character, config) => runCompaction(character, { ...deps, config }),
+    run: (character, config) => {
+      const { cachedRequest, ...rest } = deps;
+      const cached = cachedRequest?.(character);
+      return runCompaction(character, {
+        ...rest,
+        config,
+        ...(cached === undefined ? {} : { cachedRequest: cached }),
+      });
+    },
     applyDeferredEdits: (charDataDir, configDir, charName) =>
       applyDeferredEdits(charDataDir, configDir, charName),
   };

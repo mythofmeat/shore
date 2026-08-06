@@ -19,6 +19,7 @@ import { deriveContentFromBlocks, MessageStore } from "../engine/message_store.t
 import type { PendingAlt } from "../engine/message_store.ts";
 import { embedImageData } from "../engine/wire_images.ts";
 import { rustTrim } from "../memory/lines.ts";
+import type { ApiCallEntry } from "../diagnostics.ts";
 import type { UsageBudgetWarningEvent } from "../ledger/budget.ts";
 import type { StreamResult } from "../llm/stream.ts";
 import type { WireMessage } from "../llm/types.ts";
@@ -39,21 +40,14 @@ export interface SessionTokens {
   cache_write: number;
 }
 
-/** One row of the API-call diagnostics ring. Mirrors `ApiCallEntry`. */
-export interface ApiCallEntry {
-  timestamp: string;
-  model: string;
-  provider: string;
-  input_tokens: number;
-  output_tokens: number;
-  cache_read_tokens: number;
-  cache_write_tokens: number;
-  ttft_ms: number;
-  total_ms: number;
-  finish_reason: string;
-  total_cost_usd?: number;
-  error: string | null;
-}
+/**
+ * One row of the API-call diagnostics ring.
+ *
+ * The ring's own type, not a second declaration of it. There were two, agreeing
+ * on ten fields and disagreeing on how `error` spells "none", which is exactly
+ * the drift a duplicate exists to cause.
+ */
+export type { ApiCallEntry };
 
 /**
  * The engine surface this phase drives. `ConversationEngine` implements it;
@@ -95,7 +89,9 @@ export interface PersistContext {
   autonomy: PersistAutonomy;
   notifier: NotificationService;
   sessionTokens: SessionTokens;
-  diagnostics: { api_calls: ApiCallEntry[] };
+  /** Narrow, like the rings beside it in {@link Diagnostics}: this only pushes,
+   *  and saying so is what lets the real ring buffer be passed straight in. */
+  diagnostics: { api_calls: { push: (entry: ApiCallEntry) => void } };
   /** Budget thresholds newly crossed by this call, in the order they should be
    *  reported. Rejections are logged and swallowed, as in the Rust. */
   newlyCrossedUsageBudgetWarnings: () => Promise<UsageBudgetWarningEvent[]>;
