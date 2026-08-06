@@ -87,7 +87,7 @@ interface HttpishError {
 // controls (thinking on/off + effort/budget). Anthropic + Gemini keep their
 // native SDKs.
 const vercel = new VercelProvider();
-const DEFAULT_PROVIDERS: Partial<Record<SidecarRequest["sdk"], SidecarProvider>> = {
+export const DEFAULT_PROVIDERS: Partial<Record<SidecarRequest["sdk"], SidecarProvider>> = {
   anthropic: new AnthropicProvider(),
   gemini: new GeminiProvider(),
   openrouter: new OpenRouterProvider(),

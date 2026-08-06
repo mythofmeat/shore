@@ -66,10 +66,25 @@ mod supervisor;
 // hand-written one, because the two mistakes on either side of it are "refuses
 // `127.0.0.2`" and "silently exposes the daemon".
 //
-// What has not: everything that is a *server* rather than a policy — the
-// listener bind, `instances.json` registration, the signal listener, and the
-// shutdown ordering in `await_background_shutdown`. Those land with
-// `swp_server`.
+// And `run_daemon` itself has **ported**: `llm-sidecar/src/daemon/run.ts`,
+// pinned by `tests/daemon_run.test.ts` and `scripts/mutate_daemon_run.py`.
+// That is the bind, `instances.json` registration, the signal listener, the
+// order `build_server_and_handler` assembles in, and
+// `await_background_shutdown`. It is also the first caller `MessageHandler`
+// and `GenContext` have ever had: the test suite there drives a real socket
+// through a real turn.
+//
+// Two divergences, both recorded at their call site over there:
+//
+// - **The shutdown notice is written by each connection**, not broadcast from
+//   the server. Here it is sent on `push_tx` and then raced against the same
+//   watch channel every connection is already selecting on — two ready
+//   branches, chosen at random — so a client was told it was being let go only
+//   sometimes.
+// - **`spawn_background_services` has no counterpart yet.** `hot_reload.rs`
+//   and `auto_discovery.rs` are unported, and `supervisor.rs` does not move at
+//   all. A daemon over there reloads config only when a command asks and
+//   refreshes provider models only at startup.
 //
 // Two pieces are deliberately absent from the port rather than pending:
 //

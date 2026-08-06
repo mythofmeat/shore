@@ -19,6 +19,12 @@ for a port, and `instances.json` has to record the one it got. A bind that
 reported the requested address instead would write a literal `:0` and send
 every discovery client to a port nobody opened.
 
+**Writing out.** Every connection writes one last frame — the shutdown notice
+— and a write to a socket whose peer has already gone must *settle*. Bun does
+not always call the write callback for a destroyed socket, and one unsettled
+write wedges `serve`, which waits on every connection before returning. That
+mutant times out rather than failing, which is why the timeout is a kill here.
+
 **Routing.** A message that never reaches the queue is a message the handler
 never answers, and the client waits for a reply that is not coming.
 
@@ -65,6 +71,26 @@ MUTANTS = [
      S,
      "    return { host: address.address, port: address.port };",
      "    return { host: address.address, port: 0 };"),
+
+    # --- writing out ----------------------------------------------------------
+    ("write: a write to a socket whose peer has gone never settles, wedging shutdown",
+     S,
+     "              if (socket.destroyed || socket.writableEnded) {\n"
+     "                resolve();\n"
+     "                return;\n"
+     "              }\n"
+     "              const settle = () => resolve();\n"
+     '              socket.once("close", settle);\n'
+     "              socket.write(bytes, (err) => {\n"
+     '                socket.removeListener("close", settle);\n'
+     "                if (err) reject(err);\n"
+     "                else resolve();\n"
+     "              });",
+     "              socket.write(bytes, (err) => (err ? reject(err) : resolve()));"),
+    ("write: the shutdown notice is not written, so a client sees a bare EOF",
+     "src/swp/connection.ts",
+     '      case "shutdown":\n        await writeMessage(sink, { type: "shutdown" });\n        return;',
+     '      case "shutdown":\n        return;'),
 
     # --- routing --------------------------------------------------------------
     ("route: nothing is pushed, so the handler never sees a client's message",

@@ -167,6 +167,54 @@ describe("the handshake provider", () => {
   });
 });
 
+describe("stopping", () => {
+  test("a connected client is told, rather than seeing a bare EOF", async () => {
+    const { server, port, stop } = await serving();
+    server.setHandshakeProvider(providerNaming(["ada"]));
+
+    const socket = connect({ host: "127.0.0.1", port, noDelay: true });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        socket.once("connect", resolve);
+        socket.once("error", reject);
+      });
+      const frames: Record<string, unknown>[] = [];
+      let buffered = "";
+      socket.on("data", (chunk: Buffer) => {
+        buffered += chunk.toString("utf8");
+        for (;;) {
+          const at = buffered.indexOf("\n");
+          if (at === -1) return;
+          frames.push(JSON.parse(buffered.slice(0, at)) as Record<string, unknown>);
+          buffered = buffered.slice(at + 1);
+        }
+      });
+      socket.write(
+        `${JSON.stringify({
+          type: "hello",
+          client_type: "tui",
+          client_name: "test",
+          capabilities: [],
+        })}\n`,
+      );
+      // `hello` and the history snapshot that follows it.
+      while (frames.length < 2) await new Promise((r) => setTimeout(r, 5));
+
+      await stop();
+      // The write is flushed by the time `stop` returns; the client's `data`
+      // event is one turn behind it.
+      while (frames.length < 3) await new Promise((r) => setTimeout(r, 5));
+
+      // Written by the connection on its way out rather than broadcast and
+      // raced against the same signal, which is how the Rust did it and why a
+      // client there was told only sometimes.
+      expect(frames.map((f) => f["type"])).toEqual(["hello", "history", "shutdown"]);
+    } finally {
+      socket.destroy();
+    }
+  });
+});
+
 describe("what a connection produces", () => {
   test("a command reaches the route stream", async () => {
     const { server, port, stop } = await serving();

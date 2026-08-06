@@ -178,7 +178,16 @@ export class Server {
     const listener = this.#listener ?? ((await this.bind(), this.#listener));
     if (listener === null) throw new Error("listener was not bound");
 
-    this.#config.log?.info?.("TCP listening", { addr: this.#config.addr });
+    // The address the kernel gave, not the one asked for — this line is how an
+    // operator finds a `--addr 127.0.0.1:0` daemon, and `:0` would tell them
+    // nothing.
+    const address = listener.address();
+    this.#config.log?.info?.("TCP listening", {
+      addr:
+        address === null || typeof address === "string"
+          ? this.#config.addr
+          : `${address.address}:${address.port}`,
+    });
 
     listener.on("connection", (socket) => {
       this.#accept(socket);
@@ -186,10 +195,11 @@ export class Server {
 
     await this.#shutdownSignal;
 
-    // Tell everyone still connected before tearing the listener down, so a
-    // client learns the daemon is going away rather than seeing a bare EOF.
+    // Everyone still connected is told they are being let go — but by their own
+    // connection rather than from here. The Rust broadcast the frame at this
+    // point and raced it against the same shutdown signal each connection was
+    // already watching; see the `shutdown` arm of `messageLoop`.
     this.#config.log?.info?.("Server shutting down");
-    this.broadcast({ type: "shutdown" });
 
     await new Promise<void>((resolve) => listener.close(() => resolve()));
     await Promise.allSettled([...this.#connections]);
@@ -220,9 +230,26 @@ export class Server {
       {
         input: socket,
         output: {
+          // A write to a socket whose peer has gone must **settle**, not hang.
+          // Bun does not always call the write callback for a socket that is
+          // already destroyed, and one unsettled write is enough to wedge
+          // shutdown: `serve` waits on every connection before it returns, and
+          // the frame the connection is trying to write is often the last one
+          // — the shutdown notice. Both guards are for the same failure, one
+          // before the write and one during it.
           write: (bytes) =>
             new Promise<void>((resolve, reject) => {
-              socket.write(bytes, (err) => (err ? reject(err) : resolve()));
+              if (socket.destroyed || socket.writableEnded) {
+                resolve();
+                return;
+              }
+              const settle = () => resolve();
+              socket.once("close", settle);
+              socket.write(bytes, (err) => {
+                socket.removeListener("close", settle);
+                if (err) reject(err);
+                else resolve();
+              });
             }),
         },
       },

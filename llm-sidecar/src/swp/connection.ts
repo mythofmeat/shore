@@ -341,7 +341,16 @@ export async function messageLoop(
         break;
       }
 
+      // Written here rather than received off the broadcast, which is a
+      // deliberate divergence. The Rust sent `Shutdown` on `push_tx` and then
+      // let each connection's `select!` choose between that frame and the
+      // shutdown watch — two ready branches, picked at random, so a client was
+      // told or was not depending on scheduling. The frame exists for exactly
+      // one purpose, which is to be delivered at this moment; a client that
+      // sees a bare EOF instead cannot tell a stopped daemon from a dropped
+      // network. So it is written on the way out, once, to everyone.
       case "shutdown":
+        await writeMessage(sink, { type: "shutdown" });
         return;
     }
   }
