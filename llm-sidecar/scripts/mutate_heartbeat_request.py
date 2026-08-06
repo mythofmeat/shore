@@ -1,0 +1,225 @@
+#!/usr/bin/env python3
+"""Mutation pass over the heartbeat's request preparation (#18 / #12).
+
+Two groups, and they fail in different currencies.
+
+**The override** decides which model a heartbeat costs money on. Every mutant
+here still produces a request that runs — what changes is *which* model runs it,
+and the failure mode is a user who configured a background model, sees ticks
+happening, and is billed on their chat model all along. The pre-check mutants
+matter most: `resolveBackgroundModel` falls back silently by design, and this is
+the one caller that must not let it.
+
+**The preparation** decides what the request contains. The expensive one is the
+copy — the cached body is chat's own history and the object every keepalive ping
+refreshes, so a tick that appends to it in place leaves the cache holding a
+prefix no real turn extends. Nothing throws, nothing logs; the provider just
+starts charging cache-write prices.
+
+A mutant is KILLED if `bun test tests/heartbeat_request.test.ts` fails with it
+applied.
+
+Run from the repository root:
+    python3 llm-sidecar/scripts/mutate_heartbeat_request.py
+"""
+import pathlib
+import subprocess
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+H = "src/autonomy/heartbeat_request.ts"
+
+TESTS = ["tests/heartbeat_request.test.ts"]
+
+PRECHECK = (
+    "  try {\n"
+    "    findEffectiveModel(view, config.dirs.cache, configuredName, true);\n"
+    "  } catch (e) {\n"
+    "    console.warn(\n"
+    '      `shore: heartbeat model "${configuredName}" not found in catalog for ${character}; ` +\n'
+    "        `keeping chat model: ${String(e)}`,\n"
+    "    );\n"
+    "    return { request, override: undefined };\n"
+    "  }"
+)
+
+BUILD_INPUTS = (
+    "        messages: request.messages,\n"
+    "        ...(request.system === undefined ? {} : { system: request.system }),\n"
+    "        ...(request.tools === undefined ? {} : { tools: request.tools }),\n"
+    "        replay: request.replay_prior_thinking,"
+)
+
+CAP = (
+    "    override !== undefined\n"
+    "      ? override.maxToolIterations\n"
+    "      : resolveChatModelForCharacter(configView(config), character, (v, c, n, h) =>\n"
+    "          findEffectiveModel(v, c, n, h),\n"
+    "        )?.maxToolIterations;"
+)
+
+# (label, file, find, replace)
+MUTANTS = [
+    # --- the override ---------------------------------------------------------
+    ("override: no pre-check, so a typo'd pin silently resolves to the chat model",
+     H, PRECHECK, "  void configuredName;"),
+    ("override: the pre-check uses the static catalog, rejecting every modern pin",
+     H, PRECHECK,
+     "  try {\n"
+     "    findModel(config.models, configuredName);\n"
+     "  } catch (e) {\n"
+     "    console.warn(`shore: heartbeat model not found: ${String(e)}`);\n"
+     "    return { request, override: undefined };\n"
+     "  }"),
+    ("override: swaps even when the body already runs on that model",
+     H,
+     "  if (resolved.modelId === request.model) {",
+     "  if (false as boolean) {"),
+    ("override: a missing key ends the tick instead of falling back to chat",
+     H,
+     "  } catch (e) {\n"
+     "    console.warn(\n"
+     "      `shore: heartbeat could not build a request on ${resolved.name} for ${character}, ` +\n"
+     "        `falling back to the chat model: ${String(e)}`,\n"
+     "    );\n"
+     "    return { request, override: undefined };\n"
+     "  }",
+     "  } catch (e) {\n"
+     "    throw e;\n"
+     "  }"),
+    ("override: the swapped body drops chat's messages, losing the cache prefix",
+     H, BUILD_INPUTS,
+     "        messages: [],\n"
+     "        ...(request.system === undefined ? {} : { system: request.system }),\n"
+     "        ...(request.tools === undefined ? {} : { tools: request.tools }),\n"
+     "        replay: request.replay_prior_thinking,"),
+    ("override: the swapped body drops the system prefix",
+     H, BUILD_INPUTS,
+     "        messages: request.messages,\n"
+     "        ...(request.tools === undefined ? {} : { tools: request.tools }),\n"
+     "        replay: request.replay_prior_thinking,"),
+    ("override: the swapped body drops the tool definitions",
+     H, BUILD_INPUTS,
+     "        messages: request.messages,\n"
+     "        ...(request.system === undefined ? {} : { system: request.system }),\n"
+     "        replay: request.replay_prior_thinking,"),
+    ("override: the provider entry is dropped, so `[providers].keys` is ignored",
+     H,
+     "      entry === undefined ? undefined : credentialEntry(entry),",
+     "      undefined,"),
+
+    # --- preparing the body ---------------------------------------------------
+    ("prepare: the cached body is appended to in place, rewriting chat's history",
+     H,
+     "  const copy: SidecarRequest = { ...request, messages: [...request.messages] };",
+     "  const copy: SidecarRequest = request;"),
+    ("prepare: the copy shares its messages array, so the prompt lands in the cache",
+     H,
+     "  const copy: SidecarRequest = { ...request, messages: [...request.messages] };",
+     "  const copy: SidecarRequest = { ...request };"),
+    ("prepare: the stale chat request id rides along into every heartbeat round",
+     H,
+     "  if (copy.context !== undefined) {\n"
+     "    const { rid: _rid, ...rest } = copy.context;\n"
+     "    copy.context = rest;\n"
+     "  }",
+     "  void 0;"),
+    ("prepare: a cold rebuild is not cached, so keepalive pings no-op until a user speaks",
+     H,
+     "    deps.cache.set(character, source, deps.rebuild?.keepaliveIntervalMs);",
+     "    void source;"),
+    ("prepare: the body carrying the heartbeat prompt is what gets cached",
+     H,
+     "  pushInlineSystem(request, prompt);",
+     "  pushInlineSystem(request, prompt);\n"
+     "  deps.cache.set(character, request, deps.rebuild?.keepaliveIntervalMs);"),
+    ("prepare: a mid-turn conversation ticks anyway on an empty body",
+     H,
+     "    if (source === undefined) {\n"
+     "      console.info(\n"
+     "        `shore: heartbeat skipping tick for ${character} (conversation mid-turn or model unresolved)`,\n"
+     "      );\n"
+     "      return undefined;\n"
+     "    }",
+     "    if (source === undefined) source = { messages: [] } as never;"),
+    ("prepare: the round cap always comes from the chat model, not the one running",
+     H, CAP,
+     "    resolveChatModelForCharacter(configView(config), character, (v, c, n, h) =>\n"
+     "      findEffectiveModel(v, c, n, h),\n"
+     "    )?.maxToolIterations;"),
+    ("prepare: the round cap is unlimited whenever no override applies",
+     H, CAP, "    override?.maxToolIterations;"),
+    ("prepare: the prompt is never pinned, so the tick is an ordinary chat turn",
+     H,
+     "  pushInlineSystem(request, prompt);",
+     "  void prompt;"),
+    ("prepare: a failed prompt snapshot aborts the tick",
+     H,
+     "  } catch (e) {\n"
+     "    console.warn(`shore: heartbeat could not prepare the prompt snapshot for ${character}: ${String(e)}`);\n"
+     "  }",
+     "  } catch (e) {\n"
+     "    throw e;\n"
+     "  }"),
+
+    # --- how the interval is said ---------------------------------------------
+    ("interval: whole hours are said in minutes",
+     H,
+     "  if (secs >= SECONDS_PER_HOUR && secs % SECONDS_PER_HOUR === 0n) {",
+     "  if (false as boolean) {"),
+    ("interval: a single hour is said as '1 hours'",
+     H,
+     "    return hours === 1n ? \"1 hour\" : `${hours} hours`;",
+     "    return `${hours} hours`;"),
+    ("interval: a non-whole hour count is rounded up rather than truncated",
+     H,
+     "  return `${secs / SECONDS_PER_MINUTE} minutes`;",
+     "  return `${(secs + SECONDS_PER_MINUTE - 1n) / SECONDS_PER_MINUTE} minutes`;"),
+]
+
+
+def run_tests() -> bool:
+    """True when the suite passes."""
+    proc = subprocess.run(
+        ["bun", "test", *TESTS],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    return proc.returncode == 0
+
+
+def main() -> int:
+    if not run_tests():
+        print("baseline is red — fix the suite before mutating", file=sys.stderr)
+        return 2
+
+    survivors = []
+    for i, (label, rel, find, replace) in enumerate(MUTANTS, start=1):
+        path = ROOT / rel
+        original = path.read_text()
+        if find not in original:
+            print(f"{i:3}. ERROR mutant does not apply: {label}", file=sys.stderr)
+            survivors.append(label)
+            continue
+        if original.count(find) != 1:
+            print(f"{i:3}. ERROR mutant is ambiguous: {label}", file=sys.stderr)
+            survivors.append(label)
+            continue
+        path.write_text(original.replace(find, replace))
+        try:
+            killed = not run_tests()
+        finally:
+            path.write_text(original)
+        print(f"{i:3}. {'kill' if killed else 'LIVE'}  {label}")
+        if not killed:
+            survivors.append(label)
+
+    print(f"\n{len(MUTANTS) - len(survivors)}/{len(MUTANTS)} killed")
+    for label in survivors:
+        print(f"  SURVIVOR: {label}")
+    return 1 if survivors else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

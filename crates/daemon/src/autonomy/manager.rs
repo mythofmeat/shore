@@ -6,9 +6,11 @@
 //! the per-tick trigger decision, `autonomy_state.json` and `heartbeat.jsonl`,
 //! all of it pinned against the Rust that used to do it by the frozen fixtures
 //! in `llm-sidecar/tests/autonomy_fixtures/`. What is left unported is **the
-//! heartbeat tick**, and nothing else. Everything around it — the cached
-//! request, the deep-idle archive, idle compaction — has gone, and stays here as
-//! the specification the tick still reads. `mod.rs` says which is which.
+//! heartbeat tick's effects** — the tool loop, its dispatch and the message it
+//! persists. Everything around them has gone: the cached request, the deep-idle
+//! archive, idle compaction, and now the tick's own request preparation and
+//! model override. What stays is the specification the rest still reads.
+//! `mod.rs` says which is which.
 //!
 //! This is a way station, not a design. The tick reaches into the conversation
 //! engine, the memory store, the tool registry, MCP and sub-agents, and it moves
@@ -1011,6 +1013,10 @@ fn heartbeat_idle_anchor_message() -> Message {
 /// or build failure). The caller uses the returned model to source the
 /// per-model `max_tool_iterations` cap from *exactly* the model the request
 /// uses, keeping the cap and the request model coherent.
+///
+/// **Ported.** `llm-sidecar/src/autonomy/heartbeat_request.ts`. The four
+/// `heartbeat_override_*` tests below went with it verbatim — they are the
+/// specification, and each is a regression with a commit behind it.
 fn apply_heartbeat_model_override(
     request: &mut LlmRequest,
     config: &LoadedConfig,
@@ -1164,6 +1170,19 @@ async fn execute_heartbeat_tick(
 /// the request keeps the two coherent — re-resolving the cap independently
 /// could pick a different model than the request when a heartbeat pin only
 /// resolves via the effective catalog.
+///
+/// **Ported.** `llm-sidecar/src/autonomy/heartbeat_request.ts`. No parity
+/// fixture: this reads a `Mutex<AutonomyState>` and writes a prompt snapshot to
+/// disk, so there is nothing here a generated fixture could have recorded — the
+/// Rust could not test it either, which is why there is no test below to carry
+/// across. `tests/heartbeat_request.test.ts` and
+/// `scripts/mutate_heartbeat_request.py` hold it instead.
+///
+/// One thing the clone on the next line is doing, made explicit over there: the
+/// cached `last_request` is the object chat's next turn extends and every
+/// keepalive ping refreshes. Appending the inline system entry to it in place
+/// would leave the cache holding a prefix no real turn reuses, and nothing
+/// would fail — the provider would just start charging cache-write prices.
 fn prepare_heartbeat_request(
     character: &str,
     state: &Arc<Mutex<AutonomyState>>,

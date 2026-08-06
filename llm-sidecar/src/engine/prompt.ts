@@ -401,17 +401,31 @@ function formatTimeMarker(
   instantMs: number,
   timeZone: string,
 ): string {
+  const timeStr = formatWallClock(instantMs, timeZone);
+
+  return gapSecs !== undefined && gapSecs >= TIME_GAP_THRESHOLD_SECS
+    ? `[${relativeGapPhrase(gapSecs)} · ${timeStr}]`
+    : `[${timeStr}]`;
+}
+
+/**
+ * `Saturday 2026-04-04 · 9:14 PM` — chrono's `%A %Y-%m-%d · %-I:%M %p`.
+ *
+ * Shared with the heartbeat prompt, which prepends the same reading as its own
+ * `[Current time: …]` line. That sharing is the Rust's design and not a
+ * convenience: `build_heartbeat_prompt` documented that Shore has no time tool
+ * because chat gets its anchor from the marker built here and a heartbeat gets
+ * one from its prompt. Two spellings of the same clock would make a character's
+ * sense of the hour depend on which kind of turn it was having.
+ */
+export function formatWallClock(instantMs: number, timeZone: string): string {
   const naive = naiveInZone(instantMs, timeZone);
   const { year, month, day, hour } = partsOf(naive);
   const d = new Date(naive);
   const weekday = WEEKDAYS[d.getUTCDay()]!;
   const hour12 = hour % 12 === 0 ? 12 : hour % 12;
   const meridiem = hour < 12 ? "AM" : "PM";
-  const timeStr = `${weekday} ${String(year).padStart(4, "0")}-${pad2(month)}-${pad2(day)} · ${hour12}:${pad2(d.getUTCMinutes())} ${meridiem}`;
-
-  return gapSecs !== undefined && gapSecs >= TIME_GAP_THRESHOLD_SECS
-    ? `[${relativeGapPhrase(gapSecs)} · ${timeStr}]`
-    : `[${timeStr}]`;
+  return `${weekday} ${String(year).padStart(4, "0")}-${pad2(month)}-${pad2(day)} · ${hour12}:${pad2(d.getUTCMinutes())} ${meridiem}`;
 }
 
 /** Whole seconds between two instants, truncated toward zero as chrono does. */

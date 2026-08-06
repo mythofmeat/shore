@@ -9,10 +9,11 @@
 //! Rust that used to do all of that by the frozen fixtures in
 //! `llm-sidecar/tests/autonomy_fixtures/`. That Rust is gone.
 //!
-//! What is left in `manager.rs` is the heartbeat tick, verbatim. It is the last
-//! one (#12), and until it lands the rest of this module is a *specification*:
-//! the port reads it, generates fixtures from it, replays those against
-//! TypeScript, and then this directory goes.
+//! What is left in `manager.rs` is the heartbeat tick's *effects* — the tool
+//! loop, the tool dispatch and the message it persists. It is the last one
+//! (#12), and until it lands the rest of this module is a *specification*: the
+//! port reads it, generates fixtures from it, replays those against TypeScript,
+//! and then this directory goes.
 //!
 //! ## What in it has already ported
 //!
@@ -49,6 +50,27 @@
 //! pieces it calls and in what order. A generated fixture would have recorded
 //! nothing a test double does not. `tests/idle_compaction.test.ts` and
 //! `scripts/mutate_idle_compaction.py` hold it instead.
+//!
+//! **The heartbeat's request** — `prepare_heartbeat_request` and
+//! `apply_heartbeat_model_override` — is
+//! `llm-sidecar/src/autonomy/heartbeat_request.ts`. The decisions the tick makes
+//! before it calls anything: which body to run (the cached one, or a rebuild
+//! from disk that is then cached so keepalive pings have something to send),
+//! which model runs it, and which round cap goes with that model. The four
+//! `heartbeat_override_*` tests went across verbatim; the preparation had no
+//! Rust test to carry, because it read the state mutex and wrote to disk, so
+//! `tests/heartbeat_request.test.ts` is the first one it has ever had.
+//!
+//! The override is stricter than every other background task's, and that is the
+//! point of it. `resolve_background_model` falls back to the chat model when a
+//! configured name does not resolve — right for compaction, where some model
+//! beats none, and wrong here, where the user pinned a specific model and would
+//! be billed on a different one with nothing to tell them. So the name is
+//! checked against the *effective* catalog first, and a miss keeps the chat
+//! model and says so. Effective and not static: pins are written
+//! `provider:model_id` with no `[chat.*]` entry behind them, and the static
+//! lookup rejected every one of them, so heartbeat silently never left the chat
+//! model at all.
 //!
 //! The four steps it and the deep archive both end on — reload the engine, drain
 //! the deferred edits, invalidate the cached body, re-point the keepalive — ran
