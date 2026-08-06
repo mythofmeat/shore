@@ -9,11 +9,12 @@
 //! Rust that used to do all of that by the frozen fixtures in
 //! `llm-sidecar/tests/autonomy_fixtures/`. That Rust is gone.
 //!
-//! What is left in `manager.rs` is the heartbeat tick's *effects* — the tool
-//! loop, the tool dispatch and the message it persists. It is the last one
-//! (#12), and until it lands the rest of this module is a *specification*: the
-//! port reads it, generates fixtures from it, replays those against TypeScript,
-//! and then this directory goes.
+//! What is left in `manager.rs` is the heartbeat tick's *tail* — the message it
+//! persists, the tool context it runs against, and the orchestration that
+//! strings the pieces together. It is the last one (#12), and until it lands
+//! the rest of this module is a *specification*: the port reads it, generates
+//! fixtures from it, replays those against TypeScript, and then this directory
+//! goes.
 //!
 //! ## What in it has already ported
 //!
@@ -71,6 +72,28 @@
 //! `provider:model_id` with no `[chat.*]` entry behind them, and the static
 //! lookup rejected every one of them, so heartbeat silently never left the chat
 //! model at all.
+//!
+//! **The heartbeat's tool loop** — `run_heartbeat_tool_loop`,
+//! `heartbeat_budget_break`, `push_heartbeat_assistant_message` and
+//! `dispatch_heartbeat_tools` — is `llm-sidecar/src/autonomy/heartbeat_loop.ts`.
+//!
+//! A tick's conversation is thrown away when it ends. Only two things survive:
+//! what the character wrote to disk with a workspace tool, and whatever it asked
+//! to say. So the loop's real output is not the history it builds — it is the
+//! send-message text and the images, and everything worth protecting is a way
+//! for one of those to go missing without anything failing.
+//!
+//! Reaching the round cap does not end the loop; it spends a one-time nudge that
+//! buys a grace window, and only the wall clock may cut that window short. That
+//! is why this is not `engine/tool_loop.rs`'s loop with a different
+//! `CapBehavior`: a heartbeat stopped at its cap loses whatever the model had
+//! not written down yet, and the grace round exists precisely to run past the
+//! cap.
+//!
+//! `set_next_wake` and `sendMessage` stay undeclared, and the loop intercepts
+//! them by name. Declaring them would make the heartbeat's tools array differ
+//! from chat's, and the two being byte-identical is what lets a tick run against
+//! the prefix chat already paid to cache.
 //!
 //! The four steps it and the deep archive both end on — reload the engine, drain
 //! the deferred edits, invalidate the cached body, re-point the keepalive — ran

@@ -6,11 +6,12 @@
 //! the per-tick trigger decision, `autonomy_state.json` and `heartbeat.jsonl`,
 //! all of it pinned against the Rust that used to do it by the frozen fixtures
 //! in `llm-sidecar/tests/autonomy_fixtures/`. What is left unported is **the
-//! heartbeat tick's effects** — the tool loop, its dispatch and the message it
-//! persists. Everything around them has gone: the cached request, the deep-idle
-//! archive, idle compaction, and now the tick's own request preparation and
-//! model override. What stays is the specification the rest still reads.
-//! `mod.rs` says which is which.
+//! heartbeat tick's tail** — the message it persists, the tool context it runs
+//! against, and the orchestration that strings the three together. Everything
+//! before them has gone: the cached request, the deep-idle archive, idle
+//! compaction, the tick's own request preparation and model override, and its
+//! tool loop. What stays is the specification the rest still reads. `mod.rs`
+//! says which is which.
 //!
 //! This is a way station, not a design. The tick reaches into the conversation
 //! engine, the memory store, the tool registry, MCP and sub-agents, and it moves
@@ -1352,6 +1353,20 @@ fn heartbeat_budget_break(
     false
 }
 
+/// **Ported.** `llm-sidecar/src/autonomy/heartbeat_loop.ts`, together with
+/// `heartbeat_budget_break`, `push_heartbeat_assistant_message` and
+/// `dispatch_heartbeat_tools`. No parity fixture and no Rust test to carry:
+/// running one round here needed a `LedgerClient`, a tool registry and the
+/// state mutex, which is why there was never a test. `tests/heartbeat_loop.ts`
+/// and `scripts/mutate_heartbeat_loop.py` are the first ones it has had.
+///
+/// Two things the code below is doing quietly, made explicit over there. The
+/// send-message sink reads `tool_uses` *before* `has_tools` is computed, so a
+/// model that calls `sendMessage` and finishes on `end_turn` is still heard —
+/// gate it and the tick reports "no message sent" for a character that asked to
+/// speak. And `capture_tool_send_message(..).or(..)` means a tool call beats a
+/// tag written in the same round.
+///
 /// Run the heartbeat tool loop: repeated non-streaming `generate()` calls with
 /// tool dispatch, a soft deadline, and a wrap-up grace window. Tool-loop
 /// messages are appended to `request` ephemerally. Returns the last-wins
