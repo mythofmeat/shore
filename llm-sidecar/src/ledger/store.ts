@@ -5,12 +5,23 @@
  * This side computes cost and cache state because this side makes the calls —
  * it has the usage the moment a response lands.
  *
- * **The daemon still owns the schema.** It starts first and runs the migrations;
- * this opens the file that already exists and inserts into it. Two processes on
- * one SQLite file is fine in WAL — one writer, several readers — which is why
- * `Ledger::open` sets `journal_mode = WAL` (shore commit 297fc2a4). Opening a
- * database that has not been created yet is an error here rather than a
- * `CREATE TABLE`, because a second schema author is how the two drift.
+ * **This side owns the schema now.** It used to be the daemon's: it started
+ * first, ran the migrations, and this opened a file that already existed. That
+ * was right while two processes shared the file — a second schema author is how
+ * two schemas drift — and it stops being right the moment the daemon is not
+ * there to start first. Nothing else creates `ledger.db`, and the failure is
+ * silent in the worst way: `ledgerFor` caches the open failure, every call after
+ * it records nothing, and `shore usage` reports a quiet month.
+ *
+ * So {@link Ledger.create} carries {@link SCHEMA} and {@link MIGRATIONS}, both
+ * transcribed from `crates/daemon/src/ledger/store.rs`. The migrations are not
+ * optional and not historical: an installed shore has a `ledger.db` some older
+ * daemon created, and the columns added after v1 are ones the readers on this
+ * side already select.
+ *
+ * Two processes on one SQLite file is still fine in WAL — one writer, several
+ * readers — which is why the connection sets `journal_mode = WAL` (shore commit
+ * 297fc2a4).
  */
 
 import { Database } from "bun:sqlite";
@@ -23,6 +34,127 @@ import {
   type Observation,
 } from "./cache_tracker.ts";
 import { isAnthropicPricing, PricingEngine, type ModelPricing, type PricingStore } from "./pricing.ts";
+
+/**
+ * The tables, as `crates/daemon/src/ledger/store.rs` declares them.
+ *
+ * Transcribed rather than reinterpreted: an installed shore's `ledger.db` was
+ * created by that string, and every column here is one a reader on this side
+ * already selects by name.
+ */
+const SCHEMA = `
+CREATE TABLE IF NOT EXISTS calls (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts                  TEXT    NOT NULL,
+    character           TEXT    NOT NULL,
+    provider            TEXT    NOT NULL,
+    api_key_name        TEXT,
+    model               TEXT    NOT NULL,
+    call_type           TEXT    NOT NULL,
+    input_tokens        INTEGER NOT NULL,
+    output_tokens       INTEGER NOT NULL,
+    cache_read_tokens   INTEGER NOT NULL,
+    cache_write_tokens  INTEGER NOT NULL,
+    cache_ttl           TEXT    DEFAULT '1h',
+    reasoning_effort    TEXT,
+    total_ms            INTEGER NOT NULL,
+    ttft_ms             INTEGER NOT NULL,
+    finish_reason       TEXT    NOT NULL,
+    thinking_enabled    INTEGER NOT NULL,
+    cache_state         TEXT,
+    cache_anomaly       TEXT,
+    input_cost          REAL,
+    output_cost         REAL,
+    cache_read_cost     REAL,
+    cache_write_cost    REAL,
+    cost_source         TEXT    DEFAULT 'pricing_catalog',
+    total_cost          REAL
+);
+
+CREATE TABLE IF NOT EXISTS pricing (
+    model_id              TEXT PRIMARY KEY,
+    input_per_token       REAL NOT NULL,
+    output_per_token      REAL NOT NULL,
+    cache_read_per_token  REAL NOT NULL,
+    cache_write_per_token REAL NOT NULL,
+    fetched_at            TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS usage_budget_warnings (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    budget_name    TEXT NOT NULL,
+    period_start   TEXT NOT NULL,
+    threshold      TEXT NOT NULL,
+    created_at     TEXT NOT NULL,
+    UNIQUE (budget_name, period_start, threshold)
+);
+
+CREATE INDEX IF NOT EXISTS idx_calls_ts        ON calls (ts);
+CREATE INDEX IF NOT EXISTS idx_calls_character ON calls (character);
+CREATE INDEX IF NOT EXISTS idx_calls_provider  ON calls (provider);
+CREATE INDEX IF NOT EXISTS idx_calls_anomaly   ON calls (cache_anomaly) WHERE cache_anomaly IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_usage_budget_warnings_window
+    ON usage_budget_warnings (budget_name, period_start);
+`;
+
+/**
+ * Columns and tables added after the first schema, in the Rust's order.
+ *
+ * `CREATE TABLE IF NOT EXISTS` in {@link SCHEMA} covers a fresh file; these
+ * cover the file an older daemon left behind. The `UPDATE` is not a schema
+ * change and belongs here anyway: it backfills `cost_source` for rows written
+ * before the column existed, and a row with a provider-reported total must not
+ * be overwritten by a catalog estimate on the next recalculation.
+ */
+const MIGRATIONS: readonly string[] = [
+  // v2: cache_ttl on calls.
+  "ALTER TABLE calls ADD COLUMN cache_ttl TEXT DEFAULT '1h'",
+  // v3: friendly provider key name, for per-key spend attribution.
+  "ALTER TABLE calls ADD COLUMN api_key_name TEXT",
+  "CREATE INDEX IF NOT EXISTS idx_calls_api_key ON calls (provider, api_key_name)",
+  // v4: provenance for cost totals.
+  "ALTER TABLE calls ADD COLUMN cost_source TEXT DEFAULT 'pricing_catalog'",
+  `UPDATE calls
+      SET cost_source = 'provider_reported'
+    WHERE total_cost IS NOT NULL
+      AND input_cost IS NULL
+      AND output_cost IS NULL
+      AND cache_read_cost IS NULL
+      AND cache_write_cost IS NULL`,
+  // v5: de-duplication state for budget threshold warnings.
+  `CREATE TABLE IF NOT EXISTS usage_budget_warnings (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      budget_name    TEXT NOT NULL,
+      period_start   TEXT NOT NULL,
+      threshold      TEXT NOT NULL,
+      created_at     TEXT NOT NULL,
+      UNIQUE (budget_name, period_start, threshold)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_usage_budget_warnings_window
+      ON usage_budget_warnings (budget_name, period_start)`,
+  // v6: resolved reasoning effort. Part of Anthropic's prompt-cache key, so a
+  // change between rows explains an otherwise inexplicable message-level miss.
+  // Null on pre-v6 rows, meaning unknown rather than "off".
+  "ALTER TABLE calls ADD COLUMN reasoning_effort TEXT",
+];
+
+/**
+ * Apply every migration, ignoring the ones already applied.
+ *
+ * A duplicate column is the expected outcome on an up-to-date database, and
+ * SQLite reports it as an error rather than a no-op. Anything else is a real
+ * failure and is rethrown — a migration that silently did not happen leaves
+ * readers selecting a column that is not there.
+ */
+function migrate(db: Database): void {
+  for (const statement of MIGRATIONS) {
+    try {
+      db.exec(statement);
+    } catch (e) {
+      if (!String(e).includes("duplicate column")) throw e;
+    }
+  }
+}
 
 /** Flat-plan providers: record the usage, zero the cost. Metered pricing does
  *  not apply, and a non-zero cost here would accrue against usage budgets. */
@@ -143,9 +275,29 @@ export class Ledger {
   }
 
   /**
-   * Open an existing ledger. Throws if the `calls` table is absent — the
-   * daemon creates and migrates the schema, and a second author is how two
-   * schemas drift apart.
+   * Open a ledger, creating and migrating the schema if it is not there.
+   *
+   * The migrations run on every open, not only on create. `ADD COLUMN` on a
+   * column that exists is an error SQLite raises and this swallows, which is
+   * exactly what the Rust's `add_if_missing` did — the cheap way to make the
+   * step idempotent without tracking a version number.
+   */
+  static create(path: string, pricing?: PricingEngine): Ledger {
+    const db = new Database(path, { create: true, readwrite: true });
+    db.exec("PRAGMA busy_timeout = 5000;");
+    db.exec("PRAGMA journal_mode = WAL;");
+    db.exec(SCHEMA);
+    migrate(db);
+    return new Ledger(db, pricing);
+  }
+
+  /**
+   * Open an existing ledger. Throws if the `calls` table is absent.
+   *
+   * Kept beside {@link Ledger.create} rather than folded into it: a *reader*
+   * asking for a ledger that does not exist has found a real problem — the
+   * wrong data directory, most often — and creating an empty one for it turns
+   * that into a report of zero spend.
    */
   static open(path: string, pricing?: PricingEngine): Ledger {
     const db = new Database(path, { create: false, readwrite: true });

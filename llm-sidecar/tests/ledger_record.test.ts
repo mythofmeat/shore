@@ -21,7 +21,7 @@ import {
   recordingStream,
 } from "../src/ledger/record.ts";
 import type { CallContext, SidecarRequest, StreamEvent } from "../src/llm/types.ts";
-import { daemonMadeLedger, haveDaemon, rowsIn } from "./support/ledger_fixture.ts";
+import { freshLedger, rowsIn } from "./support/ledger_fixture.ts";
 
 afterEach(() => {
   closeLedgers();
@@ -75,7 +75,7 @@ async function drain(stream: AsyncIterable<StreamEvent>): Promise<StreamEvent[]>
 }
 
 async function withLedger(body: (path: string) => Promise<void>): Promise<void> {
-  const { path, cleanup } = daemonMadeLedger();
+  const { path, cleanup } = freshLedger();
   try {
     await body(path);
   } finally {
@@ -84,7 +84,7 @@ async function withLedger(body: (path: string) => Promise<void>): Promise<void> 
   }
 }
 
-describe.skipIf(!haveDaemon)("what a stream records", () => {
+describe("what a stream records", () => {
   test("a single-call stream records one row and passes every event through", async () => {
     await withLedger(async (path) => {
       const seen = await drain(
@@ -345,7 +345,7 @@ describe.skipIf(!haveDaemon)("what a stream records", () => {
   });
 });
 
-describe.skipIf(!haveDaemon)("what a non-streaming call records", () => {
+describe("what a non-streaming call records", () => {
   test("a generate records one row", async () => {
     await withLedger(async (path) => {
       recordGenerate(ctx(path, { call_type: "compaction" }), REQ, {

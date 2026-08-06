@@ -38,7 +38,7 @@ import {
   warmStreak,
   type QueryFilter,
 } from "../src/ledger/query.ts";
-import { daemonMadeLedger, haveDaemon, openLedger } from "./support/ledger_fixture.ts";
+import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
 
 interface Case {
   filter: string;
@@ -89,7 +89,7 @@ afterAll(() => {
 
 /** A daemon-made ledger holding exactly the fixture's seed rows. */
 function seededLedger(): Database {
-  const f = daemonMadeLedger();
+  const f = freshLedger();
   cleanups.push(f.cleanup);
   const db = openLedger(f.path);
   const columns = Object.keys(doc.seed[0]!);
@@ -106,7 +106,7 @@ function seededLedger(): Database {
   return db;
 }
 
-test.skipIf(!haveDaemon)("cross-language ledger query parity", () => {
+test("cross-language ledger query parity", () => {
   const db = seededLedger();
   expect(doc.cases.length).toBeGreaterThan(0);
 

@@ -26,7 +26,7 @@ import fixture from "./ledger_fixtures/ledger_usage_parity.json";
 import type { UsageConfig } from "../src/ledger/budget.ts";
 import { closeLedgers } from "../src/ledger/record.ts";
 import { parseLastPeriod, usageReport } from "../src/ledger/usage.ts";
-import { daemonMadeLedger, haveDaemon, openLedger } from "./support/ledger_fixture.ts";
+import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
 
 interface PeriodCase {
   timezone: string;
@@ -113,7 +113,7 @@ afterAll(() => {
  * cannot contaminate each other the way the budget fixture's warning dedup can.
  */
 function seededLedgerPath(): string {
-  const f = daemonMadeLedger();
+  const f = freshLedger();
   cleanups.push(f.cleanup);
   const db = openLedger(f.path);
   const columns = Object.keys(doc.seed[0]!);
@@ -130,7 +130,7 @@ function seededLedgerPath(): string {
   return f.path;
 }
 
-test.skipIf(!haveDaemon)("cross-language `--last` window parity", () => {
+test("cross-language `--last` window parity", () => {
   expect(doc.periods.length).toBeGreaterThan(0);
 
   for (const c of doc.periods) {
@@ -141,7 +141,7 @@ test.skipIf(!haveDaemon)("cross-language `--last` window parity", () => {
   }
 });
 
-test.skipIf(!haveDaemon)("cross-language usage payload parity", async () => {
+test("cross-language usage payload parity", async () => {
   expect(doc.payloads.length).toBeGreaterThan(0);
   const ledger = seededLedgerPath();
 

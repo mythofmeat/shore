@@ -25,7 +25,7 @@ import { closeLedgers, ledgerFor } from "../src/ledger/record.ts";
 import type { UsageConfig } from "../src/ledger/budget.ts";
 import { createSidecarHandler } from "../src/server.ts";
 import { budgetWarnings, modelHistory, usageReport } from "../src/ledger/usage.ts";
-import { daemonMadeLedger, haveDaemon, openLedger } from "./support/ledger_fixture.ts";
+import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
 
 const cleanups: Array<() => void> = [];
 const realFetch = globalThis.fetch;
@@ -49,7 +49,7 @@ interface SeedRow {
 }
 
 function ledgerWith(rows: SeedRow[]): string {
-  const f = daemonMadeLedger();
+  const f = freshLedger();
   cleanups.push(f.cleanup);
   const db = openLedger(f.path);
   for (const r of rows) {
@@ -125,7 +125,7 @@ function costOf(path: string, id: number): number | null {
 
 // ── recalculate ──────────────────────────────────────────────────────────────
 
-test.skipIf(!haveDaemon)("recalculate prices rows the catalog knows", async () => {
+test("recalculate prices rows the catalog knows", async () => {
   const ledger = ledgerWith([{}]);
   priceInStore(ledger, "anthropic/claude-opus-4.6", 0.00001);
   const fetched = stubCatalog();
@@ -146,7 +146,7 @@ test.skipIf(!haveDaemon)("recalculate prices rows the catalog knows", async () =
   expect(costOf(ledger, 1)).toBeCloseTo(0.0186, 10);
 });
 
-test.skipIf(!haveDaemon)("recalculate reports a model the catalog has no price for", async () => {
+test("recalculate reports a model the catalog has no price for", async () => {
   const ledger = ledgerWith([{ provider: "openai", model: "gpt-nonexistent" }]);
   const fetched = stubCatalog();
 
@@ -164,7 +164,7 @@ test.skipIf(!haveDaemon)("recalculate reports a model the catalog has no price f
   expect(costOf(ledger, 1), "an unpriceable row keeps its NULL cost").toBeNull();
 });
 
-test.skipIf(!haveDaemon)("recalculate fetches each model once, not each row", async () => {
+test("recalculate fetches each model once, not each row", async () => {
   const ledger = ledgerWith([{}, {}, {}]);
   const fetched = stubCatalog("anthropic/claude-opus-4.6");
 
@@ -178,7 +178,7 @@ test.skipIf(!haveDaemon)("recalculate fetches each model once, not each row", as
   expect(result.total).toBe(3);
 });
 
-test.skipIf(!haveDaemon)("recalculate leaves already-costed rows alone unless forced", async () => {
+test("recalculate leaves already-costed rows alone unless forced", async () => {
   // A priced row, a provider-reported one, and a subscription one. Only the
   // first is repriceable, and only under `force` — without it, nothing has a
   // NULL cost to fill in.
@@ -220,7 +220,7 @@ const OVER_BUDGET: UsageConfig = {
   budgets: [{ name: "tiny", period: "month", cost_usd: 1, warn_at: [1.0], limit: "warn" }],
 };
 
-test.skipIf(!haveDaemon)("a crossed threshold is announced once per window", () => {
+test("a crossed threshold is announced once per window", () => {
   const ledger = ledgerWith([{ total_cost: 5, cost_source: "pricing_catalog" }]);
   const now = Date.parse("2026-05-13T16:20:00+00:00");
 
@@ -238,7 +238,7 @@ test.skipIf(!haveDaemon)("a crossed threshold is announced once per window", () 
   expect(second.warnings.length).toBe(first.warnings.length);
 });
 
-test.skipIf(!haveDaemon)("no budgets means no warnings and no ledger open", () => {
+test("no budgets means no warnings and no ledger open", () => {
   // A path that cannot be opened: reaching the ledger at all would throw, so
   // this also pins that the empty-budget check comes first.
   expect(budgetWarnings({ ledger: "/nonexistent/ledger.db", usage: { budgets: [] } })).toEqual({
@@ -248,7 +248,7 @@ test.skipIf(!haveDaemon)("no budgets means no warnings and no ledger open", () =
 
 // ── model history ────────────────────────────────────────────────────────────
 
-test.skipIf(!haveDaemon)("model history is scoped to one character", () => {
+test("model history is scoped to one character", () => {
   const ledger = ledgerWith([
     { character: "poppy", model: "claude-opus-4-6", ts: "2026-04-05T10:00:00+00:00" },
     { character: "poppy", model: "claude-opus-4-6", ts: "2026-05-01T10:00:00+00:00" },
@@ -266,7 +266,7 @@ test.skipIf(!haveDaemon)("model history is scoped to one character", () => {
   expect(result.models[0]!.last_ts).toBe("2026-05-01T10:00:00+00:00");
 });
 
-test.skipIf(!haveDaemon)("model history honours the time bounds", () => {
+test("model history honours the time bounds", () => {
   const ledger = ledgerWith([
     { character: "poppy", ts: "2026-04-05T10:00:00+00:00" },
     { character: "poppy", ts: "2026-05-01T10:00:00+00:00" },
@@ -304,7 +304,7 @@ function post(path: string, body: unknown): Request {
   });
 }
 
-test.skipIf(!haveDaemon)("the usage routes are wired", async () => {
+test("the usage routes are wired", async () => {
   // Stamped *now*: these routes read the real clock, and a row outside the
   // current budget window would correctly produce no warning at all.
   const ledger = ledgerWith([
@@ -325,7 +325,7 @@ test.skipIf(!haveDaemon)("the usage routes are wired", async () => {
   expect(((await models.json()) as { models: unknown[] }).models.length).toBe(1);
 });
 
-test.skipIf(!haveDaemon)("the usage route refreshes the pricing caches", async () => {
+test("the usage route refreshes the pricing caches", async () => {
   // The route does what `commands/usage.ts` does, because the daemon calling it
   // is still the Rust one: it empties the `pricing` table on its side and this
   // endpoint is where the rest of the refresh has to happen. What the command

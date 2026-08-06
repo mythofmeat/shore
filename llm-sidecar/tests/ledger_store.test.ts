@@ -15,7 +15,7 @@ import { join } from "node:path";
 
 import { Ledger, type RecordCall } from "../src/ledger/store.ts";
 import { PricingEngine, type ModelPricing, type PricingStore } from "../src/ledger/pricing.ts";
-import { daemonMadeLedger, haveDaemon, rowsIn } from "./support/ledger_fixture.ts";
+import { freshLedger, rowsIn } from "./support/ledger_fixture.ts";
 
 function fixedPricing(entry: ModelPricing): PricingEngine {
   const map = new Map<string, ModelPricing>([["anthropic/claude-opus-4.6", entry]]);
@@ -42,9 +42,9 @@ const call = (over: Partial<RecordCall> = {}): RecordCall => ({
   ...over,
 });
 
-describe.skipIf(!haveDaemon)("writing rows the daemon's schema accepts", () => {
+describe("writing rows the daemon's schema accepts", () => {
   test("a recorded call lands as a row", () => {
-    const { path, cleanup } = daemonMadeLedger();
+    const { path, cleanup } = freshLedger();
     try {
       const ledger = Ledger.open(path);
       ledger.record(call());
@@ -68,7 +68,7 @@ describe.skipIf(!haveDaemon)("writing rows the daemon's schema accepts", () => {
   });
 
   test("cost comes from the catalog when the provider reports none", () => {
-    const { path, cleanup } = daemonMadeLedger();
+    const { path, cleanup } = freshLedger();
     try {
       const ledger = Ledger.open(
         path,
@@ -92,7 +92,7 @@ describe.skipIf(!haveDaemon)("writing rows the daemon's schema accepts", () => {
   });
 
   test("a provider-reported total wins and leaves the breakdown null", () => {
-    const { path, cleanup } = daemonMadeLedger();
+    const { path, cleanup } = freshLedger();
     try {
       const ledger = Ledger.open(path, fixedPricing({
         input_per_token: 1, output_per_token: 1, cache_read_per_token: 1, cache_write_per_token: 1,
@@ -110,7 +110,7 @@ describe.skipIf(!haveDaemon)("writing rows the daemon's schema accepts", () => {
   });
 
   test("a subscription provider records usage at zero cost", () => {
-    const { path, cleanup } = daemonMadeLedger();
+    const { path, cleanup } = freshLedger();
     try {
       const ledger = Ledger.open(path);
       const row = ledger.record(
@@ -128,7 +128,7 @@ describe.skipIf(!haveDaemon)("writing rows the daemon's schema accepts", () => {
   });
 
   test("a loop's calls each get their own row and the tracker stays quiet", () => {
-    const { path, cleanup } = daemonMadeLedger();
+    const { path, cleanup } = freshLedger();
     try {
       const ledger = Ledger.open(path);
       const usage = (read: number, write: number) => ({
@@ -154,7 +154,7 @@ describe.skipIf(!haveDaemon)("writing rows the daemon's schema accepts", () => {
   });
 
   test("a cancelled row carries no cache verdict", () => {
-    const { path, cleanup } = daemonMadeLedger();
+    const { path, cleanup } = freshLedger();
     try {
       const ledger = Ledger.open(path);
       const row = ledger.record(call({ finish_reason: "cancelled" }));
@@ -169,7 +169,7 @@ describe.skipIf(!haveDaemon)("writing rows the daemon's schema accepts", () => {
   });
 
   test("a non-Anthropic call gets a plain label and no anomaly", () => {
-    const { path, cleanup } = daemonMadeLedger();
+    const { path, cleanup } = freshLedger();
     try {
       const ledger = Ledger.open(path);
       const row = ledger.record(
@@ -188,7 +188,7 @@ describe.skipIf(!haveDaemon)("writing rows the daemon's schema accepts", () => {
   });
 
   test("a tracker seeds from the rows already in the database", () => {
-    const { path, cleanup } = daemonMadeLedger();
+    const { path, cleanup } = freshLedger();
     try {
       // First process warms the cache and goes away.
       const first = Ledger.open(path);
@@ -211,7 +211,7 @@ describe.skipIf(!haveDaemon)("writing rows the daemon's schema accepts", () => {
   });
 
   test("a shorter TTL shortens the warm window", () => {
-    const { path, cleanup } = daemonMadeLedger();
+    const { path, cleanup } = freshLedger();
     try {
       const at = (iso: string) => () => new Date(iso);
       const read = (r: number, w: number) => ({
@@ -237,7 +237,7 @@ describe.skipIf(!haveDaemon)("writing rows the daemon's schema accepts", () => {
   });
 
   test("the default TTL keeps the same pair warm", () => {
-    const { path, cleanup } = daemonMadeLedger();
+    const { path, cleanup } = freshLedger();
     try {
       const at = (iso: string) => () => new Date(iso);
       const read = (r: number, w: number) => ({

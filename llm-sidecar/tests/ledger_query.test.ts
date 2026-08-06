@@ -33,7 +33,7 @@ import {
   type QueryFilter,
 } from "../src/ledger/query.ts";
 import type { CallRow } from "../src/ledger/store.ts";
-import { daemonMadeLedger, haveDaemon, openLedger } from "./support/ledger_fixture.ts";
+import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
 
 const cleanups: Array<() => void> = [];
 afterAll(() => {
@@ -81,7 +81,7 @@ function insert(db: Database, row: CallRow): number {
 
 /** A fresh daemon-made ledger seeded with `rows`. */
 function ledgerWith(rows: CallRow[]): Database {
-  const fixture = daemonMadeLedger();
+  const fixture = freshLedger();
   cleanups.push(fixture.cleanup);
   const db = openLedger(fixture.path);
   for (const r of rows) insert(db, r);
@@ -116,7 +116,7 @@ function populated(): Database {
 
 const NONE: QueryFilter = {};
 
-describe.skipIf(!haveDaemon)("grouping", () => {
+describe("grouping", () => {
   test("model usage summary groups and orders by first seen", () => {
     const db = populated();
     const rows = modelUsageSummary(db, NONE);
@@ -176,7 +176,7 @@ describe.skipIf(!haveDaemon)("grouping", () => {
   });
 });
 
-describe.skipIf(!haveDaemon)("filtering", () => {
+describe("filtering", () => {
   test("filter by provider", () => {
     const summary = usageSummary(populated(), { provider: "anthropic" });
     expect(summary).toHaveLength(1);
@@ -212,7 +212,7 @@ describe.skipIf(!haveDaemon)("filtering", () => {
   });
 });
 
-describe.skipIf(!haveDaemon)("anomalies and export", () => {
+describe("anomalies and export", () => {
   test("anomalies query returns only flagged rows", () => {
     const db = ledgerWith([
       {
@@ -244,7 +244,7 @@ describe.skipIf(!haveDaemon)("anomalies and export", () => {
   });
 });
 
-describe.skipIf(!haveDaemon)("recalculation candidates", () => {
+describe("recalculation candidates", () => {
   test("all cost rows skips provider-reported totals", () => {
     const db = populated();
     const id = insert(db, {
@@ -310,7 +310,7 @@ describe.skipIf(!haveDaemon)("recalculation candidates", () => {
   });
 });
 
-describe.skipIf(!haveDaemon)("cache health readers", () => {
+describe("cache health readers", () => {
   test("active anthropic characters includes routed provider", () => {
     // A custom provider name (sdk = "anthropic", base_url = OpenRouter) with
     // model_id resolved to `anthropic/...` must show up in cache health

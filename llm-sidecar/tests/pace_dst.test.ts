@@ -18,7 +18,7 @@ import { Database } from "bun:sqlite";
 import { afterAll, expect, test } from "bun:test";
 
 import { budgetStatuses, type UsageConfig } from "../src/ledger/budget.ts";
-import { daemonMadeLedger, haveDaemon, openLedger } from "./support/ledger_fixture.ts";
+import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
 
 const ZONE = "America/New_York";
 
@@ -55,8 +55,8 @@ const PACED_WEEKLY: UsageConfig = {
  * after the transition, an hour off the budget's own reset hour, which is
  * exactly the drift the naive stepping exists to prevent.
  */
-test.skipIf(!haveDaemon)("day pace holds the local reset hour across spring forward", () => {
-  const f = daemonMadeLedger();
+test("day pace holds the local reset hour across spring forward", () => {
+  const f = freshLedger();
   cleanups.push(f.cleanup);
   const db = openLedger(f.path);
 

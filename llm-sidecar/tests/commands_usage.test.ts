@@ -26,7 +26,7 @@ import { usage, type UsageContext } from "../src/commands/usage.ts";
 import { CommandError } from "../src/commands/errors.ts";
 import type { UsageConfig } from "../src/ledger/budget.ts";
 import { closeLedgers, ledgerFor } from "../src/ledger/record.ts";
-import { daemonMadeLedger, haveDaemon, openLedger } from "./support/ledger_fixture.ts";
+import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
 
 const cleanups: Array<() => void> = [];
 const realFetch = globalThis.fetch;
@@ -46,7 +46,7 @@ afterEach(() => {
  * `now` opens, which is what the budget cases need.
  */
 function ledgerWithOneCall(): string {
-  const f = daemonMadeLedger();
+  const f = freshLedger();
   cleanups.push(f.cleanup);
   const db = openLedger(f.path);
   db.query(
@@ -97,7 +97,7 @@ const TINY: UsageConfig = {
 
 // ── refresh_pricing ─────────────────────────────────────────────────────────
 
-test.skipIf(!haveDaemon)("a refresh empties the table and the memory in front of it", async () => {
+test("a refresh empties the table and the memory in front of it", async () => {
   const ledger = ledgerWithOneCall();
   priceInStore(ledger, 0.00001);
   refuseCatalog();
@@ -117,7 +117,7 @@ test.skipIf(!haveDaemon)("a refresh empties the table and the memory in front of
   expect(engine.cached("anthropic", "claude-opus-4-6")?.input_per_token).toBe(0.00002);
 });
 
-test.skipIf(!haveDaemon)("the refresh happens whatever else the args ask for", async () => {
+test("the refresh happens whatever else the args ask for", async () => {
   const ledger = ledgerWithOneCall();
   priceInStore(ledger, 0.00001);
   refuseCatalog();
@@ -136,7 +136,7 @@ test.skipIf(!haveDaemon)("the refresh happens whatever else the args ask for", a
   expect(engine.cached("anthropic", "claude-opus-4-6")).toBeUndefined();
 });
 
-test.skipIf(!haveDaemon)("nothing is cleared unless the flag is exactly true", async () => {
+test("nothing is cleared unless the flag is exactly true", async () => {
   const ledger = ledgerWithOneCall();
   priceInStore(ledger, 0.00001);
   refuseCatalog();
@@ -153,7 +153,7 @@ test.skipIf(!haveDaemon)("nothing is cleared unless the flag is exactly true", a
 
 // ── the forward ─────────────────────────────────────────────────────────────
 
-test.skipIf(!haveDaemon)("the args reach the report unreshaped", async () => {
+test("the args reach the report unreshaped", async () => {
   const ledger = ledgerWithOneCall();
 
   const mine = (await usage(ctxFor(ledger), { last: "all", character: "aria" })) as {
@@ -171,7 +171,7 @@ test.skipIf(!haveDaemon)("the args reach the report unreshaped", async () => {
   expect(empty.summary, "a filter the command dropped would answer with the row").toEqual([]);
 });
 
-test.skipIf(!haveDaemon)("the session's usage config reaches the report", async () => {
+test("the session's usage config reaches the report", async () => {
   const ledger = ledgerWithOneCall();
 
   const result = (await usage(ctxFor(ledger, TINY), { budget: true })) as {

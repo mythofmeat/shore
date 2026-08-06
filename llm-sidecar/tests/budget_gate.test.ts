@@ -23,7 +23,7 @@ import type {
   StreamEvent,
 } from "../src/llm/types.ts";
 import type { UsageConfig } from "../src/ledger/budget.ts";
-import { daemonMadeLedger, haveDaemon, openLedger } from "./support/ledger_fixture.ts";
+import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -40,7 +40,7 @@ afterEach(() => {
  * and the gate would correctly allow the call.
  */
 function spentLedger(): string {
-  const f = daemonMadeLedger();
+  const f = freshLedger();
   cleanups.push(f.cleanup);
   const db = openLedger(f.path);
   db.query(
@@ -136,7 +136,7 @@ function post(path: string, body: unknown): Request {
   });
 }
 
-test.skipIf(!haveDaemon)("an over-budget generate never reaches the provider", async () => {
+test("an over-budget generate never reaches the provider", async () => {
   const ledger = spentLedger();
   const counting = countingProvider();
   const handler = createSidecarHandler({ providers: { openai: counting.provider } });
@@ -148,7 +148,7 @@ test.skipIf(!haveDaemon)("an over-budget generate never reaches the provider", a
   expect(counting.calls, "the provider must not have been called").toBe(0);
 });
 
-test.skipIf(!haveDaemon)("an over-budget stream never reaches the provider", async () => {
+test("an over-budget stream never reaches the provider", async () => {
   const ledger = spentLedger();
   const counting = countingProvider();
   const handler = createSidecarHandler({ providers: { openai: counting.provider } });
@@ -160,7 +160,7 @@ test.skipIf(!haveDaemon)("an over-budget stream never reaches the provider", asy
   expect(counting.calls).toBe(0);
 });
 
-test.skipIf(!haveDaemon)("a call under budget proceeds", async () => {
+test("a call under budget proceeds", async () => {
   const ledger = spentLedger();
   const counting = countingProvider();
   const handler = createSidecarHandler({ providers: { openai: counting.provider } });
@@ -175,7 +175,7 @@ test.skipIf(!haveDaemon)("a call under budget proceeds", async () => {
   expect(counting.calls).toBe(1);
 });
 
-test.skipIf(!haveDaemon)("no budgets configured means no gate", async () => {
+test("no budgets configured means no gate", async () => {
   // The daemon omits `usage` entirely when nothing is configured. That must
   // read as "allow", not as "deny by default" — a budget-less install would
   // otherwise stop working.

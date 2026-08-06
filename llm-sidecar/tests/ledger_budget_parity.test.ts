@@ -34,7 +34,7 @@ import {
   type UsageBudgetPeriod,
   type UsageConfig,
 } from "../src/ledger/budget.ts";
-import { daemonMadeLedger, haveDaemon, openLedger } from "./support/ledger_fixture.ts";
+import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
 
 interface Case {
   config: string;
@@ -222,7 +222,7 @@ let template: string | undefined;
  *  would be slow, so it boots once for the schema and each case copies the file. */
 function caseLedger(index: number): Database {
   if (template === undefined) {
-    const f = daemonMadeLedger();
+    const f = freshLedger();
     cleanups.push(f.cleanup);
     // Fold the WAL back into the main file so a plain copy carries the schema.
     const db = openLedger(f.path);
@@ -247,7 +247,7 @@ function caseLedger(index: number): Database {
   return db;
 }
 
-test.skipIf(!haveDaemon)("cross-language budget parity", () => {
+test("cross-language budget parity", () => {
   expect(doc.cases.length).toBeGreaterThan(0);
 
   doc.cases.forEach((c, i) => {

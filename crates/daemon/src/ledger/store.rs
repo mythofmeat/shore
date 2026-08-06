@@ -1,4 +1,17 @@
 //! SQLite-backed append-only ledger for LLM call recording.
+//!
+//! **The schema below is no longer the only author.** `SCHEMA` and `migrate`
+//! are transcribed into `llm-sidecar/src/ledger/store.ts` as `SCHEMA` and
+//! `MIGRATIONS`, and `Ledger.create` there runs both.
+//!
+//! That is a second author, which this file's own comments warned against, and
+//! it is deliberate for the length of the port: the row *writer* has been
+//! TypeScript's since `insert` became `#[cfg(test)]`, and nothing was left to
+//! create the file once the daemon stops starting first. A ledger that cannot be
+//! opened fails quietly — `ledgerFor` memoises the failure, every call after it
+//! records nothing, and `shore usage` reports a quiet month.
+//!
+//! Until this crate goes: a change here is a change there, in the same commit.
 
 #[cfg(test)]
 use crate::ledger::convert::{i64_to_u32, i64_to_u64, u64_to_i64};
