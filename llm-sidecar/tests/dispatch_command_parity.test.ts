@@ -43,19 +43,20 @@ import {
 } from "../src/commands/dispatch.ts";
 
 /**
- * The two arms this build does not wire, and what the fixture recorded for each.
+ * The one arm this build does not wire, and what the fixture recorded for it.
  *
- * Both are injected — see the module doc on `src/commands/dispatch.ts` — so what
+ * It is injected — see the module doc on `src/commands/dispatch.ts` — so what
  * the replay can check is that the name still *routes*: an unwired arm answers
  * with its own internal error rather than falling through to "unknown command",
  * which is what a client would see if the name were simply missing from the
- * table. The recorded Rust answer is kept beside each so the day the dependency
+ * table. The recorded Rust answer is kept beside it so the day the dependency
  * lands the case is already written down.
+ *
+ * `compact` was the other one and is not here any more: the harness passes a
+ * real compaction runtime, so the recorded answer — the assembly failing on an
+ * API key that is not set — is compared like every other case.
  */
 const UNWIRED: Record<string, string> = {
-  // Rust: invalid_request "No messages to compact" — the empty-conversation
-  // guard, which fires before any of the compaction assembly runs.
-  compact: "compact is not available in this build",
   // Rust: command_output {character, reason, status} — the skip a daemon with
   // no LLM client produces.
   keepalive_ping_now: "keepalive_ping_now is not available in this build",
@@ -180,6 +181,17 @@ async function harness(): Promise<{
     ledgerPath: undefined,
     now: () => 0,
     localNow: () => 0,
+    // A real compaction runtime, so `compact` reaches the assembly and fails
+    // where the Rust did: rebuilding the chat-shape prefix needs the fixture
+    // model's `SHORE_FIXTURE_API_KEY`, which is not set. `generate` is never
+    // called — the request is never built — and throws if it somehow is.
+    compaction: {
+      run: {
+        generate: () => {
+          throw new Error("the fixture never gets far enough to make a call");
+        },
+      },
+    },
   };
 
   return { engine, session, deps, config };

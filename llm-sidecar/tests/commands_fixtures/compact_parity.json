@@ -1,0 +1,503 @@
+{
+  "_generated_by": "crates/daemon/src/commands/state/gen_compact_fixture.rs at 9023b46d (uncommitted), driving the real parse_compact_args, compact, compaction_err and build_compaction_response",
+  "_note": "FROZEN. Driven against the real parse_compact_args, compact, compaction_err and build_compaction_response in a worktree at 9023b46d, each case on its own temp root. Nothing regenerates this; a later diff is a defect. Generated under TZ=America/New_York. Four sections, none of which is the compaction PASS - that is memory_fixtures/compaction_parity.json and memory_fixtures/compaction_assembly_parity.json. What is here is the command wrapped around it: what the two arguments accept, the two refusals made before any assembly runs, the five-variant error mapping, and the three outcome renderings. `guards` records the ORDER as much as the answers: the busy refusal is recorded against an empty conversation, so a port that checks the messages before claiming the slot answers invalid_request where this says busy. `renderings` records the character's data directory before and after, because that is the only place outside the process where complete_compaction's work is visible - the deferred-edit queue is drained and the active prompt snapshot appears, and only on the `compacted` arm. autonomy_state.json is filtered out of those listings: the autonomy manager writes it on its own schedule, so whether it has reached disk is a flush race rather than a decision. The dry-run previews exist for one reason: `chars().take(200)` counts Unicode scalar values and JavaScript's `slice(0, 200)` counts UTF-16 code units, so the 250-emoji case is 200 characters and 400 code units and is what turns that disagreement into a failing test. One thing this fixture cannot express: Rust read keep_turns as a u64 and JSON here is a double, so above 2^53 the two stop agreeing about which integers exist. The TypeScript uses the safe-integer ceiling and says so. One rendering case sets `would_write_files` to 99 against two previews. The only producer sets the count from the list, so they always agree in practice and a renderer that recomputed it was indistinguishable from one that read the field - a mutant survived the first pass on exactly that. The renderer's contract is to copy what it was given, and now a case says so.",
+  "timezone": "America/New_York",
+  "parse_args": [
+    {
+      "note": "no arguments at all",
+      "args": {},
+      "dry_run": false,
+      "keep_turns": null
+    },
+    {
+      "note": "dry_run true",
+      "args": {
+        "dry_run": true
+      },
+      "dry_run": true,
+      "keep_turns": null
+    },
+    {
+      "note": "dry_run false",
+      "args": {
+        "dry_run": false
+      },
+      "dry_run": false,
+      "keep_turns": null
+    },
+    {
+      "note": "dry_run as the string \"true\"",
+      "args": {
+        "dry_run": "true"
+      },
+      "dry_run": false,
+      "keep_turns": null
+    },
+    {
+      "note": "dry_run as 1",
+      "args": {
+        "dry_run": 1
+      },
+      "dry_run": false,
+      "keep_turns": null
+    },
+    {
+      "note": "dry_run as null",
+      "args": {
+        "dry_run": null
+      },
+      "dry_run": false,
+      "keep_turns": null
+    },
+    {
+      "note": "keep_turns 0, which is not the same as absent",
+      "args": {
+        "keep_turns": 0
+      },
+      "dry_run": false,
+      "keep_turns": 0
+    },
+    {
+      "note": "keep_turns 5",
+      "args": {
+        "keep_turns": 5
+      },
+      "dry_run": false,
+      "keep_turns": 5
+    },
+    {
+      "note": "keep_turns negative",
+      "args": {
+        "keep_turns": -1
+      },
+      "dry_run": false,
+      "keep_turns": null
+    },
+    {
+      "note": "keep_turns fractional",
+      "args": {
+        "keep_turns": 2.5
+      },
+      "dry_run": false,
+      "keep_turns": null
+    },
+    {
+      "note": "keep_turns as a string",
+      "args": {
+        "keep_turns": "3"
+      },
+      "dry_run": false,
+      "keep_turns": null
+    },
+    {
+      "note": "keep_turns as null",
+      "args": {
+        "keep_turns": null
+      },
+      "dry_run": false,
+      "keep_turns": null
+    },
+    {
+      "note": "keep_turns as a bool",
+      "args": {
+        "keep_turns": true
+      },
+      "dry_run": false,
+      "keep_turns": null
+    },
+    {
+      "note": "both, together",
+      "args": {
+        "dry_run": true,
+        "keep_turns": 12
+      },
+      "dry_run": true,
+      "keep_turns": 12
+    },
+    {
+      "note": "an argument object with something else in it",
+      "args": {
+        "who": "ada"
+      },
+      "dry_run": false,
+      "keep_turns": null
+    }
+  ],
+  "guards": [
+    {
+      "note": "an empty conversation, with the compaction slot free",
+      "guard_held": false,
+      "messages": 0,
+      "output": {
+        "kind": "err",
+        "code": "invalid_request",
+        "message": "No messages to compact"
+      }
+    },
+    {
+      "note": "the compaction slot already claimed — refused before the message check",
+      "guard_held": true,
+      "messages": 0,
+      "output": {
+        "kind": "err",
+        "code": "busy",
+        "message": "Compaction already running for ada"
+      }
+    },
+    {
+      "note": "the slot claimed and a conversation to compact — still the busy refusal",
+      "guard_held": true,
+      "messages": 2,
+      "output": {
+        "kind": "err",
+        "code": "busy",
+        "message": "Compaction already running for ada"
+      }
+    },
+    {
+      "note": "a second call after the first returned — the slot was given back",
+      "guard_held": false,
+      "messages": 0,
+      "output": {
+        "kind": "err",
+        "code": "invalid_request",
+        "message": "No messages to compact"
+      }
+    }
+  ],
+  "errors": [
+    {
+      "note": "the provider call failed",
+      "code": "internal_error",
+      "message": "llm: API key environment variable SHORE_K is not set"
+    },
+    {
+      "note": "the response would not parse",
+      "code": "internal_error",
+      "message": "parse: no <memory> block"
+    },
+    {
+      "note": "fewer messages than the pass needs — the one that is the caller's fault",
+      "code": "invalid_request",
+      "message": "insufficient messages"
+    },
+    {
+      "note": "the archive or the retained write failed",
+      "code": "internal_error",
+      "message": "conversation: permission denied"
+    },
+    {
+      "note": "the markdown store could not be written",
+      "code": "internal_error",
+      "message": "markdown store: read-only file system"
+    }
+  ],
+  "renderings": [
+    {
+      "note": "a pass that archived, with every field set",
+      "deferred": null,
+      "output": {
+        "kind": "ok",
+        "data": {
+          "status": "compacted",
+          "character": "ada",
+          "memory_files_written": [
+            "memory/boats.md",
+            "memory/daily/2026-01-01.md"
+          ],
+          "message_count": 42,
+          "turn_count": 17,
+          "compacted_turns": 17,
+          "retained_count": 6,
+          "retained_turns": 3,
+          "new_conversation_id": "conv_7f3a",
+          "tool_rounds": 4,
+          "tools_called": [
+            "memory_search",
+            "edit"
+          ]
+        }
+      },
+      "data_dir_before": [
+        "active.jsonl"
+      ],
+      "data_dir_after": [
+        "active.jsonl",
+        "active_prompt/"
+      ]
+    },
+    {
+      "note": "a pass that archived with nothing in any list",
+      "deferred": null,
+      "output": {
+        "kind": "ok",
+        "data": {
+          "status": "compacted",
+          "character": "ada",
+          "memory_files_written": [],
+          "message_count": 0,
+          "turn_count": 0,
+          "compacted_turns": 0,
+          "retained_count": 0,
+          "retained_turns": 0,
+          "new_conversation_id": "",
+          "tool_rounds": 0,
+          "tools_called": []
+        }
+      },
+      "data_dir_before": [
+        "active.jsonl"
+      ],
+      "data_dir_after": [
+        "active.jsonl",
+        "active_prompt/"
+      ]
+    },
+    {
+      "note": "a pass that archived, with a self-edit waiting in the queue",
+      "deferred": "SOUL.md",
+      "output": {
+        "kind": "ok",
+        "data": {
+          "status": "compacted",
+          "character": "ada",
+          "memory_files_written": [
+            "memory/boats.md",
+            "memory/daily/2026-01-01.md"
+          ],
+          "message_count": 42,
+          "turn_count": 17,
+          "compacted_turns": 17,
+          "retained_count": 6,
+          "retained_turns": 3,
+          "new_conversation_id": "conv_7f3a",
+          "tool_rounds": 4,
+          "tools_called": [
+            "memory_search",
+            "edit"
+          ]
+        }
+      },
+      "data_dir_before": [
+        "active.jsonl",
+        "deferred_edits.jsonl"
+      ],
+      "data_dir_after": [
+        "active.jsonl",
+        "active_prompt/"
+      ]
+    },
+    {
+      "note": "a pass that wrote nothing, with a self-edit waiting — the queue survives",
+      "deferred": "SOUL.md",
+      "output": {
+        "kind": "ok",
+        "data": {
+          "status": "no_memory_writes",
+          "character": "ada",
+          "message_count": 25,
+          "turn_count": 9,
+          "compacted_turns": 9,
+          "tool_rounds": 3,
+          "tools_called": [
+            "memory_search",
+            "read"
+          ],
+          "rejected_paths": [],
+          "max_rounds_hit": false
+        }
+      },
+      "data_dir_before": [
+        "active.jsonl",
+        "deferred_edits.jsonl"
+      ],
+      "data_dir_after": [
+        "active.jsonl",
+        "deferred_edits.jsonl"
+      ]
+    },
+    {
+      "note": "a pass whose model wrote nothing the filter allowed",
+      "deferred": null,
+      "output": {
+        "kind": "ok",
+        "data": {
+          "status": "no_memory_writes",
+          "character": "ada",
+          "message_count": 25,
+          "turn_count": 9,
+          "compacted_turns": 9,
+          "tool_rounds": 3,
+          "tools_called": [
+            "memory_search",
+            "read"
+          ],
+          "rejected_paths": [
+            "SOUL.md",
+            "../escape.md"
+          ],
+          "max_rounds_hit": true
+        }
+      },
+      "data_dir_before": [
+        "active.jsonl"
+      ],
+      "data_dir_after": [
+        "active.jsonl"
+      ]
+    },
+    {
+      "note": "a pass whose model wrote nothing at all",
+      "deferred": null,
+      "output": {
+        "kind": "ok",
+        "data": {
+          "status": "no_memory_writes",
+          "character": "ada",
+          "message_count": 25,
+          "turn_count": 9,
+          "compacted_turns": 9,
+          "tool_rounds": 3,
+          "tools_called": [
+            "memory_search",
+            "read"
+          ],
+          "rejected_paths": [],
+          "max_rounds_hit": false
+        }
+      },
+      "data_dir_before": [
+        "active.jsonl"
+      ],
+      "data_dir_after": [
+        "active.jsonl"
+      ]
+    },
+    {
+      "note": "a dry run, across every truncation boundary",
+      "deferred": null,
+      "output": {
+        "kind": "ok",
+        "data": {
+          "status": "dry_run",
+          "character": "ada",
+          "would_write_files": 8,
+          "file_ops_preview": [
+            {
+              "path": "memory/short.md",
+              "content_preview": "# short\n\nunder the limit\n"
+            },
+            {
+              "path": "memory/empty.md",
+              "content_preview": ""
+            },
+            {
+              "path": "memory/ascii199.md",
+              "content_preview": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            {
+              "path": "memory/ascii200.md",
+              "content_preview": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            {
+              "path": "memory/ascii201.md",
+              "content_preview": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            },
+            {
+              "path": "memory/latin.md",
+              "content_preview": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+            },
+            {
+              "path": "memory/astral.md",
+              "content_preview": "🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊🌊"
+            },
+            {
+              "path": "memory/combining.md",
+              "content_preview": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+            }
+          ],
+          "message_count": 30,
+          "turn_count": 11,
+          "compacted_turns": 11,
+          "retained_count": 8,
+          "retained_turns": 4,
+          "tool_rounds": 2,
+          "tools_called": [
+            "memory_search"
+          ]
+        }
+      },
+      "data_dir_before": [
+        "active.jsonl"
+      ],
+      "data_dir_after": [
+        "active.jsonl"
+      ]
+    },
+    {
+      "note": "a dry run that would write nothing",
+      "deferred": null,
+      "output": {
+        "kind": "ok",
+        "data": {
+          "status": "dry_run",
+          "character": "ada",
+          "would_write_files": 0,
+          "file_ops_preview": [],
+          "message_count": 30,
+          "turn_count": 11,
+          "compacted_turns": 11,
+          "retained_count": 8,
+          "retained_turns": 4,
+          "tool_rounds": 2,
+          "tools_called": [
+            "memory_search"
+          ]
+        }
+      },
+      "data_dir_before": [
+        "active.jsonl"
+      ],
+      "data_dir_after": [
+        "active.jsonl"
+      ]
+    },
+    {
+      "note": "a dry run whose count disagrees with its preview list",
+      "deferred": null,
+      "output": {
+        "kind": "ok",
+        "data": {
+          "status": "dry_run",
+          "character": "ada",
+          "would_write_files": 99,
+          "file_ops_preview": [
+            {
+              "path": "memory/one.md",
+              "content_preview": "one\n"
+            },
+            {
+              "path": "memory/two.md",
+              "content_preview": "two\n"
+            }
+          ],
+          "message_count": 30,
+          "turn_count": 11,
+          "compacted_turns": 11,
+          "retained_count": 8,
+          "retained_turns": 4,
+          "tool_rounds": 2,
+          "tools_called": [
+            "memory_search"
+          ]
+        }
+      },
+      "data_dir_before": [
+        "active.jsonl"
+      ],
+      "data_dir_after": [
+        "active.jsonl"
+      ]
+    }
+  ]
+}

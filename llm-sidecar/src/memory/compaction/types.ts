@@ -117,17 +117,27 @@ export type CompactionOutcome =
 /**
  * Which failure this is.
  *
- * Four of the Rust enum's five variants. The fifth, `Parse`, had no
- * constructor left: `parse_compaction_response` was the only thing that ever
- * built one, and it went with the rest of the XML parser (see `prompts.ts`).
- * The one remaining mention is a match arm in the command surface, which is a
- * reader, not a writer.
+ * Four of the Rust enum's five variants, plus one it did not have. The missing
+ * fifth is `Parse`, which had no constructor left: `parse_compaction_response`
+ * was the only thing that ever built one, and it went with the rest of the XML
+ * parser (see `prompts.ts`). The one remaining mention is a match arm in the
+ * command surface, which is a reader, not a writer.
+ *
+ * The addition is `busy`. The Rust raised the already-running refusal in two
+ * places with two different types — `commands/state/memory.rs` made it
+ * `ErrorCode::Busy` and `memory/compaction/background.rs` made it an
+ * `io::ErrorKind::WouldBlock` — because the guard was taken separately in each.
+ * Flattening the two assemblies into one (`compaction/run.ts`) leaves one
+ * raiser, and it has to carry enough for `shore compact` to still answer
+ * `busy` rather than `internal_error`. Hence a kind of its own, and a message
+ * with no prefix on it, which is what the command reported.
  */
 export type CompactionErrorKind =
   | "llm"
   | "insufficient_messages"
   | "conversation"
-  | "markdown_store";
+  | "markdown_store"
+  | "busy";
 
 /**
  * A compaction failure.
@@ -161,6 +171,12 @@ export class CompactionError extends Error {
    *  `Display`, which is what reaches an operator through `shore compact`. */
   static conversationManager(detail: string): CompactionError {
     return new CompactionError("conversation", `conversation: ${detail}`);
+  }
+
+  /** A pass is already running against this character's data root. No prefix:
+   *  this string is the command's `busy` message verbatim. */
+  static busy(character: string): CompactionError {
+    return new CompactionError("busy", `Compaction already running for ${character}`);
   }
 }
 

@@ -21,26 +21,23 @@
  * The narrow contexts the individual commands declare still hold: this
  * satisfies each of them structurally.
  *
- * # Two arms are injected
+ * # One arm is still injected
  *
- * `compact` and `keepalive_ping_now`, and both for the same reason — they are
- * the only commands that reach an LLM, and each is blocked on something that
- * has not ported:
- *
- * - **`compact`** needs the compaction *assembly* — templates, background
- *   model, conversation manager, the chat-shape prefix request, the tool
- *   context. `memory/compaction/background.ts` says in its own header that the
- *   assembly lands with `handler/`; it has not yet, and the same assembly is
- *   what fills `CompactionRunner` for the inline path in `handler/turn.ts`.
- * - **`keepalive_ping_now`** looks thin — `KeepaliveService.pingNow` is right
- *   there — but the command reports `source: cached_last_request` versus
- *   `rebuilt_from_disk`, and that distinction is made in
- *   `autonomy/manager.rs`'s rebuild-and-push path, which is the bridge #12 is
- *   deleting. It ports with the autonomy manager.
+ * `keepalive_ping_now`. It looks thin — `KeepaliveService.pingNow` is right
+ * there — but the command reports `source: cached_last_request` versus
+ * `rebuilt_from_disk`, and that distinction is made in `autonomy/manager.rs`'s
+ * rebuild-and-push path, which is the bridge #12 is deleting. It ports with the
+ * autonomy manager.
  *
  * Injected rather than stubbed: a caller with nothing to pass gets the same
  * `internal_error` a daemon missing the subsystem would produce, and the arm is
  * a real arm the day the dependency arrives.
+ *
+ * `compact` was the other one, and it is a real arm now. What it needs is no
+ * longer a missing module but a *runtime* — something that can make a provider
+ * call and reach the tool layer — so `deps.compaction` carries that the way
+ * `deps.ledgerPath` carries `usage`'s. Absent, the arm still refuses with
+ * `unwired`, which is what a build with no LLM client would do.
  */
 
 import type { Command } from "../protocol/Command.ts";
@@ -64,6 +61,7 @@ import {
   listAlternatives,
   log,
 } from "./conversation.ts";
+import { compact, type CompactContext } from "./compact.ts";
 import { memory } from "./memory.ts";
 import {
   backgroundModels,
@@ -127,8 +125,11 @@ export interface CommandDeps {
   /** The same clock read as local time, for the heartbeat's day boundaries. */
   localNow?: () => number;
   fetchImpl?: typeof fetch;
-  /** See the module doc: blocked on the compaction assembly. */
-  compact?: (engine: ConversationEngine, args: Args) => Promise<unknown>;
+  /**
+   * What a compaction pass runs against: the provider call, the tool layer, and
+   * the conversation's cached last request. Absent leaves `compact` unwired.
+   */
+  compaction?: Omit<CompactContext, "config" | "autonomy">;
   /** See the module doc: blocked on the autonomy manager. */
   keepalivePingNow?: (character: string) => Promise<unknown>;
 }
@@ -210,8 +211,12 @@ export async function runCommand(
     case "memory":
       return await memory(configDir, character, args);
     case "compact":
-      if (deps.compact === undefined) throw unwired("compact");
-      return await deps.compact(engine, args);
+      if (deps.compaction === undefined) throw unwired("compact");
+      return await compact(
+        engine,
+        { ...deps.compaction, config: session.config, autonomy: deps.autonomy },
+        args,
+      );
     case "config":
       return config(session, args);
     case "tools":

@@ -39,6 +39,11 @@
  * write, so a second caller is refused rather than queued — a compaction whose
  * trigger fired while another was running is a compaction whose trigger will
  * fire again.
+ *
+ * It is claimed *before* the conversation is read, which is observable: a
+ * character with nothing to compact and the slot already taken is refused as
+ * busy, not as empty. `commands_fixtures/compact_parity.json` records both
+ * orderings so the two cannot be swapped quietly.
  */
 
 import { join } from "node:path";
@@ -126,9 +131,7 @@ export async function runCompactionPass(
   const dataDir = deps.config.dirs.data;
 
   const guard = tryBeginCompaction(dataDir, character);
-  if (guard === undefined) {
-    throw CompactionError.conversationManager(`Compaction already running for ${character}`);
-  }
+  if (guard === undefined) throw CompactionError.busy(character);
 
   try {
     const loaded = await loadMessagesForCompaction(dataDir, character);
