@@ -6,12 +6,16 @@
 //! the per-tick trigger decision, `autonomy_state.json` and `heartbeat.jsonl`,
 //! all of it pinned against the Rust that used to do it by the frozen fixtures
 //! in `llm-sidecar/tests/autonomy_fixtures/`. What is left unported is **the
-//! heartbeat tick's tool context** — `build_tool_context` and
-//! `HeartbeatToolContext`, which move with the tool registry rather than with
-//! the tick. Everything else has gone: the cached request, the deep-idle
-//! archive, idle compaction, and the whole tick — its request preparation, its
-//! model override, its tool loop and the message it delivers. What stays is the
-//! specification the rest still reads. `mod.rs` says which is which.
+//! nothing**. Every behaviour in this file has a TypeScript counterpart: the
+//! cached request, the deep-idle archive, idle compaction, and the whole
+//! heartbeat tick — its request preparation, its model override, its tool loop
+//! and the message it delivers.
+//!
+//! `build_tool_context` is the exception that proves it. It has no port because
+//! it needs none: `llm-sidecar/src/handler/tool_context.ts` already builds every
+//! field it sets, and what is left here is the *call site* — which arguments a
+//! heartbeat passes. That goes with the wiring, not with a port. `mod.rs` says
+//! which is which.
 //!
 //! This is a way station, not a design. The tick reaches into the conversation
 //! engine, the memory store, the tool registry, MCP and sub-agents, and it moves

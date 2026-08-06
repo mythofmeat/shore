@@ -9,12 +9,18 @@
 //! Rust that used to do all of that by the frozen fixtures in
 //! `llm-sidecar/tests/autonomy_fixtures/`. That Rust is gone.
 //!
-//! What is left in `manager.rs` is `build_tool_context` and its
-//! `HeartbeatToolContext` — the surface a tick runs its tools against, which
-//! moves with the tool registry rather than with the tick. Until it does, the
-//! rest of this module is a *specification*: the port reads it, generates
-//! fixtures from it, replays those against TypeScript, and then this directory
-//! goes.
+//! **Nothing in `manager.rs` is unported any more.** Every behaviour in it has a
+//! TypeScript counterpart, listed below. What the file still is, is the
+//! *specification* the wiring reads: which arguments each ported piece is called
+//! with, and in what order. It goes when that lands (#12).
+//!
+//! The one function with no port is `build_tool_context`, and it needs none —
+//! `llm-sidecar/src/handler/tool_context.ts` already builds every field it sets.
+//! What is left of it here is the call site: which arguments a heartbeat passes,
+//! and the `HeartbeatToolContext` wrapper that answered `set_next_wake` from the
+//! state. `tools/dispatch.ts` carries the other half of that already, and says
+//! so — `set_next_wake` reaching the registry at all means some context other
+//! than a heartbeat dispatched it.
 //!
 //! ## What in it has already ported
 //!
