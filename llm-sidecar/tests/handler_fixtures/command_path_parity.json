@@ -1,0 +1,576 @@
+{
+  "_generated_by": "crates/daemon/src/handler/gen_command_path_fixture.rs at 9023b46d (uncommitted), driving the real MessageHandler::dispatch_command",
+  "_note": "FROZEN. Driven against the real MessageHandler::dispatch_command in a worktree at 9023b46d, each case on its own temp root with one session registered and a two-model catalog. Nothing regenerates this; a later diff is a defect. Generated under TZ=America/New_York. What is recorded is what this layer decides: which of the three paths a name takes, what a request whose character cannot be resolved gets back, the active model each path leaves in the session cache, and the rid. The commands themselves are dispatch_parity.json's, so a frame keeps only its envelope - kind, rid, name, the top-level keys of whatever answered, and the `active` field when there is one, which is what the session cache is for and the only place its effect on an answer becomes visible. ONE RECORDED VALUE IS A BUG THE PORT DOES NOT REPRODUCE. The characterless path returns its frame without `.with_rid(...)`, so `list_characters`, characterless `list_models` and `list_providers` answer with a null rid even when the request carried one - while the character path and the `refresh_provider_models` bypass both attach it. Three paths, two spellings, and a client correlating by rid simply loses those answers. The TypeScript attaches the rid on every path; the replay asserts the divergence by name rather than letting it pass. Not covered here, and asserted in the replay instead with its reason: that the character path reads the character-*effective* config rather than the global one. Making that observable needs a per-character overlay, and a LoadedConfig built for a test carries no raw table - so merging an overlay over it re-derives an empty catalog and every model command stops resolving. The `switch_model` cases are worth reading together: the command parks the *raw* name the user typed in the session cache, and the next character-backed command replaces it with the qualified name preferences resolve to.",
+  "timezone": "America/New_York",
+  "dispatch_command": [
+    {
+      "name": "a character-backed command resolves the session's character",
+      "note": "the ordinary path: resolve, build a context, dispatch, echo the rid",
+      "input": {
+        "characters_on_disk": [
+          "ada"
+        ],
+        "selected_character": "ada",
+        "rid": "r-1",
+        "command": "status",
+        "args": {},
+        "prior_command": null,
+        "prior_args": null,
+        "prior_selected": null
+      },
+      "output": {
+        "prior_frame": null,
+        "active_model_before": null,
+        "frame": {
+          "kind": "command_output",
+          "rid": "r-1",
+          "name": "status",
+          "data_keys": [
+            "active_model",
+            "activity",
+            "autonomy",
+            "cache_dir",
+            "character",
+            "config_dir",
+            "data_dir",
+            "memory_mode",
+            "message_count",
+            "pending_deferred_edit_count",
+            "pending_deferred_edits",
+            "tokens",
+            "turn_count"
+          ],
+          "data_active": null
+        },
+        "active_model_after": "chat.fixture"
+      }
+    },
+    {
+      "name": "list_characters never resolves a character",
+      "note": "it reads the global config, so it answers even with a character selected",
+      "input": {
+        "characters_on_disk": [
+          "ada",
+          "bob"
+        ],
+        "selected_character": "ada",
+        "rid": "r-2",
+        "command": "list_characters",
+        "args": {},
+        "prior_command": null,
+        "prior_args": null,
+        "prior_selected": null
+      },
+      "output": {
+        "prior_frame": null,
+        "active_model_before": null,
+        "frame": {
+          "kind": "command_output",
+          "rid": null,
+          "name": "list_characters",
+          "data_keys": [
+            "characters"
+          ],
+          "data_active": null
+        },
+        "active_model_after": null
+      }
+    },
+    {
+      "name": "list_models is characterless only while none is selected",
+      "note": "the one name whose path depends on the request rather than the name",
+      "input": {
+        "characters_on_disk": [
+          "ada",
+          "bob"
+        ],
+        "selected_character": null,
+        "rid": "r-3",
+        "command": "list_models",
+        "args": {},
+        "prior_command": null,
+        "prior_args": null,
+        "prior_selected": null
+      },
+      "output": {
+        "prior_frame": null,
+        "active_model_before": null,
+        "frame": {
+          "kind": "command_output",
+          "rid": null,
+          "name": "list_models",
+          "data_keys": [
+            "active",
+            "hidden_count",
+            "include_hidden",
+            "models"
+          ],
+          "data_active": "chat.fixture"
+        },
+        "active_model_after": null
+      }
+    },
+    {
+      "name": "list_models with a character selected takes the character path",
+      "note": "so its `active` field matches what preferences resolve, not the app default",
+      "input": {
+        "characters_on_disk": [
+          "ada"
+        ],
+        "selected_character": "ada",
+        "rid": "r-4",
+        "command": "list_models",
+        "args": {},
+        "prior_command": null,
+        "prior_args": null,
+        "prior_selected": null
+      },
+      "output": {
+        "prior_frame": null,
+        "active_model_before": null,
+        "frame": {
+          "kind": "command_output",
+          "rid": "r-4",
+          "name": "list_models",
+          "data_keys": [
+            "active",
+            "hidden_count",
+            "include_hidden",
+            "models"
+          ],
+          "data_active": "chat.fixture"
+        },
+        "active_model_after": "chat.fixture"
+      }
+    },
+    {
+      "name": "an ambiguous character is an invalid_request, not an internal error",
+      "note": "two characters on disk and none selected: the client has to choose",
+      "input": {
+        "characters_on_disk": [
+          "ada",
+          "bob"
+        ],
+        "selected_character": null,
+        "rid": "r-5",
+        "command": "status",
+        "args": {},
+        "prior_command": null,
+        "prior_args": null,
+        "prior_selected": null
+      },
+      "output": {
+        "prior_frame": null,
+        "active_model_before": null,
+        "frame": {
+          "kind": "error",
+          "rid": "r-5",
+          "code": "invalid_request",
+          "message": "multiple characters available ([\"ada\", \"bob\"]) \u2014 specify one with --character or SHORE_CHARACTER"
+        },
+        "active_model_after": null
+      }
+    },
+    {
+      "name": "no characters at all is also an invalid_request",
+      "note": "and the message says so, rather than naming a character that does not exist",
+      "input": {
+        "characters_on_disk": [],
+        "selected_character": null,
+        "rid": "r-6",
+        "command": "status",
+        "args": {},
+        "prior_command": null,
+        "prior_args": null,
+        "prior_selected": null
+      },
+      "output": {
+        "prior_frame": null,
+        "active_model_before": null,
+        "frame": {
+          "kind": "error",
+          "rid": "r-6",
+          "code": "invalid_request",
+          "message": "no characters available \u2014 create one at characters/<name>/workspace/SOUL.md"
+        },
+        "active_model_after": null
+      }
+    },
+    {
+      "name": "a selected character that is not on disk",
+      "note": "the registry's own message, which names what was asked for",
+      "input": {
+        "characters_on_disk": [
+          "ada"
+        ],
+        "selected_character": "ghost",
+        "rid": "r-7",
+        "command": "status",
+        "args": {},
+        "prior_command": null,
+        "prior_args": null,
+        "prior_selected": null
+      },
+      "output": {
+        "prior_frame": null,
+        "active_model_before": null,
+        "frame": {
+          "kind": "error",
+          "rid": "r-7",
+          "code": "invalid_request",
+          "message": "character \"ghost\" not found (available: [\"ada\"])"
+        },
+        "active_model_after": null
+      }
+    },
+    {
+      "name": "a characterless command still answers with no characters on disk",
+      "note": "which is what makes `shore complete models` work before a character exists",
+      "input": {
+        "characters_on_disk": [],
+        "selected_character": null,
+        "rid": "r-8",
+        "command": "list_models",
+        "args": {},
+        "prior_command": null,
+        "prior_args": null,
+        "prior_selected": null
+      },
+      "output": {
+        "prior_frame": null,
+        "active_model_before": null,
+        "frame": {
+          "kind": "command_output",
+          "rid": null,
+          "name": "list_models",
+          "data_keys": [
+            "active",
+            "hidden_count",
+            "include_hidden",
+            "models"
+          ],
+          "data_active": "chat.fixture"
+        },
+        "active_model_after": null
+      }
+    },
+    {
+      "name": "list_providers bypasses character resolution",
+      "note": "provider listing is global; a missing character must not make it fail",
+      "input": {
+        "characters_on_disk": [],
+        "selected_character": null,
+        "rid": "r-9",
+        "command": "list_providers",
+        "args": {},
+        "prior_command": null,
+        "prior_args": null,
+        "prior_selected": null
+      },
+      "output": {
+        "prior_frame": null,
+        "active_model_before": null,
+        "frame": {
+          "kind": "command_output",
+          "rid": null,
+          "name": "list_providers",
+          "data_keys": [
+            "providers"
+          ],
+          "data_active": null
+        },
+        "active_model_after": null
+      }
+    },
+    {
+      "name": "refresh_provider_models has its own bypass",
+      "note": "character-agnostic like the others, but async, so it does not share their path",
+      "input": {
+        "characters_on_disk": [
+          "ada"
+        ],
+        "selected_character": "ada",
+        "rid": "r-10",
+        "command": "refresh_provider_models",
+        "args": {
+          "provider": "anthropic"
+        },
+        "prior_command": null,
+        "prior_args": null,
+        "prior_selected": null
+      },
+      "output": {
+        "prior_frame": null,
+        "active_model_before": null,
+        "frame": {
+          "kind": "error",
+          "rid": "r-10",
+          "code": "not_found",
+          "message": "provider \"anthropic\" is not configured"
+        },
+        "active_model_after": null
+      }
+    },
+    {
+      "name": "an unknown command reaches the table and is refused there",
+      "note": "the routing does not filter names; the table is the only place that knows them",
+      "input": {
+        "characters_on_disk": [
+          "ada"
+        ],
+        "selected_character": "ada",
+        "rid": "r-11",
+        "command": "bogus_command",
+        "args": {},
+        "prior_command": null,
+        "prior_args": null,
+        "prior_selected": null
+      },
+      "output": {
+        "prior_frame": null,
+        "active_model_before": null,
+        "frame": {
+          "kind": "error",
+          "rid": "r-11",
+          "code": "invalid_request",
+          "message": "Unknown command: bogus_command"
+        },
+        "active_model_after": "chat.fixture"
+      }
+    },
+    {
+      "name": "no rid means no rid on the way back",
+      "note": "the frame still goes out; there is just nothing to correlate it with",
+      "input": {
+        "characters_on_disk": [
+          "ada"
+        ],
+        "selected_character": "ada",
+        "rid": null,
+        "command": "status",
+        "args": {},
+        "prior_command": null,
+        "prior_args": null,
+        "prior_selected": null
+      },
+      "output": {
+        "prior_frame": null,
+        "active_model_before": null,
+        "frame": {
+          "kind": "command_output",
+          "rid": null,
+          "name": "status",
+          "data_keys": [
+            "active_model",
+            "activity",
+            "autonomy",
+            "cache_dir",
+            "character",
+            "config_dir",
+            "data_dir",
+            "memory_mode",
+            "message_count",
+            "pending_deferred_edit_count",
+            "pending_deferred_edits",
+            "tokens",
+            "turn_count"
+          ],
+          "data_active": null
+        },
+        "active_model_after": "chat.fixture"
+      }
+    },
+    {
+      "name": "switch_model leaves the new model in the session cache",
+      "note": "the mirroring is the point: the next command reads it without re-resolving",
+      "input": {
+        "characters_on_disk": [
+          "ada"
+        ],
+        "selected_character": "ada",
+        "rid": "r-12",
+        "command": "list_models",
+        "args": {},
+        "prior_command": "switch_model",
+        "prior_args": {
+          "name": "spare"
+        },
+        "prior_selected": null
+      },
+      "output": {
+        "prior_frame": {
+          "kind": "command_output",
+          "rid": null,
+          "name": "switch_model",
+          "data_keys": [
+            "active",
+            "changed",
+            "model_id",
+            "provider",
+            "qualified_name"
+          ],
+          "data_active": "spare"
+        },
+        "active_model_before": "spare",
+        "frame": {
+          "kind": "command_output",
+          "rid": "r-12",
+          "name": "list_models",
+          "data_keys": [
+            "active",
+            "hidden_count",
+            "include_hidden",
+            "models"
+          ],
+          "data_active": "chat.spare"
+        },
+        "active_model_after": "chat.spare"
+      }
+    },
+    {
+      "name": "a character-backed command populates the cache from preferences",
+      "note": "even one that changes nothing: the context is built from preferences first",
+      "input": {
+        "characters_on_disk": [
+          "ada"
+        ],
+        "selected_character": "ada",
+        "rid": "r-13",
+        "command": "status",
+        "args": {},
+        "prior_command": "status",
+        "prior_args": {},
+        "prior_selected": null
+      },
+      "output": {
+        "prior_frame": {
+          "kind": "command_output",
+          "rid": null,
+          "name": "status",
+          "data_keys": [
+            "active_model",
+            "activity",
+            "autonomy",
+            "cache_dir",
+            "character",
+            "config_dir",
+            "data_dir",
+            "memory_mode",
+            "message_count",
+            "pending_deferred_edit_count",
+            "pending_deferred_edits",
+            "tokens",
+            "turn_count"
+          ],
+          "data_active": null
+        },
+        "active_model_before": "chat.fixture",
+        "frame": {
+          "kind": "command_output",
+          "rid": "r-13",
+          "name": "status",
+          "data_keys": [
+            "active_model",
+            "activity",
+            "autonomy",
+            "cache_dir",
+            "character",
+            "config_dir",
+            "data_dir",
+            "memory_mode",
+            "message_count",
+            "pending_deferred_edit_count",
+            "pending_deferred_edits",
+            "tokens",
+            "turn_count"
+          ],
+          "data_active": null
+        },
+        "active_model_after": "chat.fixture"
+      }
+    },
+    {
+      "name": "switch_model moves the session cache within one dispatch",
+      "note": "to the *other* model, which is the only way to tell a mirror read after the command from one read before it: the context was built holding the default",
+      "input": {
+        "characters_on_disk": [
+          "ada"
+        ],
+        "selected_character": "ada",
+        "rid": "r-14",
+        "command": "switch_model",
+        "args": {
+          "name": "spare"
+        },
+        "prior_command": null,
+        "prior_args": null,
+        "prior_selected": null
+      },
+      "output": {
+        "prior_frame": null,
+        "active_model_before": null,
+        "frame": {
+          "kind": "command_output",
+          "rid": "r-14",
+          "name": "switch_model",
+          "data_keys": [
+            "active",
+            "changed",
+            "model_id",
+            "provider",
+            "qualified_name"
+          ],
+          "data_active": "spare"
+        },
+        "active_model_after": "spare"
+      }
+    },
+    {
+      "name": "a characterless command reads the cache a character-backed one filled",
+      "note": "with no character there is nothing to resolve preferences against, so the session's last selection is the only thing `list_models` can mark active",
+      "input": {
+        "characters_on_disk": [
+          "ada"
+        ],
+        "selected_character": null,
+        "rid": "r-15",
+        "command": "list_models",
+        "args": {},
+        "prior_command": "switch_model",
+        "prior_args": {
+          "name": "spare"
+        },
+        "prior_selected": "ada"
+      },
+      "output": {
+        "prior_frame": {
+          "kind": "command_output",
+          "rid": null,
+          "name": "switch_model",
+          "data_keys": [
+            "active",
+            "changed",
+            "model_id",
+            "provider",
+            "qualified_name"
+          ],
+          "data_active": "spare"
+        },
+        "active_model_before": "spare",
+        "frame": {
+          "kind": "command_output",
+          "rid": null,
+          "name": "list_models",
+          "data_keys": [
+            "active",
+            "hidden_count",
+            "include_hidden",
+            "models"
+          ],
+          "data_active": "chat.spare"
+        },
+        "active_model_after": "spare"
+      }
+    }
+  ]
+}
