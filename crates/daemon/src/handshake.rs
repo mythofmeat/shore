@@ -1,3 +1,16 @@
+//! **Ported.** `llm-sidecar/src/swp/handshake.ts`, pinned by
+//! `tests/swp_handshake.test.ts` and `scripts/mutate_handshake.py`.
+//!
+//! `build_session_history_snapshot` has two more callers than the handshake —
+//! `handler/mod.rs` after a character switch, and `command_dispatch.rs` after a
+//! model change — and both arrive with `handler/`. It is exported on the other
+//! side for them.
+//!
+//! One difference, in a log line rather than in behaviour: the preferences
+//! resolution goes through `resolveChatModelForCharacter`, which warns under
+//! `resolve_chat_model` where this file's warning says "handshake snapshot".
+//! One shared resolver beat two spellings of the same chain.
+
 use std::sync::Arc;
 
 use crate::swp_server::{HandshakeProvider, HelloSnapshot, HistorySnapshot};

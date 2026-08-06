@@ -76,6 +76,12 @@ export interface HandshakeProvider {
  * The Rust defaults to a single character literally named `default` and an
  * empty history. It is what a daemon with no character configuration serves,
  * and it keeps the transport testable without the rest of the daemon.
+ *
+ * The real one is `buildHandshakeProvider` in `swp/handshake.ts`, which answers
+ * from the character registry. A daemon that serves this instead is a daemon
+ * whose handshake was never attached — the Rust attaches it after construction
+ * (`set_handshake_provider`) because the provider needs the registry and the
+ * registry needs the server's broadcast, and something has to be built first.
  */
 export const DEFAULT_HANDSHAKE: HandshakeProvider = {
   hello: () => Promise.resolve({ characters: [{ name: "default" }] }),

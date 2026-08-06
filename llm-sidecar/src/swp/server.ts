@@ -7,14 +7,21 @@
  *
  * # Not yet serving real clients
  *
- * Nothing constructs this in production yet. `swp_server`'s downstream —
- * `handler/`, and through it `commands/`, `memory/` and `tools/` — is still
- * Rust, and wiring TypeScript to the socket while Rust still answers the
- * frames would mean shipping every routed message across the daemon/sidecar
- * hop for Rust to handle. Issue #12 names that shape as scaffolding and its
- * most recent comment rules it out specifically for this module. So the
- * transport lands complete and pinned, and gets wired when its consumers move
- * in the same phase.
+ * Nothing constructs this in production yet, and the missing piece is now the
+ * *consumer* rather than the downstream. `MessageHandler` (`handler/router.ts`)
+ * takes what {@link Server.routes} yields, and `buildHandshakeProvider`
+ * (`swp/handshake.ts`) answers what a connection asks for on the way in. What
+ * is still unassembled is `MessageHandlerDeps` — its `dispatchCommand` and
+ * `runGeneration`, each an assembly of its own.
+ *
+ * Listening before that exists would be worse than not listening: connections
+ * would hand-shake, queue their messages in {@link RouteQueue}, and never be
+ * answered. So this stays unwired until the thing that drains the queue does.
+ *
+ * When it is wired, `handshake` will need to arrive after construction. The
+ * Rust has `set_handshake_provider` for it, because the provider needs the
+ * character registry and the registry needs this server's broadcast — one of
+ * the two has to be built first, and it is this one.
  */
 
 import { createServer, type Server as NetServer, type Socket } from "node:net";
