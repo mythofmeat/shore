@@ -7,6 +7,11 @@
 //! record a curated transcript entry per call: reasoning, visible text, and each
 //! tool call paired with its full output. These land in the `transcripts` table
 //! of the same store and back `shore log --heartbeat` / `--dreaming`.
+//!
+//! **Ported.** `llm-sidecar/src/transcript_capture.ts`, pinned by
+//! `tests/transcript_capture.test.ts` and `scripts/mutate_in_process.py`. The
+//! dreaming half went with dreaming in `cf55dff4`; what ported is the heartbeat
+//! half, which is the same function with a different `source`.
 
 use std::sync::Arc;
 

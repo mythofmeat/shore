@@ -1,0 +1,191 @@
+#!/usr/bin/env python3
+"""Mutation pass over the in-process autonomy executor and the transcript it
+writes (#18, step 5).
+
+This class is supposed to hold no decisions — every action is already its own
+module, and what is left is the wiring each one cannot assemble for itself. So
+the mutants are aimed at the wiring, and they fall into the three places a piece
+of wiring can be wrong without anything failing.
+
+**What the ledger is told.** The call type is per round: the first call is the
+tick, the rest are its loop, and that is how a heartbeat's own cost is told from
+its tool rounds'. Collapse them and the distinction is gone from every row.
+
+**Which action runs.** `max_turns` compaction fires inline from the turn that
+crossed the threshold, under that turn's config. Running it here as well
+compacts the same conversation twice and bills for both. And the deep archive's
+covered-turn count picks between a free file archive and a paid model call, so a
+wrong number there is a bill rather than a bug.
+
+**What the model is told back.** `set_next_wake` is clamped by the clock, and the
+answer quotes the clamped number — a character told it got the 900 hours it
+asked for plans around a wake that will never come.
+
+The transcript mutants are the other half: an entry a person reads afterwards,
+where an empty reasoning list and a redacted-thinking placeholder mean different
+things, and where a failed write must never take a tick down with it.
+
+A mutant is KILLED if `bun test tests/autonomy_in_process.test.ts
+tests/transcript_capture.test.ts` fails with it applied.
+
+Run from the repository root:
+    python3 llm-sidecar/scripts/mutate_in_process.py
+"""
+import pathlib
+import subprocess
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+P = "src/autonomy/in_process.ts"
+T = "src/transcript_capture.ts"
+
+TESTS = ["tests/autonomy_in_process.test.ts", "tests/transcript_capture.test.ts"]
+
+# (label, file, find, replace)
+MUTANTS = [
+    # --- what the ledger is told ----------------------------------------------
+    ("ledger: every round is labelled a first call, so the loop's cost is invisible",
+     P,
+     "        request.context = { ...request.context, character, call_type: callType } as never;",
+     '        request.context = { ...request.context, character, call_type: "heartbeat" } as never;'),
+    ("ledger: the character is dropped, so rows cannot be attributed",
+     P,
+     "        request.context = { ...request.context, character, call_type: callType } as never;",
+     "        request.context = { ...request.context, call_type: callType } as never;"),
+    ("ledger: the existing context is discarded, taking the ledger path with it",
+     P,
+     "        request.context = { ...request.context, character, call_type: callType } as never;",
+     "        request.context = { character, call_type: callType } as never;"),
+
+    # --- which action runs ----------------------------------------------------
+    ("action: a max_turns compaction runs here too, compacting the same turns twice",
+     P,
+     '    if (reason !== "idle") {',
+     "    if (false as boolean) {"),
+    ("action: the idle compaction is refused along with max_turns",
+     P,
+     '    if (reason !== "idle") {',
+     "    if (true as boolean) {"),
+    ("action: the deep archive always takes the paid arm",
+     P,
+     "    }, coveredTurnCount);",
+     "    }, 0);"),
+    ("action: the deep archive always takes the free arm",
+     P,
+     "    }, coveredTurnCount);",
+     "    }, Number.MAX_SAFE_INTEGER);"),
+
+    # --- what the model is told back ------------------------------------------
+    ("wake: the model is told the hours it asked for, not the hours it got",
+     P,
+     "        const used = hooks.scheduleNextWake(hours, reason);\n"
+     "        return `Scheduled next moment in ${used.toFixed(1)} hours.`;",
+     "        hooks.scheduleNextWake(hours, reason);\n"
+     "        return `Scheduled next moment in ${hours.toFixed(1)} hours.`;"),
+    ("wake: the clock is never moved, so the character schedules nothing",
+     P,
+     "        const used = hooks.scheduleNextWake(hours, reason);",
+     "        const used = hours;"),
+    ("wake: the reason is dropped from the log line the clock writes",
+     P,
+     "        const used = hooks.scheduleNextWake(hours, reason);",
+     '        const used = hooks.scheduleNextWake(hours, "");'),
+
+    # --- the tool surface -----------------------------------------------------
+    ("tools: a tool failure is reported to the model as a success",
+     P,
+     "          return { output: e instanceof Error ? e.message : String(e), isError: true };",
+     "          return { output: e instanceof Error ? e.message : String(e), isError: false };"),
+    ("tools: a tool failure throws, abandoning the whole tick",
+     P,
+     "          return { output: e instanceof Error ? e.message : String(e), isError: true };",
+     "          throw e;"),
+    ("tools: a generated image is never seen, because the value is not returned",
+     P,
+     "            output: typeof value === \"string\" ? value : (JSON.stringify(value) ?? \"\"),\n"
+     "            isError: false,\n"
+     "            value,",
+     "            output: typeof value === \"string\" ? value : (JSON.stringify(value) ?? \"\"),\n"
+     "            isError: false,"),
+
+    # --- the transcript -------------------------------------------------------
+    ("transcript: redacted thinking vanishes instead of leaving a placeholder",
+     T,
+     '      reasoning.push("[redacted thinking]");',
+     "      void block;"),
+    ("transcript: blank thinking is recorded as a reasoning step",
+     T,
+     '      if (block.thinking.trim() !== "") reasoning.push(block.thinking);',
+     "      reasoning.push(block.thinking);"),
+    ("transcript: split text blocks are concatenated with no separator",
+     T,
+     '        if (text !== "") text += "\\n";',
+     "        void text;"),
+    ("transcript: an empty text block becomes a blank line",
+     T,
+     '      if (block.text !== "") {',
+     "      if (true as boolean) {"),
+    ("transcript: a tool's error flag is dropped",
+     T,
+     "      is_error: tool.isError,",
+     "      is_error: false,"),
+    ("transcript: an unreported model is stored as an empty name",
+     T,
+     '    model: params.response.model === "" ? null : params.response.model,',
+     "    model: params.response.model,"),
+    ("transcript: a failed write takes the tick down with it",
+     T,
+     "  } catch (e) {\n"
+     "    console.warn(`shore: failed to record a ${params.source} transcript entry: ${String(e)}`);\n"
+     "  }",
+     "  } catch (e) {\n"
+     "    throw e;\n"
+     "  }"),
+]
+
+
+def run_tests() -> bool:
+    """True when the suite passes."""
+    proc = subprocess.run(
+        ["bun", "test", *TESTS],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    return proc.returncode == 0
+
+
+def main() -> int:
+    if not run_tests():
+        print("baseline is red — fix the suite before mutating", file=sys.stderr)
+        return 2
+
+    survivors = []
+    for i, (label, rel, find, replace) in enumerate(MUTANTS, start=1):
+        path = ROOT / rel
+        original = path.read_text()
+        if find not in original:
+            print(f"{i:3}. ERROR mutant does not apply: {label}", file=sys.stderr)
+            survivors.append(label)
+            continue
+        if original.count(find) != 1:
+            print(f"{i:3}. ERROR mutant is ambiguous: {label}", file=sys.stderr)
+            survivors.append(label)
+            continue
+        path.write_text(original.replace(find, replace))
+        try:
+            killed = not run_tests()
+        finally:
+            path.write_text(original)
+        print(f"{i:3}. {'kill' if killed else 'LIVE'}  {label}")
+        if not killed:
+            survivors.append(label)
+
+    print(f"\n{len(MUTANTS) - len(survivors)}/{len(MUTANTS)} killed")
+    for label in survivors:
+        print(f"  SURVIVOR: {label}")
+    return 1 if survivors else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

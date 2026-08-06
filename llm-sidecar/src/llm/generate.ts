@@ -74,6 +74,21 @@ export interface GenerateDeps {
   now?: () => number;
 }
 
+/**
+ * The two fields a rotation needs off a model: whose keys, and the legacy
+ * single-key variable to fall back on.
+ *
+ * Narrower than {@link ResolvedModel} because the catalog spells it camelCase
+ * and `llm/request.ts` spells the same model snake_case, and both reach here —
+ * the compaction seam carries the wire-shaped one. Asking for the two fields
+ * rather than a whole model lets either side pass without a conversion that
+ * exists only to satisfy a signature.
+ */
+export interface KeySource {
+  providerKey: string;
+  apiKeyEnv?: string | undefined;
+}
+
 /** A completed call, and every credential it had to rotate past to get there. */
 export interface GenerateOutcome {
   response: GenerateResponse;
@@ -147,7 +162,7 @@ async function callProvider(
  */
 export async function generateWithCredentialFallback(
   request: SidecarRequest,
-  resolved: ResolvedModel,
+  resolved: KeySource,
   deps: GenerateDeps,
   signal?: AbortSignal,
 ): Promise<GenerateOutcome> {

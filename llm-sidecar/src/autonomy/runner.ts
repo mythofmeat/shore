@@ -115,6 +115,28 @@ export interface AutonomyActionResult {
 }
 
 /**
+ * What a running tick can reach back into.
+ *
+ * Only the heartbeat has one, and only for `set_next_wake` — the character
+ * scheduling its own next moment from inside its own turn. The clock it moves
+ * belongs to {@link CharacterAutonomy}, and the executor is called *by*
+ * {@link CharacterAutonomy}, so this is the two being joined at the one place
+ * that holds both. Reaching the other way — an executor that held the service
+ * that held the executor — is the same wiring with a cycle in it.
+ */
+export interface TickHooks {
+  /**
+   * Move the heartbeat clock, and answer with the hours actually used.
+   *
+   * The bound is applied on the way through, so the tool quotes the number it
+   * got rather than the one it asked for. Called at the moment the model calls
+   * the tool, which for a tick that has been running for twenty minutes is not
+   * the moment the tick began — hence a call rather than a captured timestamp.
+   */
+  scheduleNextWake(hoursFromNow: number, reason: string): number;
+}
+
+/**
  * The work a tick cannot do itself.
  *
  * Each call is expected to be slow — every one of them is at least an LLM
@@ -130,11 +152,21 @@ export interface AutonomyActionResult {
  */
 export interface AutonomyExecutor {
   /** Run a heartbeat: a private turn with tools, which may send a message. */
-  runHeartbeatTick(character: string): Promise<AutonomyActionResult>;
+  runHeartbeatTick(character: string, hooks: TickHooks): Promise<AutonomyActionResult>;
   /** Compact the active conversation. */
   runCompaction(character: string, reason: CompactionReason): Promise<AutonomyActionResult>;
-  /** Archive what is left of a conversation nobody has returned to. */
-  runDeepArchive(character: string): Promise<AutonomyActionResult>;
+  /**
+   * Archive what is left of a conversation nobody has returned to.
+   *
+   * `coveredTurnCount` is how much of the conversation memory already holds,
+   * and it decides which arm runs: every user turn covered means a pure file
+   * archive with no model call at all, anything less means a real keep-0
+   * compaction. It is passed rather than read because it is *this* runner's
+   * state — the daemon used to keep its own copy, and two copies of a number
+   * that picks between a free path and a paid one is exactly the kind that
+   * drifts.
+   */
+  runDeepArchive(character: string, coveredTurnCount: number): Promise<AutonomyActionResult>;
   /** Sweep memory while the character is idle. */
 }
 
@@ -517,7 +549,15 @@ export class CharacterAutonomy {
     try {
       if (heartbeat === "run_tick") {
         this.note("tick_fired", "Heartbeat tick fired", now);
-        this.#apply(await this.#executor.runHeartbeatTick(this.#character));
+        this.#apply(
+          await this.#executor.runHeartbeatTick(this.#character, {
+            // `this.#now()` rather than the tick's `now`: a heartbeat may run
+            // for half an hour, and the character is scheduling from where the
+            // conversation actually is, not from where the tick started.
+            scheduleNextWake: (hours, reason) =>
+              this.scheduleNextWake(hours, reason, this.#now()),
+          }),
+        );
       }
 
       if (decision.compaction !== undefined) {
@@ -528,7 +568,10 @@ export class CharacterAutonomy {
 
       if (decision.deepArchive) {
         if (this.#stillIdleEnoughToArchive()) {
-          const result = await this.#executor.runDeepArchive(this.#character);
+          const result = await this.#executor.runDeepArchive(
+            this.#character,
+            this.#state.coveredTurnCount,
+          );
           this.#applyCompaction(result);
           // The archive says whether the idle period is finished; see the note
           // on `deepArchiveDone`. The fallback — a failed archive must be able

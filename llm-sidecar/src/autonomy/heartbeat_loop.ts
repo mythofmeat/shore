@@ -41,6 +41,9 @@ import { budgetDecision, appendWrapUpNudge, generatedImageRef } from "./heartbea
 import type { GenerateResponse, SidecarRequest } from "../llm/types.ts";
 import type { ContentBlock } from "../engine/types.ts";
 import { truncateSummary } from "../notifications.ts";
+// Defined where it is serialized, as the Rust had it — one shape, one owner.
+import type { CapturedTool } from "../transcript_capture.ts";
+export type { CapturedTool };
 
 /** Half an hour. The Rust's `HEARTBEAT_LOOP_DEADLINE`. */
 export const HEARTBEAT_LOOP_DEADLINE_MS = 30 * 60 * 1000;
@@ -52,14 +55,6 @@ export interface HeartbeatToolResult {
   isError: boolean;
   /** The tool's own value on success, read only to spot a generated image. */
   value?: unknown;
-}
-
-/** One tool call, as the transcript records it. */
-export interface CapturedTool {
-  name: string;
-  input: unknown;
-  output: string;
-  isError: boolean;
 }
 
 /** One round, as the curated `shore log --heartbeat` view records it. */
