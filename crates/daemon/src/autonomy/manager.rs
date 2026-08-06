@@ -6,12 +6,12 @@
 //! the per-tick trigger decision, `autonomy_state.json` and `heartbeat.jsonl`,
 //! all of it pinned against the Rust that used to do it by the frozen fixtures
 //! in `llm-sidecar/tests/autonomy_fixtures/`. What is left unported is **the
-//! heartbeat tick's tail** — the message it persists, the tool context it runs
-//! against, and the orchestration that strings the three together. Everything
-//! before them has gone: the cached request, the deep-idle archive, idle
-//! compaction, the tick's own request preparation and model override, and its
-//! tool loop. What stays is the specification the rest still reads. `mod.rs`
-//! says which is which.
+//! heartbeat tick's tool context** — `build_tool_context` and
+//! `HeartbeatToolContext`, which move with the tool registry rather than with
+//! the tick. Everything else has gone: the cached request, the deep-idle
+//! archive, idle compaction, and the whole tick — its request preparation, its
+//! model override, its tool loop and the message it delivers. What stays is the
+//! specification the rest still reads. `mod.rs` says which is which.
 //!
 //! This is a way station, not a design. The tick reaches into the conversation
 //! engine, the memory store, the tool registry, MCP and sub-agents, and it moves
@@ -1100,6 +1100,19 @@ fn apply_heartbeat_model_override(
 /// generate() calls. Tool loop messages are ephemeral — only <sendMessage>
 /// output persists to active.jsonl. All activity is logged to the ring buffer
 /// for `shore log --heartbeat`.
+///
+/// **Ported.** `llm-sidecar/src/autonomy/heartbeat_tick.ts`, with
+/// `persist_heartbeat_message`. What is left here is `build_tool_context`, which
+/// moves with the tool registry rather than with the tick.
+///
+/// The two budget numbers are this function's to source and neither is the
+/// loop's to know: the round cap comes off the model the request was *built*
+/// for, and the grace rounds come off config. The delivery it ends on is
+/// best-effort in three separate ways — the engine may refuse the append, no
+/// client may be connected, the notifier may be absent — and each fails on its
+/// own. The notification firing outside the persistence branch is deliberate
+/// and reads like an oversight: the character did speak, and a user told about
+/// a message they cannot find is better served than one never told at all.
 #[expect(
     clippy::too_many_arguments,
     reason = "heartbeat tick boundary carries scheduler dependencies"

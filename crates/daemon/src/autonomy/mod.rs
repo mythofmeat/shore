@@ -9,10 +9,10 @@
 //! Rust that used to do all of that by the frozen fixtures in
 //! `llm-sidecar/tests/autonomy_fixtures/`. That Rust is gone.
 //!
-//! What is left in `manager.rs` is the heartbeat tick's *tail* — the message it
-//! persists, the tool context it runs against, and the orchestration that
-//! strings the pieces together. It is the last one (#12), and until it lands
-//! the rest of this module is a *specification*: the port reads it, generates
+//! What is left in `manager.rs` is `build_tool_context` and its
+//! `HeartbeatToolContext` — the surface a tick runs its tools against, which
+//! moves with the tool registry rather than with the tick. Until it does, the
+//! rest of this module is a *specification*: the port reads it, generates
 //! fixtures from it, replays those against TypeScript, and then this directory
 //! goes.
 //!
@@ -94,6 +94,20 @@
 //! them by name. Declaring them would make the heartbeat's tools array differ
 //! from chat's, and the two being byte-identical is what lets a tick run against
 //! the prefix chat already paid to cache.
+//!
+//! **The tick itself** — `execute_heartbeat_tick` and
+//! `persist_heartbeat_message` — is `llm-sidecar/src/autonomy/heartbeat_tick.ts`.
+//! It sources the two budget numbers the loop is not allowed to know (the round
+//! cap off the model the request was built for, the grace rounds off config) and
+//! ends on delivery.
+//!
+//! Delivery is best-effort in three separate ways, and they are separate on
+//! purpose: the engine may refuse the append, no client may be connected, the
+//! notifier may be absent. The notification fires *outside* the persistence
+//! branch, which reads like an oversight and is not — the character did speak,
+//! and a user told about a message they cannot find is better served than one
+//! who is never told at all. An image-only tick delivers too: the image is the
+//! message, and it carries no empty text block beside it.
 //!
 //! The four steps it and the deep archive both end on — reload the engine, drain
 //! the deferred edits, invalidate the cached body, re-point the keepalive — ran
