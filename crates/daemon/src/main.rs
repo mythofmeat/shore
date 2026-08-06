@@ -54,10 +54,22 @@ mod supervisor;
 // rather than pushed in by `set_usage_config`/`set_cache_keepalive_ceiling`,
 // which is the same values with nothing left to forget to push.
 //
-// What has not: everything that is a *server* rather than a runtime — argument
-// parsing, `resolve_startup` and its remote-access policy, the listener bind,
-// `instances.json` registration, the signal listener, and the shutdown ordering
-// in `await_background_shutdown`. Those land with `swp_server`.
+// The startup half has **ported**: `llm-sidecar/src/daemon/startup.ts`, pinned
+// by `tests/daemon_startup.test.ts` and `scripts/mutate_daemon_startup.py`.
+// That is `Cli`, `resolve_startup` and everything it calls — the address
+// precedence, `validate_remote_access_policy`, `parse_env_bool`. The `mod
+// tests` below is replayed there in full.
+//
+// One thing is reproduced rather than reached for, and is worth knowing:
+// `SocketAddr::from_str` plus `is_loopback` decide whether a bind needs the
+// opt-in, and there is no such parser in Node. `parseSocketAddrIp` is a
+// hand-written one, because the two mistakes on either side of it are "refuses
+// `127.0.0.2`" and "silently exposes the daemon".
+//
+// What has not: everything that is a *server* rather than a policy — the
+// listener bind, `instances.json` registration, the signal listener, and the
+// shutdown ordering in `await_background_shutdown`. Those land with
+// `swp_server`.
 //
 // Two pieces are deliberately absent from the port rather than pending:
 //
