@@ -980,4 +980,73 @@ describe("what an action reports back", () => {
       ).toBe(2);
     });
   });
+
+  test("an archive that says the period is unfinished runs again in it", async () => {
+    // `execute_deep_archive_compaction`'s comment made into a field: the LLM
+    // arm succeeds with a turn count and *deliberately* does not set
+    // `deep_archive_done`, because a pass that wrote no memory returns the same
+    // zero a successful one does. Inferring the flag from "did not fail" —
+    // which this used to do — would stop the next window retrying a
+    // conversation that is still fully intact.
+    await inTempDir(async (dir) => {
+      const { runner, executor, time } = build({
+        dir,
+        config: { maxTurns: 0, idleTriggerSecs: 0, archiveAfterSecs: 5 },
+      });
+      executor.results.set("deep_archive", {
+        events: [],
+        turnCount: 0,
+        deepArchiveDone: false,
+      });
+      runner.onUserMessage(10, time.now);
+      time.now += 4 * HOUR;
+      await runner.tick();
+
+      time.now += 4 * HOUR;
+      await runner.tick();
+      expect(executor.calls.filter((c) => c === "deep_archive").length).toBe(2);
+    });
+  });
+
+  test("an archive that says the period is finished does not run again in it", async () => {
+    // The pure arm and the nothing-to-archive quiesce both report `true`, and
+    // the second tick must find the trigger closed even though the first one
+    // succeeded — otherwise a character archives on every window forever.
+    await inTempDir(async (dir) => {
+      const { runner, executor, time } = build({
+        dir,
+        config: { maxTurns: 0, idleTriggerSecs: 0, archiveAfterSecs: 5 },
+      });
+      executor.results.set("deep_archive", {
+        events: [],
+        turnCount: 0,
+        deepArchiveDone: true,
+      });
+      runner.onUserMessage(10, time.now);
+      time.now += 4 * HOUR;
+      await runner.tick();
+
+      time.now += 4 * HOUR;
+      await runner.tick();
+      expect(executor.calls.filter((c) => c === "deep_archive").length).toBe(1);
+    });
+  });
+
+  test("an archive that says nothing keeps the old inference", async () => {
+    // The fallback, for an action that has not ported yet: a result with no
+    // `deepArchiveDone` and no failure still finishes the period.
+    await inTempDir(async (dir) => {
+      const { runner, executor, time } = build({
+        dir,
+        config: { maxTurns: 0, idleTriggerSecs: 0, archiveAfterSecs: 5 },
+      });
+      runner.onUserMessage(10, time.now);
+      time.now += 4 * HOUR;
+      await runner.tick();
+
+      time.now += 4 * HOUR;
+      await runner.tick();
+      expect(executor.calls.filter((c) => c === "deep_archive").length).toBe(1);
+    });
+  });
 });

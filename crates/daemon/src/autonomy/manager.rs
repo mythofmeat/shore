@@ -5,9 +5,10 @@
 //! `llm-sidecar/src/autonomy/` holds the heartbeat clock, the activity tracker,
 //! the per-tick trigger decision, `autonomy_state.json` and `heartbeat.jsonl`,
 //! all of it pinned against the Rust that used to do it by the frozen fixtures
-//! in `llm-sidecar/tests/autonomy_fixtures/`. What is left is a heartbeat tick,
-//! idle compaction and the deep-idle archive — plus the cached request they
-//! reuse to keep a warm cache prefix.
+//! in `llm-sidecar/tests/autonomy_fixtures/`. What is left is a heartbeat tick
+//! and idle compaction — plus the cached request and the deep-idle archive they
+//! share, both of which have ported and stay here as the specification the two
+//! remaining actions still read. `mod.rs` says which is which.
 //!
 //! This is a way station, not a design. Every one of those three reaches into
 //! the conversation engine, the memory store, the tool registry, MCP and
@@ -482,7 +483,13 @@ fn release_deep_archive_trigger(ctx: &TickContext) {
 
 /// Deep-idle archive: after `archive_after` of inactivity, archive what is
 /// left of the active conversation so the next exchange starts from a clean
-/// slate. A trailing run of unanswered autonomous messages (heartbeat
+/// slate.
+///
+/// **Ported.** `llm-sidecar/src/autonomy/deep_archive.ts`, pinned by
+/// `tests/autonomy_fixtures/deep_archive_parity.json`. This and the two arms
+/// below stay as the specification the heartbeat tick still reads.
+///
+/// A trailing run of unanswered autonomous messages (heartbeat
 /// `<sendMessage>` output with no user response yet) is retained in the
 /// active conversation so the user still sees it when they return.
 ///

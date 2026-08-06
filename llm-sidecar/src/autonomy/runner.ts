@@ -98,6 +98,20 @@ export interface AutonomyActionResult {
    * throw — see the note on {@link AutonomyExecutor}.
    */
   readonly failed?: string | undefined;
+  /**
+   * Whether this idle period's archive is finished. Only the deep archive says.
+   *
+   * It cannot be inferred from "did not fail", which is what this used to do.
+   * The Rust's LLM arm sets the turn counts on success and *deliberately leaves
+   * this alone*, because a pass that wrote no memory returns the same zero a
+   * successful one does — so declaring the period finished there would stop the
+   * next window retrying a conversation that is still fully intact. The pure
+   * arm and the nothing-to-archive quiesce both do set it.
+   *
+   * Absent falls back to the inference, which is what an action that has not
+   * ported yet still reports.
+   */
+  readonly deepArchiveDone?: boolean | undefined;
 }
 
 /**
@@ -516,9 +530,12 @@ export class CharacterAutonomy {
         if (this.#stillIdleEnoughToArchive()) {
           const result = await this.#executor.runDeepArchive(this.#character);
           this.#applyCompaction(result);
-          // A failed archive must be able to run again, so the "already done
-          // for this idle period" flag is only set by one that worked.
-          if (result.failed === undefined) this.#state.deepArchiveDone = true;
+          // The archive says whether the idle period is finished; see the note
+          // on `deepArchiveDone`. The fallback — a failed archive must be able
+          // to run again — is for an action that does not yet report it.
+          if (result.deepArchiveDone ?? result.failed === undefined) {
+            this.#state.deepArchiveDone = true;
+          }
         } else {
           // Release the latch so the next tick is not wedged behind a trigger
           // that no longer applies.
