@@ -21,23 +21,15 @@
  * The narrow contexts the individual commands declare still hold: this
  * satisfies each of them structurally.
  *
- * # One arm is still injected
+ * # Nothing is injected any more
  *
- * `keepalive_ping_now`. It looks thin — `KeepaliveService.pingNow` is right
- * there — but the command reports `source: cached_last_request` versus
- * `rebuilt_from_disk`, and that distinction is made in `autonomy/manager.rs`'s
- * rebuild-and-push path, which is the bridge #12 is deleting. It ports with the
- * autonomy manager.
- *
- * Injected rather than stubbed: a caller with nothing to pass gets the same
- * `internal_error` a daemon missing the subsystem would produce, and the arm is
- * a real arm the day the dependency arrives.
- *
- * `compact` was the other one, and it is a real arm now. What it needs is no
- * longer a missing module but a *runtime* — something that can make a provider
- * call and reach the tool layer — so `deps.compaction` carries that the way
- * `deps.ledgerPath` carries `usage`'s. Absent, the arm still refuses with
- * `unwired`, which is what a build with no LLM client would do.
+ * Two arms landed here unwired — `compact` and `keepalive_ping_now`, the only
+ * two that reach an LLM — because each was blocked on a module that had not
+ * ported. Both are real arms now. What they need is not a missing module but a
+ * *runtime*: something that can make a provider call, reach the tool layer, or
+ * ping a cached prefix. `deps.compaction` and `deps.keepalive` carry those the
+ * way `deps.ledgerPath` carries `usage`'s, and an absent one still refuses with
+ * `unwired` — which is what a build with no LLM client behind it would do.
  */
 
 import type { Command } from "../protocol/Command.ts";
@@ -62,6 +54,7 @@ import {
   log,
 } from "./conversation.ts";
 import { compact, type CompactContext } from "./compact.ts";
+import { keepalivePingNowCommand, type KeepalivePingContext } from "./keepalive.ts";
 import { memory } from "./memory.ts";
 import {
   backgroundModels,
@@ -130,8 +123,11 @@ export interface CommandDeps {
    * the conversation's cached last request. Absent leaves `compact` unwired.
    */
   compaction?: Omit<CompactContext, "config" | "autonomy">;
-  /** See the module doc: blocked on the autonomy manager. */
-  keepalivePingNow?: (character: string) => Promise<unknown>;
+  /**
+   * The armed prefix and the body behind it, for the `keepalive_ping_now`
+   * diagnostic. Absent leaves the arm unwired.
+   */
+  keepalive?: Omit<KeepalivePingContext, "config" | "dataDir">;
 }
 
 /** The five names that answer without a character, and their handlers. */
@@ -238,8 +234,12 @@ export async function runCommand(
     case "heartbeat_tick_now":
       return heartbeatTickNow(statusContext(engine, session, deps));
     case "keepalive_ping_now":
-      if (deps.keepalivePingNow === undefined) throw unwired("keepalive_ping_now");
-      return await deps.keepalivePingNow(character);
+      if (deps.keepalive === undefined) throw unwired("keepalive_ping_now");
+      return await keepalivePingNowCommand(character, {
+        ...deps.keepalive,
+        config: session.config,
+        dataDir: session.dataDir,
+      });
     case "heartbeat_set_dormant":
       return heartbeatSetDormant(statusContext(engine, session, deps));
     case "heartbeat_set_active":

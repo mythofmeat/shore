@@ -14,6 +14,23 @@
 //! are a *specification*: the port reads them, generates fixtures from them,
 //! replays those against TypeScript, and then this directory goes.
 //!
+//! ## What in it has already ported
+//!
+//! The cached request and everything around it — `AutonomyState::last_request`,
+//! `cache_last_request`, `invalidate_cached_request`, `reprime_decision`,
+//! `reprime_keepalive_from_tick`, `heartbeat_rebuild_messages`,
+//! `history_is_between_turns`, `heartbeat_idle_anchor_message`,
+//! `rebuild_request_from_disk`, and the on-demand ping's `KeepalivePing` —
+//! is `llm-sidecar/src/autonomy/{rebuild,last_request}.ts` and
+//! `src/commands/keepalive.ts`, pinned by
+//! `tests/autonomy_fixtures/last_request_parity.json`.
+//!
+//! They are **not deleted here**, and that is deliberate rather than an
+//! oversight: the three remaining actions call them, and a specification with
+//! holes in it is a worse specification. They go with the last of the three.
+//! `POST /v1/keepalive/prefix` and its client half *are* deleted, on both
+//! sides — that was the bridge, and the bridge is what had to die.
+//!
 //! The dream sweep was a fourth. It is not being ported — dreaming was deleted
 //! outright in `cf55dff4`, and its paths here went with it rather than staying
 //! on as a specification for something nothing will build.

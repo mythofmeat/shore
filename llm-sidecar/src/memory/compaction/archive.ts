@@ -155,11 +155,24 @@ async function readManifest(path: string): Promise<CompactionManifest> {
   }
 }
 
-/** How many segments a character has, for the callers that only want the count. */
+/**
+ * How many segments a character has, for the callers that only want the count.
+ *
+ * The **manifest**, not the directory. This counted `.jsonl` files when it
+ * landed and that was wrong: the Rust's `SegmentReader::load(dir).segment_count()`
+ * reads `compaction.json`, and `engine/segments.ts` says in its own header that
+ * the manifest is the authority and the files are not — with a fixture pinning
+ * a manifest that disagrees with what is on disk.
+ *
+ * The two answers differ exactly when an archive crashed between writing a
+ * segment and updating the manifest, or when a segment file was removed by
+ * hand. Both callers use this for `has_prior_context`, which decides whether the
+ * model is told it is missing earlier context, so the looser count would have
+ * claimed prior context from an orphan file the reader cannot actually read.
+ */
 export async function segmentCount(characterDir: string): Promise<number> {
   try {
-    const entries = await readdir(join(characterDir, SEGMENTS_DIR));
-    return entries.filter((e) => e.endsWith(".jsonl")).length;
+    return (await readManifest(join(characterDir, COMPACTION_MANIFEST_FILE))).segments.length;
   } catch {
     return 0;
   }

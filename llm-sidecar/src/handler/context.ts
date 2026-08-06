@@ -170,6 +170,21 @@ export async function prepareChatContext(
  * provider key all flow from it. Compaction passes the *chat* model here on
  * purpose, because its own tool loop rebuilds against the compaction model
  * later; this call only establishes the wire shape.
+ *
+ * # `mcpToolDefs` is not optional in the way it looks
+ *
+ * The Rust had two of these, and they disagreed about MCP tools on purpose.
+ * `handler/context.rs` passed `&[]` with a comment saying "not wired on this
+ * path yet"; `autonomy/manager.rs`'s passed the registry's filtered defs with a
+ * comment saying that omitting them would make the keepalive *strictly
+ * negative* — a warmed prefix missing tools chat includes is a prefix the next
+ * chat turn cannot reuse, so the ping pays for a write and buys nothing.
+ *
+ * Which caller is which decides it. Compaction rebuilds only to establish a
+ * wire shape it immediately re-anchors on the compaction model, so its tool
+ * surface never has to match chat's byte for byte. The keepalive's whole job is
+ * that it does. Defaulting to empty keeps compaction's behaviour and makes the
+ * keepalive's a thing its caller states.
  */
 export async function buildChatShapeRequestFromDisk(
   character: string,
@@ -178,7 +193,13 @@ export async function buildChatShapeRequestFromDisk(
   resolved: ResolvedModel,
   messages: Message[],
   hasPriorContext: boolean,
-  resize?: CachedResize,
+  options: {
+    resize?: CachedResize;
+    mcpToolDefs?: readonly ToolDefinition[];
+    /** Injected so a replay can pin the time markers. Production reads the
+     *  process zone, which is what the Rust's `chrono::Local` did. */
+    timeZone?: string;
+  } = {},
 ): Promise<BuiltRequest> {
   const prepared = await prepareChatContext({
     character,
@@ -187,9 +208,9 @@ export async function buildChatShapeRequestFromDisk(
     resolved,
     messages,
     hasPriorContext,
-    // Background disk rebuild: MCP tools are not wired on this path.
-    mcpToolDefs: [],
-    ...(resize === undefined ? {} : { resize }),
+    mcpToolDefs: options.mcpToolDefs ?? [],
+    ...(options.resize === undefined ? {} : { resize: options.resize }),
+    ...(options.timeZone === undefined ? {} : { timeZone: options.timeZone }),
   });
 
   const entry = config.providers.get(resolved.providerKey);

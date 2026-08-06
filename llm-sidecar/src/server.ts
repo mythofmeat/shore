@@ -4,7 +4,6 @@ import { RpcAutonomyExecutor } from "./autonomy/executor.ts";
 import {
   KeepaliveService,
   startKeepaliveTimer,
-  type KeepalivePrefix,
   type KeepaliveRestore,
 } from "./autonomy/keepalive.ts";
 import {
@@ -261,13 +260,13 @@ export function createSidecarHandler(
     // disarm, and report on a schedule this side runs on its own clock. The
     // pings it fires are ordinary calls, budget-gated and recorded like any
     // other. See `autonomy/keepalive.ts`.
-    if (url.pathname === "/v1/keepalive/prefix") {
-      const parsed = await readJson<KeepalivePrefix>(request);
-      if (!parsed.ok) return parsed.response;
-      keepalive.arm(parsed.value);
-      return jsonResponse({ ok: true });
-    }
-
+    //
+    // `POST /v1/keepalive/prefix` used to be here, and it was the last bridge
+    // #12 listed: the daemon pushed the body to ping from because that body was
+    // `request + this turn's response`, assembled from Rust's own persisted
+    // content blocks, and one divergent byte turns a 0.1x read into a 2.0x
+    // write. `handler/turn.ts` writes those blocks now, so the push is a call to
+    // `LastRequestCache.set` and there is nothing left to serve.
     if (url.pathname === "/v1/keepalive/disarm") {
       const parsed = await readJson<{ character: string }>(request);
       if (!parsed.ok) return parsed.response;

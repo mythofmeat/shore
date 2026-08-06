@@ -125,28 +125,6 @@ struct ModelHistoryRequest<'req> {
 
 // ── Keepalive control bodies ────────────────────────────────────────────────
 
-/// `POST /v1/keepalive/prefix` — the body to ping from, plus the cadence.
-///
-/// Deliberately the same shape as a real outbound call (flattened request plus
-/// `context`), because the sidecar pings by cloning it: reusing the
-/// serialization both sides already have is what keeps the ping byte-identical
-/// to the turn it stands in for.
-#[derive(Serialize)]
-struct KeepalivePrefixRequest<'req> {
-    #[serde(flatten)]
-    request: &'req LlmRequest,
-    context: CallContext<'req>,
-    /// The model's `cache_keepalive`, milliseconds. Absent means off.
-    ///
-    /// Milliseconds rather than seconds because the config domain allows a
-    /// sub-second cadence: `"500ms"` is a legal `cache_keepalive`, and seconds
-    /// would truncate it to zero. A zero interval schedules the next ping at
-    /// the moment of the last one, so every tick is due and the loop spins —
-    /// which is why `CacheKeepaliveSetting::parse` rejects `"0s"` outright.
-    /// Sending the unit the far side already works in keeps that guarantee.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    keepalive_interval_ms: Option<u64>,
-}
 
 /// The body for the two keepalive endpoints that name a character and nothing
 /// else: `/v1/keepalive/disarm` and `/v1/keepalive/drain`.
@@ -408,63 +386,12 @@ impl LedgerClient {
     // response persistence and hoping the two agree forever; one divergent byte
     // turns every ping from a read at 0.1x into a write at 2.0x.
 
-    /// Hand the sidecar the request to ping from, and the cadence to ping on.
-    ///
-    /// Called wherever the daemon caches a new `last_request`. `interval` is the
-    /// model's resolved `cache_keepalive`; `None` means keepalive is off for
-    /// this model, which disarms rather than leaving a stale cadence running.
-    pub async fn push_keepalive_prefix(
-        &self,
-        request: &LlmRequest,
-        character: &str,
-    ) -> Result<(), LlmError> {
-        // Derived rather than threaded through every caller: it is a pure
-        // function of the request, and the same one `generation.rs` applies.
-        let thinking_enabled = request
-            .provider_options
-            .as_ref()
-            .is_some_and(crate::llm::types::ProviderOptions::thinking_enabled);
-        let cache_ttl = request
-            .provider_options
-            .as_ref()
-            .and_then(|opts| opts.cache_ttl.clone());
-        let reasoning_effort = request
-            .provider_options
-            .as_ref()
-            .and_then(crate::llm::types::ProviderOptions::resolved_reasoning_effort);
-        let usage = self.usage_for_call();
-        // Built through the same helper as a real call's context, so the ping's
-        // ledger row carries the labels the turn it clones would have.
-        // `call_type` is `Keepalive`: that is what makes the row a keepalive row
-        // and lets the tracker's `cold_keepalive` check fire on it.
-        let context = self.call_context(
-            request,
-            CallType::Keepalive,
-            character,
-            CallLabels {
-                thinking_enabled,
-                cache_ttl: cache_ttl.as_deref(),
-                reasoning_effort: reasoning_effort.as_deref(),
-                usage: usage.as_ref(),
-            },
-        );
-        let _ack: serde_json::Value = self
-            .inner
-            .control_call(
-                "/v1/keepalive/prefix",
-                &KeepalivePrefixRequest {
-                    request,
-                    context,
-                    // Read off the request the model profile resolved it onto.
-                    // `None` means keepalive is off for this model.
-                    keepalive_interval_ms: request
-                        .keepalive_interval
-                        .map(|iv| u64::try_from(iv.as_millis()).unwrap_or(u64::MAX)),
-                },
-            )
-            .await?;
-        Ok(())
-    }
+    // `push_keepalive_prefix` used to be here. It was the last bridge #12
+    // listed: this side pushed the body to ping from, because that body was
+    // `request + this turn's response` assembled from Rust's own persisted
+    // content blocks. TypeScript writes those blocks now, so the push is a
+    // function call over there and `POST /v1/keepalive/prefix` is gone from
+    // both sides.
 
     /// Send a keepalive ping right now and report what it read, for the
     /// `keepalive_ping_now` diagnostic.
