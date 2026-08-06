@@ -57,8 +57,9 @@ import type { TurnAutonomyBridge } from "../autonomy/registration.ts";
 import { CharacterError, type CharacterRegistry } from "../characters.ts";
 import type { CommandDeps } from "../commands/dispatch.ts";
 import type { ConfigRuntime } from "../commands/config.ts";
-import { characterDataDir, rustJoin } from "../config/dirs.ts";
-import { loadConfig } from "../config/loader.ts";
+import { characterDataDir, discoverCharacters, rustJoin } from "../config/dirs.ts";
+import { loadCharacterConfig, loadConfig, type LoadedConfig } from "../config/loader.ts";
+import { restartRequiredChanges } from "../config/restart.ts";
 import type { Diagnostics } from "../diagnostics.ts";
 import {
   newlyCrossedBudgetWarnings,
@@ -77,7 +78,7 @@ import { historyMessage, type HandshakeProvider } from "../swp/connection.ts";
 import type { SessionRouter } from "../swp/session.ts";
 import { deferEditTo } from "../tools/dispatch.ts";
 import { makeDispatchCommand, type CommandPathDeps, type SessionCache } from "./commands.ts";
-import type { DispatchRuntime } from "./command_dispatch.ts";
+import type { DispatchRuntime, ReloadSummary } from "./command_dispatch.ts";
 import {
   generationEngine,
   makeRunGeneration,
@@ -509,23 +510,98 @@ export function dispatchRuntime(
       a.autonomy.reloadConfig((name) => runtime.registry.effectiveConfig(name));
     },
 
-    applyReloadedConfig: async (config) => {
-      // First, because it is what every read below goes through: the registry
-      // holds the global config, re-scans the character list, drops the
-      // per-character config cache and discards engines that no longer exist.
-      const summary = await runtime.registry.reloadRuntimeState(config);
-      // `[mcp]` is not reconnected here — see the module doc, and #28.
-      a.autonomy.reloadConfig((name) => runtime.registry.effectiveConfig(name));
-      await pushHistorySnapshots(a);
-      return {
-        characterDiscoveryChanged: summary.characterDiscoveryChanged,
-        droppedEngines: summary.droppedEngines,
-      };
-    },
+    applyReloadedConfig: async (config) => await applyReloadedConfig(a, config),
 
     clearActiveModel: () => {
       sessions.clear();
     },
+  };
+}
+
+/**
+ * Adopt a freshly-loaded config everywhere that holds one.
+ *
+ * A module function rather than a closure on {@link dispatchRuntime} because
+ * it has a second caller that has nothing to do with commands: the config
+ * watcher. A `config_reload` and a file saved in `$XDG_CONFIG_HOME/shore` are
+ * the same event as far as the daemon is concerned, and it would be a poor
+ * kind of hot reload that did less than the command.
+ */
+export async function applyReloadedConfig(
+  a: CommandAssembly,
+  config: LoadedConfig,
+): Promise<ReloadSummary> {
+  // First, because it is what every read below goes through: the registry
+  // holds the global config, re-scans the character list, drops the
+  // per-character config cache and discards engines that no longer exist.
+  const summary = await a.runtime.registry.reloadRuntimeState(config);
+  // `[mcp]` is not reconnected here — see the module doc, and #28.
+  a.autonomy.reloadConfig((name) => a.runtime.registry.effectiveConfig(name));
+  await pushHistorySnapshots(a);
+  return {
+    characterDiscoveryChanged: summary.characterDiscoveryChanged,
+    droppedEngines: summary.droppedEngines,
+  };
+}
+
+/**
+ * Re-read `config.toml` from disk and adopt it, or keep what is running.
+ *
+ * What the watcher calls. Two things it must get right, both of them about
+ * *not* adopting:
+ *
+ * - **A config that will not parse changes nothing.** Someone is editing the
+ *   file, and half-typed TOML reaches the watcher as often as finished TOML
+ *   does. A daemon that adopted every intermediate state would spend the edit
+ *   flapping between configurations.
+ * - **A broken per-character overlay changes nothing either.** `loadConfig`
+ *   only parses the global file, so a `characters/<name>/config.toml` that
+ *   does not parse would be discovered later, one character at a time, as a
+ *   silent fall back to the global config. Every overlay is validated against
+ *   the new global before any of it is committed.
+ *
+ * Startup-owned settings that moved are warned about rather than applied. The
+ * listen address and the data directory are read once, before any of this
+ * exists; saying so is the only thing that can be done about them.
+ */
+export function configReloader(
+  a: CommandAssembly,
+): (changedPaths: readonly string[]) => Promise<void> {
+  return async (changedPaths) => {
+    const where = `${a.runtime.configPath} (changed: ${changedPaths.join(", ")})`;
+
+    let config: LoadedConfig;
+    try {
+      config = loadConfig(a.runtime.configPath, a.env === undefined ? {} : { env: a.env });
+    } catch (e) {
+      console.warn(
+        `shore: config hot reload failed, keeping the running config — ${where}: ${String(e)}`,
+      );
+      return;
+    }
+
+    for (const name of discoverCharacters(config.dirs.config)) {
+      try {
+        loadCharacterConfig(config, name);
+      } catch (e) {
+        console.warn(
+          `shore: config hot reload failed on ${name}'s overlay, keeping the running config — ` +
+            `${where}: ${String(e)}`,
+        );
+        return;
+      }
+    }
+
+    const restart = restartRequiredChanges(a.runtime.registry.globalConfig(), config);
+    if (restart.length > 0) {
+      console.warn(
+        `shore: config hot reload saw startup-owned changes (${restart.join(", ")}); ` +
+          `restart the daemon to apply them`,
+      );
+    }
+
+    await applyReloadedConfig(a, config);
+    console.info(`shore: config hot reload applied — ${where}`);
   };
 }
 

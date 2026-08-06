@@ -174,16 +174,16 @@ MUTANTS = [
      "    reloadRuntimeConfig: () => {},\n\n    applyReloadedConfig:"),
     ("adopt: the registry never re-scans, so a character added at runtime stays invisible",
      D,
-     "      const summary = await runtime.registry.reloadRuntimeState(config);",
-     "      const summary = {\n"
-     "        characterDiscoveryChanged: false,\n"
-     "        droppedEngines: 0,\n      };\n      void config;"),
+     "  const summary = await a.runtime.registry.reloadRuntimeState(config);",
+     "  const summary = {\n"
+     "    characterDiscoveryChanged: false,\n"
+     "    droppedEngines: 0,\n  };\n  void config;"),
     ("adopt: discovery changes are reported as engine drops and the client invalidates the wrong cache",
      D,
-     "        characterDiscoveryChanged: summary.characterDiscoveryChanged,\n"
-     "        droppedEngines: summary.droppedEngines,",
-     "        characterDiscoveryChanged: summary.droppedEngines > 0,\n"
-     "        droppedEngines: summary.droppedEngines,"),
+     "    characterDiscoveryChanged: summary.characterDiscoveryChanged,\n"
+     "    droppedEngines: summary.droppedEngines,",
+     "    characterDiscoveryChanged: summary.droppedEngines > 0,\n"
+     "    droppedEngines: summary.droppedEngines,"),
     ("prompt: the cached body survives a prompt refresh, keeping a dead prefix warm",
      D,
      '      runtime.cache.invalidate(character, "prompt_reload");',

@@ -23,7 +23,7 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { connect, createServer, type Socket } from "node:net";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -337,6 +337,87 @@ describe("what a client gets", () => {
     } finally {
       client.close();
     }
+  });
+});
+
+describe("hot reload", () => {
+  /** Wait for a condition the watcher will bring about, or give up. */
+  async function until(check: () => boolean, timeoutMs = 5_000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (!check()) {
+      if (Date.now() > deadline) throw new Error("the config was never adopted");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  }
+
+  test("an edit to config.toml is adopted without a restart", async () => {
+    const place = await layout();
+    const daemon = await start(place);
+    expect(daemon.runtime.registry.globalConfig().app.daemon.allowed_hosts).toEqual([]);
+
+    await writeFile(place.configPath, `[daemon]\nallowed_hosts = ["10.0.0.5"]\n`);
+
+    await until(
+      () => daemon.runtime.registry.globalConfig().app.daemon.allowed_hosts.length === 1,
+    );
+    expect(daemon.runtime.registry.globalConfig().app.daemon.allowed_hosts).toEqual(["10.0.0.5"]);
+  });
+
+  test("a config that will not parse changes nothing", async () => {
+    const place = await layout();
+    const daemon = await start(place);
+    await writeFile(place.configPath, `[daemon]\nallowed_hosts = ["10.0.0.5"]\n`);
+    await until(
+      () => daemon.runtime.registry.globalConfig().app.daemon.allowed_hosts.length === 1,
+    );
+
+    // Half-typed TOML reaches the watcher as often as finished TOML does. A
+    // daemon that adopted every intermediate state would spend an edit
+    // flapping between configurations.
+    await writeFile(place.configPath, "[daemon]\nallowed_hosts = [");
+    await new Promise((resolve) => setTimeout(resolve, 900));
+
+    expect(daemon.runtime.registry.globalConfig().app.daemon.allowed_hosts).toEqual(["10.0.0.5"]);
+  });
+
+  test("a broken per-character overlay keeps the running config", async () => {
+    const place = await layout();
+    const daemon = await start(place);
+    await writeFile(place.configPath, `[daemon]\nallowed_hosts = ["10.0.0.5"]\n`);
+    await until(
+      () => daemon.runtime.registry.globalConfig().app.daemon.allowed_hosts.length === 1,
+    );
+
+    // `loadConfig` only parses the global file, so an overlay that does not
+    // parse would be discovered later, one character at a time, as a silent
+    // fall back to the global config. Every overlay is checked against the new
+    // global before any of it is committed.
+    await writeFile(
+      join(place.root, "config", "characters", "ada", "config.toml"),
+      "[behavior]\nnot_a_field = ",
+    );
+    await writeFile(place.configPath, `[daemon]\nallowed_hosts = ["10.0.0.6"]\n`);
+    await new Promise((resolve) => setTimeout(resolve, 900));
+
+    expect(daemon.runtime.registry.globalConfig().app.daemon.allowed_hosts).toEqual(["10.0.0.5"]);
+  });
+
+  test("a character appearing on disk is picked up", async () => {
+    const place = await layout();
+    const daemon = await start(place);
+    expect(daemon.runtime.registry.availableCharacters()).toEqual(["ada"]);
+
+    // Staged and renamed in, rather than built in place. A character is only
+    // discovered once its `SOUL.md` exists, and building it in place races the
+    // debounce: the directory is what fires the watcher, and the file that
+    // completes it does not fire anything.
+    const staged = join(place.root, "staged", "workspace");
+    await mkdir(staged, { recursive: true });
+    await writeFile(join(staged, "SOUL.md"), "# nova\n");
+    await rename(join(place.root, "staged"), join(place.root, "config", "characters", "nova"));
+
+    await until(() => daemon.runtime.registry.availableCharacters().length === 2);
+    expect(daemon.runtime.registry.availableCharacters()).toEqual(["ada", "nova"]);
   });
 });
 

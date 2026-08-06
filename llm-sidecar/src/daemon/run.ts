@@ -33,12 +33,11 @@
  *
  * # What is not here yet
  *
- * `spawn_background_services` has three tasks and none of them have ported: the
- * config watcher (`hot_reload.rs`), the provider auto-discovery loop
- * (`auto_discovery.rs`), and the sidecar supervisor — which does not move at
- * all, because it supervises the process this port is being written into.
- * A daemon without the first two reloads config only when asked and refreshes
- * provider models only at startup; both are noted at their call site below.
+ * `spawn_background_services` has three tasks. The config watcher has ported —
+ * see `hot_reload.ts`. The provider auto-discovery loop (`auto_discovery.rs`)
+ * has not, so provider model lists are whatever discovery cached at startup.
+ * The sidecar supervisor does not move at all, because it supervises the
+ * process this port is being written into.
  */
 
 import { randomUUID } from "node:crypto";
@@ -47,7 +46,7 @@ import { TurnAutonomyBridge } from "../autonomy/registration.ts";
 import { Diagnostics } from "../diagnostics.ts";
 import { emitNewMessageEvent } from "../handler/persistence.ts";
 import type { SessionTokens } from "../handler/persistence.ts";
-import { buildMessageHandlerDeps } from "../handler/deps.ts";
+import { buildMessageHandlerDeps, configReloader } from "../handler/deps.ts";
 import { MessageHandler } from "../handler/router.ts";
 import { Instances, type InstanceInfo } from "../instances.ts";
 import type { SidecarProvider, SidecarRequest } from "../llm/types.ts";
@@ -58,6 +57,7 @@ import type { Logger } from "../swp/connection.ts";
 import { buildHandshakeProvider } from "../swp/handshake.ts";
 import { Server } from "../swp/server.ts";
 import { localRfc3339 } from "../time.ts";
+import { startConfigWatcher } from "./hot_reload.ts";
 import { parseArgs, resolveStartup, sourceLabel, StartupError } from "./startup.ts";
 
 /**
@@ -81,6 +81,13 @@ export interface DaemonOptions {
   log?: Logger | undefined;
   /** Injected so a test can pin the id it then looks for. */
   newInstanceId?: (() => string) | undefined;
+  /**
+   * Watch the config directory for edits. On by default.
+   *
+   * Off is for a test that is asserting something else: a recursive watch over
+   * a temp directory turns every file the test writes into a config reload.
+   */
+  watchConfig?: boolean | undefined;
 }
 
 /** A daemon that is serving. */
@@ -206,33 +213,46 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
 
   const clocks = startRuntimeClocks(runtime);
 
-  const handler = new MessageHandler(
-    buildMessageHandlerDeps({
-      runtime,
-      providers: options.providers,
-      autonomy: new TurnAutonomyBridge(runtime.autonomy),
-      router: server.sessionRouter,
-      handshake,
-      emitEvent: (message) => server.broadcast(message),
-      sessionTokens: newSessionTokens(),
-      diagnostics: new Diagnostics(),
-      env,
-      ...(log === undefined ? {} : { log }),
-    }),
-  );
+  const assembly = {
+    runtime,
+    providers: options.providers,
+    autonomy: new TurnAutonomyBridge(runtime.autonomy),
+    router: server.sessionRouter,
+    handshake,
+    emitEvent: (message: ServerMessage) => server.broadcast(message),
+    sessionTokens: newSessionTokens(),
+    diagnostics: new Diagnostics(),
+    env,
+    ...(log === undefined ? {} : { log }),
+  };
+  const handler = new MessageHandler(buildMessageHandlerDeps(assembly));
 
   // Started, not awaited: it returns when the route stream closes, which is
   // shutdown. Before `serve`, so no message can arrive with nobody draining.
   const handlerDone = handler.run(server.routes());
 
-  // Nothing here yet — `hot_reload.rs` and `auto_discovery.rs` are unported, so
-  // config reloads only when a `config` command asks for one and the provider
-  // model lists are whatever discovery cached at startup.
+  // Watched rather than polled, and it does exactly what `config_reload` does
+  // — a file saved in the config directory and a client asking for a reload
+  // are the same event as far as the daemon is concerned.
+  const watcher = options.watchConfig === false
+    ? undefined
+    : startConfigWatcher({
+        configPath: startup.configPath,
+        configDir: loaded.dirs.config,
+        reload: configReloader(assembly),
+        ...(log === undefined ? {} : { log }),
+      });
+
+  // `auto_discovery.rs` is still unported, so provider model lists are
+  // whatever discovery cached at startup.
 
   const served = server.serve();
 
   const done = (async () => {
     await served;
+    // Stopped first, and before anything is torn down: a reload that landed
+    // after the registry had been let go would be adopting into nothing.
+    watcher?.stop();
     // Ordered, and each step waits for the one before it. The server closing
     // its route queue is what ends the handler; the handler finishing is what
     // guarantees no turn is still writing when autonomy persists its state.

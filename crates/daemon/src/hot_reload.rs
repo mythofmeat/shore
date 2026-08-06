@@ -4,6 +4,22 @@
 //! supported config inputs. Character workspace prompt and memory files are
 //! deliberately ignored so filesystem saves do not become prompt activation
 //! boundaries.
+//!
+//! **Ported.** `llm-sidecar/src/daemon/hot_reload.ts`, pinned by
+//! `tests/daemon_hot_reload.test.ts` and `scripts/mutate_daemon_hot_reload.py`.
+//! `path_triggers_reload` and its tests carry over exactly.
+//!
+//! Two things are shaped differently over there:
+//!
+//! - **There is no control channel.** `HandlerControl::ReloadConfig` existed
+//!   because the handler owned the config and this watcher runs on its own
+//!   task; over there the watcher is handed the same `configReloader` a
+//!   `config_reload` command runs, so a save and a command are one code path
+//!   rather than two that have to agree.
+//! - **`notify` is `fs.watch`.** Recursive watching is native on Linux. It
+//!   reports a newly-created directory but can miss a file written into one in
+//!   the same tick — which costs nothing here, because the directory event is
+//!   itself a reload trigger.
 
 use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};

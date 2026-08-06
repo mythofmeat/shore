@@ -54,6 +54,8 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 R = "src/daemon/run.ts"
+D = "src/handler/deps.ts"
+H = "src/daemon/hot_reload.ts"
 
 TESTS = ["tests/daemon_run.test.ts"]
 
@@ -110,10 +112,11 @@ MUTANTS = [
      "  void handshake;"),
     ("handshake: the command path gets its own provider rather than the server's",
      R,
-     "      handshake,",
-     "      handshake: { hello: () => Promise.resolve({ characters: [] }),\n"
-     "                   history: () => Promise.resolve({ messages: [], activeStart: 0, config: {},\n"
-     "                                                    selectedCharacter: null, revision: 0 }) },"),
+     "    handshake,\n    emitEvent:",
+     "    handshake: { hello: () => Promise.resolve({ characters: [] }),\n"
+     "                 history: () => Promise.resolve({ messages: [], activeStart: 0, config: {},\n"
+     "                                                  selectedCharacter: null, revision: 0 }) },\n"
+     "    emitEvent:"),
 
     # --- the push channels ----------------------------------------------------
     ("push: history changes are not broadcast, so a conversation stops appearing",
@@ -122,16 +125,14 @@ MUTANTS = [
      "    onHistory: () => {},"),
     ("push: the broadcast is used for routed replies, so a command answers everyone",
      R,
-     "      emitEvent: (message) => server.broadcast(message),\n"
-     "      sessionTokens: newSessionTokens(),",
-     "      emitEvent: () => {},\n"
-     "      sessionTokens: newSessionTokens(),"),
+     "    emitEvent: (message: ServerMessage) => server.broadcast(message),",
+     "    emitEvent: () => {},"),
 
     # --- the config the runtime runs on ---------------------------------------
     ("config: the runtime re-reads the default path rather than the one started with",
      R,
-     "    configPath: startup.configPath,",
-     "    configPath: undefined,"),
+     "    config: loaded,\n    configPath: startup.configPath,",
+     "    config: loaded,\n    configPath: undefined,"),
 
     # --- shutdown -------------------------------------------------------------
     ("shutdown: the instance is left in the registry, pointing at a dead process",
@@ -154,6 +155,40 @@ MUTANTS = [
      R,
      "    const result = await Promise.race([work.then(() => \"done\" as const), expiry]);",
      "    const result = await work.then(() => \"done\" as const);"),
+
+    # --- the config watcher ---------------------------------------------------
+    ("watch: the daemon does not watch its config directory at all",
+     R,
+     "  const watcher = options.watchConfig === false\n    ? undefined\n    : startConfigWatcher({",
+     "  const watcher = true\n    ? undefined\n    : startConfigWatcher({"),
+    ("watch: the watcher is pointed at the data directory rather than the config one",
+     R,
+     "        configDir: loaded.dirs.config,",
+     "        configDir: loaded.dirs.data,"),
+    ("reload: a config that will not parse is adopted, flapping through every keystroke",
+     D,
+     "      console.warn(\n"
+     "        `shore: config hot reload failed, keeping the running config — ${where}: ${String(e)}`,\n"
+     "      );\n"
+     "      return;",
+     "      console.warn(String(e));\n"
+     "      config = a.runtime.config;"),
+    ("reload: per-character overlays are not validated before the global is committed",
+     D,
+     "    for (const name of discoverCharacters(config.dirs.config)) {",
+     "    for (const name of [] as string[]) {"),
+    ("reload: a broken overlay warns and the config is adopted anyway",
+     D,
+     "        console.warn(\n"
+     "          `shore: config hot reload failed on ${name}'s overlay, keeping the running config — ` +\n"
+     "            `${where}: ${String(e)}`,\n"
+     "        );\n"
+     "        return;",
+     "        console.warn(String(e));"),
+    ("reload: the watcher path never adopts what it loaded",
+     D,
+     "    await applyReloadedConfig(a, config);",
+     "    void config;"),
 
     # --- the address string ---------------------------------------------------
     ("addr: an IPv6 host is not bracketed, so the string splits on the wrong colon",

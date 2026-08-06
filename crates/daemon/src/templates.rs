@@ -1,5 +1,15 @@
 //! Prompt template upgrade manifest.
 //!
+//! **Not ported, and not pending: this module has no caller.** `sync_templates`,
+//! `default_manifest_path` and `default_prompts_dir` are `pub` and reachable
+//! only from `pub mod templates;` in `lib.rs` — nothing in this crate, the TUI,
+//! the CLI or the MCP server calls any of them. The 474 lines below have been
+//! maintained, compiled and tested for a feature that never ran.
+//!
+//! Porting it would mean writing the TypeScript for a behaviour nobody has
+//! observed, and keeping it would mean carrying the same dead weight into a new
+//! language. It goes with the crate.
+//!
 //! Tracks SHA-256 hashes of default templates so the daemon can auto-update
 //! stock templates without clobbering user edits. See §11.1 of ARCHITECTURE.md.
 //!

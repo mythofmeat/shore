@@ -1,6 +1,18 @@
 //! Shared utilities for reading structured data out of content block
 //! sequences, and for shaping tool output before it is stored.
 //!
+//! **Ported**, absorbed rather than moved — all three functions landed inside
+//! the callers that wanted them, because each has exactly one job in one place:
+//!
+//! - `extract_tool_uses` → the `toolUses` method on the loop driver in
+//!   `llm-sidecar/src/engine/tool_loop.ts`. Reading tool-use blocks out of a
+//!   turn is what a driver is for, and the two drivers spell "a turn"
+//!   differently.
+//! - `dispatch_result_to_output` → `llm-sidecar/src/tools/execute.ts`, beside
+//!   the `tool_result` block it exists to fill in.
+//! - `truncate_tool_result` → `llm-sidecar/src/tools/dispatch.ts`, pinned by
+//!   `scripts/mutate_dispatch.py`.
+//!
 //! This module used to also project `ContentBlock` onto provider request JSON —
 //! per-SDK forks, thinking-carrier naming, cross-model replay portability, and
 //! the prior-thinking strip. Those are provider decisions and now live in the

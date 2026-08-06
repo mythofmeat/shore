@@ -1,5 +1,17 @@
 //! Compile-time prompt loading.
 //!
+//! **Ported**, absorbed into the language. Bun inlines
+//! `import text from "….md" with { type: "text" }` at build time, which is what
+//! `include_prompt!` was for — see `llm-sidecar/src/md.d.ts`, and the `.md`
+//! imports in `src/tools/registry.ts` and `src/memory/compaction/prompts.ts`,
+//! which reach into `crates/daemon/prompts/` so there is still one copy of each
+//! file and it is the one a person edits.
+//!
+//! The trailing-newline rule below is the part that had to be written out by
+//! hand rather than inherited: `stripOneTrailingNewline` in
+//! `llm-sidecar/src/engine/prompt.ts`. Same reason as here — the bytes are a
+//! cache prefix.
+//!
 //! All hand-authored prompts (system templates, compaction, dreaming librarian,
 //! tool descriptions) live as plain `.md` files under `crates/daemon/prompts/`
 //! and are pulled in at compile time via the `include_prompt!` macro.
