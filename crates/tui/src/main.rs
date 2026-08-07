@@ -73,8 +73,13 @@ impl UiEffect {
 #[derive(Parser)]
 #[command(name = "shore-tui", about = "Shore terminal UI")]
 struct Cli {
-    /// TCP address of the daemon
-    #[arg(long)]
+    /// TCP address of the daemon (overrides discovery)
+    ///
+    /// Reads `SHORE_ADDR` when the flag is absent, matching `shore`. The two
+    /// binaries talk to the same daemon and are configured the same way, so a
+    /// variable that steers one and is ignored by the other is a trap — you set
+    /// it, `shore` obeys, and `shore-tui` silently falls back to discovery.
+    #[arg(long, env = "SHORE_ADDR")]
     addr: Option<String>,
 
     /// Config path to select daemon instance
