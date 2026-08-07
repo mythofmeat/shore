@@ -95,6 +95,112 @@ describe("arming and cadence", () => {
   });
 });
 
+/**
+ * #27: the deadline is anchored on the last *confirmed* warm of the prefix a
+ * ping sends, not on the last event claiming to be a warm.
+ *
+ *     nextPingAt = min(now + interval, prefixWarmAt + interval)
+ *
+ * The evidence was eleven cold pings in one day, eight of them preceded exactly
+ * 55 minutes earlier by a call on a *different* model — and three by a call on
+ * the same model with a different prefix, which the model guard could not see.
+ * In both shapes the timer re-armed on an event that never refreshed what the
+ * ping sends, and the effective interval became "55 minutes after whatever ran
+ * last" rather than 55 minutes after the prefix was last warm.
+ */
+describe("the ping deadline", () => {
+  /** A schedule whose prefix was confirmed warm by a completed turn. */
+  function pushed(at: number): CacheKeepalive {
+    const ka = new CacheKeepalive(hours(12));
+    ka.setInterval(minutes(55), MODEL, at);
+    ka.onCacheWarmed(MODEL, at);
+    ka.onPrefixWarmed(at);
+    return ka;
+  }
+
+  test("a warm with no prefix behind it cannot push the ping past the TTL", () => {
+    const ka = pushed(now);
+    // The worked example from the issue: a background tick lands 13 minutes in.
+    // It ran, so the funnel reports it — but it never touched this prefix.
+    ka.onCacheWarmed(MODEL, now + minutes(13));
+
+    // The old shape put the next ping at 13+55 = 68 minutes, past a 1h TTL.
+    expect(ka.tick(now + minutes(68))).toBe("ping");
+    // And it is due at 55, where it always should have been.
+    expect(ka.tick(now + minutes(55))).toBe("ping");
+    expect(ka.tick(now + minutes(54))).toBe("none");
+  });
+
+  test("a real turn does move it, because the push confirms the prefix", () => {
+    const ka = pushed(now);
+    // A turn: the funnel sees the call, then the body it sent is cached.
+    ka.onCacheWarmed(MODEL, now + minutes(30));
+    ka.onPrefixWarmed(now + minutes(30));
+
+    expect(ka.tick(now + minutes(55))).toBe("none");
+    expect(ka.tick(now + minutes(85))).toBe("ping");
+  });
+
+  test("a same-model warm is clamped too", () => {
+    // The three cold pings `4ee6bb7f` left behind: the model guard passes,
+    // because the call really was on this model, but the prefix it warmed was
+    // not the one the ping sends. Only a push can tell the difference.
+    const ka = pushed(now);
+    ka.onCacheWarmed(MODEL, now + minutes(40));
+    expect(ka.tick(now + minutes(55))).toBe("ping");
+  });
+
+  test("a successful ping confirms the prefix it sent", () => {
+    const ka = pushed(now);
+    ka.onPingSucceeded(now + minutes(55));
+    // Anchored on the ping, and unmoved by a warm that follows it.
+    ka.onCacheWarmed(MODEL, now + minutes(70));
+    expect(ka.tick(now + minutes(109))).toBe("none");
+    expect(ka.tick(now + minutes(110))).toBe("ping");
+  });
+
+  test("with nothing confirmed, the plain cadence still arms", () => {
+    // A character whose calls never push — the clamp must not leave it unarmed,
+    // which would be a keepalive that never pings at all.
+    const ka = new CacheKeepalive(hours(12));
+    ka.setInterval(minutes(55), MODEL, now);
+    ka.onCacheWarmed(MODEL, now);
+    expect(ka.tick(now + minutes(54))).toBe("none");
+    expect(ka.tick(now + minutes(55))).toBe("ping");
+  });
+
+  test("after invalidation, only a real turn re-arms", () => {
+    // The rebuild-from-disk push is the case to get right: that body was
+    // assembled from `active.jsonl` and has never been sent, so it arrives as
+    // `setInterval` alone with no `onPrefixWarmed` behind it, and must leave
+    // the schedule stood down.
+    const rebuilt = pushed(now);
+    rebuilt.onCacheInvalidated();
+    rebuilt.setInterval(minutes(55), MODEL, now + minutes(5));
+    expect(rebuilt.tick(now + hours(6))).toBe("none");
+
+    // A real turn is the other half: the funnel sees the call and the body it
+    // sent is cached, so there is a warm prefix again and pinging resumes.
+    const real = pushed(now);
+    real.onCacheInvalidated();
+    real.onCacheWarmed(MODEL, now + minutes(5));
+    real.onPrefixWarmed(now + minutes(5));
+    expect(real.tick(now + minutes(59))).toBe("none");
+    expect(real.tick(now + minutes(60))).toBe("ping");
+  });
+
+  test("the idle ceiling is untouched by a push", () => {
+    // `onPrefixWarmed` says the prefix is warm, not that the user is present.
+    // Moving the idle anchor here would let a run of turns-plus-pings keep the
+    // ceiling out of reach.
+    const ka = pushed(now);
+    for (let m = 55; m <= 60 * 12; m += 55) {
+      ka.onPrefixWarmed(now + minutes(m));
+    }
+    expect(ka.tick(now + hours(12) + minutes(1))).toBe("none");
+  });
+});
+
 describe("the idle ceiling", () => {
   test("ping succeeded does not reset idle clock", () => {
     // The maxIdle cutoff counts from the last REAL activity, so repeated pings

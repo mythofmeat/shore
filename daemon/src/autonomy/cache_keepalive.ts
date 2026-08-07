@@ -125,6 +125,29 @@ export class CacheKeepalive {
    */
   #lastWarmAt: number | undefined;
 
+  /**
+   * Last confirmed warm of **the exact prefix the ping sends**, as opposed to
+   * "something happened on this model".
+   *
+   * This is the field the ping deadline is anchored to, and the distinction is
+   * the whole of #27. `onCacheWarmed` is fed by the ledger funnel, which sees
+   * every real call and can only say *that* one happened — not whether it
+   * refreshed the bytes a ping would send. A `memory_query`, a compaction pass,
+   * or a foreground turn whose prefix differs from the cached body all arrive
+   * as warms and all used to push the deadline out by a full interval.
+   *
+   * Eleven cold pings in one day's logs came from exactly that: a background
+   * tick landing partway through the window silently moved the next ping past
+   * the TTL. The effective interval was never 55 minutes — it was "55 minutes
+   * after whatever ran last, on any model".
+   *
+   * Only two events set this, because only two prove the prefix is warm:
+   * a ping that read ({@link onPingSucceeded}), and a body being cached right
+   * after the call that produced it ({@link onPrefixWarmed}). `undefined` means
+   * nothing has proved it, and the deadline falls back to the plain cadence.
+   */
+  #prefixWarmAt: number | undefined;
+
   /** Consecutive failed ping attempts. Used for retry backoff. */
   #failureCount = 0;
 
@@ -135,6 +158,47 @@ export class CacheKeepalive {
    */
   constructor(maxIdleMs: number) {
     this.#maxIdle = maxIdleMs;
+  }
+
+  /**
+   * When the next ping must land, given what is actually known to be warm.
+   *
+   *     nextPingAt = min(now + interval, prefixWarmAt + interval)
+   *
+   * The cadence alone — `now + interval` — trusts every event's claim to be a
+   * warm, and slides the deadline forward on all of them. The second term is
+   * the ceiling that makes that harmless: however many events arrive, the ping
+   * still lands within one interval of the last *confirmed* warm of the prefix
+   * it sends. The interval sits below the provider TTL by convention (55m
+   * against Anthropic's 1h), so "one interval since the confirmed warm" is the
+   * same statement as "before the prefix dies", with the margin built in.
+   *
+   * `min`, not "anchor on `prefixWarmAt` and ignore the cadence": the cadence
+   * term is what keeps a schedule that has never confirmed anything armed at
+   * all, and the two agree whenever a real turn pushes a fresh body — which is
+   * every ordinary turn. The clamp only bites on the events that were lying.
+   */
+  #deadline(now: number): number | undefined {
+    if (this.#interval === undefined) return undefined;
+    const byCadence = now + this.#interval;
+    if (this.#prefixWarmAt === undefined) return byCadence;
+    return Math.min(byCadence, this.#prefixWarmAt + this.#interval);
+  }
+
+  /**
+   * A body was cached immediately after the call that produced it, so the
+   * prefix a ping would send is warm as of `now`.
+   *
+   * Called from `LastRequestCache.set` — the push that follows a real turn.
+   * Deliberately *not* called from the rebuild-from-disk path: that body was
+   * assembled from `active.jsonl` and has never been sent, so nothing has
+   * warmed it. Leaving the anchor alone there can only make the next ping
+   * earlier, and earlier is the safe direction — the dangerous one is always
+   * "ping something cold", never "ping sooner than necessary".
+   */
+  onPrefixWarmed(now: number): void {
+    this.#prefixWarmAt = now;
+    this.#nextPingAt = this.#deadline(now);
   }
 
   /**
@@ -178,7 +242,9 @@ export class CacheKeepalive {
       this.#nextPingAt =
         this.#lastActiveAt === undefined
           ? undefined
-          : this.#lastActiveAt + interval;
+          : // Same clamp: arming off the activity anchor must not reach past
+            // one interval from the last confirmed warm either.
+            this.#deadline(this.#lastActiveAt);
     }
   }
 
@@ -201,8 +267,9 @@ export class CacheKeepalive {
     this.#lastActiveAt = now;
     this.#lastWarmAt = now;
     this.#failureCount = 0;
-    this.#nextPingAt =
-      this.#interval === undefined ? undefined : now + this.#interval;
+    // Clamped, not `now + interval`. This is the event the funnel cannot
+    // vouch for — see `#prefixWarmAt`.
+    this.#nextPingAt = this.#deadline(now);
   }
 
   /**
@@ -213,8 +280,10 @@ export class CacheKeepalive {
   onPingSucceeded(now: number): void {
     this.#failureCount = 0;
     this.#lastWarmAt = now;
-    this.#nextPingAt =
-      this.#interval === undefined ? undefined : now + this.#interval;
+    // A ping that landed refreshed the exact bytes it sent, which is the one
+    // thing this schedule can confirm without being told.
+    this.#prefixWarmAt = now;
+    this.#nextPingAt = this.#deadline(now);
   }
 
   /**
@@ -232,6 +301,7 @@ export class CacheKeepalive {
     // resumes once a real call re-warms via `onCacheWarmed`.
     this.#lastActiveAt = undefined;
     this.#lastWarmAt = undefined;
+    this.#prefixWarmAt = undefined;
     this.#failureCount = 0;
   }
 
@@ -275,6 +345,11 @@ export class CacheKeepalive {
     this.#targetModel = snapshot.model;
     this.#interval = snapshot.interval;
     this.#lastWarmAt = snapshot.last_warm_at;
+    // A persisted `last_warm_at` came from a live schedule, so it is a
+    // confirmed warm — and `restore` has always anchored the next ping on it
+    // rather than on `now`, which is the invariant #27 asks for, already held
+    // on this one path.
+    this.#prefixWarmAt = snapshot.last_warm_at;
     this.#lastActiveAt = snapshot.last_active_at;
     this.#nextPingAt = snapshot.last_warm_at + snapshot.interval;
     this.#failureCount = 0;
@@ -327,10 +402,14 @@ export class CacheKeepalive {
    * re-arms it.
    */
   onPingFailed(now: number): void {
+    // The strict anchor when one exists: "is the prefix past any plausible
+    // TTL" is the same question the deadline asks, so it deserves the same
+    // answer rather than the funnel's looser one.
+    const confirmed = this.#prefixWarmAt ?? this.#lastWarmAt;
     const warmExpired =
-      this.#lastWarmAt === undefined || this.#interval === undefined
+      confirmed === undefined || this.#interval === undefined
         ? true
-        : now - this.#lastWarmAt >= this.#interval + PING_RETRY_GRACE_MS;
+        : now - confirmed >= this.#interval + PING_RETRY_GRACE_MS;
     if (warmExpired) {
       this.onCacheInvalidated();
       return;

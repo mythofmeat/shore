@@ -93,7 +93,10 @@ export class LastRequestCache {
    */
   set(character: string, request: SidecarRequest, keepaliveIntervalMs?: number): void {
     this.#bodies.set(character, request);
-    this.#keepalive?.arm(toPrefix(character, request, keepaliveIntervalMs));
+    // `warm`: this body is the turn that just ran, so the prefix a ping sends
+    // is warm as of now. It is the only place in the system that can say so —
+    // see `#prefixWarmAt` in `cache_keepalive.ts` (#27).
+    this.#keepalive?.arm(toPrefix(character, request, keepaliveIntervalMs), true);
   }
 
   /**

@@ -244,14 +244,23 @@ export class KeepaliveService {
    * Mirrors the daemon's `cache_last_request`: store the body, then feed the
    * cadence to the state machine, which decides for itself whether a model
    * switch means the old prefix is cold.
+   *
+   * `warm` says whether the body being cached was just *sent*. A push from a
+   * completed turn was, and is the only signal in the system that the exact
+   * bytes a ping would send are warm right now — which is what anchors the ping
+   * deadline (#27). A push from the rebuild-from-disk path was not: that body
+   * was assembled from `active.jsonl` and has never been near a provider, so
+   * claiming it as a warm would push the deadline out for a prefix nothing has
+   * ever cached.
    */
-  arm(prefix: KeepalivePrefix): void {
+  arm(prefix: KeepalivePrefix, warm = false): void {
     const character = prefix.context?.character;
     if (character === undefined) return;
     const maxIdleSecs = prefix.context?.keepalive_max_secs ?? DEFAULT_MAX_IDLE_SECS;
     const entry = this.#entryFor(character, maxIdleSecs);
     entry.prefix = prefix;
     entry.keepalive.setInterval(prefix.keepalive_interval_ms, prefix.model, this.#now());
+    if (warm) entry.keepalive.onPrefixWarmed(this.#now());
   }
 
   /**
