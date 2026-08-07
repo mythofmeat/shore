@@ -118,10 +118,10 @@ const passwdHome: HomeLookup = () => {
  * **passwd entry** otherwise — not nothing. The `home` crate treats an empty
  * `HOME` as unset, so this does too.
  *
- * That fallback is why the `"~/.config"` literal in `resolveXdgDir` is very
- * nearly dead code: clearing `HOME` does not reach it, because `getpwuid`
- * still answers. The fixture pins it — with the whole environment cleared, the
- * daemon resolves to the passwd home's `.config`, not to a directory named `~`.
+ * That fallback is why {@link resolveXdgDir}'s last resort is very nearly
+ * unreachable: clearing `HOME` does not get there, because `getpwuid` still
+ * answers. The fixture pins it — with the whole environment cleared, the daemon
+ * resolves to the passwd home's `.config`.
  *
  * **The crate's own relative-XDG guard is not reproduced, because it cannot
  * run.** `dirs::config_dir()` re-reads `XDG_CONFIG_HOME` and ignores it unless
@@ -138,32 +138,56 @@ function xdgOrHome(env: Env, home: HomeLookup, rel: string): string | undefined 
   return rustJoin(base, rel);
 }
 
+/** What {@link resolveXdgDir} does when nothing above has answered. */
+type LastResort =
+  /**
+   * `os.tmpdir()`. Correct for `runtime`, and only for `runtime`: the `dirs`
+   * crate offers no platform default for `XDG_RUNTIME_DIR`, so this arm is
+   * taken routinely, and a directory that means "ephemeral" is the one place
+   * ephemeral storage is the right answer. Every fixture case without
+   * `XDG_RUNTIME_DIR` shows it.
+   */
+  | "temp_dir"
+  /**
+   * Nothing is correct, so refuse — see {@link resolveXdgDir}.
+   */
+  | "refuse";
+
+/** Raised when no source can name a home directory. */
+export class NoHomeDirectoryError extends Error {
+  override readonly name = "NoHomeDirectoryError";
+}
+
 /**
  * Resolve one directory.
  *
  * Precedence: `overrideVar` -> `xdgVar` + `/shore` -> platform + `/shore` ->
- * `fallback` + `/shore`, with an empty `fallback` meaning the temp directory.
+ * `lastResort`.
  *
- * Two properties here look like mistakes and are the Rust's, faithfully:
+ * The `xdgVar` read looks like a mistake and is the Rust's, faithfully:
+ * `std::env::var` yields `Ok("")` for a variable that is set but empty, and
+ * `Ok` short-circuits the `or_else` that would have consulted the platform
+ * lookup. So `XDG_CONFIG_HOME=""` resolves to the *relative* path `shore`, and
+ * a relative `XDG_CONFIG_HOME=cfg` resolves to `cfg/shore` — both of which the
+ * platform lookup would have rejected in favour of `$HOME/.config`.
  *
- * - **The `xdgVar` read is unguarded.** `std::env::var` yields `Ok("")` for a
- *   variable that is set but empty, and `Ok` short-circuits the `or_else` that
- *   would have consulted the platform lookup. So `XDG_CONFIG_HOME=""` resolves
- *   to the *relative* path `shore`, and a relative `XDG_CONFIG_HOME=cfg`
- *   resolves to `cfg/shore` — both of which the platform lookup would have
- *   rejected in favour of `$HOME/.config`.
- * - **`fallback` is a literal, and `~` is not a path.** `PathBuf::from("~/.config")`
- *   does not expand, so reaching it would yield a *relative* directory named
- *   `~`. It is very nearly unreachable: clearing `HOME` does not get there,
- *   because the `dirs` crate falls through to the passwd entry — the fixture
- *   case with the whole environment cleared resolves to the passwd home's
- *   `.config`, not to `~/.config`. Only a user with no passwd entry at all
- *   reaches the literal, so this is kept faithful rather than fixed, and the
- *   fixture pins the passwd path that actually runs.
+ * # The last resort used to be a tilde, and that was the bug (#45)
  *
- * `runtime` is the one directory whose fallback *is* routinely taken: the crate
- * offers no platform default for `XDG_RUNTIME_DIR`, so an unset variable lands
- * in the temp directory. Every fixture case without `XDG_RUNTIME_DIR` shows it.
+ * `config`, `data` and `cache` each carried a shell-notation string literal —
+ * `"~/.config"` and friends. Nothing expands a tilde, on either side of the
+ * port, so reaching one produced a *relative* path whose first component was a
+ * directory literally named `~`, created wherever the process happened to
+ * start. They read as though they did something and never had.
+ *
+ * It is very nearly unreachable, which is why it never bit: clearing `HOME`
+ * does not get there, because the passwd entry still answers. It needs no
+ * `HOME` **and** no passwd entry for the uid — a container run as
+ * `--user 1001:1001` against an image whose passwd only knows uid 1000. The
+ * supported configuration sets `SHORE_CONFIG_DIR` and never arrives here.
+ *
+ * Refusing is the honest answer. A process that can find no home has nowhere
+ * right to write, and failing at startup beats writing to `./~/.config/shore`
+ * and looking fine.
  */
 function resolveXdgDir(
   env: Env,
@@ -171,13 +195,24 @@ function resolveXdgDir(
   overrideVar: string,
   xdgVar: string,
   platform: (env: Env, home: HomeLookup) => string | undefined,
-  fallback: string,
+  lastResort: LastResort,
 ): string {
   const override = env[overrideVar];
   if (override !== undefined) return override;
 
   const xdg = env[xdgVar];
-  const base = xdg ?? platform(env, home) ?? (fallback === "" ? tmpdir() : fallback);
+  let base = xdg ?? platform(env, home);
+  if (base === undefined) {
+    if (lastResort === "temp_dir") {
+      base = tmpdir();
+    } else {
+      throw new NoHomeDirectoryError(
+        `shore cannot determine a home directory: $${xdgVar} is unset and this user has no ` +
+          `home (no $HOME and no passwd entry for the uid). Set $${overrideVar} to an explicit ` +
+          `path, or $${xdgVar}, or run as a user the passwd database knows.`,
+      );
+    }
+  }
   return rustJoin(base, "shore");
 }
 
@@ -197,14 +232,14 @@ export function resolveShoreDirs(env: Env = process.env, home: HomeLookup = pass
     overrideVar: string,
     xdgVar: string,
     platform: (env: Env, home: HomeLookup) => string | undefined,
-    fallback: string,
-  ) => resolveXdgDir(env, home, overrideVar, xdgVar, platform, fallback);
+    lastResort: LastResort,
+  ) => resolveXdgDir(env, home, overrideVar, xdgVar, platform, lastResort);
 
   return {
-    config: one("SHORE_CONFIG_DIR", "XDG_CONFIG_HOME", PLATFORM.config, "~/.config"),
-    data: one("SHORE_DATA_DIR", "XDG_DATA_HOME", PLATFORM.data, "~/.local/share"),
-    runtime: one("SHORE_RUNTIME_DIR", "XDG_RUNTIME_DIR", PLATFORM.runtime, ""),
-    cache: one("SHORE_CACHE_DIR", "XDG_CACHE_HOME", PLATFORM.cache, "~/.cache"),
+    config: one("SHORE_CONFIG_DIR", "XDG_CONFIG_HOME", PLATFORM.config, "refuse"),
+    data: one("SHORE_DATA_DIR", "XDG_DATA_HOME", PLATFORM.data, "refuse"),
+    runtime: one("SHORE_RUNTIME_DIR", "XDG_RUNTIME_DIR", PLATFORM.runtime, "temp_dir"),
+    cache: one("SHORE_CACHE_DIR", "XDG_CACHE_HOME", PLATFORM.cache, "refuse"),
     workspace: workspaceRoot(env),
   };
 }
