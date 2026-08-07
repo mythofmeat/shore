@@ -25,7 +25,12 @@ export type Transport =
       /** Working directory for the child. Absent inherits the daemon's. */
       cwd?: string;
     }
-  | { kind: "http"; url: string };
+  | {
+      kind: "http";
+      url: string;
+      /** Sent on every request. Empty when none are configured. */
+      headers: Record<string, string>;
+    };
 
 /** A named MCP server to connect to. */
 export interface McpServerSpec {
@@ -119,13 +124,24 @@ export class McpClient {
           }),
         );
       } else {
+        const { url, headers } = spec.transport;
+        // `requestInit` is merged into every fetch the transport makes — the
+        // POST, the GET that opens the SSE stream, and the DELETE that ends
+        // the session — so a token set here gates all three, which is what
+        // servers putting `requireBearerAuth` on `/mcp` expect.
+        //
+        // Passed only when non-empty so the no-headers case builds the exact
+        // transport it did before this option existed.
+        const opts =
+          Object.keys(headers).length === 0 ? undefined : { requestInit: { headers } };
         // The cast is `exactOptionalPropertyTypes` friction, not a real
         // mismatch: the SDK declares `sessionId?: string` on the interface and
         // `string | undefined` on the class, which this project's stricter
         // setting treats as different types.
         await client.connect(
           new StreamableHTTPClientTransport(
-            new URL(spec.transport.url),
+            new URL(url),
+            opts,
           ) as unknown as Parameters<Client["connect"]>[0],
         );
       }

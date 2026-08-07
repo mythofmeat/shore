@@ -830,6 +830,7 @@ describe("reloading [mcp]", () => {
       env: new Map(),
       cwd: undefined,
       url: undefined,
+      headers: new Map(),
     } as never);
   }
 

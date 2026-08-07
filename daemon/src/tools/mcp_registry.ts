@@ -45,6 +45,7 @@ export interface McpServerConfigView {
   env?: Record<string, string>;
   cwd?: string;
   url?: string;
+  headers?: Record<string, string>;
 }
 
 /** Render to the provider-neutral tool shape. */
@@ -123,7 +124,7 @@ export function toSpec(
     };
   }
   if (cfg.url !== undefined) {
-    return { name, transport: { kind: "http", url: cfg.url } };
+    return { name, transport: { kind: "http", url: cfg.url, headers: cfg.headers ?? {} } };
   }
   return undefined;
 }
@@ -577,6 +578,9 @@ function normalizeSource(
       env: Object.fromEntries(Object.entries(c.env ?? {}).sort(([a], [b]) => compareByCodePoint(a, b))),
       cwd: c.cwd ?? null,
       url: c.url ?? null,
+      headers: Object.fromEntries(
+        Object.entries(c.headers ?? {}).sort(([a], [b]) => compareByCodePoint(a, b)),
+      ),
     };
   }
   return out;

@@ -730,6 +730,16 @@ function validateMcpServers(app: AppConfig, onWarn: ConfigWarn): void {
         `mcp.${name} sets neither \`command\` nor \`url\`; set exactly one transport`,
       );
     }
+    // Rejected rather than ignored, for the reason the transport check above
+    // exists: a stdio server has no requests to put headers on, so a `headers`
+    // block there is always a mistake — most likely a server the operator
+    // believes is HTTP. Silently dropping it would mean discovering that from
+    // the server's 401 instead of from the config.
+    if (hasCommand && server.headers.size > 0) {
+      throw validationError(
+        `mcp.${name} sets \`headers\` on a \`command\` server; headers are HTTP-only`,
+      );
+    }
   }
 
   // The global allowlist first, then each sub-agent's own grants in map order.

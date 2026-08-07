@@ -331,6 +331,7 @@ export function mcpConfigView(config: LoadedConfig): Record<string, McpServerCon
       env: Object.fromEntries(server.env),
       ...(server.cwd === undefined ? {} : { cwd: server.cwd }),
       ...(server.url === undefined ? {} : { url: server.url }),
+      headers: Object.fromEntries(server.headers),
     };
   }
   return servers;

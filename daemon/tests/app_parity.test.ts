@@ -136,6 +136,62 @@ function withRustBudgetFieldCount(err: string): string {
   );
 }
 
+/**
+ * `[mcp.<name>]` keys added after the fixture was frozen, exactly as
+ * {@link BUDGET_FIELDS_ADDED_SINCE} above — same reason, same technique.
+ *
+ * `headers` carries the bearer token an HTTP MCP server gates `/mcp` behind.
+ * The Rust never had it: when this fixture was captured the only HTTP servers
+ * anyone pointed shore at were unauthenticated.
+ */
+const MCP_FIELDS_ADDED_SINCE = ["headers"] as const;
+
+/** The same value with the added keys dropped from every `[mcp.*]` server. */
+function withoutAddedMcpFields(value: unknown): unknown {
+  const mcp = (value as { mcp?: unknown } | null)?.mcp;
+  if (mcp === null || typeof mcp !== "object") return value;
+  const servers: Record<string, unknown> = {};
+  for (const [name, server] of Object.entries(mcp as Record<string, unknown>)) {
+    const copy = { ...(server as Record<string, unknown>) };
+    for (const key of MCP_FIELDS_ADDED_SINCE) delete copy[key];
+    servers[name] = copy;
+  }
+  return { ...(value as object), mcp: servers };
+}
+
+/** The Rust's field count for `McpServerConfig`, moved by the same addition. */
+const RUST_MCP_FIELD_COUNT = 5;
+
+/**
+ * The Rust's accepted-field list for `McpServerConfig`, which serde spells out
+ * in the `unknown field` error and which the added key extends.
+ *
+ * Anchored on the two fields `headers` was appended after, rather than
+ * replacing the bare `` , `headers` ``: if the struct's declaration order ever
+ * changes, this stops matching and the case fails loudly, which is the point.
+ * A floating replace would keep passing while the port and the Rust disagreed
+ * about what order serde reports.
+ */
+function withRustMcpFields(err: string): string {
+  return err.replace("`cwd`, `url`, `headers`", "`cwd`, `url`");
+}
+
+function withRustMcpFieldCount(err: string): string {
+  return withRustMcpFields(
+    err.replace(
+      `McpServerConfig with ${RUST_MCP_FIELD_COUNT + MCP_FIELDS_ADDED_SINCE.length} elements`,
+      `McpServerConfig with ${RUST_MCP_FIELD_COUNT} elements`,
+    ),
+  );
+}
+
+/** Every exemption above, applied in one pass. */
+const withoutAddedFields = (value: unknown): unknown =>
+  withoutAddedMcpFields(withoutAddedBudgetFields(value));
+
+const withRustFieldCounts = (err: string): string =>
+  withRustMcpFieldCount(withRustBudgetFieldCount(err));
+
 // ── Cases the TypeScript deliberately cannot match ──────────────────────
 
 /**
@@ -178,6 +234,14 @@ describe("the fixture is real", () => {
       expect(text).not.toContain(`"${key}"`);
     }
     expect(text).toContain(`UsageBudgetConfig with ${RUST_BUDGET_FIELD_COUNT} elements`);
+  });
+
+  test("the exempted mcp fields really are ones it never had", () => {
+    const text = JSON.stringify(fixture);
+    for (const key of MCP_FIELDS_ADDED_SINCE) {
+      expect(text).not.toContain(`"${key}"`);
+    }
+    expect(text).toContain(`McpServerConfig with ${RUST_MCP_FIELD_COUNT} elements`);
   });
 
   test("it records both parse paths, and they genuinely differ somewhere", () => {
@@ -229,10 +293,10 @@ describe("parsing config.toml", () => {
 
       if ("err" in want) {
         if ("ok" in parsed) throw new Error("expected a parse error, got a config");
-        expect(withRustBudgetFieldCount(parsed.err)).toBe(want.err);
+        expect(withRustFieldCounts(parsed.err)).toBe(want.err);
       } else {
         if ("err" in parsed) throw new Error(`expected a parse, got: ${parsed.err}`);
-        expect(withoutAddedBudgetFields(canonical(parsed.ok))).toEqual(want.ok);
+        expect(withoutAddedFields(canonical(parsed.ok))).toEqual(want.ok);
       }
     });
   }

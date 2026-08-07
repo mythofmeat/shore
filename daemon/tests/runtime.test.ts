@@ -282,6 +282,7 @@ describe("MCP configuration crosses the two shapes intact", () => {
         env: new Map([["HUE_TOKEN", "secret"]]),
         cwd: undefined,
         url: undefined,
+        headers: new Map(),
       });
 
       const specs: unknown[] = [];
