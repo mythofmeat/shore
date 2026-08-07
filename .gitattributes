@@ -5,3 +5,8 @@
 # invalidate the cache key for every running conversation. Lock these to LF.
 daemon/prompts/** text eol=lf
 *.md text eol=lf
+
+# The parity fixtures are frozen captures of the Rust daemon's behaviour, not
+# hand-written code. Mark them generated so GitHub keeps them out of the
+# language stats and collapses them by default in review.
+daemon/tests/**/*_parity.json linguist-generated=true
