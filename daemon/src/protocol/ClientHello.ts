@@ -7,4 +7,14 @@ export type ClientHello = { client_type: string, client_name: string, capabiliti
 /**
  * Which character this client wants to talk to.
  */
-character?: string | null, };
+character?: string | null, 
+/**
+ * The shared secret, from `SHORE_TOKEN` or `<config_dir>/token`.
+ *
+ * `Option` on the wire and required in practice: the daemon rejects a
+ * hello without one. It is optional here so that a client too old to send
+ * it is refused by the *authentication* check with a message saying so,
+ * rather than by the deserializer with a parse error that explains
+ * nothing.
+ */
+token?: string | null, };

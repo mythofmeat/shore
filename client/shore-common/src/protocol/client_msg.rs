@@ -11,6 +11,15 @@ pub struct ClientHello {
     /// Which character this client wants to talk to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub character: Option<String>,
+    /// The shared secret, from `SHORE_TOKEN` or `<config_dir>/token`.
+    ///
+    /// `Option` on the wire and required in practice: the daemon rejects a
+    /// hello without one. It is optional here so that a client too old to send
+    /// it is refused by the *authentication* check with a message saying so,
+    /// rather than by the deserializer with a parse error that explains
+    /// nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
 }
 
 /// One-shot parameter overrides for a single message.

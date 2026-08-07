@@ -53,6 +53,15 @@ export interface ServerConfig {
   readonly allowedHosts?: readonly string[];
   readonly serverName: string;
   readonly handshake?: HandshakeProvider;
+  /**
+   * Whether a client's hello carries the right token.
+   *
+   * Required, and deliberately not optional with a permissive default: a
+   * `ServerConfig` that forgot to supply one would be an open daemon, and that
+   * is exactly the failure this exists to make impossible. Tests that do not
+   * care pass `() => true` and say so.
+   */
+  readonly authenticate: (token: string | null | undefined) => boolean;
   readonly log?: Logger;
 }
 
@@ -267,6 +276,8 @@ export class Server {
         // Read per connection, not captured at construction: this is what
         // `setHandshakeProvider` moves.
         handshake: this.#handshake ?? DEFAULT_HANDSHAKE,
+        authenticate: this.#config.authenticate,
+        peer: socket.remoteAddress ?? "",
         route: async (msg) => {
           this.#routes.push(msg);
         },

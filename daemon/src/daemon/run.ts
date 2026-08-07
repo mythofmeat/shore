@@ -47,6 +47,7 @@ import { Diagnostics } from "../diagnostics.ts";
 import { emitNewMessageEvent } from "../handler/persistence.ts";
 import type { SessionTokens } from "../handler/persistence.ts";
 import { createDefaultConfig } from "../config/loader.ts";
+import { tokenMatches, TOKEN_ENV } from "../config/token.ts";
 import { buildMessageHandlerDeps, configReloader } from "../handler/deps.ts";
 import { MessageHandler } from "../handler/router.ts";
 import { Instances, type InstanceInfo } from "../instances.ts";
@@ -140,7 +141,20 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     bind_addr_source: sourceLabel(startup.bindAddrSource),
     allow_remote_access: startup.allowRemoteAccess,
     allow_remote_access_source: startup.allowRemoteAccessSource,
+    // Where the secret came from — never the secret. A person debugging "my
+    // client is rejected" needs to know which of the two sides is answering
+    // from where, and that is the whole of what this says.
+    token_source: startup.token.source,
   });
+  if (startup.token.source === "generated") {
+    // Said once, at the moment it becomes true, because it is the only time a
+    // person has to be told a file now exists. A client on this machine reads
+    // it without being told; one anywhere else needs this line.
+    log?.info?.("Wrote a new client token", {
+      path: startup.token.path ?? "",
+      hint: `clients elsewhere need this value in $${TOKEN_ENV}`,
+    });
+  }
   for (const warning of startup.remoteAccessWarnings) {
     log?.warn?.("Daemon remote access warning", {
       addr: warning.addr,
@@ -154,6 +168,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     addr: startup.bindAddr,
     allowedHosts: loaded.app.daemon.allowed_hosts,
     serverName: "shore-daemon",
+    authenticate: (presented) => tokenMatches(startup.token.token, presented),
     ...(log === undefined ? {} : { log }),
   });
 

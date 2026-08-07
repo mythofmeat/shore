@@ -23,6 +23,7 @@ import { statSync } from "node:fs";
 import { rustJoin, configDir } from "../config/dirs.ts";
 import { loadConfig, type LoadedConfig } from "../config/loader.ts";
 import { invalidAllowedHosts } from "../swp/allowlist.ts";
+import { resolveDaemonToken, type ResolvedToken } from "../config/token.ts";
 
 /**
  * Environment override for `[daemon].unsafe_allow_remote_access`.
@@ -73,6 +74,14 @@ export interface RemoteAccessWarning {
 export interface StartupConfig {
   readonly loaded: LoadedConfig;
   readonly configPath: string;
+  /**
+   * The shared secret every client must present, resolved once here.
+   *
+   * Resolved at startup rather than per connection so that a daemon which
+   * cannot establish one fails to *start* — loudly, with somewhere to go —
+   * instead of accepting connections and refusing every one of them.
+   */
+  readonly token: ResolvedToken;
   readonly bindAddr: string;
   readonly bindAddrSource: StartupValueSource;
   readonly allowRemoteAccess: boolean;
@@ -96,7 +105,8 @@ export class StartupError extends Error {
       | "remote_access_policy"
       | "invalid_env_bool"
       | "register_instance"
-      | "server_run",
+      | "server_run"
+      | "token",
     message: string,
   ) {
     super(message);
@@ -194,9 +204,20 @@ export function resolveStartup(
     );
   }
 
+  let token: ResolvedToken;
+  try {
+    token = resolveDaemonToken(env, loaded.dirs.config);
+  } catch (e) {
+    // A refusal to start, never a fallback to "authentication off". There is
+    // one way in and no way to switch it off, so a daemon that cannot hold a
+    // token is a daemon that must not listen.
+    throw new StartupError("token", String(e instanceof Error ? e.message : e));
+  }
+
   return {
     loaded,
     configPath: explicitConfigPath ?? defaultConfigPath(env),
+    token,
     bindAddr,
     bindAddrSource,
     allowRemoteAccess,

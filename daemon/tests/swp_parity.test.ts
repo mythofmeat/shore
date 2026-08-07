@@ -39,6 +39,11 @@ import {
 } from "../src/swp/routing";
 import { SessionRouter, type SessionMeta } from "../src/swp/session";
 
+/** Accept any token; authentication is `swp_auth.test.ts`'s subject, not this
+ *  file's. `authenticate` is required so that opting out is written down. */
+const OPEN = (): boolean => true;
+
+
 interface Fixture {
   readonly constants: Record<string, number>;
   readonly framing: readonly FramingCase[];
@@ -392,6 +397,7 @@ describe("handshake", () => {
             router,
             events: null as never,
             handshake: provider,
+            authenticate: OPEN,
             route: async () => {},
             shutdown: new Promise<void>(() => {}),
           },

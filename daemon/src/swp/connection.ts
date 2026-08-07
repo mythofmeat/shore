@@ -26,6 +26,7 @@
  * client could flood.
  */
 
+import { TOKEN_ENV, TOKEN_FILE } from "../config/token.ts";
 import type { CharacterInfo } from "../protocol/CharacterInfo";
 import type { ClientMessage } from "../protocol/ClientMessage";
 import type { Message } from "../protocol/Message";
@@ -102,6 +103,16 @@ export interface ConnectionContext {
   readonly router: SessionRouter;
   readonly events: Subscription;
   readonly handshake: HandshakeProvider;
+  /**
+   * Whether the token in a client's hello is the right one.
+   *
+   * Passed in rather than read here so this module stays a transport: the
+   * secret is resolved once at startup, and a connection only ever asks a
+   * yes/no question about the string it was handed.
+   */
+  readonly authenticate: (token: string | null | undefined) => boolean;
+  /** The peer address, for the rejection log line. */
+  readonly peer?: string;
   /** Hand a routed message downstream. */
   readonly route: (msg: RoutedMessage) => Promise<void>;
   /** Resolves when the daemon is shutting down. */
@@ -174,6 +185,27 @@ export async function performHandshake(
       message: `Expected hello, got ${JSON.stringify(msgTypeName(first))}`,
     });
     throw new HandshakeError("Protocol error: expected hello");
+  }
+
+  // Authentication, before anything is revealed. The server hello above names
+  // only the daemon and its characters; everything that follows — history,
+  // config, the session registration that makes this client able to *send* —
+  // is behind this check.
+  if (!ctx.authenticate(first.token)) {
+    ctx.log?.warn?.("Client rejected: bad or missing token", {
+      addr: ctx.peer ?? "",
+      client_name: first.client_name,
+      had_token: first.token !== undefined && first.token !== null,
+    });
+    await writeMessage(sink, {
+      type: "error",
+      code: "unauthorized",
+      message:
+        first.token === undefined || first.token === null
+          ? `This client sent no token. Set $${TOKEN_ENV}, or run it where it can read ${TOKEN_FILE} in the daemon's config directory.`
+          : `The token this client sent was rejected. Check $${TOKEN_ENV}, or copy ${TOKEN_FILE} from the daemon's config directory.`,
+    });
+    throw new HandshakeError("Unauthorized: bad or missing token");
   }
 
   const requested = first.character ?? null;

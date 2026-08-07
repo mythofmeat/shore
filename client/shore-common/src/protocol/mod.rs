@@ -66,10 +66,32 @@ mod tests {
             client_name: "shore-tui".into(),
             capabilities: vec!["streaming".into()],
             character: None,
+            token: Some("s3cret".into()),
         });
         let (json, _back) = round_trip(&msg);
         assert_eq!(field(&json, "type"), "hello");
         assert_eq!(field(&json, "client_type"), "tui");
+        assert_eq!(field(&json, "token"), "s3cret");
+    }
+
+    /// A hello with no token still parses, so the daemon can refuse it with an
+    /// `unauthorized` message rather than a deserialization error that says
+    /// nothing about what to do.
+    #[test]
+    fn a_tokenless_hello_still_parses() {
+        let json = serde_json::json!({
+            "type": "hello",
+            "client_type": "tui",
+            "client_name": "old-client",
+        });
+        let msg: ClientMessage = serde_json::from_value(json).expect("parses");
+        match msg {
+            ClientMessage::Hello(h) => assert_eq!(h.token, None),
+            ClientMessage::Message(_)
+            | ClientMessage::Regen(_)
+            | ClientMessage::Command(_)
+            | ClientMessage::Cancel(_) => panic!("Expected Hello"),
+        }
     }
 
     #[test]

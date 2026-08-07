@@ -25,6 +25,15 @@ import { connect, type Socket } from "node:net";
 import { Server } from "../src/swp/server.ts";
 import type { HandshakeProvider } from "../src/swp/connection.ts";
 
+/**
+ * Accept any token.
+ *
+ * These tests are about the listener, not about authentication —
+ * `swp_auth.test.ts` owns that. `authenticate` is a required field precisely so
+ * that opting out of it has to be written down, which is what this is.
+ */
+const OPEN = (): boolean => true;
+
 /** A hello, and the first frame the server answers with. */
 async function handshake(port: number, selected: string | null): Promise<Record<string, unknown>> {
   const socket = connect({ host: "127.0.0.1", port, noDelay: true });
@@ -65,7 +74,7 @@ function firstFrame(socket: Socket): Promise<Record<string, unknown>> {
 
 /** A server bound to an ephemeral port and serving, with its port. */
 async function serving(): Promise<{ server: Server; port: number; stop: () => Promise<void> }> {
-  const server = new Server({ addr: "127.0.0.1:0", serverName: "shore-test" });
+  const server = new Server({ addr: "127.0.0.1:0", serverName: "shore-test", authenticate: OPEN });
   const { port } = await server.bind();
   const running = server.serve();
   return {
@@ -94,7 +103,7 @@ function providerNaming(names: readonly string[]): HandshakeProvider {
 
 describe("binding", () => {
   test("port zero resolves to a real port before anything is served", async () => {
-    const server = new Server({ addr: "127.0.0.1:0", serverName: "shore-test" });
+    const server = new Server({ addr: "127.0.0.1:0", serverName: "shore-test", authenticate: OPEN });
     const { host, port } = await server.bind();
 
     // `--addr 127.0.0.1:0` depends on this: the instance registry records the
@@ -155,6 +164,7 @@ describe("the handshake provider", () => {
       addr: "127.0.0.1:0",
       serverName: "shore-test",
       handshake: providerNaming(["constructed"]),
+      authenticate: OPEN,
     });
     const { port } = await server.bind();
     const running = server.serve();

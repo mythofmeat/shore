@@ -53,6 +53,9 @@ afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 
+/** The shared secret this file's daemon and clients both use. */
+const TEST_TOKEN = "test-token";
+
 interface Layout {
   root: string;
   configPath: string;
@@ -91,6 +94,11 @@ async function layout(config = "", characters: readonly string[] = ["ada"]): Pro
       XDG_RUNTIME_DIR: join(root, "runtime"),
       HOME: root,
       SHORE_TEST_KEY: "sk-test",
+      // Supplied rather than left to be generated, so the client below can
+      // present the same value without reading the daemon's config directory.
+      // This is the deployment shape too: one secret in the environment, given
+      // to the daemon and its clients alike.
+      SHORE_TOKEN: TEST_TOKEN,
     },
   };
 }
@@ -165,6 +173,7 @@ class Client {
         client_type: "tui",
         client_name: "test",
         capabilities: [],
+        token: TEST_TOKEN,
         ...(selected === null ? {} : { character: selected }),
       })}\n`,
     );

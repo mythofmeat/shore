@@ -150,11 +150,15 @@ describe("resolveStartup", () => {
     expect(readFileSync(startup.configPath, "utf8")).toBe(DEFAULT_CONFIG_TOML);
   });
 
-  test("writes nothing when the hook is omitted", () => {
+  test("writes no config.toml when the hook is omitted", () => {
     const root = tempDir();
     const configDir = join(root, "config");
 
     resolveStartup({}, { SHORE_CONFIG_DIR: configDir, SHORE_DATA_DIR: join(root, "data") });
-    expect(existsSync(configDir)).toBe(false);
+
+    // The directory itself now exists either way: startup resolves a client
+    // token, and a token has to be written somewhere. What this test is about
+    // is the *config file*, which only the hook creates.
+    expect(existsSync(join(configDir, "config.toml"))).toBe(false);
   });
 });
