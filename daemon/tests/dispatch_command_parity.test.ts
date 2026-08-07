@@ -73,6 +73,29 @@ const DIVERGENT: Record<string, string> = {
   usage: "the missing-ledger refusal moved in front of the call",
 };
 
+/**
+ * Names whose *outcome* changed, not just its wording.
+ *
+ * `config` is the only one. The recorded case reads `behavior.autonomy.enabled`
+ * and the Rust answered `not_found`, because its read arm took a top-level
+ * section name and nothing else — while its write arm took dotted keys and
+ * nothing else. #30 made read walk dots, so the key the fixture recorded as
+ * absent is now one of the ones that resolves.
+ *
+ * The fixture keeps the Rust's answer; what is asserted here is the new one,
+ * and that the fixture still holds the old — so a regression that reinstates
+ * the split grammar fails rather than passing quietly.
+ */
+const NOW_RESOLVES: Record<string, { was: string; value: unknown }> = {
+  config: {
+    was: "Config section not found: behavior.autonomy.enabled",
+    // Read from the defaults rather than written down: the harness config is
+    // the default one, and the point of the case is that the walk reaches the
+    // leaf, not what the leaf happens to hold.
+    value: defaultAppConfig().behavior.autonomy.enabled,
+  },
+};
+
 /** The conversation every case runs against. */
 const SEEDED = [
   ["m_1", "user", "first question"],
@@ -320,6 +343,19 @@ describe("runCommand", () => {
         expect(got["kind"]).toBe("error");
         expect(got["code"]).toBe("internal_error");
         expect(got["message"]).toBe(unwired);
+        return;
+      }
+
+      const resolves = NOW_RESOLVES[c.name];
+      if (resolves !== undefined) {
+        expect(want["message"]).toBe(resolves.was);
+        expect(got["kind"]).toBe("command_output");
+        // The value itself, not just the shape: what the read arm now returns
+        // for a dotted key is the point, and a shape check would pass on any
+        // scalar.
+        const data = frame.type === "command_output" ? (frame.data as Record<string, unknown>) : {};
+        expect(data["key"]).toBe(c.args?.["key"] as never);
+        expect(data["config"]).toEqual(resolves.value as never);
         return;
       }
 

@@ -1400,7 +1400,11 @@ fn print_config_section(
 ) {
     let indent = "  ".repeat(depth);
     let serde_json::Value::Object(map) = value else {
-        _ = writeln!(out, "{indent}{value}");
+        // `render_config_value`, not `{value}`: a dotted read lands here with a
+        // bare leaf, and serde's Display would print a string in quotes and an
+        // array as JSON — neither of which is how the same leaf renders one
+        // line up inside its section.
+        _ = writeln!(out, "{indent}{}", render_config_value(value));
         return;
     };
 

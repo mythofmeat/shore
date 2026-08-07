@@ -201,10 +201,22 @@ export function configCheck(ctx: ConfigContext, env: NodeJS.ProcessEnv = process
 // ── config, read and set ──────────────────────────────────────────────────
 
 /**
- * Read the config, a section of it, or set one of three runtime overrides.
+ * Read the config, any part of it, or set one of three runtime overrides.
  *
  * It is a set only when `key` *and* `value` are both strings; a `value` with no
  * `key` is still a read, and a non-string `key` is no key at all.
+ *
+ * # The read key used to be a section name and nothing else
+ *
+ * The Rust did one `Value::get` against the serialized `AppConfig`, so the read
+ * arm accepted `defaults` and refused `defaults.stream` — while the *write* arm
+ * accepted `defaults.stream` and refused `defaults`. The two grammars were
+ * disjoint: every key you could set was a key you could not read back (#30).
+ *
+ * Read now walks dots, which makes it a superset of write and makes the command
+ * behave the way its own output looks: `shore config` prints a two-level tree,
+ * and `daemon.addr` is the obvious way to ask for one line of it. Write is
+ * unchanged — three keys, still the only three that can move at runtime.
  */
 export function config(ctx: ConfigContext, args: Args): unknown {
   const key = asStr(args["key"]);
@@ -215,8 +227,65 @@ export function config(ctx: ConfigContext, args: Args): unknown {
   const defaults = serializeConfigValue(defaultAppConfig()) as Record<string, unknown>;
 
   if (key === undefined) return { config: app, defaults };
-  if (!(key in app)) throw notFound(`Config section not found: ${key}`);
-  return { key, config: app[key], defaults: defaults[key] ?? null };
+
+  const found = walkConfigKey(app, key);
+  if (found === undefined) throw notFound(notFoundMessage(key));
+  return { key, config: found.value, defaults: walkConfigKey(defaults, key)?.value ?? null };
+}
+
+/**
+ * The six spellings `config <key> <value>` accepts, and where each reads back from.
+ *
+ * Three settings, six names. The canonical paths walk like any other key; the
+ * bare aliases do not, because they are shorthands for the set arm rather than
+ * paths in the config tree — `model` names no section, and `autonomy.enabled`
+ * sits one level above where the setting actually lives.
+ *
+ * Teaching the read arm to accept them would be a second read grammar, which is
+ * the thing #30 is about. So a miss on one of them says where to read it
+ * instead: the set arm echoes `autonomy.enabled` after a write, and a user who
+ * types that back deserves the path rather than "not found".
+ */
+const SETTABLE_KEY_PATHS: ReadonlyMap<string, string> = new Map([
+  ["model", "defaults.model"],
+  ["defaults.model", "defaults.model"],
+  ["stream", "defaults.stream"],
+  ["defaults.stream", "defaults.stream"],
+  ["autonomy.enabled", "behavior.autonomy.enabled"],
+  ["behavior.autonomy.enabled", "behavior.autonomy.enabled"],
+]);
+
+/** Exported for the test that keeps this table and {@link configSet} in step. */
+export const settableKeySpellings = (): string[] => [...SETTABLE_KEY_PATHS.keys()];
+
+function notFoundMessage(key: string): string {
+  const readable = SETTABLE_KEY_PATHS.get(key);
+  if (readable === undefined || readable === key) return `Config section not found: ${key}`;
+  return `Config section not found: ${key} — settable under that name; read it as ${readable}`;
+}
+
+/**
+ * Walk a dotted key through the serialized config.
+ *
+ * Wrapped in an object rather than returned bare, because `null` is a value the
+ * config really holds — `defaults.model` is null until one is set — and a bare
+ * `undefined` return could not tell "absent" from "present and null". The
+ * caller has to distinguish them: one is a `not_found`, the other is an answer.
+ *
+ * Only plain objects are walked into. A segment that lands on a scalar or an
+ * array is a miss rather than an index: `allowed_hosts.0` is not a key anyone
+ * writes in a config file, and refusing it keeps the read grammar the same
+ * shape as the TOML the user edits.
+ */
+function walkConfigKey(root: Record<string, unknown>, key: string): { value: unknown } | undefined {
+  let current: unknown = root;
+  for (const segment of key.split(".")) {
+    if (current === null || typeof current !== "object" || Array.isArray(current)) return undefined;
+    const table = current as Record<string, unknown>;
+    if (!(segment in table)) return undefined;
+    current = table[segment];
+  }
+  return { value: current };
 }
 
 /**

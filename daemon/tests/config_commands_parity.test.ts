@@ -43,6 +43,7 @@ import {
   configCheck,
   configReload,
   configReset,
+  settableKeySpellings,
   tools,
   type ConfigContext,
   type ConfigRuntime,
@@ -379,6 +380,105 @@ describe("config read", () => {
       config(w.ctx, { key: "nosuchsection" }),
     );
   });
+});
+
+// ── config, read: the dotted keys the fixture has none of ───────────────
+
+/**
+ * A dotted read resolves (#30).
+ *
+ * Not fixture-driven, and it cannot be: the Rust's read arm did one
+ * `Value::get` against the serialized `AppConfig`, so every case the generator
+ * could record used a top-level section name. The keys below are exactly the
+ * ones it would have answered `not_found` for — including the three the *write*
+ * arm has always accepted, which is what made the two grammars disjoint.
+ *
+ * `FURNISHED` sets each of these to a non-default value, so a walk that lost
+ * its way and returned the default baseline instead would fail here.
+ */
+describe("config read walks dots", () => {
+  const cases: [key: string, value: unknown][] = [
+    ["defaults.model", "primary"],
+    ["defaults.stream", false],
+    ["behavior.autonomy.enabled", true],
+    ["daemon.addr", "127.0.0.1:7320"],
+    ["tools.enabled_tools", ["web_search", "not_a_real_tool"]],
+  ];
+  for (const [key, value] of cases) {
+    test(`\`${key}\` reads back`, async () => {
+      const w = await build("mid", FURNISHED);
+      const ok = config(w.ctx, { key }) as { key: string; config: unknown };
+      expect(ok.key).toBe(key);
+      expect(ok.config).toEqual(value as never);
+    });
+  }
+
+  /**
+   * The relationship the help text always claimed: everything settable can be
+   * read back. Not always at the same spelling — the bare aliases (`model`,
+   * `stream`, `autonomy.enabled`) are shorthands for the set arm, not paths —
+   * so a settable key either reads directly or names the path that does.
+   *
+   * Driven off `settableKeySpellings`, so a fourth settable key added without a
+   * read path fails here rather than reintroducing the split quietly.
+   */
+  test("every settable key reads back, or says where it reads back from", async () => {
+    const w = await build("mid", FURNISHED);
+    for (const key of settableKeySpellings()) {
+      let redirect: string | undefined;
+      try {
+        config(w.ctx, { key });
+      } catch (e) {
+        redirect = (e as Error).message;
+      }
+      if (redirect === undefined) continue;
+      // A miss is only acceptable when it hands over a key that does resolve.
+      const named = /read it as (\S+)$/.exec(redirect)?.[1];
+      expect(named, `${key} missed without naming a readable path`).toBeDefined();
+      expect(() => config(w.ctx, { key: named! })).not.toThrow();
+    }
+  });
+
+  test("the set arm accepts exactly the spellings the table lists", async () => {
+    const w = await build("mid", FURNISHED);
+    for (const key of settableKeySpellings()) {
+      // Any value that parses for the key; what matters is that the arm exists.
+      const value = key.endsWith("model") ? "primary" : "true";
+      expect(() => config(w.ctx, { key, value })).not.toThrow();
+    }
+  });
+
+  test("the default baseline is scoped to the same key", async () => {
+    const w = await build("mid", FURNISHED);
+    const ok = config(w.ctx, { key: "defaults.stream" }) as { config: unknown; defaults: unknown };
+    // FURNISHED sets it false; the built-in default is true. Both halves of the
+    // answer walk, or the client renders "unchanged" for a changed value.
+    expect(ok.config).toBe(false as never);
+    expect(ok.defaults).toBe(true as never);
+  });
+
+  // `null` is a value the config really holds, and it has to come back as an
+  // answer rather than as a miss — which is why the walk reports absence out of
+  // band instead of returning `undefined`.
+  test("a key whose value is null is found, not missing", async () => {
+    const w = await build("mid", FURNISHED);
+    const ok = config(w.ctx, { key: "defaults.display_name" }) as { config: unknown };
+    expect(ok.config).toBeNull();
+  });
+
+  const misses: [why: string, key: string][] = [
+    ["an unknown leaf", "defaults.nosuchkey"],
+    ["an unknown branch", "nosuchsection.nosuchkey"],
+    ["a walk through a scalar", "defaults.stream.deeper"],
+    ["a walk into an array", "tools.enabled_tools.0"],
+    ["a trailing dot", "defaults."],
+  ];
+  for (const [why, key] of misses) {
+    test(`${why} is still not_found`, async () => {
+      const w = await build("mid", FURNISHED);
+      expect(() => config(w.ctx, { key })).toThrow(`Config section not found: ${key}`);
+    });
+  }
 });
 
 // ── config, set ─────────────────────────────────────────────────────────

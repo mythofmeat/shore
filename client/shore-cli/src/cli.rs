@@ -283,10 +283,11 @@ pub(crate) enum CliCommand {
         #[command(subcommand)]
         subcommand: Option<ConfigCommand>,
 
-        /// Optional key to get/set
+        /// Dotted key to read (e.g. defaults.stream, daemon.addr); omit for all
         key: Option<String>,
 
-        /// Value to set (requires key)
+        /// Value to set. Only defaults.model, defaults.stream and
+        /// autonomy.enabled can move at runtime
         value: Option<String>,
 
         /// Print the config directory path
