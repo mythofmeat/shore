@@ -9,7 +9,7 @@ WORKDIR /src
 COPY . .
 WORKDIR /src/daemon
 RUN bun install
-RUN bun run build:daemon
+RUN bun run build
 
 FROM archlinux:latest AS entry
 COPY --from=rust    /src/target/release/shore /usr/bin/shore
