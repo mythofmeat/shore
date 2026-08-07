@@ -170,7 +170,12 @@ pub(crate) enum CliCommand {
         info: bool,
 
         /// Create a new character scaffold directory
-        #[arg(long)]
+        ///
+        /// `requires`, because `--new` with no NAME otherwise falls past the
+        /// local handler in `run.rs` and out the bottom of `to_swp_command` as
+        /// "non-send/regen/local command must map to SWP command" — a routing
+        /// invariant reported to someone who just forgot an argument.
+        #[arg(long, requires = "name")]
         new: bool,
 
         /// Output raw JSON
@@ -1427,6 +1432,30 @@ mod tests {
                 assert!(!info);
             }
         );
+    }
+
+    #[test]
+    fn parse_character_new() {
+        let cli = parse(&["character", "--new", "alice"]);
+        assert_variant!(
+            &cli.command,
+            CliCommand::Character { name, new, .. } => {
+                assert_eq!(name.as_deref(), Some("alice"));
+                assert!(new);
+            }
+        );
+    }
+
+    #[test]
+    fn character_new_requires_a_name() {
+        // Without `requires`, this parses fine and then falls past the local
+        // handler in `run.rs` and out the bottom of `to_swp_command`, reporting
+        // "non-send/regen/local command must map to SWP command" — a routing
+        // invariant shown to someone who forgot an argument.
+        let err = Cli::try_parse_from(["shore", "character", "--new"])
+            .expect_err("--new with no NAME must not parse");
+        assert_eq!(err.kind(), clap::error::ErrorKind::MissingRequiredArgument);
+        assert!(err.to_string().contains("NAME"), "{err}");
     }
 
     #[test]

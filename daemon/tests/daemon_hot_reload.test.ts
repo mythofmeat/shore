@@ -78,6 +78,41 @@ describe("which paths are config", () => {
     expect(pathTriggersReload(DIR, FILE, join(DIR, "characters/Alice/character.md"))).toBe(true);
   });
 
+  test("so is the characters directory itself", () => {
+    // The only event a *first* character produces. `create_dir_all` makes
+    // `characters/<n>/workspace` faster than the recursive watcher registers a
+    // watch on each new level, so nothing below `characters` is ever reported —
+    // see the watcher case that drives this over a real directory.
+    expect(pathTriggersReload(DIR, FILE, join(DIR, "characters"))).toBe(true);
+  });
+
+  test("SOUL.md reloads for a character the registry does not have yet", () => {
+    // The file's *existence* is what makes a directory a character, so this one
+    // write is not only a prompt edit.
+    const known = (name: string) => name === "Alice";
+    expect(
+      pathTriggersReload(DIR, FILE, join(DIR, "characters/Bob/workspace/SOUL.md"), known),
+    ).toBe(true);
+  });
+
+  test("SOUL.md is still ignored for a character it already has", () => {
+    // The rule this exemption is carved out of, and the reason it is narrow: a
+    // save must not become a prompt activation boundary, and a character
+    // rewriting its own prompt must not invalidate the prefix it is talking
+    // through.
+    const known = (name: string) => name === "Alice";
+    expect(
+      pathTriggersReload(DIR, FILE, join(DIR, "characters/Alice/workspace/SOUL.md"), known),
+    ).toBe(false);
+    // Nothing else in the workspace is exempt, known or not.
+    expect(
+      pathTriggersReload(DIR, FILE, join(DIR, "characters/Bob/workspace/MEMORY.md"), known),
+    ).toBe(false);
+    expect(
+      pathTriggersReload(DIR, FILE, join(DIR, "characters/Bob/workspace/memory/facts.toml"), known),
+    ).toBe(false);
+  });
+
   test("the config file counts wherever it is", () => {
     // `--config /etc/shore.toml` puts the file outside the tree being watched;
     // the daemon still reloads on it, because it is the file it was started
@@ -161,6 +196,42 @@ describe("the watcher", () => {
 
     expect(reloads).toHaveLength(1);
     expect(reloads[0]).toEqual([configPath, join(dir, "models.toml")].sort());
+  });
+
+  test("scaffolding a first character reloads without a restart", async () => {
+    // The regression, driven the way `shore character --new` actually does it:
+    // one `create_dir_all` of three levels, then the write. On Linux the
+    // recursive watcher cannot register a watch on `characters/` before `<n>`
+    // and `workspace/` already exist, so the ONLY event that arrives is
+    // `characters` — every path below it is lost. While that path was ignored,
+    // a first character stayed invisible until an unrelated edit happened to
+    // trigger a reload, and the daemon had to be restarted.
+    const dir = await tempRoot();
+    const configPath = join(dir, "config.toml");
+    await writeFile(configPath, "");
+    const reloads: string[][] = [];
+
+    const watcher = startConfigWatcher({
+      configPath,
+      configDir: dir,
+      reload: (paths) => {
+        reloads.push([...paths]);
+        return Promise.resolve();
+      },
+      // No character exists yet, which is the whole point.
+      knownCharacter: () => false,
+      debounceMs: 60,
+    });
+    stoppers.push(() => watcher?.stop());
+
+    await mkdir(join(dir, "characters", "ada", "workspace"), { recursive: true });
+    await writeFile(join(dir, "characters", "ada", "workspace", "SOUL.md"), "You are ada.\n");
+
+    await until(() => reloads.length > 0);
+    // The debounce is what makes this work rather than a race: the reload runs
+    // after the window, by which time `SOUL.md` is on disk and the rescan that
+    // `characters` triggered can see it.
+    expect(reloads[0]).toContain(join(dir, "characters"));
   });
 
   test("a reload queued behind a slow one is dropped when the watcher stops", async () => {

@@ -257,6 +257,10 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
         configPath: startup.configPath,
         configDir: loaded.dirs.config,
         reload: configReloader(assembly),
+        // Read through the registry per event, not captured: the whole point
+        // is that the answer changes the moment a reload adopts the character
+        // this predicate let through.
+        knownCharacter: (name) => runtime.registry.hasCharacter(name),
         ...(log === undefined ? {} : { log }),
       });
 
