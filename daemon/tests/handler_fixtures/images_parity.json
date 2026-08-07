@@ -1,0 +1,771 @@
+{
+  "_generated_by": "crates/daemon/tests/gen_images_fixture.rs at 9023b46d (uncommitted)",
+  "_note": "FROZEN. Driven against the real handler::images. Nothing regenerates this; a diff is a defect.",
+  "media_type_for_path": [
+    {
+      "path": "a.png",
+      "media_type": "image/png"
+    },
+    {
+      "path": "a.PNG",
+      "media_type": "image/png"
+    },
+    {
+      "path": "a.jpg",
+      "media_type": "image/jpeg"
+    },
+    {
+      "path": "a.JPEG",
+      "media_type": "image/jpeg"
+    },
+    {
+      "path": "a.jpeg",
+      "media_type": "image/jpeg"
+    },
+    {
+      "path": "a.gif",
+      "media_type": "image/gif"
+    },
+    {
+      "path": "a.webp",
+      "media_type": "image/webp"
+    },
+    {
+      "path": "a.bmp",
+      "media_type": null
+    },
+    {
+      "path": "a.svg",
+      "media_type": null
+    },
+    {
+      "path": "png",
+      "media_type": "image/png"
+    },
+    {
+      "path": "",
+      "media_type": null
+    },
+    {
+      "path": ".",
+      "media_type": null
+    },
+    {
+      "path": ".png",
+      "media_type": "image/png"
+    },
+    {
+      "path": "a.png.txt",
+      "media_type": null
+    },
+    {
+      "path": "dir.png/file",
+      "media_type": null
+    },
+    {
+      "path": "/abs/path/photo.PnG",
+      "media_type": "image/png"
+    },
+    {
+      "path": "trailing.",
+      "media_type": null
+    },
+    {
+      "path": "a.png ",
+      "media_type": null
+    },
+    {
+      "path": "🎵.png",
+      "media_type": "image/png"
+    },
+    {
+      "path": "a.ṕng",
+      "media_type": null
+    }
+  ],
+  "sniff_media_type": [
+    {
+      "label": "png",
+      "bytes": [
+        137,
+        80,
+        78,
+        71,
+        13,
+        10,
+        26,
+        10,
+        0,
+        0
+      ],
+      "media_type": "image/png"
+    },
+    {
+      "label": "png truncated header",
+      "bytes": [
+        137,
+        80,
+        78,
+        71,
+        13,
+        10
+      ],
+      "media_type": null
+    },
+    {
+      "label": "png wrong byte 1",
+      "bytes": [
+        137,
+        80,
+        78,
+        72,
+        13,
+        10,
+        26,
+        10
+      ],
+      "media_type": null
+    },
+    {
+      "label": "jpeg",
+      "bytes": [
+        255,
+        216,
+        255,
+        224,
+        0
+      ],
+      "media_type": "image/jpeg"
+    },
+    {
+      "label": "jpeg two bytes only",
+      "bytes": [
+        255,
+        216
+      ],
+      "media_type": null
+    },
+    {
+      "label": "gif87a",
+      "bytes": [
+        71,
+        73,
+        70,
+        56,
+        55,
+        97,
+        46,
+        46,
+        46,
+        46
+      ],
+      "media_type": "image/gif"
+    },
+    {
+      "label": "gif89a",
+      "bytes": [
+        71,
+        73,
+        70,
+        56,
+        57,
+        97,
+        46,
+        46,
+        46,
+        46
+      ],
+      "media_type": "image/gif"
+    },
+    {
+      "label": "gif88a",
+      "bytes": [
+        71,
+        73,
+        70,
+        56,
+        56,
+        97,
+        46,
+        46,
+        46,
+        46
+      ],
+      "media_type": null
+    },
+    {
+      "label": "webp",
+      "bytes": [
+        82,
+        73,
+        70,
+        70,
+        0,
+        0,
+        0,
+        0,
+        87,
+        69,
+        66,
+        80,
+        86,
+        80,
+        56,
+        32
+      ],
+      "media_type": "image/webp"
+    },
+    {
+      "label": "riff wave",
+      "bytes": [
+        82,
+        73,
+        70,
+        70,
+        0,
+        0,
+        0,
+        0,
+        87,
+        65,
+        86,
+        69,
+        102,
+        109,
+        116,
+        32
+      ],
+      "media_type": null
+    },
+    {
+      "label": "riff short",
+      "bytes": [
+        82,
+        73,
+        70,
+        70,
+        0,
+        0,
+        0
+      ],
+      "media_type": null
+    },
+    {
+      "label": "empty",
+      "bytes": [],
+      "media_type": null
+    },
+    {
+      "label": "text",
+      "bytes": [
+        104,
+        101,
+        108,
+        108,
+        111,
+        32,
+        119,
+        111,
+        114,
+        108,
+        100
+      ],
+      "media_type": null
+    }
+  ],
+  "extension_for_media_type": [
+    {
+      "media_type": "image/png",
+      "extension": "png"
+    },
+    {
+      "media_type": "image/PNG",
+      "extension": "png"
+    },
+    {
+      "media_type": "Image/PNG; charset=binary",
+      "extension": "png"
+    },
+    {
+      "media_type": "image/jpeg",
+      "extension": "jpg"
+    },
+    {
+      "media_type": "image/jpg",
+      "extension": "jpg"
+    },
+    {
+      "media_type": "  image/gif  ",
+      "extension": "gif"
+    },
+    {
+      "media_type": "image/webp",
+      "extension": "webp"
+    },
+    {
+      "media_type": "image/webp;",
+      "extension": "webp"
+    },
+    {
+      "media_type": ";image/webp",
+      "extension": null
+    },
+    {
+      "media_type": "image/svg+xml",
+      "extension": null
+    },
+    {
+      "media_type": "text/plain",
+      "extension": null
+    },
+    {
+      "media_type": "",
+      "extension": null
+    },
+    {
+      "media_type": "image/png; q=0.9; charset=x",
+      "extension": "png"
+    }
+  ],
+  "sanitize_filename": [
+    {
+      "name": "photo.png",
+      "sanitized": "photo.png"
+    },
+    {
+      "name": "../../etc/passwd",
+      "sanitized": "passwd"
+    },
+    {
+      "name": "/etc/passwd",
+      "sanitized": "passwd"
+    },
+    {
+      "name": "dir\\sub\\photo.png",
+      "sanitized": "photo.png"
+    },
+    {
+      "name": "dir/sub/photo.png",
+      "sanitized": "photo.png"
+    },
+    {
+      "name": "",
+      "sanitized": "image"
+    },
+    {
+      "name": ".",
+      "sanitized": "image"
+    },
+    {
+      "name": "..",
+      "sanitized": "image"
+    },
+    {
+      "name": "...",
+      "sanitized": "..."
+    },
+    {
+      "name": "a\u0000b.png",
+      "sanitized": "ab.png"
+    },
+    {
+      "name": "\u0000",
+      "sanitized": "image"
+    },
+    {
+      "name": "a/",
+      "sanitized": "image"
+    },
+    {
+      "name": "a\\",
+      "sanitized": "image"
+    },
+    {
+      "name": "/",
+      "sanitized": "image"
+    },
+    {
+      "name": "  spaced  .png",
+      "sanitized": "  spaced  .png"
+    },
+    {
+      "name": "🎵.png",
+      "sanitized": "🎵.png"
+    },
+    {
+      "name": "a/./b.png",
+      "sanitized": "b.png"
+    },
+    {
+      "name": "..\u0000",
+      "sanitized": "image"
+    }
+  ],
+  "attachment_file_name": [
+    {
+      "filename": "photo.png",
+      "declared_mime": null,
+      "bytes": [
+        137,
+        80,
+        78,
+        71,
+        13,
+        10,
+        26,
+        10,
+        0
+      ],
+      "result": "photo.png"
+    },
+    {
+      "filename": "photo.png",
+      "declared_mime": "image/jpeg",
+      "bytes": [
+        255,
+        216,
+        255,
+        224
+      ],
+      "result": "photo.png"
+    },
+    {
+      "filename": "photo",
+      "declared_mime": null,
+      "bytes": [
+        137,
+        80,
+        78,
+        71,
+        13,
+        10,
+        26,
+        10,
+        0
+      ],
+      "result": "photo.png"
+    },
+    {
+      "filename": "photo",
+      "declared_mime": null,
+      "bytes": [
+        255,
+        216,
+        255,
+        224
+      ],
+      "result": "photo.jpg"
+    },
+    {
+      "filename": "photo",
+      "declared_mime": "image/webp",
+      "bytes": [
+        110,
+        111,
+        116,
+        32,
+        97,
+        110,
+        32,
+        105,
+        109,
+        97,
+        103,
+        101
+      ],
+      "result": "photo.webp"
+    },
+    {
+      "filename": "photo",
+      "declared_mime": "Image/JPEG; charset=binary",
+      "bytes": [
+        110,
+        111,
+        116,
+        32,
+        97,
+        110,
+        32,
+        105,
+        109,
+        97,
+        103,
+        101
+      ],
+      "result": "photo.jpg"
+    },
+    {
+      "filename": "photo",
+      "declared_mime": "image/webp",
+      "bytes": [
+        137,
+        80,
+        78,
+        71,
+        13,
+        10,
+        26,
+        10,
+        0
+      ],
+      "result": "photo.png"
+    },
+    {
+      "filename": "photo",
+      "declared_mime": null,
+      "bytes": [
+        110,
+        111,
+        116,
+        32,
+        97,
+        110,
+        32,
+        105,
+        109,
+        97,
+        103,
+        101
+      ],
+      "result": "photo"
+    },
+    {
+      "filename": "photo",
+      "declared_mime": "text/plain",
+      "bytes": [
+        110,
+        111,
+        116,
+        32,
+        97,
+        110,
+        32,
+        105,
+        109,
+        97,
+        103,
+        101
+      ],
+      "result": "photo"
+    },
+    {
+      "filename": "archive.tar.gz",
+      "declared_mime": null,
+      "bytes": [
+        137,
+        80,
+        78,
+        71,
+        13,
+        10,
+        26,
+        10,
+        0
+      ],
+      "result": "archive.tar.gz.png"
+    },
+    {
+      "filename": "../../evil",
+      "declared_mime": null,
+      "bytes": [
+        137,
+        80,
+        78,
+        71,
+        13,
+        10,
+        26,
+        10,
+        0
+      ],
+      "result": "evil.png"
+    },
+    {
+      "filename": "",
+      "declared_mime": null,
+      "bytes": [
+        137,
+        80,
+        78,
+        71,
+        13,
+        10,
+        26,
+        10,
+        0
+      ],
+      "result": "image.png"
+    },
+    {
+      "filename": "..",
+      "declared_mime": null,
+      "bytes": [
+        255,
+        216,
+        255,
+        224
+      ],
+      "result": "image.jpg"
+    }
+  ],
+  "create_attachment_file": [
+    {
+      "requested": "a.png",
+      "claimed": "a.png"
+    },
+    {
+      "requested": "a.png",
+      "claimed": "a_1.png"
+    },
+    {
+      "requested": "a.png",
+      "claimed": "a_2.png"
+    },
+    {
+      "requested": "noext",
+      "claimed": "noext"
+    },
+    {
+      "requested": "noext",
+      "claimed": "noext_1"
+    },
+    {
+      "requested": ".hidden",
+      "claimed": ".hidden"
+    },
+    {
+      "requested": ".hidden",
+      "claimed": ".hidden_1"
+    }
+  ],
+  "build_content": [
+    {
+      "label": "text only",
+      "text": "hello",
+      "blocks": [
+        {
+          "type": "text",
+          "text": "hello"
+        }
+      ]
+    },
+    {
+      "label": "empty text",
+      "text": "",
+      "blocks": []
+    },
+    {
+      "label": "whitespace text",
+      "text": "   \n\t ",
+      "blocks": []
+    },
+    {
+      "label": "text plus unreadable image",
+      "text": "hi",
+      "blocks": [
+        {
+          "type": "text",
+          "text": "hi"
+        }
+      ]
+    },
+    {
+      "label": "unreadable image only",
+      "text": "",
+      "blocks": []
+    },
+    {
+      "label": "unsupported extension",
+      "text": "hi",
+      "blocks": [
+        {
+          "type": "text",
+          "text": "hi"
+        }
+      ]
+    },
+    {
+      "label": "readable image plus text",
+      "text": "look",
+      "blocks": [
+        {
+          "type": "image",
+          "source": {
+            "type": "base64",
+            "media_type": "image/png",
+            "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+          }
+        },
+        {
+          "type": "text",
+          "text": "look"
+        }
+      ]
+    }
+  ],
+  "ingest_images": [
+    {
+      "label": "uploads only",
+      "count": 1,
+      "file_names": [
+        "up.png"
+      ],
+      "under_attachments": true,
+      "captions": [
+        null
+      ],
+      "data": [
+        null
+      ],
+      "blocks": 0
+    },
+    {
+      "label": "legacy only",
+      "count": 1,
+      "file_names": [
+        "legacy.png"
+      ],
+      "under_attachments": true,
+      "captions": [
+        null
+      ],
+      "data": [
+        null
+      ],
+      "blocks": 0
+    },
+    {
+      "label": "both",
+      "count": 1,
+      "file_names": [
+        "up_1.png"
+      ],
+      "under_attachments": true,
+      "captions": [
+        null
+      ],
+      "data": [
+        null
+      ],
+      "blocks": 0
+    },
+    {
+      "label": "legacy missing file",
+      "count": 0,
+      "file_names": [],
+      "under_attachments": true,
+      "captions": [],
+      "data": [],
+      "blocks": 0
+    },
+    {
+      "label": "neither",
+      "count": 0,
+      "file_names": [],
+      "under_attachments": true,
+      "captions": [],
+      "data": [],
+      "blocks": 0
+    }
+  ]
+}

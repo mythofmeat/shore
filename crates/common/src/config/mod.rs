@@ -11,7 +11,6 @@ pub use duration::ConfigDuration;
 use std::path::{Path, PathBuf};
 
 use app::AppConfig;
-use cron::CronSchedule;
 use models::ModelCatalog;
 use providers::ProviderRegistry;
 use tracing::{info, warn};
@@ -398,7 +397,7 @@ fn parse_config_table(
         .try_into()
         .map_err(ConfigError::ParseApp)?;
 
-    // Forward legacy top-level `defaults.heartbeat` / `defaults.dreaming`
+    // Forward the legacy top-level `defaults.heartbeat`
     // into `defaults.background.*` with a one-time deprecation warning.
     app.defaults.normalize_deprecated_aliases();
 
@@ -609,12 +608,6 @@ fn validate_config(
     warn_on_unresolvable_model_ref(
         catalog,
         providers,
-        "defaults.background.dreaming",
-        app.defaults.background.dreaming.as_deref(),
-    );
-    warn_on_unresolvable_model_ref(
-        catalog,
-        providers,
         "defaults.subagent_model",
         app.defaults.subagent_model.as_deref(),
     );
@@ -661,7 +654,6 @@ fn validate_config(
     validate_default_embedding(providers, app.defaults.embedding.as_deref())?;
     validate_default_image_generation(providers, app.defaults.image_generation.as_deref())?;
 
-    validate_cron_schedule(&app.memory.dreaming.frequency)?;
     validate_usage_config(&app.usage)?;
     app.memory
         .compaction
@@ -931,16 +923,6 @@ fn validate_default_image_generation(
         )));
     }
     validate_aux_provider(providers, "defaults.image_generation", provider_key)
-}
-
-fn validate_cron_schedule(expr: &str) -> Result<(), ConfigError> {
-    let _ignored = CronSchedule::parse(expr).map_err(|e| {
-        ConfigError::Validation(format!(
-            "memory.dreaming.frequency must be a valid five-field cron expression \
-             (minute hour day-of-month month day-of-week), got {expr:?}: {e}"
-        ))
-    })?;
-    Ok(())
 }
 
 /// Emit a warning if an optional default-model reference can't be reconciled
@@ -1228,7 +1210,6 @@ model_id = "claude-opus-4-6"
 
         // All defaults should be filled in.
         assert!(loaded.app.defaults.stream);
-        assert!(loaded.app.defaults.dreaming.is_none());
         assert!(!loaded.app.behavior.autonomy.enabled);
         assert!(loaded.app.behavior.autonomy.heartbeat.enabled);
         assert_eq!(
@@ -1242,46 +1223,11 @@ model_id = "claude-opus-4-6"
         );
         assert!(!loaded.app.tools.any_enabled());
         assert!(loaded.app.memory.compaction.enabled);
-        assert!(!loaded.app.memory.dreaming.enabled);
-        assert_eq!(loaded.app.memory.dreaming.frequency, "0 3 * * *");
         assert_eq!(loaded.app.daemon.addr, "127.0.0.1:7320"); // default
         assert!(!loaded.app.daemon.unsafe_allow_remote_access);
         assert!(loaded.app.advanced.editor.is_none());
         assert!(loaded.app.advanced.max_retries.is_none());
         assert!(loaded.app.advanced.retry_backoff.is_none());
-    }
-
-    #[test]
-    fn invalid_dreaming_frequency_fails_validation() {
-        let tmp = setup_config_dir(&[(
-            "config.toml",
-            r#"
-[memory.dreaming]
-frequency = "sometimes"
-"#,
-        )]);
-
-        let config_path = tmp.path().join("config.toml");
-        let err = load_config(Some(&config_path)).unwrap_err();
-        assert!(
-            err.to_string().contains("memory.dreaming.frequency"),
-            "unexpected error: {err}"
-        );
-    }
-
-    #[test]
-    fn weekly_dreaming_frequency_passes_validation() {
-        let tmp = setup_config_dir(&[(
-            "config.toml",
-            r#"
-[memory.dreaming]
-frequency = "0 6 * * 1"
-"#,
-        )]);
-
-        let config_path = tmp.path().join("config.toml");
-        let loaded = load_config(Some(&config_path)).unwrap();
-        assert_eq!(loaded.app.memory.dreaming.frequency, "0 6 * * 1");
     }
 
     #[test]
@@ -1400,22 +1346,6 @@ model_id = "claude-opus-4-6"
         )]);
         let _ignored = load_config(Some(&tmp.path().join("config.toml")))
             .expect("unresolvable heartbeat default should warn, not fail");
-    }
-
-    #[test]
-    fn unresolvable_default_dreaming_warns_but_loads() {
-        let tmp = setup_config_dir(&[(
-            "config.toml",
-            r#"
-[defaults]
-dreaming = "no-such-model"
-
-[chat.anthropic.opus]
-model_id = "claude-opus-4-6"
-"#,
-        )]);
-        let _ignored = load_config(Some(&tmp.path().join("config.toml")))
-            .expect("unresolvable dreaming default should warn, not fail");
     }
 
     #[test]
@@ -1660,7 +1590,6 @@ image_generation = "missing-profile"
 [defaults]
 model = "opus"
 heartbeat = "opus"
-dreaming = "opus"
 embedding = "openai:text-embedding-3-large"
 image_generation = "gemini:gemini-3.1-flash-image-preview"
 

@@ -1,0 +1,595 @@
+{
+  "_frozen": "FROZEN. Generated once from the Rust at 9023b46d by an uncommitted crates/daemon/src/autonomy/gen_deep_archive_fixture.rs, which is not in the tree and is not coming back. Nothing regenerates this file. A later diff against it is a defect in the TypeScript, not a fixture to refresh.",
+  "_generated_by": "crates/daemon/src/autonomy/gen_deep_archive_fixture.rs at 9023b46d (uncommitted), driving the real deep_archive_plan, RealConversationManager::archive_and_retain and deep_archive_notification",
+  "timezone": "America/New_York",
+  "plan": [
+    {
+      "note": "an empty conversation",
+      "input": [],
+      "covered_turn_count": 0,
+      "plan": {
+        "arm": "quiesce",
+        "tail": 0
+      }
+    },
+    {
+      "note": "nothing but an unanswered autonomous run — already archived once",
+      "input": [
+        {
+          "role": "assistant",
+          "msg_id": "m_1",
+          "content": "thinking of you",
+          "autonomous": true,
+          "tool_result_only": false
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_2",
+          "content": "still here",
+          "autonomous": true,
+          "tool_result_only": false
+        }
+      ],
+      "covered_turn_count": 0,
+      "plan": {
+        "arm": "quiesce",
+        "tail": 2
+      }
+    },
+    {
+      "note": "every user turn covered — the cheap arm",
+      "input": [
+        {
+          "role": "user",
+          "msg_id": "m_1",
+          "content": "hello",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_2",
+          "content": "hi",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "user",
+          "msg_id": "m_3",
+          "content": "and another",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_4",
+          "content": "sure",
+          "autonomous": false,
+          "tool_result_only": false
+        }
+      ],
+      "covered_turn_count": 2,
+      "plan": {
+        "arm": "pure",
+        "tail": 0,
+        "archivable": 4
+      }
+    },
+    {
+      "note": "covered, with an unanswered autonomous tail to retain",
+      "input": [
+        {
+          "role": "user",
+          "msg_id": "m_1",
+          "content": "hello",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_2",
+          "content": "hi",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_3",
+          "content": "thinking of you",
+          "autonomous": true,
+          "tool_result_only": false
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_4",
+          "content": "still here",
+          "autonomous": true,
+          "tool_result_only": false
+        }
+      ],
+      "covered_turn_count": 1,
+      "plan": {
+        "arm": "pure",
+        "tail": 2,
+        "archivable": 2
+      }
+    },
+    {
+      "note": "uncovered turns — the conversation never reached min_turns",
+      "input": [
+        {
+          "role": "user",
+          "msg_id": "m_1",
+          "content": "hello",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_2",
+          "content": "hi",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "user",
+          "msg_id": "m_3",
+          "content": "and another",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_4",
+          "content": "sure",
+          "autonomous": false,
+          "tool_result_only": false
+        }
+      ],
+      "covered_turn_count": 0,
+      "plan": {
+        "arm": "compaction",
+        "tail": 0,
+        "archivable": 4
+      }
+    },
+    {
+      "note": "covered count above the on-disk count — still the LLM arm",
+      "input": [
+        {
+          "role": "user",
+          "msg_id": "m_1",
+          "content": "hello",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_2",
+          "content": "hi",
+          "autonomous": false,
+          "tool_result_only": false
+        }
+      ],
+      "covered_turn_count": 5,
+      "plan": {
+        "arm": "compaction",
+        "tail": 0,
+        "archivable": 2
+      }
+    },
+    {
+      "note": "a tool-loop intermediate is not a user turn",
+      "input": [
+        {
+          "role": "user",
+          "msg_id": "m_1",
+          "content": "hello",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_2",
+          "content": "calling a tool",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "user",
+          "msg_id": "m_3",
+          "content": "ok",
+          "autonomous": false,
+          "tool_result_only": true
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_4",
+          "content": "done",
+          "autonomous": false,
+          "tool_result_only": false
+        }
+      ],
+      "covered_turn_count": 1,
+      "plan": {
+        "arm": "pure",
+        "tail": 0,
+        "archivable": 4
+      }
+    },
+    {
+      "note": "an autonomous run interrupted by a prompted assistant turn",
+      "input": [
+        {
+          "role": "user",
+          "msg_id": "m_1",
+          "content": "hello",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_2",
+          "content": "thinking of you",
+          "autonomous": true,
+          "tool_result_only": false
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_3",
+          "content": "hi",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_4",
+          "content": "still here",
+          "autonomous": true,
+          "tool_result_only": false
+        }
+      ],
+      "covered_turn_count": 1,
+      "plan": {
+        "arm": "pure",
+        "tail": 1,
+        "archivable": 3
+      }
+    },
+    {
+      "note": "an autonomous message that is not at the end counts for nothing",
+      "input": [
+        {
+          "role": "assistant",
+          "msg_id": "m_1",
+          "content": "thinking of you",
+          "autonomous": true,
+          "tool_result_only": false
+        },
+        {
+          "role": "user",
+          "msg_id": "m_2",
+          "content": "sorry, I was away",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_3",
+          "content": "no trouble",
+          "autonomous": false,
+          "tool_result_only": false
+        }
+      ],
+      "covered_turn_count": 1,
+      "plan": {
+        "arm": "pure",
+        "tail": 0,
+        "archivable": 3
+      }
+    },
+    {
+      "note": "a user-role message ending the conversation stops the tail",
+      "input": [
+        {
+          "role": "user",
+          "msg_id": "m_1",
+          "content": "hello",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_2",
+          "content": "thinking of you",
+          "autonomous": true,
+          "tool_result_only": false
+        },
+        {
+          "role": "user",
+          "msg_id": "m_3",
+          "content": "back",
+          "autonomous": false,
+          "tool_result_only": false
+        }
+      ],
+      "covered_turn_count": 2,
+      "plan": {
+        "arm": "pure",
+        "tail": 0,
+        "archivable": 3
+      }
+    },
+    {
+      "note": "no user turns at all, and something to archive",
+      "input": [
+        {
+          "role": "assistant",
+          "msg_id": "m_1",
+          "content": "a prompted turn with no prompt on disk",
+          "autonomous": false,
+          "tool_result_only": false
+        }
+      ],
+      "covered_turn_count": 0,
+      "plan": {
+        "arm": "pure",
+        "tail": 0,
+        "archivable": 1
+      }
+    },
+    {
+      "note": "one autonomous message and nothing else",
+      "input": [
+        {
+          "role": "assistant",
+          "msg_id": "m_1",
+          "content": "thinking of you",
+          "autonomous": true,
+          "tool_result_only": false
+        }
+      ],
+      "covered_turn_count": 0,
+      "plan": {
+        "arm": "quiesce",
+        "tail": 1
+      }
+    },
+    {
+      "note": "an autonomous user message is not part of the tail",
+      "input": [
+        {
+          "role": "user",
+          "msg_id": "m_1",
+          "content": "hello",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_2",
+          "content": "hi",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "user",
+          "msg_id": "m_3",
+          "content": "an autonomous user turn",
+          "autonomous": true,
+          "tool_result_only": false
+        }
+      ],
+      "covered_turn_count": 2,
+      "plan": {
+        "arm": "pure",
+        "tail": 0,
+        "archivable": 3
+      }
+    }
+  ],
+  "pure_archive": [
+    {
+      "note": "an ordinary covered conversation — everything goes",
+      "input": [
+        {
+          "role": "user",
+          "msg_id": "m_1",
+          "content": "hello",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_2",
+          "content": "hi",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "user",
+          "msg_id": "m_3",
+          "content": "and another",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_4",
+          "content": "sure",
+          "autonomous": false,
+          "tool_result_only": false
+        }
+      ],
+      "active_before": "{\"msg_id\":\"m_1\",\"role\":\"user\",\"content\":\"hello\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"hello\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_2\",\"role\":\"assistant\",\"content\":\"hi\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"hi\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_3\",\"role\":\"user\",\"content\":\"and another\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"and another\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_4\",\"role\":\"assistant\",\"content\":\"sure\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"sure\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n",
+      "covered_turn_count": 2,
+      "prior_segment": false,
+      "plan": {
+        "arm": "pure",
+        "tail": 0,
+        "archivable": 4
+      },
+      "active_after": "",
+      "segments_after": {
+        "0001.jsonl": "{\"msg_id\":\"m_1\",\"role\":\"user\",\"content\":\"hello\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"hello\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_2\",\"role\":\"assistant\",\"content\":\"hi\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"hi\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_3\",\"role\":\"user\",\"content\":\"and another\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"and another\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_4\",\"role\":\"assistant\",\"content\":\"sure\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"sure\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n"
+      },
+      "manifest_after": {
+        "segments": [
+          {
+            "file": "0001.jsonl",
+            "message_count": 4,
+            "compacted_at": "<stamp>"
+          }
+        ],
+        "total_compacted_messages": 4
+      },
+      "new_conversation_id_is_fresh": true,
+      "notification": {
+        "title": "Shore — ada",
+        "body": "Idle conversation archived (4 messages, no LLM pass needed)"
+      }
+    },
+    {
+      "note": "an unanswered autonomous run survives in active.jsonl",
+      "input": [
+        {
+          "role": "user",
+          "msg_id": "m_1",
+          "content": "hello",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_2",
+          "content": "hi",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_3",
+          "content": "thinking of you",
+          "autonomous": true,
+          "tool_result_only": false
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_4",
+          "content": "still here",
+          "autonomous": true,
+          "tool_result_only": false
+        }
+      ],
+      "active_before": "{\"msg_id\":\"m_1\",\"role\":\"user\",\"content\":\"hello\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"hello\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_2\",\"role\":\"assistant\",\"content\":\"hi\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"hi\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_3\",\"role\":\"assistant\",\"content\":\"thinking of you\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"thinking of you\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\",\"origin\":\"autonomous\"}\n{\"msg_id\":\"m_4\",\"role\":\"assistant\",\"content\":\"still here\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"still here\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\",\"origin\":\"autonomous\"}\n",
+      "covered_turn_count": 1,
+      "prior_segment": false,
+      "plan": {
+        "arm": "pure",
+        "tail": 2,
+        "archivable": 2
+      },
+      "active_after": "{\"msg_id\":\"m_3\",\"role\":\"assistant\",\"content\":\"thinking of you\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"thinking of you\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\",\"origin\":\"autonomous\"}\n{\"msg_id\":\"m_4\",\"role\":\"assistant\",\"content\":\"still here\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"still here\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\",\"origin\":\"autonomous\"}\n",
+      "segments_after": {
+        "0001.jsonl": "{\"msg_id\":\"m_1\",\"role\":\"user\",\"content\":\"hello\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"hello\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_2\",\"role\":\"assistant\",\"content\":\"hi\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"hi\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n"
+      },
+      "manifest_after": {
+        "segments": [
+          {
+            "file": "0001.jsonl",
+            "message_count": 2,
+            "compacted_at": "<stamp>"
+          }
+        ],
+        "total_compacted_messages": 2
+      },
+      "new_conversation_id_is_fresh": true,
+      "notification": {
+        "title": "Shore — ada",
+        "body": "Idle conversation archived (2 messages, no LLM pass needed)"
+      }
+    },
+    {
+      "note": "a second archive over a character that already has a segment",
+      "input": [
+        {
+          "role": "user",
+          "msg_id": "m_1",
+          "content": "hello again",
+          "autonomous": false,
+          "tool_result_only": false
+        },
+        {
+          "role": "assistant",
+          "msg_id": "m_2",
+          "content": "welcome back",
+          "autonomous": false,
+          "tool_result_only": false
+        }
+      ],
+      "active_before": "{\"msg_id\":\"m_1\",\"role\":\"user\",\"content\":\"hello again\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"hello again\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_2\",\"role\":\"assistant\",\"content\":\"welcome back\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"welcome back\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n",
+      "covered_turn_count": 1,
+      "prior_segment": true,
+      "plan": {
+        "arm": "pure",
+        "tail": 0,
+        "archivable": 2
+      },
+      "active_after": "",
+      "segments_after": {
+        "0001.jsonl": "{}\n",
+        "0002.jsonl": "{\"msg_id\":\"m_1\",\"role\":\"user\",\"content\":\"hello again\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"hello again\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n{\"msg_id\":\"m_2\",\"role\":\"assistant\",\"content\":\"welcome back\",\"images\":[],\"content_blocks\":[{\"type\":\"text\",\"text\":\"welcome back\"}],\"timestamp\":\"2026-01-01T10:00:00-05:00\"}\n"
+      },
+      "manifest_after": {
+        "segments": [
+          {
+            "file": "0001.jsonl",
+            "message_count": 4,
+            "compacted_at": "<stamp>"
+          },
+          {
+            "file": "0002.jsonl",
+            "message_count": 2,
+            "compacted_at": "<stamp>"
+          }
+        ],
+        "total_compacted_messages": 6
+      },
+      "new_conversation_id_is_fresh": true,
+      "notification": {
+        "title": "Shore — ada",
+        "body": "Idle conversation archived (2 messages, no LLM pass needed)"
+      }
+    }
+  ],
+  "notification": [
+    {
+      "archivable": 0,
+      "notification": {
+        "title": "Shore — ada",
+        "body": "Idle conversation archived (0 messages, no LLM pass needed)"
+      }
+    },
+    {
+      "archivable": 1,
+      "notification": {
+        "title": "Shore — ada",
+        "body": "Idle conversation archived (1 messages, no LLM pass needed)"
+      }
+    },
+    {
+      "archivable": 2,
+      "notification": {
+        "title": "Shore — ada",
+        "body": "Idle conversation archived (2 messages, no LLM pass needed)"
+      }
+    },
+    {
+      "archivable": 47,
+      "notification": {
+        "title": "Shore — ada",
+        "body": "Idle conversation archived (47 messages, no LLM pass needed)"
+      }
+    }
+  ]
+}

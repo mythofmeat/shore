@@ -1,0 +1,518 @@
+{
+  "_generated_by": "crates/daemon/tests/gen_dispatch_fixture.rs at 9023b46d (uncommitted)",
+  "_note": "FROZEN. Produced by driving the real dispatch_tool. Nothing regenerates this; a diff is a defect.",
+  "routing": {
+    "search_chat_logs": {
+      "err": "invalid args: conversation history is not configured"
+    },
+    "model_history": {
+      "err": "io: the usage ledger is not available in this context"
+    },
+    "generate_image": {
+      "err": "invalid args: missing 'prompt' field"
+    },
+    "web_search": {
+      "err": "invalid args: missing 'query' field"
+    },
+    "fetch_url": {
+      "err": "invalid args: missing 'url' field"
+    },
+    "roll_dice": {
+      "err": "invalid args: missing 'notation' parameter"
+    },
+    "activity_heatmap": {
+      "ok": {
+        "days": 30,
+        "hours": [
+          {
+            "hour": 0,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 1,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 2,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 3,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 4,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 5,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 6,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 7,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 8,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 9,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 10,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 11,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 12,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 13,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 14,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 15,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 16,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 17,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 18,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 19,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 20,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 21,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 22,
+            "density": 0.0,
+            "classification": "normal"
+          },
+          {
+            "hour": 23,
+            "density": 0.0,
+            "classification": "normal"
+          }
+        ],
+        "total_messages": 0,
+        "total_turns": 0,
+        "has_sufficient_data": false,
+        "engagement_score": 0.0,
+        "sessions_per_day": 0.0
+      }
+    },
+    "read": {
+      "err": "invalid args: workspace not configured"
+    },
+    "edit": {
+      "err": "invalid args: missing required field: path"
+    },
+    "search": {
+      "err": "invalid args: workspace not configured"
+    },
+    "delete": {
+      "err": "invalid args: missing required field: path"
+    },
+    "git": {
+      "err": "invalid args: missing required field: subcommand"
+    },
+    "set_next_wake": {
+      "err": "invalid args: set_next_wake is only available during heartbeat ticks"
+    },
+    "unknown_tool": {
+      "err": "unknown_tool: not yet implemented"
+    },
+    "": {
+      "err": ": not yet implemented"
+    },
+    "ask_researcher": {
+      "err": "invalid args: ask_researcher requires a string `query`"
+    },
+    "ask_": {
+      "err": "invalid args: ask_ requires a string `query`"
+    },
+    "mcp__hue__set_light": {
+      "err": "mcp__hue__set_light: not yet implemented"
+    },
+    "mcp__": {
+      "err": "mcp__: not yet implemented"
+    },
+    "ask": {
+      "err": "ask: not yet implemented"
+    },
+    "mcp_hue__x": {
+      "err": "mcp_hue__x: not yet implemented"
+    },
+    "Ask_researcher": {
+      "err": "Ask_researcher: not yet implemented"
+    },
+    "MCP__hue__x": {
+      "err": "MCP__hue__x: not yet implemented"
+    },
+    "x_ask_researcher": {
+      "err": "x_ask_researcher: not yet implemented"
+    },
+    "not_mcp__hue__x": {
+      "err": "not_mcp__hue__x: not yet implemented"
+    },
+    "ask_researcher WITH query": {
+      "err": "ask_researcher: not yet implemented"
+    },
+    "ask_researcher WITH numeric query": {
+      "err": "invalid args: ask_researcher requires a string `query`"
+    }
+  },
+  "search_mode": [
+    {
+      "mode": "Auto",
+      "embedder": false,
+      "index_path": false,
+      "applied": {
+        "mode": "lexical"
+      }
+    },
+    {
+      "mode": "Auto",
+      "embedder": false,
+      "index_path": true,
+      "applied": {
+        "mode": "lexical"
+      }
+    },
+    {
+      "mode": "Auto",
+      "embedder": true,
+      "index_path": false,
+      "applied": {
+        "mode": "lexical"
+      }
+    },
+    {
+      "mode": "Auto",
+      "embedder": true,
+      "index_path": true,
+      "applied": {
+        "mode": "hybrid"
+      }
+    },
+    {
+      "mode": "Lexical",
+      "embedder": false,
+      "index_path": false,
+      "applied": {
+        "mode": "lexical"
+      }
+    },
+    {
+      "mode": "Lexical",
+      "embedder": false,
+      "index_path": true,
+      "applied": {
+        "mode": "lexical"
+      }
+    },
+    {
+      "mode": "Lexical",
+      "embedder": true,
+      "index_path": false,
+      "applied": {
+        "mode": "lexical"
+      }
+    },
+    {
+      "mode": "Lexical",
+      "embedder": true,
+      "index_path": true,
+      "applied": {
+        "mode": "lexical"
+      }
+    },
+    {
+      "mode": "Hybrid",
+      "embedder": false,
+      "index_path": false,
+      "applied": {
+        "mode": "hybrid"
+      }
+    },
+    {
+      "mode": "Hybrid",
+      "embedder": false,
+      "index_path": true,
+      "applied": {
+        "mode": "hybrid"
+      }
+    },
+    {
+      "mode": "Hybrid",
+      "embedder": true,
+      "index_path": false,
+      "applied": {
+        "mode": "hybrid"
+      }
+    },
+    {
+      "mode": "Hybrid",
+      "embedder": true,
+      "index_path": true,
+      "applied": {
+        "mode": "hybrid"
+      }
+    },
+    {
+      "preset": {
+        "mode": "lexical"
+      },
+      "applied": {
+        "mode": "lexical"
+      }
+    },
+    {
+      "preset": {
+        "mode": "vector"
+      },
+      "applied": {
+        "mode": "vector"
+      }
+    },
+    {
+      "preset": {
+        "mode": null
+      },
+      "applied": {
+        "mode": null
+      }
+    },
+    {
+      "preset": {
+        "mode": 7
+      },
+      "applied": {
+        "mode": 7
+      }
+    },
+    {
+      "preset": "scalar",
+      "applied": "scalar"
+    },
+    {
+      "preset": [
+        1,
+        2
+      ],
+      "applied": [
+        1,
+        2
+      ]
+    },
+    {
+      "preset": null,
+      "applied": null
+    }
+  ],
+  "deferred_edit": [
+    {
+      "path": "MEMORY.md",
+      "result": {
+        "status": "ok",
+        "path": "MEMORY.md",
+        "prompt_visible_file": true,
+        "deferred_until_compaction": true,
+        "deferred_path": "MEMORY.md",
+        "prompt_reload_required": true
+      }
+    },
+    {
+      "path": "memory/MEMORY.md",
+      "result": {
+        "status": "ok",
+        "path": "memory/MEMORY.md"
+      }
+    },
+    {
+      "path": "./MEMORY.md",
+      "result": {
+        "status": "ok",
+        "path": "./MEMORY.md",
+        "prompt_visible_file": true,
+        "deferred_until_compaction": true,
+        "deferred_path": "MEMORY.md",
+        "prompt_reload_required": true
+      }
+    },
+    {
+      "path": "SOUL.md",
+      "result": {
+        "status": "ok",
+        "path": "SOUL.md",
+        "prompt_visible_file": true,
+        "protected_file": true,
+        "deferred_until_compaction": true,
+        "deferred_path": "SOUL.md",
+        "prompt_reload_required": true
+      }
+    },
+    {
+      "path": "notes/scratch.md",
+      "result": {
+        "status": "ok",
+        "path": "notes/scratch.md"
+      }
+    },
+    {
+      "path": "",
+      "result": {
+        "status": "ok",
+        "path": ""
+      }
+    },
+    {
+      "path": "memory/facts.md",
+      "result": {
+        "status": "ok",
+        "path": "memory/facts.md"
+      }
+    },
+    {
+      "path": "MEMORY.md/../MEMORY.md",
+      "result": {
+        "status": "ok",
+        "path": "MEMORY.md/../MEMORY.md"
+      }
+    },
+    {
+      "path": "MEMORY.md",
+      "result": "done"
+    }
+  ],
+  "truncate": [
+    {
+      "input": "hello",
+      "max_chars": 0,
+      "output": "hello"
+    },
+    {
+      "input": "hello",
+      "max_chars": 5,
+      "output": "hello"
+    },
+    {
+      "input": "hello",
+      "max_chars": 4,
+      "output": "hell\n\n[tool_result truncated: showing first 4 of 5 characters]"
+    },
+    {
+      "input": "hello",
+      "max_chars": 1,
+      "output": "h\n\n[tool_result truncated: showing first 1 of 5 characters]"
+    },
+    {
+      "input": "",
+      "max_chars": 3,
+      "output": ""
+    },
+    {
+      "input": "🎵🎵🎵🎵",
+      "max_chars": 3,
+      "output": "🎵🎵🎵\n\n[tool_result truncated: showing first 3 of 4 characters]"
+    },
+    {
+      "input": "héllo wörld",
+      "max_chars": 6,
+      "output": "héllo \n\n[tool_result truncated: showing first 6 of 11 characters]"
+    },
+    {
+      "input": "日本語テキスト",
+      "max_chars": 3,
+      "output": "日本語\n\n[tool_result truncated: showing first 3 of 7 characters]"
+    },
+    {
+      "input": "éxample",
+      "max_chars": 2,
+      "output": "é\n\n[tool_result truncated: showing first 2 of 8 characters]"
+    }
+  ],
+  "limits": [
+    {
+      "tool": "ask_researcher",
+      "result_chars": 50000,
+      "timeout_ms": 600000
+    },
+    {
+      "tool": "roll_dice",
+      "result_chars": 0,
+      "timeout_ms": null
+    },
+    {
+      "tool": "read",
+      "result_chars": 1000,
+      "timeout_ms": 30000
+    },
+    {
+      "tool": "web_search",
+      "result_chars": 1000,
+      "timeout_ms": 30000
+    },
+    {
+      "tool": "ask_researcher",
+      "global_timeout": "0s",
+      "timeout_ms": 5000
+    },
+    {
+      "tool": "read",
+      "global_timeout": "0s",
+      "timeout_ms": null
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "character_scoped": {
+    "character": "aria"
+  },
+  "ping_now_reply": {
+    "status": "skipped",
+    "cold": false,
+    "reason": "no_prefix",
+    "detail": "no cached request"
+  }
+}

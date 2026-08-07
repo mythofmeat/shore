@@ -1,0 +1,1873 @@
+{
+  "_header": [
+    "Cross-language parity fixture for provider model discovery.",
+    "",
+    "GENERATED from crates/daemon/src/llm/discovery.rs by driving the real Rust",
+    "in a throwaway worktree at 9023b46d — the last commit where the daemon",
+    "crate still compiles. This file is FROZEN: nothing regenerates this file.",
+    "A later diff against it is a defect in the TypeScript, not a fixture that",
+    "needs updating."
+  ],
+  "cache_version": 1,
+  "refresh_interval_secs": 86400,
+  "anthropic_version_header": "2023-06-01",
+  "build_models_url": [
+    {
+      "base_url": "https://openrouter.ai/api/v1",
+      "expect": "https://openrouter.ai/api/v1/models"
+    },
+    {
+      "base_url": "https://openrouter.ai/api/v1/",
+      "expect": "https://openrouter.ai/api/v1/models"
+    },
+    {
+      "base_url": "https://openrouter.ai/api/v1///",
+      "expect": "https://openrouter.ai/api/v1/models"
+    },
+    {
+      "base_url": "https://api.openai.com/v1",
+      "expect": "https://api.openai.com/v1/models"
+    },
+    {
+      "base_url": "http://localhost:8080",
+      "expect": "http://localhost:8080/models"
+    },
+    {
+      "base_url": "",
+      "expect": "/models"
+    },
+    {
+      "base_url": "/",
+      "expect": "/models"
+    }
+  ],
+  "build_anthropic_models_url": [
+    {
+      "base_url": "https://api.anthropic.com",
+      "expect": "https://api.anthropic.com/v1/models"
+    },
+    {
+      "base_url": "https://api.anthropic.com/",
+      "expect": "https://api.anthropic.com/v1/models"
+    },
+    {
+      "base_url": "https://gateway.test/api/v1",
+      "expect": "https://gateway.test/api/v1/models"
+    },
+    {
+      "base_url": "https://gateway.test/api/v1/",
+      "expect": "https://gateway.test/api/v1/models"
+    },
+    {
+      "base_url": "https://gateway.test/api/v1///",
+      "expect": "https://gateway.test/api/v1/models"
+    },
+    {
+      "base_url": "https://gateway.test/v1/beta",
+      "expect": "https://gateway.test/v1/beta/v1/models"
+    },
+    {
+      "base_url": "https://gateway.test/v10",
+      "expect": "https://gateway.test/v10/v1/models"
+    },
+    {
+      "base_url": "https://v1",
+      "expect": "https://v1/models"
+    },
+    {
+      "base_url": "",
+      "expect": "/v1/models"
+    }
+  ],
+  "truncate_for_log": [
+    {
+      "name": "empty",
+      "input": "",
+      "input_byte_len": 0,
+      "expect": "",
+      "expect_byte_len": 0
+    },
+    {
+      "name": "short ascii",
+      "input": "hi",
+      "input_byte_len": 2,
+      "expect": "hi",
+      "expect_byte_len": 2
+    },
+    {
+      "name": "exactly 512 ascii",
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "input_byte_len": 512,
+      "expect": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "expect_byte_len": 512
+    },
+    {
+      "name": "513 ascii",
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "input_byte_len": 513,
+      "expect": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…",
+      "expect_byte_len": 515
+    },
+    {
+      "name": "2000 ascii",
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "input_byte_len": 2000,
+      "expect": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…",
+      "expect_byte_len": 515
+    },
+    {
+      "name": "3-byte char straddling byte 512",
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx世yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "input_byte_len": 2513,
+      "expect": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…",
+      "expect_byte_len": 513
+    },
+    {
+      "name": "3-byte char starting at byte 511",
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx世yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "input_byte_len": 1114,
+      "expect": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…",
+      "expect_byte_len": 514
+    },
+    {
+      "name": "cut lands on a boundary",
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx世",
+      "input_byte_len": 515,
+      "expect": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…",
+      "expect_byte_len": 515
+    },
+    {
+      "name": "all 3-byte chars",
+      "input": "世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世",
+      "input_byte_len": 900,
+      "expect": "世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世…",
+      "expect_byte_len": 513
+    },
+    {
+      "name": "all 4-byte chars",
+      "input": "🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂",
+      "input_byte_len": 800,
+      "expect": "🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂🙂…",
+      "expect_byte_len": 515
+    },
+    {
+      "name": "all 2-byte chars",
+      "input": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "input_byte_len": 800,
+      "expect": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé…",
+      "expect_byte_len": 515
+    },
+    {
+      "name": "multibyte under cap",
+      "input": "世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世",
+      "input_byte_len": 300,
+      "expect": "世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世世",
+      "expect_byte_len": 300
+    }
+  ],
+  "effective_model_sdk": [
+    {
+      "provider_key": "opencode-go",
+      "model_id": "qwen3.7-max",
+      "default_sdk": "openai",
+      "expect": "anthropic"
+    },
+    {
+      "provider_key": "opencode-go",
+      "model_id": "QWEN3-MAX",
+      "default_sdk": "openai",
+      "expect": "anthropic"
+    },
+    {
+      "provider_key": "opencode-go",
+      "model_id": "vendor/qwen3",
+      "default_sdk": "openai",
+      "expect": "anthropic"
+    },
+    {
+      "provider_key": "opencode-go",
+      "model_id": "a/b/qwen-plus",
+      "default_sdk": "openai",
+      "expect": "anthropic"
+    },
+    {
+      "provider_key": "opencode-go",
+      "model_id": "minimax-m2.7",
+      "default_sdk": "openai",
+      "expect": "anthropic"
+    },
+    {
+      "provider_key": "opencode-go",
+      "model_id": "MiniMax/minimax-m2",
+      "default_sdk": "openai",
+      "expect": "anthropic"
+    },
+    {
+      "provider_key": "opencode-go",
+      "model_id": "deepseek-v4-pro",
+      "default_sdk": "openai",
+      "expect": "openai"
+    },
+    {
+      "provider_key": "opencode-go",
+      "model_id": "kimi-k2.6",
+      "default_sdk": "openai",
+      "expect": "openai"
+    },
+    {
+      "provider_key": "opencode-go",
+      "model_id": "glm-5.1",
+      "default_sdk": "anthropic",
+      "expect": "openai"
+    },
+    {
+      "provider_key": "opencode-go",
+      "model_id": "qwen/deepseek-v4",
+      "default_sdk": "openai",
+      "expect": "openai"
+    },
+    {
+      "provider_key": "opencode-go",
+      "model_id": "",
+      "default_sdk": "openai",
+      "expect": "openai"
+    },
+    {
+      "provider_key": "opencode-go",
+      "model_id": "minimax",
+      "default_sdk": "openai",
+      "expect": "anthropic"
+    },
+    {
+      "provider_key": "openrouter",
+      "model_id": "qwen/qwen3-max",
+      "default_sdk": "openai",
+      "expect": "openai"
+    },
+    {
+      "provider_key": "openrouter",
+      "model_id": "minimax-m2",
+      "default_sdk": "anthropic",
+      "expect": "anthropic"
+    },
+    {
+      "provider_key": "openai",
+      "model_id": "gpt-4o",
+      "default_sdk": "openai",
+      "expect": "openai"
+    }
+  ],
+  "map_entry": {
+    "now": "2026-04-28T10:00:00+00:00",
+    "cases": [
+      {
+        "name": "minimal openai entry",
+        "provider_key": "openai",
+        "base_url": "https://api.openai.com/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "gpt-4o",
+          "object": "model",
+          "created": 1234567890,
+          "owned_by": "openai"
+        },
+        "expect": {
+          "provider_key": "openai",
+          "model_id": "gpt-4o",
+          "sdk": "openai",
+          "base_url": "https://api.openai.com/v1",
+          "created_at": 1234567890,
+          "owned_by": "openai",
+          "raw_provider_metadata": {
+            "id": "gpt-4o",
+            "object": "model",
+            "created": 1234567890,
+            "owned_by": "openai"
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "id absent yields nothing",
+        "provider_key": "openai",
+        "base_url": "u",
+        "sdk": "openai",
+        "raw": {
+          "object": "model"
+        },
+        "expect": null
+      },
+      {
+        "name": "non-string id yields nothing",
+        "provider_key": "openai",
+        "base_url": "u",
+        "sdk": "openai",
+        "raw": {
+          "id": 5
+        },
+        "expect": null
+      },
+      {
+        "name": "null id yields nothing",
+        "provider_key": "openai",
+        "base_url": "u",
+        "sdk": "openai",
+        "raw": {
+          "id": null
+        },
+        "expect": null
+      },
+      {
+        "name": "empty string id is kept",
+        "provider_key": "openai",
+        "base_url": "u",
+        "sdk": "openai",
+        "raw": {
+          "id": ""
+        },
+        "expect": {
+          "provider_key": "openai",
+          "model_id": "",
+          "sdk": "openai",
+          "base_url": "u",
+          "raw_provider_metadata": {
+            "id": ""
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "name wins over display_name",
+        "provider_key": "openai",
+        "base_url": "u",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "name": "From name",
+          "display_name": "From display_name"
+        },
+        "expect": {
+          "provider_key": "openai",
+          "model_id": "x",
+          "display_name": "From name",
+          "sdk": "openai",
+          "base_url": "u",
+          "raw_provider_metadata": {
+            "id": "x",
+            "name": "From name",
+            "display_name": "From display_name"
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "display_name is the fallback",
+        "provider_key": "openai",
+        "base_url": "u",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "display_name": "From display_name"
+        },
+        "expect": {
+          "provider_key": "openai",
+          "model_id": "x",
+          "display_name": "From display_name",
+          "sdk": "openai",
+          "base_url": "u",
+          "raw_provider_metadata": {
+            "id": "x",
+            "display_name": "From display_name"
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "non-string name suppresses the display_name fallback",
+        "provider_key": "openai",
+        "base_url": "u",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "name": 5,
+          "display_name": "From display_name"
+        },
+        "expect": {
+          "provider_key": "openai",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "u",
+          "raw_provider_metadata": {
+            "id": "x",
+            "name": 5,
+            "display_name": "From display_name"
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "null name suppresses the display_name fallback",
+        "provider_key": "openai",
+        "base_url": "u",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "name": null,
+          "display_name": "From display_name"
+        },
+        "expect": {
+          "provider_key": "openai",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "u",
+          "raw_provider_metadata": {
+            "id": "x",
+            "name": null,
+            "display_name": "From display_name"
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "created as integer seconds",
+        "provider_key": "openai",
+        "base_url": "u",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "created": 1700000000
+        },
+        "expect": {
+          "provider_key": "openai",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "u",
+          "created_at": 1700000000,
+          "raw_provider_metadata": {
+            "id": "x",
+            "created": 1700000000
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "negative created is kept",
+        "provider_key": "openai",
+        "base_url": "u",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "created": -5
+        },
+        "expect": {
+          "provider_key": "openai",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "u",
+          "created_at": -5,
+          "raw_provider_metadata": {
+            "id": "x",
+            "created": -5
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "fractional created is not an integer",
+        "provider_key": "openai",
+        "base_url": "u",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "created": 1700000000.5
+        },
+        "expect": {
+          "provider_key": "openai",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "u",
+          "raw_provider_metadata": {
+            "id": "x",
+            "created": 1700000000.5
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "created_at rfc3339 at the epoch",
+        "provider_key": "anthropic",
+        "base_url": "u",
+        "sdk": "anthropic",
+        "raw": {
+          "id": "x",
+          "created_at": "1970-01-01T00:00:00Z"
+        },
+        "expect": {
+          "provider_key": "anthropic",
+          "model_id": "x",
+          "sdk": "anthropic",
+          "base_url": "u",
+          "created_at": 0,
+          "raw_provider_metadata": {
+            "id": "x",
+            "created_at": "1970-01-01T00:00:00Z"
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "created_at rfc3339 with an offset",
+        "provider_key": "anthropic",
+        "base_url": "u",
+        "sdk": "anthropic",
+        "raw": {
+          "id": "x",
+          "created_at": "2026-04-28T10:00:00+02:00"
+        },
+        "expect": {
+          "provider_key": "anthropic",
+          "model_id": "x",
+          "sdk": "anthropic",
+          "base_url": "u",
+          "created_at": 1777363200,
+          "raw_provider_metadata": {
+            "id": "x",
+            "created_at": "2026-04-28T10:00:00+02:00"
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "created_at garbage yields nothing",
+        "provider_key": "anthropic",
+        "base_url": "u",
+        "sdk": "anthropic",
+        "raw": {
+          "id": "x",
+          "created_at": "nope"
+        },
+        "expect": {
+          "provider_key": "anthropic",
+          "model_id": "x",
+          "sdk": "anthropic",
+          "base_url": "u",
+          "raw_provider_metadata": {
+            "id": "x",
+            "created_at": "nope"
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "created_at date-only is not rfc3339",
+        "provider_key": "anthropic",
+        "base_url": "u",
+        "sdk": "anthropic",
+        "raw": {
+          "id": "x",
+          "created_at": "2026-04-28"
+        },
+        "expect": {
+          "provider_key": "anthropic",
+          "model_id": "x",
+          "sdk": "anthropic",
+          "base_url": "u",
+          "raw_provider_metadata": {
+            "id": "x",
+            "created_at": "2026-04-28"
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "created wins over created_at",
+        "provider_key": "openai",
+        "base_url": "u",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "created": 42,
+          "created_at": "1970-01-01T00:00:00Z"
+        },
+        "expect": {
+          "provider_key": "openai",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "u",
+          "created_at": 42,
+          "raw_provider_metadata": {
+            "id": "x",
+            "created": 42,
+            "created_at": "1970-01-01T00:00:00Z"
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "fractional created falls back to created_at",
+        "provider_key": "openai",
+        "base_url": "u",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "created": 1.5,
+          "created_at": "1970-01-01T00:00:10Z"
+        },
+        "expect": {
+          "provider_key": "openai",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "u",
+          "created_at": 10,
+          "raw_provider_metadata": {
+            "id": "x",
+            "created": 1.5,
+            "created_at": "1970-01-01T00:00:10Z"
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "context_length integer",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "context_length": 200000
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "context_length": 200000,
+          "raw_provider_metadata": {
+            "id": "x",
+            "context_length": 200000
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "fractional context_length is not an unsigned integer",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "context_length": 200000.5
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "raw_provider_metadata": {
+            "id": "x",
+            "context_length": 200000.5
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "negative context_length is not an unsigned integer",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "context_length": -1
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "raw_provider_metadata": {
+            "id": "x",
+            "context_length": -1
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "string context_length is not a number",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "context_length": "200000"
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "raw_provider_metadata": {
+            "id": "x",
+            "context_length": "200000"
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "max_output_tokens from top_provider",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "top_provider": {
+            "max_completion_tokens": 8192
+          }
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "max_output_tokens": 8192,
+          "raw_provider_metadata": {
+            "id": "x",
+            "top_provider": {
+              "max_completion_tokens": 8192
+            }
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "max_output_tokens from the top level",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "max_completion_tokens": 4096
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "max_output_tokens": 4096,
+          "raw_provider_metadata": {
+            "id": "x",
+            "max_completion_tokens": 4096
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "top_provider wins over the top level",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "top_provider": {
+            "max_completion_tokens": 8192
+          },
+          "max_completion_tokens": 4096
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "max_output_tokens": 8192,
+          "raw_provider_metadata": {
+            "id": "x",
+            "top_provider": {
+              "max_completion_tokens": 8192
+            },
+            "max_completion_tokens": 4096
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "null in top_provider falls back to the top level",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "top_provider": {
+            "max_completion_tokens": null
+          },
+          "max_completion_tokens": 4096
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "max_output_tokens": 4096,
+          "raw_provider_metadata": {
+            "id": "x",
+            "top_provider": {
+              "max_completion_tokens": null
+            },
+            "max_completion_tokens": 4096
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "fractional in top_provider falls back to the top level",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "top_provider": {
+            "max_completion_tokens": 1.5
+          },
+          "max_completion_tokens": 4096
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "max_output_tokens": 4096,
+          "raw_provider_metadata": {
+            "id": "x",
+            "top_provider": {
+              "max_completion_tokens": 1.5
+            },
+            "max_completion_tokens": 4096
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "top_provider not an object",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "top_provider": 7,
+          "max_completion_tokens": 4096
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "max_output_tokens": 4096,
+          "raw_provider_metadata": {
+            "id": "x",
+            "top_provider": 7,
+            "max_completion_tokens": 4096
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "empty supported_parameters means known-false",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "supported_parameters": []
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "supports_tools": false,
+          "supports_reasoning": false,
+          "supports_prompt_cache": false,
+          "raw_provider_metadata": {
+            "id": "x",
+            "supported_parameters": []
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "supported_parameters tools",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "supported_parameters": [
+            "temperature",
+            "tools"
+          ]
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "supports_tools": true,
+          "supports_reasoning": false,
+          "supports_prompt_cache": false,
+          "raw_provider_metadata": {
+            "id": "x",
+            "supported_parameters": [
+              "temperature",
+              "tools"
+            ]
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "supported_parameters tool_use alias",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "supported_parameters": [
+            "tool_use"
+          ]
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "supports_tools": true,
+          "supports_reasoning": false,
+          "supports_prompt_cache": false,
+          "raw_provider_metadata": {
+            "id": "x",
+            "supported_parameters": [
+              "tool_use"
+            ]
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "supported_parameters function_calling alias",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "supported_parameters": [
+            "function_calling"
+          ]
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "supports_tools": true,
+          "supports_reasoning": false,
+          "supports_prompt_cache": false,
+          "raw_provider_metadata": {
+            "id": "x",
+            "supported_parameters": [
+              "function_calling"
+            ]
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "supported_parameters reasoning",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "supported_parameters": [
+            "reasoning"
+          ]
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "supports_tools": false,
+          "supports_reasoning": true,
+          "supports_prompt_cache": false,
+          "raw_provider_metadata": {
+            "id": "x",
+            "supported_parameters": [
+              "reasoning"
+            ]
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "supported_parameters include_reasoning alias",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "supported_parameters": [
+            "include_reasoning"
+          ]
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "supports_tools": false,
+          "supports_reasoning": true,
+          "supports_prompt_cache": false,
+          "raw_provider_metadata": {
+            "id": "x",
+            "supported_parameters": [
+              "include_reasoning"
+            ]
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "supported_parameters prompt_cache",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "supported_parameters": [
+            "prompt_cache"
+          ]
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "supports_tools": false,
+          "supports_reasoning": false,
+          "supports_prompt_cache": true,
+          "raw_provider_metadata": {
+            "id": "x",
+            "supported_parameters": [
+              "prompt_cache"
+            ]
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "supported_parameters cache_control alias",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "supported_parameters": [
+            "cache_control"
+          ]
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "supports_tools": false,
+          "supports_reasoning": false,
+          "supports_prompt_cache": true,
+          "raw_provider_metadata": {
+            "id": "x",
+            "supported_parameters": [
+              "cache_control"
+            ]
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "non-string members of supported_parameters are ignored",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "supported_parameters": [
+            7,
+            {
+              "tools": true
+            },
+            "tools"
+          ]
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "supports_tools": true,
+          "supports_reasoning": false,
+          "supports_prompt_cache": false,
+          "raw_provider_metadata": {
+            "id": "x",
+            "supported_parameters": [
+              7,
+              {
+                "tools": true
+              },
+              "tools"
+            ]
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "supported_parameters not an array leaves capabilities unknown",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "supported_parameters": "tools"
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "raw_provider_metadata": {
+            "id": "x",
+            "supported_parameters": "tools"
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "null supported_parameters leaves capabilities unknown",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "supported_parameters": null
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "raw_provider_metadata": {
+            "id": "x",
+            "supported_parameters": null
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "input modalities include image",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "architecture": {
+            "input_modalities": [
+              "text",
+              "image"
+            ]
+          }
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "supports_images": true,
+          "raw_provider_metadata": {
+            "id": "x",
+            "architecture": {
+              "input_modalities": [
+                "text",
+                "image"
+              ]
+            }
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "input modalities exclude image",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "architecture": {
+            "input_modalities": [
+              "text"
+            ]
+          }
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "supports_images": false,
+          "raw_provider_metadata": {
+            "id": "x",
+            "architecture": {
+              "input_modalities": [
+                "text"
+              ]
+            }
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "only the input side is consulted",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "architecture": {
+            "input_modalities": [
+              "text"
+            ],
+            "output_modalities": [
+              "text",
+              "image"
+            ]
+          }
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "supports_images": false,
+          "raw_provider_metadata": {
+            "id": "x",
+            "architecture": {
+              "input_modalities": [
+                "text"
+              ],
+              "output_modalities": [
+                "text",
+                "image"
+              ]
+            }
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "output modalities alone leave images unknown",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "architecture": {
+            "output_modalities": [
+              "image"
+            ]
+          }
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "raw_provider_metadata": {
+            "id": "x",
+            "architecture": {
+              "output_modalities": [
+                "image"
+              ]
+            }
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "architecture without modality arrays leaves images unknown",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "architecture": {
+            "input_modalities": "image"
+          }
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "raw_provider_metadata": {
+            "id": "x",
+            "architecture": {
+              "input_modalities": "image"
+            }
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "architecture not an object leaves images unknown",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "architecture": "multimodal"
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "raw_provider_metadata": {
+            "id": "x",
+            "architecture": "multimodal"
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "non-string description is dropped",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "description": 42
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "raw_provider_metadata": {
+            "id": "x",
+            "description": 42
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "non-string owned_by is dropped",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "x",
+          "owned_by": 42
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "x",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "raw_provider_metadata": {
+            "id": "x",
+            "owned_by": 42
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "full openrouter entry",
+        "provider_key": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "anthropic/claude-3.5-sonnet",
+          "name": "Claude 3.5 Sonnet",
+          "created": 1700000000,
+          "description": "Strong general model.",
+          "context_length": 200000,
+          "supported_parameters": [
+            "temperature",
+            "tools",
+            "reasoning"
+          ],
+          "architecture": {
+            "input_modalities": [
+              "text",
+              "image"
+            ],
+            "output_modalities": [
+              "text"
+            ]
+          },
+          "top_provider": {
+            "max_completion_tokens": 8192
+          },
+          "pricing": {
+            "prompt": "0.000003"
+          }
+        },
+        "expect": {
+          "provider_key": "openrouter",
+          "model_id": "anthropic/claude-3.5-sonnet",
+          "display_name": "Claude 3.5 Sonnet",
+          "sdk": "openai",
+          "base_url": "https://openrouter.ai/api/v1",
+          "created_at": 1700000000,
+          "description": "Strong general model.",
+          "context_length": 200000,
+          "max_output_tokens": 8192,
+          "supports_tools": true,
+          "supports_images": true,
+          "supports_reasoning": true,
+          "supports_prompt_cache": false,
+          "raw_provider_metadata": {
+            "id": "anthropic/claude-3.5-sonnet",
+            "name": "Claude 3.5 Sonnet",
+            "created": 1700000000,
+            "description": "Strong general model.",
+            "context_length": 200000,
+            "supported_parameters": [
+              "temperature",
+              "tools",
+              "reasoning"
+            ],
+            "architecture": {
+              "input_modalities": [
+                "text",
+                "image"
+              ],
+              "output_modalities": [
+                "text"
+              ]
+            },
+            "top_provider": {
+              "max_completion_tokens": 8192
+            },
+            "pricing": {
+              "prompt": "0.000003"
+            }
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "opencode-go remaps qwen to the anthropic dialect",
+        "provider_key": "opencode-go",
+        "base_url": "https://opencode.ai/zen/go/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "qwen3.7-max",
+          "object": "model"
+        },
+        "expect": {
+          "provider_key": "opencode-go",
+          "model_id": "qwen3.7-max",
+          "sdk": "anthropic",
+          "base_url": "https://opencode.ai/zen/go/v1",
+          "raw_provider_metadata": {
+            "id": "qwen3.7-max",
+            "object": "model"
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      },
+      {
+        "name": "opencode-go leaves other families on openai",
+        "provider_key": "opencode-go",
+        "base_url": "https://opencode.ai/zen/go/v1",
+        "sdk": "openai",
+        "raw": {
+          "id": "glm-5.1",
+          "object": "model"
+        },
+        "expect": {
+          "provider_key": "opencode-go",
+          "model_id": "glm-5.1",
+          "sdk": "openai",
+          "base_url": "https://opencode.ai/zen/go/v1",
+          "raw_provider_metadata": {
+            "id": "glm-5.1",
+            "object": "model"
+          },
+          "discovered_at": "2026-04-28T10:00:00+00:00"
+        }
+      }
+    ]
+  },
+  "parse_models_response": [
+    {
+      "name": "openai minimal list",
+      "provider_key": "openai",
+      "base_url": "https://api.openai.com/v1",
+      "kind": "openai",
+      "body": "{\"object\":\"list\",\"data\":[{\"id\":\"gpt-4o\",\"object\":\"model\"},{\"id\":\"gpt-4o-mini\"}]}",
+      "expect": {
+        "ok": [
+          {
+            "model_id": "gpt-4o",
+            "sdk": "openai",
+            "display_name": null
+          },
+          {
+            "model_id": "gpt-4o-mini",
+            "sdk": "openai",
+            "display_name": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "anthropic list stamps the anthropic sdk",
+      "provider_key": "anthropic",
+      "base_url": "https://api.anthropic.com",
+      "kind": "anthropic",
+      "body": "{\"data\":[{\"id\":\"claude-sonnet-4-20250514\",\"display_name\":\"Claude Sonnet 4\",\"type\":\"model\"}],\"has_more\":false}",
+      "expect": {
+        "ok": [
+          {
+            "model_id": "claude-sonnet-4-20250514",
+            "sdk": "anthropic",
+            "display_name": "Claude Sonnet 4"
+          }
+        ]
+      }
+    },
+    {
+      "name": "entries without an id are skipped, not fatal",
+      "provider_key": "p",
+      "base_url": "u",
+      "kind": "openai",
+      "body": "{\"data\":[{\"object\":\"model\"},{\"id\":\"keep\"}]}",
+      "expect": {
+        "ok": [
+          {
+            "model_id": "keep",
+            "sdk": "openai",
+            "display_name": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "data absent yields an empty list",
+      "provider_key": "p",
+      "base_url": "u",
+      "kind": "openai",
+      "body": "{\"object\":\"list\"}",
+      "expect": {
+        "ok": []
+      }
+    },
+    {
+      "name": "empty data yields an empty list",
+      "provider_key": "p",
+      "base_url": "u",
+      "kind": "openai",
+      "body": "{\"data\":[]}",
+      "expect": {
+        "ok": []
+      }
+    },
+    {
+      "name": "null data is a parse error",
+      "provider_key": "p",
+      "base_url": "u",
+      "kind": "openai",
+      "body": "{\"data\":null}",
+      "expect": {
+        "error": "parse"
+      }
+    },
+    {
+      "name": "object data is a parse error",
+      "provider_key": "p",
+      "base_url": "u",
+      "kind": "openai",
+      "body": "{\"data\":{}}",
+      "expect": {
+        "error": "parse"
+      }
+    },
+    {
+      "name": "a bare array is a parse error",
+      "provider_key": "p",
+      "base_url": "u",
+      "kind": "openai",
+      "body": "[{\"id\":\"x\"}]",
+      "expect": {
+        "error": "parse"
+      }
+    },
+    {
+      "name": "malformed json is a parse error",
+      "provider_key": "p",
+      "base_url": "u",
+      "kind": "openai",
+      "body": "{bad json",
+      "expect": {
+        "error": "parse"
+      }
+    },
+    {
+      "name": "empty body is a parse error",
+      "provider_key": "p",
+      "base_url": "u",
+      "kind": "openai",
+      "body": "",
+      "expect": {
+        "error": "parse"
+      }
+    },
+    {
+      "name": "opencode-go feed splits across two dialects",
+      "provider_key": "opencode-go",
+      "base_url": "https://opencode.ai/zen/go/v1",
+      "kind": "openai",
+      "body": "{\"data\":[{\"id\":\"deepseek-v4-pro\"},{\"id\":\"kimi-k2.6\"},{\"id\":\"glm-5.1\"},{\"id\":\"qwen3.7-max\"},{\"id\":\"minimax-m2.7\"}]}",
+      "expect": {
+        "ok": [
+          {
+            "model_id": "deepseek-v4-pro",
+            "sdk": "openai",
+            "display_name": null
+          },
+          {
+            "model_id": "kimi-k2.6",
+            "sdk": "openai",
+            "display_name": null
+          },
+          {
+            "model_id": "glm-5.1",
+            "sdk": "openai",
+            "display_name": null
+          },
+          {
+            "model_id": "qwen3.7-max",
+            "sdk": "anthropic",
+            "display_name": null
+          },
+          {
+            "model_id": "minimax-m2.7",
+            "sdk": "anthropic",
+            "display_name": null
+          }
+        ]
+      }
+    }
+  ],
+  "cache_path": [
+    {
+      "cache_dir": "/cache",
+      "provider_key": "openrouter",
+      "expect": "/cache/providers/openrouter/models.json"
+    },
+    {
+      "cache_dir": "/cache",
+      "provider_key": "opencode-go",
+      "expect": "/cache/providers/opencode-go/models.json"
+    },
+    {
+      "cache_dir": "/var/lib/shore/cache",
+      "provider_key": "anthropic",
+      "expect": "/var/lib/shore/cache/providers/anthropic/models.json"
+    },
+    {
+      "cache_dir": "relative/cache",
+      "provider_key": "p",
+      "expect": "relative/cache/providers/p/models.json"
+    }
+  ],
+  "staleness": [
+    {
+      "name": "one hour old is fresh",
+      "offset_secs": 3600,
+      "age_is_known": true,
+      "stale": false
+    },
+    {
+      "name": "just under the interval is fresh",
+      "offset_secs": 86399,
+      "age_is_known": true,
+      "stale": false
+    },
+    {
+      "name": "exactly at the interval is stale",
+      "offset_secs": 86400,
+      "age_is_known": true,
+      "stale": true
+    },
+    {
+      "name": "two days old is stale",
+      "offset_secs": 172800,
+      "age_is_known": true,
+      "stale": true
+    },
+    {
+      "name": "a future timestamp is stale",
+      "offset_secs": -3600,
+      "age_is_known": false,
+      "stale": true
+    },
+    {
+      "name": "garbage is stale",
+      "fetched_at": "not-a-timestamp",
+      "age_is_known": false,
+      "stale": true
+    },
+    {
+      "name": "empty is stale",
+      "fetched_at": "",
+      "age_is_known": false,
+      "stale": true
+    },
+    {
+      "name": "date-only is stale",
+      "fetched_at": "2026-04-28",
+      "age_is_known": false,
+      "stale": true
+    },
+    {
+      "name": "epoch is stale",
+      "fetched_at": "1970-01-01T00:00:00Z",
+      "age_is_known": true,
+      "stale": true
+    }
+  ],
+  "write_cache": {
+    "full": {
+      "cache": {
+        "version": 1,
+        "provider_key": "openrouter",
+        "fetched_at": "2026-04-28T10:00:00Z",
+        "base_url": "https://openrouter.ai/api/v1",
+        "models": [
+          {
+            "provider_key": "openrouter",
+            "model_id": "x-ai/grok-2",
+            "display_name": "Grok 2",
+            "sdk": "openai",
+            "base_url": "https://openrouter.ai/api/v1",
+            "created_at": 1700000000,
+            "owned_by": "xai",
+            "context_length": 131072,
+            "max_output_tokens": 8192,
+            "supports_tools": true,
+            "supports_images": false,
+            "raw_provider_metadata": {
+              "id": "x-ai/grok-2"
+            },
+            "discovered_at": "2026-04-28T10:00:00Z"
+          },
+          {
+            "provider_key": "openrouter",
+            "model_id": "bare",
+            "sdk": "openai",
+            "discovered_at": "2026-04-28T10:00:00Z"
+          }
+        ]
+      },
+      "bytes": "{\n  \"version\": 1,\n  \"provider_key\": \"openrouter\",\n  \"fetched_at\": \"2026-04-28T10:00:00Z\",\n  \"base_url\": \"https://openrouter.ai/api/v1\",\n  \"models\": [\n    {\n      \"provider_key\": \"openrouter\",\n      \"model_id\": \"x-ai/grok-2\",\n      \"display_name\": \"Grok 2\",\n      \"sdk\": \"openai\",\n      \"base_url\": \"https://openrouter.ai/api/v1\",\n      \"created_at\": 1700000000,\n      \"owned_by\": \"xai\",\n      \"context_length\": 131072,\n      \"max_output_tokens\": 8192,\n      \"supports_tools\": true,\n      \"supports_images\": false,\n      \"raw_provider_metadata\": {\n        \"id\": \"x-ai/grok-2\"\n      },\n      \"discovered_at\": \"2026-04-28T10:00:00Z\"\n    },\n    {\n      \"provider_key\": \"openrouter\",\n      \"model_id\": \"bare\",\n      \"sdk\": \"openai\",\n      \"discovered_at\": \"2026-04-28T10:00:00Z\"\n    }\n  ]\n}",
+      "tmp_left_behind": false,
+      "round_trips": true
+    },
+    "empty": {
+      "cache": {
+        "version": 1,
+        "provider_key": "p",
+        "fetched_at": "2026-04-28T10:00:00Z",
+        "models": []
+      },
+      "bytes": "{\n  \"version\": 1,\n  \"provider_key\": \"p\",\n  \"fetched_at\": \"2026-04-28T10:00:00Z\",\n  \"models\": []\n}"
+    }
+  },
+  "read_cache": [
+    {
+      "name": "absent file",
+      "file": null,
+      "expect": null
+    },
+    {
+      "name": "corrupt file",
+      "file": "not-json{{{",
+      "expect": null
+    },
+    {
+      "name": "empty file",
+      "file": "",
+      "expect": null
+    },
+    {
+      "name": "current version",
+      "file": "{\"version\":1,\"provider_key\":\"openrouter\",\"fetched_at\":\"2026-04-28T10:00:00Z\",\"models\":[]}",
+      "expect": {
+        "version": 1,
+        "provider_key": "openrouter",
+        "fetched_at": "2026-04-28T10:00:00Z",
+        "models": []
+      }
+    },
+    {
+      "name": "older version",
+      "file": "{\"version\":0,\"provider_key\":\"openrouter\",\"fetched_at\":\"2026-04-28T10:00:00Z\",\"models\":[]}",
+      "expect": {
+        "version": 0,
+        "provider_key": "openrouter",
+        "fetched_at": "2026-04-28T10:00:00Z",
+        "models": []
+      }
+    },
+    {
+      "name": "newer version reads as missing",
+      "file": "{\"version\":100,\"provider_key\":\"openrouter\",\"fetched_at\":\"2026-04-28T10:00:00Z\",\"models\":[]}",
+      "expect": null
+    },
+    {
+      "name": "missing models reads as missing",
+      "file": "{\"version\":1,\"provider_key\":\"openrouter\",\"fetched_at\":\"2026-04-28T10:00:00Z\"}",
+      "expect": null
+    },
+    {
+      "name": "missing version reads as missing",
+      "file": "{\"provider_key\":\"openrouter\",\"fetched_at\":\"2026-04-28T10:00:00Z\",\"models\":[]}",
+      "expect": null
+    },
+    {
+      "name": "unknown fields are ignored",
+      "file": "{\"version\":1,\"provider_key\":\"openrouter\",\"fetched_at\":\"2026-04-28T10:00:00Z\",\"models\":[],\"future\":true}",
+      "expect": {
+        "version": 1,
+        "provider_key": "openrouter",
+        "fetched_at": "2026-04-28T10:00:00Z",
+        "models": []
+      }
+    },
+    {
+      "name": "absent optional model fields default",
+      "file": "{\"version\":1,\"provider_key\":\"openrouter\",\"fetched_at\":\"t\",\"models\":[{\"provider_key\":\"openrouter\",\"model_id\":\"m\",\"sdk\":\"openai\",\"discovered_at\":\"t\"}]}",
+      "expect": {
+        "version": 1,
+        "provider_key": "openrouter",
+        "fetched_at": "t",
+        "models": [
+          {
+            "provider_key": "openrouter",
+            "model_id": "m",
+            "sdk": "openai",
+            "discovered_at": "t"
+          }
+        ]
+      }
+    }
+  ]
+}

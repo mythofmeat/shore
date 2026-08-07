@@ -4,7 +4,8 @@ use crate::protocol::error::ErrorCode;
 use crate::protocol::types::{CharacterInfo, Message, StreamMetadata};
 
 /// Server hello — sent after client connects.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ServerHello {
     pub v: u32,
     pub server_name: String,
@@ -13,7 +14,8 @@ pub struct ServerHello {
 }
 
 /// Full state snapshot.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct History {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -27,10 +29,12 @@ pub struct History {
     #[serde(default, skip_serializing_if = "is_zero")]
     pub active_start: usize,
     #[serde(default)]
+    #[ts(type = "unknown")]
     pub config: serde_json::Value,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_character: Option<String>,
     #[serde(default)]
+    #[ts(type = "number")]
     pub revision: u64,
 }
 
@@ -43,24 +47,29 @@ fn is_zero(value: &usize) -> bool {
 }
 
 /// Server shutting down.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct Shutdown {}
 
 /// Keepalive.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct Ping {}
 
 /// Command result.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct CommandOutput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
     pub name: String,
+    #[ts(type = "unknown")]
     pub data: serde_json::Value,
 }
 
 /// Error response.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct Error {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -69,7 +78,8 @@ pub struct Error {
 }
 
 /// Begin streaming.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct StreamStart {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -83,7 +93,8 @@ pub struct StreamStart {
 }
 
 /// Partial content chunk.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct StreamChunk {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -109,7 +120,8 @@ fn default_content_type() -> String {
 /// result (e.g. `collect_stream`) must keep reading until they see it.
 /// Older servers that predate the field will serialize nothing; `serde`'s
 /// default treats missing as `true`, preserving pre-tool-loop semantics.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct StreamEnd {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -121,6 +133,7 @@ pub struct StreamEnd {
     pub msg_id: Option<String>,
     /// Durable history revision containing `msg_id`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(type = "number")]
     pub revision: Option<u64>,
     pub content: String,
     pub metadata: StreamMetadata,
@@ -146,12 +159,13 @@ fn default_true() -> bool {
 }
 
 /// Generation phase change.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct Phase {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
     pub phase: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
 }
 
@@ -165,9 +179,11 @@ pub use crate::protocol::types::MessageOrigin;
 /// Because `message` is flattened, the wire shape is byte-identical to the
 /// envelope-level `origin` field this struct carried historically — only the
 /// Rust-side field moved.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct NewMessage {
     #[serde(default)]
+    #[ts(type = "number")]
     pub revision: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub character: Option<String>,
@@ -176,12 +192,14 @@ pub struct NewMessage {
 }
 
 /// Tool invoked during generation.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ToolCall {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
     pub tool_id: String,
     pub tool_name: String,
+    #[ts(type = "unknown")]
     pub input: serde_json::Value,
     /// Sub-agent name when this call is from a nested `ask_<name>` loop; see
     /// [`StreamStart::subagent`].
@@ -190,7 +208,8 @@ pub struct ToolCall {
 }
 
 /// Tool completed.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ToolResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -206,12 +225,13 @@ pub struct ToolResult {
 }
 
 /// Server-generated image ready.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct SendImage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
     pub path: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub caption: Option<String>,
     /// Base64-encoded image data for wire transfer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -223,7 +243,8 @@ pub struct SendImage {
 }
 
 /// Unexpected cache invalidation warning.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct CacheWarning {
     pub expected_tokens: u32,
     pub message: String,
@@ -237,7 +258,8 @@ pub struct CacheWarning {
 /// payload intentionally never carries the env var value or the API key
 /// itself — only the provider key, the friendly key names, the failure
 /// classification, and a sanitized human-readable reason.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ProviderFallbackWarning {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -259,7 +281,8 @@ pub struct ProviderFallbackWarning {
 }
 
 /// A configured usage budget crossed one or more warning thresholds.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct UsageWarning {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -295,7 +318,8 @@ pub struct UsageWarning {
 }
 
 /// All server → client message types, tagged by "type".
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ServerMessage {
     Hello(ServerHello),

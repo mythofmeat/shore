@@ -2,7 +2,7 @@
 //!
 //! Provides a `spawn_connection()` function that spawns a background task
 //! managing the daemon connection with automatic reconnect and exponential
-//! backoff. Used by shore-tui and shore-matrix.
+//! backoff. Used by shore-tui.
 
 use crate::protocol::client_msg::ClientMessage;
 use crate::protocol::server_msg::ServerMessage;
@@ -41,7 +41,7 @@ pub enum ConnCommand {
 /// - `addr`: optional explicit TCP address (`host:port`)
 /// - `config`: optional config path for service discovery
 /// - `client_id`: protocol-level client type (e.g. `"tui"`, `"bridge"`)
-/// - `app_name`: human-readable application name (e.g. `"shore-tui"`, `"shore-matrix"`)
+/// - `app_name`: human-readable application name (e.g. `"shore-tui"`)
 /// - `character`: optional character to select on connect
 pub fn spawn_connection(
     addr: Option<String>,

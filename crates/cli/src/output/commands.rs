@@ -270,8 +270,6 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "refresh_all_provider_models" => print_provider_refresh_all(data),
         "memory" => print_memory(data),
         "compact" => print_compact_result(data),
-        "memory_changelog" => print_changelog(data),
-        "memory_dream" => print_memory_dream(data),
         "config" => print_config(data, false),
         "tools" => print_tools(data),
         "config_check" => print_config_check(data),
@@ -406,7 +404,7 @@ fn print_one_call(out: &mut impl Write, call: &serde_json::Value, width: usize) 
     print_dim_line(out, "(--json for the full, untruncated payload)");
 }
 
-/// Render curated heartbeat/dreaming transcripts: per call, the model/provider
+/// Render the curated heartbeat transcript: per call, the model/provider
 /// and usage, the reasoning, visible text, and each tool call with its result.
 fn print_transcript(data: &serde_json::Value) {
     let stdout = io::stdout();
@@ -527,75 +525,6 @@ fn truncate_display(s: &str, max: usize) -> String {
     }
     let kept: String = flat.chars().take(max).collect();
     format!("{kept}… (+{} chars)", count.saturating_sub(max))
-}
-
-fn print_memory_dream(data: &serde_json::Value) {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    let width = term_width();
-    let char_name = data["character"].as_str().unwrap_or("?");
-    write_section_header(&mut out, "Dreaming", char_name, width);
-
-    if data.get("state_path").is_some() {
-        write_row(
-            &mut out,
-            "Enabled",
-            if data["enabled"].as_bool().unwrap_or(false) {
-                "yes"
-            } else {
-                "no"
-            },
-        );
-        write_row(
-            &mut out,
-            "Frequency",
-            data["frequency"].as_str().unwrap_or("?"),
-        );
-        write_row(
-            &mut out,
-            "Due",
-            if data["due"].as_bool().unwrap_or(false) {
-                "yes"
-            } else {
-                "no"
-            },
-        );
-        if let Some(last) = data["last_run_at"].as_str() {
-            write_row(&mut out, "Last run", last);
-        }
-    } else if data["status"].as_str() == Some("not_due") {
-        write_row(&mut out, "Status", "not due");
-    } else {
-        let dry = data["dry_run"].as_bool().unwrap_or(false);
-        write_row(&mut out, "Status", if dry { "dry run" } else { "ran" });
-        let candidates = data["candidate_count"].as_u64().unwrap_or_else(|| {
-            data["candidates"]
-                .as_array()
-                .map_or(0, |items| u64::try_from(items.len()).unwrap_or(u64::MAX))
-        });
-        let indexed = data["indexed_count"].as_u64().unwrap_or_else(|| {
-            data["indexed"]
-                .as_array()
-                .map_or(0, |items| u64::try_from(items.len()).unwrap_or(u64::MAX))
-        });
-        let rejected = data["rejected_count"].as_u64().unwrap_or(0);
-        write_row(&mut out, "Candidates", &candidates.to_string());
-        write_row(&mut out, "Indexed", &indexed.to_string());
-        write_row(&mut out, "Deferred", &rejected.to_string());
-        let paths_opt = if dry {
-            data["would_write_paths"].as_array()
-        } else {
-            data["paths_written"].as_array()
-        };
-        if let Some(paths) = paths_opt {
-            write_row(
-                &mut out,
-                if dry { "Would write" } else { "Paths written" },
-                &paths.len().to_string(),
-            );
-        }
-    }
-    _ = writeln!(out);
 }
 
 fn print_command_output_fallback(name: &str, data: &serde_json::Value) {
@@ -1343,63 +1272,6 @@ fn print_memory(data: &serde_json::Value) {
             "Breakdown",
             &format!("{curated} curated, {daily} daily, {images} images"),
         );
-    }
-    _ = writeln!(out);
-}
-
-/// Print memory changelog.
-fn print_changelog(data: &serde_json::Value) {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    let width = term_width();
-
-    let char_name = data["character"].as_str().unwrap_or("?");
-    write_section_header(&mut out, "Memory Changelog", char_name, width);
-
-    if let Some(entries) = data["changelog"].as_array() {
-        if entries.is_empty() {
-            if use_color() {
-                let _ignored = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-            }
-            _ = writeln!(out, "  (no entries)");
-            if use_color() {
-                _ = crossterm::execute!(out, ResetColor);
-            }
-        } else {
-            for entry in entries {
-                let ts = entry["timestamp"].as_str().unwrap_or("");
-                let op = entry["operation"].as_str().unwrap_or("?");
-                let desc = entry["description"].as_str().unwrap_or("");
-
-                let time_display = parse_timestamp(ts)
-                    .map_or_else(|| ts.to_owned(), |dt| dt.format("%b %d %H:%M").to_string());
-
-                if use_color() {
-                    let _ignored = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-                }
-                _ = write!(out, "  {time_display:<16}");
-
-                let op_color = match op {
-                    s if s.starts_with("create") || s.starts_with("compaction") => Color::Green,
-                    s if s.starts_with("update") => Color::DarkYellow,
-                    s if s.starts_with("supersede")
-                        || s.starts_with("delete")
-                        || s.starts_with("decay") =>
-                    {
-                        Color::Red
-                    }
-                    _ => Color::White,
-                };
-                if use_color() {
-                    _ = crossterm::execute!(out, SetForegroundColor(op_color));
-                }
-                _ = write!(out, "{op:<18}");
-                if use_color() {
-                    _ = crossterm::execute!(out, ResetColor);
-                }
-                _ = writeln!(out, "{desc}");
-            }
-        }
     }
     _ = writeln!(out);
 }

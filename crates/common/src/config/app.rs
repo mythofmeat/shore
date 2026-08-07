@@ -183,9 +183,6 @@ pub struct BackgroundDefaultsConfig {
 
     /// Per-task override for memory compaction passes.
     pub compaction: Option<String>,
-
-    /// Per-task override for the AI librarian dreaming pass.
-    pub dreaming: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -198,7 +195,7 @@ pub struct DefaultsConfig {
     /// on the first chat model declared in the catalog.
     pub model: Option<String>,
 
-    /// Background-task model selectors (heartbeat, compaction, dreaming).
+    /// Background-task model selectors (heartbeat, compaction).
     #[serde(default)]
     pub background: BackgroundDefaultsConfig,
 
@@ -208,13 +205,6 @@ pub struct DefaultsConfig {
     /// new key is unset).
     #[serde(default)]
     pub heartbeat: Option<String>,
-
-    /// **Deprecated.** Old top-level shorthand for
-    /// `defaults.background.dreaming`. Parse-only — the loader logs a
-    /// warning and forwards into `background.dreaming` (only when the
-    /// new key is unset).
-    #[serde(default)]
-    pub dreaming: Option<String>,
 
     /// Default embedding profile name.
     pub embedding: Option<String>,
@@ -241,7 +231,6 @@ pub struct DefaultsConfig {
 pub enum BackgroundTask {
     Heartbeat,
     Compaction,
-    Dreaming,
 }
 
 impl DefaultsConfig {
@@ -264,7 +253,6 @@ impl DefaultsConfig {
         let per_task = match task {
             BackgroundTask::Heartbeat => self.background.heartbeat.as_deref(),
             BackgroundTask::Compaction => self.background.compaction.as_deref(),
-            BackgroundTask::Dreaming => self.background.dreaming.as_deref(),
         };
         per_task.or(self.background.model.as_deref())
     }
@@ -289,20 +277,6 @@ impl DefaultsConfig {
                 );
             }
         }
-        if let Some(value) = self.dreaming.take() {
-            if self.background.dreaming.is_none() {
-                tracing::warn!(
-                    "`defaults.dreaming = {value:?}` is deprecated; \
-                     move it under `[defaults.background]` as `dreaming`."
-                );
-                self.background.dreaming = Some(value);
-            } else {
-                tracing::warn!(
-                    "`defaults.dreaming` is deprecated and was ignored \
-                     because `defaults.background.dreaming` is already set."
-                );
-            }
-        }
     }
 }
 
@@ -312,7 +286,6 @@ impl Default for DefaultsConfig {
             model: None,
             background: BackgroundDefaultsConfig::default(),
             heartbeat: None,
-            dreaming: None,
             embedding: None,
             image_generation: None,
             subagent_model: None,
@@ -494,10 +467,44 @@ impl Default for CompactionConfig {
     }
 }
 
+/// Reject an idle threshold that is not a whole number of seconds.
+///
+/// Compaction truncates both sides to seconds before comparing, so an
+/// `idle_trigger` of `1.5s` does not wait 1.5s — it fires at 1.2s of idleness.
+/// Rather than let a value mean something other than what it says, the range
+/// where the truncation is observable stops being representable. Nothing is
+/// lost: these are minutes-to-hours thresholds a human types into
+/// `config.toml`, and they mean nothing at millisecond resolution.
+///
+/// This rule used to have a second half. Dreaming's `minimum_inactive_time`
+/// compared whole `Duration`s and so rounded the *opposite* way from
+/// compaction — same file, same shape of value, disagreeing thresholds (#15) —
+/// and the rule existed as much to stop the two diverging as to stop either
+/// one surprising a reader. Dreaming was deleted in `cf55dff4` and only the
+/// compaction half is left, which is still reason enough to keep it.
+///
+/// Zero is a whole number of seconds and stays valid — it is how these fields
+/// spell "off".
+fn reject_fractional_seconds(field: &str, value: ConfigDuration) -> Result<(), String> {
+    if value.as_millis().is_multiple_of(1000) {
+        return Ok(());
+    }
+    Err(format!(
+        "{field} is {}ms. Idle thresholds must be a whole number of seconds: \
+         the compaction triggers truncate to seconds before comparing, so a \
+         value like `1.5s` would fire early. Use `{}s` or `{}s`.",
+        value.as_millis(),
+        value.as_secs(),
+        value.as_secs().saturating_add(1),
+    ))
+}
+
 impl CompactionConfig {
     /// Check the turn-count invariants that make compaction meaningful: both
     /// turn thresholds must exceed `keep_recent_turns` (otherwise a pass would
     /// have nothing to compact) and `max_turns` must not undercut `min_turns`.
+    /// Also that neither idle threshold carries a fraction of a second — see
+    /// [`reject_fractional_seconds`].
     ///
     /// Config load treats a violation as a hard error so the daemon refuses to
     /// start (and a runtime reload keeps the previous config) instead of
@@ -507,6 +514,8 @@ impl CompactionConfig {
         if !self.enabled {
             return Ok(());
         }
+        reject_fractional_seconds("memory.compaction.idle_trigger", self.idle_trigger)?;
+        reject_fractional_seconds("memory.compaction.archive_after", self.archive_after)?;
         let k = self.keep_recent_turns;
         if self.min_turns <= k || self.max_turns <= k {
             return Err(format!(
@@ -568,10 +577,6 @@ pub struct ToolsConfig {
     #[serde(default)]
     pub web_search: SearchConfig,
 
-    /// Tool subprocess sandbox settings — `[tools.sandbox]`.
-    #[serde(default)]
-    pub sandbox: SandboxConfig,
-
     /// Per-tool config tables `[tools.config.<name>]`, keyed by tool name;
     /// currently carries per-tool `max_result_chars`. (A flattened
     /// `[tools.<name>]` form would be nicer but serde's `flatten` drops fields
@@ -595,52 +600,9 @@ impl Default for ToolsConfig {
             max_result_chars: default_max_result_chars(),
             timeout: default_tool_timeout(),
             web_search: SearchConfig::default(),
-            sandbox: SandboxConfig::default(),
             config: BTreeMap::new(),
         }
     }
-}
-
-// ── [tools.sandbox] ──────────────────────────────────────────────────────
-
-/// Tool subprocess sandbox configuration (`[tools.sandbox]`).
-///
-/// The sandbox confines the programs tools spawn with Landlock (filesystem) and
-/// seccomp (syscalls) so an escaped command cannot reach outside the character
-/// workspace, regain privileges, or open the network. It is named for the
-/// mechanism rather than any one tool: `git` is currently the only tool that
-/// spawns a process, but anything else that gains one is confined by the same
-/// settings. Linux-only; other platforms always behave as if disabled.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-#[serde(deny_unknown_fields)]
-pub struct SandboxConfig {
-    /// Enforcement mode. `auto` (default) enforces the sandbox when the kernel
-    /// supports Landlock and silently falls back to the subcommand denylist
-    /// otherwise; `on` requires it (the tool call fails when it cannot be
-    /// enforced); `off` disables it.
-    #[serde(default)]
-    pub mode: SandboxMode,
-
-    /// Permit outbound network from sandboxed subprocesses. Default `false`:
-    /// the seccomp layer blocks IPv4/IPv6 socket creation, which is invisible
-    /// to the local-repo git workloads the sandbox wraps today. Set `true` if a
-    /// future tool's subprocesses need the network.
-    #[serde(default)]
-    pub allow_network: bool,
-}
-
-/// Sandbox enforcement mode (`[tools.sandbox].mode`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum SandboxMode {
-    /// Enforce when the kernel supports Landlock; fall back to denylist-only
-    /// (with a logged warning) when it does not.
-    #[default]
-    Auto,
-    /// Require the sandbox: the tool call fails when it cannot be enforced.
-    On,
-    /// Disable the sandbox; rely on the subcommand denylist alone.
-    Off,
 }
 
 /// Whether allowlist `pattern` matches tool `name`.
@@ -759,15 +721,12 @@ pub struct MemoryConfig {
     pub compaction: CompactionConfig,
 
     #[serde(default)]
-    pub dreaming: DreamingConfig,
-
-    #[serde(default)]
     pub thinking: ThinkingConfig,
 
     #[serde(default)]
     pub retrieval: RetrievalConfig,
 
-    /// After a successful compaction or dreaming pass, push the character's
+    /// After a successful compaction pass, push the character's
     /// workspace git repository to its configured remote (a plain `git push`
     /// honoring the repo's own upstream). Off by default: the daemon never
     /// invents a remote, and pushing is opt-in to one the operator set up. A
@@ -775,57 +734,6 @@ pub struct MemoryConfig {
     /// never fails the pass.
     #[serde(default)]
     pub git_push: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct DreamingConfig {
-    /// Whether scheduled memory dreaming sweeps are enabled.
-    #[serde(default)]
-    pub enabled: bool,
-
-    /// Five-field cron schedule: minute hour day-of-month month day-of-week.
-    #[serde(default = "default_dreaming_frequency")]
-    pub frequency: String,
-
-    /// Minimum time since the last user message before a scheduled dreaming
-    /// sweep is allowed to fire. Heartbeat / autonomy turns do not reset this.
-    #[serde(default = "default_dreaming_minimum_inactive_time")]
-    pub minimum_inactive_time: ConfigDuration,
-
-    /// How long a scheduled cron occurrence stays eligible to fire after its
-    /// scheduled time. If the daemon misses the occurrence by more than this,
-    /// it is skipped and the next cron tick takes over (no late catch-up).
-    #[serde(default = "default_dreaming_max_lateness")]
-    pub max_lateness: ConfigDuration,
-
-    /// When true, run idle-style compaction (if eligible) before the
-    /// dreaming sweep. Aborts the sweep on compaction failure.
-    #[serde(default = "default_true")]
-    pub compact_before: bool,
-
-    /// When true (and `compact_before` is true), the pre-dream compaction
-    /// archives every chat turn instead of retaining the configured
-    /// `keep_recent_turns` tail.
-    #[serde(default)]
-    pub compact_to_zero: bool,
-}
-
-serde_default!(default_dreaming_frequency -> String { "0 3 * * *".to_owned() });
-serde_default!(default_dreaming_minimum_inactive_time -> ConfigDuration { ConfigDuration::from_secs(45 * 60) });
-serde_default!(default_dreaming_max_lateness -> ConfigDuration { ConfigDuration::from_secs(2 * 60 * 60) });
-
-impl Default for DreamingConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            frequency: default_dreaming_frequency(),
-            minimum_inactive_time: default_dreaming_minimum_inactive_time(),
-            max_lateness: default_dreaming_max_lateness(),
-            compact_before: true,
-            compact_to_zero: false,
-        }
-    }
 }
 
 serde_default!(default_replay_prior_thinking -> ThinkingReplay { ThinkingReplay::All });
@@ -1013,99 +921,10 @@ impl Default for RetrievalConfig {
 #[serde(deny_unknown_fields)]
 pub struct ConnectionsConfig {
     #[serde(default)]
-    pub matrix: Option<MatrixConfig>,
-
-    #[serde(default)]
     pub telegram: Option<TelegramConfig>,
 
     #[serde(default)]
     pub discord: Option<DiscordConfig>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct MatrixConfig {
-    /// Whether the Matrix connection is enabled.
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-
-    /// Mirror the full conversation for each character into its bound Matrix
-    /// room — user prompts from any client, assistant replies, and autonomous
-    /// messages — routed by character. When false, only the room you are
-    /// actively chatting in sees responses (legacy behavior). Consumed by the
-    /// `shore-matrix` bridge; the daemon only stores it.
-    #[serde(default = "default_true")]
-    pub mirror_all: bool,
-
-    /// Homeserver URL. Required for external mode.
-    /// In embedded mode, auto-derived as http://localhost:{port}.
-    pub homeserver: Option<String>,
-
-    /// Matrix user ID (e.g. @shore:example.com). External mode only.
-    pub user_id: Option<String>,
-
-    /// Room ID to join. External mode only.
-    pub room_id: Option<String>,
-
-    /// Matrix user to trust for SAS auto-verification.
-    pub trusted_user: Option<String>,
-
-    /// Embedded homeserver configuration. Presence of this section
-    /// activates embedded mode (mutually exclusive with homeserver).
-    pub embedded: Option<EmbeddedConfig>,
-}
-
-/// Configuration for an embedded (shore-matrix-managed) Matrix homeserver.
-///
-/// Uses a conduwuit-compatible server (continuwuity, conduwuit, or tuwunel).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct EmbeddedConfig {
-    /// Matrix server_name (e.g. "shore.local"). Cannot be changed after first run.
-    #[serde(default = "default_server_name")]
-    pub server_name: String,
-
-    /// HTTP bind address. Default "127.0.0.1" (loopback only). Set to "0.0.0.0"
-    /// or "::" to expose the embedded homeserver to LAN/Tailscale clients.
-    #[serde(default = "default_bind_address")]
-    pub bind_address: String,
-
-    /// HTTP listener port.
-    #[serde(default = "default_homeserver_port")]
-    pub port: u16,
-
-    /// Admin username (without @ or :server).
-    #[serde(default = "default_admin_user")]
-    pub admin_user: String,
-
-    /// Admin account password.
-    pub admin_password: String,
-
-    /// Override data directory. Default: $XDG_DATA_HOME/shore/matrix-server/
-    pub data_dir: Option<String>,
-
-    /// Override the homeserver binary name.
-    /// Default: auto-detect (tries continuwuity, conduwuit, tuwunel).
-    pub binary: Option<String>,
-}
-
-serde_default!(default_server_name -> String { "localhost".into() });
-serde_default!(default_bind_address -> String { "127.0.0.1".into() });
-serde_default!(default_homeserver_port -> u16 { 6167 });
-serde_default!(default_admin_user -> String { "shore-admin".into() });
-
-impl Default for EmbeddedConfig {
-    fn default() -> Self {
-        Self {
-            server_name: default_server_name(),
-            bind_address: default_bind_address(),
-            port: default_homeserver_port(),
-            admin_user: default_admin_user(),
-            admin_password: String::new(),
-            data_dir: None,
-            binary: None,
-        }
-    }
 }
 
 /// Reserved for future use.
@@ -1613,6 +1432,20 @@ mod tests {
     }
 
     #[test]
+    fn the_rejection_says_which_two_values_would_work() {
+        // An error that only says "no" leaves the user guessing at a field
+        // they typed in seconds and got told about in milliseconds.
+        let compaction = CompactionConfig {
+            idle_trigger: ConfigDuration::from_millis(90_500),
+            ..CompactionConfig::default()
+        };
+        let err = compaction.validate().unwrap_err();
+        assert!(err.contains("memory.compaction.idle_trigger"), "{err}");
+        assert!(err.contains("`90s`"), "{err}");
+        assert!(err.contains("`91s`"), "{err}");
+    }
+
+    #[test]
     fn defaults_are_sensible() {
         let config = AppConfig::default();
         assert!(config.defaults.stream);
@@ -2064,108 +1897,21 @@ bogus_key = 42
         assert!(result.is_err());
     }
 
+    /// The Matrix bridge is gone; `deny_unknown_fields` on `[connections]`
+    /// turns a config that still configures it into a hard load error rather
+    /// than a table that parses and does nothing. Same reasoning as the
+    /// removed sandbox keys: a connection the daemon will never open should
+    /// say so at startup, not go quiet.
     #[test]
-    fn matrix_external_mode_parses() {
-        let toml_str = r#"
-[connections.matrix]
-homeserver = "https://matrix.example.com"
-user_id = "@shore:example.com"
-room_id = "!abc:example.com"
-trusted_user = "@user:example.com"
-"#;
-        let config: AppConfig = toml::from_str(toml_str).unwrap();
-        let mx = config.connections.matrix.unwrap();
-        assert!(mx.enabled);
-        assert_eq!(mx.homeserver.as_deref(), Some("https://matrix.example.com"));
-        assert_eq!(mx.user_id.as_deref(), Some("@shore:example.com"));
-        assert_eq!(mx.room_id.as_deref(), Some("!abc:example.com"));
-        assert_eq!(mx.trusted_user.as_deref(), Some("@user:example.com"));
-        assert!(mx.embedded.is_none());
-    }
-
-    #[test]
-    fn matrix_embedded_mode_parses() {
-        let toml_str = r#"
-[connections.matrix]
-trusted_user = "@user:shore.local"
-
-[connections.matrix.embedded]
-server_name = "shore.local"
-port = 9008
-admin_password = "secret"
-"#;
-        let config: AppConfig = toml::from_str(toml_str).unwrap();
-        let mx = config.connections.matrix.unwrap();
-        assert!(mx.enabled);
-        assert!(mx.homeserver.is_none());
-        assert_eq!(mx.trusted_user.as_deref(), Some("@user:shore.local"));
-        let emb = mx.embedded.unwrap();
-        assert_eq!(emb.server_name, "shore.local");
-        assert_eq!(emb.port, 9008);
-        assert_eq!(emb.admin_password, "secret");
-        assert_eq!(emb.admin_user, "shore-admin");
-        assert!(emb.data_dir.is_none());
-        assert!(emb.binary.is_none());
-    }
-
-    #[test]
-    fn matrix_embedded_defaults() {
-        let toml_str = r#"
-[connections.matrix.embedded]
-admin_password = "required"
-"#;
-        let config: AppConfig = toml::from_str(toml_str).unwrap();
-        let emb = config.connections.matrix.unwrap().embedded.unwrap();
-        assert_eq!(emb.server_name, "localhost");
-        assert_eq!(emb.bind_address, "127.0.0.1");
-        assert_eq!(emb.port, 6167);
-        assert_eq!(emb.admin_user, "shore-admin");
-    }
-
-    #[test]
-    fn matrix_embedded_with_all_fields() {
-        let toml_str = r#"
-[connections.matrix.embedded]
-server_name = "test.local"
-bind_address = "0.0.0.0"
-port = 9999
-admin_user = "admin"
-admin_password = "secret123"
-data_dir = "/tmp/test-matrix"
-binary = "tuwunel"
-"#;
-        let config: AppConfig = toml::from_str(toml_str).unwrap();
-        let emb = config.connections.matrix.unwrap().embedded.unwrap();
-        assert_eq!(emb.server_name, "test.local");
-        assert_eq!(emb.bind_address, "0.0.0.0");
-        assert_eq!(emb.port, 9999);
-        assert_eq!(emb.admin_user, "admin");
-        assert_eq!(emb.admin_password, "secret123");
-        assert_eq!(emb.data_dir.as_deref(), Some("/tmp/test-matrix"));
-        assert_eq!(emb.binary.as_deref(), Some("tuwunel"));
-    }
-
-    #[test]
-    fn matrix_rejects_unknown_embedded_field() {
-        let toml_str = r#"
-[connections.matrix.embedded]
-server_name = "localhost"
-bogus = true
-"#;
-        let result: Result<AppConfig, _> = toml::from_str(toml_str);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn matrix_disabled() {
-        let toml_str = r#"
-[connections.matrix]
-enabled = false
-homeserver = "https://matrix.example.com"
-"#;
-        let config: AppConfig = toml::from_str(toml_str).unwrap();
-        let mx = config.connections.matrix.unwrap();
-        assert!(!mx.enabled);
+    fn removed_matrix_connection_is_rejected() {
+        for toml_str in [
+            "[connections.matrix]\nenabled = true\n",
+            "[connections.matrix.embedded]\nadmin_password = \"x\"\n",
+        ] {
+            let err = toml::from_str::<AppConfig>(toml_str)
+                .expect_err("[connections.matrix] must not parse");
+            assert!(err.to_string().contains("matrix"), "{err}");
+        }
     }
 
     // ── resolve_display_name ────────────────────────────────────────
@@ -2261,37 +2007,24 @@ cache_forensics = true
         assert!(enabled_config.advanced.cache_forensics);
     }
 
+    /// `[tools.exec]` and `[tools.sandbox]` both configured the removed
+    /// subprocess sandbox. `deny_unknown_fields` turns either into a hard parse
+    /// error, which is the intended migration: a config still asking for
+    /// confinement says so loudly instead of being ignored into a false sense
+    /// of one.
     #[test]
-    fn tool_sandbox_defaults_to_auto_no_network() {
-        let tools = ToolsConfig::default();
-        assert_eq!(tools.sandbox.mode, SandboxMode::Auto);
-        assert!(!tools.sandbox.allow_network);
-    }
-
-    #[test]
-    fn tool_sandbox_parses_mode_and_network() {
-        let toml_str = r#"
-[tools.sandbox]
-mode = "on"
-allow_network = true
-"#;
-        let cfg: AppConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(cfg.tools.sandbox.mode, SandboxMode::On);
-        assert!(cfg.tools.sandbox.allow_network);
-
-        let off: AppConfig = toml::from_str("[tools.sandbox]\nmode = \"off\"\n").unwrap();
-        assert_eq!(off.tools.sandbox.mode, SandboxMode::Off);
-        assert!(!off.tools.sandbox.allow_network);
-    }
-
-    /// The pre-release key was `[tools.exec]`; `deny_unknown_fields` makes the
-    /// old name a hard parse error rather than a silently ignored table that
-    /// would leave the sandbox on its default.
-    #[test]
-    fn legacy_tools_exec_key_is_rejected() {
-        let err = toml::from_str::<AppConfig>("[tools.exec]\nsandbox = \"off\"\n")
-            .expect_err("[tools.exec] must not parse");
-        assert!(err.to_string().contains("exec"), "{err}");
+    fn removed_sandbox_keys_are_rejected() {
+        for toml_str in [
+            "[tools.exec]\nsandbox = \"off\"\n",
+            "[tools.sandbox]\nmode = \"on\"\n",
+        ] {
+            let err = toml::from_str::<AppConfig>(toml_str)
+                .expect_err("removed sandbox keys must not parse");
+            assert!(
+                err.to_string().contains("exec") || err.to_string().contains("sandbox"),
+                "{err}"
+            );
+        }
     }
 
     #[test]
@@ -2348,11 +2081,7 @@ socket_path = "/tmp/shore-llm.sock"
             model: Some("chat".into()),
             ..Default::default()
         };
-        for task in [
-            BackgroundTask::Heartbeat,
-            BackgroundTask::Compaction,
-            BackgroundTask::Dreaming,
-        ] {
+        for task in [BackgroundTask::Heartbeat, BackgroundTask::Compaction] {
             assert_eq!(d_only_chat.resolve_background_model_name(task), None);
         }
 
@@ -2366,11 +2095,7 @@ socket_path = "/tmp/shore-llm.sock"
             },
             ..Default::default()
         };
-        for task in [
-            BackgroundTask::Heartbeat,
-            BackgroundTask::Compaction,
-            BackgroundTask::Dreaming,
-        ] {
+        for task in [BackgroundTask::Heartbeat, BackgroundTask::Compaction] {
             assert_eq!(d_split.resolve_background_model_name(task), Some("bg"));
         }
     }
@@ -2390,26 +2115,19 @@ socket_path = "/tmp/shore-llm.sock"
 [defaults]
 model = "primary"
 heartbeat = "hb-old"
-dreaming = "dream-old"
 "#;
         let mut config: AppConfig = toml::from_str(toml_str).unwrap();
         // Pre-normalize: old keys still populated, background empty.
         assert_eq!(config.defaults.heartbeat.as_deref(), Some("hb-old"));
-        assert_eq!(config.defaults.dreaming.as_deref(), Some("dream-old"));
         assert!(config.defaults.background.heartbeat.is_none());
 
         config.defaults.normalize_deprecated_aliases();
 
         // Old keys cleared, background filled.
         assert!(config.defaults.heartbeat.is_none());
-        assert!(config.defaults.dreaming.is_none());
         assert_eq!(
             config.defaults.background.heartbeat.as_deref(),
             Some("hb-old")
-        );
-        assert_eq!(
-            config.defaults.background.dreaming.as_deref(),
-            Some("dream-old")
         );
     }
 

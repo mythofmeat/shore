@@ -10,8 +10,8 @@ use serde::Serialize;
 use shore_common::config::app::{
     AdvancedConfig, AppConfig, AutonomyConfig, BackgroundDefaultsConfig, BehaviorConfig,
     BudgetWeekday, CommandNotifyConfig, CompactionConfig, ConnectionsConfig, DaemonConfig,
-    DefaultsConfig, DreamingConfig, EmbeddedConfig, HeartbeatConfig, LlmSidecarConfig,
-    MatrixConfig, McpServerConfig, MemoryConfig, NotificationBackend, NotificationEventsConfig,
+    DefaultsConfig, HeartbeatConfig, LlmSidecarConfig,
+    McpServerConfig, MemoryConfig, NotificationBackend, NotificationEventsConfig,
     NotificationsConfig, NtfyConfig, RetrievalBinaryMode, RetrievalConfig, RetrievalMode,
     SearchConfig, SubagentConfig, ThinkingConfig, ToolOverride, ToolsConfig, UsageBudgetAction,
     UsageBudgetConfig, UsageBudgetPeriod, UsageConfig, UsageSpikeWarningsConfig, UserTimestampMode,
@@ -241,7 +241,6 @@ fn arb_defaults_config() -> impl Strategy<Value = DefaultsConfig> {
         prop::option::of(arb_nonempty_text()),
         prop::option::of(arb_nonempty_text()),
         prop::option::of(arb_nonempty_text()),
-        prop::option::of(arb_nonempty_text()),
         any::<bool>(),
     )
         .prop_map(
@@ -250,7 +249,6 @@ fn arb_defaults_config() -> impl Strategy<Value = DefaultsConfig> {
                 background_model,
                 background_heartbeat,
                 background_compaction,
-                background_dreaming,
                 embedding,
                 image_generation,
                 subagent_model,
@@ -262,10 +260,8 @@ fn arb_defaults_config() -> impl Strategy<Value = DefaultsConfig> {
                     model: background_model,
                     heartbeat: background_heartbeat,
                     compaction: background_compaction,
-                    dreaming: background_dreaming,
                 },
                 heartbeat: None,
-                dreaming: None,
                 embedding,
                 image_generation,
                 subagent_model,
@@ -314,20 +310,6 @@ fn arb_tool_override() -> impl Strategy<Value = ToolOverride> {
         })
 }
 
-fn arb_sandbox_config() -> impl Strategy<Value = shore_common::config::app::SandboxConfig> {
-    use shore_common::config::app::SandboxMode;
-    (
-        prop::sample::select(vec![SandboxMode::Auto, SandboxMode::On, SandboxMode::Off]),
-        any::<bool>(),
-    )
-        .prop_map(
-            |(mode, allow_network)| shore_common::config::app::SandboxConfig {
-                mode,
-                allow_network,
-            },
-        )
-}
-
 fn arb_tools_config() -> impl Strategy<Value = ToolsConfig> {
     (
         prop::collection::vec(arb_nonempty_text(), 0..5),
@@ -340,7 +322,6 @@ fn arb_tools_config() -> impl Strategy<Value = ToolsConfig> {
             arb_nonempty_text(),
             any::<bool>(),
         ),
-        arb_sandbox_config(),
         prop::collection::vec((arb_nonempty_text(), arb_tool_override()), 0..3),
     )
         .prop_map(
@@ -350,7 +331,6 @@ fn arb_tools_config() -> impl Strategy<Value = ToolsConfig> {
                 max_result_chars,
                 timeout,
                 search,
-                sandbox,
                 per_tool_entries,
             )| {
                 let (api_key_env, result_limit, search_depth, include_answer) = search;
@@ -366,7 +346,6 @@ fn arb_tools_config() -> impl Strategy<Value = ToolsConfig> {
                         search_depth,
                         include_answer,
                     },
-                    sandbox,
                     config,
                 }
             },
@@ -483,34 +462,6 @@ fn arb_compaction_config() -> impl Strategy<Value = CompactionConfig> {
         )
 }
 
-fn arb_dreaming_config() -> impl Strategy<Value = DreamingConfig> {
-    (
-        any::<bool>(),
-        Just("0 3 * * *".to_owned()),
-        arb_duration(),
-        arb_duration(),
-        any::<bool>(),
-        any::<bool>(),
-    )
-        .prop_map(
-            |(
-                enabled,
-                frequency,
-                minimum_inactive_time,
-                max_lateness,
-                compact_before,
-                compact_to_zero,
-            )| DreamingConfig {
-                enabled,
-                frequency,
-                minimum_inactive_time,
-                max_lateness,
-                compact_before,
-                compact_to_zero,
-            },
-        )
-}
-
 fn arb_retrieval_mode() -> impl Strategy<Value = RetrievalMode> {
     prop_oneof![
         Just(RetrievalMode::Auto),
@@ -535,7 +486,6 @@ fn arb_thinking_replay() -> impl Strategy<Value = shore_common::config::app::Thi
 fn arb_memory_config() -> impl Strategy<Value = MemoryConfig> {
     (
         arb_compaction_config(),
-        arb_dreaming_config(),
         arb_thinking_replay(),
         arb_retrieval_mode(),
         0_u64..10_000_000,
@@ -548,7 +498,6 @@ fn arb_memory_config() -> impl Strategy<Value = MemoryConfig> {
         .prop_map(
             |(
                 compaction,
-                dreaming,
                 replay_prior_thinking,
                 mode,
                 max_file_bytes,
@@ -559,7 +508,6 @@ fn arb_memory_config() -> impl Strategy<Value = MemoryConfig> {
                 git_push,
             )| MemoryConfig {
                 compaction,
-                dreaming,
                 thinking: ThinkingConfig {
                     replay_prior_thinking,
                 },
@@ -576,57 +524,8 @@ fn arb_memory_config() -> impl Strategy<Value = MemoryConfig> {
         )
 }
 
-fn arb_matrix_config() -> impl Strategy<Value = MatrixConfig> {
-    let embedded_strategy = (
-        arb_nonempty_text(),
-        arb_nonempty_text(),
-        1_u16..9000,
-        arb_nonempty_text(),
-        arb_nonempty_text(),
-        prop::option::of(arb_nonempty_text()),
-        prop::option::of(arb_nonempty_text()),
-    )
-        .prop_map(
-            |(server_name, bind_address, port, admin_user, admin_password, data_dir, binary)| {
-                EmbeddedConfig {
-                    server_name,
-                    bind_address,
-                    port,
-                    admin_user,
-                    admin_password,
-                    data_dir,
-                    binary,
-                }
-            },
-        );
-
-    (
-        any::<bool>(),
-        any::<bool>(),
-        prop::option::of(arb_nonempty_text()),
-        prop::option::of(arb_nonempty_text()),
-        prop::option::of(arb_nonempty_text()),
-        prop::option::of(arb_nonempty_text()),
-        prop::option::of(embedded_strategy),
-    )
-        .prop_map(
-            |(enabled, mirror_all, homeserver, user_id, room_id, trusted_user, embedded)| {
-                MatrixConfig {
-                    enabled,
-                    mirror_all,
-                    homeserver,
-                    user_id,
-                    room_id,
-                    trusted_user,
-                    embedded,
-                }
-            },
-        )
-}
-
 fn arb_connections_config() -> impl Strategy<Value = ConnectionsConfig> {
-    prop::option::of(arb_matrix_config()).prop_map(|matrix| ConnectionsConfig {
-        matrix,
+    Just(ConnectionsConfig {
         telegram: None,
         discord: None,
     })

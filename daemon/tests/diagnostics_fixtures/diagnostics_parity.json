@@ -1,0 +1,2708 @@
+{
+  "_header": [
+    "Generated from crates/common/src/diagnostics/mod.rs at 9023b46d. FROZEN.",
+    "A diff against this file is a defect in the TypeScript, not a fixture to regenerate.",
+    "The entries behind each `seed` are declared in the generator and re-declared in",
+    "the replay, so what went in is what the assertions are about."
+  ],
+  "ring": [
+    {
+      "case": "empty",
+      "capacity": 5,
+      "pushes": 0,
+      "len": 0,
+      "is_empty": true,
+      "items": [],
+      "last_n": [
+        {
+          "n": 0,
+          "items": []
+        },
+        {
+          "n": 1,
+          "items": []
+        },
+        {
+          "n": 2,
+          "items": []
+        },
+        {
+          "n": 3,
+          "items": []
+        },
+        {
+          "n": 100,
+          "items": []
+        }
+      ]
+    },
+    {
+      "case": "within_capacity",
+      "capacity": 5,
+      "pushes": 3,
+      "len": 3,
+      "is_empty": false,
+      "items": [
+        0,
+        1,
+        2
+      ],
+      "last_n": [
+        {
+          "n": 0,
+          "items": []
+        },
+        {
+          "n": 1,
+          "items": [
+            2
+          ]
+        },
+        {
+          "n": 2,
+          "items": [
+            1,
+            2
+          ]
+        },
+        {
+          "n": 3,
+          "items": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "n": 100,
+          "items": [
+            0,
+            1,
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "case": "exactly_full",
+      "capacity": 3,
+      "pushes": 3,
+      "len": 3,
+      "is_empty": false,
+      "items": [
+        0,
+        1,
+        2
+      ],
+      "last_n": [
+        {
+          "n": 0,
+          "items": []
+        },
+        {
+          "n": 1,
+          "items": [
+            2
+          ]
+        },
+        {
+          "n": 2,
+          "items": [
+            1,
+            2
+          ]
+        },
+        {
+          "n": 3,
+          "items": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "n": 100,
+          "items": [
+            0,
+            1,
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "case": "evicts_oldest",
+      "capacity": 3,
+      "pushes": 5,
+      "len": 3,
+      "is_empty": false,
+      "items": [
+        2,
+        3,
+        4
+      ],
+      "last_n": [
+        {
+          "n": 0,
+          "items": []
+        },
+        {
+          "n": 1,
+          "items": [
+            4
+          ]
+        },
+        {
+          "n": 2,
+          "items": [
+            3,
+            4
+          ]
+        },
+        {
+          "n": 3,
+          "items": [
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "n": 100,
+          "items": [
+            2,
+            3,
+            4
+          ]
+        }
+      ]
+    },
+    {
+      "case": "capacity_one",
+      "capacity": 1,
+      "pushes": 4,
+      "len": 1,
+      "is_empty": false,
+      "items": [
+        3
+      ],
+      "last_n": [
+        {
+          "n": 0,
+          "items": []
+        },
+        {
+          "n": 1,
+          "items": [
+            3
+          ]
+        },
+        {
+          "n": 2,
+          "items": [
+            3
+          ]
+        },
+        {
+          "n": 3,
+          "items": [
+            3
+          ]
+        },
+        {
+          "n": 100,
+          "items": [
+            3
+          ]
+        }
+      ]
+    },
+    {
+      "case": "capacity_zero",
+      "capacity": 0,
+      "pushes": 3,
+      "len": 1,
+      "is_empty": false,
+      "items": [
+        2
+      ],
+      "last_n": [
+        {
+          "n": 0,
+          "items": []
+        },
+        {
+          "n": 1,
+          "items": [
+            2
+          ]
+        },
+        {
+          "n": 2,
+          "items": [
+            2
+          ]
+        },
+        {
+          "n": 3,
+          "items": [
+            2
+          ]
+        },
+        {
+          "n": 100,
+          "items": [
+            2
+          ]
+        }
+      ]
+    }
+  ],
+  "to_json": [
+    {
+      "case": "empty/last_n=0",
+      "seed": "empty",
+      "last_n": 0,
+      "ok": {
+        "api_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "empty/last_n=1",
+      "seed": "empty",
+      "last_n": 1,
+      "ok": {
+        "api_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "empty/last_n=2",
+      "seed": "empty",
+      "last_n": 2,
+      "ok": {
+        "api_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "empty/last_n=10",
+      "seed": "empty",
+      "last_n": 10,
+      "ok": {
+        "api_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "empty/last_n=1000",
+      "seed": "empty",
+      "last_n": 1000,
+      "ok": {
+        "api_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "full/last_n=0",
+      "seed": "full",
+      "last_n": 0,
+      "ok": {
+        "api_calls": {
+          "count": 1,
+          "recent": []
+        },
+        "tool_calls": {
+          "count": 1,
+          "recent": []
+        },
+        "errors": {
+          "count": 1,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 1,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "full/last_n=1",
+      "seed": "full",
+      "last_n": 1,
+      "ok": {
+        "api_calls": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:00Z",
+              "model": "test-model",
+              "provider": "anthropic",
+              "input_tokens": 100,
+              "output_tokens": 50,
+              "cache_read_tokens": 80,
+              "cache_write_tokens": 10,
+              "ttft_ms": 200,
+              "total_ms": 1000,
+              "finish_reason": "end_turn",
+              "total_cost_usd": 0.0123,
+              "error": "retried once"
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:01Z",
+              "tool_name": "check_time",
+              "tool_id": "t1",
+              "success": true,
+              "duration_ms": 5,
+              "input_summary": "{}",
+              "output_summary": "2026-01-01T00:00:01Z"
+            }
+          ]
+        },
+        "errors": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:02Z",
+              "error_type": "llm",
+              "message": "connection refused",
+              "context": "character=test"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:03Z",
+              "rid": "rid_1",
+              "provider": "anthropic",
+              "model": "claude-x",
+              "character": "poppy",
+              "from_key": "primary",
+              "to_key": "backup",
+              "kind": "quota",
+              "status": 429,
+              "reason": "rate limited"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": "full/last_n=2",
+      "seed": "full",
+      "last_n": 2,
+      "ok": {
+        "api_calls": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:00Z",
+              "model": "test-model",
+              "provider": "anthropic",
+              "input_tokens": 100,
+              "output_tokens": 50,
+              "cache_read_tokens": 80,
+              "cache_write_tokens": 10,
+              "ttft_ms": 200,
+              "total_ms": 1000,
+              "finish_reason": "end_turn",
+              "total_cost_usd": 0.0123,
+              "error": "retried once"
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:01Z",
+              "tool_name": "check_time",
+              "tool_id": "t1",
+              "success": true,
+              "duration_ms": 5,
+              "input_summary": "{}",
+              "output_summary": "2026-01-01T00:00:01Z"
+            }
+          ]
+        },
+        "errors": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:02Z",
+              "error_type": "llm",
+              "message": "connection refused",
+              "context": "character=test"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:03Z",
+              "rid": "rid_1",
+              "provider": "anthropic",
+              "model": "claude-x",
+              "character": "poppy",
+              "from_key": "primary",
+              "to_key": "backup",
+              "kind": "quota",
+              "status": 429,
+              "reason": "rate limited"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": "full/last_n=10",
+      "seed": "full",
+      "last_n": 10,
+      "ok": {
+        "api_calls": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:00Z",
+              "model": "test-model",
+              "provider": "anthropic",
+              "input_tokens": 100,
+              "output_tokens": 50,
+              "cache_read_tokens": 80,
+              "cache_write_tokens": 10,
+              "ttft_ms": 200,
+              "total_ms": 1000,
+              "finish_reason": "end_turn",
+              "total_cost_usd": 0.0123,
+              "error": "retried once"
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:01Z",
+              "tool_name": "check_time",
+              "tool_id": "t1",
+              "success": true,
+              "duration_ms": 5,
+              "input_summary": "{}",
+              "output_summary": "2026-01-01T00:00:01Z"
+            }
+          ]
+        },
+        "errors": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:02Z",
+              "error_type": "llm",
+              "message": "connection refused",
+              "context": "character=test"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:03Z",
+              "rid": "rid_1",
+              "provider": "anthropic",
+              "model": "claude-x",
+              "character": "poppy",
+              "from_key": "primary",
+              "to_key": "backup",
+              "kind": "quota",
+              "status": 429,
+              "reason": "rate limited"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": "full/last_n=1000",
+      "seed": "full",
+      "last_n": 1000,
+      "ok": {
+        "api_calls": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:00Z",
+              "model": "test-model",
+              "provider": "anthropic",
+              "input_tokens": 100,
+              "output_tokens": 50,
+              "cache_read_tokens": 80,
+              "cache_write_tokens": 10,
+              "ttft_ms": 200,
+              "total_ms": 1000,
+              "finish_reason": "end_turn",
+              "total_cost_usd": 0.0123,
+              "error": "retried once"
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:01Z",
+              "tool_name": "check_time",
+              "tool_id": "t1",
+              "success": true,
+              "duration_ms": 5,
+              "input_summary": "{}",
+              "output_summary": "2026-01-01T00:00:01Z"
+            }
+          ]
+        },
+        "errors": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:02Z",
+              "error_type": "llm",
+              "message": "connection refused",
+              "context": "character=test"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:03Z",
+              "rid": "rid_1",
+              "provider": "anthropic",
+              "model": "claude-x",
+              "character": "poppy",
+              "from_key": "primary",
+              "to_key": "backup",
+              "kind": "quota",
+              "status": 429,
+              "reason": "rate limited"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": "sparse/last_n=0",
+      "seed": "sparse",
+      "last_n": 0,
+      "ok": {
+        "api_calls": {
+          "count": 1,
+          "recent": []
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 1,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "sparse/last_n=1",
+      "seed": "sparse",
+      "last_n": 1,
+      "ok": {
+        "api_calls": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:01:00Z",
+              "model": "sparse-model",
+              "provider": "openai",
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": ""
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:01:01Z",
+              "provider": "openai",
+              "model": "gpt",
+              "character": "wren",
+              "from_key": "only",
+              "kind": "missing",
+              "reason": "no key configured"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": "sparse/last_n=2",
+      "seed": "sparse",
+      "last_n": 2,
+      "ok": {
+        "api_calls": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:01:00Z",
+              "model": "sparse-model",
+              "provider": "openai",
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": ""
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:01:01Z",
+              "provider": "openai",
+              "model": "gpt",
+              "character": "wren",
+              "from_key": "only",
+              "kind": "missing",
+              "reason": "no key configured"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": "sparse/last_n=10",
+      "seed": "sparse",
+      "last_n": 10,
+      "ok": {
+        "api_calls": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:01:00Z",
+              "model": "sparse-model",
+              "provider": "openai",
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": ""
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:01:01Z",
+              "provider": "openai",
+              "model": "gpt",
+              "character": "wren",
+              "from_key": "only",
+              "kind": "missing",
+              "reason": "no key configured"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": "sparse/last_n=1000",
+      "seed": "sparse",
+      "last_n": 1000,
+      "ok": {
+        "api_calls": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:01:00Z",
+              "model": "sparse-model",
+              "provider": "openai",
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": ""
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:01:01Z",
+              "provider": "openai",
+              "model": "gpt",
+              "character": "wren",
+              "from_key": "only",
+              "kind": "missing",
+              "reason": "no key configured"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": "mixed/last_n=0",
+      "seed": "mixed",
+      "last_n": 0,
+      "ok": {
+        "api_calls": {
+          "count": 2,
+          "recent": []
+        },
+        "tool_calls": {
+          "count": 1,
+          "recent": []
+        },
+        "errors": {
+          "count": 1,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 2,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "mixed/last_n=1",
+      "seed": "mixed",
+      "last_n": 1,
+      "ok": {
+        "api_calls": {
+          "count": 2,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:01:00Z",
+              "model": "sparse-model",
+              "provider": "openai",
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": ""
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:01Z",
+              "tool_name": "check_time",
+              "tool_id": "t1",
+              "success": true,
+              "duration_ms": 5,
+              "input_summary": "{}",
+              "output_summary": "2026-01-01T00:00:01Z"
+            }
+          ]
+        },
+        "errors": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:02Z",
+              "error_type": "llm",
+              "message": "connection refused",
+              "context": "character=test"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 2,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:01:01Z",
+              "provider": "openai",
+              "model": "gpt",
+              "character": "wren",
+              "from_key": "only",
+              "kind": "missing",
+              "reason": "no key configured"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": "mixed/last_n=2",
+      "seed": "mixed",
+      "last_n": 2,
+      "ok": {
+        "api_calls": {
+          "count": 2,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:00Z",
+              "model": "test-model",
+              "provider": "anthropic",
+              "input_tokens": 100,
+              "output_tokens": 50,
+              "cache_read_tokens": 80,
+              "cache_write_tokens": 10,
+              "ttft_ms": 200,
+              "total_ms": 1000,
+              "finish_reason": "end_turn",
+              "total_cost_usd": 0.0123,
+              "error": "retried once"
+            },
+            {
+              "timestamp": "2026-01-01T00:01:00Z",
+              "model": "sparse-model",
+              "provider": "openai",
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": ""
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:01Z",
+              "tool_name": "check_time",
+              "tool_id": "t1",
+              "success": true,
+              "duration_ms": 5,
+              "input_summary": "{}",
+              "output_summary": "2026-01-01T00:00:01Z"
+            }
+          ]
+        },
+        "errors": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:02Z",
+              "error_type": "llm",
+              "message": "connection refused",
+              "context": "character=test"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 2,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:03Z",
+              "rid": "rid_1",
+              "provider": "anthropic",
+              "model": "claude-x",
+              "character": "poppy",
+              "from_key": "primary",
+              "to_key": "backup",
+              "kind": "quota",
+              "status": 429,
+              "reason": "rate limited"
+            },
+            {
+              "timestamp": "2026-01-01T00:01:01Z",
+              "provider": "openai",
+              "model": "gpt",
+              "character": "wren",
+              "from_key": "only",
+              "kind": "missing",
+              "reason": "no key configured"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": "mixed/last_n=10",
+      "seed": "mixed",
+      "last_n": 10,
+      "ok": {
+        "api_calls": {
+          "count": 2,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:00Z",
+              "model": "test-model",
+              "provider": "anthropic",
+              "input_tokens": 100,
+              "output_tokens": 50,
+              "cache_read_tokens": 80,
+              "cache_write_tokens": 10,
+              "ttft_ms": 200,
+              "total_ms": 1000,
+              "finish_reason": "end_turn",
+              "total_cost_usd": 0.0123,
+              "error": "retried once"
+            },
+            {
+              "timestamp": "2026-01-01T00:01:00Z",
+              "model": "sparse-model",
+              "provider": "openai",
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": ""
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:01Z",
+              "tool_name": "check_time",
+              "tool_id": "t1",
+              "success": true,
+              "duration_ms": 5,
+              "input_summary": "{}",
+              "output_summary": "2026-01-01T00:00:01Z"
+            }
+          ]
+        },
+        "errors": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:02Z",
+              "error_type": "llm",
+              "message": "connection refused",
+              "context": "character=test"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 2,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:03Z",
+              "rid": "rid_1",
+              "provider": "anthropic",
+              "model": "claude-x",
+              "character": "poppy",
+              "from_key": "primary",
+              "to_key": "backup",
+              "kind": "quota",
+              "status": 429,
+              "reason": "rate limited"
+            },
+            {
+              "timestamp": "2026-01-01T00:01:01Z",
+              "provider": "openai",
+              "model": "gpt",
+              "character": "wren",
+              "from_key": "only",
+              "kind": "missing",
+              "reason": "no key configured"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": "mixed/last_n=1000",
+      "seed": "mixed",
+      "last_n": 1000,
+      "ok": {
+        "api_calls": {
+          "count": 2,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:00Z",
+              "model": "test-model",
+              "provider": "anthropic",
+              "input_tokens": 100,
+              "output_tokens": 50,
+              "cache_read_tokens": 80,
+              "cache_write_tokens": 10,
+              "ttft_ms": 200,
+              "total_ms": 1000,
+              "finish_reason": "end_turn",
+              "total_cost_usd": 0.0123,
+              "error": "retried once"
+            },
+            {
+              "timestamp": "2026-01-01T00:01:00Z",
+              "model": "sparse-model",
+              "provider": "openai",
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": ""
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:01Z",
+              "tool_name": "check_time",
+              "tool_id": "t1",
+              "success": true,
+              "duration_ms": 5,
+              "input_summary": "{}",
+              "output_summary": "2026-01-01T00:00:01Z"
+            }
+          ]
+        },
+        "errors": {
+          "count": 1,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:02Z",
+              "error_type": "llm",
+              "message": "connection refused",
+              "context": "character=test"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 2,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:03Z",
+              "rid": "rid_1",
+              "provider": "anthropic",
+              "model": "claude-x",
+              "character": "poppy",
+              "from_key": "primary",
+              "to_key": "backup",
+              "kind": "quota",
+              "status": 429,
+              "reason": "rate limited"
+            },
+            {
+              "timestamp": "2026-01-01T00:01:01Z",
+              "provider": "openai",
+              "model": "gpt",
+              "character": "wren",
+              "from_key": "only",
+              "kind": "missing",
+              "reason": "no key configured"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": "overflowing/last_n=0",
+      "seed": "overflowing",
+      "last_n": 0,
+      "ok": {
+        "api_calls": {
+          "count": 100,
+          "recent": []
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "overflowing/last_n=1",
+      "seed": "overflowing",
+      "last_n": 1,
+      "ok": {
+        "api_calls": {
+          "count": 100,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:104Z",
+              "model": "m104",
+              "provider": "anthropic",
+              "input_tokens": 104,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "overflowing/last_n=2",
+      "seed": "overflowing",
+      "last_n": 2,
+      "ok": {
+        "api_calls": {
+          "count": 100,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:103Z",
+              "model": "m103",
+              "provider": "anthropic",
+              "input_tokens": 103,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:104Z",
+              "model": "m104",
+              "provider": "anthropic",
+              "input_tokens": 104,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "overflowing/last_n=10",
+      "seed": "overflowing",
+      "last_n": 10,
+      "ok": {
+        "api_calls": {
+          "count": 100,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:95Z",
+              "model": "m95",
+              "provider": "anthropic",
+              "input_tokens": 95,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:96Z",
+              "model": "m96",
+              "provider": "anthropic",
+              "input_tokens": 96,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:97Z",
+              "model": "m97",
+              "provider": "anthropic",
+              "input_tokens": 97,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:98Z",
+              "model": "m98",
+              "provider": "anthropic",
+              "input_tokens": 98,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:99Z",
+              "model": "m99",
+              "provider": "anthropic",
+              "input_tokens": 99,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:100Z",
+              "model": "m100",
+              "provider": "anthropic",
+              "input_tokens": 100,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:101Z",
+              "model": "m101",
+              "provider": "anthropic",
+              "input_tokens": 101,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:102Z",
+              "model": "m102",
+              "provider": "anthropic",
+              "input_tokens": 102,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:103Z",
+              "model": "m103",
+              "provider": "anthropic",
+              "input_tokens": 103,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:104Z",
+              "model": "m104",
+              "provider": "anthropic",
+              "input_tokens": 104,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "overflowing/last_n=1000",
+      "seed": "overflowing",
+      "last_n": 1000,
+      "ok": {
+        "api_calls": {
+          "count": 100,
+          "recent": [
+            {
+              "timestamp": "2026-01-01T00:00:05Z",
+              "model": "m5",
+              "provider": "anthropic",
+              "input_tokens": 5,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:06Z",
+              "model": "m6",
+              "provider": "anthropic",
+              "input_tokens": 6,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:07Z",
+              "model": "m7",
+              "provider": "anthropic",
+              "input_tokens": 7,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:08Z",
+              "model": "m8",
+              "provider": "anthropic",
+              "input_tokens": 8,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:09Z",
+              "model": "m9",
+              "provider": "anthropic",
+              "input_tokens": 9,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:10Z",
+              "model": "m10",
+              "provider": "anthropic",
+              "input_tokens": 10,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:11Z",
+              "model": "m11",
+              "provider": "anthropic",
+              "input_tokens": 11,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:12Z",
+              "model": "m12",
+              "provider": "anthropic",
+              "input_tokens": 12,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:13Z",
+              "model": "m13",
+              "provider": "anthropic",
+              "input_tokens": 13,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:14Z",
+              "model": "m14",
+              "provider": "anthropic",
+              "input_tokens": 14,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:15Z",
+              "model": "m15",
+              "provider": "anthropic",
+              "input_tokens": 15,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:16Z",
+              "model": "m16",
+              "provider": "anthropic",
+              "input_tokens": 16,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:17Z",
+              "model": "m17",
+              "provider": "anthropic",
+              "input_tokens": 17,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:18Z",
+              "model": "m18",
+              "provider": "anthropic",
+              "input_tokens": 18,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:19Z",
+              "model": "m19",
+              "provider": "anthropic",
+              "input_tokens": 19,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:20Z",
+              "model": "m20",
+              "provider": "anthropic",
+              "input_tokens": 20,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:21Z",
+              "model": "m21",
+              "provider": "anthropic",
+              "input_tokens": 21,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:22Z",
+              "model": "m22",
+              "provider": "anthropic",
+              "input_tokens": 22,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:23Z",
+              "model": "m23",
+              "provider": "anthropic",
+              "input_tokens": 23,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:24Z",
+              "model": "m24",
+              "provider": "anthropic",
+              "input_tokens": 24,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:25Z",
+              "model": "m25",
+              "provider": "anthropic",
+              "input_tokens": 25,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:26Z",
+              "model": "m26",
+              "provider": "anthropic",
+              "input_tokens": 26,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:27Z",
+              "model": "m27",
+              "provider": "anthropic",
+              "input_tokens": 27,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:28Z",
+              "model": "m28",
+              "provider": "anthropic",
+              "input_tokens": 28,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:29Z",
+              "model": "m29",
+              "provider": "anthropic",
+              "input_tokens": 29,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:30Z",
+              "model": "m30",
+              "provider": "anthropic",
+              "input_tokens": 30,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:31Z",
+              "model": "m31",
+              "provider": "anthropic",
+              "input_tokens": 31,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:32Z",
+              "model": "m32",
+              "provider": "anthropic",
+              "input_tokens": 32,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:33Z",
+              "model": "m33",
+              "provider": "anthropic",
+              "input_tokens": 33,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:34Z",
+              "model": "m34",
+              "provider": "anthropic",
+              "input_tokens": 34,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:35Z",
+              "model": "m35",
+              "provider": "anthropic",
+              "input_tokens": 35,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:36Z",
+              "model": "m36",
+              "provider": "anthropic",
+              "input_tokens": 36,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:37Z",
+              "model": "m37",
+              "provider": "anthropic",
+              "input_tokens": 37,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:38Z",
+              "model": "m38",
+              "provider": "anthropic",
+              "input_tokens": 38,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:39Z",
+              "model": "m39",
+              "provider": "anthropic",
+              "input_tokens": 39,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:40Z",
+              "model": "m40",
+              "provider": "anthropic",
+              "input_tokens": 40,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:41Z",
+              "model": "m41",
+              "provider": "anthropic",
+              "input_tokens": 41,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:42Z",
+              "model": "m42",
+              "provider": "anthropic",
+              "input_tokens": 42,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:43Z",
+              "model": "m43",
+              "provider": "anthropic",
+              "input_tokens": 43,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:44Z",
+              "model": "m44",
+              "provider": "anthropic",
+              "input_tokens": 44,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:45Z",
+              "model": "m45",
+              "provider": "anthropic",
+              "input_tokens": 45,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:46Z",
+              "model": "m46",
+              "provider": "anthropic",
+              "input_tokens": 46,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:47Z",
+              "model": "m47",
+              "provider": "anthropic",
+              "input_tokens": 47,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:48Z",
+              "model": "m48",
+              "provider": "anthropic",
+              "input_tokens": 48,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:49Z",
+              "model": "m49",
+              "provider": "anthropic",
+              "input_tokens": 49,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:50Z",
+              "model": "m50",
+              "provider": "anthropic",
+              "input_tokens": 50,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:51Z",
+              "model": "m51",
+              "provider": "anthropic",
+              "input_tokens": 51,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:52Z",
+              "model": "m52",
+              "provider": "anthropic",
+              "input_tokens": 52,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:53Z",
+              "model": "m53",
+              "provider": "anthropic",
+              "input_tokens": 53,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:54Z",
+              "model": "m54",
+              "provider": "anthropic",
+              "input_tokens": 54,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:55Z",
+              "model": "m55",
+              "provider": "anthropic",
+              "input_tokens": 55,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:56Z",
+              "model": "m56",
+              "provider": "anthropic",
+              "input_tokens": 56,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:57Z",
+              "model": "m57",
+              "provider": "anthropic",
+              "input_tokens": 57,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:58Z",
+              "model": "m58",
+              "provider": "anthropic",
+              "input_tokens": 58,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:59Z",
+              "model": "m59",
+              "provider": "anthropic",
+              "input_tokens": 59,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:60Z",
+              "model": "m60",
+              "provider": "anthropic",
+              "input_tokens": 60,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:61Z",
+              "model": "m61",
+              "provider": "anthropic",
+              "input_tokens": 61,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:62Z",
+              "model": "m62",
+              "provider": "anthropic",
+              "input_tokens": 62,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:63Z",
+              "model": "m63",
+              "provider": "anthropic",
+              "input_tokens": 63,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:64Z",
+              "model": "m64",
+              "provider": "anthropic",
+              "input_tokens": 64,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:65Z",
+              "model": "m65",
+              "provider": "anthropic",
+              "input_tokens": 65,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:66Z",
+              "model": "m66",
+              "provider": "anthropic",
+              "input_tokens": 66,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:67Z",
+              "model": "m67",
+              "provider": "anthropic",
+              "input_tokens": 67,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:68Z",
+              "model": "m68",
+              "provider": "anthropic",
+              "input_tokens": 68,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:69Z",
+              "model": "m69",
+              "provider": "anthropic",
+              "input_tokens": 69,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:70Z",
+              "model": "m70",
+              "provider": "anthropic",
+              "input_tokens": 70,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:71Z",
+              "model": "m71",
+              "provider": "anthropic",
+              "input_tokens": 71,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:72Z",
+              "model": "m72",
+              "provider": "anthropic",
+              "input_tokens": 72,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:73Z",
+              "model": "m73",
+              "provider": "anthropic",
+              "input_tokens": 73,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:74Z",
+              "model": "m74",
+              "provider": "anthropic",
+              "input_tokens": 74,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:75Z",
+              "model": "m75",
+              "provider": "anthropic",
+              "input_tokens": 75,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:76Z",
+              "model": "m76",
+              "provider": "anthropic",
+              "input_tokens": 76,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:77Z",
+              "model": "m77",
+              "provider": "anthropic",
+              "input_tokens": 77,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:78Z",
+              "model": "m78",
+              "provider": "anthropic",
+              "input_tokens": 78,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:79Z",
+              "model": "m79",
+              "provider": "anthropic",
+              "input_tokens": 79,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:80Z",
+              "model": "m80",
+              "provider": "anthropic",
+              "input_tokens": 80,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:81Z",
+              "model": "m81",
+              "provider": "anthropic",
+              "input_tokens": 81,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:82Z",
+              "model": "m82",
+              "provider": "anthropic",
+              "input_tokens": 82,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:83Z",
+              "model": "m83",
+              "provider": "anthropic",
+              "input_tokens": 83,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:84Z",
+              "model": "m84",
+              "provider": "anthropic",
+              "input_tokens": 84,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:85Z",
+              "model": "m85",
+              "provider": "anthropic",
+              "input_tokens": 85,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:86Z",
+              "model": "m86",
+              "provider": "anthropic",
+              "input_tokens": 86,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:87Z",
+              "model": "m87",
+              "provider": "anthropic",
+              "input_tokens": 87,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:88Z",
+              "model": "m88",
+              "provider": "anthropic",
+              "input_tokens": 88,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:89Z",
+              "model": "m89",
+              "provider": "anthropic",
+              "input_tokens": 89,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:90Z",
+              "model": "m90",
+              "provider": "anthropic",
+              "input_tokens": 90,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:91Z",
+              "model": "m91",
+              "provider": "anthropic",
+              "input_tokens": 91,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:92Z",
+              "model": "m92",
+              "provider": "anthropic",
+              "input_tokens": 92,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:93Z",
+              "model": "m93",
+              "provider": "anthropic",
+              "input_tokens": 93,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:94Z",
+              "model": "m94",
+              "provider": "anthropic",
+              "input_tokens": 94,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:95Z",
+              "model": "m95",
+              "provider": "anthropic",
+              "input_tokens": 95,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:96Z",
+              "model": "m96",
+              "provider": "anthropic",
+              "input_tokens": 96,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:97Z",
+              "model": "m97",
+              "provider": "anthropic",
+              "input_tokens": 97,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:98Z",
+              "model": "m98",
+              "provider": "anthropic",
+              "input_tokens": 98,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:99Z",
+              "model": "m99",
+              "provider": "anthropic",
+              "input_tokens": 99,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:100Z",
+              "model": "m100",
+              "provider": "anthropic",
+              "input_tokens": 100,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:101Z",
+              "model": "m101",
+              "provider": "anthropic",
+              "input_tokens": 101,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:102Z",
+              "model": "m102",
+              "provider": "anthropic",
+              "input_tokens": 102,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:103Z",
+              "model": "m103",
+              "provider": "anthropic",
+              "input_tokens": 103,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            },
+            {
+              "timestamp": "2026-01-01T00:00:104Z",
+              "model": "m104",
+              "provider": "anthropic",
+              "input_tokens": 104,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "ttft_ms": 0,
+              "total_ms": 0,
+              "finish_reason": "end_turn"
+            }
+          ]
+        },
+        "tool_calls": {
+          "count": 0,
+          "recent": []
+        },
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,357 @@
+/**
+ * Replay of the handler's command path against the frozen Rust fixture.
+ *
+ * `tests/handler_fixtures/command_path_parity.json` was generated in a worktree
+ * at `9023b46d` by driving the real `MessageHandler::dispatch_command` against
+ * a real registry, a real session router and characters on disk. Nothing
+ * regenerates it; a diff here is a defect in `src/handler/commands.ts`, not a
+ * fixture to refresh.
+ *
+ * # The one divergence, asserted rather than smoothed over
+ *
+ * The Rust's characterless path returned its frame without attaching the
+ * request's rid, while the other two paths attached it. This side attaches it
+ * everywhere, so those cases are compared with the rid *expected to differ* —
+ * see {@link RID_DROPPED}. Making that an explicit assertion rather than a
+ * loosened comparison is the point: if the port ever stops attaching it, this
+ * fails.
+ */
+
+import { describe, expect, test } from "bun:test";
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+
+import fixture from "./handler_fixtures/command_path_parity.json" with { type: "json" };
+import { CharacterError } from "../src/characters.ts";
+import { ConversationEngine } from "../src/engine/conversation.ts";
+import { defaultAppConfig } from "../src/config/app.ts";
+import { emptyCatalog } from "../src/config/models.ts";
+import { ProviderRegistry } from "../src/config/providers.ts";
+import type { LoadedConfig } from "../src/config/loader.ts";
+import { Diagnostics } from "../src/diagnostics.ts";
+import { AutonomyService } from "../src/autonomy/service.ts";
+import { dispatchCommand, type CommandPathDeps } from "../src/handler/commands.ts";
+import type { RequestMeta } from "../src/swp/session.ts";
+
+/**
+ * The three names the Rust answered with a null rid, whatever the request
+ * carried — its characterless path forgot `.with_rid(...)`.
+ */
+const RID_DROPPED = new Set(["list_characters", "list_models", "list_providers"]);
+
+/** The one model in the catalog, named as `defaults.model`. */
+const FIXTURE_MODEL = {
+  name: "fixture",
+  qualifiedName: "chat.fixture",
+  category: "chat",
+  providerKey: "anthropic",
+  sdk: "anthropic",
+  modelId: "claude-fixture",
+  apiKeyEnv: "SHORE_FIXTURE_API_KEY",
+  maxContextTokens: 200_000,
+  maxOutputTokens: 4096,
+  maxToolIterations: 4,
+} as never;
+
+// ── harness ─────────────────────────────────────────────────────────────
+
+interface Harness {
+  deps: CommandPathDeps;
+  activeModel(): string | undefined;
+}
+
+async function harness(characters: readonly string[]): Promise<Harness> {
+  const root = await mkdtemp(join(tmpdir(), "shore-cmdpath-"));
+  const dirs = {
+    config: join(root, "config"),
+    data: join(root, "data"),
+    cache: join(root, "cache"),
+    runtime: join(root, "runtime"),
+  };
+  for (const d of Object.values(dirs)) await mkdir(d, { recursive: true });
+  for (const name of characters) {
+    const workspace = join(dirs.config, "characters", name, "workspace");
+    await mkdir(workspace, { recursive: true });
+    await writeFile(join(workspace, "SOUL.md"), `# ${name}`);
+  }
+
+  const app = defaultAppConfig();
+  app.defaults.model = "fixture";
+  const models = emptyCatalog();
+  models.chat.set("chat.fixture", FIXTURE_MODEL);
+  models.chat.set("chat.spare", {
+    ...(FIXTURE_MODEL as unknown as Record<string, unknown>),
+    name: "spare",
+    qualifiedName: "chat.spare",
+    modelId: "claude-spare",
+  } as never);
+  const config: LoadedConfig = {
+    app,
+    models,
+    providers: ProviderRegistry.empty(),
+    dirs,
+    rawTable: undefined,
+  };
+
+  const engines = new Map<string, ConversationEngine>();
+  let activeModel: string | undefined;
+
+  const deps: CommandPathDeps = {
+    registry: {
+      // The registry's own three-way resolution, reproduced here rather than
+      // reached for: `characters.ts` owns it and is pinned by its own fixture,
+      // and building a real registry would drag its config loading in too.
+      resolveCharacter: (selected) => resolveCharacter(selected, characters),
+      getOrCreate: async (name) => {
+        const existing = engines.get(name);
+        if (existing !== undefined) return existing;
+        await mkdir(join(dirs.data, name), { recursive: true });
+        const engine = await ConversationEngine.load(name, dirs.data, undefined);
+        engines.set(name, engine);
+        return engine;
+      },
+      effectiveConfig: () => config,
+    },
+    globalConfig: () => config,
+    configPath: join(dirs.config, "config.toml"),
+    dataDir: dirs.data,
+    sessions: {
+      activeModel: () => activeModel,
+      setActiveModel: (_id, m) => {
+        activeModel = m;
+      },
+    },
+    commands: {
+      sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+      autonomy: new AutonomyService(
+        { run: async () => ({ ok: false, detail: "unwired" }) } as never,
+      ),
+      diagnostics: new Diagnostics(),
+      callStore: undefined,
+      ledgerPath: undefined,
+      now: () => 0,
+      localNow: () => 0,
+    },
+    runtime: {
+      reloadRuntimeConfig: () => {},
+      setUsageConfig: () => {},
+      setCacheKeepaliveCeiling: () => {},
+      notifyPromptSnapshotRefreshed: () => {},
+    },
+    dispatchRuntime: {
+      globalConfig: () => config,
+      reloadGlobalConfig: () => undefined,
+      setEffectiveConfig: async () => {},
+      reloadRuntimeConfig: () => {},
+      applyReloadedConfig: async () => ({
+        characterDiscoveryChanged: false,
+        droppedEngines: 0,
+      }),
+      clearActiveModel: () => {
+        activeModel = undefined;
+      },
+    },
+    router: { setSelectedCharacter: () => {}, sendToSession: async () => {} } as never,
+    handshake: { history: async () => ({ messages: [], config: {} }) } as never,
+  };
+
+  return { deps, activeModel: () => activeModel };
+}
+
+/**
+ * `CharacterRegistry.resolveCharacter`'s three answers, which is what the
+ * fixture's three failure cases are about.
+ */
+function resolveCharacter(selected: string | undefined, available: readonly string[]): string {
+  if (selected !== undefined) {
+    if (!available.includes(selected)) throw CharacterError.notFound(selected, available);
+    return selected;
+  }
+  if (available.length === 0) throw CharacterError.noneAvailable();
+  if (available.length > 1) throw CharacterError.ambiguous(available);
+  return available[0]!;
+}
+
+function meta(selected: string | null, rid: string | null): RequestMeta {
+  return {
+    session: {
+      clientId: 1,
+      sessionId: 1,
+      clientType: "test-client",
+      clientName: "test-1",
+      capabilities: ["streaming"],
+      selectedCharacter: selected,
+    },
+    rid,
+    kind: "command",
+  } as RequestMeta;
+}
+
+/** The envelope the generator recorded. */
+function envelope(frame: Awaited<ReturnType<typeof dispatchCommand>>): Record<string, unknown> {
+  if (frame.type === "command_output") {
+    const data = frame.data;
+    const record =
+      typeof data === "object" && data !== null && !Array.isArray(data)
+        ? (data as Record<string, unknown>)
+        : {};
+    return {
+      kind: "command_output",
+      rid: frame.rid,
+      name: frame.name,
+      data_keys: Object.keys(record).sort(),
+      data_active: record["active"] ?? null,
+    };
+  }
+  if (frame.type === "error") {
+    return { kind: "error", rid: frame.rid, code: frame.code, message: frame.message };
+  }
+  return { kind: "unexpected" };
+}
+
+// ── the cases ───────────────────────────────────────────────────────────
+
+describe("dispatchCommand", () => {
+  for (const c of fixture.dispatch_command) {
+    test(c.name, async () => {
+      const input = c.input as Record<string, any>;
+      const out = c.output as Record<string, any>;
+      const h = await harness(input["characters_on_disk"] as string[]);
+      const selected = (input["selected_character"] as string | null) ?? null;
+
+      if (input["prior_command"] !== null) {
+        await dispatchCommand(
+          h.deps,
+          { rid: null, name: input["prior_command"] as string, args: input["prior_args"] },
+          meta((input["prior_selected"] as string | null) ?? selected, null),
+        );
+      }
+      const activeModelBefore = h.activeModel();
+
+      const frame = await dispatchCommand(
+        h.deps,
+        { rid: null, name: input["command"] as string, args: input["args"] },
+        meta(selected, (input["rid"] as string | null) ?? null),
+      );
+
+      const got = envelope(frame);
+      const want = out["frame"] as Record<string, unknown>;
+
+      expect(got["kind"]).toBe(want["kind"] as string);
+
+      // The rid: the same as recorded, except on the three names the Rust's
+      // characterless path dropped it for — there, this side must carry it.
+      const requestRid = (input["rid"] as string | null) ?? null;
+      if (RID_DROPPED.has(input["command"] as string) && want["rid"] === null) {
+        expect(got["rid"]).toBe(requestRid);
+      } else {
+        expect(got["rid"]).toBe(want["rid"] as string | null);
+      }
+
+      if (want["kind"] === "error") {
+        expect(got["code"]).toBe(want["code"] as never);
+        expect(got["message"]).toBe(want["message"] as string);
+      } else {
+        expect(got["name"]).toBe(want["name"] as string);
+        expect(got["data_keys"]).toEqual(want["data_keys"] as string[]);
+        expect(got["data_active"]).toEqual(want["data_active"] ?? null);
+      }
+
+      expect(activeModelBefore ?? null).toEqual(out["active_model_before"] ?? null);
+      expect(h.activeModel() ?? null).toEqual(out["active_model_after"] ?? null);
+    });
+  }
+});
+
+// ── two decisions the fixture cannot reach, and why ─────────────────────
+
+/**
+ * An engine that will not open is an internal error, not an invalid request.
+ *
+ * No recorded case has one: the Rust's `get_or_create` succeeded in every world
+ * the generator could build, because it creates what it cannot find. The
+ * distinction still matters — `invalid_request` tells a client to change
+ * something and this is not something a client can change — so it is asserted
+ * from this side.
+ */
+test("a character whose engine will not open is an internal error", async () => {
+  const h = await harness(["ada"]);
+  h.deps.registry.getOrCreate = async () => {
+    throw new Error("active.jsonl is a directory");
+  };
+
+  const frame = await dispatchCommand(
+    h.deps,
+    { rid: null, name: "status", args: {} },
+    meta("ada", "r-engine"),
+  );
+
+  expect(frame.type).toBe("error");
+  if (frame.type === "error") {
+    expect(frame.code).toBe("internal_error");
+    expect(frame.message).toBe("active.jsonl is a directory");
+    expect(frame.rid).toBe("r-engine");
+  }
+});
+
+/**
+ * The character path reads the character-*effective* config, not the global.
+ *
+ * Also not recorded, and the fixture's own note says why: making it observable
+ * needs a per-character overlay, and a `LoadedConfig` built for a test carries
+ * no raw table, so merging one over it re-derives an empty catalog and every
+ * model command stops resolving. Here the registry is a stub, so the two
+ * configs can simply be made to differ — which is the whole assertion.
+ */
+test("the character path is given the character's effective config", async () => {
+  const h = await harness(["ada"]);
+  const global = h.deps.globalConfig();
+  const perCharacter: LoadedConfig = {
+    ...global,
+    app: { ...global.app, defaults: { ...global.app.defaults, model: "spare" } },
+  };
+  h.deps.registry.effectiveConfig = () => perCharacter;
+
+  const frame = await dispatchCommand(
+    h.deps,
+    { rid: null, name: "status", args: {} },
+    meta("ada", null),
+  );
+
+  expect(frame.type).toBe("command_output");
+  if (frame.type === "command_output") {
+    // `status` reports the model the *effective* config resolves. Under the
+    // global one it would be `chat.fixture`.
+    expect((frame.data as Record<string, unknown>)["active_model"]).toBe("chat.spare");
+  }
+});
+
+/**
+ * The post-processing sees the config the command produced, not the one it
+ * started from.
+ *
+ * Not recorded: the annotation a reload adds is the same either way — what
+ * moves is the config that gets *adopted*, which never reaches the frame. So
+ * the adoption is what is asserted, through `config_reset`, which is the one
+ * command that *replaces* its context's config rather than editing it in place.
+ */
+test("config_reset adopts the config the command re-read, not the one it started from", async () => {
+  const h = await harness(["ada"]);
+  await writeFile(
+    h.deps.configPath,
+    '[defaults]\nmodel = "spare"\n',
+  );
+  const before = h.deps.globalConfig();
+  const adopted: LoadedConfig[] = [];
+  h.deps.dispatchRuntime.applyReloadedConfig = async (config) => {
+    adopted.push(config);
+    return { characterDiscoveryChanged: false, droppedEngines: 0 };
+  };
+
+  await dispatchCommand(h.deps, { rid: null, name: "config_reset", args: {} }, meta("ada", null));
+
+  expect(adopted).toHaveLength(1);
+  expect(adopted[0]).not.toBe(before);
+  expect(adopted[0]?.app.defaults.model).toBe("spare");
+});

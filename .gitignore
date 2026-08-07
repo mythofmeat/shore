@@ -58,3 +58,4 @@ test_char
 .worktree
 .worktrees/
 sweep.timestamp
+nohup.out

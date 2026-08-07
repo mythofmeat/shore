@@ -3,7 +3,6 @@ use std::io::{self, IsTerminal, Read as _};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-use shore_common::config::binaries::MATRIX_BIN_ENV;
 use shore_common::protocol::server_msg::{MessageOrigin, NewMessage, ServerMessage};
 use shore_common::protocol::types::{CharacterAvatar, CharacterInfo, Role};
 use shore_common::swp_client::{SWPConnection, ServerAddr};
@@ -124,7 +123,6 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
         | CliCommand::Config { .. }
         | CliCommand::Tools { .. }
         | CliCommand::Usage { .. }
-        | CliCommand::Connectors { .. }
         | CliCommand::Completions { .. }
         | CliCommand::Complete { .. }) => {
             handle_generic_swp_command(&mut conn, other).await?;
@@ -184,7 +182,6 @@ async fn handle_generic_swp_command(
         | CliCommand::Log { .. }
         | CliCommand::Status { .. }
         | CliCommand::Debug { .. }
-        | CliCommand::Connectors { .. }
         | CliCommand::Completions { .. }
         | CliCommand::Complete { .. } => false,
     };
@@ -315,7 +312,6 @@ async fn handle_log_command(
         tools,
         subagent_tools,
         heartbeat,
-        dreaming,
         events,
         api,
         count,
@@ -351,9 +347,9 @@ async fn handle_log_command(
         return Ok(());
     }
 
-    // Background observability views (heartbeat/dreaming transcript, the event
+    // Background observability views (the heartbeat transcript, the event
     // ring, raw call payloads) map to their own SWP commands via `to_swp_command`.
-    if *heartbeat || *dreaming || *events || api.is_some() {
+    if *heartbeat || *events || api.is_some() {
         let Some((name, swp_args)) = crate::cli::to_swp_command(cmd) else {
             return Ok(());
         };
@@ -715,7 +711,7 @@ async fn handle_local_model_command(
 }
 
 /// Handle the commands that never need a daemon connection — `config --path`,
-/// `character --new`, `connectors`, and `complete`. Returns `Some(result)` when
+/// `character --new`, and `complete`. Returns `Some(result)` when
 /// one of them ran, or `None` to continue with the normal connected path.
 async fn try_handle_local_only(cli: &Cli) -> Option<Result<(), Box<dyn std::error::Error>>> {
     // config --path: query the daemon for its actual config dir, fall back to local.
@@ -729,9 +725,6 @@ async fn try_handle_local_only(cli: &Cli) -> Option<Result<(), Box<dyn std::erro
     } = &cli.command
     {
         return Some(handle_create_character(name));
-    }
-    if let CliCommand::Connectors { subcommand } = &cli.command {
-        return Some(handle_connectors_command(subcommand, cli));
     }
     if let CliCommand::Complete { kind } = &cli.command {
         // Any failure (daemon down, parse error) ends with empty stdout
@@ -856,88 +849,6 @@ async fn handle_complete_query(
                 cli_out!("{name}");
             }
         }
-    }
-    Ok(())
-}
-
-/// Handle `shore connectors` subcommands. Today only Matrix exists, so
-/// this dispatches to its handler; new connectors get their own arms here.
-fn handle_connectors_command(
-    subcommand: &crate::cli::ConnectorsCommand,
-    cli: &Cli,
-) -> Result<(), Box<dyn std::error::Error>> {
-    match subcommand {
-        crate::cli::ConnectorsCommand::Matrix {
-            subcommand: matrix_sub,
-        } => handle_matrix_command(matrix_sub, cli),
-    }
-}
-
-/// Handle `shore connectors matrix` subcommands by delegating to the
-/// `shore-matrix` binary.
-///
-/// Packaged installs keep the bridge off `$PATH`; [`MATRIX_BIN_ENV`] and the
-/// libexec fallbacks are what still make it reachable from here.
-fn handle_matrix_command(
-    subcommand: &crate::cli::MatrixCommand,
-    cli: &Cli,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // Resolved the same way the daemon resolves it, so `shore connectors
-    // matrix ...` keeps working when packaging holds the bridge off `$PATH`.
-    let binary = shore_common::config::binaries::resolve("shore-matrix", MATRIX_BIN_ENV)
-        .path
-        .ok_or_else(|| {
-            format!(
-                "shore-matrix binary not found via {}. Install it, or point \
-                 {MATRIX_BIN_ENV} at it.",
-                shore_common::config::binaries::searched_locations(MATRIX_BIN_ENV)
-            )
-        })?;
-    let mut cmd = std::process::Command::new(&binary);
-
-    // Config + data discovery: ask the running daemon via the instance
-    // registry so interactive invocations work even when the shell lacks
-    // SHORE_CONFIG_DIR / SHORE_DATA_DIR (typical when the daemon runs
-    // under systemd with those set in the unit file).
-    let resolved_config = match cli.config.clone() {
-        Some(c) => Some(c),
-        None => shore_common::swp_client::discover_config_dir()
-            .ok()
-            .flatten()
-            .map(|p| p.display().to_string()),
-    };
-    if let Some(ref config) = resolved_config {
-        let _ignored = cmd.arg("--config").arg(config);
-    }
-    if std::env::var_os("SHORE_DATA_DIR").is_none() {
-        if let Some(data_dir) = shore_common::swp_client::discover_data_dir().ok().flatten() {
-            let _ignored = cmd.env("SHORE_DATA_DIR", data_dir);
-        }
-    }
-    if let Some(ref addr) = cli.addr {
-        let _ignored = cmd.arg("--addr").arg(addr);
-    }
-
-    match subcommand {
-        crate::cli::MatrixCommand::Setup => {
-            let _ignored = cmd.arg("--setup");
-        }
-        crate::cli::MatrixCommand::Register { username, password } => {
-            let _ignored = cmd.arg("--register").arg(username);
-            if let Some(pw) = password {
-                _ = cmd.arg("--register-password").arg(pw);
-            }
-        }
-    }
-
-    let status = cmd
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()
-        .map_err(|e| format!("failed to run {}: {e}", binary.display()))?;
-
-    if !status.success() {
-        return Err(format!("shore-matrix exited with status {status}").into());
     }
     Ok(())
 }
@@ -1919,8 +1830,7 @@ mod tests {
             | CliCommand::Config { .. }
             | CliCommand::Tools { .. }
             | CliCommand::Usage { .. }
-            | CliCommand::Connectors { .. }
-            | CliCommand::Completions { .. }
+                | CliCommand::Completions { .. }
             | CliCommand::Complete { .. }) => {
                 let (name, args) = crate::cli::to_swp_command(other).unwrap();
                 let _ignored = conn.send_command(name, args).await.unwrap();
@@ -2101,7 +2011,6 @@ mod tests {
             tools: false,
             subagent_tools: false,
             heartbeat: false,
-            dreaming: false,
             events: false,
             api: None,
             call_type: None,
@@ -2137,7 +2046,6 @@ mod tests {
             tools: false,
             subagent_tools: false,
             heartbeat: false,
-            dreaming: false,
             events: false,
             api: None,
             call_type: None,

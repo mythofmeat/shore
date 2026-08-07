@@ -1,0 +1,996 @@
+{
+  "_generated_by": "crates/daemon/src/commands/gen_dispatch_fixture.rs at 9023b46d (uncommitted), driving the real commands::dispatch, dispatch_characterless and engine_err",
+  "_note": "FROZEN. Driven against the real commands::dispatch, dispatch_characterless and engine_err in a worktree at 9023b46d, each case on its own temp root. Nothing regenerates this; a later diff is a defect. Generated under TZ=America/New_York. What is recorded is the ROUTING, not what a command computes: every handler here has its own frozen fixture already, so a success keeps its top-level keys and a reduction of each value, and a failure keeps the code and the message - which is what names the handler that produced it. The reduction is four discriminators rather than content: a `status` string keeps its value (it is the whole answer of the three commands that set one), a number keeps its value (the commands answering in counts have nothing else to tell them apart), an array keeps its length, and an array of named things keeps the names (which is the only thing that moves when `list_characters` marks an active character). The per-run temp root in a message becomes <root>. The world each case runs in is deliberately not empty - three messages, three characters (one sorting before the active one), one model, two memory files and live autonomy state - and `log` and `history_page` are both given a `before` argument, which the first ignores and the second honours. The first pass of this fixture used a bare temp dir and no discriminators, and nine cross-wiring mutants survived it: on an empty conversation with no models, `get` and `alt`, `log` and `history_page`, `model_info` and `model_settings` all answer identically. Two names answer from a dependency the TypeScript side does not have yet, and the replay says so at each: `compact`, whose recorded answer here is its assembly failing on an unset API key, and `keepalive_ping_now`, whose recorded answer is the skip a daemon with no LLM client produces. Both are injected arms until their dependencies port - the compaction assembly with handler/, the ping's cached-versus-rebuilt distinction with autonomy/manager.rs.",
+  "timezone": "America/New_York",
+  "dispatch": [
+    {
+      "name": "list_characters",
+      "args": {},
+      "output": {
+        "kind": "command_output",
+        "name": "list_characters",
+        "data_keys": [
+          "characters"
+        ],
+        "data_shape": {
+          "characters": "array[ada,aaron,bob]"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "switch_character",
+      "args": {
+        "name": "bob"
+      },
+      "output": {
+        "kind": "command_output",
+        "name": "switch_character",
+        "data_keys": [
+          "changed",
+          "character"
+        ],
+        "data_shape": {
+          "character": "string",
+          "changed": "bool"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "character_info",
+      "args": {
+        "name": "bob"
+      },
+      "output": {
+        "kind": "command_output",
+        "name": "character_info",
+        "data_keys": [
+          "active",
+          "bootstrap_files",
+          "config_dir",
+          "data_dir",
+          "definition_preview",
+          "has_config_override",
+          "has_data",
+          "has_definition",
+          "name",
+          "pending_deferred_edits",
+          "workspace_dir"
+        ],
+        "data_shape": {
+          "name": "string",
+          "active": "bool",
+          "config_dir": "string",
+          "workspace_dir": "string",
+          "has_definition": "bool",
+          "definition_preview": "string",
+          "bootstrap_files": "array[1]",
+          "has_config_override": "bool",
+          "pending_deferred_edits": "array[0]",
+          "data_dir": "string",
+          "has_data": "bool"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "log",
+      "args": {
+        "before": 2
+      },
+      "output": {
+        "kind": "command_output",
+        "name": "log",
+        "data_keys": [
+          "active_start",
+          "cursor",
+          "global_active_start",
+          "has_more_before",
+          "messages",
+          "next_before",
+          "total_messages",
+          "total_turns"
+        ],
+        "data_shape": {
+          "messages": "array[3]",
+          "active_start": "number:0",
+          "cursor": "number:0",
+          "next_before": "number:0",
+          "has_more_before": "bool",
+          "global_active_start": "number:0",
+          "total_messages": "number:2",
+          "total_turns": "number:2"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "history_page",
+      "args": {
+        "before": 2
+      },
+      "output": {
+        "kind": "command_output",
+        "name": "history_page",
+        "data_keys": [
+          "active_start",
+          "cursor",
+          "global_active_start",
+          "has_more_before",
+          "messages",
+          "next_before",
+          "total_messages",
+          "total_turns"
+        ],
+        "data_shape": {
+          "messages": "array[2]",
+          "active_start": "number:0",
+          "cursor": "number:0",
+          "next_before": "number:0",
+          "has_more_before": "bool",
+          "global_active_start": "number:0",
+          "total_messages": "number:2",
+          "total_turns": "number:2"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "get",
+      "args": {
+        "ref": "1"
+      },
+      "output": {
+        "kind": "command_output",
+        "name": "get",
+        "data_keys": [
+          "content",
+          "content_blocks",
+          "images",
+          "msg_id",
+          "role",
+          "timestamp"
+        ],
+        "data_shape": {
+          "msg_id": "string",
+          "role": "string",
+          "content": "string",
+          "images": "array[0]",
+          "content_blocks": "array[1]",
+          "timestamp": "string"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "edit",
+      "args": {
+        "ref": "1"
+      },
+      "output": {
+        "kind": "error",
+        "code": "invalid_request",
+        "message": "Missing required argument: content"
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "delete",
+      "args": {
+        "ref": "1"
+      },
+      "output": {
+        "kind": "error",
+        "code": "invalid_request",
+        "message": "Missing required argument: refs"
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "alt",
+      "args": {
+        "ref": "1"
+      },
+      "output": {
+        "kind": "error",
+        "code": "invalid_request",
+        "message": "Alternate response selection only applies to assistant messages"
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "list_alternatives",
+      "args": {
+        "ref": "1"
+      },
+      "output": {
+        "kind": "error",
+        "code": "invalid_request",
+        "message": "Alternate response selection only applies to assistant messages"
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "inject_system",
+      "args": {
+        "content": "note"
+      },
+      "output": {
+        "kind": "error",
+        "code": "invalid_request",
+        "message": "Missing required argument: text"
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "status",
+      "args": {},
+      "output": {
+        "kind": "command_output",
+        "name": "status",
+        "data_keys": [
+          "active_model",
+          "activity",
+          "autonomy",
+          "cache_dir",
+          "character",
+          "config_dir",
+          "data_dir",
+          "memory_mode",
+          "message_count",
+          "pending_deferred_edit_count",
+          "pending_deferred_edits",
+          "tokens",
+          "turn_count"
+        ],
+        "data_shape": {
+          "character": "string",
+          "message_count": "number:2",
+          "turn_count": "number:2",
+          "active_model": "string",
+          "config_dir": "string",
+          "data_dir": "string",
+          "cache_dir": "string",
+          "memory_mode": "string",
+          "pending_deferred_edit_count": "number:0",
+          "pending_deferred_edits": "array[0]",
+          "tokens": "object",
+          "autonomy": "object",
+          "activity": "object"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "list_models",
+      "args": {},
+      "output": {
+        "kind": "command_output",
+        "name": "list_models",
+        "data_keys": [
+          "active",
+          "hidden_count",
+          "include_hidden",
+          "models"
+        ],
+        "data_shape": {
+          "models": "array[fixture]",
+          "active": "string",
+          "include_hidden": "bool",
+          "hidden_count": "number:0"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "model_info",
+      "args": {
+        "model": "fixture"
+      },
+      "output": {
+        "kind": "command_output",
+        "name": "model_info",
+        "data_keys": [
+          "api_key_env",
+          "base_url",
+          "budget_tokens",
+          "cache_keepalive",
+          "cache_ttl",
+          "category",
+          "effective_sampler",
+          "gemini_generation",
+          "max_context_tokens",
+          "max_output_tokens",
+          "max_tool_iterations",
+          "model_id",
+          "name",
+          "openrouter_provider",
+          "provider_key",
+          "qualified_name",
+          "reasoning_effort",
+          "replay_prior_thinking",
+          "scopes",
+          "sdk",
+          "temperature",
+          "top_p",
+          "zai_clear_thinking",
+          "zai_subscription"
+        ],
+        "data_shape": {
+          "name": "string",
+          "qualified_name": "string",
+          "category": "string",
+          "provider_key": "string",
+          "sdk": "string",
+          "model_id": "string",
+          "api_key_env": "string",
+          "base_url": "null",
+          "max_context_tokens": "number:200000",
+          "max_output_tokens": "number:4096",
+          "temperature": "null",
+          "top_p": "null",
+          "reasoning_effort": "null",
+          "budget_tokens": "null",
+          "cache_ttl": "null",
+          "cache_keepalive": "null",
+          "openrouter_provider": "null",
+          "gemini_generation": "null",
+          "zai_clear_thinking": "null",
+          "zai_subscription": "null",
+          "replay_prior_thinking": "null",
+          "max_tool_iterations": "number:4",
+          "effective_sampler": "object",
+          "scopes": "object"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "switch_model",
+      "args": {
+        "model": "fixture"
+      },
+      "output": {
+        "kind": "command_output",
+        "name": "switch_model",
+        "data_keys": [
+          "active"
+        ],
+        "data_shape": {
+          "active": "null"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "reset_model",
+      "args": {},
+      "output": {
+        "kind": "command_output",
+        "name": "reset_model",
+        "data_keys": [
+          "active",
+          "previous",
+          "previous_model_id",
+          "previous_provider",
+          "reset_to"
+        ],
+        "data_shape": {
+          "previous": "null",
+          "previous_provider": "null",
+          "previous_model_id": "null",
+          "active": "null",
+          "reset_to": "string"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "set_model_setting",
+      "args": {
+        "key": "temperature",
+        "value": 0.5
+      },
+      "output": {
+        "kind": "command_output",
+        "name": "set_model_setting",
+        "data_keys": [
+          "changed",
+          "key",
+          "model",
+          "model_id",
+          "provider",
+          "scope",
+          "value"
+        ],
+        "data_shape": {
+          "changed": "bool",
+          "scope": "string",
+          "model": "string",
+          "provider": "string",
+          "model_id": "string",
+          "key": "string",
+          "value": "number:0.5"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "model_settings",
+      "args": {},
+      "output": {
+        "kind": "command_output",
+        "name": "model_settings",
+        "data_keys": [
+          "applicability",
+          "effective_sampler",
+          "model",
+          "model_id",
+          "provider",
+          "reasoning_effort_domain",
+          "saved_character",
+          "saved_global",
+          "scopes"
+        ],
+        "data_shape": {
+          "model": "string",
+          "provider": "string",
+          "model_id": "string",
+          "effective_sampler": "object",
+          "saved_global": "null",
+          "saved_character": "null",
+          "applicability": "object",
+          "reasoning_effort_domain": "array[6]",
+          "scopes": "object"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "background_models",
+      "args": {},
+      "output": {
+        "kind": "command_output",
+        "name": "background_models",
+        "data_keys": [
+          "background"
+        ],
+        "data_shape": {
+          "background": "array[2]"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "memory",
+      "args": {},
+      "output": {
+        "kind": "command_output",
+        "name": "memory",
+        "data_keys": [
+          "character",
+          "curated_files",
+          "daily_files",
+          "entries",
+          "image_files"
+        ],
+        "data_shape": {
+          "character": "string",
+          "entries": "number:2",
+          "curated_files": "number:1",
+          "daily_files": "number:1",
+          "image_files": "number:0"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "compact",
+      "args": {},
+      "output": {
+        "kind": "error",
+        "code": "internal_error",
+        "message": "API key environment variable SHORE_FIXTURE_API_KEY is not set"
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "config",
+      "args": {
+        "key": "behavior.autonomy.enabled"
+      },
+      "output": {
+        "kind": "error",
+        "code": "not_found",
+        "message": "Config section not found: behavior.autonomy.enabled"
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "tools",
+      "args": {},
+      "output": {
+        "kind": "command_output",
+        "name": "tools",
+        "data_keys": [
+          "subagents",
+          "tools",
+          "warnings"
+        ],
+        "data_shape": {
+          "tools": "array[12]",
+          "subagents": "array[0]",
+          "warnings": "array[0]"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "config_check",
+      "args": {},
+      "output": {
+        "kind": "command_output",
+        "name": "config_check",
+        "data_keys": [
+          "cache_dir",
+          "chat_models",
+          "config_dir",
+          "data_dir",
+          "info",
+          "memory_mode",
+          "valid",
+          "warnings"
+        ],
+        "data_shape": {
+          "valid": "bool",
+          "warnings": "array[1]",
+          "info": "array[2]",
+          "config_dir": "string",
+          "data_dir": "string",
+          "cache_dir": "string",
+          "chat_models": "number:1",
+          "memory_mode": "string"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "config_reload",
+      "args": {},
+      "output": {
+        "kind": "command_output",
+        "name": "config_reload",
+        "data_keys": [
+          "applied",
+          "changed_prompt_files",
+          "character",
+          "config_path"
+        ],
+        "data_shape": {
+          "applied": "bool",
+          "config_path": "string",
+          "character": "string",
+          "changed_prompt_files": "array[1]"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "config_reset",
+      "args": {},
+      "output": {
+        "kind": "command_output",
+        "name": "config_reset",
+        "data_keys": [
+          "config_path",
+          "invalidated",
+          "message",
+          "reset"
+        ],
+        "data_shape": {
+          "reset": "bool",
+          "message": "string",
+          "config_path": "string",
+          "invalidated": "object"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "diagnostics",
+      "args": {
+        "count": 2
+      },
+      "output": {
+        "kind": "command_output",
+        "name": "diagnostics",
+        "data_keys": [
+          "api_calls",
+          "errors",
+          "key_fallbacks",
+          "tool_calls"
+        ],
+        "data_shape": {
+          "api_calls": "object",
+          "tool_calls": "object",
+          "errors": "object",
+          "key_fallbacks": "object"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "heartbeat_log",
+      "args": {
+        "count": 2
+      },
+      "output": {
+        "kind": "command_output",
+        "name": "heartbeat_log",
+        "data_keys": [
+          "events"
+        ],
+        "data_shape": {
+          "events": "array[0]"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "call_log",
+      "args": {
+        "count": 2
+      },
+      "output": {
+        "kind": "command_output",
+        "name": "call_log",
+        "data_keys": [
+          "enabled",
+          "entries"
+        ],
+        "data_shape": {
+          "enabled": "bool",
+          "entries": "array[0]"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "transcript",
+      "args": {
+        "count": 2
+      },
+      "output": {
+        "kind": "command_output",
+        "name": "transcript",
+        "data_keys": [
+          "enabled",
+          "entries",
+          "source"
+        ],
+        "data_shape": {
+          "enabled": "bool",
+          "source": "string",
+          "entries": "array[0]"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "heartbeat_tick_now",
+      "args": {},
+      "output": {
+        "kind": "command_output",
+        "name": "heartbeat_tick_now",
+        "data_keys": [
+          "character",
+          "status"
+        ],
+        "data_shape": {
+          "status": "status:scheduled",
+          "character": "string"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "keepalive_ping_now",
+      "args": {},
+      "output": {
+        "kind": "command_output",
+        "name": "keepalive_ping_now",
+        "data_keys": [
+          "character",
+          "reason",
+          "status"
+        ],
+        "data_shape": {
+          "status": "status:skipped",
+          "character": "string",
+          "reason": "string"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "heartbeat_set_dormant",
+      "args": {},
+      "output": {
+        "kind": "command_output",
+        "name": "heartbeat_set_dormant",
+        "data_keys": [
+          "character",
+          "status"
+        ],
+        "data_shape": {
+          "status": "status:dormant",
+          "character": "string"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "heartbeat_set_active",
+      "args": {},
+      "output": {
+        "kind": "command_output",
+        "name": "heartbeat_set_active",
+        "data_keys": [
+          "character",
+          "status"
+        ],
+        "data_shape": {
+          "status": "status:active",
+          "character": "string"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "usage",
+      "args": {
+        "period": "today"
+      },
+      "output": {
+        "kind": "error",
+        "code": "internal_error",
+        "message": "provider error: usage reports need a ledger on disk; this client has an in-memory one"
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "list_providers",
+      "args": {},
+      "output": {
+        "kind": "command_output",
+        "name": "list_providers",
+        "data_keys": [
+          "providers"
+        ],
+        "data_shape": {
+          "providers": "array[0]"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "refresh_provider_models",
+      "args": {
+        "provider": "anthropic"
+      },
+      "output": {
+        "kind": "error",
+        "code": "not_found",
+        "message": "provider \"anthropic\" is not configured"
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "refresh_all_provider_models",
+      "args": {},
+      "output": {
+        "kind": "command_output",
+        "name": "refresh_all_provider_models",
+        "data_keys": [
+          "results",
+          "skipped"
+        ],
+        "data_shape": {
+          "results": "array[0]",
+          "skipped": "array[0]"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "list_provider_models",
+      "args": {
+        "provider": "anthropic"
+      },
+      "output": {
+        "kind": "command_output",
+        "name": "list_provider_models",
+        "data_keys": [
+          "cache",
+          "discovered",
+          "hidden",
+          "include_hidden",
+          "provider",
+          "static"
+        ],
+        "data_shape": {
+          "provider": "string",
+          "discovered": "array[0]",
+          "hidden": "array[0]",
+          "static": "array[fixture]",
+          "include_hidden": "bool",
+          "cache": "object"
+        }
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "list_character",
+      "args": {},
+      "output": {
+        "kind": "error",
+        "code": "invalid_request",
+        "message": "Unknown command: list_character"
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "switch_models",
+      "args": {},
+      "output": {
+        "kind": "error",
+        "code": "invalid_request",
+        "message": "Unknown command: switch_models"
+      },
+      "active_model_after": null
+    },
+    {
+      "name": "",
+      "args": {},
+      "output": {
+        "kind": "error",
+        "code": "invalid_request",
+        "message": "Unknown command: "
+      },
+      "active_model_after": null
+    }
+  ],
+  "dispatch_characterless": [
+    {
+      "name": "list_characters",
+      "output": {
+        "kind": "ok",
+        "data_keys": [
+          "characters"
+        ],
+        "data_shape": {
+          "characters": "array[aaron,ada,bob]"
+        }
+      }
+    },
+    {
+      "name": "list_models",
+      "output": {
+        "kind": "ok",
+        "data_keys": [
+          "active",
+          "hidden_count",
+          "include_hidden",
+          "models"
+        ],
+        "data_shape": {
+          "models": "array[fixture]",
+          "active": "string",
+          "include_hidden": "bool",
+          "hidden_count": "number:0"
+        }
+      }
+    },
+    {
+      "name": "background_models",
+      "output": {
+        "kind": "ok",
+        "data_keys": [
+          "background"
+        ],
+        "data_shape": {
+          "background": "array[2]"
+        }
+      }
+    },
+    {
+      "name": "list_providers",
+      "output": {
+        "kind": "ok",
+        "data_keys": [
+          "providers"
+        ],
+        "data_shape": {
+          "providers": "array[0]"
+        }
+      }
+    },
+    {
+      "name": "list_provider_models",
+      "output": {
+        "kind": "ok",
+        "data_keys": [
+          "cache",
+          "discovered",
+          "hidden",
+          "include_hidden",
+          "provider",
+          "static"
+        ],
+        "data_shape": {
+          "provider": "string",
+          "discovered": "array[0]",
+          "hidden": "array[0]",
+          "static": "array[fixture]",
+          "include_hidden": "bool",
+          "cache": "object"
+        }
+      }
+    },
+    {
+      "name": "status",
+      "output": {
+        "kind": "err",
+        "code": "invalid_request",
+        "message": "Command 'status' requires a character"
+      }
+    },
+    {
+      "name": "switch_character",
+      "output": {
+        "kind": "err",
+        "code": "invalid_request",
+        "message": "Command 'switch_character' requires a character"
+      }
+    },
+    {
+      "name": "log",
+      "output": {
+        "kind": "err",
+        "code": "invalid_request",
+        "message": "Command 'log' requires a character"
+      }
+    },
+    {
+      "name": "bogus",
+      "output": {
+        "kind": "err",
+        "code": "invalid_request",
+        "message": "Command 'bogus' requires a character"
+      }
+    }
+  ],
+  "engine_err": [
+    {
+      "note": "a message reference that resolved to nothing",
+      "code": "not_found",
+      "message": "message not found: m_1"
+    },
+    {
+      "note": "a character that is not on disk",
+      "code": "not_found",
+      "message": "character not found: ghost"
+    },
+    {
+      "note": "an alternative index outside the set",
+      "code": "invalid_request",
+      "message": "alt index 9 out of range"
+    },
+    {
+      "note": "an io failure, which is nobody's fault but the disk's",
+      "code": "internal_error",
+      "message": "I/O error on /nowhere/active.jsonl: denied"
+    }
+  ]
+}

@@ -1,0 +1,1741 @@
+{
+  "_generated_by": "crates/daemon/tests/gen_compaction_llm_fixture.rs at 9023b46d, driving the real resolve_image_gen_config and RealCompactionLlm. Frozen: a later diff against this file is a defect, not a fixture to update.",
+  "hardcoded_base_url": [
+    {
+      "provider_key": "anthropic",
+      "base_url": null
+    },
+    {
+      "provider_key": "openai",
+      "base_url": null
+    },
+    {
+      "provider_key": "openrouter",
+      "base_url": "https://openrouter.ai/api/v1"
+    },
+    {
+      "provider_key": "deepseek",
+      "base_url": "https://api.deepseek.com/v1"
+    },
+    {
+      "provider_key": "moonshot",
+      "base_url": "https://api.moonshot.ai/v1"
+    },
+    {
+      "provider_key": "moonshotai",
+      "base_url": "https://api.moonshot.ai/v1"
+    },
+    {
+      "provider_key": "gemini",
+      "base_url": null
+    },
+    {
+      "provider_key": "xai",
+      "base_url": "https://api.x.ai/v1"
+    },
+    {
+      "provider_key": "zhipuai",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4"
+    },
+    {
+      "provider_key": "zai",
+      "base_url": null
+    },
+    {
+      "provider_key": "nanogpt",
+      "base_url": "https://nano-gpt.com/api/v1"
+    },
+    {
+      "provider_key": "opencode-go",
+      "base_url": "https://opencode.ai/zen/go/v1"
+    },
+    {
+      "provider_key": "unknown",
+      "base_url": null
+    },
+    {
+      "provider_key": "",
+      "base_url": null
+    }
+  ],
+  "resolve_image_gen_config": [
+    {
+      "name": "default_ref with settings",
+      "default_ref": "openai:gpt-image-1",
+      "image_gen": [
+        {
+          "key": "openai:gpt-image-1",
+          "settings": {
+            "size": "512x512",
+            "quality": "hd",
+            "aspect_ratio": null,
+            "image_size": null
+          }
+        }
+      ],
+      "providers": [
+        {
+          "key": "openai",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_OPENAI_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_OPENAI_KEY",
+          "value": "sk-openai"
+        }
+      ],
+      "result": {
+        "ok": {
+          "provider": "openai",
+          "model_id": "gpt-image-1",
+          "api_key": "sk-openai",
+          "base_url": null,
+          "size": "512x512",
+          "quality": "hd",
+          "aspect_ratio": null,
+          "image_size": null
+        }
+      }
+    },
+    {
+      "name": "default_ref with no settings falls back to 1024x1024",
+      "default_ref": "openai:gpt-image-1",
+      "image_gen": [],
+      "providers": [
+        {
+          "key": "openai",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_OPENAI_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_OPENAI_KEY",
+          "value": "sk-openai"
+        }
+      ],
+      "result": {
+        "ok": {
+          "provider": "openai",
+          "model_id": "gpt-image-1",
+          "api_key": "sk-openai",
+          "base_url": null,
+          "size": "1024x1024",
+          "quality": null,
+          "aspect_ratio": null,
+          "image_size": null
+        }
+      }
+    },
+    {
+      "name": "settings keyed by a different identity are ignored",
+      "default_ref": "openai:gpt-image-1",
+      "image_gen": [
+        {
+          "key": "openai:other-model",
+          "settings": {
+            "size": "512x512",
+            "quality": null,
+            "aspect_ratio": null,
+            "image_size": null
+          }
+        }
+      ],
+      "providers": [
+        {
+          "key": "openai",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_OPENAI_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_OPENAI_KEY",
+          "value": "sk-openai"
+        }
+      ],
+      "result": {
+        "ok": {
+          "provider": "openai",
+          "model_id": "gpt-image-1",
+          "api_key": "sk-openai",
+          "base_url": null,
+          "size": "1024x1024",
+          "quality": null,
+          "aspect_ratio": null,
+          "image_size": null
+        }
+      }
+    },
+    {
+      "name": "sole overlay key with no default",
+      "default_ref": null,
+      "image_gen": [
+        {
+          "key": "openai:gpt-image-1",
+          "settings": {
+            "size": "256x256",
+            "quality": null,
+            "aspect_ratio": null,
+            "image_size": null
+          }
+        }
+      ],
+      "providers": [
+        {
+          "key": "openai",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_OPENAI_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_OPENAI_KEY",
+          "value": "sk-openai"
+        }
+      ],
+      "result": {
+        "ok": {
+          "provider": "openai",
+          "model_id": "gpt-image-1",
+          "api_key": "sk-openai",
+          "base_url": null,
+          "size": "256x256",
+          "quality": null,
+          "aspect_ratio": null,
+          "image_size": null
+        }
+      }
+    },
+    {
+      "name": "two overlay keys with no default",
+      "default_ref": null,
+      "image_gen": [
+        {
+          "key": "openai:a",
+          "settings": {
+            "size": null,
+            "quality": null,
+            "aspect_ratio": null,
+            "image_size": null
+          }
+        },
+        {
+          "key": "openai:b",
+          "settings": {
+            "size": null,
+            "quality": null,
+            "aspect_ratio": null,
+            "image_size": null
+          }
+        }
+      ],
+      "providers": [
+        {
+          "key": "openai",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_OPENAI_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_OPENAI_KEY",
+          "value": "sk-openai"
+        }
+      ],
+      "result": {
+        "err": "multiple [image_generation.\"provider:model_id\"] entries are configured but defaults.image_generation is unset; set defaults.image_generation to choose one"
+      }
+    },
+    {
+      "name": "no default and no overlay",
+      "default_ref": null,
+      "image_gen": [],
+      "providers": [
+        {
+          "key": "openai",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_OPENAI_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_OPENAI_KEY",
+          "value": "sk-openai"
+        }
+      ],
+      "result": {
+        "err": "no image generation model configured; set defaults.image_generation = \"provider:model_id\" and configure [providers.<provider>] (see CONFIGURATION.md)."
+      }
+    },
+    {
+      "name": "identity without a colon",
+      "default_ref": "gpt-image-1",
+      "image_gen": [],
+      "providers": [
+        {
+          "key": "openai",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_OPENAI_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_OPENAI_KEY",
+          "value": "sk-openai"
+        }
+      ],
+      "result": {
+        "err": "image generation model 'gpt-image-1' must be a `provider:model_id` identity with transport under [providers.<provider>]"
+      }
+    },
+    {
+      "name": "identity with an empty provider",
+      "default_ref": ":gpt-image-1",
+      "image_gen": [],
+      "providers": [
+        {
+          "key": "openai",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_OPENAI_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_OPENAI_KEY",
+          "value": "sk-openai"
+        }
+      ],
+      "result": {
+        "err": "image generation model ':gpt-image-1' is not a valid `provider:model_id` identity"
+      }
+    },
+    {
+      "name": "identity with an empty model",
+      "default_ref": "openai:",
+      "image_gen": [],
+      "providers": [
+        {
+          "key": "openai",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_OPENAI_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_OPENAI_KEY",
+          "value": "sk-openai"
+        }
+      ],
+      "result": {
+        "err": "image generation model 'openai:' is not a valid `provider:model_id` identity"
+      }
+    },
+    {
+      "name": "identity with two colons keeps the tail in the model id",
+      "default_ref": "openai:a:b",
+      "image_gen": [],
+      "providers": [
+        {
+          "key": "openai",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_OPENAI_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_OPENAI_KEY",
+          "value": "sk-openai"
+        }
+      ],
+      "result": {
+        "ok": {
+          "provider": "openai",
+          "model_id": "a:b",
+          "api_key": "sk-openai",
+          "base_url": null,
+          "size": "1024x1024",
+          "quality": null,
+          "aspect_ratio": null,
+          "image_size": null
+        }
+      }
+    },
+    {
+      "name": "registry base_url wins over the hardcoded default",
+      "default_ref": "openrouter:some-model",
+      "image_gen": [],
+      "providers": [
+        {
+          "key": "openrouter",
+          "enabled": true,
+          "base_url": "https://proxy.example/v1",
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_OR_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_OR_KEY",
+          "value": "sk-or"
+        }
+      ],
+      "result": {
+        "ok": {
+          "provider": "openrouter",
+          "model_id": "some-model",
+          "api_key": "sk-or",
+          "base_url": "https://proxy.example/v1",
+          "size": "1024x1024",
+          "quality": null,
+          "aspect_ratio": null,
+          "image_size": null
+        }
+      }
+    },
+    {
+      "name": "hardcoded default when the registry sets none",
+      "default_ref": "openrouter:some-model",
+      "image_gen": [],
+      "providers": [
+        {
+          "key": "openrouter",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_OR_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_OR_KEY",
+          "value": "sk-or"
+        }
+      ],
+      "result": {
+        "ok": {
+          "provider": "openrouter",
+          "model_id": "some-model",
+          "api_key": "sk-or",
+          "base_url": "https://openrouter.ai/api/v1",
+          "size": "1024x1024",
+          "quality": null,
+          "aspect_ratio": null,
+          "image_size": null
+        }
+      }
+    },
+    {
+      "name": "unknown provider gets no base url",
+      "default_ref": "selfhosted:my-model",
+      "image_gen": [],
+      "providers": [
+        {
+          "key": "selfhosted",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_SELF_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_SELF_KEY",
+          "value": "sk-self"
+        }
+      ],
+      "result": {
+        "ok": {
+          "provider": "selfhosted",
+          "model_id": "my-model",
+          "api_key": "sk-self",
+          "base_url": null,
+          "size": "1024x1024",
+          "quality": null,
+          "aspect_ratio": null,
+          "image_size": null
+        }
+      }
+    },
+    {
+      "name": "no registry entry at all falls back to the conventional env var",
+      "default_ref": "openai:gpt-image-1",
+      "image_gen": [],
+      "providers": [],
+      "env": [
+        {
+          "var": "OPENAI_API_KEY",
+          "value": "sk-conventional"
+        }
+      ],
+      "result": {
+        "ok": {
+          "provider": "openai",
+          "model_id": "gpt-image-1",
+          "api_key": "sk-conventional",
+          "base_url": null,
+          "size": "1024x1024",
+          "quality": null,
+          "aspect_ratio": null,
+          "image_size": null
+        }
+      }
+    },
+    {
+      "name": "disabled provider",
+      "default_ref": "openai:gpt-image-1",
+      "image_gen": [],
+      "providers": [
+        {
+          "key": "openai",
+          "enabled": false,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_OPENAI_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_OPENAI_KEY",
+          "value": "sk-openai"
+        }
+      ],
+      "result": {
+        "err": "image generation provider 'openai' is disabled in [providers.openai]"
+      }
+    },
+    {
+      "name": "first set key wins",
+      "default_ref": "openai:gpt-image-1",
+      "image_gen": [],
+      "providers": [
+        {
+          "key": "openai",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "primary",
+              "env": "GEN_KEY_A",
+              "enabled": true
+            },
+            {
+              "name": "backup",
+              "env": "GEN_KEY_B",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_KEY_A",
+          "value": null
+        },
+        {
+          "var": "GEN_KEY_B",
+          "value": "sk-backup"
+        }
+      ],
+      "result": {
+        "ok": {
+          "provider": "openai",
+          "model_id": "gpt-image-1",
+          "api_key": "sk-backup",
+          "base_url": null,
+          "size": "1024x1024",
+          "quality": null,
+          "aspect_ratio": null,
+          "image_size": null
+        }
+      }
+    },
+    {
+      "name": "the first of two set keys wins",
+      "default_ref": "openai:gpt-image-1",
+      "image_gen": [],
+      "providers": [
+        {
+          "key": "openai",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "primary",
+              "env": "GEN_KEY_A",
+              "enabled": true
+            },
+            {
+              "name": "backup",
+              "env": "GEN_KEY_B",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_KEY_A",
+          "value": "sk-primary"
+        },
+        {
+          "var": "GEN_KEY_B",
+          "value": "sk-backup"
+        }
+      ],
+      "result": {
+        "ok": {
+          "provider": "openai",
+          "model_id": "gpt-image-1",
+          "api_key": "sk-primary",
+          "base_url": null,
+          "size": "1024x1024",
+          "quality": null,
+          "aspect_ratio": null,
+          "image_size": null
+        }
+      }
+    },
+    {
+      "name": "a disabled key is skipped",
+      "default_ref": "openai:gpt-image-1",
+      "image_gen": [],
+      "providers": [
+        {
+          "key": "openai",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "primary",
+              "env": "GEN_KEY_A",
+              "enabled": false
+            },
+            {
+              "name": "backup",
+              "env": "GEN_KEY_B",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_KEY_A",
+          "value": "sk-primary"
+        },
+        {
+          "var": "GEN_KEY_B",
+          "value": "sk-backup"
+        }
+      ],
+      "result": {
+        "ok": {
+          "provider": "openai",
+          "model_id": "gpt-image-1",
+          "api_key": "sk-backup",
+          "base_url": null,
+          "size": "1024x1024",
+          "quality": null,
+          "aspect_ratio": null,
+          "image_size": null
+        }
+      }
+    },
+    {
+      "name": "no key set anywhere",
+      "default_ref": "openai:gpt-image-1",
+      "image_gen": [],
+      "providers": [
+        {
+          "key": "openai",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "primary",
+              "env": "GEN_KEY_A",
+              "enabled": true
+            },
+            {
+              "name": "backup",
+              "env": "GEN_KEY_B",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_KEY_A",
+          "value": null
+        },
+        {
+          "var": "GEN_KEY_B",
+          "value": null
+        }
+      ],
+      "result": {
+        "err": "image generation API key not set for provider 'openai'; set one of these env vars: GEN_KEY_A, GEN_KEY_B"
+      }
+    },
+    {
+      "name": "an empty env value is not a key",
+      "default_ref": "openai:gpt-image-1",
+      "image_gen": [],
+      "providers": [
+        {
+          "key": "openai",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_OPENAI_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_OPENAI_KEY",
+          "value": "   "
+        }
+      ],
+      "result": {
+        "err": "image generation API key not set for provider 'openai'; set one of these env vars: GEN_OPENAI_KEY"
+      }
+    },
+    {
+      "name": "all four settings carry through",
+      "default_ref": "openrouter:img",
+      "image_gen": [
+        {
+          "key": "openrouter:img",
+          "settings": {
+            "size": "2048x2048",
+            "quality": "standard",
+            "aspect_ratio": "16:9",
+            "image_size": "4K"
+          }
+        }
+      ],
+      "providers": [
+        {
+          "key": "openrouter",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_OR_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_OR_KEY",
+          "value": "sk-or"
+        }
+      ],
+      "result": {
+        "ok": {
+          "provider": "openrouter",
+          "model_id": "img",
+          "api_key": "sk-or",
+          "base_url": "https://openrouter.ai/api/v1",
+          "size": "2048x2048",
+          "quality": "standard",
+          "aspect_ratio": "16:9",
+          "image_size": "4K"
+        }
+      }
+    }
+  ],
+  "build_initial_request": [
+    {
+      "name": "chat prefix carried, model rebuilt",
+      "model": {
+        "qualified_name": "chat.anthropic.compact",
+        "provider_key": "anthropic",
+        "model_id": "claude-compact",
+        "sdk": "anthropic",
+        "api_key_env": null,
+        "base_url": null,
+        "max_output_tokens": 2048,
+        "temperature": 0.3,
+        "top_p": null,
+        "cache_ttl": "1h",
+        "reasoning_effort": null,
+        "budget_tokens": null
+      },
+      "providers": [
+        {
+          "key": "anthropic",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_ANTHROPIC_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_ANTHROPIC_KEY",
+          "value": "sk-compact"
+        }
+      ],
+      "chat_request": {
+        "sdk": "openai",
+        "model": "chat-model",
+        "api_key": "chat-key",
+        "base_url": "https://chat.example/v1",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "hello"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "hi"
+              }
+            ]
+          }
+        ],
+        "system": [
+          {
+            "text": "chat system",
+            "label": "system"
+          },
+          {
+            "text": "memory index",
+            "label": "memory_index"
+          }
+        ],
+        "tools": [
+          {
+            "name": "edit",
+            "description": "edit a file",
+            "input_schema": {
+              "type": "object"
+            }
+          }
+        ],
+        "max_tokens": 8192,
+        "temperature": 0.9,
+        "top_p": 0.95,
+        "provider_key": "chatprov",
+        "replay_prior_thinking": "all",
+        "max_tool_iterations": 7
+      },
+      "result": {
+        "ok": {
+          "sdk": "anthropic",
+          "model": "claude-compact",
+          "api_key": "sk-compact",
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "hello"
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "hi"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "compact now please"
+                }
+              ]
+            },
+            {
+              "role": "system",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "SYSTEM INSTRUCTION"
+                }
+              ]
+            }
+          ],
+          "system": [
+            {
+              "text": "chat system",
+              "label": "system"
+            },
+            {
+              "text": "memory index",
+              "label": "memory_index"
+            }
+          ],
+          "tools": [
+            {
+              "name": "edit",
+              "description": "edit a file",
+              "input_schema": {
+                "type": "object"
+              }
+            }
+          ],
+          "max_tokens": 2048,
+          "temperature": 0.3,
+          "provider_options": {
+            "cache_ttl": "1h"
+          },
+          "provider_key": "anthropic",
+          "replay_prior_thinking": "all"
+        }
+      }
+    },
+    {
+      "name": "empty chat prefix",
+      "model": {
+        "qualified_name": "chat.anthropic.compact",
+        "provider_key": "anthropic",
+        "model_id": "claude-compact",
+        "sdk": "anthropic",
+        "api_key_env": null,
+        "base_url": null,
+        "max_output_tokens": 2048,
+        "temperature": 0.3,
+        "top_p": null,
+        "cache_ttl": "1h",
+        "reasoning_effort": null,
+        "budget_tokens": null
+      },
+      "providers": [
+        {
+          "key": "anthropic",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_ANTHROPIC_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_ANTHROPIC_KEY",
+          "value": "sk-compact"
+        }
+      ],
+      "chat_request": {
+        "sdk": "openai",
+        "model": "chat-model",
+        "api_key": "chat-key",
+        "base_url": "https://chat.example/v1",
+        "messages": [],
+        "max_tokens": 8192,
+        "temperature": 0.9,
+        "top_p": 0.95,
+        "provider_key": "chatprov",
+        "replay_prior_thinking": "all",
+        "max_tool_iterations": 7
+      },
+      "result": {
+        "ok": {
+          "sdk": "anthropic",
+          "model": "claude-compact",
+          "api_key": "sk-compact",
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "compact now please"
+                }
+              ]
+            },
+            {
+              "role": "system",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "SYSTEM INSTRUCTION"
+                }
+              ]
+            }
+          ],
+          "max_tokens": 2048,
+          "temperature": 0.3,
+          "provider_options": {
+            "cache_ttl": "1h"
+          },
+          "provider_key": "anthropic",
+          "replay_prior_thinking": "all"
+        }
+      }
+    },
+    {
+      "name": "no tools",
+      "model": {
+        "qualified_name": "chat.anthropic.compact",
+        "provider_key": "anthropic",
+        "model_id": "claude-compact",
+        "sdk": "anthropic",
+        "api_key_env": null,
+        "base_url": null,
+        "max_output_tokens": 2048,
+        "temperature": 0.3,
+        "top_p": null,
+        "cache_ttl": "1h",
+        "reasoning_effort": null,
+        "budget_tokens": null
+      },
+      "providers": [
+        {
+          "key": "anthropic",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_ANTHROPIC_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_ANTHROPIC_KEY",
+          "value": "sk-compact"
+        }
+      ],
+      "chat_request": {
+        "sdk": "openai",
+        "model": "chat-model",
+        "api_key": "chat-key",
+        "base_url": "https://chat.example/v1",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "hello"
+              }
+            ]
+          }
+        ],
+        "system": [
+          {
+            "text": "chat system",
+            "label": "system"
+          }
+        ],
+        "max_tokens": 8192,
+        "temperature": 0.9,
+        "top_p": 0.95,
+        "provider_key": "chatprov",
+        "replay_prior_thinking": "all",
+        "max_tool_iterations": 7
+      },
+      "result": {
+        "ok": {
+          "sdk": "anthropic",
+          "model": "claude-compact",
+          "api_key": "sk-compact",
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "hello"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "compact now please"
+                }
+              ]
+            },
+            {
+              "role": "system",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "SYSTEM INSTRUCTION"
+                }
+              ]
+            }
+          ],
+          "system": [
+            {
+              "text": "chat system",
+              "label": "system"
+            }
+          ],
+          "max_tokens": 2048,
+          "temperature": 0.3,
+          "provider_options": {
+            "cache_ttl": "1h"
+          },
+          "provider_key": "anthropic",
+          "replay_prior_thinking": "all"
+        }
+      }
+    },
+    {
+      "name": "empty tools list is not the same as none",
+      "model": {
+        "qualified_name": "chat.anthropic.compact",
+        "provider_key": "anthropic",
+        "model_id": "claude-compact",
+        "sdk": "anthropic",
+        "api_key_env": null,
+        "base_url": null,
+        "max_output_tokens": 2048,
+        "temperature": 0.3,
+        "top_p": null,
+        "cache_ttl": "1h",
+        "reasoning_effort": null,
+        "budget_tokens": null
+      },
+      "providers": [
+        {
+          "key": "anthropic",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_ANTHROPIC_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_ANTHROPIC_KEY",
+          "value": "sk-compact"
+        }
+      ],
+      "chat_request": {
+        "sdk": "openai",
+        "model": "chat-model",
+        "api_key": "chat-key",
+        "base_url": "https://chat.example/v1",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "hello"
+              }
+            ]
+          }
+        ],
+        "tools": [],
+        "max_tokens": 8192,
+        "temperature": 0.9,
+        "top_p": 0.95,
+        "provider_key": "chatprov",
+        "replay_prior_thinking": "all",
+        "max_tool_iterations": 7
+      },
+      "result": {
+        "ok": {
+          "sdk": "anthropic",
+          "model": "claude-compact",
+          "api_key": "sk-compact",
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "hello"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "compact now please"
+                }
+              ]
+            },
+            {
+              "role": "system",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "SYSTEM INSTRUCTION"
+                }
+              ]
+            }
+          ],
+          "tools": [],
+          "max_tokens": 2048,
+          "temperature": 0.3,
+          "provider_options": {
+            "cache_ttl": "1h"
+          },
+          "provider_key": "anthropic",
+          "replay_prior_thinking": "all"
+        }
+      }
+    },
+    {
+      "name": "the model's own api_key_env is the fallback",
+      "model": {
+        "qualified_name": "chat.selfhosted.compact",
+        "provider_key": "selfhosted",
+        "model_id": "my-compact",
+        "sdk": "anthropic",
+        "api_key_env": "GEN_MODEL_KEY",
+        "base_url": null,
+        "max_output_tokens": 2048,
+        "temperature": 0.3,
+        "top_p": null,
+        "cache_ttl": "1h",
+        "reasoning_effort": null,
+        "budget_tokens": null
+      },
+      "providers": [],
+      "env": [
+        {
+          "var": "GEN_MODEL_KEY",
+          "value": "sk-model"
+        }
+      ],
+      "chat_request": {
+        "sdk": "openai",
+        "model": "chat-model",
+        "api_key": "chat-key",
+        "base_url": "https://chat.example/v1",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "hello"
+              }
+            ]
+          }
+        ],
+        "max_tokens": 8192,
+        "temperature": 0.9,
+        "top_p": 0.95,
+        "provider_key": "chatprov",
+        "replay_prior_thinking": "all",
+        "max_tool_iterations": 7
+      },
+      "result": {
+        "ok": {
+          "sdk": "anthropic",
+          "model": "my-compact",
+          "api_key": "sk-model",
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "hello"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "compact now please"
+                }
+              ]
+            },
+            {
+              "role": "system",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "SYSTEM INSTRUCTION"
+                }
+              ]
+            }
+          ],
+          "max_tokens": 2048,
+          "temperature": 0.3,
+          "provider_options": {
+            "cache_ttl": "1h"
+          },
+          "provider_key": "selfhosted",
+          "replay_prior_thinking": "all"
+        }
+      }
+    },
+    {
+      "name": "provider keys beat the model's api_key_env",
+      "model": {
+        "qualified_name": "chat.anthropic.compact",
+        "provider_key": "anthropic",
+        "model_id": "claude-compact",
+        "sdk": "anthropic",
+        "api_key_env": "GEN_MODEL_KEY",
+        "base_url": null,
+        "max_output_tokens": 2048,
+        "temperature": 0.3,
+        "top_p": null,
+        "cache_ttl": "1h",
+        "reasoning_effort": null,
+        "budget_tokens": null
+      },
+      "providers": [
+        {
+          "key": "anthropic",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_ANTHROPIC_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_ANTHROPIC_KEY",
+          "value": "sk-provider"
+        },
+        {
+          "var": "GEN_MODEL_KEY",
+          "value": "sk-model"
+        }
+      ],
+      "chat_request": {
+        "sdk": "openai",
+        "model": "chat-model",
+        "api_key": "chat-key",
+        "base_url": "https://chat.example/v1",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "hello"
+              }
+            ]
+          }
+        ],
+        "max_tokens": 8192,
+        "temperature": 0.9,
+        "top_p": 0.95,
+        "provider_key": "chatprov",
+        "replay_prior_thinking": "all",
+        "max_tool_iterations": 7
+      },
+      "result": {
+        "ok": {
+          "sdk": "anthropic",
+          "model": "claude-compact",
+          "api_key": "sk-provider",
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "hello"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "compact now please"
+                }
+              ]
+            },
+            {
+              "role": "system",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "SYSTEM INSTRUCTION"
+                }
+              ]
+            }
+          ],
+          "max_tokens": 2048,
+          "temperature": 0.3,
+          "provider_options": {
+            "cache_ttl": "1h"
+          },
+          "provider_key": "anthropic",
+          "replay_prior_thinking": "all"
+        }
+      }
+    },
+    {
+      "name": "no key set",
+      "model": {
+        "qualified_name": "chat.anthropic.compact",
+        "provider_key": "anthropic",
+        "model_id": "claude-compact",
+        "sdk": "anthropic",
+        "api_key_env": null,
+        "base_url": null,
+        "max_output_tokens": 2048,
+        "temperature": 0.3,
+        "top_p": null,
+        "cache_ttl": "1h",
+        "reasoning_effort": null,
+        "budget_tokens": null
+      },
+      "providers": [
+        {
+          "key": "anthropic",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_ANTHROPIC_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_ANTHROPIC_KEY",
+          "value": null
+        }
+      ],
+      "chat_request": {
+        "sdk": "openai",
+        "model": "chat-model",
+        "api_key": "chat-key",
+        "base_url": "https://chat.example/v1",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "hello"
+              }
+            ]
+          }
+        ],
+        "max_tokens": 8192,
+        "temperature": 0.9,
+        "top_p": 0.95,
+        "provider_key": "chatprov",
+        "replay_prior_thinking": "all",
+        "max_tool_iterations": 7
+      },
+      "result": {
+        "err": "llm: API key environment variable GEN_ANTHROPIC_KEY is not set"
+      }
+    },
+    {
+      "name": "disabled provider",
+      "model": {
+        "qualified_name": "chat.anthropic.compact",
+        "provider_key": "anthropic",
+        "model_id": "claude-compact",
+        "sdk": "anthropic",
+        "api_key_env": null,
+        "base_url": null,
+        "max_output_tokens": 2048,
+        "temperature": 0.3,
+        "top_p": null,
+        "cache_ttl": "1h",
+        "reasoning_effort": null,
+        "budget_tokens": null
+      },
+      "providers": [
+        {
+          "key": "anthropic",
+          "enabled": false,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_ANTHROPIC_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_ANTHROPIC_KEY",
+          "value": "sk-compact"
+        }
+      ],
+      "chat_request": {
+        "sdk": "openai",
+        "model": "chat-model",
+        "api_key": "chat-key",
+        "base_url": "https://chat.example/v1",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "hello"
+              }
+            ]
+          }
+        ],
+        "max_tokens": 8192,
+        "temperature": 0.9,
+        "top_p": 0.95,
+        "provider_key": "chatprov",
+        "replay_prior_thinking": "all",
+        "max_tool_iterations": 7
+      },
+      "result": {
+        "err": "llm: API key environment variable provider 'anthropic' has no enabled keys is not set"
+      }
+    },
+    {
+      "name": "replay policy comes from chat, not the model",
+      "model": {
+        "qualified_name": "chat.anthropic.compact",
+        "provider_key": "anthropic",
+        "model_id": "claude-compact",
+        "sdk": "anthropic",
+        "api_key_env": null,
+        "base_url": null,
+        "max_output_tokens": 2048,
+        "temperature": 0.3,
+        "top_p": null,
+        "cache_ttl": "1h",
+        "reasoning_effort": null,
+        "budget_tokens": null
+      },
+      "providers": [
+        {
+          "key": "anthropic",
+          "enabled": true,
+          "base_url": null,
+          "keys": [
+            {
+              "name": "default",
+              "env": "GEN_ANTHROPIC_KEY",
+              "enabled": true
+            }
+          ]
+        }
+      ],
+      "env": [
+        {
+          "var": "GEN_ANTHROPIC_KEY",
+          "value": "sk-compact"
+        }
+      ],
+      "chat_request": {
+        "sdk": "openai",
+        "model": "chat-model",
+        "api_key": "chat-key",
+        "base_url": "https://chat.example/v1",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "hello"
+              }
+            ]
+          }
+        ],
+        "max_tokens": 8192,
+        "temperature": 0.9,
+        "top_p": 0.95,
+        "provider_key": "chatprov",
+        "replay_prior_thinking": "none",
+        "max_tool_iterations": 7
+      },
+      "result": {
+        "ok": {
+          "sdk": "anthropic",
+          "model": "claude-compact",
+          "api_key": "sk-compact",
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "hello"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "compact now please"
+                }
+              ]
+            },
+            {
+              "role": "system",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "SYSTEM INSTRUCTION"
+                }
+              ]
+            }
+          ],
+          "max_tokens": 2048,
+          "temperature": 0.3,
+          "provider_options": {
+            "cache_ttl": "1h"
+          },
+          "provider_key": "anthropic",
+          "replay_prior_thinking": "none"
+        }
+      }
+    }
+  ]
+}

@@ -3,7 +3,7 @@
 #
 # Compiled into BOTH:
 #   * the Rust daemon  — `crates/common/src/config/capabilities.rs` via `include_str!`
-#   * the TS sidecar   — `llm-sidecar/src/llm/capabilities.ts` via a
+#   * the TS sidecar   — `daemon/src/llm/capabilities.ts` via a
 #                        `.toml` import that `bun build` inlines into the bundle.
 #
 # It is therefore NOT runtime- or user-editable: edit this file and rebuild.

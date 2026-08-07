@@ -1,0 +1,384 @@
+{
+  "_generated_by": "crates/daemon/tests/gen_mcp_fixture.rs at 9023b46d, driving the real to_spec / resolve_under / resolve_command and the real registry sort. FROZEN: the generator is not committed and nothing regenerates this. A later diff against this file is a defect in the TypeScript, not a fixture to update.",
+  "_note": "Live connections are not covered: they need a running MCP server. What is driven is everything deciding what to connect to and what surface the result contributes — path resolution, namespacing, the pinned sort, and allowlist filtering. The client wrapper (environment isolation, result flattening, call routing) is asserted directly in mcp_parity.test.ts against the Rust read side by side, and marked as such there.",
+  "plugins_dir": "/data/plugins",
+  "resolve_under": [
+    {
+      "input": "hue-mcp",
+      "output": "/data/plugins/hue-mcp"
+    },
+    {
+      "input": "./hue-mcp",
+      "output": "/data/plugins/hue-mcp"
+    },
+    {
+      "input": "././hue-mcp",
+      "output": "/data/plugins/hue-mcp"
+    },
+    {
+      "input": "a/b/c",
+      "output": "/data/plugins/a/b/c"
+    },
+    {
+      "input": "./a/./b",
+      "output": "/data/plugins/a/b"
+    },
+    {
+      "input": "../sibling",
+      "output": "/data/plugins/../sibling"
+    },
+    {
+      "input": "a/../b",
+      "output": "/data/plugins/a/../b"
+    },
+    {
+      "input": "/absolute/path",
+      "output": "/absolute/path"
+    },
+    {
+      "input": "/",
+      "output": "/"
+    },
+    {
+      "input": "",
+      "output": "/data/plugins"
+    },
+    {
+      "input": ".",
+      "output": "/data/plugins"
+    },
+    {
+      "input": "./",
+      "output": "/data/plugins"
+    },
+    {
+      "input": "a/",
+      "output": "/data/plugins/a"
+    },
+    {
+      "input": "a//b",
+      "output": "/data/plugins/a/b"
+    },
+    {
+      "input": "with space/x",
+      "output": "/data/plugins/with space/x"
+    },
+    {
+      "input": "🎵/emoji",
+      "output": "/data/plugins/🎵/emoji"
+    }
+  ],
+  "resolve_command": [
+    {
+      "input": "node",
+      "output": "node"
+    },
+    {
+      "input": "npx",
+      "output": "npx"
+    },
+    {
+      "input": "python3",
+      "output": "python3"
+    },
+    {
+      "input": "./venv/bin/python",
+      "output": "/data/plugins/hue/venv/bin/python"
+    },
+    {
+      "input": "venv/bin/python",
+      "output": "/data/plugins/hue/venv/bin/python"
+    },
+    {
+      "input": "../shared/bin/server",
+      "output": "/data/plugins/hue/../shared/bin/server"
+    },
+    {
+      "input": "/usr/bin/node",
+      "output": "/usr/bin/node"
+    },
+    {
+      "input": "",
+      "output": ""
+    },
+    {
+      "input": ".",
+      "output": "."
+    },
+    {
+      "input": "./node",
+      "output": "/data/plugins/hue/node"
+    },
+    {
+      "input": "a b",
+      "output": "a b"
+    },
+    {
+      "input": "node.js",
+      "output": "node.js"
+    }
+  ],
+  "to_spec": {
+    "stdio_bare_command_no_cwd": {
+      "name": "hue",
+      "stdio": {
+        "command": "node",
+        "args": [
+          "--serve"
+        ],
+        "env": {
+          "TOKEN": "x"
+        },
+        "cwd": null
+      }
+    },
+    "stdio_bare_command_with_cwd": {
+      "name": "hue",
+      "stdio": {
+        "command": "node",
+        "args": [
+          "--serve"
+        ],
+        "env": {
+          "TOKEN": "x"
+        },
+        "cwd": "/data/plugins/hue-mcp"
+      }
+    },
+    "stdio_relative_command_with_cwd": {
+      "name": "hue",
+      "stdio": {
+        "command": "/data/plugins/hue-mcp/bin/server",
+        "args": [
+          "--serve"
+        ],
+        "env": {
+          "TOKEN": "x"
+        },
+        "cwd": "/data/plugins/hue-mcp"
+      }
+    },
+    "stdio_relative_command_no_cwd": {
+      "name": "hue",
+      "stdio": {
+        "command": "/data/plugins/bin/server",
+        "args": [
+          "--serve"
+        ],
+        "env": {
+          "TOKEN": "x"
+        },
+        "cwd": null
+      }
+    },
+    "stdio_absolute_command": {
+      "name": "hue",
+      "stdio": {
+        "command": "/usr/bin/node",
+        "args": [
+          "--serve"
+        ],
+        "env": {
+          "TOKEN": "x"
+        },
+        "cwd": null
+      }
+    },
+    "stdio_absolute_cwd": {
+      "name": "hue",
+      "stdio": {
+        "command": "node",
+        "args": [
+          "--serve"
+        ],
+        "env": {
+          "TOKEN": "x"
+        },
+        "cwd": "/srv/hue"
+      }
+    },
+    "http": {
+      "name": "hue",
+      "http": {
+        "url": "https://example.com/mcp"
+      }
+    },
+    "both_command_and_url": {
+      "name": "hue",
+      "stdio": {
+        "command": "node",
+        "args": [
+          "--serve"
+        ],
+        "env": {
+          "TOKEN": "x"
+        },
+        "cwd": null
+      }
+    },
+    "neither": {
+      "none": true
+    }
+  },
+  "sorted_full_names": [
+    "mcp__alpha__a",
+    "mcp__alpha__z",
+    "mcp__hue__get_light",
+    "mcp__hue__set",
+    "mcp__hue__set_light",
+    "mcp__multi__part__tool__name",
+    "mcp__ﬀute__play",
+    "mcp__🎵drum__play"
+  ],
+  "filtering": {
+    "empty_patterns": {
+      "patterns": [],
+      "tool_defs": [],
+      "names_matching": []
+    },
+    "exact_one": {
+      "patterns": [
+        "mcp__hue__set_light"
+      ],
+      "tool_defs": [
+        "mcp__hue__set_light"
+      ],
+      "names_matching": [
+        "mcp__hue__set_light"
+      ]
+    },
+    "server_glob": {
+      "patterns": [
+        "mcp__hue__*"
+      ],
+      "tool_defs": [
+        "mcp__hue__get_light",
+        "mcp__hue__set",
+        "mcp__hue__set_light"
+      ],
+      "names_matching": [
+        "mcp__hue__get_light",
+        "mcp__hue__set",
+        "mcp__hue__set_light"
+      ]
+    },
+    "bare_star": {
+      "patterns": [
+        "*"
+      ],
+      "tool_defs": [
+        "mcp__alpha__a",
+        "mcp__alpha__z",
+        "mcp__hue__get_light",
+        "mcp__hue__set",
+        "mcp__hue__set_light",
+        "mcp__multi__part__tool__name",
+        "mcp__ﬀute__play",
+        "mcp__🎵drum__play"
+      ],
+      "names_matching": [
+        "mcp__alpha__a",
+        "mcp__alpha__z",
+        "mcp__hue__get_light",
+        "mcp__hue__set",
+        "mcp__hue__set_light",
+        "mcp__multi__part__tool__name",
+        "mcp__ﬀute__play",
+        "mcp__🎵drum__play"
+      ]
+    },
+    "mcp_prefix_glob": {
+      "patterns": [
+        "mcp__*"
+      ],
+      "tool_defs": [
+        "mcp__alpha__a",
+        "mcp__alpha__z",
+        "mcp__hue__get_light",
+        "mcp__hue__set",
+        "mcp__hue__set_light",
+        "mcp__multi__part__tool__name",
+        "mcp__ﬀute__play",
+        "mcp__🎵drum__play"
+      ],
+      "names_matching": [
+        "mcp__alpha__a",
+        "mcp__alpha__z",
+        "mcp__hue__get_light",
+        "mcp__hue__set",
+        "mcp__hue__set_light",
+        "mcp__multi__part__tool__name",
+        "mcp__ﬀute__play",
+        "mcp__🎵drum__play"
+      ]
+    },
+    "no_match": {
+      "patterns": [
+        "mcp__nope__x"
+      ],
+      "tool_defs": [],
+      "names_matching": []
+    },
+    "pattern_order_does_not_reorder": {
+      "patterns": [
+        "mcp__hue__set_light",
+        "mcp__alpha__a"
+      ],
+      "tool_defs": [
+        "mcp__alpha__a",
+        "mcp__hue__set_light"
+      ],
+      "names_matching": [
+        "mcp__alpha__a",
+        "mcp__hue__set_light"
+      ]
+    },
+    "overlapping_patterns_offer_once": {
+      "patterns": [
+        "mcp__hue__*",
+        "mcp__hue__set_light"
+      ],
+      "tool_defs": [
+        "mcp__hue__get_light",
+        "mcp__hue__set",
+        "mcp__hue__set_light"
+      ],
+      "names_matching": [
+        "mcp__hue__get_light",
+        "mcp__hue__set",
+        "mcp__hue__set_light"
+      ]
+    },
+    "prefix_glob_catches_both": {
+      "patterns": [
+        "mcp__hue__set*"
+      ],
+      "tool_defs": [
+        "mcp__hue__set",
+        "mcp__hue__set_light"
+      ],
+      "names_matching": [
+        "mcp__hue__set",
+        "mcp__hue__set_light"
+      ]
+    },
+    "underscored_names": {
+      "patterns": [
+        "mcp__multi__part__*"
+      ],
+      "tool_defs": [
+        "mcp__multi__part__tool__name"
+      ],
+      "names_matching": [
+        "mcp__multi__part__tool__name"
+      ]
+    }
+  },
+  "to_tool_def": {
+    "name": "mcp__hue__set_light",
+    "description": "set_light tool",
+    "input_schema": {
+      "type": "object"
+    }
+  }
+}
