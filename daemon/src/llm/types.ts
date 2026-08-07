@@ -274,9 +274,17 @@ export interface Timing {
 }
 
 /**
- * The NDJSON event vocabulary the daemon's `StreamConsumer` consumes.
- * Mirrors Rust `StreamEvent` (`#[serde(tag = "type", rename_all = "snake_case")]`).
- * Ordering rules live in `docs/LLM_SIDECAR_IPC.md`.
+ * The event vocabulary every provider adapter emits and `StreamConsumer` folds
+ * into a turn. Mirrors Rust `StreamEvent`
+ * (`#[serde(tag = "type", rename_all = "snake_case")]`).
+ *
+ * Ordering rules live with the code that depends on them, in
+ * `llm/stream.ts`'s `handle`: which events flush a pending text or thinking
+ * buffer, and therefore what order the persisted blocks come out in. They used
+ * to be prose in `docs/LLM_SIDECAR_IPC.md`, which described this as an NDJSON
+ * wire format between two processes. There is one process, the events never
+ * serialize, and the doc had drifted — it stated as a rule that this union has
+ * no `error` variant.
  */
 export type StreamEvent =
   | { type: "start"; model: string }
