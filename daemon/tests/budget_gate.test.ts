@@ -231,7 +231,13 @@ test("no budgets configured means no gate", async () => {
 // leaves `tool_use` blocks with no `tool_result` after them, which Anthropic
 // rejects on the next request — turning an overrun into a wedged conversation.
 
-/** A ledger holding `count` calls of `each` dollars, all inside the window. */
+/**
+ * A ledger holding `count` continuations of `each` dollars, inside the window.
+ *
+ * `tool_loop`, not `message`: the projection prices what a loop's continuations
+ * cost, and those are the rows it averages. A fixture full of `message` rows
+ * would leave it with nothing to learn from and project nothing at all.
+ */
 function ledgerWithHistory(count: number, each: number): string {
   const f = freshLedger();
   cleanups.push(f.cleanup);
@@ -243,7 +249,7 @@ function ledgerWithHistory(count: number, each: number): string {
          input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
          total_ms, ttft_ms, finish_reason, thinking_enabled, cost_source, total_cost)
        VALUES (?1, 'aria', 'openai', 'default',
-         'openai/gpt-test', 'message', 10, 5, 0, 0, 100, 10, 'end_turn', 1,
+         'openai/gpt-test', 'tool_loop', 10, 5, 0, 0, 100, 10, 'end_turn', 1,
          'pricing_catalog', ?2)`,
     ).run(ts, each);
   }
@@ -270,6 +276,20 @@ const RECENT_WINDOW_BUDGET = {
   timezone: "utc",
   budgets: [
     { name: "window", period: "month", cost_usd: 25.0, warn_at: [1.0], limit: "block" },
+  ],
+} as unknown as UsageConfig;
+
+/**
+ * $30, against $20 of history.
+ *
+ * Sized so only the *right* cost basis fits: $9 of continuations lands at $29,
+ * while pricing them off the openers ($27 -> $47) or off a blend ($18 -> $38)
+ * both breach. A budget that let all three through would assert nothing.
+ */
+const THIRTY_DOLLAR_BUDGET = {
+  timezone: "utc",
+  budgets: [
+    { name: "basis", period: "month", cost_usd: 30.0, warn_at: [1.0], limit: "block" },
   ],
 } as unknown as UsageConfig;
 
@@ -362,6 +382,73 @@ test("a cap of one or zero projects nothing, and never projects backwards", () =
   expect(budgetBlockFor(loopReq(room, TEN_DOLLAR_BUDGET, 1))).toBeUndefined();
 });
 
+
+test("continuations are priced off continuations, not off the turn that opens them", () => {
+  // Measured over two weeks of real traffic: a `tool_loop` call cost $0.0145
+  // against $0.0416 for a `message` on the same models. Averaging both prices
+  // every projected continuation at roughly triple, and the gate then demands
+  // triple the headroom — refusing turns that would have fit, which reads as
+  // the daemon being broken rather than as a budget working.
+  const f = freshLedger();
+  cleanups.push(f.cleanup);
+  const db = openLedger(f.path);
+  const ts = new Date().toISOString();
+  const insert = (callType: string, cost: number): void => {
+    db.query(
+      `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type,
+         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+         total_ms, ttft_ms, finish_reason, thinking_enabled, cost_source, total_cost)
+       VALUES (?1, 'aria', 'openai', 'default',
+         'openai/gpt-test', ?2, 10, 5, 0, 0, 100, 10, 'end_turn', 1,
+         'pricing_catalog', ?3)`,
+    ).run(ts, callType, cost);
+  };
+  // Expensive openers, cheap continuations — the real shape.
+  for (let i = 0; i < 5; i++) insert("message", 3.0);
+  for (let i = 0; i < 5; i++) insert("tool_loop", 1.0);
+  db.close();
+
+  // Nine more continuations at $1 is $9. Priced off the $3 openers it would be
+  // $27, or off the $2 blended mean $18 — either would refuse this loop.
+  const block = budgetBlockFor(loopReq(f.path, THIRTY_DOLLAR_BUDGET, 10));
+  expect(block, "$20 spent + $9 projected fits under $30").toBeUndefined();
+});
+
+test("a heartbeat loop is priced off heartbeat continuations", () => {
+  // The two loops record under different call types and cost very differently:
+  // `heartbeat_tool_loop` averaged $0.0052 against `tool_loop`'s $0.0145. A
+  // heartbeat priced off chat's continuations would reserve nearly triple.
+  const f = freshLedger();
+  cleanups.push(f.cleanup);
+  const db = openLedger(f.path);
+  const ts = new Date().toISOString();
+  const insert = (callType: string, cost: number): void => {
+    db.query(
+      `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type,
+         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+         total_ms, ttft_ms, finish_reason, thinking_enabled, cost_source, total_cost)
+       VALUES (?1, 'aria', 'openai', 'default',
+         'openai/gpt-test', ?2, 10, 5, 0, 0, 100, 10, 'end_turn', 1,
+         'pricing_catalog', ?3)`,
+    ).run(ts, callType, cost);
+  };
+  for (let i = 0; i < 5; i++) insert("tool_loop", 3.0);
+  for (let i = 0; i < 5; i++) insert("heartbeat_tool_loop", 1.0);
+  db.close();
+
+  const heartbeat = {
+    ...loopReq(f.path, THIRTY_DOLLAR_BUDGET, 10),
+    context: {
+      ...(loopReq(f.path, THIRTY_DOLLAR_BUDGET, 10).context as object),
+      call_type: "heartbeat",
+    },
+  } as SidecarRequest;
+
+  // $20 spent, nine heartbeat continuations at $1 = $9, under $30. Priced off
+  // `tool_loop` it would project $27 and refuse.
+  expect(budgetBlockFor(heartbeat)).toBeUndefined();
+});
+
 test("the estimate follows the recent window, not the whole history", () => {
   // A model that was cheap and is now expensive. Averaging everything ever
   // recorded would price this loop off the old rate and wave it through.
@@ -375,7 +462,7 @@ test("the estimate follows the recent window, not the whole history", () => {
          input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
          total_ms, ttft_ms, finish_reason, thinking_enabled, cost_source, total_cost)
        VALUES (?1, 'aria', 'openai', 'default',
-         'openai/gpt-test', 'message', 10, 5, 0, 0, 100, 10, 'end_turn', 1,
+         'openai/gpt-test', 'tool_loop', 10, 5, 0, 0, 100, 10, 'end_turn', 1,
          'pricing_catalog', ?2)`,
     ).run(ts, cost);
   };
@@ -404,7 +491,7 @@ test("free rows do not drag the mean toward zero", () => {
          input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
          total_ms, ttft_ms, finish_reason, thinking_enabled, cost_source, total_cost)
        VALUES (?1, 'aria', 'openai', 'default',
-         'openai/gpt-test', 'message', 10, 5, 0, 0, 100, 10, 'end_turn', 1,
+         'openai/gpt-test', 'tool_loop', 10, 5, 0, 0, 100, 10, 'end_turn', 1,
          'pricing_catalog', ?2)`,
     ).run(ts, cost);
   };

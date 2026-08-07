@@ -90,12 +90,27 @@ export function budgetBlockFor(
  * Three cases deliberately project nothing, and each would otherwise refuse a
  * turn on a number that means nothing:
  *
- *   - **No tools or no cap.** One call, and the ordinary check already covers
- *     it exactly.
- *   - **No cost history for this model.** A first call on a newly configured
- *     model has nothing to average; guessing high would refuse it outright.
+ *   - **No tools, or no configured cap.** See below on the uncapped case.
+ *   - **No continuation history for this model.** A first loop on a newly
+ *     configured model has nothing to average; guessing would refuse it.
  *   - **A cap of one.** The loop cannot make a second call, so there is no
  *     overrun to prevent.
+ *
+ * # The uncapped case is left alone on purpose
+ *
+ * `max_tool_iterations` has no default, and `config/models.ts` says why:
+ * absent means **unlimited**. Someone who has left it there has said they do
+ * not want their loops bounded, and a budget gate that invents a bound for
+ * them is second-guessing a deliberate choice. So this projects nothing, and
+ * enforcement stays where it was: the entry check still runs on every turn, so
+ * an overrun is bounded by **one turn's loop** and the next turn is refused.
+ *
+ * That bound is small in practice. Over two weeks of real traffic a turn made
+ * 1.7 provider calls on average — 0.68 continuations — at $0.0145 each, so a
+ * typical overshoot past a budget is a few cents. This gate is for the case
+ * where someone has asked to be conservative *twice*, by setting both a cap and
+ * a budget; for everyone else, option 1 of #14 is the right answer and this is
+ * it.
  */
 function projectedLoopCost(
   db: Parameters<typeof recentCallCost>[0],
@@ -106,10 +121,17 @@ function projectedLoopCost(
   if (cap === undefined || cap <= 1) return undefined;
   if (request.tools === undefined || request.tools.length === 0) return undefined;
 
-  const perCall = recentCallCost(db, provider, request.model);
+  // Priced off continuations, not off the turn that opens them — they cost
+  // about a third as much, and mixing the two demands triple the headroom.
+  const perCall = recentCallCost(db, provider, request.model, continuationType(request));
   if (perCall === undefined) return undefined;
 
   // The opening call is what the plain gate already weighs; this is what the
   // loop adds on top of it, which is why the cap is not counted whole.
   return perCall * (cap - 1);
+}
+
+/** The `call_type` this request's continuations will be recorded under. */
+function continuationType(request: SidecarRequest): string {
+  return request.context?.call_type === "heartbeat" ? "heartbeat_tool_loop" : "tool_loop";
 }

@@ -117,8 +117,16 @@ MUTANTS = [
      "            AND total_cost IS NOT NULL"),
     ("mean: the whole history averaged instead of the recent window",
      QUERY,
-     "          ORDER BY id DESC LIMIT ?3",
-     "          ORDER BY id ASC LIMIT ?3"),
+     "          ORDER BY id DESC LIMIT ?4",
+     "          ORDER BY id ASC LIMIT ?4"),
+    ("basis: continuations priced off every call type, so openers inflate them",
+     QUERY,
+     "          WHERE provider = ?1 AND model = ?2 AND call_type = ?3",
+     "          WHERE provider = ?1 AND model = ?2 AND (?3 IS NOT NULL OR 1)"),
+    ("basis: a heartbeat loop priced off chat's continuations",
+     GATE,
+     '  return request.context?.call_type === "heartbeat" ? "heartbeat_tool_loop" : "tool_loop";',
+     '  return "tool_loop";'),
 ]
 
 
