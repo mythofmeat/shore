@@ -92,5 +92,10 @@ export function shouldRetryError(
     // Vague enough to be worth one more attempt.
     case "provider":
       return RETRY;
+
+    // A policy decision, computed locally from the ledger. It will decide the
+    // same way on every attempt, so retrying only makes the refusal slower.
+    case "budget_blocked":
+      return FAIL;
   }
 }

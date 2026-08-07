@@ -78,7 +78,9 @@ import {
 } from "../llm/credentials.ts";
 import { anthropicToolLoopEvents } from "../llm/providers/anthropic_loop.ts";
 import { genericToolLoopEvents } from "../llm/providers/generic_loop.ts";
+import { BudgetBlocked } from "../llm/generate.ts";
 import { consumeStream, type StreamResult } from "../llm/stream.ts";
+import { budgetBlockFor } from "../ledger/gate.ts";
 import { recordingStream } from "../ledger/record.ts";
 import type {
   CallContext,
@@ -506,6 +508,20 @@ async function streamTurn(
         ? {}
         : { context: { ...request.context, api_key_name: candidate.name } }),
     };
+
+    // `[usage]`, before any provider work. The Rust checked here too, though it
+    // did not look like a check: this attempt was a POST to the sidecar, and
+    // the sidecar gated `/v1/stream`. Absorbing that hop moved the request into
+    // this process and left the gate on the endpoint nothing calls, so a chat
+    // turn — alone among the paths that spend — stopped being budgeted.
+    //
+    // Inside the attempt rather than before the rotation, because a budget may
+    // be scoped to an `api_key`, and `budgetMatchesCall` compares it against
+    // `api_key_name ?? "unknown"`. Hoisted above the loop that name is not yet
+    // known, so every key-scoped budget would quietly match nothing — the same
+    // silence this is fixing, one level down.
+    const blocked = budgetBlockFor(call);
+    if (blocked) throw new BudgetBlocked(blocked.message, blocked.scope);
 
     const phase: ToolPhase | undefined =
       toolCtx === undefined

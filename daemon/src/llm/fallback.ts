@@ -86,6 +86,13 @@ export function sanitizeReason(error: LlmError): string {
       return "request serialization failed";
     case "deserialize":
       return "response deserialization failed";
+    // Unreachable today: this is the reason recorded when a failure *rotates*,
+    // and a budget block classifies as `not_credential_failure`. Written out
+    // rather than left to a default so that a future classifier change is a
+    // compile error here instead of a silent `undefined` in a warning. The text
+    // is the user's own budget message, capped like a provider's.
+    case "budget_blocked":
+      return truncateBytes(error.message, MAX_REASON_BYTES);
   }
 }
 

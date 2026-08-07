@@ -74,6 +74,11 @@ export function classifyCredentialFailure(
     case "deserialize":
     case "provider":
       return "not_credential_failure";
+    // A budget refuses the *call*, not the credential. Rotating would ask every
+    // remaining key the same question and get the same answer, and a budget
+    // scoped to one key would then be enforced by spending another.
+    case "budget_blocked":
+      return "not_credential_failure";
   }
 }
 

@@ -32,7 +32,20 @@ export type LlmError =
    */
   | { kind: "stream_errored"; message: string; usage: Usage; timing: Timing }
   | { kind: "missing_api_key"; var: string }
-  | { kind: "provider"; message: string };
+  | { kind: "provider"; message: string }
+  /**
+   * `[usage]` refused the call before it was placed — see `ledger/gate.ts`.
+   *
+   * The Rust had no variant for this: the gate lived on the far side of an HTTP
+   * hop, so a refusal arrived as a 402 that `check_sidecar_response` flattened
+   * into `Provider`. That flattening cost two things now worth having back.
+   * Rotation was the accident it *didn't* cost — `Provider` classifies as
+   * `not_credential_failure`, so keys were safe — but retry was: `provider`
+   * retries, so the daemon re-POSTed a deterministic policy refusal until the
+   * attempt ceiling. Remote, that was a wasted round-trip. Local, it is a
+   * backoff sleep the user waits through for an answer that cannot change.
+   */
+  | { kind: "budget_blocked"; message: string; scope?: string };
 
 /** The `Display` text the Rust's `#[error(...)]` attributes produce. */
 export function describeLlmError(error: LlmError): string {
@@ -53,5 +66,10 @@ export function describeLlmError(error: LlmError): string {
       return `API key environment variable ${error.var} is not set`;
     case "provider":
       return `provider error: ${error.message}`;
+    case "budget_blocked":
+      // The budget's own sentence, unadorned. It is written to be read by the
+      // person who set the budget, and a prefix here would be the daemon
+      // explaining someone's own configuration back to them.
+      return error.message;
   }
 }

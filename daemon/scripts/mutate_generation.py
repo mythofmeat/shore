@@ -8,7 +8,7 @@ wrong directory, with the loop mutating the request the keepalive later clones,
 or with `stream_end` going out before the turn was durable. That last one is
 the bug the whole arrangement exists to prevent.
 
-The mutants cover five things:
+The mutants cover six things:
 
 - **The order.** `stream_end` after persistence, the compaction gate last, the
   user turn recorded before the request is assembled from it.
@@ -22,10 +22,29 @@ The mutants cover five things:
 - **The failure paths.** A stream that errors persists nothing, and a retry
   starts the turn's tool record over rather than appending to it.
 
-A mutant is KILLED if `bun test tests/generation_parity.test.ts` fails with it
-applied.
+- **The budget gate.** That a chat turn is checked at all, that it is checked
+  where the key is known, and that a refusal neither rotates nor retries.
 
-This is **28/28**, from 24/29 on the first pass.
+A mutant is KILLED if `bun test tests/generation_parity.test.ts
+tests/budget_gate.test.ts` fails with it applied. The second file is here
+because the gate mutants are about a call that never happens, and the parity
+fixture records what a turn *did* — it has nothing to say about a turn that was
+refused before it started.
+
+This is **33/33**: 28/28 for the driver, from 24/29 on the first pass, plus
+five for the gate, which went 3/5 before the tests grew a fallback count and a
+sleep count.
+
+The two gate survivors are worth naming, because both were invisible in the
+obvious assertion — "the provider was not called" is true whether the refusal
+was decided once or five times:
+
+- **Rotation.** A refusal that classifies as a credential failure is re-asked
+  with each remaining key, and the provider is still never called. Killed by
+  counting `key_fallbacks` with two keys configured.
+- **Retry.** A refusal that classifies as transient is re-asked after a
+  backoff, and the provider is still never called. Killed by counting the
+  injected `sleep`, which is the only trace it leaves.
 
 Five survivors, and the split was the usual one — three cases present with
 nothing load-bearing in them, and two lines that did not need to exist:
@@ -55,6 +74,9 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 GEN = "src/handler/generation.ts"
 CTX = "src/handler/tool_context.ts"
+GENERATE = "src/llm/generate.ts"
+RETRY = "src/llm/retry.ts"
+CREDS = "src/llm/credentials.ts"
 
 # (label, file, find, replace)
 MUTANTS = [
@@ -186,19 +208,47 @@ MUTANTS = [
      GEN,
      "  const { context: _perCall, ...sentBody } = request;",
      "  const sentBody = request;"),
+
+    # --- the budget gate ------------------------------------------------------
+    # This is the one the port lost. `/v1/stream` gated the turn while the
+    # daemon still posted to it; absorbing the hop moved the call in-process and
+    # left the gate on the endpoint. Everything below is a way for that to
+    # happen again quietly, so each has to be a failing test rather than a
+    # reading of the source.
+    ("gate: a chat turn is not budget-checked at all",
+     GEN,
+     "    const blocked = budgetBlockFor(call);\n"
+     "    if (blocked) throw new BudgetBlocked(blocked.message, blocked.scope);",
+     "    void budgetBlockFor;"),
+    ("gate: the check is hoisted above the rotation, before the key is known",
+     GEN,
+     "    const blocked = budgetBlockFor(call);",
+     "    const blocked = budgetBlockFor(request);"),
+    ("gate: a refusal carries no kind, so rotation burns every key",
+     GENERATE,
+     '  readonly kind = "budget_blocked" as const;\n',
+     ""),
+    ("gate: a refusal is retried until the attempt ceiling",
+     RETRY,
+     '    case "budget_blocked":\n      return FAIL;',
+     '    case "budget_blocked":\n      return RETRY;'),
+    ("gate: a refusal is treated as a credential failure",
+     CREDS,
+     '    case "budget_blocked":\n      return "not_credential_failure";',
+     '    case "budget_blocked":\n      return "quota_exhausted";'),
 ]
 
 
 def run() -> bool:
     r = subprocess.run(
-        ["bun", "test", "tests/generation_parity.test.ts"],
+        ["bun", "test", "tests/generation_parity.test.ts", "tests/budget_gate.test.ts"],
         cwd=ROOT, capture_output=True, text=True,
     )
     return r.returncode == 0
 
 
 def main() -> None:
-    originals = {p: (ROOT / p).read_text() for p in {GEN, CTX}}
+    originals = {p: (ROOT / p).read_text() for p in {GEN, CTX, GENERATE, RETRY, CREDS}}
     if not run():
         sys.exit("baseline is red; fix before mutating")
 

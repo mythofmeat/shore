@@ -51,8 +51,17 @@ import {
 } from "./fallback.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "./types.ts";
 
-/** A provider call was refused before it happened, by `[usage]`. */
+/**
+ * A provider call was refused before it happened, by `[usage]`.
+ *
+ * An `Error` so the message survives the handler's `instanceof Error` check on
+ * the way to the client, and an {@link LlmError} — via `kind` — so the retry
+ * and rotation layers can classify it. Both layers cast what they catch, so a
+ * plain `Error` reaching them classifies as `undefined`, which `shouldRotate`
+ * reads as rotatable: a refused call would burn every configured key.
+ */
 export class BudgetBlocked extends Error {
+  readonly kind = "budget_blocked" as const;
   readonly scope: string | undefined;
 
   constructor(message: string, scope?: string) {
