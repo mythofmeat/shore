@@ -1,8 +1,6 @@
 FROM rust:latest AS rust
 WORKDIR /src
 COPY . .
-# The Cargo workspace root is client/, not the repo root — the repo is organised
-# by concern, and all remaining Rust is client code.
 WORKDIR /src/client
 RUN cargo build --release --bin shore
 RUN cargo build --release --bin shore-tui
