@@ -208,8 +208,12 @@ export interface GenerationDeps {
    * *this* character's tracker. A process-wide table could only leave both out,
    * which is a heartbeat's tool context — see `runtime.ts` — and not a chat
    * turn's.
+   *
+   * Per *turn* as well as per character, because `runSubagent` is: the nested
+   * loop's frames go to the session that asked, and its history macro reads
+   * this turn's conversation tail.
    */
-  tools?: (charName: string) => ToolContextDeps;
+  tools?: (charName: string, turn: SubagentTurn) => ToolContextDeps;
   /** RFC 3339 with offset. Injected so a replay can pin it. */
   now?: () => string;
   /** `format!("m_{}", Uuid::new_v4())` in the Rust. */
@@ -402,6 +406,22 @@ export async function runGeneration(
 
 // ── the stream ──────────────────────────────────────────────────────────
 
+/**
+ * The turn a sub-agent's runtime is built against.
+ *
+ * Everything here is per turn rather than per character: the nested loop
+ * streams into the session that asked, correlates with that request's rid, and
+ * reads that turn's conversation tail for `{{active_history: n}}`.
+ */
+export interface SubagentTurn {
+  conversation: readonly Message[];
+  send: (message: ServerMessage) => void;
+  rid?: string;
+  now: () => string;
+  newMessageId: () => string;
+  signal: AbortSignal;
+}
+
 interface StreamTurnParams {
   config: LoadedConfig;
   charName: string;
@@ -442,7 +462,19 @@ async function streamTurn(
   const toolsOn = anyEnabled(config.app.tools) && (request.tools?.length ?? 0) > 0;
 
   const toolCtx = toolsOn
-    ? await buildToolContext(config, deps.dataDir, charName, deps.tools?.(charName) ?? {})
+    ? await buildToolContext(
+        config,
+        deps.dataDir,
+        charName,
+        deps.tools?.(charName, {
+          conversation: params.conversation,
+          send: params.send,
+          ...(params.rid === undefined ? {} : { rid: params.rid }),
+          now: params.now,
+          newMessageId: params.newMessageId,
+          signal: params.signal,
+        }) ?? {},
+      )
     : undefined;
 
   const retry = {

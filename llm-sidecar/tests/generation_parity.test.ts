@@ -269,7 +269,7 @@ describe("buildToolContext", () => {
         mcpRegistry: { call: async () => undefined },
         // Always passed, so what the fixture's `subagent_runtime` is recording
         // — the `[subagents.*]` gate — is the only thing that can decide it.
-        runSubagent: async () => undefined,
+        runSubagent: () => async () => undefined,
       });
 
       expect(stripRoot(ctx.imageDir, root)).toBe(out["image_dir"]);

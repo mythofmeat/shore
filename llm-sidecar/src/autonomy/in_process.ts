@@ -224,7 +224,11 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
   } {
     return {
       generate: compactionGenerate(this.#generateDeps(config)),
-      ...(this.#deps.tools === undefined ? {} : { tools: this.#deps.tools }),
+      // `runSubagent` is stripped rather than merely absent from the type: the
+      // shared backends carry the background one, and compaction is the one
+      // context the Rust left without it, so `ask_*` answers `NotImplemented`
+      // during a compaction pass.
+      ...(this.#deps.tools === undefined ? {} : { tools: withoutSubagent(this.#deps.tools) }),
     };
   }
 }
@@ -265,4 +269,10 @@ export function compactionGenerate(deps: GenerateDeps): CompactionGenerate {
     }
     return response;
   };
+}
+
+/** A tool-deps object with `runSubagent` removed. See {@link InProcessAutonomyExecutor}. */
+function withoutSubagent(tools: ToolContextDeps): Omit<ToolContextDeps, "runSubagent"> {
+  const { runSubagent: _dropped, ...rest } = tools;
+  return rest;
 }

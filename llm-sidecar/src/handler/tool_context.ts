@@ -59,12 +59,13 @@ export interface ToolContextDeps {
    * matching the Rust — which built the runtime conditionally to avoid cloning
    * the config into an `Arc` on every turn that has no sub-agents.
    *
-   * Still injected rather than built here: the sub-agent's nested loop driver
-   * is `crates/daemon/src/tools/subagent.rs` and has not ported (#12's
-   * remaining system-prompt fork lives in it). A caller with nothing to pass
+   * A **binder**, not the function itself, because a sub-agent's nested loop
+   * runs against this very context minus its own `runSubagent` — that removal
+   * is the recursion cap. So the runner cannot exist until the context does,
+   * and the one place that knows both is here. A caller with nothing to pass
    * leaves `ask_*` uncallable, which is what a daemon without the runtime did.
    */
-  runSubagent?: (name: string, query: string, signal?: AbortSignal) => Promise<unknown>;
+  runSubagent?: (parent: ToolContext) => NonNullable<ToolContext["runSubagent"]>;
   /** Records that a prompt-visible file changed. */
   deferEdit?: (path: string) => Promise<void> | void;
   /** `generate_image`'s backend, when one is configured. */
@@ -134,7 +135,7 @@ export async function buildToolContext(
   // otherwise offer `ask_*` for sub-agents that do not exist.
   const subagentsConfigured = config.app.subagents.size > 0;
 
-  return {
+  const ctx: ToolContext = {
     imageDir: rustJoin(charDataDir, "images"),
     workspaceDir,
     characterDataDir: charDataDir,
@@ -153,10 +154,14 @@ export async function buildToolContext(
     ...(mcp === undefined
       ? {}
       : { mcpCall: (name: string, input: unknown) => mcp.call(name, input) }),
-    ...(subagentsConfigured && deps.runSubagent !== undefined
-      ? { runSubagent: deps.runSubagent }
-      : {}),
   };
+
+  // Attached after the object exists, because the runner closes over it: the
+  // nested loop a sub-agent runs gets this context with `runSubagent` gone.
+  if (subagentsConfigured && deps.runSubagent !== undefined) {
+    ctx.runSubagent = deps.runSubagent(ctx);
+  }
+  return ctx;
 }
 
 /**

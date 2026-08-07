@@ -45,6 +45,9 @@ import { loadConfig, type LoadedConfig } from "./config/loader.ts";
 import type { HistoryListener } from "./engine/conversation.ts";
 import type { Message } from "./engine/types.ts";
 import type { ToolContextDeps } from "./handler/tool_context.ts";
+import { Diagnostics } from "./diagnostics.ts";
+import type { ToolContext } from "./tools/dispatch.ts";
+import { subagentRunner } from "./tools/subagent_loop.ts";
 import { Ledger } from "./ledger/store.ts";
 import { ledgerFor } from "./ledger/record.ts";
 import { setCallObserver } from "./ledger/record.ts";
@@ -155,7 +158,10 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       registry,
       cache,
       providers: options.providers,
-      tools: sharedToolDeps(config, mcp),
+      tools: sharedToolDeps(config, mcp, {
+        providers: options.providers,
+        ...(options.env === undefined ? {} : { env: options.env }),
+      }),
       ...(callStore === undefined ? {} : { callStore }),
       ...(options.emit === undefined ? {} : { emit: options.emit }),
       ...(options.env === undefined ? {} : { env: options.env }),
@@ -313,19 +319,46 @@ async function connectMcpRegistry(
  * surfaces have to agree, and the cheapest way for them to disagree is for one
  * of them to grow a backend the other did not.
  *
- * Three fields a chat turn wants are absent here, and each for its own reason
- * rather than as a batch:
+ * Two fields a chat turn wants are absent here, and both for the same reason:
+ * **`activityStats` and `deferEdit`** are per-character, and this object is
+ * shared. The Rust's `build_tool_context` for a heartbeat set neither, so
+ * their absence from a background tick is the port rather than a gap.
  *
- * - **`runSubagent`** is unported — the nested loop driver is still
- *   `crates/daemon/src/tools/subagent.rs`. `ask_*` is uncallable until it
- *   lands, which is what a daemon without the runtime did.
- * - **`activityStats` and `deferEdit`** are per-character, and this object is
- *   shared. The Rust's `build_tool_context` for a heartbeat set neither, so
- *   their absence from a background tick is the port rather than a gap.
+ * `runSubagent` *is* here, and it is the background flavour — the Rust's
+ * `SubagentRuntime::background`. No client channel, because a tick has no live
+ * turn to stream a nested loop into, and no conversation tail, so
+ * `{{active_history:}}` degrades to nothing. The sub-agent still runs and still
+ * returns its summary. A chat turn replaces it with one bound to its own
+ * session; compaction strips it, which is the Rust's rule and is why `ask_*`
+ * answers `NotImplemented` there.
  */
-export function sharedToolDeps(config: LoadedConfig, mcp: McpRegistry): ToolContextDeps {
+export function sharedToolDeps(
+  config: LoadedConfig,
+  mcp: McpRegistry,
+  /** Absent leaves `ask_*` uncallable — a caller with no provider table. */
+  subagent?: {
+    providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
+    env?: NodeJS.ProcessEnv | undefined;
+  },
+): ToolContextDeps {
   return {
     mcpRegistry: mcp,
+    ...(subagent === undefined
+      ? {}
+      : {
+          runSubagent: (parent: ToolContext) =>
+            subagentRunner({
+              config,
+              ctx: parent,
+              providers: subagent.providers,
+              mcpRegistry: mcp,
+              // Its own ring: a background tick has no interactive
+              // `shore status --diagnostics` view to feed, which is what the
+              // Rust's throwaway `Diagnostics::default()` said too.
+              diagnostics: new Diagnostics().tool_calls,
+              ...(subagent.env === undefined ? {} : { env: subagent.env }),
+            }),
+        }),
     // `generateImage` speaks the sidecar's request shape; the tool speaks its
     // own, with every field present and possibly undefined. The optional ones
     // are dropped rather than passed as `undefined`, which is not the same

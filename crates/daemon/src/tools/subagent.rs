@@ -1,15 +1,32 @@
 //! Sub-agent delegation runtime.
 //!
-//! **Partly ported.** The prompt-assembly half — macro expansion, the history
+//! **Ported.** The prompt-assembly half — macro expansion, the history
 //! transcript, the tool subset, template vars and the model-resolution chain —
-//! now lives in `llm-sidecar/src/tools/subagent.ts`, pinned by
-//! `llm-sidecar/tests/engine_fixtures/subagent_parity.json`. Change behaviour
-//! there, not here.
+//! is `llm-sidecar/src/tools/subagent.ts`, pinned by
+//! `llm-sidecar/tests/engine_fixtures/subagent_parity.json`. The driving half —
+//! [`run`], `resolve_spec_and_model`, `build_request` and [`spawn_forwarder`] —
+//! is `llm-sidecar/src/tools/subagent_loop.ts`, pinned by
+//! `tests/subagent_loop.test.ts` and `scripts/mutate_subagent_loop.py`.
 //!
-//! What remains here is bridge: [`run`] drives the nested loop through
-//! `StreamConsumer` and the daemon's ledger client, and [`spawn_forwarder`]
-//! relays frames over the NDJSON hop. Both disappear with the hop itself — the
-//! TypeScript daemon runs the nested loop in-process against `runToolLoop`.
+//! Three things read differently over there:
+//!
+//! - **The system prompt is top-level for every provider.** The SDK fork below
+//!   was the last of #11's, and it was carried rather than kept: its stated
+//!   reason is to mirror dreaming and compaction, which must hold an
+//!   instruction at a fixed index so the chat prefix they extend stays
+//!   byte-stable. A sub-agent request is built from scratch — one user message,
+//!   no prefix to protect — so nothing can shift. What the fork cost was real:
+//!   inline on Anthropic means the adapter wraps the prompt in
+//!   `<system_instruction>` and merges it into the preceding user turn, so it
+//!   lost the system role and landed *after* the question.
+//! - **There is no forwarder task.** `spawn_forwarder` existed because the
+//!   nested loop's frames crossed a bounded channel and had to be drained even
+//!   when nobody wanted them, or the loop would stall on a full buffer. In one
+//!   process the tag is applied by the sink itself, and a background context
+//!   passes no sink at all.
+//! - **`SubagentGuardContext` is a spread.** The trait impl forwarded fourteen
+//!   methods to override one; over there the nested context is the parent with
+//!   `runSubagent` deleted, which is the same statement in one line.
 //!
 //! A `[subagents.<name>]` config entry surfaces to the primary model as a
 //! single `ask_<name>(query)` tool. Invoking it runs a *nested* tool loop on a

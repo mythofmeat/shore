@@ -76,7 +76,8 @@ import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import { sharedToolDeps, type ShoreRuntime } from "../runtime.ts";
 import { historyMessage, type HandshakeProvider } from "../swp/connection.ts";
 import type { SessionRouter } from "../swp/session.ts";
-import { deferEditTo } from "../tools/dispatch.ts";
+import { deferEditTo, type ToolContext } from "../tools/dispatch.ts";
+import { subagentRunner } from "../tools/subagent_loop.ts";
 import { makeDispatchCommand, type CommandPathDeps, type SessionCache } from "./commands.ts";
 import type { DispatchRuntime, ReloadSummary } from "./command_dispatch.ts";
 import {
@@ -84,6 +85,7 @@ import {
   makeRunGeneration,
   type GenerationDeps,
   type GenerationRegistry,
+  type SubagentTurn,
 } from "./generation.ts";
 import { StreamLeases } from "./lease.ts";
 import type {
@@ -136,7 +138,7 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
     usageConfig: usage,
     keepaliveMaxSecs: () =>
       Number(global().app.behavior.autonomy.cache_keepalive_max.asSecs()),
-    tools: (charName) => chatToolDeps(runtime, charName),
+    tools: (charName, turn) => chatToolDeps(a, charName, turn),
     ...(a.env === undefined ? {} : { env: a.env }),
   };
 }
@@ -209,13 +211,36 @@ export function turnAutonomy(
  *   tracker. `messageCount` is the Rust's `turn_count` — one number, two names,
  *   and the rename happens here rather than in the tool.
  *
- * `runSubagent` is still absent: `crates/daemon/src/tools/subagent.rs` has not
- * ported, so `ask_*` is uncallable, which is what a daemon without the runtime
- * did.
+ * **`runSubagent`** is the third, and it is per *turn* as well as per
+ * character: the nested loop streams into the session that asked and its
+ * history macro reads that turn's conversation tail. `buildToolContext` gates
+ * it on `[subagents]` being non-empty, so passing one costs nothing for a
+ * character that has none.
  */
-export function chatToolDeps(runtime: ShoreRuntime, charName: string): ToolContextDeps {
+export function chatToolDeps(
+  a: GenerationAssembly,
+  charName: string,
+  turn: SubagentTurn,
+): ToolContextDeps {
+  const { runtime } = a;
   return {
     ...sharedToolDeps(runtime.config, runtime.mcp),
+    // A binder: `buildToolContext` calls it with the context it just built,
+    // and the nested loop runs against that context minus this very field.
+    runSubagent: (parent: ToolContext) =>
+      subagentRunner({
+      config: runtime.registry.effectiveConfig(charName),
+      ctx: parent,
+      providers: a.providers,
+      mcpRegistry: runtime.mcp,
+      sendDirect: turn.send,
+      diagnostics: a.diagnostics.tool_calls,
+      conversation: turn.conversation,
+      ...(a.env === undefined ? {} : { env: a.env }),
+      ...(turn.rid === undefined ? {} : { rid: turn.rid }),
+      now: turn.now,
+      newMessageId: turn.newMessageId,
+      }),
     deferEdit: deferEditTo(
       characterDataDir(runtime.config.dirs.data, charName),
       queueDeferredEdit,

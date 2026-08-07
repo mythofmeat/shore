@@ -46,6 +46,7 @@ import {
 import { SessionRouter } from "../src/swp/session.ts";
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
 import { CharacterError } from "../src/characters.ts";
+import { Diagnostics } from "../src/diagnostics.ts";
 import { createRuntime, type ShoreRuntime } from "../src/runtime.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
@@ -138,11 +139,31 @@ function recordingService(gate?: Promise<void>) {
   };
 }
 
+/** The assembly slice `chatToolDeps` reads, over a runtime. */
+function assemblyFor(runtime: ShoreRuntime): Parameters<typeof chatToolDeps>[0] {
+  return {
+    runtime,
+    providers: {},
+    diagnostics: new Diagnostics(),
+  } as unknown as Parameters<typeof chatToolDeps>[0];
+}
+
+/** A turn with nothing live behind it. `runSubagent` is the only reader. */
+function turnFor(): Parameters<typeof chatToolDeps>[2] {
+  return {
+    conversation: [],
+    send: () => {},
+    now: () => "2026-01-01T00:00:00+00:00",
+    newMessageId: () => "m_test",
+    signal: new AbortController().signal,
+  };
+}
+
 describe("the tool backends a character's turn gets", () => {
   test("a deferred edit lands in the character's own directory", async () => {
     const { root, runtime } = await runtimeUnder("shore-deps-defer-");
     try {
-      const ada = chatToolDeps(runtime, "ada");
+      const ada = chatToolDeps(assemblyFor(runtime), "ada", turnFor());
       await ada.deferEdit?.("SOUL.md");
 
       // Under `<data>/ada`, not `<data>` and not anyone else's. A queue written
@@ -159,8 +180,8 @@ describe("the tool backends a character's turn gets", () => {
   test("two characters queue to two directories", async () => {
     const { root, runtime } = await runtimeUnder("shore-deps-defer2-");
     try {
-      await chatToolDeps(runtime, "ada").deferEdit?.("SOUL.md");
-      await chatToolDeps(runtime, "nova").deferEdit?.("USER.md");
+      await chatToolDeps(assemblyFor(runtime), "ada", turnFor()).deferEdit?.("SOUL.md");
+      await chatToolDeps(assemblyFor(runtime), "nova", turnFor()).deferEdit?.("USER.md");
 
       expect(await readdir(join(root, "data", "ada"))).toEqual(["deferred_edits.jsonl"]);
       expect(await readdir(join(root, "data", "nova"))).toEqual(["deferred_edits.jsonl"]);
@@ -188,11 +209,11 @@ describe("the tool backends a character's turn gets", () => {
 
       // `messageCount` on this side is the Rust's `turn_count`: one number, two
       // names, and the tool reads the second.
-      expect(chatToolDeps(stubbed, "ada").activityStats?.()).toEqual({
+      expect(chatToolDeps(assemblyFor(stubbed), "ada", turnFor()).activityStats?.()).toEqual({
         stats: { hour_histogram: [1] } as never,
         turnCount: 12,
       });
-      expect(chatToolDeps(stubbed, "nova").activityStats?.()).toBeUndefined();
+      expect(chatToolDeps(assemblyFor(stubbed), "nova", turnFor()).activityStats?.()).toBeUndefined();
       expect(asked).toEqual(["ada", "nova"]);
     } finally {
       await runtime.shutdown();
@@ -203,13 +224,14 @@ describe("the tool backends a character's turn gets", () => {
   test("the shared backends come along, so chat is not offered less than a heartbeat", async () => {
     const { root, runtime } = await runtimeUnder("shore-deps-shared-");
     try {
-      const ada = chatToolDeps(runtime, "ada");
+      const ada = chatToolDeps(assemblyFor(runtime), "ada", turnFor());
       expect(ada.mcpRegistry).toBe(runtime.mcp);
       expect(ada.imageGenerator).toBeDefined();
       expect(ada.modelHistoryQuery).toBeDefined();
-      // Still absent: `crates/daemon/src/tools/subagent.rs` has not ported, so
-      // `ask_*` is uncallable — which is what a daemon without the runtime did.
-      expect(ada.runSubagent).toBeUndefined();
+      // A *binder*, not the runner: a sub-agent's nested loop runs against the
+      // built context minus its own `runSubagent`, so the runner cannot exist
+      // until the context does. `buildToolContext` is where the two meet.
+      expect(ada.runSubagent).toBeDefined();
     } finally {
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });
