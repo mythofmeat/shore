@@ -37,7 +37,6 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 R = "src/runtime.ts"
-S = "src/server.ts"
 
 TESTS = ["tests/runtime.test.ts"]
 
@@ -153,19 +152,6 @@ MUTANTS = [
      "      throw e;\n"
      "    }"),
 
-    # --- the refusing executor ------------------------------------------------
-    ("unassembled: an action throws, abandoning the tick with its latch still held",
-     S,
-     "  runCompaction: () => Promise.resolve(refusal(\"compaction\")),",
-     "  runCompaction: () => Promise.reject(new Error(\"no runtime\")),"),
-    ("unassembled: every action refuses with the same line, so a log says nothing",
-     S,
-     "  runDeepArchive: () => Promise.resolve(refusal(\"deep archive\")),",
-     "  runDeepArchive: () => Promise.resolve(refusal(\"compaction\")),"),
-    ("unassembled: a refusal reports success, so the tick believes the action ran",
-     S,
-     "  return { events: [], failed: `${action} needs a runtime, and this handler was built without one` };",
-     "  return { events: [] };"),
 ]
 
 

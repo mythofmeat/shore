@@ -21,7 +21,6 @@ import {
 import { encodeState, STATE_FILENAME } from "../src/autonomy/state_file.ts";
 import type { AutonomyActionResult, AutonomyExecutor } from "../src/autonomy/runner.ts";
 import type { CompactionReason } from "../src/autonomy/tick.ts";
-import { createSidecarHandler } from "../src/server.ts";
 import type { KeepaliveEvent, KeepaliveService } from "../src/autonomy/keepalive.ts";
 import type { KeepaliveSnapshot } from "../src/autonomy/cache_keepalive.ts";
 
@@ -344,76 +343,33 @@ describe("what the daemon reports", () => {
   });
 });
 
-describe("the endpoints", () => {
-  /** A handler over its own service, so nothing here starts a clock. */
-  function handler() {
-    const { service, executor, now } = build();
-    return { post: postTo(createSidecarHandler({ autonomy: service })), service, executor, now };
-  }
+describe("the surface the daemon drives", () => {
+  // These ran over `/v1/autonomy/*` until that hop was deleted. The service is
+  // the same object either way; what the HTTP layer added was JSON validation
+  // and a status code, and both are gone with it — an unknown character is now
+  // `undefined` from a typed call rather than a 404 body.
+  //
+  // One test did not survive the move, deliberately. It asserted that a missing
+  // `local_ms` was a 400 rather than a `NaN` in the record, because the bodies
+  // were hand-mirrored Rust structs and a field renamed on one side only would
+  // arrive as `undefined`. In one process there is no body to mirror and the
+  // parameter is `number`, so the case it guarded cannot be constructed.
 
-  const postTo =
-    (fetch: ReturnType<typeof createSidecarHandler>) =>
-    (path: string, body: unknown): Promise<Response> =>
-      fetch(
-        new Request(`http://sidecar${path}`, {
-          method: "POST",
-          body: JSON.stringify(body),
-        }),
-      );
-
-  test("register, notify, read back", async () => {
+  test("pause round-trips, and reports the state it set", async () => {
     await inTempDir(async (root) => {
-      const { post } = handler();
-      const dir = characterDir(root, "nova");
+      const { service } = build();
+      await service.register(registration("nova", characterDir(root, "nova")));
 
-      expect(await (await post("/v1/autonomy/register", registration("nova", dir))).json()).toEqual({
-        ok: true,
-      });
-      await post("/v1/autonomy/user-message", {
-        character: "nova",
-        turn_count: 12,
-        local_ms: LOCAL_AT,
-      });
-      await post("/v1/autonomy/compaction-complete", { character: "nova", turn_count: 4 });
-
-      const status = await (await post("/v1/autonomy/status", { character: "nova" })).json();
-      expect(status).toMatchObject({ character: "nova", paused: false, covered_turn_count: 4 });
+      expect(service.setPaused("nova", true)).toBe(true);
+      expect(service.setPaused("nova", false)).toBe(false);
     });
-  });
-
-  test("pausing answers with the state it landed in", async () => {
-    await inTempDir(async (root) => {
-      const { post } = handler();
-      await post("/v1/autonomy/register", registration("nova", characterDir(root, "nova")));
-
-      expect(
-        await (await post("/v1/autonomy/pause", { character: "nova", paused: true })).json(),
-      ).toEqual({ paused: true });
-      expect(
-        await (await post("/v1/autonomy/pause", { character: "nova", paused: false })).json(),
-      ).toEqual({ paused: false });
-    });
-  });
-
-  test("asking about a character that is not loaded is a 404, not a 500", async () => {
-    // The CLI can ask about a character that has not spoken since the daemon
-    // started, which is an ordinary answer rather than a failure.
-    const { post } = handler();
-    expect((await post("/v1/autonomy/status", { character: "ghost" })).status).toBe(404);
-    expect((await post("/v1/autonomy/pause", { character: "ghost", paused: true })).status).toBe(
-      404,
-    );
   });
 
   test("the log reads back the events a tick wrote", async () => {
     await inTempDir(async (root) => {
-      const { post, service, now } = handler();
-      await post("/v1/autonomy/register", registration("nova", characterDir(root, "nova")));
-      await post("/v1/autonomy/user-message", {
-        character: "nova",
-        turn_count: 1,
-        local_ms: LOCAL_AT,
-      });
+      const { service, now } = build();
+      await service.register(registration("nova", characterDir(root, "nova")));
+      service.onUserMessage("nova", 1, LOCAL_AT);
 
       // Two hours and two ticks: the clock arms on one and fires on the next.
       now.value += 2 * HOUR;
@@ -421,149 +377,88 @@ describe("the endpoints", () => {
       now.value += 2 * HOUR;
       await service.tick();
 
-      const body = (await (
-        await post("/v1/autonomy/log", { character: "nova", limit: 10 })
-      ).json()) as { events: { kind: string }[] };
-      expect(body.events.map((e) => e.kind)).toContain("tick_fired");
+      expect(service.log("nova", 10).map((e) => e.kind)).toContain("tick_fired");
     });
   });
 
   test("the activity tracker fills from live messages and from history", async () => {
     await inTempDir(async (root) => {
-      const { post } = handler();
-      await post("/v1/autonomy/register", registration("nova", characterDir(root, "nova")));
+      const { service } = build();
+      await service.register(registration("nova", characterDir(root, "nova")));
 
       const nineAM = Date.UTC(2026, 6, 30, 9, 0, 0);
-      await post("/v1/autonomy/backfill-activity", {
-        character: "nova",
-        local_timestamps: [nineAM, nineAM + 24 * HOUR],
-        latest_user_at: START - HOUR,
-      });
-      await post("/v1/autonomy/user-message", {
-        character: "nova",
-        turn_count: 1,
-        local_ms: nineAM + 48 * HOUR,
-      });
+      service.backfillActivity("nova", [nineAM, nineAM + 24 * HOUR], START - HOUR);
+      service.onUserMessage("nova", 1, nineAM + 48 * HOUR);
 
-      const body = (await (
-        await post("/v1/autonomy/activity", { character: "nova", local_ms: nineAM })
-      ).json()) as { messageCount: number; stats: { hourHistogram: number[] } };
-      expect(body.messageCount, "two backfilled and one live").toBe(3);
+      const report = service.activityStats("nova", nineAM);
+      expect(report?.messageCount, "two backfilled and one live").toBe(3);
       // Densities, not counts: every message landed at 09:00, so that hour
       // holds all of the mass and the other twenty-three hold none.
-      expect(body.stats.hourHistogram[9]).toBe(1);
-      expect(body.stats.hourHistogram.filter((d) => d > 0).length).toBe(1);
+      expect(report?.stats.hourHistogram[9]).toBe(1);
+      expect(report?.stats.hourHistogram.filter((d) => d > 0).length).toBe(1);
     });
   });
 
-  test("a timestamp that did not arrive is a 400, not a NaN in the record", async () => {
-    // The bodies here are hand-mirrored Rust structs. A field renamed on one
-    // side only would otherwise land as `undefined`, and `new Date(undefined)`
-    // poisons the character's own engagement score with no error anywhere —
-    // the same silent shape as the keepalive's `keepalive_interval_secs`.
+  test("the compaction question is answered and the latch taken", async () => {
     await inTempDir(async (root) => {
-      const { post } = handler();
-      await post("/v1/autonomy/register", registration("nova", characterDir(root, "nova")));
-
-      expect((await post("/v1/autonomy/user-message", { character: "nova", turn_count: 1 })).status)
-        .toBe(400);
-      expect(
-        (await post("/v1/autonomy/backfill-activity", { character: "nova", local_timestamps: [1, null] }))
-          .status,
-      ).toBe(400);
-      expect((await post("/v1/autonomy/activity", { character: "nova" })).status).toBe(400);
-
-      const body = (await (
-        await post("/v1/autonomy/activity", { character: "nova", local_ms: LOCAL_AT })
-      ).json()) as { messageCount: number };
-      expect(body.messageCount, "and nothing was recorded").toBe(0);
-    });
-  });
-
-  test("the handler's compaction question is answered and the latch taken", async () => {
-    await inTempDir(async (root) => {
-      const { post, service, executor, now } = handler();
-      await post(
-        "/v1/autonomy/register",
+      const { service, executor, now } = build();
+      await service.register(
         registration("nova", characterDir(root, "nova"), COMPACTION_ONLY),
       );
-      await post("/v1/autonomy/user-message", {
-        character: "nova",
-        turn_count: 50,
-        local_ms: LOCAL_AT,
-      });
+      service.onUserMessage("nova", 50, LOCAL_AT);
 
-      const answer = await (
-        await post("/v1/autonomy/should-compact", {
-          character: "nova",
-          turn_count: 50,
-          context_tokens: 0,
-        })
-      ).json();
-      expect(answer).toEqual({ compact: true });
+      expect(service.shouldCompactNow("nova", 50, 0)).toBe(true);
 
       now.value += 3 * HOUR;
       await service.tick();
-      expect(executor.calls, "the tick sees the latch the handler took").toEqual([]);
+      expect(executor.calls, "the tick sees the latch the caller took").toEqual([]);
 
       // And the failure gives it back.
-      await post("/v1/autonomy/compaction-failed", { character: "nova" });
+      service.onCompactionFailed("nova");
       now.value += 3 * HOUR;
       await service.tick();
       expect(executor.calls).toEqual(["nova:compaction:max_turns"]);
     });
   });
 
-  test("a character nobody registered is told not to compact", async () => {
-    // Rather than a 404: the handler asks on every generation, and a character
-    // that has not been registered yet has nothing to compact anyway. Matches
-    // the Rust, where a `with_state` miss fell through to `false`.
-    const { post } = handler();
-    const response = await post("/v1/autonomy/should-compact", {
-      character: "ghost",
-      turn_count: 500,
-      context_tokens: 0,
-    });
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ compact: false });
+  test("a character nobody registered is told not to compact", () => {
+    // Not an error: the caller asks on every generation, and a character that
+    // has not been registered yet has nothing to compact anyway. Matches the
+    // Rust, where a `with_state` miss fell through to `false`. The endpoint
+    // spelled that `{compact: false}` with a 200; here it is `undefined`, and
+    // `handler/deps.ts` is what coalesces it.
+    const { service } = build();
+    expect(service.shouldCompactNow("ghost", 500, 0)).toBeUndefined();
   });
 
   test("the debug commands force the heartbeat and report what they found", async () => {
     await inTempDir(async (root) => {
-      const { post } = handler();
-      await post("/v1/autonomy/register", registration("nova", characterDir(root, "nova")));
-      const heartbeatState = async (): Promise<string> =>
-        ((await (await post("/v1/autonomy/status", { character: "nova" })).json()) as {
-          heartbeat_state: string;
-        }).heartbeat_state;
+      const { service } = build();
+      await service.register(registration("nova", characterDir(root, "nova")));
 
-      expect(await (await post("/v1/autonomy/heartbeat/tick-now", { character: "nova" })).json())
-        .toEqual({ dormant: false });
+      expect(service.forceHeartbeatNow("nova")).toBe(false);
 
-      await post("/v1/autonomy/heartbeat/state", { character: "nova", state: "dormant" });
-      expect(await (await post("/v1/autonomy/heartbeat/tick-now", { character: "nova" })).json())
-        .toEqual({ dormant: true });
-      expect(await heartbeatState()).toBe("Dormant");
+      expect(service.forceHeartbeatState("nova", "dormant")).toBe(true);
+      expect(service.forceHeartbeatNow("nova")).toBe(true);
+      expect(service.status("nova")?.heartbeat_state).toBe("Dormant");
 
-      await post("/v1/autonomy/heartbeat/state", { character: "nova", state: "active" });
-      expect(await heartbeatState()).toBe("Active");
+      expect(service.forceHeartbeatState("nova", "active")).toBe(true);
+      expect(service.status("nova")?.heartbeat_state).toBe("Active");
     });
   });
 
-  test("the debug commands 404 on a character that is not loaded", async () => {
-    const { post } = handler();
-    expect((await post("/v1/autonomy/heartbeat/tick-now", { character: "ghost" })).status).toBe(404);
-    expect(
-      (await post("/v1/autonomy/heartbeat/state", { character: "ghost", state: "active" })).status,
-    ).toBe(404);
+  test("the debug commands answer nothing for a character that is not loaded", () => {
+    const { service } = build();
+    expect(service.forceHeartbeatNow("ghost")).toBeUndefined();
+    expect(service.forceHeartbeatState("ghost", "active")).toBe(false);
   });
 
   test("unregistering leaves nothing to ask about", async () => {
     await inTempDir(async (root) => {
-      const { post } = handler();
-      await post("/v1/autonomy/register", registration("nova", characterDir(root, "nova")));
-      await post("/v1/autonomy/unregister", { character: "nova" });
-      expect((await post("/v1/autonomy/status", { character: "nova" })).status).toBe(404);
+      const { service } = build();
+      await service.register(registration("nova", characterDir(root, "nova")));
+      await service.unregister("nova");
+      expect(service.status("nova")).toBeUndefined();
     });
   });
 });

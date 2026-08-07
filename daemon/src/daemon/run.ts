@@ -50,7 +50,7 @@ import { MessageHandler } from "../handler/router.ts";
 import { Instances, type InstanceInfo } from "../instances.ts";
 import type { SidecarProvider, SidecarRequest } from "../llm/types.ts";
 import { createRuntime, startRuntimeClocks, type ShoreRuntime } from "../runtime.ts";
-import { DEFAULT_PROVIDERS } from "../server.ts";
+import { DEFAULT_PROVIDERS } from "../llm/providers/table.ts";
 import type { ServerMessage } from "../protocol/ServerMessage";
 import type { Logger } from "../swp/connection.ts";
 import { buildHandshakeProvider } from "../swp/handshake.ts";

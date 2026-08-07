@@ -23,7 +23,6 @@ import { afterEach, expect, test } from "bun:test";
 
 import { closeLedgers, ledgerFor } from "../src/ledger/record.ts";
 import type { UsageConfig } from "../src/ledger/budget.ts";
-import { createSidecarHandler } from "../src/server.ts";
 import { budgetWarnings, modelHistory, usageReport } from "../src/ledger/usage.ts";
 import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
 
@@ -289,74 +288,4 @@ test("a ledger that will not open is an error, not an empty report", () => {
   expect(() => modelHistory({ ledger: "/nonexistent/ledger.db", character: "aria" })).toThrow(
     /cannot open ledger/,
   );
-});
-
-// ── routes ───────────────────────────────────────────────────────────────────
-//
-// The functions above can all be right while nothing calls them. These pin that
-// each one is reachable over the socket the daemon actually posts to.
-
-function post(path: string, body: unknown): Request {
-  return new Request(`http://sidecar${path}`, {
-    method: "POST",
-    body: JSON.stringify(body),
-    headers: { "content-type": "application/json" },
-  });
-}
-
-test("the usage routes are wired", async () => {
-  // Stamped *now*: these routes read the real clock, and a row outside the
-  // current budget window would correctly produce no warning at all.
-  const ledger = ledgerWith([
-    { character: "poppy", total_cost: 5, ts: new Date().toISOString() },
-  ]);
-  const handler = createSidecarHandler();
-
-  const summary = await handler(post("/v1/usage", { ledger, args: {}, usage: { timezone: "utc" } }));
-  expect(summary.status).toBe(200);
-  expect(((await summary.json()) as { mode: string }).mode).toBe("summary");
-
-  const warnings = await handler(post("/v1/usage/warnings", { ledger, usage: OVER_BUDGET }));
-  expect(warnings.status).toBe(200);
-  expect(((await warnings.json()) as { warnings: unknown[] }).warnings.length).toBe(1);
-
-  const models = await handler(post("/v1/usage/models", { ledger, character: "poppy" }));
-  expect(models.status).toBe(200);
-  expect(((await models.json()) as { models: unknown[] }).models.length).toBe(1);
-});
-
-test("the usage route refreshes the pricing caches", async () => {
-  // The route does what `commands/usage.ts` does, because the daemon calling it
-  // is still the Rust one: it empties the `pricing` table on its side and this
-  // endpoint is where the rest of the refresh has to happen. What the command
-  // does with the flag is covered in `commands_usage.test.ts`; this is only
-  // that the endpoint does it too.
-  const ledger = ledgerWith([{}]);
-  priceInStore(ledger, "anthropic/claude-opus-4.6", 0.00001);
-  const engine = ledgerFor(ledger)!.pricing;
-  expect(engine.cached("anthropic", "claude-opus-4-6")).toBeDefined();
-
-  const handler = createSidecarHandler();
-  const res = await handler(post("/v1/usage", { ledger, args: { refresh_pricing: true } }));
-
-  expect(res.status).toBe(200);
-  expect(((await res.json()) as { mode: string }).mode).toBe("refresh_pricing");
-  expect(engine.cached("anthropic", "claude-opus-4-6")).toBeUndefined();
-
-  // And a non-boolean is not the flag: the daemon read this with `as_bool`,
-  // which answers `None` to a string, so `"true"` asks for a summary.
-  priceInStore(ledger, "anthropic/claude-opus-4.6", 0.00002);
-  const soft = await handler(
-    post("/v1/usage", { ledger, args: { refresh_pricing: "true", last: "all" } }),
-  );
-  expect(((await soft.json()) as { mode: string }).mode).toBe("summary");
-  expect(engine.cached("anthropic", "claude-opus-4-6")).toBeDefined();
-});
-
-test("a usage request naming an unopenable ledger fails rather than reporting zero", async () => {
-  const handler = createSidecarHandler();
-  const res = await handler(post("/v1/usage", { ledger: "/nonexistent/ledger.db", args: {} }));
-
-  expect(res.status).toBeGreaterThanOrEqual(400);
-  expect(await res.text()).toContain("cannot open ledger");
 });

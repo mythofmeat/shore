@@ -33,7 +33,7 @@ import { rmSync } from "node:fs";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { closeLedgers } from "../src/ledger/record.ts";
-import { createSidecarHandler } from "../src/server.ts";
+import { generate } from "../src/llm/generate.ts";
 import type {
   GenerateResponse,
   SidecarProvider,
@@ -157,65 +157,66 @@ function req(ledger: string, usage?: unknown): SidecarRequest {
   } as unknown as SidecarRequest;
 }
 
-function post(path: string, body: unknown): Request {
-  return new Request(`http://sidecar${path}`, {
-    method: "POST",
-    body: JSON.stringify(body),
-    headers: { "content-type": "application/json" },
-  });
+// ── the generate path ───────────────────────────────────────────────────
+//
+// These ran over `/v1/generate` and `/v1/stream` until that hop was deleted.
+// The stream half is now "the chat turn" below, which drives `runGeneration`
+// and is the path a person types into. What is left here is the non-streaming
+// one — compaction, dreaming and the image tool reach the provider through
+// `llm/generate.ts`, and its gate is a separate line of code from the turn's.
+//
+// The endpoints answered 402 for a refusal. There is no status any more, so
+// these assert on the thrown `BudgetBlocked` — which is what `ff7426ae` gave a
+// `kind` so the retry layer would stop treating it as rotatable.
+
+async function generateOnce(
+  usage: unknown,
+): Promise<{ calls: number; error: string | undefined }> {
+  const root = await mkdtemp(join(tmpdir(), "shore-budget-generate-"));
+  cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+  const config = await chatConfig(root, false);
+  const ledger = spentLedger();
+  const counting = countingProvider();
+
+  let error: string | undefined;
+  try {
+    await generate(req(ledger, usage), {
+      providers: { openai: counting.provider },
+      config,
+    });
+  } catch (e) {
+    error = e instanceof Error ? e.message : String(e);
+  }
+  return { calls: counting.calls, error };
 }
 
 test("an over-budget generate never reaches the provider", async () => {
-  const ledger = spentLedger();
-  const counting = countingProvider();
-  const handler = createSidecarHandler({ providers: { openai: counting.provider } });
+  const { calls, error } = await generateOnce(BLOCKING_BUDGET);
 
-  const res = await handler(post("/v1/generate", req(ledger, BLOCKING_BUDGET)));
-
-  expect(res.status, "the status the daemon maps to a budget error").toBe(402);
-  expect(await res.text()).toContain('Shore usage budget "tiny" is over limit');
-  expect(counting.calls, "the provider must not have been called").toBe(0);
+  expect(error, "the budget's own sentence, not a transport failure").toContain(
+    'Shore usage budget "tiny" is over limit',
+  );
+  expect(calls, "the provider must not have been called").toBe(0);
 });
 
-test("an over-budget stream never reaches the provider", async () => {
-  const ledger = spentLedger();
-  const counting = countingProvider();
-  const handler = createSidecarHandler({ providers: { openai: counting.provider } });
-
-  const res = await handler(post("/v1/stream", req(ledger, BLOCKING_BUDGET)));
-
-  expect(res.status).toBe(402);
-  expect(await res.text()).toContain('Shore usage budget "tiny" is over limit');
-  expect(counting.calls).toBe(0);
-});
-
-test("a call under budget proceeds", async () => {
-  const ledger = spentLedger();
-  const counting = countingProvider();
-  const handler = createSidecarHandler({ providers: { openai: counting.provider } });
-
-  const generous = {
+test("a generate under budget proceeds", async () => {
+  const { calls, error } = await generateOnce({
     timezone: "utc",
     budgets: [{ name: "roomy", period: "month", cost_usd: 100.0, limit: "block" }],
-  };
-  const res = await handler(post("/v1/generate", req(ledger, generous)));
+  });
 
-  expect(res.status).toBe(200);
-  expect(counting.calls).toBe(1);
+  expect(error).toBeUndefined();
+  expect(calls).toBe(1);
 });
 
 test("no budgets configured means no gate", async () => {
-  // The daemon omits `usage` entirely when nothing is configured. That must
-  // read as "allow", not as "deny by default" — a budget-less install would
-  // otherwise stop working.
-  const ledger = spentLedger();
-  const counting = countingProvider();
-  const handler = createSidecarHandler({ providers: { openai: counting.provider } });
+  // Nothing is configured when `[usage]` is absent. That must read as "allow",
+  // not as "deny by default" — a budget-less install would otherwise stop
+  // working the moment this gate was introduced.
+  const { calls, error } = await generateOnce(undefined);
 
-  const res = await handler(post("/v1/generate", req(ledger, undefined)));
-
-  expect(res.status).toBe(200);
-  expect(counting.calls).toBe(1);
+  expect(error).toBeUndefined();
+  expect(calls).toBe(1);
 });
 
 // ── the chat turn ───────────────────────────────────────────────────────

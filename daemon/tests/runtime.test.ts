@@ -30,7 +30,6 @@ import {
   createRuntime,
   startRuntimeClocks,
 } from "../src/runtime.ts";
-import { unassembledExecutor } from "../src/server.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
@@ -266,30 +265,6 @@ describe("the clocks", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-  });
-});
-
-describe("a handler nobody assembled a runtime for", () => {
-  test("refuses every action rather than throwing, so the latch releases", async () => {
-    // A throw here would abandon the tick with the single-flight latch still
-    // held: that character stops compacting for the life of the process, and
-    // nothing in the log says why. A refusal is a result — it releases, it
-    // restarts the retry window, and it leaves a line someone can read.
-    const results = [
-      await unassembledExecutor.runHeartbeatTick("ada", {
-        scheduleNextWake: () => 1,
-      }),
-      await unassembledExecutor.runCompaction("ada", "idle"),
-      await unassembledExecutor.runDeepArchive("ada", 0),
-    ];
-
-    for (const result of results) {
-      expect(result.events).toEqual([]);
-      expect(result.failed).toContain("runtime");
-    }
-    // Each names its own action, because the log line is the only thing a
-    // person sees and "an action failed" tells them nothing.
-    expect(new Set(results.map((r) => r.failed)).size).toBe(3);
   });
 });
 

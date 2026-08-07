@@ -60,7 +60,6 @@ COMMAND = "src/commands/usage.ts"
 ENGINE = "src/ledger/pricing.ts"
 STORE = "src/ledger/store.ts"
 REPORT = "src/ledger/usage.ts"
-SERVER = "src/server.ts"
 
 # (label, file, find, replace)
 MUTANTS = [
@@ -113,18 +112,6 @@ MUTANTS = [
      "    return await usageReport({ ledger: ctx.ledger, args, usage: ctx.usage });",
      "    return await usageReport({ ledger: ctx.ledger, args, usage: {} });"),
 
-    # --- the endpoint the Rust daemon still calls -----------------------------
-    ("endpoint: the refresh never reaches the caches through /v1/usage",
-     SERVER,
-     '        if (parsed.value.args?.["refresh_pricing"] === true) {\n'
-     "          clearPricingCache(parsed.value.ledger);\n"
-     "        }\n",
-     ""),
-    ("endpoint: any truthy flag refreshes",
-     SERVER,
-     '        if (parsed.value.args?.["refresh_pricing"] === true) {',
-     '        if (parsed.value.args?.["refresh_pricing"]) {'),
-
     # --- the failures ---------------------------------------------------------
     ("errors: a failure is reported as a bad request",
      COMMAND,
@@ -159,7 +146,7 @@ def run() -> bool:
 
 
 def main() -> None:
-    originals = {p: (ROOT / p).read_text() for p in {COMMAND, ENGINE, STORE, REPORT, SERVER}}
+    originals = {p: (ROOT / p).read_text() for p in {COMMAND, ENGINE, STORE, REPORT}}
     if not run():
         sys.exit("baseline is red; fix before mutating")
 
