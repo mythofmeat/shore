@@ -392,7 +392,8 @@ export const DEFAULT_CONFIG_TOML = `# Shore configuration
 # addr = "127.0.0.1:7320"             # env override: SHORE_ADDR
 # unsafe_allow_remote_access = false  # required for non-loopback binds
 #                                     # env override: SHORE_UNSAFE_ALLOW_REMOTE_ACCESS
-# allowed_hosts = []                  # IP allowlist only; not auth/TLS
+# allowed_hosts = []                  # IPs or CIDR ranges, e.g. ["10.0.0.5", "172.18.0.0/16"]
+#                                     # allowlist only; not auth/TLS
 `;
 
 /**
@@ -845,8 +846,9 @@ function validateBudgetAnchors(idx: number, budget: UsageBudgetConfig): void {
  * an equal pace makes the allowance the budget itself, and a longer one has no
  * defined division.
  *
- * `pace_action` / `pace_warn_at` with no `pace_period` are rejected rather than
- * ignored, so a typo fails at load instead of silently doing nothing.
+ * `pace_action` / `pace_warn_at` / `pace_warn_action` with no `pace_period` are
+ * rejected rather than ignored, so a typo fails at load instead of silently
+ * doing nothing.
  */
 function validateBudgetPace(idx: number, budget: UsageBudgetConfig): void {
   const pace = budget.pace_period;
@@ -856,6 +858,9 @@ function validateBudgetPace(idx: number, budget: UsageBudgetConfig): void {
     }
     if (budget.pace_warn_at !== undefined) {
       throw validationError(`usage.budgets[${idx}].pace_warn_at requires pace_period`);
+    }
+    if (budget.pace_warn_action !== undefined) {
+      throw validationError(`usage.budgets[${idx}].pace_warn_action requires pace_period`);
     }
     return;
   }

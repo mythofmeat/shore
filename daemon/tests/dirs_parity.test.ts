@@ -32,6 +32,7 @@ import {
   loadCharacterDefinition,
   pluginsDir,
   resolvePromptTemplate,
+  NoHomeDirectoryError,
   resolveShoreDirs,
   resolveUserDefinition,
   rustJoin,
@@ -107,17 +108,71 @@ describe("ShoreDirs.resolve", () => {
 });
 
 describe("ShoreDirs.resolve, where the fixture cannot reach", () => {
-  test("with no HOME and no passwd entry, the literal ~ fallbacks are used", () => {
-    // Not fixture-generated: the generator cannot run as an account with no
-    // passwd entry, so this is the one branch pinned by construction rather
-    // than by replay. It is reproduced faithfully — `PathBuf::from("~/.config")`
-    // does not expand, so `~` is an ordinary relative directory name.
-    const got = resolveShoreDirs({}, () => undefined);
-    expect(got.config).toBe("~/.config/shore");
-    expect(got.data).toBe("~/.local/share/shore");
-    expect(got.cache).toBe("~/.cache/shore");
-    // runtime has an empty fallback, which means the temp dir, not "~".
+  // Not fixture-generated: the generator cannot run as an account with no
+  // passwd entry, so this branch is pinned by construction rather than by
+  // replay. It used to assert the Rust's literals faithfully — `config` came
+  // back as `"~/.config/shore"`, a *relative* path whose first component is a
+  // directory literally named `~`, created wherever the process started.
+  // Nothing on either side expands a tilde, so that was never a home
+  // directory; #45 replaced it with a refusal.
+
+  test("with no HOME and no passwd entry, resolution refuses", () => {
+    expect(() => resolveShoreDirs({}, () => undefined)).toThrow(NoHomeDirectoryError);
+  });
+
+  test("the refusal says which variables would fix it", () => {
+    // The message is the entire user interface of this failure: whoever hits it
+    // is inside a container wondering why shore will not start.
+    let message = "";
+    try {
+      resolveShoreDirs({}, () => undefined);
+    } catch (e) {
+      message = String(e);
+    }
+    expect(message).toContain("SHORE_CONFIG_DIR");
+    expect(message).toContain("XDG_CONFIG_HOME");
+    expect(message).toContain("passwd");
+  });
+
+  test("an override is enough on its own, with no home anywhere", () => {
+    // The escape hatch the message points at has to actually work — and it has
+    // to work for each directory independently, since they refuse independently.
+    const got = resolveShoreDirs(
+      {
+        SHORE_CONFIG_DIR: "/srv/cfg",
+        SHORE_DATA_DIR: "/srv/data",
+        SHORE_CACHE_DIR: "/srv/cache",
+      },
+      () => undefined,
+    );
+    expect(got.config).toBe("/srv/cfg");
+    expect(got.data).toBe("/srv/data");
+    expect(got.cache).toBe("/srv/cache");
+    // runtime never refuses: the temp dir is a correct answer for it.
     expect(got.runtime).toBe(join(tmpdir(), "shore"));
+  });
+
+  test("XDG alone is enough too, and still gets its /shore suffix", () => {
+    const got = resolveShoreDirs(
+      {
+        XDG_CONFIG_HOME: "/x/cfg",
+        XDG_DATA_HOME: "/x/data",
+        XDG_CACHE_HOME: "/x/cache",
+      },
+      () => undefined,
+    );
+    expect(got.config).toBe("/x/cfg/shore");
+    expect(got.data).toBe("/x/data/shore");
+    expect(got.cache).toBe("/x/cache/shore");
+  });
+
+  test("a home from passwd alone still resolves everything", () => {
+    // The case that made the tilde unreachable in practice, and the reason
+    // this was latent rather than a live bug.
+    const got = resolveShoreDirs({}, () => "/home/u");
+    expect(got.config).toBe("/home/u/.config/shore");
+    expect(got.data).toBe("/home/u/.local/share/shore");
+    expect(got.cache).toBe("/home/u/.cache/shore");
   });
 });
 

@@ -1070,7 +1070,9 @@ const NOTIFICATIONS: StructSpec<NotificationsConfig> = {
 // ── [usage] ─────────────────────────────────────────────────────────────
 
 export type UsageBudgetPeriod = "hour" | "day" | "week" | "month";
-export type UsageBudgetAction = "warn" | "block" | "pause_background";
+/** See `ledger/budget.ts` for why `pause_heartbeat` is not `pause_background`
+ *  with a shorter list. */
+export type UsageBudgetAction = "warn" | "block" | "pause_background" | "pause_heartbeat";
 export type BudgetWeekday =
   | "monday"
   | "tuesday"
@@ -1081,7 +1083,12 @@ export type BudgetWeekday =
   | "sunday";
 
 const BUDGET_PERIODS: readonly UsageBudgetPeriod[] = ["hour", "day", "week", "month"];
-const BUDGET_ACTIONS: readonly UsageBudgetAction[] = ["warn", "block", "pause_background"];
+const BUDGET_ACTIONS: readonly UsageBudgetAction[] = [
+  "warn",
+  "block",
+  "pause_background",
+  "pause_heartbeat",
+];
 const BUDGET_WEEKDAYS: readonly BudgetWeekday[] = [
   "monday",
   "tuesday",
@@ -1131,6 +1138,17 @@ export interface UsageBudgetConfig {
   pace_period: UsageBudgetPeriod | undefined;
   pace_action: UsageBudgetAction | undefined;
   pace_warn_at: number[] | undefined;
+  /**
+   * Appended rather than filed next to `warn_at`, and `pace_warn_action` after
+   * it, because this struct also deserializes from a positional array — a key
+   * inserted mid-list would silently re-map every field after it for anyone
+   * writing `budgets = [[...]]`. New keys go on the end.
+   *
+   * What crossing a `warn_at` threshold does, beyond the warning itself. Unset
+   * means it does nothing, which is what it always did.
+   */
+  warn_action: UsageBudgetAction | undefined;
+  pace_warn_action: UsageBudgetAction | undefined;
 }
 
 const BUDGET: StructSpec<UsageBudgetConfig> = {
@@ -1157,6 +1175,8 @@ const BUDGET: StructSpec<UsageBudgetConfig> = {
     pace_period: undefined,
     pace_action: undefined,
     pace_warn_at: undefined,
+    warn_action: undefined,
+    pace_warn_action: undefined,
   }),
   fields: {
     name: readString,
@@ -1177,6 +1197,8 @@ const BUDGET: StructSpec<UsageBudgetConfig> = {
     pace_period: optional(readEnum(BUDGET_PERIODS)),
     pace_action: optional(readEnum(BUDGET_ACTIONS)),
     pace_warn_at: optional(readF64Seq),
+    warn_action: optional(readEnum(BUDGET_ACTIONS)),
+    pace_warn_action: optional(readEnum(BUDGET_ACTIONS)),
   },
 };
 

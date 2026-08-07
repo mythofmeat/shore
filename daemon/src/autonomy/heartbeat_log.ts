@@ -44,6 +44,8 @@ export type HeartbeatEventKind =
   | "timeout"
   /** A bare ping sent to keep the provider's cache warm. */
   | "dormant_ping"
+  /** A tick was skipped before it spent anything, by `[usage]`. */
+  | "budget_paused"
   /** Retained so older logs still parse. */
   | "recap_written"
   /** Retained so older logs still parse. */
@@ -58,6 +60,7 @@ const KNOWN_KINDS = new Set<string>([
   "wake",
   "timeout",
   "dormant_ping",
+  "budget_paused",
   "recap_written",
   "recap_missing",
 ]);

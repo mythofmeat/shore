@@ -379,6 +379,33 @@ describe("running a tick", () => {
     expect(result.failed).toBeUndefined();
   });
 
+  test("a budget-paused tick is a logged skip, and spends nothing", async () => {
+    // The pre-flight keepalive has always had. Without it the tick builds its
+    // request, reaches the gate inside `generate`, and throws `BudgetBlocked`
+    // — once per tick, forever, which is not what "pause" means.
+    const config = await world();
+    let generated = 0;
+
+    const result = await runHeartbeatTick(
+      "ada",
+      config,
+      tickDeps({
+        generate: async () => {
+          generated += 1;
+          return response([{ type: "text", text: "HEARTBEAT_OK" }]);
+        },
+        budgetBlockFor: () =>
+          ({ budget_name: "monthly", action: "pause_heartbeat" }) as never,
+      }),
+    );
+
+    expect(generated).toBe(0);
+    expect(result.events).toEqual([
+      { kind: "budget_paused", detail: 'Tick skipped — usage budget "monthly"' },
+    ]);
+    expect(result.failed).toBeUndefined();
+  });
+
   test("collects the loop's tool lines into the tick's events", async () => {
     const config = await world();
     let round = 0;

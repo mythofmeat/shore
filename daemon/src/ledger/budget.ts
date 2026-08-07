@@ -51,7 +51,23 @@ import {
 // ── Config (mirrors shore_common::config::app) ───────────────────────────────
 
 export type UsageBudgetPeriod = "hour" | "day" | "week" | "month";
-export type UsageBudgetAction = "warn" | "block" | "pause_background";
+/**
+ * What a budget does when it trips.
+ *
+ * `pause_heartbeat` exists because `pause_background` stops two kinds of spend
+ * that are not the same kind at all. A heartbeat is a turn nobody asked for —
+ * discretionary, and the first thing to cut. A keepalive ping is *spend to
+ * avoid spend*: a small ping that stops a cached prefix from expiring, where
+ * the thing it prevents is a full cache write on the character's next real
+ * turn. Blocking it under budget pressure can raise the bill rather than lower
+ * it — the budget goes quiet for an hour, the prefix dies, and the next user
+ * message pays for the whole prefix again.
+ *
+ * `compaction` was already carved out of the same bucket by
+ * `allow_compaction_over_budget`, which is the precedent: `pause_background`
+ * was never one undifferentiated thing.
+ */
+export type UsageBudgetAction = "warn" | "block" | "pause_background" | "pause_heartbeat";
 export type BudgetWeekday =
   | "monday"
   | "tuesday"
@@ -66,6 +82,7 @@ export interface UsageBudgetConfig {
   period?: UsageBudgetPeriod;
   cost_usd: number;
   warn_at?: number[];
+  warn_action?: UsageBudgetAction | null;
   limit?: UsageBudgetAction;
   character?: string | null;
   provider?: string | null;
@@ -80,6 +97,7 @@ export interface UsageBudgetConfig {
   pace_period?: UsageBudgetPeriod | null;
   pace_action?: UsageBudgetAction | null;
   pace_warn_at?: number[] | null;
+  pace_warn_action?: UsageBudgetAction | null;
 }
 
 export interface UsageSpikeWarningsConfig {
@@ -146,6 +164,14 @@ const paceAction = (b: UsageBudgetConfig): UsageBudgetAction =>
 /** Effective pace warning thresholds, falling back to the budget's own. */
 const paceWarnAt = (b: UsageBudgetConfig): readonly number[] =>
   b.pace_warn_at ?? budgetWarnAt(b);
+/** What crossing a `warn_at` threshold *does*; `warn` — i.e. nothing but the
+ *  existing warning — unless configured. */
+const budgetWarnAction = (b: UsageBudgetConfig): UsageBudgetAction =>
+  b.warn_action ?? "warn";
+/** The pace's own, mirroring how `pace_action` mirrors `limit`. Falls back to
+ *  the budget's `warn_action` so one key covers both windows. */
+const paceWarnAction = (b: UsageBudgetConfig): UsageBudgetAction =>
+  b.pace_warn_action ?? budgetWarnAction(b);
 
 /**
  * Rust's `{:.N}`: round the **exact** value of the double to `digits` decimal
@@ -215,7 +241,12 @@ export function formatFixed(value: number, digits: number): string {
 const periodDebug = (p: UsageBudgetPeriod): string =>
   ({ hour: "Hour", day: "Day", week: "Week", month: "Month" })[p];
 const actionDebug = (a: UsageBudgetAction): string =>
-  ({ warn: "Warn", block: "Block", pause_background: "PauseBackground" })[a];
+  ({
+    warn: "Warn",
+    block: "Block",
+    pause_background: "PauseBackground",
+    pause_heartbeat: "PauseHeartbeat",
+  })[a];
 
 const WEEKDAY_FROM_MONDAY: Record<BudgetWeekday, number> = {
   monday: 0,
@@ -328,6 +359,15 @@ export interface BudgetBlock {
    * and what tripped is what the call was about to authorise.
    */
   projected_cost?: number;
+  /**
+   * The `warn_at` fraction that tripped, when this block came from a warning
+   * threshold rather than the limit itself.
+   *
+   * Its presence is what tells the two apart: `cost_limit` stays the budget's
+   * real limit either way, because a message that reported $16 as the limit
+   * would not reconcile with `shore usage`.
+   */
+  warn_threshold?: number;
   /** The Rust `Display` text, which reaches the user as an error. */
   message: string;
 }
@@ -370,6 +410,28 @@ export interface EnforceOptions extends BudgetOptions {
 }
 
 function blockMessage(block: Omit<BudgetBlock, "message">): string {
+  // A threshold block is under the limit by construction, so neither the "is
+  // over limit" nor the "would be exceeded" wording fits. Say which threshold
+  // and against what, so `shore usage` showing room left reads as agreement
+  // rather than as a contradiction.
+  const threshold = block.warn_threshold;
+  if (threshold !== undefined) {
+    const window =
+      block.scope === "budget"
+        ? `$${formatFixed(block.cost_limit, 2)} for ${periodDebug(block.period)}`
+        : `the ${block.period} pace allowance of $${formatFixed(block.cost_limit, 2)}`;
+    const projected = block.projected_cost;
+    const spend =
+      projected !== undefined && projected > 0
+        ? `$${formatFixed(block.current_cost, 2)} spent plus up to $${formatFixed(projected, 2)} projected`
+        : `$${formatFixed(block.current_cost, 2)} spent`;
+    return (
+      `Shore usage budget "${block.budget_name}" is past its ` +
+      `${formatFixed(threshold * 100, 0)}% warning threshold (${spend}, against ${window}); ` +
+      `action ${actionDebug(block.action)}; resets at ${block.reset_at}`
+    );
+  }
+
   // A pre-flight refusal is under the limit until the call it is refusing, so
   // the "is over limit" wording would be false where it is most likely to be
   // read. It gets its own sentence naming the projection that tripped it —
@@ -906,9 +968,84 @@ export function enforceBudgetForCall(
         ...(projected > 0 ? { projected_cost: projected } : {}),
       });
     }
+
+    // Warning thresholds last: they sit below both limits, so anything that
+    // stops a call at 80% would also have stopped it at 100%, and naming the
+    // limit is the more useful message when both apply. A `warn_action` that
+    // is *harsher* than `limit` still works — each check above only returns
+    // when it actually blocks, so a non-blocking limit falls through to here.
+    const warnAction = budgetWarnAction(budget);
+    const crossedBudget = highestCrossed(
+      budgetWarnAt(budget),
+      status.current_cost + projected,
+      status.cost_limit,
+    );
+    if (
+      crossedBudget !== undefined &&
+      shouldBlock(config, budget, warnAction, call.call_type)
+    ) {
+      return withMessage({
+        budget_name: status.name,
+        action: warnAction,
+        current_cost: status.current_cost,
+        cost_limit: status.cost_limit,
+        period: status.period,
+        reset_at: status.reset_at,
+        scope: "budget",
+        warn_threshold: crossedBudget,
+        ...(projected > 0 ? { projected_cost: projected } : {}),
+      });
+    }
+
+    const paceWarn = paceWarnAction(budget);
+    const crossedPace =
+      pace === undefined
+        ? undefined
+        : highestCrossed(paceWarnAt(budget), pace.current_cost + projected, pace.allowance);
+    if (
+      pace !== undefined &&
+      crossedPace !== undefined &&
+      shouldBlock(config, budget, paceWarn, call.call_type)
+    ) {
+      return withMessage({
+        budget_name: status.name,
+        action: paceWarn,
+        current_cost: pace.current_cost,
+        cost_limit: pace.allowance,
+        period: pace.period,
+        reset_at: pace.window_end,
+        scope: "pace",
+        warn_threshold: crossedPace,
+        ...(projected > 0 ? { projected_cost: projected } : {}),
+      });
+    }
   }
 
   return undefined;
+}
+
+/**
+ * The largest configured threshold this spend has reached, or `undefined` when
+ * it has reached none.
+ *
+ * The largest rather than the smallest because they all fire the same action,
+ * so the only question the number answers is "how far past", and 100% is more
+ * informative than the 80% that technically triggered first.
+ *
+ * A zero limit is treated as fully used, matching {@link paceStatus}: an
+ * allowance of nothing cannot have room left in it.
+ */
+function highestCrossed(
+  thresholds: readonly number[],
+  spend: number,
+  limit: number,
+): number | undefined {
+  const percentUsed = limit > 0 ? spend / limit : 1;
+  let highest: number | undefined;
+  for (const t of thresholds) {
+    if (percentUsed >= t && (highest === undefined || t > highest)) highest = t;
+  }
+  return highest;
 }
 
 function withMessage(block: Omit<BudgetBlock, "message">): BudgetBlock {
@@ -999,6 +1136,8 @@ function shouldBlock(
       return true;
     case "pause_background":
       return isBackgroundCall(callType);
+    case "pause_heartbeat":
+      return isHeartbeatCall(callType);
   }
 }
 
@@ -1015,13 +1154,19 @@ function compactionAllowed(
 
 function isBackgroundCall(callType: string): boolean {
   return (
-    callType === "heartbeat" ||
-    callType === "heartbeat_tool_loop" ||
+    isHeartbeatCall(callType) ||
     callType === "keepalive" ||
     callType === "compaction" ||
     callType === "dreaming" ||
     callType === "memory_query"
   );
+}
+
+/** The discretionary half of {@link isBackgroundCall}: a turn nobody asked
+ *  for, and its tool loop. Notably *not* `keepalive` — see
+ *  {@link UsageBudgetAction}. */
+function isHeartbeatCall(callType: string): boolean {
+  return callType === "heartbeat" || callType === "heartbeat_tool_loop";
 }
 
 // ── Spike warnings ───────────────────────────────────────────────────────────
