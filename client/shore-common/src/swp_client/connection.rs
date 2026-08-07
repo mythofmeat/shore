@@ -3,6 +3,7 @@ use tokio::net::TcpStream;
 use tracing::{debug, error, trace, warn};
 
 use crate::protocol::client_msg::{ClientHello, ClientMessage};
+use crate::protocol::error::ErrorCode;
 use crate::protocol::server_msg::{History, ServerHello, ServerMessage};
 use crate::protocol::{MAX_WIRE_MESSAGE_SIZE, SWP_V1};
 
@@ -77,6 +78,14 @@ impl SWPConnection {
     ) -> Result<(ServerHello, History)> {
         debug!(client_type = %client_type, client_name = %client_name, character = ?character, "starting SWP handshake");
 
+        // Resolved here rather than passed in, so that neither the CLI nor the
+        // TUI has to know a token exists: both reach the daemon through this
+        // one function, and both resolve the same config directory they already
+        // use to *find* the daemon. There is one way to authenticate and no
+        // caller-side plumbing that could get it wrong.
+        let token = crate::token::resolve_token(&crate::dirs::config_dir())
+            .map_err(|e| ClientError::Unauthorized(e.to_string()))?;
+
         let server_hello = self.recv_server_hello().await?;
 
         // Step 2: send client hello
@@ -85,6 +94,7 @@ impl SWPConnection {
             client_name,
             capabilities: vec!["streaming".into()],
             character,
+            token: Some(token),
         });
         self.send(&hello).await?;
         debug!("sent client hello");
@@ -161,11 +171,29 @@ impl SWPConnection {
                 ServerMessage::Unknown => {
                     debug!("skipping unknown frame during handshake");
                 }
+                // The daemon's refusal, surfaced as itself. Falling through to
+                // the arm below would render it as `expected history, got:
+                // Error(..)` — a `{:?}` dump of the frame, in which the actual
+                // sentence explaining what to do is buried. This is the one
+                // handshake failure a person is expected to fix, so it arrives
+                // as the daemon wrote it.
+                ServerMessage::Error(e) => {
+                    error!(code = ?e.code, "daemon refused the handshake");
+                    return Err(match e.code {
+                        ErrorCode::Unauthorized => ClientError::Unauthorized(e.message),
+                        ErrorCode::ProtocolError
+                        | ErrorCode::InvalidRequest
+                        | ErrorCode::NotFound
+                        | ErrorCode::Busy
+                        | ErrorCode::ProviderError
+                        | ErrorCode::Timeout
+                        | ErrorCode::InternalError => ClientError::Protocol(e.message),
+                    });
+                }
                 other @ (ServerMessage::Hello(_)
                 | ServerMessage::Shutdown(_)
                 | ServerMessage::Ping(_)
                 | ServerMessage::CommandOutput(_)
-                | ServerMessage::Error(_)
                 | ServerMessage::StreamStart(_)
                 | ServerMessage::StreamChunk(_)
                 | ServerMessage::StreamEnd(_)

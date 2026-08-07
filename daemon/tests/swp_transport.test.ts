@@ -46,6 +46,11 @@ import {
 import { WireReader, type ByteSink } from "../src/swp/framing";
 import { SessionRouter, type RoutedMessage, type SessionMeta } from "../src/swp/session";
 
+/** Accept any token; authentication is `swp_auth.test.ts`'s subject, not this
+ *  file's. `authenticate` is required so that opting out is written down. */
+const OPEN = (): boolean => true;
+
+
 const SESSION: SessionMeta = {
   clientId: 1,
   sessionId: 1,
@@ -298,6 +303,7 @@ function harness(pingIntervalMs = 3_600_000, events?: Subscriptionish): LoopHarn
       router,
       events: (events ?? bus.subscribe()) as never,
       handshake: null as never,
+      authenticate: OPEN,
       route: async (m) => void routed.push(m),
       shutdown: shutdownSignal,
       pingIntervalMs,
@@ -341,6 +347,7 @@ describe("handleConnection", () => {
         serverName: "shore-test",
         router,
         events: bus.subscribe(),
+        authenticate: OPEN,
         handshake: {
           hello: () => Promise.resolve({ characters: [{ name: "alice" }] }),
           history: (selected) =>

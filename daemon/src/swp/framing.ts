@@ -226,6 +226,10 @@ export function decodeClientMessage(value: unknown): ClientMessage {
         client_name: str("client_name", true) as string,
         capabilities: arr<string>("capabilities"),
         ...opt("character", str("character", false)),
+        // Absent stays absent, matching `Option<String>` with no default — the
+        // handshake distinguishes "sent none" from "sent the wrong one", and
+        // materializing this as `""` would collapse the two.
+        ...opt("token", str("token", false)),
       };
     case "message":
       return {

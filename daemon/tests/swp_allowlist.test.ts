@@ -16,6 +16,11 @@ import { buildAllowlist, invalidAllowedHosts, parseAllowedHost } from "../src/sw
 import { validateRemoteAccessPolicy } from "../src/daemon/startup.ts";
 import { Server } from "../src/swp/server.ts";
 
+/** Accept any token; authentication is `swp_auth.test.ts`'s subject, not this
+ *  file's. `authenticate` is required so that opting out is written down. */
+const OPEN = (): boolean => true;
+
+
 /** Whether a peer gets past an allowlist built from these entries. */
 function allows(entries: readonly string[], peer: string): boolean {
   return buildAllowlist(entries)?.check(peer) ?? true;
@@ -153,6 +158,7 @@ describe("over a socket", () => {
       addr: "127.0.0.1:0",
       serverName: "shore-test",
       allowedHosts: ["127.0.0.0/8"],
+      authenticate: OPEN,
     });
     const { port } = await server.bind();
     const running = server.serve();
@@ -167,6 +173,7 @@ describe("over a socket", () => {
       addr: "127.0.0.1:0",
       serverName: "shore-test",
       allowedHosts: ["10.0.0.0/8"],
+      authenticate: OPEN,
     });
     const { port: closedPort } = await closed.bind();
     const closedRunning = closed.serve();
@@ -186,6 +193,7 @@ describe("over a socket", () => {
       addr: "[::]:0",
       serverName: "shore-test",
       allowedHosts: ["127.0.0.1"],
+      authenticate: OPEN,
     });
     const { port } = await server.bind();
     const running = server.serve();

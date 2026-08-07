@@ -30,6 +30,13 @@ pub enum ClientError {
     #[error("protocol error: {0}")]
     Protocol(String),
 
+    /// No token could be found on this side, or the daemon refused the one
+    /// sent. Separate from [`ClientError::Protocol`] because it is the one
+    /// failure the person running the client is expected to fix, and the
+    /// message carries the instructions for fixing it.
+    #[error("{0}")]
+    Unauthorized(String),
+
     #[error("discovery error: {message}")]
     Discovery {
         kind: DiscoveryKind,

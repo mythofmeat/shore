@@ -1844,8 +1844,23 @@ mod tests {
         }
     }
 
+    /// A resolvable `SHORE_TOKEN` for the two mock-server helpers below.
+    ///
+    /// Every handshake sends one, so without this each of these tests would
+    /// fail at connect with an unauthorized error rather than exercising the
+    /// command it is about. Set once and never cleared — the process
+    /// environment is shared by this parallel test binary, and clearing it
+    /// would break whichever neighbour was mid-connect. It must be set *before*
+    /// the client task starts, which is why it lives here rather than in
+    /// `mock_server`: that runs spawned, concurrently with the connect.
+    fn with_token() {
+        static ONCE: std::sync::Once = std::sync::Once::new();
+        ONCE.call_once(|| std::env::set_var(shore_common::token::TOKEN_ENV, "test-token"));
+    }
+
     /// Execute a command against a mock server and return what the server received.
     async fn execute_with_mock(cli: Cli, responses: Vec<ServerMessage>) -> ClientMessage {
+        with_token();
         let (client_stream, server_stream) = duplex(16384);
 
         let server_handle = tokio::spawn(mock_server(server_stream, responses));
@@ -2349,6 +2364,7 @@ mod tests {
 
     /// Drive one command against a mock server that answers with an error.
     async fn error_from_mock(err: Error) -> Box<dyn std::error::Error> {
+        with_token();
         let (client_stream, server_stream) = duplex(16384);
         let server = tokio::spawn(mock_server(server_stream, vec![ServerMessage::Error(err)]));
 

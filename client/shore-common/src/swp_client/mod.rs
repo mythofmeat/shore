@@ -57,10 +57,23 @@ mod tests {
         w.flush().await.unwrap();
     }
 
+    /// The token every handshake test needs, since `do_handshake` resolves one
+    /// before it sends anything.
+    ///
+    /// Set once and never cleared. The process environment is shared by this
+    /// parallel test binary, so a test that removed it would break whichever
+    /// neighbour happened to be mid-handshake. `token.rs`'s own tests use the
+    /// injectable `resolve_token_with` and never touch the global at all.
+    fn with_token() {
+        static ONCE: std::sync::Once = std::sync::Once::new();
+        ONCE.call_once(|| std::env::set_var(crate::token::TOKEN_ENV, "test-token"));
+    }
+
     // ── Handshake tests ──────────────────────────────────────────────
 
     #[tokio::test]
     async fn handshake_success() {
+        with_token();
         let (client_stream, server_stream) = duplex(8192);
 
         let server_handle = tokio::spawn(async move {
@@ -83,6 +96,8 @@ mod tests {
             assert_eq!(h.client_type, "tui");
             assert_eq!(h.client_name, "test-client");
             assert!(h.capabilities.contains(&"streaming".to_owned()));
+            // Resolved inside `do_handshake`, so no caller can forget it.
+            assert_eq!(h.token.as_deref(), Some("test-token"));
 
             // Server sends history
             let history = ServerMessage::History(History {
@@ -134,6 +149,7 @@ mod tests {
 
     #[tokio::test]
     async fn handshake_wrong_version() {
+        with_token();
         let (client_stream, server_stream) = duplex(8192);
 
         let _ignored = tokio::spawn(async move {
@@ -157,6 +173,7 @@ mod tests {
 
     #[tokio::test]
     async fn handshake_unexpected_first_message() {
+        with_token();
         let (client_stream, server_stream) = duplex(8192);
 
         let _ignored = tokio::spawn(async move {
@@ -176,6 +193,7 @@ mod tests {
 
     #[tokio::test]
     async fn handshake_skips_unknown_frames() {
+        with_token();
         let (client_stream, server_stream) = duplex(8192);
 
         let server_handle = tokio::spawn(async move {
@@ -331,6 +349,7 @@ mod tests {
 
     #[tokio::test]
     async fn handshake_rejects_oversized_server_hello() {
+        with_token();
         let (client_stream, server_stream) = duplex(MAX_WIRE_MESSAGE_SIZE + 4096);
 
         let _ignored = tokio::spawn(async move {

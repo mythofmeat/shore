@@ -211,13 +211,15 @@ fn arb_client_message() -> BoxedStrategy<ClientMessage> {
         arb_ident(),
         prop::collection::vec(arb_ident(), 0..3),
         prop::option::of(arb_ident()),
+        prop::option::of(arb_ident()),
     )
-        .prop_map(|(client_type, client_name, capabilities, character)| {
+        .prop_map(|(client_type, client_name, capabilities, character, token)| {
             ClientMessage::Hello(ClientHello {
                 client_type,
                 client_name,
                 capabilities,
                 character,
+                token,
             })
         });
 
