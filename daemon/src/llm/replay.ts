@@ -44,18 +44,23 @@ const ECHOES_UNSIGNED_THINKING: ReadonlySet<Sdk> = new Set<Sdk>([
 ]);
 
 /**
- * Provider keys whose thinking-mode API *rejects* requests that omit
- * `reasoning_content` from prior assistant turns — DeepSeek V3.1+ and
- * Moonshot's Kimi-thinking answer with
- * `"reasoning_content in the thinking mode must be passed back to the API."`.
+ * Provider keys that need prior `reasoning_content` replayed regardless of the
+ * user's `replay_prior_thinking`. A floor, not a preference.
  *
- * This is a floor, not a preference: it overrides `replay_prior_thinking`.
+ * Only Moonshot is on it. Kimi K2.5+/K3 are trained in preserved-thinking-history
+ * mode and degrade erratically without the replay — observed as coin-flip
+ * think/no-think on byte-identical requests (657f3590).
+ *
+ * DeepSeek used to be here, on the claim that V3.1+ rejects a request omitting
+ * prior `reasoning_content`. Measured against the live API on 2026-08-08, that
+ * is false, and so is the opposite claim this repo carried in `openai.ts` (that
+ * DeepSeek rejects the field on the way in). It does neither: both shapes
+ * return 200, and a ~600-token `reasoning_content` on a prior assistant turn
+ * moves `prompt_tokens` by exactly zero. DeepSeek accepts the field, discards
+ * it server-side, and bills nothing for it — so replaying to DeepSeek is inert
+ * rather than required.
  */
-const REQUIRES_REASONING_REPLAY: ReadonlySet<string> = new Set([
-  "deepseek",
-  "moonshot",
-  "moonshotai",
-]);
+const REQUIRES_REASONING_REPLAY: ReadonlySet<string> = new Set(["moonshot", "moonshotai"]);
 
 /** Blocks that carry opaque, model-specific data rather than plain text. */
 function carriesOpaqueData(block: ContentBlock): boolean {
@@ -142,8 +147,7 @@ export function replayableMessages(req: SidecarRequest): WireMessage[] {
   const activeModel = req.model;
   const keepsUncarried = ECHOES_UNSIGNED_THINKING.has(req.sdk);
 
-  // Provider floor beats the user setting: these APIs reject a request that
-  // omits prior reasoning.
+  // Provider floor beats the user setting: Kimi degrades without the replay.
   const stripPrior =
     req.replay_prior_thinking === "none" && !REQUIRES_REASONING_REPLAY.has(activeProvider);
 

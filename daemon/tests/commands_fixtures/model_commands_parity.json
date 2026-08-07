@@ -2429,7 +2429,7 @@
               "cache_ttl": "ignored",
               "cache_keepalive": "honored",
               "sdk": "always",
-              "replay_prior_thinking": "ignored",
+              "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "honored",

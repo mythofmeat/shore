@@ -64,7 +64,9 @@ export interface WireMessage {
   model?: string;
 }
 
-/** How much prior-turn thinking to replay. Mirrors Rust `ThinkingReplay`. */
+/** How much prior-turn thinking to replay. `none` is a compatibility escape
+ *  hatch for backends that reject inbound reasoning, not a cost knob — see the
+ *  twin in `config/app.ts` for why. */
 export type ThinkingReplay = "all" | "none";
 
 /**

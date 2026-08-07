@@ -267,8 +267,8 @@ export interface ResolvedModel {
    * Per-model override for preserving prior-turn extended-thinking blocks.
    * Absent means "inherit the global `[memory.thinking].replay_prior_thinking`".
    * Not sourced from the static catalog — stamped here by the runtime
-   * preference overlay. The quality effect is model-dependent, so there is no
-   * opinionated default.
+   * preference overlay. Reach for `none` only when a backend rejects inbound
+   * reasoning; it is a compatibility escape hatch, not a cost knob.
    */
   replayPriorThinking?: ThinkingReplay;
   /**

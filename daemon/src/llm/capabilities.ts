@@ -347,9 +347,9 @@ export function applicability(sdk: Sdk, modelId: string, field: Field): Applicab
       return vendorField(sdk, "zai");
 
     // Honored wherever an adapter puts surviving thinking blocks on the wire.
-    // Ignored on Gemini (no reasoning-replay surface) and on native
-    // DeepSeek/Moonshot, where the provider contract forces full replay
-    // regardless, so the knob can change nothing.
+    // Ignored on native DeepSeek, which discards inbound `reasoning_content`
+    // server-side, and on Moonshot, whose Kimi thinking models need the full
+    // history regardless — on both, the knob can change nothing.
     case "replay_prior_thinking":
       return replayApplicability(sdk);
   }
@@ -376,8 +376,10 @@ function replayApplicability(sdk: Sdk): Applicability {
     case "openai":
     case "zai":
     case "openrouter":
-      return "honored";
+    // Gemini gained a replay surface when the adapter stopped dropping thought
+    // signatures on the outbound path (#10).
     case "gemini":
+      return "honored";
     case "deepseek":
     case "moonshot":
       return "ignored";

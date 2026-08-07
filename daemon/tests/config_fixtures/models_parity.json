@@ -2487,7 +2487,7 @@
       "sdk": "gemini",
       "model_id": "claude-opus-4-6",
       "field": "replay_prior_thinking",
-      "applicability": "ignored"
+      "applicability": "honored"
     },
     {
       "sdk": "gemini",
@@ -2565,7 +2565,7 @@
       "sdk": "gemini",
       "model_id": "claude-opus-4-7",
       "field": "replay_prior_thinking",
-      "applicability": "ignored"
+      "applicability": "honored"
     },
     {
       "sdk": "gemini",
@@ -2643,7 +2643,7 @@
       "sdk": "gemini",
       "model_id": "claude-sonnet-4-7",
       "field": "replay_prior_thinking",
-      "applicability": "ignored"
+      "applicability": "honored"
     },
     {
       "sdk": "gemini",
@@ -2721,7 +2721,7 @@
       "sdk": "gemini",
       "model_id": "claude-haiku-4-5",
       "field": "replay_prior_thinking",
-      "applicability": "ignored"
+      "applicability": "honored"
     },
     {
       "sdk": "gemini",
@@ -2799,7 +2799,7 @@
       "sdk": "gemini",
       "model_id": "gpt-5.6",
       "field": "replay_prior_thinking",
-      "applicability": "ignored"
+      "applicability": "honored"
     },
     {
       "sdk": "gemini",
@@ -2877,7 +2877,7 @@
       "sdk": "gemini",
       "model_id": "anthropic/claude-opus-4-7",
       "field": "replay_prior_thinking",
-      "applicability": "ignored"
+      "applicability": "honored"
     },
     {
       "sdk": "gemini",
@@ -2955,7 +2955,7 @@
       "sdk": "gemini",
       "model_id": "o3-mini",
       "field": "replay_prior_thinking",
-      "applicability": "ignored"
+      "applicability": "honored"
     },
     {
       "sdk": "gemini",
@@ -3033,7 +3033,7 @@
       "sdk": "gemini",
       "model_id": "",
       "field": "replay_prior_thinking",
-      "applicability": "ignored"
+      "applicability": "honored"
     },
     {
       "sdk": "zai",

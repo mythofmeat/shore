@@ -282,7 +282,21 @@ function translateParts(content: WireMessage["content"], toolIdToName: Map<strin
         break;
       }
       case "thinking":
+        // Gemini's stateless `contents` API requires thought signatures to be
+        // resent exactly as received; the model needs them to continue its own
+        // reasoning. https://ai.google.dev/gemini-api/docs/thinking
+        //
+        // Only signed blocks are replayed. An unsigned one carries nothing
+        // Gemini can use, and by this point anything reaching here has already
+        // passed the portability check, so a signature present is a signature
+        // this model minted.
+        if (block.signature !== undefined && block.signature.length > 0) {
+          parts.push({ text: block.thinking, thought: true, thoughtSignature: block.signature });
+        }
+        break;
       case "redacted_thinking":
+        // Never minted by this adapter, and a foreign one is dropped upstream
+        // as unportable. Nothing to send.
         break;
     }
   }

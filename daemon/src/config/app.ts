@@ -791,10 +791,37 @@ export function validateCompaction(compaction: CompactionConfig): string | undef
 /**
  * Whether to replay prior turns' extended-thinking blocks.
  *
- * `all` is Anthropic's recommended setting and the only one that never rewrites
- * bytes it has already sent, so the prompt cache stays whole. `none` is cheaper
- * per request and still cache-stable, because every completed turn is stripped
- * in every request.
+ * **`all` is the right answer nearly everywhere, and `none` is a compatibility
+ * escape hatch — not a cost knob.** The name reads like it saves tokens. It
+ * does not, on any provider Shore ships against:
+ *
+ * - Anthropic keeps prior-turn thinking in context by default on the models
+ *   Shore runs, bills input only for the blocks actually shown to Claude, and
+ *   documents no intelligence cost for preserving them. Stripping client-side
+ *   removes blocks the API would have filtered for free.
+ * - Gemini and Kimi K2.5+/K3 require the replay; Z.AI and OpenRouter carry it
+ *   in a provider-specific envelope the adapter replays from.
+ * - Native DeepSeek discards inbound reasoning server-side, so the setting is
+ *   inert there either way (measured 2026-08-08; see `llm/replay.ts`).
+ *
+ * The one real use is a generic OpenAI-compatible backend that **rejects**
+ * inbound `reasoning_content` with an API error. Set `none` for that model to
+ * make the request go through.
+ *
+ * Both modes are prompt-cache-safe: a given history always projects to the same
+ * bytes, so neither rewrites something already sent.
+ *
+ * ## Why there is no context-reclaiming mode here
+ *
+ * Anthropic's supported way to reclaim context from thinking is the server-side
+ * `clear_thinking_20251015` context-editing strategy, not client-side
+ * stripping. It is tunable (`keep: {type: "thinking_turns", value: N}`) where
+ * this setting is binary, and it reports what it cleared instead of leaving the
+ * cost inferred. Shore does not implement it, deliberately: it invalidates the
+ * cache at the point where clearing occurs, which is the same trade this
+ * setting makes, only stated out loud — and Shore already has a compaction
+ * system that owns context pressure. Revisit if compaction starts firing
+ * earlier than it should because thinking is what filled the window.
  */
 export type ThinkingReplay = "all" | "none";
 
@@ -1384,6 +1411,25 @@ export interface McpServerConfig {
    *  unset. Ignored by HTTP servers. */
   cwd: string | undefined;
   url: string | undefined;
+  /**
+   * Extra HTTP request headers, sent on every request to an HTTP server.
+   * Ignored by stdio servers, which `validate_mcp_servers` rejects rather than
+   * silently dropping.
+   *
+   * This is where a bearer token goes, and it is the reason the key exists:
+   * an HTTP server is reachable by anything that can reach its port, so most
+   * of them gate `/mcp` behind one. `env` cannot carry it — that configures
+   * the *child process* shore spawns, and an HTTP server has none.
+   *
+   * Values are literal, like `env`'s, rather than naming environment
+   * variables the way `api_key_env` does. Both sit in the same config
+   * directory with the same exposure, so the indirection would buy nothing.
+   *
+   * Appended rather than filed next to `url`: `McpServerConfig` also
+   * deserializes positionally, and a key inserted mid-list silently re-maps
+   * every field after it.
+   */
+  headers: Map<string, string>;
 }
 
 const MCP_SERVER: StructSpec<McpServerConfig> = {
@@ -1395,6 +1441,7 @@ const MCP_SERVER: StructSpec<McpServerConfig> = {
     env: new Map(),
     cwd: undefined,
     url: undefined,
+    headers: new Map(),
   }),
   fields: {
     command: optional(readString),
@@ -1402,6 +1449,7 @@ const MCP_SERVER: StructSpec<McpServerConfig> = {
     env: readMap(readString),
     cwd: optional(readString),
     url: optional(readString),
+    headers: readMap(readString),
   },
 };
 

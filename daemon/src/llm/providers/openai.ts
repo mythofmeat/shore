@@ -10,18 +10,24 @@
  * No client-side cache markers: OpenAI-compatible backends cache server-side.
  *
  * **Thinking replay is decided upstream, transmitted faithfully here.** The
- * daemon's `maybe_strip_prior_thinking` (tri-state `replay_prior_thinking`,
- * #191) controls which assistant turns still carry thinking blocks by the time
- * a request reaches this adapter; whatever survives is emitted as
- * `reasoning_content` on the corresponding assistant message. Kimi K2.5+/K3
- * are trained in preserved-thinking-history mode and degrade erratically
- * without it; backends that reject inbound `reasoning_content` (DeepSeek
- * treats it as output-only) surface an API error the user can act on by
- * setting `replay_prior_thinking = "none"` for that model — never a silent
- * drop here. The retired Rust adapter's deepseek/kimi tool-loop bug was
- * replaying reasoning in the WRONG SHAPE unconditionally; the conversion
- * regression test now pins the faithful mapping in both directions (thinking
- * block ⇄ `reasoning_content`, absent ⇄ absent).
+ * `replay_prior_thinking` projection in `llm/replay.ts` controls which assistant
+ * turns still carry thinking blocks by the time a request reaches this adapter;
+ * whatever survives is emitted as `reasoning_content` on the corresponding
+ * assistant message. Kimi K2.5+/K3 are trained in preserved-thinking-history
+ * mode and degrade erratically without it.
+ *
+ * This comment used to claim DeepSeek rejects inbound `reasoning_content` and
+ * that `replay_prior_thinking = "none"` was the fix. Measured against the live
+ * API on 2026-08-08, it doesn't: the request succeeds and the field costs zero
+ * prompt tokens, so DeepSeek is accepting and discarding it. `none` remains the
+ * escape hatch for a backend that *does* reject the field — that failure mode
+ * is real on some OpenAI-compatible gateways — but it surfaces as an API error,
+ * never a silent drop here.
+ *
+ * The retired Rust adapter's deepseek/kimi tool-loop bug was replaying reasoning
+ * in the WRONG SHAPE unconditionally; the conversion regression test now pins
+ * the faithful mapping in both directions (thinking block ⇄ `reasoning_content`,
+ * absent ⇄ absent).
  */
 
 import OpenAI from "openai";

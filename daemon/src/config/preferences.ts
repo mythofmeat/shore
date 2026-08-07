@@ -87,10 +87,10 @@ export interface SamplerSettings {
   /** Wire SDK override. Lets a user force, e.g., the Anthropic wire shape for
    *  a model the discovery cache labelled `openai`. Validated on write. */
   sdk?: string;
-  /** Per-model override for `[memory.thinking].replay_prior_thinking`. The
-   *  quality effect is model-dependent, so there is no default in either
-   *  direction. The DeepSeek/Kimi reasoning-replay floor is orthogonal and
-   *  still enforced regardless. */
+  /** Per-model override for `[memory.thinking].replay_prior_thinking`. Set
+   *  `none` only for a backend that rejects inbound reasoning — it is a
+   *  compatibility escape hatch, not a cost knob (see `config/app.ts`). The
+   *  Kimi reasoning-replay floor is orthogonal and still enforced regardless. */
   replayPriorThinking?: ThinkingReplay;
   /** Maximum tool-loop iterations per turn. Absent means **unlimited**. The
    *  single surface governing every agentic loop — chat, heartbeat,

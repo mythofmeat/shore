@@ -139,6 +139,71 @@ describe("request construction", () => {
     expect(contents[1]?.parts?.[1]?.text).toBe("<system_instruction>be brief</system_instruction>");
   });
 
+  test("replays signed thinking as a thought part carrying its signature", () => {
+    // #10: the adapter captured `thoughtSignature` on the way in and dropped it
+    // on the way out, so Shore could never comply with Gemini's "you MUST
+    // resend thought blocks" contract on the stateless `contents` API.
+    const contents = translateMessages([
+      {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "weighing it up", signature: "sig-abc" },
+          { type: "text", text: "the answer" },
+        ],
+      },
+    ]);
+
+    expect(contents[0]?.parts?.[0]).toEqual({
+      text: "weighing it up",
+      thought: true,
+      thoughtSignature: "sig-abc",
+    });
+    expect(contents[0]?.parts?.[1]?.text).toBe("the answer");
+  });
+
+  test("an unsigned thinking block still sends nothing", () => {
+    // Nothing Gemini can continue from, and the round trip is what the
+    // signature exists for.
+    const contents = translateMessages([
+      {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "no carrier" },
+          { type: "text", text: "the answer" },
+        ],
+      },
+    ]);
+
+    expect(contents[0]?.parts).toHaveLength(1);
+    expect(contents[0]?.parts?.[0]?.text).toBe("the answer");
+  });
+
+  test("a captured signature survives the full round trip", () => {
+    // Pins inbound capture and outbound replay against each other, so the two
+    // halves cannot drift apart again.
+    const response = geminiGenerateResponse(
+      "gemini-2.5-pro",
+      {
+        candidates: [
+          {
+            content: {
+              parts: [
+                { text: "reasoning", thought: true, thoughtSignature: "sig-xyz" },
+                { text: "reply" },
+              ],
+            },
+          },
+        ],
+      } as unknown as GenerateContentResponse,
+      1,
+    );
+
+    const contents = translateMessages([
+      { role: "assistant", content: response.content_blocks },
+    ]);
+    expect(contents[0]?.parts?.[0]?.thoughtSignature).toBe("sig-xyz");
+  });
+
   test("merges consecutive same-role plain text without merging thoughts", () => {
     const contents = [
       { role: "model", parts: [{ text: "thinking", thought: true }] },

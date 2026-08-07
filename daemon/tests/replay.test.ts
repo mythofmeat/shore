@@ -148,7 +148,7 @@ describe("prior-thinking replay setting", () => {
   });
 
   test("the provider floor overrides `none` where the API demands replay", () => {
-    for (const provider of ["deepseek", "moonshot", "moonshotai"]) {
+    for (const provider of ["moonshot", "moonshotai"]) {
       // Minted by the same provider/model — the floor governs the *setting*,
       // not portability, and a foreign signature is still dropped either way.
       const own: WireMessage[] = history.map((m) =>
@@ -172,10 +172,30 @@ describe("prior-thinking replay setting", () => {
     // the provider cannot read fails the request outright, so it goes anyway.
     const out = replayableMessages(
       req({
+        sdk: "moonshot",
+        model: "reasoner",
+        provider_key: "moonshot",
+        messages: history,
+        replay_prior_thinking: "none",
+      }),
+    );
+    expect(types(out)[1]).toEqual(["text"]);
+  });
+
+  test("deepseek is not on the floor: `none` strips there like anywhere else", () => {
+    // Measured 2026-08-08: DeepSeek neither rejects a request that omits prior
+    // `reasoning_content` nor one that carries it — a ~600-token block moves
+    // `prompt_tokens` by zero, so it is accepted and discarded server-side. The
+    // floor claimed the opposite and bought nothing.
+    const own: WireMessage[] = history.map((m) =>
+      m.role === "assistant" ? { ...m, provider_key: "deepseek", model: "reasoner" } : m,
+    );
+    const out = replayableMessages(
+      req({
         sdk: "deepseek",
         model: "reasoner",
         provider_key: "deepseek",
-        messages: history,
+        messages: own,
         replay_prior_thinking: "none",
       }),
     );
