@@ -14,11 +14,6 @@ RUN bun run build
 FROM archlinux:latest AS entry
 COPY --from=rust    /src/target/release/shore /usr/bin/shore
 COPY --from=rust    /src/target/release/shore-tui /usr/bin/shore-tui
-# The daemon is TypeScript now, so `bun` below is a runtime dependency and not
-# only a build one. How this binary is produced — `bun build` versus
-# `bun build --compile`, whether bun has to be installed at all, minification,
-# or just running from source — is undecided; this is the same bundle
-# `bun run build:daemon` writes and nothing more.
 COPY --from=bun     /src/daemon/dist/shore-daemon /usr/bin/shore-daemon
 
 RUN groupadd --gid 1000 shore \
