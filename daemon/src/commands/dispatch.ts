@@ -32,6 +32,7 @@
  * `unwired` — which is what a build with no LLM client behind it would do.
  */
 
+import { describeError } from "../llm/errors.ts";
 import type { Command } from "../protocol/Command.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { LoadedConfig } from "../config/loader.ts";
@@ -313,10 +314,10 @@ export function commandFrame(name: string, outcome: { ok: unknown } | { err: unk
     return { type: "command_output", rid: null, name, data: outcome.ok };
   }
   const e = outcome.err;
-  const error =
-    e instanceof CommandError
-      ? e
-      : internalError(e instanceof Error ? e.message : String(e));
+  // `describeError` rather than `String`: several commands reach the provider,
+  // and an `LlmError` is a plain object whose default stringification is
+  // `[object Object]`.
+  const error = e instanceof CommandError ? e : internalError(describeError(e));
   console.warn(`shore: command ${name} failed: ${error.message}`);
   return { type: "error", rid: null, code: error.code, message: error.message };
 }

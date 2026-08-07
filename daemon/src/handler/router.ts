@@ -38,6 +38,7 @@
  * makes as `DispatchRuntime`, and nothing implements that interface yet.
  */
 
+import { describeError } from "../llm/errors.ts";
 import type { ClientMessage } from "../protocol/ClientMessage.ts";
 import type { Command } from "../protocol/Command.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
@@ -371,7 +372,10 @@ export class MessageHandler {
         // An aborted generation is this handler's own doing, not a failure to
         // report: the client already got the cancelled `stream_end`.
         if (controller.signal.aborted) return;
-        const message = error instanceof Error ? error.message : String(error);
+        // `describeError`, not `String`: a generation fails through the LLM
+        // stack, and an `LlmError` is a plain object that stringifies to
+        // `[object Object]`.
+        const message = describeError(error);
         this.#deps.log?.error?.("error processing engine message", { error: message });
         await send(withRid({ type: "error", code: "internal_error", message }, rid));
         this.#deps.notifier.notify("error", `Shore - ${charName}`, message);

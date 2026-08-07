@@ -36,6 +36,7 @@ import {
   type HomeLookup,
   type ShoreDirs,
 } from "./dirs.ts";
+import { applyDotenv } from "./dotenv.ts";
 import { rustTrim } from "./duration.ts";
 import { catalogFromSections, findModel, CatalogError, type ModelCatalog } from "./models.ts";
 import { ProviderRegistry, ProviderRegistryError } from "./providers.ts";
@@ -156,6 +157,46 @@ function readFileOrThrow(path: string): string {
   }
 }
 
+/**
+ * Apply `<configDir>/.env` to the environment, as the Rust's
+ * `dotenvy::from_path_override` does.
+ *
+ * This is where provider API keys come from. `[providers.<key>] api_key_env`
+ * names a variable and the credential layer reads it off `process.env` at call
+ * time, so a daemon that skips this file has no keys for any provider and every
+ * generation fails before it reaches the network — which is not obvious from
+ * anything the config itself says.
+ *
+ * A missing file is the normal case and is silent. A file that exists but
+ * cannot be read or parsed warns and is skipped, rather than failing the load:
+ * that is dotenvy's behaviour and the Rust's, and it keeps a stray character in
+ * a secrets file from making the daemon unstartable.
+ */
+function loadDotenv(
+  configDir: string,
+  target: Record<string, string | undefined>,
+  onWarn: ConfigWarn,
+): void {
+  const path = rustJoin(configDir, ".env");
+  if (!exists(path)) return;
+
+  try {
+    const applied = applyDotenv(path, target);
+    if (applied.length > 0) {
+      // Names only — the values are the secrets this file exists to hold. Worth
+      // a line because the failure it makes visible is otherwise silent: the
+      // daemon starts fine and only the first generation reveals there were no
+      // credentials.
+      console.info(`shore: loaded ${applied.length} variables from ${path}`);
+    }
+  } catch (e) {
+    onWarn("Failed to load .env file", [
+      ["path", path],
+      ["error", e instanceof Error ? e.message : String(e)],
+    ]);
+  }
+}
+
 function parseToml(content: string, kind: ConfigErrorKind, path?: string): TomlTable {
   try {
     return Bun.TOML.parse(content) as TomlTable;
@@ -231,6 +272,8 @@ export function loadRawConfigTable(
     env?: Env;
     homeLookup?: HomeLookup;
     createDefault?: (configDir: string) => void;
+    onWarn?: ConfigWarn;
+    envTarget?: Record<string, string | undefined>;
   } = {},
 ): RawConfigTable {
   const dirs = resolveShoreDirs(options.env, options.homeLookup);
@@ -241,6 +284,8 @@ export function loadRawConfigTable(
   if (configPath !== undefined) dirs.config = configDirectory;
 
   const configFile = configPath ?? rustJoin(configDirectory, "config.toml");
+
+  loadDotenv(configDirectory, options.envTarget ?? process.env, options.onWarn ?? consoleConfigWarn);
 
   let table: TomlTable;
   if (exists(configFile)) {

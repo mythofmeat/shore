@@ -10,6 +10,7 @@
  * unchanged.
  */
 
+import { describeError } from "../llm/errors.ts";
 import type { ErrorCode } from "../protocol/ErrorCode.ts";
 import { InvalidAlt, MessageNotFound } from "../engine/message_store.ts";
 
@@ -51,5 +52,5 @@ export const providerError = (message: string): CommandError =>
 export function engineError(e: unknown): CommandError {
   if (e instanceof MessageNotFound) return notFound(e.message);
   if (e instanceof InvalidAlt) return invalidRequest(e.message);
-  return internalError(e instanceof Error ? e.message : String(e));
+  return internalError(describeError(e));
 }

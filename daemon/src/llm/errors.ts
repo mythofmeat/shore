@@ -47,6 +47,46 @@ export type LlmError =
    */
   | { kind: "budget_blocked"; message: string; scope?: string };
 
+/** The `kind` tags {@link isLlmError} recognises. */
+const LLM_ERROR_KINDS: ReadonlySet<string> = new Set([
+  "transport",
+  "http_status",
+  "serialize",
+  "deserialize",
+  "incomplete_stream",
+  "stream_errored",
+  "missing_api_key",
+  "provider",
+  "budget_blocked",
+]);
+
+/** Whether an unknown caught value is one of these. */
+export function isLlmError(value: unknown): value is LlmError {
+  if (typeof value !== "object" || value === null) return false;
+  const kind = (value as { kind?: unknown }).kind;
+  return typeof kind === "string" && LLM_ERROR_KINDS.has(kind);
+}
+
+/**
+ * The text to report for anything caught on a path that can raise an
+ * {@link LlmError}.
+ *
+ * `LlmError` is a plain discriminated union rather than an `Error` subclass —
+ * that is what the Rust enum ported to, and `throw`ing one is how the retry and
+ * rotation layers signal upward. The consequence is that the usual
+ * `e instanceof Error ? e.message : String(e)` produces the literal string
+ * `[object Object]` for every one of them: a daemon with no API key configured
+ * reported exactly that to the client, naming neither the provider nor the
+ * variable it wanted. This is the extractor those call sites need instead.
+ */
+export function describeError(e: unknown): string {
+  // `Error` first: `BudgetBlocked` is both, and its own message is the budget's
+  // sentence — which is what `describeLlmError` would return for it anyway.
+  if (e instanceof Error) return e.message;
+  if (isLlmError(e)) return describeLlmError(e);
+  return String(e);
+}
+
 /** The `Display` text the Rust's `#[error(...)]` attributes produce. */
 export function describeLlmError(error: LlmError): string {
   switch (error.kind) {
