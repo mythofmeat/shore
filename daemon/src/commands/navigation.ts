@@ -109,17 +109,23 @@ export function characterMetadata(configDir: string, name: string): CharacterInf
  * The Rust had these as two functions because one took the engine and the other
  * could not; here the difference is the whole of it.
  */
-export function listCharacters(configDir: string, active?: string): { characters: CharacterInfo[] } {
+export function listCharacters(
+  configDir: string,
+  active?: string,
+  workspaceRoot?: string | undefined,
+): { characters: CharacterInfo[] } {
   const characters = active === undefined ? [] : [characterMetadata(configDir, active)];
-  for (const name of discoverCharacters(configDir)) {
+  for (const name of discoverCharacters(configDir, workspaceRoot)) {
     if (name !== active) characters.push(characterMetadata(configDir, name));
   }
   return { characters };
 }
 
 /** The listing with no session attached — used before a character is resolved. */
-export const listCharactersStandalone = (configDir: string): { characters: CharacterInfo[] } =>
-  listCharacters(configDir);
+export const listCharactersStandalone = (
+  configDir: string,
+  workspaceRoot?: string | undefined,
+): { characters: CharacterInfo[] } => listCharacters(configDir, undefined, workspaceRoot);
 
 // ── character_info ────────────────────────────────────────────────────────
 
@@ -133,6 +139,8 @@ export interface CharacterInfoContext {
   dataDir: string;
   /** The session's character, used when the request names none. */
   active: string;
+  /** `SHORE_WORKSPACE_DIR`, when workspaces live outside the config tree. */
+  workspaceRoot?: string | undefined;
 }
 
 /**

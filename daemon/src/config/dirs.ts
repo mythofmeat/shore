@@ -53,6 +53,15 @@ export interface ShoreDirs {
   runtime: string;
   /** `$XDG_CACHE_HOME/shore/` */
   cache: string;
+  /**
+   * `SHORE_WORKSPACE_DIR`, when set: the root every character's workspace
+   * lives under, as `<root>/<character>/`. Undefined means the default
+   * layout, where a workspace sits inside the character's config directory.
+   *
+   * Unlike the other four this has no XDG equivalent and gets no `/shore`
+   * suffix, and an empty value counts as unset — see {@link workspaceRoot}.
+   */
+  workspace?: string | undefined;
 }
 
 /** The environment a resolution reads. Injectable so the replay can drive it. */
@@ -174,6 +183,9 @@ function resolveXdgDir(
  * 1. `SHORE_{CONFIG,DATA,RUNTIME,CACHE}_DIR` — used as-is, no `/shore` suffix
  * 2. `XDG_{CONFIG_HOME,DATA_HOME,RUNTIME_DIR,CACHE_HOME}` + `/shore`
  * 3. Platform defaults + `/shore`
+ *
+ * `workspace` is the odd one out and has no default: it is `SHORE_WORKSPACE_DIR`
+ * or nothing, and nothing means workspaces stay inside the config directory.
  */
 export function resolveShoreDirs(env: Env = process.env, home: HomeLookup = passwdHome): ShoreDirs {
   const one = (
@@ -188,7 +200,24 @@ export function resolveShoreDirs(env: Env = process.env, home: HomeLookup = pass
     data: one("SHORE_DATA_DIR", "XDG_DATA_HOME", PLATFORM.data, "~/.local/share"),
     runtime: one("SHORE_RUNTIME_DIR", "XDG_RUNTIME_DIR", PLATFORM.runtime, ""),
     cache: one("SHORE_CACHE_DIR", "XDG_CACHE_HOME", PLATFORM.cache, "~/.cache"),
+    workspace: workspaceRoot(env),
   };
+}
+
+/**
+ * `SHORE_WORKSPACE_DIR`, or undefined for the default layout.
+ *
+ * Used as-is, like the other `SHORE_*_DIR` overrides: no `/shore` suffix and
+ * no XDG variable behind it. **An empty value is unset here**, which is the one
+ * place this deliberately differs from the other four. Those have no default
+ * but the one they compute, so `SHORE_CONFIG_DIR=""` meaning "the current
+ * directory" is at least a coherent answer; this has a perfectly good default,
+ * and an empty root would silently scatter every character's workspace into
+ * whatever directory the daemon happened to start in.
+ */
+export function workspaceRoot(env: Env = process.env): string | undefined {
+  const root = env.SHORE_WORKSPACE_DIR;
+  return root === undefined || root === "" ? undefined : root;
 }
 
 /** `ShoreDirs::resolve().config`, for callers that want only the one. */
@@ -238,17 +267,38 @@ export const pluginsDir = (data: string): string => rustJoin(data, PLUGINS_DIR);
 export const characterConfigDir = (config: string, name: string): string =>
   rustJoin(config, "characters", name);
 
-/** `characters/{name}/workspace/` */
-export const characterWorkspaceDir = (config: string, name: string): string =>
-  rustJoin(characterConfigDir(config, name), CHARACTER_WORKSPACE_DIR);
+/**
+ * `characters/{name}/workspace/`, or `{workspaceRoot}/{name}/` when a
+ * workspace root is given.
+ *
+ * The root is passed rather than read, because every other path helper here is
+ * a pure function of its base and the parity fixture drives them that way. A
+ * caller that has `ShoreDirs` passes `dirs.workspace`; one that has neither
+ * passes nothing and gets the default layout.
+ */
+export const characterWorkspaceDir = (
+  config: string,
+  name: string,
+  workspaceRoot?: string | undefined,
+): string =>
+  workspaceRoot === undefined
+    ? rustJoin(characterConfigDir(config, name), CHARACTER_WORKSPACE_DIR)
+    : rustJoin(workspaceRoot, name);
 
-/** `characters/{name}/workspace/{file}` */
-export const characterWorkspaceFile = (config: string, name: string, file: string): string =>
-  rustJoin(characterWorkspaceDir(config, name), file);
+/** `characters/{name}/workspace/{file}`, or `{workspaceRoot}/{name}/{file}`. */
+export const characterWorkspaceFile = (
+  config: string,
+  name: string,
+  file: string,
+  workspaceRoot?: string | undefined,
+): string => rustJoin(characterWorkspaceDir(config, name, workspaceRoot), file);
 
-/** `characters/{name}/workspace/memory/` */
-export const characterMemoryDir = (config: string, name: string): string =>
-  rustJoin(characterWorkspaceDir(config, name), MEMORY_DIR);
+/** `characters/{name}/workspace/memory/`, or `{workspaceRoot}/{name}/memory/`. */
+export const characterMemoryDir = (
+  config: string,
+  name: string,
+  workspaceRoot?: string | undefined,
+): string => rustJoin(characterWorkspaceDir(config, name, workspaceRoot), MEMORY_DIR);
 
 /** `<data_dir>/{character}/` — the per-character runtime storage root. */
 export const characterDataDir = (data: string, name: string): string => rustJoin(data, name);
@@ -317,17 +367,11 @@ export function readOrUndefined(path: string): string | undefined {
  * `String: Ord` compares bytes. `readdir` order is not sorted on either side,
  * so the sort is what makes this deterministic.
  */
-export function discoverCharacters(config: string): string[] {
-  let entries: string[];
-  try {
-    entries = readdirSync(rustJoin(config, "characters"));
-  } catch {
-    return [];
-  }
+export function discoverCharacters(config: string, workspaceRoot?: string | undefined): string[] {
+  const names = new Set<string>();
 
   const charsDir = rustJoin(config, "characters");
-  const names: string[] = [];
-  for (const name of entries) {
+  for (const name of readdirOrEmpty(charsDir)) {
     const dir = join(charsDir, name);
     // Redundant, and knowingly kept: a marker file can only exist *under* a
     // directory, so the two `pathExists` calls below already imply this. Deleting
@@ -335,12 +379,38 @@ export function discoverCharacters(config: string): string[] {
     // because it says what a character is — a directory — at the point that is
     // decided, rather than leaving it implied by two path probes.
     if (!isDir(dir)) continue;
-    if (pathExists(join(dir, CHARACTER_WORKSPACE_DIR, SOUL_FILE)) ||
-      pathExists(join(dir, LEGACY_CHARACTER_FILE))) {
-      names.push(name);
+    // `workspace/SOUL.md` only counts where a workspace is: with a root set,
+    // that file is no longer the one the daemon would read, and discovering a
+    // character by a definition nothing goes on to load is worse than not
+    // discovering it. The legacy marker is checked either way, because
+    // `loadCharacterDefinition` still falls back to it either way.
+    if (
+      (workspaceRoot === undefined &&
+        pathExists(join(dir, CHARACTER_WORKSPACE_DIR, SOUL_FILE))) ||
+      pathExists(join(dir, LEGACY_CHARACTER_FILE))
+    ) {
+      names.add(name);
     }
   }
-  return names.sort(compareByCodePoint);
+
+  if (workspaceRoot !== undefined) {
+    for (const name of readdirOrEmpty(workspaceRoot)) {
+      const dir = join(workspaceRoot, name);
+      if (!isDir(dir)) continue;
+      if (pathExists(join(dir, SOUL_FILE))) names.add(name);
+    }
+  }
+
+  return [...names].sort(compareByCodePoint);
+}
+
+/** Directory entries, or none — an unreadable directory is not an error here. */
+function readdirOrEmpty(dir: string): string[] {
+  try {
+    return readdirSync(dir);
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -351,9 +421,13 @@ export function discoverCharacters(config: string): string[] {
  * empty `SOUL.md` is a definition of the empty string and stops the legacy
  * fallback, because the Rust branches on `read_to_string(..)` being `Ok`.
  */
-export function loadCharacterDefinition(config: string, name: string): string | undefined {
+export function loadCharacterDefinition(
+  config: string,
+  name: string,
+  workspaceRoot?: string | undefined,
+): string | undefined {
   return (
-    readOrUndefined(characterWorkspaceFile(config, name, SOUL_FILE)) ??
+    readOrUndefined(characterWorkspaceFile(config, name, SOUL_FILE, workspaceRoot)) ??
     readOrUndefined(rustJoin(characterConfigDir(config, name), LEGACY_CHARACTER_FILE))
   );
 }
@@ -362,9 +436,13 @@ export function loadCharacterDefinition(config: string, name: string): string | 
  * A character's user definition: `workspace/USER.md`, else the legacy
  * `characters/{name}/user.md`, else nothing.
  */
-export function resolveUserDefinition(config: string, name: string): string | undefined {
+export function resolveUserDefinition(
+  config: string,
+  name: string,
+  workspaceRoot?: string | undefined,
+): string | undefined {
   return (
-    readOrUndefined(characterWorkspaceFile(config, name, USER_FILE)) ??
+    readOrUndefined(characterWorkspaceFile(config, name, USER_FILE, workspaceRoot)) ??
     readOrUndefined(rustJoin(characterConfigDir(config, name), LEGACY_USER_FILE))
   );
 }

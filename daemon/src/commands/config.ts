@@ -308,7 +308,7 @@ export async function configReload(ctx: ConfigContext, args: Args): Promise<unkn
     throw invalidRequest(`Config error: ${message(e)}`);
   }
 
-  for (const name of discoverCharacters(fresh.dirs.config)) {
+  for (const name of discoverCharacters(fresh.dirs.config, fresh.dirs.workspace)) {
     try {
       loadCharacterConfig(fresh, name);
     } catch (e) {
@@ -322,7 +322,12 @@ export async function configReload(ctx: ConfigContext, args: Args): Promise<unkn
   }
 
   const characterDataDir = join(ctx.config.dirs.data, character);
-  const changed = await changedPromptFiles(characterDataDir, fresh.dirs.config, character);
+  const changed = await changedPromptFiles(
+    characterDataDir,
+    fresh.dirs.config,
+    character,
+    fresh.dirs.workspace,
+  );
 
   // `restart_required` is annotated by `handler/command_dispatch.ts`, not by
   // this command: it compares global to global, and this context holds the
@@ -341,7 +346,12 @@ export async function configReload(ctx: ConfigContext, args: Args): Promise<unkn
   let promptsRefreshed = false;
   if (refreshPrompts) {
     try {
-      await applyDeferredEdits(characterDataDir, fresh.dirs.config, character);
+      await applyDeferredEdits(
+        characterDataDir,
+        fresh.dirs.config,
+        character,
+        fresh.dirs.workspace,
+      );
     } catch (e) {
       throw internalError(`Failed to refresh active prompt snapshot: ${message(e)}`);
     }

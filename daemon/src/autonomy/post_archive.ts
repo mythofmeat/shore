@@ -76,6 +76,7 @@ export async function reloadAndApplyDeferred(
       join(deps.config.dirs.data, character),
       deps.config.dirs.config,
       character,
+      deps.config.dirs.workspace,
     );
   } catch (e) {
     console.warn(`shore: ${context}: failed to apply deferred edits for ${character}: ${String(e)}`);

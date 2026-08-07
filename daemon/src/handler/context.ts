@@ -91,7 +91,12 @@ export async function prepareChatContext(
   const displayName = resolveDisplayName(config.app.defaults);
 
   try {
-    await ensureActivePromptSnapshot(characterDataDir, config.dirs.config, character);
+    await ensureActivePromptSnapshot(
+      characterDataDir,
+      config.dirs.config,
+      character,
+      config.dirs.workspace,
+    );
   } catch (e) {
     console.warn(`shore: failed to prepare active prompt snapshot for ${character}: ${String(e)}`);
   }
@@ -100,7 +105,12 @@ export async function prepareChatContext(
   const userDefinition = await loadActivePromptFile(characterDataDir, USER_FILE);
   const systemPrompt = await loadActivePromptFile(characterDataDir, AGENTS_FILE);
   const toolsGuidance = await loadActivePromptFile(characterDataDir, TOOLS_FILE);
-  const memoryIndex = await loadMemoryIndex(characterDataDir, config.dirs.config, character);
+  const memoryIndex = await loadMemoryIndex(
+    characterDataDir,
+    config.dirs.config,
+    character,
+    config.dirs.workspace,
+  );
 
   const promptParams = {
     character_name: character,

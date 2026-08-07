@@ -263,6 +263,7 @@ export async function prepareHeartbeatRequest(
       join(config.dirs.data, character),
       config.dirs.config,
       character,
+      config.dirs.workspace,
     );
   } catch (e) {
     console.warn(`shore: heartbeat could not prepare the prompt snapshot for ${character}: ${String(e)}`);

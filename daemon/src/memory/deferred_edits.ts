@@ -103,8 +103,17 @@ Use tools when they materially help.
 // absolute or carries redundant separators — the frozen fixture below uses
 // neither, and still passes unchanged.
 
-export const memoryIndexPath = (configDir: string, charName: string) =>
-  join(characterWorkspaceDir(configDir, charName), MEMORY_INDEX_FILE);
+// Every entry point below takes the workspace root the same way `config/dirs.ts`
+// does — trailing and optional, undefined meaning the workspace sits under the
+// config directory. It is threaded rather than read from the environment so
+// these stay drivable from a fixture, and so a test can put a workspace
+// anywhere without touching the process.
+
+export const memoryIndexPath = (
+  configDir: string,
+  charName: string,
+  workspaceRoot?: string | undefined,
+) => join(characterWorkspaceDir(configDir, charName, workspaceRoot), MEMORY_INDEX_FILE);
 
 // --- small fs helpers ------------------------------------------------------
 
@@ -139,8 +148,12 @@ async function effectiveContent(p: string): Promise<string | undefined> {
  * needs no special case: `memoryIndexPath` resolves to exactly this, since
  * both live at the workspace root. See MEMORY_INDEX_FILE.
  */
-const canonicalFile = (configDir: string, charName: string, path: string) =>
-  characterWorkspaceFile(configDir, charName, path);
+const canonicalFile = (
+  configDir: string,
+  charName: string,
+  path: string,
+  workspaceRoot: string | undefined,
+) => characterWorkspaceFile(configDir, charName, path, workspaceRoot);
 
 // --- reads -----------------------------------------------------------------
 
@@ -149,8 +162,11 @@ export const loadActivePromptFile = (characterDataDir: string, name: string) =>
   effectiveContent(activePromptFile(characterDataDir, name));
 
 /** Canonical memory index, ignoring any snapshot. */
-export const loadCanonicalMemoryIndex = (configDir: string, charName: string) =>
-  effectiveContent(memoryIndexPath(configDir, charName));
+export const loadCanonicalMemoryIndex = (
+  configDir: string,
+  charName: string,
+  workspaceRoot?: string | undefined,
+) => effectiveContent(memoryIndexPath(configDir, charName, workspaceRoot));
 
 /**
  * Memory index as the prompt should see it.
@@ -165,10 +181,11 @@ export async function loadMemoryIndex(
   characterDataDir: string,
   configDir: string,
   charName: string,
+  workspaceRoot?: string | undefined,
 ): Promise<string | undefined> {
   const active = activePromptFile(characterDataDir, MEMORY_INDEX_FILE);
   if (await exists(active)) return effectiveContent(active);
-  return effectiveContent(memoryIndexPath(configDir, charName));
+  return effectiveContent(memoryIndexPath(configDir, charName, workspaceRoot));
 }
 
 /**
@@ -257,11 +274,12 @@ export async function changedPromptFiles(
   characterDataDir: string,
   configDir: string,
   charName: string,
+  workspaceRoot?: string | undefined,
 ): Promise<string[]> {
   const changed: string[] = [];
   for (const path of [...PROTECTED_PATHS, MEMORY_INDEX_FILE]) {
     const canonical = await effectiveContent(
-      canonicalFile(configDir, charName, path),
+      canonicalFile(configDir, charName, path, workspaceRoot),
     );
     const active = await effectiveContent(
       activePromptFile(characterDataDir, path),
@@ -286,11 +304,12 @@ async function copyPromptVisibleFile(
   charName: string,
   path: string,
   seedOnly: boolean,
+  workspaceRoot: string | undefined,
 ): Promise<void> {
   const activeDir = activePromptDir(characterDataDir);
   await mkdir(activeDir, { recursive: true });
 
-  const src = canonicalFile(configDir, charName, path);
+  const src = canonicalFile(configDir, charName, path, workspaceRoot);
   const dst = join(activeDir, path);
 
   if (seedOnly && (await exists(dst))) return;
@@ -316,10 +335,11 @@ export async function ensureCharacterWorkspace(
   characterDataDir: string,
   configDir: string,
   charName: string,
+  workspaceRoot?: string | undefined,
 ): Promise<void> {
   const charConfigDir = characterConfigDir(configDir, charName);
-  const workspaceDir = characterWorkspaceDir(configDir, charName);
-  const memoryDir = characterMemoryDir(configDir, charName);
+  const workspaceDir = characterWorkspaceDir(configDir, charName, workspaceRoot);
+  const memoryDir = characterMemoryDir(configDir, charName, workspaceRoot);
 
   await mkdir(workspaceDir, { recursive: true });
   await mkdir(memoryDir, { recursive: true });
@@ -362,14 +382,15 @@ export async function ensureActivePromptSnapshot(
   characterDataDir: string,
   configDir: string,
   charName: string,
+  workspaceRoot?: string | undefined,
 ): Promise<void> {
-  await ensureCharacterWorkspace(characterDataDir, configDir, charName);
+  await ensureCharacterWorkspace(characterDataDir, configDir, charName, workspaceRoot);
 
   const activeDir = activePromptDir(characterDataDir);
   await mkdir(activeDir, { recursive: true });
 
   for (const path of [...PROTECTED_PATHS, MEMORY_INDEX_FILE]) {
-    await copyPromptVisibleFile(characterDataDir, configDir, charName, path, true);
+    await copyPromptVisibleFile(characterDataDir, configDir, charName, path, true, workspaceRoot);
   }
 
   for (const legacy of LEGACY_SNAPSHOTS) {
@@ -383,10 +404,11 @@ export async function refreshActivePromptSnapshot(
   characterDataDir: string,
   configDir: string,
   charName: string,
+  workspaceRoot?: string | undefined,
 ): Promise<void> {
-  await ensureCharacterWorkspace(characterDataDir, configDir, charName);
+  await ensureCharacterWorkspace(characterDataDir, configDir, charName, workspaceRoot);
   for (const path of [...PROTECTED_PATHS, MEMORY_INDEX_FILE]) {
-    await copyPromptVisibleFile(characterDataDir, configDir, charName, path, false);
+    await copyPromptVisibleFile(characterDataDir, configDir, charName, path, false, workspaceRoot);
   }
 }
 
@@ -395,8 +417,9 @@ export async function applyDeferredEdits(
   characterDataDir: string,
   configDir: string,
   charName: string,
+  workspaceRoot?: string | undefined,
 ): Promise<void> {
-  await refreshActivePromptSnapshot(characterDataDir, configDir, charName);
+  await refreshActivePromptSnapshot(characterDataDir, configDir, charName, workspaceRoot);
   await rm(join(characterDataDir, QUEUE_FILE), { force: true });
 }
 

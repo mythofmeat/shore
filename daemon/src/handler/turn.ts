@@ -296,7 +296,12 @@ export interface CompactionRunner {
   /** Runs the compaction pass, returning how many messages were retained. */
   run(charName: string, config: LoadedConfig): Promise<number>;
   /** Re-applies the character's deferred self-edits. */
-  applyDeferredEdits(characterDataDir: string, configDir: string, charName: string): Promise<void>;
+  applyDeferredEdits(
+    characterDataDir: string,
+    configDir: string,
+    charName: string,
+    workspaceRoot?: string | undefined,
+  ): Promise<void>;
 }
 
 /**
@@ -376,6 +381,7 @@ export async function runInlineCompaction(
       characterDataDir(dataDir, charName),
       config.dirs.config,
       charName,
+      config.dirs.workspace,
     );
   } catch (e) {
     console.warn(`shore: failed to apply deferred edits after compaction: ${String(e)}`);

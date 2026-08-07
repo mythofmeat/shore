@@ -297,7 +297,12 @@ async function completeCompaction(
   }
 
   try {
-    await applyDeferredEdits(join(ctx.config.dirs.data, character), ctx.config.dirs.config, character);
+    await applyDeferredEdits(
+      join(ctx.config.dirs.data, character),
+      ctx.config.dirs.config,
+      character,
+      ctx.config.dirs.workspace,
+    );
   } catch (e) {
     console.warn(`shore: failed to apply deferred edits after compaction: ${String(e)}`);
   }

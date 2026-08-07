@@ -4,6 +4,5 @@
 //! in `shore-daemon` instead.
 
 pub mod config;
-pub mod diagnostics;
 pub mod protocol;
 pub mod swp_client;
