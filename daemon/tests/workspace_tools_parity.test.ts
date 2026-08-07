@@ -228,14 +228,44 @@ function syncOutcome(run: () => void): Outcome {
 
 // ── read ────────────────────────────────────────────────────────────────
 
+/**
+ * The two cases where the port deliberately answers something the Rust did not.
+ *
+ * `read` on a bare `workspace` or `memory` returned "invalid args: path is
+ * empty" at `9023b46d`, because the handler resolved through the strict
+ * resolver — which refuses a prefix with nothing below it — before it decided
+ * whether the target was a directory. The tool schema promised a listing, so
+ * that was a bug, and #39 fixed it here.
+ *
+ * The fixture stays untouched: it records what the Rust returned, and that is
+ * the only thing it is for. These two are checked against the listing the Rust
+ * *did* produce for the same directory spelled `memory/.` — the workaround the
+ * bug report found — so the new answer is still pinned to captured behaviour
+ * rather than to a hand-written expectation. The `toEqual` on `c.result` keeps
+ * the divergence honest: if the fixture is ever regenerated against a daemon
+ * that lists, this list is what tells us to delete the exception.
+ */
+const READ_DIVERGES_FROM_RUST = new Map([
+  ["memory prefix directory", "invalid args: path is empty"],
+  ["workspace prefix root", "invalid args: path is empty"],
+]);
+
 describe("read", () => {
   for (const c of fixture.read) {
     test(c.name, async () => {
       const { workspace } = await makeCase(c.tree, c.workspace_missing === true);
       const ws = c.workspace_unset === true ? "" : workspace;
-      expect(blankDirectorySizes(await outcome(() => handleRead(c.input, ws)))).toEqual(
-        blankDirectorySizes(c.result),
-      );
+      const got = blankDirectorySizes(await outcome(() => handleRead(c.input, ws)));
+
+      const rustError = READ_DIVERGES_FROM_RUST.get(c.name);
+      if (rustError !== undefined) {
+        expect(c.result).toEqual({ err: rustError });
+        const viaDot = await outcome(() => handleRead({ path: `${String(c.input.path)}/.` }, ws));
+        expect(got).toEqual(blankDirectorySizes(viaDot));
+        return;
+      }
+
+      expect(got).toEqual(blankDirectorySizes(c.result));
     });
   }
 

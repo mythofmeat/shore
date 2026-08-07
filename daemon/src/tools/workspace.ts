@@ -337,10 +337,27 @@ function truncateExcerptLine(line: string): string {
  * path lists the workspace root. That is why `path` is optional and why a
  * missing path cannot be an error — a bare `read` is the root listing that
  * `list_files` used to serve.
+ *
+ * `workspace` and `memory` are caller-facing *prefixes* rather than real
+ * leading directories, so {@link resolveRoots} consumes them whole and leaves
+ * an empty remainder — the one state {@link resolvePath} refuses, because a
+ * file tool needs a file. The bare-prefix case is therefore dispatched to the
+ * listing before the strict resolver ever sees it. The Rust did not, and
+ * `read` on `memory` answered "invalid args: path is empty" (#39).
+ *
+ * The dispatch is on the *shape* of the path, not on `isDir`: `memory/` is
+ * created lazily, and a not-yet-existing directory has to reach
+ * {@link listDirectory} to get its "does not exist yet" answer rather than
+ * falling back into the resolver that rejected it.
  */
 export async function handleRead(input: ToolInput, workspaceDir: string): Promise<unknown> {
   const pathStr = asStr(input, "path");
   if (pathStr === undefined) return await listDirectory(workspaceDir, undefined);
+
+  // Throws on an unconfigured workspace and on a blank path, exactly as the
+  // strict resolver did when it ran first.
+  const [, stripped] = resolveRoots(workspaceDir, pathStr);
+  if (stripped === "") return await listDirectory(workspaceDir, pathStr);
 
   const path = resolvePath(workspaceDir, pathStr);
 
