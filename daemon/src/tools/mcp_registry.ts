@@ -140,6 +140,16 @@ export class McpRegistry {
     this.source = source;
   }
 
+  /**
+   * How many servers are actually connected.
+   *
+   * Not the tool count: a server can legitimately offer none, and the question
+   * a reload asks is whether anything answered at all (#28).
+   */
+  connectedServers(): number {
+    return this.clients.size;
+  }
+
   /** An empty registry — no servers configured, or none reachable. */
   static empty(): McpRegistry {
     return new McpRegistry(new Map(), [], {});

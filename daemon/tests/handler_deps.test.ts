@@ -30,6 +30,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  applyReloadedConfig,
   buildCommandPathDeps,
   buildGenerationDeps,
   buildMessageHandlerDeps,
@@ -47,7 +48,8 @@ import { SessionRouter } from "../src/swp/session.ts";
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
 import { CharacterError } from "../src/characters.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
-import { createRuntime, type ShoreRuntime } from "../src/runtime.ts";
+import { createRuntime, mcpConfigView, type ShoreRuntime } from "../src/runtime.ts";
+import type { McpRegistry } from "../src/tools/mcp_registry.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
 import { emptyCatalog } from "../src/config/models.ts";
@@ -118,6 +120,33 @@ async function runtimeUnder(
   const config = configFor(root, mutate);
   const runtime = await createRuntime({ config, providers: {}, connectMcp: NO_MCP });
   return { root, config, runtime };
+}
+
+/**
+ * Whether `view.call` dispatches to whatever the runtime's holder points at
+ * *now*, rather than to the registry that existed when the view was made.
+ *
+ * Swaps in a stub, calls through the view, and puts the real one back — the
+ * caller still has to shut the runtime down cleanly.
+ */
+async function routesToCurrentRegistry(
+  runtime: ShoreRuntime,
+  view: Pick<McpRegistry, "call">,
+): Promise<boolean> {
+  let reached = false;
+  const stub = {
+    call: async () => {
+      reached = true;
+      return undefined;
+    },
+  } as unknown as McpRegistry;
+  const real = runtime.mcp.replace(stub);
+  try {
+    await view.call("mcp__anything__at_all", {});
+  } finally {
+    runtime.mcp.replace(real);
+  }
+  return reached;
 }
 
 /** Records what reached the service, and when it was allowed to. */
@@ -225,7 +254,11 @@ describe("the tool backends a character's turn gets", () => {
     const { root, runtime } = await runtimeUnder("shore-deps-shared-");
     try {
       const ada = chatToolDeps(assemblyFor(runtime), "ada", turnFor());
-      expect(ada.mcpRegistry).toBe(runtime.mcp);
+      // A live view rather than the registry object, so a `[mcp]` reload
+      // reaches a turn already in flight (#28). Asserted by behaviour, because
+      // identity is exactly what it no longer has.
+      expect(ada.mcpRegistry).toBeDefined();
+      expect(await routesToCurrentRegistry(runtime, ada.mcpRegistry!)).toBe(true);
       expect(ada.imageGenerator).toBeDefined();
       expect(ada.modelHistoryQuery).toBeDefined();
       // A *binder*, not the runner: a sub-agent's nested loop runs against the
@@ -385,7 +418,11 @@ describe("what the assembly hands the driver", () => {
       expect(deps.ledgerPath).toBe(join(root, "data", "ledger.db"));
       expect(deps.dataDir).toBe(join(root, "data"));
       expect(deps.notifier).toBe(runtime.notifier);
-      expect(deps.mcpRegistry).toBe(runtime.mcp);
+      expect(await routesToCurrentRegistry(runtime, deps.mcpRegistry)).toBe(true);
+      // The other half of the split: the tool *surface* is read from the
+      // registry current when the turn was assembled, which is what keeps a
+      // turn's cache prefix stable across a reload.
+      expect(deps.mcpRegistry.toolDefsFiltered(["*"])).toEqual([]);
     } finally {
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });
@@ -740,6 +777,190 @@ describe("the command path", () => {
       expect(deps.commands.keepalive?.keepalive).toBe(runtime.keepalive);
       expect(deps.commands.callStore).toBe(runtime.callStore);
       expect(deps.commands.ledgerPath).toBe(join(root, "data", "ledger.db"));
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * Reloading `[mcp]` (#28).
+ *
+ * Before this, servers added, removed or re-pointed kept their startup
+ * connections until the daemon restarted, and the command reported success —
+ * `matchesConfig` had already ported and had no caller.
+ */
+describe("reloading [mcp]", () => {
+  /** The command-path assembly, which is all `applyReloadedConfig` reads. */
+  function assemblyOf(runtime: ShoreRuntime): CommandAssembly {
+    return {
+      runtime,
+      autonomy: new TurnAutonomyBridge(recordingService()),
+      sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+      diagnostics: { api_calls: { push: () => {} } } as never,
+      router: new SessionRouter(),
+      handshake: { hello: () => ({}) as never, history: () => Promise.resolve({} as never) },
+      providers: {},
+    } satisfies CommandAssembly;
+  }
+
+  /** A fake server offering one tool, so a surface change is observable. */
+  function fakeServer(tool: string) {
+    let shutdowns = 0;
+    const connect = (spec: { name: string }) =>
+      Promise.resolve({
+        listTools: () =>
+          Promise.resolve([
+            { server: spec.name, name: tool, description: `the ${tool} tool`, input_schema: {} },
+          ]),
+        call: () => Promise.resolve(`${tool} ran`),
+        shutdown: () => {
+          shutdowns += 1;
+          return Promise.resolve();
+        },
+      } as never);
+    return { connect, shutdowns: () => shutdowns };
+  }
+
+  function withServer(app: ReturnType<typeof defaultAppConfig>, name: string, command: string) {
+    app.mcp.set(name, {
+      command,
+      args: [],
+      env: new Map(),
+      cwd: undefined,
+      url: undefined,
+    } as never);
+  }
+
+  async function runtimeWithMcp(server: ReturnType<typeof fakeServer>, command = "hue-server") {
+    const root = await mkdtemp(join(tmpdir(), "shore-mcp-reload-"));
+    const config = configFor(root, (app) => withServer(app, "hue", command));
+    const runtime = await createRuntime({ config, providers: {}, connectMcp: server.connect });
+    return { root, config, runtime };
+  }
+
+  test("a changed [mcp] reconnects and swaps the surface", async () => {
+    const server = fakeServer("set_light");
+    const { root, runtime } = await runtimeWithMcp(server);
+    try {
+      expect(runtime.mcp.current.toolDefsFiltered(["*"]).map((t) => t.name)).toEqual([
+        "mcp__hue__set_light",
+      ]);
+
+      // The same server re-pointed at a different command: a real `[mcp]` edit.
+      const fresh = configFor(root, (app) => withServer(app, "hue", "hue-server-v2"));
+      await applyReloadedConfig(assemblyOf(runtime), fresh);
+
+      expect(runtime.mcp.current.matchesConfig(mcpConfigView(fresh))).toBe(true);
+      // And the registry it replaced was shut down, so the old child is gone
+      // rather than left running for the life of the daemon.
+      expect(server.shutdowns()).toBe(1);
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("an unrelated reload leaves the connections alone", async () => {
+    // The comparison is not an optimisation. Every rebuild respawns every stdio
+    // child *and* changes the tool surface, which is a cache prefix change —
+    // so an edit to a different section must not cause one.
+    const server = fakeServer("set_light");
+    const { root, runtime } = await runtimeWithMcp(server);
+    try {
+      const before = runtime.mcp.current;
+      const fresh = configFor(root, (app) => {
+        withServer(app, "hue", "hue-server");
+        app.defaults.stream = !app.defaults.stream;
+      });
+      await applyReloadedConfig(assemblyOf(runtime), fresh);
+
+      expect(runtime.mcp.current).toBe(before);
+      expect(server.shutdowns()).toBe(0);
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a removed server drops its tools", async () => {
+    const server = fakeServer("set_light");
+    const { root, runtime } = await runtimeWithMcp(server);
+    try {
+      const fresh = configFor(root);
+      await applyReloadedConfig(assemblyOf(runtime), fresh);
+
+      expect(runtime.mcp.current.toolDefsFiltered(["*"])).toEqual([]);
+      expect(server.shutdowns()).toBe(1);
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("removing every server on purpose does empty the surface", async () => {
+    // The other side of the guard above: with nothing declared, nothing
+    // connected is the correct answer rather than a failure.
+    const server = fakeServer("set_light");
+    const { root, runtime } = await runtimeWithMcp(server);
+    try {
+      await applyReloadedConfig(assemblyOf(runtime), configFor(root));
+      expect(runtime.mcp.current.connectedServers()).toBe(0);
+      expect(server.shutdowns()).toBe(1);
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a turn already in flight dispatches to the new registry", async () => {
+    // The decision this issue asked to be made rather than assumed. A turn
+    // holds the tool *definitions* it was assembled with — so its cache prefix
+    // is stable — but its calls follow the holder, which is what stops the rest
+    // of the turn's MCP calls dying with the old transports.
+    const first = fakeServer("set_light");
+    const { root, runtime } = await runtimeWithMcp(first);
+    try {
+      const inFlight = chatToolDeps(assemblyFor(runtime), "ada", turnFor());
+
+      const second = fakeServer("set_light");
+      const fresh = configFor(root, (app) => withServer(app, "hue", "hue-server-v2"));
+      await applyReloadedConfig(
+        assemblyOf({ ...runtime, connectMcp: second.connect } as ShoreRuntime),
+        fresh,
+      );
+
+      await expect(inFlight.mcpRegistry!.call("mcp__hue__set_light", {})).resolves.toBe(
+        "set_light ran",
+      );
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a reconnect that reaches nothing keeps the running servers", async () => {
+    const server = fakeServer("set_light");
+    const { root, runtime } = await runtimeWithMcp(server);
+    try {
+      const before = runtime.mcp.current;
+      const fresh = configFor(root, (app) => withServer(app, "hue", "hue-server-v2"));
+      const broken = {
+        ...runtime,
+        connectMcp: () => {
+          throw new Error("the whole rebuild failed");
+        },
+      } as ShoreRuntime;
+      await applyReloadedConfig(assemblyOf(broken), fresh);
+
+      // `fromConfig` skips an unreachable server rather than failing, which is
+      // right at startup and wrong on a reload: it would swap in an empty
+      // surface and shut down the working connections, silently, for the rest
+      // of the session. Declared servers plus none connected is a failed
+      // rebuild, not an intentionally empty surface.
+      expect(runtime.mcp.current).toBe(before);
+      expect(server.shutdowns()).toBe(0);
     } finally {
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });

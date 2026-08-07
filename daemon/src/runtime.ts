@@ -58,6 +58,7 @@ import type { SidecarProvider, SidecarRequest } from "./llm/types.ts";
 import { McpClient, type McpServerSpec } from "./mcp/client.ts";
 import { NotificationService } from "./notifications.ts";
 import { McpRegistry, type McpServerConfigView } from "./tools/mcp_registry.ts";
+import { McpHolder } from "./tools/mcp_holder.ts";
 
 /** Observability store retention window: rows older than this are pruned. */
 export const CALL_STORE_RETENTION_DAYS = 14;
@@ -104,7 +105,18 @@ export interface ShoreRuntime {
   readonly configPath: string;
   readonly registry: CharacterRegistry;
   readonly cache: LastRequestCache;
-  readonly mcp: McpRegistry;
+  /**
+   * The live MCP registry, behind a holder so a `[mcp]` reload can swap it
+   * (#28). Read it as `runtime.mcp.current` at the moment you need it, never
+   * once into a long-lived object — that is what made the section unreloadable.
+   */
+  readonly mcp: McpHolder;
+  /**
+   * How this runtime connects an MCP server, kept so a `[mcp]` reload rebuilds
+   * through the same path startup used — and so a test that injected a fake
+   * connector still has one after a reload (#28).
+   */
+  readonly connectMcp: (spec: McpServerSpec) => Promise<McpClient>;
   /** `undefined` when the store would not open — capture off, daemon up. */
   readonly callStore: CallStore | undefined;
   readonly notifier: NotificationService;
@@ -151,7 +163,8 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
   });
   const cache = new LastRequestCache(keepalive);
 
-  const mcp = await connectMcpRegistry(config, options.connectMcp ?? McpClient.connect);
+  const connectMcp = options.connectMcp ?? McpClient.connect;
+  const mcp = new McpHolder(await connectMcpRegistry(config, connectMcp));
 
   const registry = await CharacterRegistry.create(
     config.dirs.config,
@@ -184,12 +197,13 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     registry,
     cache,
     mcp,
+    connectMcp,
     callStore,
     notifier,
     keepalive,
     autonomy,
     async shutdown() {
-      await mcp.shutdown();
+      await mcp.current.shutdown();
       callStore?.close();
     },
   };
@@ -300,10 +314,15 @@ function ensureLedger(config: LoadedConfig): void {
  *
  * An empty `[mcp]` yields an empty registry, which costs nothing.
  */
-async function connectMcpRegistry(
-  config: LoadedConfig,
-  connect: (spec: McpServerSpec) => Promise<McpClient>,
-): Promise<McpRegistry> {
+/**
+ * `[mcp]` as the registry wants it.
+ *
+ * Exported because the reload path compares against it: `matchesConfig` is only
+ * honest if both sides were built the same way, and a second transcription of
+ * this loop is how the comparison starts reporting a change that is not one —
+ * which would respawn every stdio child on an unrelated config edit (#28).
+ */
+export function mcpConfigView(config: LoadedConfig): Record<string, McpServerConfigView> {
   const servers: Record<string, McpServerConfigView> = {};
   for (const [name, server] of config.app.mcp) {
     servers[name] = {
@@ -314,7 +333,18 @@ async function connectMcpRegistry(
       ...(server.url === undefined ? {} : { url: server.url }),
     };
   }
-  return await McpRegistry.fromConfig(servers, pluginsDir(config.dirs.data), connect);
+  return servers;
+}
+
+async function connectMcpRegistry(
+  config: LoadedConfig,
+  connect: (spec: McpServerSpec) => Promise<McpClient>,
+): Promise<McpRegistry> {
+  return await McpRegistry.fromConfig(
+    mcpConfigView(config),
+    pluginsDir(config.dirs.data),
+    connect,
+  );
 }
 
 /**
@@ -341,7 +371,7 @@ async function connectMcpRegistry(
  */
 export function sharedToolDeps(
   config: LoadedConfig,
-  mcp: McpRegistry,
+  mcp: McpHolder,
   /** Absent leaves `ask_*` uncallable — a caller with no provider table. */
   subagent?: {
     providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
@@ -349,7 +379,10 @@ export function sharedToolDeps(
   },
 ): ToolContextDeps {
   return {
-    mcpRegistry: mcp,
+    // The live view, not the registry: this object is built once for the
+    // background executor and would otherwise pin whatever registry existed at
+    // assembly — the captured copy that made `[mcp]` unreloadable (#28).
+    mcpRegistry: mcp.callView(),
     ...(subagent === undefined
       ? {}
       : {
@@ -358,7 +391,7 @@ export function sharedToolDeps(
               config,
               ctx: parent,
               providers: subagent.providers,
-              mcpRegistry: mcp,
+              mcpRegistry: mcp.current,
               // Its own ring: a background tick has no interactive
               // `shore status --diagnostics` view to feed, which is what the
               // Rust's throwaway `Diagnostics::default()` said too.

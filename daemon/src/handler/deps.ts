@@ -73,7 +73,9 @@ import { queueDeferredEdit } from "../memory/deferred_edits.ts";
 import { compactionRunner } from "../memory/compaction/run.ts";
 import type { NotificationService } from "../notifications.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
-import { sharedToolDeps, type ShoreRuntime } from "../runtime.ts";
+import { mcpConfigView, sharedToolDeps, type ShoreRuntime } from "../runtime.ts";
+import { McpRegistry } from "../tools/mcp_registry.ts";
+import { pluginsDir } from "../config/dirs.ts";
 import { historyMessage, type HandshakeProvider } from "../swp/connection.ts";
 import type { SessionRouter } from "../swp/session.ts";
 import { deferEditTo, type ToolContext } from "../tools/dispatch.ts";
@@ -131,7 +133,17 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
     sessionTokens: a.sessionTokens,
     diagnostics: a.diagnostics,
     emitEvent: a.emitEvent,
-    mcpRegistry: runtime.mcp,
+    // Two halves, deliberately different. `toolDefsFiltered` is read once here
+    // and the request built from it is reused for every round of the turn's
+    // loop, so the surface — and the cache prefix keyed on it — is fixed for
+    // this turn whatever a reload does mid-flight. `call` follows the holder,
+    // so a turn that outlives a `[mcp]` reload dispatches to the registry that
+    // is actually connected rather than to one whose transports just closed
+    // (#28).
+    mcpRegistry: {
+      toolDefsFiltered: (patterns) => runtime.mcp.current.toolDefsFiltered(patterns),
+      ...runtime.mcp.callView(),
+    },
     compaction: chatCompactionRunner(a),
     newlyCrossedUsageBudgetWarnings: usageBudgetWarnings(ledgerPath, usage, a.now),
     ledgerPath,
@@ -232,7 +244,7 @@ export function chatToolDeps(
       config: runtime.registry.effectiveConfig(charName),
       ctx: parent,
       providers: a.providers,
-      mcpRegistry: runtime.mcp,
+      mcpRegistry: runtime.mcp.current,
       sendDirect: turn.send,
       diagnostics: a.diagnostics.tool_calls,
       conversation: turn.conversation,
@@ -490,7 +502,7 @@ export function configRuntime(a: CommandAssembly): ConfigRuntime {
       // side: nothing is pinged rather than the wrong thing.
       void runtime.cache
         .reprimeFromDisk(character, runtime.config.dirs.data, runtime.registry.effectiveConfig(character), {
-          mcpRegistry: runtime.mcp,
+          mcpRegistry: runtime.mcp.current,
         })
         .catch((e: unknown) => {
           console.warn(`shore: keepalive reprime failed for ${character}: ${String(e)}`);
@@ -560,13 +572,81 @@ export async function applyReloadedConfig(
   // holds the global config, re-scans the character list, drops the
   // per-character config cache and discards engines that no longer exist.
   const summary = await a.runtime.registry.reloadRuntimeState(config);
-  // `[mcp]` is not reconnected here — see the module doc, and #28.
+  await reconnectMcpIfChanged(a, config);
   a.autonomy.reloadConfig((name) => a.runtime.registry.effectiveConfig(name));
   await pushHistorySnapshots(a);
   return {
     characterDiscoveryChanged: summary.characterDiscoveryChanged,
     droppedEngines: summary.droppedEngines,
   };
+}
+
+/**
+ * Rebuild the MCP registry when `[mcp]` moved, and only then (#28).
+ *
+ * **The comparison is the point, not an optimisation.** Rebuilding on every
+ * reload would tear down and respawn every stdio child for an unrelated edit —
+ * and each rebuild is a tool-surface change, which is a cache prefix change,
+ * which costs a full write on every character's next turn. An unrelated config
+ * edit must not do that.
+ *
+ * Order: connect the new one, swap the holder, then shut the old one down.
+ * Connecting first means a total failure to connect leaves the running
+ * registry in place rather than a hole; swapping before shutting down means
+ * nothing can take a reference to a registry that is about to close.
+ *
+ * The old registry's transports close immediately. A generation already in
+ * flight keeps the tool *definitions* it was assembled with — those are read
+ * once in `buildGenerationRequest`, so its prefix is stable — but its `call`s
+ * go through the holder and land on the new registry. A call already on the
+ * wire when the swap happens fails once; that one is unavoidable without
+ * keeping the old child processes alive for an unbounded time.
+ */
+async function reconnectMcpIfChanged(a: CommandAssembly, config: LoadedConfig): Promise<void> {
+  const servers = mcpConfigView(config);
+  if (a.runtime.mcp.current.matchesConfig(servers)) return;
+
+  let next: McpRegistry;
+  try {
+    next = await McpRegistry.fromConfig(
+      servers,
+      pluginsDir(config.dirs.data),
+      a.runtime.connectMcp,
+    );
+  } catch (e) {
+    // `fromConfig` skips a server it cannot reach rather than throwing, so this
+    // is something structural. Keep running on the registry that works and say
+    // so loudly: a reload that silently kept the old tool surface is the bug
+    // this function exists to fix.
+    console.error(`shore: [mcp] reload failed, keeping the running servers: ${String(e)}`);
+    return;
+  }
+
+  // `fromConfig` skips a server it cannot reach rather than failing, which is
+  // right at startup — a bad server must never take the daemon down. On a
+  // *reload* the same policy would let one bad moment destroy every working
+  // connection and leave the daemon serving an empty tool surface for the rest
+  // of the session, which is the silent, expensive failure #37 describes. So a
+  // rebuild that declared servers and connected none of them is treated as a
+  // failed rebuild rather than as an intentionally empty surface. Removing
+  // every server from the config still empties it, because then none were
+  // declared.
+  if (Object.keys(servers).length > 0 && next.connectedServers() === 0) {
+    console.error(
+      "shore: [mcp] reload connected none of the configured servers; " +
+        "keeping the running ones",
+    );
+    await next.shutdown();
+    return;
+  }
+
+  const previous = a.runtime.mcp.replace(next);
+  try {
+    await previous.shutdown();
+  } catch (e) {
+    console.warn(`shore: shutting down the previous MCP registry failed: ${String(e)}`);
+  }
+  console.info("shore: [mcp] changed; reconnected servers and swapped the tool surface");
 }
 
 /**
@@ -686,7 +766,9 @@ export function commandDeps(a: CommandAssembly): CommandDeps {
     keepalive: {
       keepalive: runtime.keepalive,
       lastRequest: runtime.cache,
-      rebuild: { mcpRegistry: runtime.mcp },
+      // Read at rebuild time, not captured: a keepalive body assembled from a
+      // stale surface would ping a prefix no turn will send.
+      rebuild: { mcpRegistry: runtime.mcp.current },
     },
   };
 }
