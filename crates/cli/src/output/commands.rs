@@ -1320,12 +1320,6 @@ fn print_compact_result(data: &serde_json::Value) {
     _ = writeln!(out);
 }
 
-/// Build a default-config baseline locally so `--all` and the hide-defaults
-/// path work even against older daemons that don't ship a `defaults` field.
-fn local_defaults_baseline() -> Option<serde_json::Value> {
-    serde_json::to_value(shore_common::config::app::AppConfig::default()).ok()
-}
-
 /// Print config display.
 pub(crate) fn print_config(data: &serde_json::Value, show_all: bool) {
     let stdout = io::stdout();
@@ -1341,16 +1335,8 @@ pub(crate) fn print_config(data: &serde_json::Value, show_all: bool) {
 
     // Section view: { "key": "name", "config": { ... }, "defaults": { ... } }
     if let Some(key) = data["key"].as_str() {
-        // The daemon (new) ships `defaults` already scoped to the section. For
-        // old daemons we synthesize the baseline locally and descend into the
-        // matching subtree so the comparison stays aligned with `config`.
-        let local_baseline;
-        let section_default = if let Some(d) = data.get("defaults") {
-            Some(d)
-        } else {
-            local_baseline = local_defaults_baseline();
-            local_baseline.as_ref().and_then(|d| d.get(key))
-        };
+        // The daemon scopes `defaults` to the section for us.
+        let section_default = data.get("defaults");
         write_section_header(&mut out, "Config", key, width);
         print_config_section(&mut out, &data["config"], section_default, 1, show_all);
         _ = writeln!(out);
@@ -1359,13 +1345,7 @@ pub(crate) fn print_config(data: &serde_json::Value, show_all: bool) {
 
     // Full config: { "config": { ... }, "defaults": { ... } }
     if let Some(config) = data.get("config") {
-        let local_baseline;
-        let defaults = if let Some(d) = data.get("defaults") {
-            Some(d)
-        } else {
-            local_baseline = local_defaults_baseline();
-            local_baseline.as_ref()
-        };
+        let defaults = data.get("defaults");
         write_section_header(&mut out, "Config", "", width);
         print_config_section(&mut out, config, defaults, 1, show_all);
         _ = writeln!(out);

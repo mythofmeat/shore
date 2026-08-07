@@ -855,29 +855,36 @@ async fn handle_complete_query(
 
 /// Create a new character scaffold directory.
 fn handle_create_character(name: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let char_dir = create_character_scaffold(&config_dir(), name)?;
-    cli_out!("Created character scaffold: {}", char_dir.display());
+    let workspace_root = shore_common::config::workspace_root();
+    let workspace_dir =
+        create_character_scaffold(workspace_root.as_deref(), &config_dir(), name)?;
+    cli_out!("Created character scaffold: {}", workspace_dir.display());
     Ok(())
 }
 
-/// Scaffold `characters/<name>/workspace/SOUL.md` under `config_dir`.
+/// Scaffold `SOUL.md` in the character's workspace — `characters/<name>/workspace/`
+/// under `config_dir`, or `<workspace_root>/<name>/` when one is set.
 ///
 /// Errors if the character already exists in either the canonical
 /// (`workspace/SOUL.md`) or legacy (`character.md`) layout, matching
-/// `shore_common::config::discover_characters`. Returns the character directory.
+/// `shore_common::config::discover_characters`. Returns the workspace directory,
+/// which is where the file a person is about to edit actually is — with a
+/// workspace root that is no longer under the character's config directory.
 fn create_character_scaffold(
+    workspace_root: Option<&Path>,
     config_dir: &Path,
     name: &str,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let char_dir = config_dir.join("characters").join(name);
-    let workspace_dir = char_dir.join(shore_common::config::CHARACTER_WORKSPACE_DIR);
+    let workspace_dir =
+        shore_common::config::character_workspace_dir_in(workspace_root, config_dir, name);
     let soul_md = workspace_dir.join(shore_common::config::SOUL_FILE);
 
     if soul_md.exists() || char_dir.join("character.md").exists() {
         return Err(format!(
             "Character '{}' already exists at {}",
             name,
-            char_dir.display()
+            workspace_dir.display()
         )
         .into());
     }
@@ -887,7 +894,7 @@ fn create_character_scaffold(
         &soul_md,
         format!("You are {name}.\n\n<!-- Edit this file to define {name}'s personality and behavior. -->\n"),
     )?;
-    Ok(char_dir)
+    Ok(workspace_dir)
 }
 
 /// Resolve the Shore config directory.
@@ -1193,18 +1200,7 @@ fn print_config_toml(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let payload = data.get("config").unwrap_or(data);
     let key = data.get("key").and_then(|v| v.as_str());
-    // Prefer the daemon-supplied baseline; synthesize one locally if absent so
-    // we behave the same against pre-defaults daemons.
-    let local_baseline;
-    let defaults: Option<&serde_json::Value> = if let Some(d) = data.get("defaults") {
-        Some(d)
-    } else {
-        local_baseline = serde_json::to_value(shore_common::config::app::AppConfig::default()).ok();
-        match key {
-            Some(k) => local_baseline.as_ref().and_then(|d| d.get(k)),
-            None => local_baseline.as_ref(),
-        }
-    };
+    let defaults: Option<&serde_json::Value> = data.get("defaults");
     let filtered: serde_json::Value;
     let effective: &serde_json::Value = if show_all {
         payload
@@ -2248,12 +2244,15 @@ mod tests {
     #[test]
     fn create_character_scaffolds_workspace_layout() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let char_dir =
-            super::create_character_scaffold(dir.path(), "ada").expect("scaffold should succeed");
-        let soul_md = char_dir
-            .join(shore_common::config::CHARACTER_WORKSPACE_DIR)
-            .join(shore_common::config::SOUL_FILE);
-        let content = std::fs::read_to_string(&soul_md).expect("SOUL.md should exist");
+        let workspace_dir = super::create_character_scaffold(None, dir.path(), "ada")
+            .expect("scaffold should succeed");
+        let char_dir = dir.path().join("characters").join("ada");
+        assert_eq!(
+            workspace_dir,
+            char_dir.join(shore_common::config::CHARACTER_WORKSPACE_DIR)
+        );
+        let content = std::fs::read_to_string(workspace_dir.join(shore_common::config::SOUL_FILE))
+            .expect("SOUL.md should exist");
         assert!(content.starts_with("You are ada."));
         assert!(
             !char_dir.join("character.md").exists(),
@@ -2262,11 +2261,29 @@ mod tests {
     }
 
     #[test]
+    fn create_character_scaffolds_into_the_workspace_root() {
+        // The whole point of `SHORE_WORKSPACE_DIR`: nothing is written under
+        // the config directory, so a character's files can live on a disk the
+        // config tree knows nothing about.
+        let config = tempfile::tempdir().expect("tempdir");
+        let workspace = tempfile::tempdir().expect("tempdir");
+        let workspace_dir =
+            super::create_character_scaffold(Some(workspace.path()), config.path(), "ada")
+                .expect("scaffold should succeed");
+        assert_eq!(workspace_dir, workspace.path().join("ada"));
+        assert!(workspace_dir.join(shore_common::config::SOUL_FILE).exists());
+        assert!(
+            !config.path().join("characters").exists(),
+            "the config tree should be untouched"
+        );
+    }
+
+    #[test]
     fn create_character_rejects_existing_workspace_character() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let _ = super::create_character_scaffold(dir.path(), "ada").expect("first create");
-        let err =
-            super::create_character_scaffold(dir.path(), "ada").expect_err("re-create should fail");
+        let _ = super::create_character_scaffold(None, dir.path(), "ada").expect("first create");
+        let err = super::create_character_scaffold(None, dir.path(), "ada")
+            .expect_err("re-create should fail");
         assert!(err.to_string().contains("already exists"));
     }
 
@@ -2276,7 +2293,7 @@ mod tests {
         let char_dir = dir.path().join("characters").join("ada");
         std::fs::create_dir_all(&char_dir).expect("mkdir");
         std::fs::write(char_dir.join("character.md"), "You are ada.\n").expect("write");
-        let err = super::create_character_scaffold(dir.path(), "ada")
+        let err = super::create_character_scaffold(None, dir.path(), "ada")
             .expect_err("create over legacy layout should fail");
         assert!(err.to_string().contains("already exists"));
     }
