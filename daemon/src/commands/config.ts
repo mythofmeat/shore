@@ -32,7 +32,7 @@ import { join } from "node:path";
 import { ConfigDuration } from "../config/duration.ts";
 import { discoverCharacters, type Env } from "../config/dirs.ts";
 import { ConfigError, loadCharacterConfig, loadConfig, type LoadedConfig } from "../config/loader.ts";
-import { findModel } from "../config/models.ts";
+import { findModel, NO_CHAT_MODELS_MESSAGE } from "../config/models.ts";
 import type { ResolvedModel } from "../config/models.ts";
 import { serializeConfigValue } from "../config/serialize.ts";
 import { defaultAppConfig } from "../config/app.ts";
@@ -158,10 +158,7 @@ export function configCheck(ctx: ConfigContext, env: NodeJS.ProcessEnv = process
   const info: string[] = [];
 
   if (ctx.config.models.chat.size === 0) {
-    warnings.push(
-      "No chat models configured. Add a [providers.*] entry and set " +
-        "[defaults].model to a provider:model_id.",
-    );
+    warnings.push(NO_CHAT_MODELS_MESSAGE);
   } else {
     info.push(`${ctx.config.models.chat.size} chat model(s) configured`);
   }

@@ -41,7 +41,9 @@
 import { describeError } from "../llm/errors.ts";
 import type { ClientMessage } from "../protocol/ClientMessage.ts";
 import type { Command } from "../protocol/Command.ts";
+import type { ErrorCode } from "../protocol/ErrorCode.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
+import { NoModelError } from "./setup.ts";
 import type {
   DirectSender,
   RequestMeta,
@@ -74,6 +76,23 @@ const RID_BEARING: ReadonlySet<string> = new Set([
   "provider_fallback_warning",
   "usage_warning",
 ]);
+
+/**
+ * The SWP code for a generation that threw.
+ *
+ * `internal_error` is the honest default — a turn fails through the LLM stack,
+ * and the client can do nothing about a provider that broke mid-stream. The
+ * exception is a failure the *config* caused: a missing model is the user's to
+ * fix, and calling it internal told them to look in the wrong place (#31).
+ *
+ * Listed by type rather than sniffed for a `code` field: an `LlmError` carries
+ * a provider's own `code`, and reading that structurally would put an HTTP
+ * status on the wire where an SWP code belongs.
+ */
+function generationErrorCode(error: unknown): ErrorCode {
+  if (error instanceof NoModelError) return error.code;
+  return "internal_error";
+}
 
 export function withRid(msg: ServerMessage, rid: string | null): ServerMessage {
   if (rid === null || !RID_BEARING.has(msg.type)) return msg;
@@ -377,7 +396,7 @@ export class MessageHandler {
         // `[object Object]`.
         const message = describeError(error);
         this.#deps.log?.error?.("error processing engine message", { error: message });
-        await send(withRid({ type: "error", code: "internal_error", message }, rid));
+        await send(withRid({ type: "error", code: generationErrorCode(error), message }, rid));
         this.#deps.notifier.notify("error", `Shore - ${charName}`, message);
       })
       .finally(() => {

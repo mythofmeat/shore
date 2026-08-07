@@ -26,6 +26,8 @@ import { StreamLeases } from "../src/handler/lease.ts";
 import { SessionRouter, type RequestMeta, type RoutedMessage } from "../src/swp/session.ts";
 import type { ClientMessage } from "../src/protocol/ClientMessage.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
+import { NoModelError } from "../src/handler/setup.ts";
+import { NO_CHAT_MODELS_MESSAGE } from "../src/config/models.ts";
 
 // ── harness ─────────────────────────────────────────────────────────────
 
@@ -50,7 +52,12 @@ function registryOf(characters: readonly string[]): HandlerRegistry {
   };
 }
 
-function harness(characters: readonly string[], sessions: number) {
+function harness(
+  characters: readonly string[],
+  sessions: number,
+  /** Overrides the never-settling default; used by the failure cases below. */
+  runGeneration?: (params: GenerationParams) => Promise<void>,
+) {
   const router = new SessionRouter();
   const frames = new Map<number, ServerMessage[]>();
   for (let id = 1; id <= sessions; id += 1) {
@@ -89,6 +96,7 @@ function harness(characters: readonly string[], sessions: number) {
     // tokio task, and a promise has no equivalent handle.
     runGeneration: (params) => {
       started.push(params);
+      if (runGeneration !== undefined) return runGeneration(params);
       return new Promise<void>((resolve) => {
         params.signal.addEventListener("abort", () => resolve(), { once: true });
       });
@@ -470,4 +478,48 @@ describe("the regen body", () => {
       }).toEqual(c.output as never);
     });
   }
+});
+
+// ── the code a failed generation reports ────────────────────────────────
+
+/**
+ * Not fixture-driven, and could not be: the Rust's `handle_generation` reached
+ * an LLM, so no recorded case fails before the wire.
+ *
+ * `internal_error` is the right default for a turn that broke — the client can
+ * do nothing about a provider that hung up mid-stream. A missing model is the
+ * other kind: the user's config has no `[providers.*]` and no `[defaults].model`,
+ * which is theirs to fix, and calling it internal pointed them at the daemon
+ * (#31).
+ */
+describe("a generation that throws", () => {
+  async function failWith(error: unknown): Promise<ServerMessage | undefined> {
+    const h = harness(["Alice"], 1, () => Promise.reject(error));
+    await h.handler.handleRouted({
+      kind: "engine",
+      msg: message(null, "hello", true),
+      meta: meta("Alice", 1, null, "message"),
+    } as RoutedMessage);
+    // The catch runs on the promise the launch did not await.
+    await h.handler.drain();
+    return h.frames.get(1)?.find((f) => f.type === "error");
+  }
+
+  test("reports a missing model as invalid_request", async () => {
+    const frame = await failWith(new NoModelError(NO_CHAT_MODELS_MESSAGE));
+    expect(frame).toMatchObject({
+      type: "error",
+      code: "invalid_request",
+      message: NO_CHAT_MODELS_MESSAGE,
+    });
+  });
+
+  test("reports anything else as internal_error", async () => {
+    const frame = await failWith(new Error("provider hung up"));
+    expect(frame).toMatchObject({
+      type: "error",
+      code: "internal_error",
+      message: "provider hung up",
+    });
+  });
 });

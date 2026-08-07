@@ -285,14 +285,24 @@ export async function runGeneration(
     newMessageId,
   };
 
-  // ── setup: record the turn, decide the model, seed autonomy ────────────
+  // ── setup: decide the model, record the turn, seed autonomy ────────────
   const body = {
     text: params.body.text,
     images: params.body.images,
     image_data: params.body.image_data as never[],
   };
-  const regenAlt = await appendUserTurn(turnCtx, engine, deps.dataDir, charName, body, regen);
 
+  // Before the write, not after it. Model resolution reads the effective
+  // config and the sampler overlay and touches no engine state, so nothing
+  // about the user's message can change its answer — and a turn that fails
+  // here fails for a reason that was true before the user typed. The Rust
+  // resolved second (`setup_generation`, task.rs:52,68) and left the message
+  // committed to `active.jsonl` with no assistant turn and nothing in the CLI
+  // output saying so; repeating the command stacked them up (#31).
+  //
+  // Only the *knowable-in-advance* failure moves. A provider 500 halfway
+  // through a turn still keeps what the user typed, which is the behaviour
+  // the original order was defending and is worth defending.
   const { model: activeModel, overlay } = resolveActiveModelAndOverlay(
     configView(config),
     charName,
@@ -300,6 +310,8 @@ export async function runGeneration(
       findEffectiveModel(view, cacheDir, name, includeHidden),
   );
   const resolved = resolveGenerationModel(activeModel, config, overlay);
+
+  const regenAlt = await appendUserTurn(turnCtx, engine, deps.dataDir, charName, body, regen);
 
   await ensureAndBackfillAutonomy(turnCtx, engine, charName, config);
   notifyUserMessageIfFresh(turnCtx, engine, charName, body, regen);

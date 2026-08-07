@@ -18,8 +18,14 @@
  */
 
 import type { LoadedConfig } from "../config/loader.ts";
+import type { ErrorCode } from "../protocol/ErrorCode.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
-import { firstChatModel, toRequestModel, type ResolvedModel } from "../config/models.ts";
+import {
+  firstChatModel,
+  NO_CHAT_MODELS_MESSAGE,
+  toRequestModel,
+  type ResolvedModel,
+} from "../config/models.ts";
 import {
   applySamplerOverlay,
   configView,
@@ -54,8 +60,18 @@ export interface MessageOverrides {
   thinking_budget?: number;
 }
 
-/** No model could be resolved for this turn. */
+/**
+ * No model could be resolved for this turn.
+ *
+ * `invalid_request`, not `internal_error`: the config is missing a
+ * `[providers.*]` entry and a `[defaults].model`, which is the user's to fix
+ * and nothing to do with the daemon being broken. It reached clients as
+ * `internal_error` only because the generic catch in `router.ts` maps anything
+ * it does not recognise that way (#31).
+ */
 export class NoModelError extends Error {
+  readonly code: ErrorCode = "invalid_request";
+
   constructor(message: string) {
     super(message);
     this.name = "NoModelError";
@@ -96,7 +112,7 @@ export function resolveGenerationModel(
       base = findEffectiveModel(configView(config), config.dirs.cache, name, true);
     } else {
       const first = firstChatModel(config.models);
-      if (first === undefined) throw new NoModelError("No model configured");
+      if (first === undefined) throw new NoModelError(NO_CHAT_MODELS_MESSAGE);
       base = first;
     }
   }

@@ -37,6 +37,7 @@ import type { LoadedConfig } from "../src/config/loader.ts";
 import {
   catalogFromSections,
   emptyCatalog,
+  NO_CHAT_MODELS_MESSAGE,
   type ModelCatalog,
   type ResolvedModel,
 } from "../src/config/models.ts";
@@ -117,6 +118,24 @@ interface BuildCase {
     temperature: number;
   };
   request: Record<string, unknown>;
+}
+
+/**
+ * The one message the port deliberately does not reproduce.
+ *
+ * The Rust said "No model configured" — true, and no use: a user whose config
+ * has no `[providers.*]` at all is told the state and not the fix, on the path
+ * they are most likely to hit first. `config --check` has always said it
+ * properly, and #31 moved that sentence here so both come from one constant.
+ *
+ * The fixture keeps the Rust's string. Rewriting it here, keyed on the exact
+ * old text, is what makes the divergence a decision rather than a drift — the
+ * next change to this message stops matching and has to be restated.
+ */
+const RUST_NO_MODEL = "No model configured";
+
+function expectedFailure(err: string): string {
+  return err === RUST_NO_MODEL ? NO_CHAT_MODELS_MESSAGE : err;
 }
 
 const resolveCases = fixture.resolve_generation_model as unknown as ResolveCase[];
@@ -290,7 +309,9 @@ describe("resolveGenerationModel", () => {
       const overlay = toOverlay(c.input.overlay);
 
       if ("err" in c.result) {
-        expect(() => resolveGenerationModel(active, config, overlay)).toThrow(c.result.err);
+        expect(() => resolveGenerationModel(active, config, overlay)).toThrow(
+          expectedFailure(c.result.err),
+        );
         return;
       }
       expect(fromModel(resolveGenerationModel(active, config, overlay))).toEqual(c.result.ok);

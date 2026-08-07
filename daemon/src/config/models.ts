@@ -711,6 +711,18 @@ export function findModel(catalog: ModelCatalog, name: string): ResolvedModel {
   throw CatalogError.ambiguousName(name, matches.map((m) => m.qualifiedName).join(", "));
 }
 
+/**
+ * What to say when the catalog is empty: the state, and the two edits that fix it.
+ *
+ * Shared rather than written twice. `config --check` has always said this well
+ * and a `send` into the same empty catalog used to answer "No model configured"
+ * — true, and no help at all about where to go next (#31). One constant is what
+ * keeps the two from drifting apart again.
+ */
+export const NO_CHAT_MODELS_MESSAGE =
+  "No chat models configured. Add a [providers.*] entry and set " +
+  "[defaults].model to a provider:model_id.";
+
 /** The first chat model in catalog order, if any. */
 export function firstChatModel(catalog: ModelCatalog): ResolvedModel | undefined {
   for (const model of catalog.chat.values()) return model;

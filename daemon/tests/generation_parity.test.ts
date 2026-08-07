@@ -39,16 +39,17 @@
 
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import fixture from "./handler_fixtures/generation_parity.json" with { type: "json" };
 import { ConversationEngine } from "../src/engine/conversation.ts";
+import { characterActiveJsonl } from "../src/config/dirs.ts";
 import type { Message } from "../src/engine/types.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { defaultAppConfig, type AppConfig } from "../src/config/app.ts";
-import { emptyCatalog } from "../src/config/models.ts";
+import { emptyCatalog, NO_CHAT_MODELS_MESSAGE } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import type { ResolvedModel } from "../src/config/models.ts";
@@ -721,4 +722,92 @@ test("a sampler preference set for the character reaches the outgoing request", 
   );
 
   expect(requests[0]?.temperature).toBe(0.25);
+});
+
+/**
+ * A turn that cannot resolve a model writes nothing.
+ *
+ * Not from the fixture, and it could not be: the Rust appended the user turn
+ * and resolved the model *after* it, so the recorded behaviour is the bug —
+ * `send` into a config with no `[providers.*]` failed, and left the message in
+ * `active.jsonl` with no assistant turn and nothing in the CLI output saying it
+ * had been kept. Repeating the command stacked them up (#31).
+ *
+ * The assertion is the file, not the engine's in-memory list: the complaint was
+ * about what `shore log` showed on the next run.
+ */
+test("a turn with no model configured leaves the conversation untouched", async () => {
+  const root = await tempRoot("nomodel");
+  // No `with_model`, so the catalog is empty and no default is named — the
+  // shape of a fresh install that has not configured a provider yet.
+  const config = await loadedConfig(root, {});
+  await mkdir(join(config.dirs.data, "ada"), { recursive: true });
+
+  const engine = generationEngine(
+    await ConversationEngine.load("ada", config.dirs.data, undefined),
+  );
+  const broadcast: ServerMessage[] = [];
+  const direct: ServerMessage[] = [];
+
+  const run = runGeneration(
+    {
+      registry: { getOrCreate: async () => engine, effectiveConfig: () => config },
+      dataDir: config.dirs.data,
+      providers: {
+        anthropic: {
+          stream: () => {
+            throw new Error("a turn with no model must not reach a provider");
+          },
+          generate: () => {
+            throw new Error("a turn with no model must not reach a provider");
+          },
+        },
+      },
+      autonomy: {
+        ensureState: () => false,
+        backfillActivity: () => {},
+        onUserMessage: () => {},
+        shouldCompactNow: () => false,
+        onCompactionComplete: () => {},
+        onCompactionFailed: () => {},
+        notifyLastRequest: () => {},
+        notifyAssistantMessage: () => {},
+      },
+      notifier: { notifyMessageComplete: () => {} } as unknown as GenerationDeps["notifier"],
+      sessionTokens: { input: 0, output: 0 } as GenerationDeps["sessionTokens"],
+      diagnostics: {
+        api_calls: { push: () => {} },
+        tool_calls: { push: () => {} },
+        key_fallbacks: { push: () => {} },
+      },
+      emitEvent: (m) => broadcast.push(m),
+      mcpRegistry: { toolDefsFiltered: () => [], call: async () => undefined },
+      compaction: { run: async () => 0, applyDeferredEdits: async () => {} },
+      newlyCrossedUsageBudgetWarnings: async () => [],
+      now: () => MINTED_TS,
+      newMessageId: () => `m_${crypto.randomUUID()}`,
+      monotonicMs: () => 0,
+      sleep: async () => {},
+    },
+    {
+      meta: { session: { sessionId: 1 } } as never,
+      body: { rid: null, text: "hello", stream: true, images: [], image_data: [] },
+      regen: false,
+      charName: "ada",
+      rid: null,
+      send: async (m) => {
+        direct.push(m);
+      },
+      signal: new AbortController().signal,
+    },
+  );
+
+  await expect(run).rejects.toThrow(NO_CHAT_MODELS_MESSAGE);
+
+  expect(existsSync(characterActiveJsonl(config.dirs.data, "ada"))).toBe(false);
+  expect(engine.messages()).toEqual([]);
+  // And the turn was never announced: a `new_message` for a message that was
+  // not kept is the same lie from the other direction.
+  expect(broadcast).toEqual([]);
+  expect(direct).toEqual([]);
 });
