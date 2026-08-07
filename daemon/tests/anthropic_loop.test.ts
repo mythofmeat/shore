@@ -330,6 +330,39 @@ describe("driving a tool loop", () => {
     expect(tools.messages[1]!.content_blocks.map((b) => b.type)).toEqual(["tool_result"]);
   });
 
+  test("breakpoints never reach the turns handed to persistence", async () => {
+    // Regression, production 2026-08-07. `placeContinuationBreakpoints` mutates
+    // blocks in place, and the loop was handing `message.content` to *both* the
+    // params array and `recordTurn` — the same objects. A breakpoint landed on
+    // a `tool_use` block that then went to disk in `active.jsonl`. Every later
+    // request read that marker back, and the adapter's `has_existing_markers`
+    // gate answered by placing nothing at all, so prompt caching stayed off for
+    // the whole conversation until the file was edited by hand. Both halves are
+    // fixed; this pins the half that stops the corruption being written.
+    const anthropic = fakeAnthropic([
+      { kind: "tool", id: "tu_1", name: "read", input: {} },
+      { kind: "text", text: "done" },
+    ]);
+    const tools = fakePhase("ok");
+    stops.push(anthropic.stop);
+
+    await collect(anthropicToolLoopEvents(request(anthropic), tools.phase));
+
+    // Nothing that went to persistence carries a wire-only field.
+    for (const m of tools.messages) {
+      for (const block of m.content_blocks as Array<Record<string, unknown>>) {
+        expect(block["cache_control"]).toBeUndefined();
+      }
+    }
+
+    // …and the continuation request still got its breakpoints, so this is the
+    // marker not leaking rather than the loop quietly ceasing to cache.
+    const second = anthropic.requests[1] as { messages: Msg[] };
+    expect(
+      second.messages.some((m) => m.content.some((b) => b["cache_control"] !== undefined)),
+    ).toBe(true);
+  });
+
   test("the assistant turn is appended exactly once", async () => {
     // Runner contract 1: with messages taken over it stops appending the
     // assistant turn itself. Getting this wrong drops every model reply, or

@@ -52,6 +52,7 @@ import { Ledger } from "./ledger/store.ts";
 import { ledgerFor } from "./ledger/record.ts";
 import { setCallObserver } from "./ledger/record.ts";
 import { modelUsageSummary } from "./ledger/query.ts";
+import { captureProviders } from "./llm/capture.ts";
 import { generateImage } from "./llm/image_generate.ts";
 import type { SidecarProvider, SidecarRequest } from "./llm/types.ts";
 import { McpClient, type McpServerSpec } from "./mcp/client.ts";
@@ -133,12 +134,18 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
   const callStore = openCallStore(config);
   ensureLedger(config);
 
+  // Wrapped once, here, so *every* consumer below records: chat, tool loops,
+  // sub-agents, and the keepalive pings. Wrapping at each use site is how the
+  // writer ended up with no callers at all — the store was opened, announced,
+  // and then nothing ever wrote to it.
+  const providers = captureProviders(options.providers, callStore);
+
   // The ping sender is the same dispatch the request path uses. Built here
   // rather than taken as an option so the two cannot drift: a keepalive that
   // pings through a different adapter than chat sends through is warming a
   // prefix nothing will read.
   const keepalive = new KeepaliveService((req, signal) => {
-    const provider = options.providers[req.sdk];
+    const provider = providers[req.sdk];
     if (!provider) throw new Error(`unsupported sdk: ${req.sdk}`);
     return provider.generate(req, signal);
   });
@@ -157,9 +164,9 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     new InProcessAutonomyExecutor({
       registry,
       cache,
-      providers: options.providers,
+      providers,
       tools: sharedToolDeps(config, mcp, {
-        providers: options.providers,
+        providers,
         ...(options.env === undefined ? {} : { env: options.env }),
       }),
       ...(callStore === undefined ? {} : { callStore }),

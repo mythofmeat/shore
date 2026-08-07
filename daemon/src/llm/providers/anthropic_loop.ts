@@ -232,7 +232,16 @@ export async function* anthropicToolLoopEvents(
       runner.setMessagesParams((prev) => {
         const messages: BetaMessageParam[] = [
           ...prev.messages,
-          { role: message.role, content: message.content },
+          // Cloned. `placeContinuationBreakpoints` sets `cache_control` on
+          // blocks *in place*, and `message.content` is the same array
+          // `recordTurn` just handed to persistence — and the one
+          // `terminalBlocks` holds for the `done` event. Sharing it stamps a
+          // wire-only marker into the stored turn, and a marker on disk comes
+          // back on every later request as `hasExistingMarkers`, which used to
+          // switch caching off for the rest of the conversation. Everything
+          // already in `prev.messages` came from `normalizeMessages`, which
+          // builds fresh blocks, so only the turn appended here is shared.
+          { role: message.role, content: structuredClone(message.content) },
         ];
         const system = (prev.system ?? []) as BetaTextBlockParam[];
         // The beta and non-beta param shapes are identical for the fields

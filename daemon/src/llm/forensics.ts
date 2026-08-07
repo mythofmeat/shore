@@ -35,8 +35,12 @@ export interface CachePlacement {
   sys_blocks: number;
   /** False when the model has no `cache_ttl` — nothing was placed. */
   cache_enabled: boolean;
-  /** True when the daemon's messages already carried markers, in which case
-   * the adapter placed none of its own. */
+  /** True when the incoming messages already carried `cache_control`.
+   *
+   * Observation only — placement runs regardless and `normalizeMessages` strips
+   * them first. It is worth logging because a marker arriving here means one
+   * leaked into persisted history, which is a bug upstream even though it no
+   * longer breaks caching. */
   has_existing_markers: boolean;
 }
 

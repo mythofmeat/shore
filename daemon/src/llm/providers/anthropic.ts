@@ -287,13 +287,23 @@ export function buildAnthropicPlan(req: SidecarRequest): {
   const cacheEnabled = cacheTtl !== "";
 
   const converted = convertInlineSystemMessages(replayableMessages(req), req.model);
+  // Recorded for forensics only. It used to *suppress* placement — "the daemon
+  // already placed markers, so leave them alone" — which could not work and was
+  // never merely a no-op: `toContentBlockParam` rebuilds every block field by
+  // field and does not copy `cache_control`, so deferring to incoming markers
+  // dropped them on the way to the wire and sent a request with no breakpoints
+  // at all. One marker leaked into `active.jsonl` by the tool loop therefore
+  // took prompt caching down for the whole conversation, permanently and
+  // silently, at roughly 5x the token cost per turn. `normalizeMessages` strips
+  // incoming markers and the schedule re-places them, which is the only
+  // handling of a stale marker that is actually correct.
   const hasExistingMarkers = messagesHaveCacheControl(converted);
 
   let messages: MessageParam[];
   let system: TextBlockParam[];
   let msgBreakpoints: number[] = [];
   let sysBreakpoints: number[] = [];
-  if (cacheEnabled && !hasExistingMarkers) {
+  if (cacheEnabled) {
     const cc = makeCacheControl(cacheTtl);
     const msgs = normalizeMessages(converted); // strip cc, string → block array
     // Placement reads the labels (the system anchor skips `memory_index`), so

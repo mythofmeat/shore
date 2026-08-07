@@ -250,17 +250,37 @@ describe("cache placement (mirrors ts_default_placement)", () => {
     expect(blockCC(m[4]?.content)).toEqual([true]);
   });
 
-  test("pre-existing markers → placement skipped (has_existing_markers gate)", () => {
+  // Regression: a `cache_control` on an incoming message used to *suppress* the
+  // whole schedule. That could never work — `toContentBlockParam` does not copy
+  // `cache_control`, so deferring to the incoming marker dropped it on the way
+  // to the wire and shipped a request with no breakpoints at all. In production
+  // the tool loop leaked one marker into `active.jsonl`; every later request
+  // read it back, placed nothing, and paid full price for the whole prefix
+  // until the file was edited by hand. Stale markers are stripped and the
+  // schedule re-places them — the only correct handling.
+  test("a stale marker is stripped and placement still runs", () => {
     const marked: SidecarRequest["messages"] = [
       {
         role: "user",
+        // No `ttl`, so a marker that survived rather than being re-placed is
+        // distinguishable from one this request produced.
         content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral" } } as never],
       },
     ];
-    const p = buildAnthropicParams(req({ system, messages: marked, provider_options: { cache_ttl: "1h" } }));
-    // system passes through un-anchored because we didn't run placement.
+    const p = buildAnthropicParams(
+      req({ system, messages: marked, provider_options: { cache_ttl: "1h" } }),
+    );
+
+    // The system anchor is placed — this is the one that was silently lost.
     const sys = p.system as unknown as Rec[];
-    expect(sys.every((b) => b["cache_control"] === undefined)).toBe(true);
+    expect(sys.some((b) => b["cache_control"] !== undefined)).toBe(true);
+
+    // The message anchor carries *this* request's ttl, not the stale marker's.
+    const m = p.messages as Array<{ content: unknown }>;
+    expect((m[0]?.content as Rec[])[0]?.["cache_control"]).toEqual({
+      type: "ephemeral",
+      ttl: "1h",
+    });
   });
 });
 
