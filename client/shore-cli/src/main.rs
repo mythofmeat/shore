@@ -78,7 +78,11 @@ fn main() -> ExitCode {
     match rt.block_on(run::execute(cli)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            output::print_error(&e);
+            // A server error was printed where it happened, with its protocol
+            // code; printing it here too is the same sentence twice.
+            if !run::already_reported(e.as_ref()) {
+                output::print_error(&e);
+            }
             ExitCode::FAILURE
         }
     }

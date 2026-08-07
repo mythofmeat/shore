@@ -39,6 +39,45 @@ fn active_start_index(data: &serde_json::Value) -> usize {
         .unwrap_or(0)
 }
 
+/// An error whose message the user has already been shown.
+///
+/// A server error is printed where it happens — mid-stream, after the spinner
+/// is cleared, and with its protocol code — and then still has to fail the
+/// process. Returning the bare message left `main` printing the same sentence
+/// a second time, without the code and detached from where it occurred:
+///
+/// ```text
+/// server error ["invalid_request"]: no characters available — …
+/// error: no characters available — …
+/// ```
+///
+/// The message is kept rather than dropped, so anything that logs or wraps the
+/// error still has it; what changes is that `main` knows not to print it
+/// again. Reaching for a sentinel rather than deleting one of the two prints
+/// is deliberate — the printed one carries the code and the position, and the
+/// `Err` is what sets the exit status.
+#[derive(Debug)]
+pub(crate) struct ReportedError(String);
+
+impl ReportedError {
+    fn new(message: impl Into<String>) -> Self {
+        Self(message.into())
+    }
+}
+
+impl std::fmt::Display for ReportedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for ReportedError {}
+
+/// Whether `err` has already been reported to the user by the code that raised it.
+pub(crate) fn already_reported(err: &(dyn std::error::Error + 'static)) -> bool {
+    err.downcast_ref::<ReportedError>().is_some()
+}
+
 /// Execute the CLI command by connecting to the daemon and dispatching.
 #[instrument(skip(cli))]
 pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
@@ -1473,7 +1512,7 @@ async fn recv_streaming_response(
                     &serde_json::to_string(&err.code).unwrap_or_default(),
                     &err.message,
                 );
-                return Err(err.message.clone().into());
+                return Err(ReportedError::new(err.message.clone()).into());
             }
             ServerMessage::SendImage(img) => {
                 output::print_send_image(img);
@@ -1524,7 +1563,7 @@ async fn recv_command_data(
                     &serde_json::to_string(&err.code).unwrap_or_default(),
                     &err.message,
                 );
-                return Err(err.message.clone().into());
+                return Err(ReportedError::new(err.message.clone()).into());
             }
             ServerMessage::SendImage(img) => {
                 output::print_send_image(img);
@@ -1564,6 +1603,7 @@ mod tests {
     use tokio::io::AsyncWriteExt;
 
     use shore_common::protocol::client_msg::ClientMessage;
+    use shore_common::protocol::error::ErrorCode;
     use shore_common::protocol::server_msg::*;
     use shore_common::protocol::types::*;
     use shore_common::protocol::SWP_V1;
@@ -2303,6 +2343,57 @@ mod tests {
         let err = super::create_character_scaffold(None, dir.path(), "ada")
             .expect_err("re-create should fail");
         assert!(err.to_string().contains("already exists"));
+    }
+
+    // ── the failure is reported once ────────────────────────────────
+
+    /// Drive one command against a mock server that answers with an error.
+    async fn error_from_mock(err: Error) -> Box<dyn std::error::Error> {
+        let (client_stream, server_stream) = duplex(16384);
+        let server = tokio::spawn(mock_server(server_stream, vec![ServerMessage::Error(err)]));
+
+        let (mut conn, _hello, _history) = shore_common::swp_client::SWPConnection::connect_raw(
+            client_stream,
+            "cli",
+            "shore-cli",
+            None,
+        )
+        .await
+        .unwrap();
+        let _ignored = conn
+            .send_command("status", serde_json::json!({}))
+            .await
+            .unwrap();
+        let failure = super::recv_command_data(&mut conn)
+            .await
+            .expect_err("the mock answers with an error");
+        drop(conn);
+        let _client_msg = server.await.unwrap();
+        failure
+    }
+
+    /// The server error is printed where it happens, so `main` must not print
+    /// it a second time. Both halves are asserted: the marker `main` reads,
+    /// and the message it still carries for anything that logs it.
+    #[tokio::test]
+    async fn a_server_error_is_marked_as_already_reported() {
+        let failure = error_from_mock(Error {
+            rid: None,
+            code: ErrorCode::InvalidRequest,
+            message: "no characters available".into(),
+        })
+        .await;
+
+        assert!(super::already_reported(failure.as_ref()));
+        assert_eq!(failure.to_string(), "no characters available");
+    }
+
+    /// The other direction, which is what stops the marker from swallowing
+    /// everything: an error nobody printed still has to be printed by `main`.
+    #[test]
+    fn an_unprinted_error_is_not_marked() {
+        let failure: Box<dyn std::error::Error> = "connection refused".into();
+        assert!(!super::already_reported(failure.as_ref()));
     }
 
     #[test]
