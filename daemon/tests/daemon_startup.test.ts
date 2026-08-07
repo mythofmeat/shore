@@ -1,17 +1,16 @@
 /**
- * The daemon's startup policy.
+ * What the daemon settles before it opens anything: arguments, the listen
+ * address, and the config path.
  *
- * The Rust's own tests for this are in `main.rs`'s `mod tests`, and every one
- * of them is replayed below. They are worth replaying rather than
- * re-deriving because the thing they pin is a *refusal*: a bug here does not
- * crash, it opens a port.
+ * This file used to be mostly about a *refusal* — the remote-access policy,
+ * and the ~200 lines of socket-address parsing behind it that decided whether
+ * a bind was loopback. All of that is gone with `unsafe_allow_remote_access`
+ * and `allowed_hosts`: the token is the boundary now, so where the daemon
+ * binds no longer decides who can reach it, and there is no policy left to get
+ * wrong. `swp_auth.test.ts` is where the equivalent stakes moved.
  *
- * Three things are covered beyond the Rust's own:
+ * Two things here are still covered beyond the Rust's own tests:
  *
- * - **`127.0.0.2` is loopback.** Rust's `Ipv4Addr::is_loopback` is the whole
- *   `127/8` block, and a TypeScript port that compared against the string
- *   `"127.0.0.1"` would refuse a bind the Rust allowed. The reverse mistake —
- *   treating `[::ffff:127.0.0.1]` as loopback — would open a real one.
  * - **Argument parsing.** clap rejected an unknown flag; a hand-rolled parser
  *   that skipped it would let a misspelled `--addr` bind somewhere else.
  * - **A blank `SHORE_ADDR`.** `Option::filter` in the Rust, and the case a
@@ -24,18 +23,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
-  ALLOW_REMOTE_ENV,
-  bindAddrIsLoopback,
-  extractBindHost,
   parseArgs,
-  parseEnvBool,
-  resolveAllowRemoteAccess,
   resolveExplicitConfigPath,
   resolveListenAddr,
   resolveStartup,
   sourceLabel,
   StartupError,
-  validateRemoteAccessPolicy,
 } from "../src/daemon/startup.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
@@ -82,96 +75,6 @@ async function configRoot(
   };
 }
 
-describe("the remote-access policy", () => {
-  test("a loopback bind needs no opt-in", () => {
-    expect(validateRemoteAccessPolicy("127.0.0.1:7320", false, [])).toEqual([]);
-  });
-
-  test("a remote bind is refused without one", () => {
-    const err = validateRemoteAccessPolicy("0.0.0.0:7320", false, []);
-    expect(typeof err).toBe("string");
-    expect(err).toContain("unsafe_allow_remote_access");
-    expect(err).toContain("allowed_hosts");
-  });
-
-  test("an opted-in remote bind warns twice when the allowlist is empty", () => {
-    const warnings = validateRemoteAccessPolicy("0.0.0.0:7320", true, []);
-    expect(warnings).toHaveLength(2);
-    expect(warnings[0]).toContain("does not provide authentication or TLS");
-    expect(warnings[1]).toContain("any host that can reach the port may connect");
-  });
-
-  test("an allowlist removes only the second warning", () => {
-    const warnings = validateRemoteAccessPolicy("0.0.0.0:7320", true, ["10.0.0.5"]);
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain("trusted private or overlay networks");
-  });
-
-  test("localhost by name is loopback", () => {
-    expect(validateRemoteAccessPolicy("localhost:7320", false, [])).toEqual([]);
-  });
-
-  test("an unparseable address is refused rather than assumed safe", () => {
-    const err = validateRemoteAccessPolicy("not-an-address", false, []);
-    expect(err).toContain("Invalid daemon listen address");
-  });
-});
-
-describe("what counts as loopback", () => {
-  test("the whole 127/8 block, as Rust's is_loopback", () => {
-    expect(bindAddrIsLoopback("127.0.0.1:7320")).toBe(true);
-    expect(bindAddrIsLoopback("127.0.0.2:7320")).toBe(true);
-    expect(bindAddrIsLoopback("127.255.255.254:7320")).toBe(true);
-    expect(bindAddrIsLoopback("128.0.0.1:7320")).toBe(false);
-  });
-
-  test("::1 in both spellings, bracketed and bare", () => {
-    expect(bindAddrIsLoopback("[::1]:7320")).toBe(true);
-    expect(bindAddrIsLoopback("[0:0:0:0:0:0:0:1]:7320")).toBe(true);
-    expect(bindAddrIsLoopback("::1:7320")).toBe(true);
-  });
-
-  test("`::` has to stand for at least one group", () => {
-    // Seven groups on the left and one on the right leaves nothing for `::`
-    // to elide, so Rust rejects the literal and the host text is matched
-    // instead — which does not match. A parser that allowed a zero-width `::`
-    // would read this malformed address as `::1` and skip the opt-in check.
-    expect(bindAddrIsLoopback("[0:0:0:0:0:0:0::1]:7320")).toBe(false);
-  });
-
-  test("an IPv4-mapped loopback is not loopback", () => {
-    // `Ipv6Addr::is_loopback` is `::1` alone. Reading this as loopback would
-    // let `[::ffff:127.0.0.1]:7320` bind with no opt-in, and that address is
-    // reachable from off-host on some stacks.
-    expect(bindAddrIsLoopback("[::ffff:127.0.0.1]:7320")).toBe(false);
-    expect(bindAddrIsLoopback("[::]:7320")).toBe(false);
-  });
-
-  test("a bad port makes it a name, not an IP", () => {
-    // `1.2.3.4:99999` fails Rust's SocketAddr parse and falls through to the
-    // host match, which does not match — so it is remote, not invalid. The
-    // same fall-through is why `127.0.0.1:99999` stays loopback: the host text
-    // matches literally even though the port is not a u16.
-    expect(bindAddrIsLoopback("1.2.3.4:99999")).toBe(false);
-    expect(bindAddrIsLoopback("127.0.0.1:99999")).toBe(true);
-    expect(bindAddrIsLoopback("127.0.0.2:99999")).toBe(false);
-  });
-
-  test("no port at all is unparseable", () => {
-    expect(bindAddrIsLoopback("not-an-address")).toBeUndefined();
-    expect(bindAddrIsLoopback("127.0.0.1")).toBeUndefined();
-    expect(bindAddrIsLoopback("[::1]")).toBeUndefined();
-  });
-
-  test("the host half is taken from the last colon", () => {
-    expect(extractBindHost("localhost:7320")).toBe("localhost");
-    expect(extractBindHost("[::1]:7320")).toBe("::1");
-    expect(extractBindHost("::1:7320")).toBe("::1");
-    expect(extractBindHost("localhost:")).toBeUndefined();
-    expect(extractBindHost(":7320")).toBeUndefined();
-  });
-});
-
 describe("precedence", () => {
   test("the listen address is cli, then env, then config", () => {
     const loaded = configWith();
@@ -191,46 +94,10 @@ describe("precedence", () => {
     expect(resolveListenAddr(undefined, "   ", configWith())).toEqual(["127.0.0.1:7320", "config"]);
   });
 
-  test("the env opt-in wins in both directions", () => {
-    const optedIn = configWith({ unsafe_allow_remote_access: true });
-    expect(resolveAllowRemoteAccess(false, optedIn)).toEqual([false, ALLOW_REMOTE_ENV]);
-    expect(resolveAllowRemoteAccess(true, configWith())).toEqual([true, ALLOW_REMOTE_ENV]);
-    expect(resolveAllowRemoteAccess(undefined, optedIn)).toEqual([
-      true,
-      "[daemon].unsafe_allow_remote_access",
-    ]);
-  });
-
   test("each source prints the name a user would recognise", () => {
     expect(sourceLabel("cli")).toBe("--addr");
     expect(sourceLabel("env")).toBe("SHORE_ADDR");
     expect(sourceLabel("config")).toBe("[daemon].addr");
-  });
-});
-
-describe("the environment opt-in", () => {
-  test("common spellings, both ways", () => {
-    for (const raw of ["1", "true", "TRUE", " yes ", "on"]) {
-      expect(parseEnvBool(ALLOW_REMOTE_ENV, raw)).toBe(true);
-    }
-    for (const raw of ["0", "false", "No", "off"]) {
-      expect(parseEnvBool(ALLOW_REMOTE_ENV, raw)).toBe(false);
-    }
-    for (const raw of ["", "   "]) {
-      expect(parseEnvBool(ALLOW_REMOTE_ENV, raw)).toBeUndefined();
-    }
-  });
-
-  test("garbage is rejected rather than ignored", () => {
-    let caught: unknown;
-    try {
-      parseEnvBool(ALLOW_REMOTE_ENV, "flase");
-    } catch (e) {
-      caught = e;
-    }
-    expect(caught).toBeInstanceOf(StartupError);
-    expect((caught as StartupError).kind).toBe("invalid_env_bool");
-    expect((caught as StartupError).message).toContain(ALLOW_REMOTE_ENV);
   });
 });
 
@@ -287,11 +154,10 @@ describe("--config", () => {
 });
 
 describe("resolveStartup", () => {
-  test("one precedence model, and the warnings that come with it", async () => {
+  test("cli beats env beats config, all the way through", async () => {
     const { path, env } = await configRoot(`
 [daemon]
 addr = "127.0.0.1:7000"
-unsafe_allow_remote_access = true
 `);
 
     const startup = resolveStartup(
@@ -300,57 +166,19 @@ unsafe_allow_remote_access = true
     );
 
     expect(startup.configPath).toBe(path);
+    // A non-loopback bind resolves like any other now. It used to need
+    // `unsafe_allow_remote_access` and produce warnings; the token replaced
+    // both, so this is simply the address that was asked for.
     expect(startup.bindAddr).toBe("0.0.0.0:9000");
     expect(startup.bindAddrSource).toBe("cli");
-    expect(startup.allowRemoteAccess).toBe(true);
-    expect(startup.remoteAccessWarnings.length).toBeGreaterThan(0);
-    expect(startup.remoteAccessWarnings[0]?.addr).toBe("0.0.0.0:9000");
-    expect(startup.remoteAccessWarnings[0]?.bindAddrSource).toBe("cli");
   });
 
-  test("a non-loopback SHORE_ADDR still meets the policy, and says so", async () => {
+  test("a non-loopback SHORE_ADDR is resolved, not refused", async () => {
     const { path, env } = await configRoot("");
 
-    let caught: unknown;
-    try {
-      resolveStartup({ config: path }, { ...env, SHORE_ADDR: "0.0.0.0:9000" });
-    } catch (e) {
-      caught = e;
-    }
-    expect((caught as StartupError).kind).toBe("remote_access_policy");
-    // The source is in the message because it is the only thing that tells an
-    // operator which of three places to go and change.
-    expect((caught as StartupError).message).toContain("SHORE_ADDR");
-  });
-
-  test("the env opt-in permits a remote bind with no config edit", async () => {
-    const { path, env } = await configRoot("");
-
-    const startup = resolveStartup(
-      { config: path },
-      { ...env, SHORE_ADDR: "0.0.0.0:9000", [ALLOW_REMOTE_ENV]: "1" },
-    );
-
+    const startup = resolveStartup({ config: path }, { ...env, SHORE_ADDR: "0.0.0.0:9000" });
     expect(startup.bindAddr).toBe("0.0.0.0:9000");
-    expect(startup.allowRemoteAccess).toBe(true);
-    expect(startup.allowRemoteAccessSource).toBe(ALLOW_REMOTE_ENV);
-    expect(startup.remoteAccessWarnings.length).toBeGreaterThan(0);
-  });
-
-  test("the env opt-out revokes a config opt-in", async () => {
-    const { path, env } = await configRoot(`
-[daemon]
-addr = "0.0.0.0:7000"
-unsafe_allow_remote_access = true
-`);
-
-    let caught: unknown;
-    try {
-      resolveStartup({ config: path }, { ...env, [ALLOW_REMOTE_ENV]: "0" });
-    } catch (e) {
-      caught = e;
-    }
-    expect((caught as StartupError).kind).toBe("remote_access_policy");
+    expect(startup.bindAddrSource).toBe("env");
   });
 
   test("a config that will not parse is fatal, and names the file", async () => {

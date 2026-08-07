@@ -93,6 +93,30 @@ function parseToml(src: string): unknown {
 // ── Fields the fixture predates ─────────────────────────────────────────
 
 /**
+ * `[daemon]` keys the fixture has and the schema no longer does.
+ *
+ * `unsafe_allow_remote_access` and `allowed_hosts` were deleted when every
+ * client started presenting a token: an address is not a credential, and a flag
+ * asking you to acknowledge a risk is worse than not having the risk. The
+ * fixture is a frozen capture of a Rust that still had them, and it cannot be
+ * regenerated — so the *expectation* is trimmed here, the mirror of what
+ * {@link withoutAddedBudgetFields} does for keys the fixture never had.
+ *
+ * Asserted below to really be present in the fixture, so this cannot quietly
+ * start hiding a key that was supposed to survive.
+ */
+const DAEMON_FIELDS_REMOVED_SINCE = ["unsafe_allow_remote_access", "allowed_hosts"] as const;
+
+/** The fixture's expected value with the deleted `[daemon]` keys dropped. */
+function withoutRemovedDaemonFields(value: unknown): unknown {
+  const daemon = (value as { daemon?: unknown } | null)?.daemon;
+  if (typeof daemon !== "object" || daemon === null) return value;
+  const copy = { ...(daemon as Record<string, unknown>) };
+  for (const key of DAEMON_FIELDS_REMOVED_SINCE) delete copy[key];
+  return { ...(value as object), daemon: copy };
+}
+
+/**
  * `[[usage.budgets]]` keys added after the fixture was frozen (#35).
  *
  * The fixture is a capture of a Rust that no longer exists, so it cannot grow
@@ -144,6 +168,17 @@ function withRustBudgetFieldCount(err: string): string {
  * skipped in the bulk replay rather than expected to pass. The fixture header
  * spells out all four categories.
  */
+/**
+ * The one case whose Rust answer this schema deliberately no longer gives.
+ *
+ * Its TOML *sets* `unsafe_allow_remote_access` and `allowed_hosts`, which the
+ * Rust parsed and this schema now rejects as unknown fields. Trimming the
+ * expectation is not enough and would be dishonest — the outcome changed from
+ * a parse to an error, not just its contents. Skipped in the bulk replay and
+ * asserted on its own below, where the new behaviour is the subject.
+ */
+const DELIBERATELY_DIVERGENT = "the daemon section";
+
 const BUN_CANNOT_SEE = new Set([
   // Datetime literals: rejected outright by Bun.
   "datetime where a string is expected",
@@ -167,6 +202,16 @@ describe("the fixture is real", () => {
 
   test("it names `main` as its source, not a worktree", () => {
     expect(fixture._header.join(" ")).toContain("GENERATED from `main`");
+  });
+
+  test("the trimmed daemon fields really are ones it had", () => {
+    // The trim above is only honest if the fixture genuinely carries these.
+    // If one ever stops appearing, the replay is hiding a real disagreement
+    // rather than a key this schema deliberately dropped.
+    const daemon = (fixture.defaults as { daemon: Record<string, unknown> }).daemon;
+    for (const key of DAEMON_FIELDS_REMOVED_SINCE) {
+      expect(Object.keys(daemon)).toContain(key);
+    }
   });
 
   test("the exempted budget fields really are ones it never had", () => {
@@ -194,7 +239,7 @@ describe("the fixture is real", () => {
 
 describe("AppConfig::default", () => {
   test("every default matches the Rust's", () => {
-    expect(canonical(defaultAppConfig())).toEqual(fixture.defaults);
+    expect(canonical(defaultAppConfig())).toEqual(withoutRemovedDaemonFields(fixture.defaults));
   });
 
   test("ToolsConfig::default matches on its own", () => {
@@ -212,7 +257,7 @@ describe("AppConfig::default", () => {
 
 describe("parsing config.toml", () => {
   for (const c of fixture.parse) {
-    if (BUN_CANNOT_SEE.has(c.name)) continue;
+    if (BUN_CANNOT_SEE.has(c.name) || c.name === DELIBERATELY_DIVERGENT) continue;
 
     test(c.name, () => {
       const parsed = parseAppConfig(parseToml(c.toml));
@@ -232,10 +277,32 @@ describe("parsing config.toml", () => {
         expect(withRustBudgetFieldCount(parsed.err)).toBe(want.err);
       } else {
         if ("err" in parsed) throw new Error(`expected a parse, got: ${parsed.err}`);
-        expect(withoutAddedBudgetFields(canonical(parsed.ok))).toEqual(want.ok);
+        expect(withoutAddedBudgetFields(canonical(parsed.ok))).toEqual(
+          withoutRemovedDaemonFields(want.ok),
+        );
       }
     });
   }
+
+  test("a config still setting the deleted [daemon] keys is now rejected", () => {
+    // The fixture's `the daemon section` case, asserted as what it became. An
+    // old config does not silently keep an inert key: it fails at load, naming
+    // the key, which is the only way someone learns their allowlist stopped
+    // being consulted. `addr` is all that is left of the section.
+    const c = fixture.parse.find((x) => x.name === DELIBERATELY_DIVERGENT);
+    expect(c).toBeDefined();
+
+    const parsed = parseAppConfig(parseToml(c!.toml));
+    expect("err" in parsed).toBe(true);
+    expect((parsed as { err: string }).err).toBe(
+      "unknown field `allowed_hosts`, expected `addr`",
+    );
+
+    // And the surviving key still parses on its own.
+    const ok = parseAppConfig(parseToml(`[daemon]\naddr = "0.0.0.0:9999"\n`));
+    if ("err" in ok) throw new Error(ok.err);
+    expect(ok.ok.daemon).toEqual({ addr: "0.0.0.0:9999" });
+  });
 
   test("map-valued sections are built in code point order, not document order", () => {
     // `subagents` and `mcp` decide the order tools reach the model, which is

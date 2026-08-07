@@ -2261,11 +2261,9 @@ mod tests {
             "key": "daemon",
             "config": {
                 "addr": "0.0.0.0:1112",
-                "unsafe_allow_remote_access": true,
             },
             "defaults": {
                 "addr": "127.0.0.1:7320",
-                "unsafe_allow_remote_access": false,
             },
         });
         // Capture stdout by routing through to_string_pretty directly via the

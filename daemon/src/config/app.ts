@@ -339,16 +339,20 @@ function optional<T>(inner: Reader<T>): Reader<T | undefined> {
 
 // ── [daemon] ────────────────────────────────────────────────────────────
 
+/**
+ * One key, deliberately.
+ *
+ * `unsafe_allow_remote_access` and `allowed_hosts` both lived here until every
+ * client had to present a token (`config/token.ts`). They were two ways to
+ * answer a question that no longer gets asked: where the daemon is bound does
+ * not decide who may talk to it.
+ */
 export interface DaemonConfig {
   addr: string;
-  unsafe_allow_remote_access: boolean;
-  allowed_hosts: string[];
 }
 
 export const defaultDaemonConfig = (): DaemonConfig => ({
   addr: "127.0.0.1:7320",
-  unsafe_allow_remote_access: false,
-  allowed_hosts: [],
 });
 
 const DAEMON: StructSpec<DaemonConfig> = {
@@ -356,8 +360,6 @@ const DAEMON: StructSpec<DaemonConfig> = {
   make: defaultDaemonConfig,
   fields: {
     addr: readString,
-    unsafe_allow_remote_access: readBool,
-    allowed_hosts: readStringSeq,
   },
 };
 

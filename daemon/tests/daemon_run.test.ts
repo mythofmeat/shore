@@ -373,39 +373,39 @@ describe("hot reload", () => {
   test("an edit to config.toml is adopted without a restart", async () => {
     const place = await layout();
     const daemon = await start(place);
-    expect(daemon.runtime.registry.globalConfig().app.daemon.allowed_hosts).toEqual([]);
+    expect(daemon.runtime.registry.globalConfig().app.tools.max_result_chars).toBe(20000);
 
-    await writeFile(place.configPath, `[daemon]\nallowed_hosts = ["10.0.0.5"]\n`);
+    await writeFile(place.configPath, `[tools]\nmax_result_chars = 4242\n`);
 
     await until(
-      () => daemon.runtime.registry.globalConfig().app.daemon.allowed_hosts.length === 1,
+      () => daemon.runtime.registry.globalConfig().app.tools.max_result_chars === 4242,
     );
-    expect(daemon.runtime.registry.globalConfig().app.daemon.allowed_hosts).toEqual(["10.0.0.5"]);
+    expect(daemon.runtime.registry.globalConfig().app.tools.max_result_chars).toBe(4242);
   });
 
   test("a config that will not parse changes nothing", async () => {
     const place = await layout();
     const daemon = await start(place);
-    await writeFile(place.configPath, `[daemon]\nallowed_hosts = ["10.0.0.5"]\n`);
+    await writeFile(place.configPath, `[tools]\nmax_result_chars = 4242\n`);
     await until(
-      () => daemon.runtime.registry.globalConfig().app.daemon.allowed_hosts.length === 1,
+      () => daemon.runtime.registry.globalConfig().app.tools.max_result_chars === 4242,
     );
 
     // Half-typed TOML reaches the watcher as often as finished TOML does. A
     // daemon that adopted every intermediate state would spend an edit
     // flapping between configurations.
-    await writeFile(place.configPath, "[daemon]\nallowed_hosts = [");
+    await writeFile(place.configPath, "[tools]\nmax_result_chars = ");
     await new Promise((resolve) => setTimeout(resolve, 900));
 
-    expect(daemon.runtime.registry.globalConfig().app.daemon.allowed_hosts).toEqual(["10.0.0.5"]);
+    expect(daemon.runtime.registry.globalConfig().app.tools.max_result_chars).toBe(4242);
   });
 
   test("a broken per-character overlay keeps the running config", async () => {
     const place = await layout();
     const daemon = await start(place);
-    await writeFile(place.configPath, `[daemon]\nallowed_hosts = ["10.0.0.5"]\n`);
+    await writeFile(place.configPath, `[tools]\nmax_result_chars = 4242\n`);
     await until(
-      () => daemon.runtime.registry.globalConfig().app.daemon.allowed_hosts.length === 1,
+      () => daemon.runtime.registry.globalConfig().app.tools.max_result_chars === 4242,
     );
 
     // `loadConfig` only parses the global file, so an overlay that does not
@@ -416,10 +416,10 @@ describe("hot reload", () => {
       join(place.root, "config", "characters", "ada", "config.toml"),
       "[behavior]\nnot_a_field = ",
     );
-    await writeFile(place.configPath, `[daemon]\nallowed_hosts = ["10.0.0.6"]\n`);
+    await writeFile(place.configPath, `[tools]\nmax_result_chars = 9999\n`);
     await new Promise((resolve) => setTimeout(resolve, 900));
 
-    expect(daemon.runtime.registry.globalConfig().app.daemon.allowed_hosts).toEqual(["10.0.0.5"]);
+    expect(daemon.runtime.registry.globalConfig().app.tools.max_result_chars).toBe(4242);
   });
 
   test("a character appearing on disk is picked up", async () => {
@@ -509,27 +509,26 @@ describe("going down", () => {
 });
 
 describe("refusing to start", () => {
-  test("a non-loopback bind opens nothing and registers nothing", async () => {
+  test("a non-loopback bind is now ordinary, because the token is the boundary", async () => {
+    // This used to be the headline refusal: `0.0.0.0` needed
+    // `unsafe_allow_remote_access` to acknowledge that the protocol had no
+    // authentication. It has one now, so a bind address is just a bind address
+    // and this starts like any other.
     const place = await layout(`
 [daemon]
 addr = "0.0.0.0:0"
 `);
 
-    let caught: unknown;
-    try {
-      await startDaemon({
-        argv: ["--config", place.configPath],
-        env: place.env,
-        providers: {},
-        instancesPath: place.instancesPath,
-      });
-    } catch (e) {
-      caught = e;
-    }
+    const daemon = await startDaemon({
+      argv: ["--config", place.configPath],
+      env: place.env,
+      providers: {},
+      instancesPath: place.instancesPath,
+    });
+    running.push(daemon);
 
-    expect((caught as StartupError).kind).toBe("remote_access_policy");
-    // The policy runs before the socket does, which is the whole point of it.
-    expect(existsSync(place.instancesPath)).toBe(false);
+    expect(daemon.port).toBeGreaterThan(0);
+    expect(existsSync(place.instancesPath)).toBe(true);
   });
 
   test("a port already in use fails as itself, before the stores are opened", async () => {
