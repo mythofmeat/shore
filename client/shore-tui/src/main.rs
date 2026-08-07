@@ -1,3 +1,39 @@
+// Burn-down list. This crate opted into the workspace lint policy late (#8),
+// with ~690 pre-existing violations. Each entry below is an exemption for
+// code that predates the opt-in, not a decision that the lint is wrong here.
+//
+// These are `expect`, not `allow`, deliberately: when the last violation of a
+// lint is fixed, the expectation goes unfulfilled and the build fails until
+// the entry is deleted. The list can therefore only shrink. Do not add to it —
+// new code in this crate is held to the workspace policy like every other crate.
+#![expect(
+    elided_lifetimes_in_paths,
+    unused_qualifications,
+    clippy::arithmetic_side_effects,
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::else_if_without_else,
+    clippy::exit,
+    clippy::expect_used,
+    clippy::float_arithmetic,
+    clippy::impl_trait_in_params,
+    clippy::indexing_slicing,
+    clippy::integer_division,
+    clippy::let_underscore_must_use,
+    clippy::shadow_reuse,
+    clippy::shadow_unrelated,
+    clippy::str_to_string,
+    clippy::string_slice,
+    clippy::unreachable,
+    clippy::unseparated_literal_suffix,
+    clippy::unwrap_in_result,
+    clippy::unwrap_used,
+    clippy::wildcard_enum_match_arm,
+    reason = "pre-existing violations from before this crate opted into the workspace lints (#8)"
+)]
+
 mod app;
 mod clipboard;
 mod connection;

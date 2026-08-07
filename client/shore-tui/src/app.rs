@@ -355,13 +355,13 @@ pub enum Block {
     Text(String),
     Thinking(String),
     ToolUse {
-        #[allow(dead_code)] // stored for protocol fidelity; TUI renders by tool_name
+        #[expect(dead_code, reason = "stored for protocol fidelity; TUI renders by tool_name")]
         tool_id: String,
         tool_name: String,
         input: serde_json::Value,
     },
     ToolResult {
-        #[allow(dead_code)] // stored for protocol fidelity; TUI renders by tool_name
+        #[expect(dead_code, reason = "stored for protocol fidelity; TUI renders by tool_name")]
         tool_id: String,
         tool_name: String,
         output: String,
@@ -395,7 +395,7 @@ pub enum TurnState {
 #[derive(Clone, Debug)]
 pub struct Turn {
     pub role: Role,
-    #[allow(dead_code)] // used for msg_id-matched reconciliation and metadata attach
+    /// Used for msg_id-matched reconciliation and metadata attach.
     pub msg_id: Option<String>,
     pub blocks: Vec<Block>,
     pub images: Vec<ImageRef>,

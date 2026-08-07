@@ -46,13 +46,22 @@ fn open_tty_write() -> Option<std::fs::File> {
 /// Query the terminal for cell pixel dimensions via TIOCGWINSZ.
 /// Returns (cell_width, cell_height) or None if unavailable.
 #[cfg(unix)]
+#[expect(
+    unsafe_code,
+    reason = "TIOCGWINSZ is the only way to read cell pixel size; no safe std wrapper"
+)]
 fn query_cell_size() -> Option<(u16, u16)> {
     use std::os::unix::io::AsRawFd;
     let tty = std::fs::File::open("/dev/tty").ok()?;
     let fd = tty.as_raw_fd();
 
     // winsize struct: rows, cols, xpixel, ypixel (all u16)
+    // SAFETY: `winsize` is four `u16`s with no padding and no invalid bit
+    // patterns, so all-zeroes is a valid value. It is overwritten by the
+    // ioctl below, and only read when that ioctl reports success.
     let mut ws: libc::winsize = unsafe { std::mem::zeroed() };
+    // SAFETY: `fd` comes from the `tty` file, which outlives this call, and
+    // TIOCGWINSZ writes exactly one initialized `winsize` through the pointer.
     let ret = unsafe { libc::ioctl(fd, libc::TIOCGWINSZ, &mut ws) };
     if ret != 0 || ws.ws_xpixel == 0 || ws.ws_ypixel == 0 || ws.ws_col == 0 || ws.ws_row == 0 {
         return None;
