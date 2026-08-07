@@ -48,6 +48,21 @@ export interface McpTool {
 export class McpError extends Error {}
 
 /**
+ * The request itself did not complete — the transport, not the tool.
+ *
+ * Split out from {@link McpError} because the registry has to tell "the server
+ * is not there" apart from "the tool ran and said no", and the two arrive at
+ * the same catch. Only the former means the connection is worth rebuilding;
+ * treating a tool's own error as a dead socket would reconnect on every failed
+ * tool call.
+ *
+ * **Not a signal that the call did not happen.** A request can fail after the
+ * server has acted on it — the response is what got lost. Anything reacting to
+ * this must not re-send the call. See `McpRegistry.call`.
+ */
+export class McpTransportError extends McpError {}
+
+/**
  * Environment variables a stdio server inherits.
  *
  * **The daemon's environment is not passed through.** MCP servers are
@@ -126,13 +141,18 @@ export class McpClient {
    * Called once at connect; the registry pins the result for the session so the
    * tool surface — and the cache prefix built on it — is stable. A server that
    * gains a tool mid-session does not get it offered until the next reload.
+   *
+   * That holds across a reconnect too. When `McpRegistry` rebuilds a dead
+   * connection it deliberately does *not* call this again: re-listing is what
+   * would let the surface move, and moving it is the cost the reconnect exists
+   * to avoid.
    */
   async listTools(): Promise<McpTool[]> {
     let result: Awaited<ReturnType<Client["listTools"]>>;
     try {
       result = await this.client.listTools();
     } catch (e) {
-      throw new McpError(`MCP request to '${this.serverName}': ${String(e)}`);
+      throw new McpTransportError(`MCP request to '${this.serverName}': ${String(e)}`);
     }
     return result.tools.map((tool) => ({
       server: this.serverName,
@@ -169,7 +189,7 @@ export class McpClient {
         ...(argumentsMap === undefined ? {} : { arguments: argumentsMap }),
       });
     } catch (e) {
-      throw new McpError(`MCP request to '${this.serverName}': ${String(e)}`);
+      throw new McpTransportError(`MCP request to '${this.serverName}': ${String(e)}`);
     }
 
     if (result.isError === true) {

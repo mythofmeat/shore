@@ -16,6 +16,7 @@ import {
   type McpServerConfigView,
   type Sleep,
 } from "../src/tools/mcp_registry.ts";
+import { McpError, McpTransportError } from "../src/mcp/client.ts";
 import type { McpClient, McpServerSpec } from "../src/mcp/client.ts";
 
 const PLUGINS = "/plugins";
@@ -191,6 +192,244 @@ describe("servers are brought up concurrently", () => {
       "mcp__alpha__a_tool",
       "mcp__zulu__z_tool",
     ]);
+  });
+});
+
+/**
+ * A server whose connection can be killed and whose process can be stopped
+ * independently — the 3am compose restart, where the transport shore holds is
+ * dead but the peer behind the URL is fine.
+ */
+function revivableServer(options: { tools?: string[] } = {}) {
+  const state = {
+    /** Whether a *new* connection can be established. */
+    listening: true,
+    /** Tool names the next connection reports. */
+    tools: options.tools ?? ["ping"],
+    connects: 0,
+    calls: 0,
+    shutdowns: 0,
+  };
+
+  /** Each connection carries its own liveness, so killing one is not global. */
+  const makeClient = (spec: McpServerSpec): McpClient => {
+    let dead = false;
+    const client = {
+      server: spec.name,
+      listTools: () =>
+        Promise.resolve(
+          state.tools.map((name) => ({
+            server: spec.name,
+            name,
+            description: `the ${name} tool`,
+            input_schema: {},
+          })),
+        ),
+      call: (tool: string) => {
+        state.calls += 1;
+        if (dead) return Promise.reject(new McpTransportError(`MCP request to '${spec.name}'`));
+        return Promise.resolve(`${tool} ran`);
+      },
+      shutdown: () => {
+        state.shutdowns += 1;
+        return Promise.resolve();
+      },
+      kill: () => {
+        dead = true;
+      },
+    };
+    live.push(client);
+    return client as unknown as McpClient;
+  };
+
+  const live: { kill: () => void }[] = [];
+
+  const connect = (spec: McpServerSpec): Promise<McpClient> => {
+    state.connects += 1;
+    if (!state.listening) return Promise.reject(new Error(`ECONNREFUSED ${spec.name}`));
+    return Promise.resolve(makeClient(spec));
+  };
+
+  return {
+    connect,
+    state,
+    /** Sever the transport shore is holding, leaving the peer itself alone. */
+    killConnection: () => live.at(-1)?.kill(),
+  };
+}
+
+const noSleep: Sleep = () => Promise.resolve();
+
+describe("a connection that dies mid-session is rebuilt", () => {
+  test("the failed call reports the failure, and the next call works", async () => {
+    // The 3am compose restart. Before this, the server was gone until the
+    // daemon restarted.
+    const hue = revivableServer({ tools: ["set_light"] });
+    const registry = await McpRegistry.fromConfig(
+      { hue: httpServer() },
+      PLUGINS,
+      hue.connect,
+      noSleep,
+    );
+
+    hue.killConnection();
+    await expect(registry.call("mcp__hue__set_light", {})).rejects.toThrow(McpTransportError);
+    await expect(registry.call("mcp__hue__set_light", {})).resolves.toBe("set_light ran");
+    expect(hue.state.connects).toBe(2);
+  });
+
+  test("the failed call is never retried", async () => {
+    // The correctness constraint on the whole design: a request can fail after
+    // the server acted on it, so re-sending could fire a non-idempotent tool
+    // twice. Exactly one call reaches the dead client.
+    const hue = revivableServer({ tools: ["send_message"] });
+    const registry = await McpRegistry.fromConfig(
+      { hue: httpServer() },
+      PLUGINS,
+      hue.connect,
+      noSleep,
+    );
+
+    hue.killConnection();
+    await expect(registry.call("mcp__hue__send_message", {})).rejects.toThrow(McpTransportError);
+    expect(hue.state.calls).toBe(1);
+  });
+
+  test("the tool surface does not move, so cached prefixes still match", async () => {
+    // Why this is cheaper than the registry rebuild the issue proposed. The
+    // server comes back offering an extra tool; adopting it would change the
+    // tool array, which is part of the cache prefix, which would cost every
+    // character a full write.
+    const hue = revivableServer({ tools: ["set_light"] });
+    const registry = await McpRegistry.fromConfig(
+      { hue: httpServer() },
+      PLUGINS,
+      hue.connect,
+      noSleep,
+    );
+    const before = registry.allTools().map((t) => t.full_name);
+
+    hue.state.tools = ["set_light", "brand_new_tool"];
+    hue.killConnection();
+    await expect(registry.call("mcp__hue__set_light", {})).rejects.toThrow(McpTransportError);
+
+    // Reconnected, and still offering exactly what it offered at startup. The
+    // pinning contract is unchanged: a reload is how a new surface is adopted.
+    expect(registry.allTools().map((t) => t.full_name)).toEqual(before);
+    await expect(registry.call("mcp__hue__set_light", {})).resolves.toBe("set_light ran");
+  });
+
+  test("the old connection is closed once the new one is in place", async () => {
+    const hue = revivableServer();
+    const registry = await McpRegistry.fromConfig(
+      { hue: httpServer() },
+      PLUGINS,
+      hue.connect,
+      noSleep,
+    );
+
+    hue.killConnection();
+    await expect(registry.call("mcp__hue__ping", {})).rejects.toThrow(McpTransportError);
+    expect(hue.state.shutdowns).toBe(1);
+  });
+
+  test("concurrent calls to a dead server share one reconnect", async () => {
+    // A tool loop can have several calls to the same server outstanding. One
+    // connection, not one per call.
+    const hue = revivableServer({ tools: ["a", "b", "c"] });
+    const registry = await McpRegistry.fromConfig(
+      { hue: httpServer() },
+      PLUGINS,
+      hue.connect,
+      noSleep,
+    );
+
+    hue.killConnection();
+    const results = await Promise.allSettled([
+      registry.call("mcp__hue__a", {}),
+      registry.call("mcp__hue__b", {}),
+      registry.call("mcp__hue__c", {}),
+    ]);
+
+    expect(results.every((r) => r.status === "rejected")).toBe(true);
+    expect(hue.state.connects).toBe(2);
+  });
+
+  test("a peer that is still down leaves the registry usable and tries again later", async () => {
+    const hue = revivableServer();
+    const registry = await McpRegistry.fromConfig(
+      { hue: httpServer() },
+      PLUGINS,
+      hue.connect,
+      noSleep,
+    );
+
+    hue.killConnection();
+    hue.state.listening = false;
+    await expect(registry.call("mcp__hue__ping", {})).rejects.toThrow(McpTransportError);
+    expect(hue.state.connects).toBe(2);
+
+    // Nothing is latched: the next call attempts a fresh reconnect, and when
+    // the peer is finally back it takes.
+    hue.state.listening = true;
+    await expect(registry.call("mcp__hue__ping", {})).rejects.toThrow(McpTransportError);
+    await expect(registry.call("mcp__hue__ping", {})).resolves.toBe("ping ran");
+  });
+
+  test("a tool that returns an error does not touch the connection", async () => {
+    // The distinction `McpTransportError` exists for. A tool saying no is not
+    // a dead socket, and reconnecting on it would rebuild the transport on
+    // every failed tool call.
+    let connects = 0;
+    const connect = (spec: McpServerSpec): Promise<McpClient> => {
+      connects += 1;
+      return Promise.resolve({
+        server: spec.name,
+        listTools: () =>
+          Promise.resolve([
+            { server: spec.name, name: "ping", description: "", input_schema: {} },
+          ]),
+        call: () => Promise.reject(new McpError("MCP tool 'ping' returned an error: nope")),
+        shutdown: () => Promise.resolve(),
+      } as unknown as McpClient);
+    };
+
+    const registry = await McpRegistry.fromConfig({ hue: httpServer() }, PLUGINS, connect, noSleep);
+    await expect(registry.call("mcp__hue__ping", {})).rejects.toThrow("returned an error");
+    expect(connects).toBe(1);
+  });
+
+  test("a stdio server is not revived", async () => {
+    // Same asymmetry as startup: reviving it means respawning a child that
+    // already exited, on every tool call.
+    const hue = revivableServer();
+    const registry = await McpRegistry.fromConfig(
+      { hue: stdioServer() },
+      PLUGINS,
+      hue.connect,
+      noSleep,
+    );
+
+    hue.killConnection();
+    await expect(registry.call("mcp__hue__ping", {})).rejects.toThrow(McpTransportError);
+    expect(hue.state.connects).toBe(1);
+  });
+
+  test("a registry being shut down does not adopt a late reconnect", async () => {
+    const hue = revivableServer();
+    const registry = await McpRegistry.fromConfig(
+      { hue: httpServer() },
+      PLUGINS,
+      hue.connect,
+      noSleep,
+    );
+
+    await registry.shutdown();
+    hue.killConnection();
+    await expect(registry.call("mcp__hue__ping", {})).rejects.toThrow(McpTransportError);
+
+    // No second connection: a registry on its way out does not acquire one.
+    expect(hue.state.connects).toBe(1);
   });
 });
 

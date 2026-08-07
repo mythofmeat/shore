@@ -12,12 +12,18 @@
  * for the registry's lifetime**. Pinning is what keeps the outbound tool
  * surface — and therefore the Anthropic cache prefix — stable across turns: a
  * server is listed once at connect, never re-listed mid-session.
+ *
+ * A connection that dies is rebuilt underneath that pinned list rather than
+ * re-listed ({@link McpRegistry.reviveClient}), so recovering from an outage
+ * costs nothing in cache terms. Changing the surface is a `[mcp]` reload's job,
+ * and swapping the whole registry is how that is done (`handler/deps.ts`).
  */
 
 import { toolPatternMatches } from "./registry.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
 import { compareByCodePoint } from "../sort.ts";
 import type { ToolDefinition } from "../llm/types.ts";
+import { McpTransportError } from "../mcp/client.ts";
 import type { McpClient, McpServerSpec, Transport } from "../mcp/client.ts";
 
 /** One discovered MCP tool. Owned, because names and schemas are runtime facts. */
@@ -249,6 +255,17 @@ async function connectOne(
 
 // ── The registry ────────────────────────────────────────────────────────
 
+/**
+ * How to rebuild a connection that died, kept only for registries that were
+ * built by connecting. A hand-assembled one has no specs and no connector, so
+ * it simply never revives.
+ */
+interface RevivalDeps {
+  connect: (spec: McpServerSpec) => Promise<McpClient>;
+  /** The spec each server was connected with, by `[mcp.<name>]` key. */
+  specs: Map<string, McpServerSpec>;
+}
+
 /** Live MCP connections plus the pinned, sorted tool surface they expose. */
 export class McpRegistry {
   private readonly clients: Map<string, McpClient>;
@@ -256,15 +273,23 @@ export class McpRegistry {
   private readonly tools: McpToolDef[];
   /** The `[mcp.*]` config this was built from, for the hot-reload check. */
   private readonly source: Record<string, McpServerConfigView>;
+  /** Absent on a hand-built registry, which cannot revive anything. */
+  private readonly revival: RevivalDeps | undefined;
+  /** One revival in flight per server, so concurrent calls share the attempt. */
+  private readonly reviving = new Map<string, Promise<McpClient | undefined>>();
+  /** Set by `shutdown`, so a revival cannot race a teardown and win. */
+  private closed = false;
 
   private constructor(
     clients: Map<string, McpClient>,
     tools: McpToolDef[],
     source: Record<string, McpServerConfigView>,
+    revival?: RevivalDeps,
   ) {
     this.clients = clients;
     this.tools = [...tools].sort((a, b) => compareByCodePoint(a.full_name, b.full_name));
     this.source = source;
+    this.revival = revival;
   }
 
   /**
@@ -376,7 +401,15 @@ export class McpRegistry {
     if (tools.length > 0) {
       console.info(`connected MCP tools: ${tools.length}`);
     }
-    return new McpRegistry(clients, tools, mcp);
+    // Keep the specs and the connector: a connection that dies mid-session is
+    // rebuilt through exactly the path that built it, including a connector a
+    // test injected. See `reviveClient`.
+    const specs = new Map<string, McpServerSpec>();
+    for (const name of names) {
+      const spec = toSpec(name, mcp[name] as McpServerConfigView, pluginsDir);
+      if (spec !== undefined) specs.set(name, spec);
+    }
+    return new McpRegistry(clients, tools, mcp, { connect, specs });
   }
 
   /** Every tool, in pinned order. */
@@ -425,11 +458,102 @@ export class McpRegistry {
     if (def === undefined) throw new InvalidArgs(`${fullName}: not yet implemented`);
     const client = this.clients.get(def.server);
     if (client === undefined) throw new InvalidArgs(`${fullName}: not yet implemented`);
-    return await client.call(def.tool, args);
+    try {
+      return await client.call(def.tool, args);
+    } catch (e) {
+      if (!(e instanceof McpTransportError)) throw e;
+      // The connection is gone. Rebuild it for the *next* call and report this
+      // one as the failure it was.
+      //
+      // **This call is deliberately not retried.** A request that failed at the
+      // transport can still have reached the server and been acted on — the
+      // response is what got lost — so a retry here would re-run a tool that
+      // may already have fired. There is no way to tell the two apart, and MCP
+      // tools are not idempotent by contract. The model sees an ordinary tool
+      // error, which it is free to retry itself, and by then the connection is
+      // back.
+      await this.reviveClient(def.server);
+      throw e;
+    }
+  }
+
+  /**
+   * Rebuild a dead connection in place, keeping the pinned tool surface.
+   *
+   * This is the mid-session half of #37, and the reason it is cheap: the tool
+   * list is *not* re-listed. Only the transport underneath is replaced, so
+   * `allTools` is byte-identical before and after and the cache prefix never
+   * moves. A full registry rebuild — the obvious fix — would move it, which is
+   * the very cost the issue is about.
+   *
+   * It follows that a server which came back offering a *different* tool list
+   * does not get its new surface here. That is the existing pinning contract
+   * ("a server that gains a tool mid-session does not get it offered until the
+   * next reload"), not a new limitation, and honouring it is what keeps the
+   * prefix stable. `[mcp]` reload remains the way to adopt a changed surface.
+   *
+   * HTTP only, matching the startup asymmetry: a stdio child that exited is a
+   * process shore would have to respawn, and respawning a crashing server on
+   * every tool call is the loop the startup path already refuses to enter.
+   */
+  private async reviveClient(server: string): Promise<McpClient | undefined> {
+    const inFlight = this.reviving.get(server);
+    // A tool loop can have several calls to the same dead server outstanding.
+    // They share one attempt rather than opening one connection each.
+    if (inFlight !== undefined) return await inFlight;
+
+    const spec = this.revival?.specs.get(server);
+    if (this.revival === undefined || spec === undefined) return undefined;
+    if (spec.transport.kind !== "http") return undefined;
+    if (this.closed) return undefined;
+
+    const connect = this.revival.connect;
+    const attempt = (async (): Promise<McpClient | undefined> => {
+      let next: McpClient;
+      try {
+        next = await connect(spec);
+      } catch (e) {
+        console.warn(`shore: mcp server '${server}' is still unreachable: ${String(e)}`);
+        return undefined;
+      }
+      // Losing the race against `shutdown` would leave a live connection with
+      // nothing holding it, so the late arrival closes itself instead.
+      if (this.closed) {
+        await next.shutdown();
+        return undefined;
+      }
+      const previous = this.clients.get(server);
+      this.clients.set(server, next);
+      // Best-effort: the old client is already broken, and its close path can
+      // throw for the same reason its request did.
+      if (previous !== undefined) {
+        try {
+          await previous.shutdown();
+        } catch {
+          /* the transport it would close is the one that just died */
+        }
+      }
+      console.info(
+        `shore: mcp server '${server}' reconnected; its tools work again, ` +
+          `and the tool surface did not change so cached prefixes still match`,
+      );
+      return next;
+    })();
+
+    this.reviving.set(server, attempt);
+    try {
+      return await attempt;
+    } finally {
+      this.reviving.delete(server);
+    }
   }
 
   /** Shut down every connection, draining stdio child processes. */
   async shutdown(): Promise<void> {
+    // Before awaiting anything, so a revival that resolves during the drain
+    // closes itself rather than adding a connection to a registry on its way
+    // out.
+    this.closed = true;
     for (const client of this.clients.values()) {
       await client.shutdown();
     }
