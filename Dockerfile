@@ -1,22 +1,25 @@
 FROM rust:latest AS rust
 WORKDIR /src
 COPY . .
-RUN cargo build --release --bin shore-daemon
 RUN cargo build --release --bin shore
 RUN cargo build --release --bin shore-tui
 
 FROM oven/bun:latest AS bun
 WORKDIR /src
 COPY . .
-WORKDIR /src/llm-sidecar
+WORKDIR /src/daemon
 RUN bun install
-RUN bun run build
+RUN bun run build:daemon
 
 FROM archlinux:latest AS entry
-COPY --from=rust    /src/target/release/shore-daemon /usr/bin/shore-daemon
 COPY --from=rust    /src/target/release/shore /usr/bin/shore
 COPY --from=rust    /src/target/release/shore-tui /usr/bin/shore-tui
-COPY --from=bun     /src/llm-sidecar/dist/shore-llm-sidecar /usr/lib/shore/shore-llm-sidecar
+# The daemon is TypeScript now, so `bun` below is a runtime dependency and not
+# only a build one. How this binary is produced — `bun build` versus
+# `bun build --compile`, whether bun has to be installed at all, minification,
+# or just running from source — is undecided; this is the same bundle
+# `bun run build:daemon` writes and nothing more.
+COPY --from=bun     /src/daemon/dist/shore-daemon /usr/bin/shore-daemon
 
 RUN groupadd --gid 1000 shore \
     && useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash shore

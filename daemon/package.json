@@ -1,0 +1,28 @@
+{
+  "name": "@shore/daemon",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/server.ts",
+    "start:daemon": "bun run src/daemon/run.ts",
+    "build": "bun build src/server.ts --outfile dist/shore-llm-sidecar --minify --target=bun --banner='#!/usr/bin/env bun' && chmod +x dist/shore-llm-sidecar",
+    "build:daemon": "bun build src/daemon/run.ts --outfile dist/shore-daemon --minify --target=bun --banner='#!/usr/bin/env bun' && chmod +x dist/shore-daemon",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@ai-sdk/deepseek": "^2.0.51",
+    "@ai-sdk/moonshotai": "^2.0.40",
+    "@anthropic-ai/sdk": "^0.100.1",
+    "@google/genai": "^2.15.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@openrouter/sdk": "^0.12.79",
+    "ai": "^6.0.238",
+    "openai": "^6.49.0",
+    "sharp": "^0.35.3"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.3"
+  }
+}

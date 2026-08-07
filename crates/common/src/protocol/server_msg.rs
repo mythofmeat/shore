@@ -5,7 +5,7 @@ use crate::protocol::types::{CharacterInfo, Message, StreamMetadata};
 
 /// Server hello — sent after client connects.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ServerHello {
     pub v: u32,
     pub server_name: String,
@@ -15,7 +15,7 @@ pub struct ServerHello {
 
 /// Full state snapshot.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct History {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -48,17 +48,17 @@ fn is_zero(value: &usize) -> bool {
 
 /// Server shutting down.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct Shutdown {}
 
 /// Keepalive.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct Ping {}
 
 /// Command result.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct CommandOutput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -69,7 +69,7 @@ pub struct CommandOutput {
 
 /// Error response.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct Error {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -79,7 +79,7 @@ pub struct Error {
 
 /// Begin streaming.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct StreamStart {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -94,7 +94,7 @@ pub struct StreamStart {
 
 /// Partial content chunk.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct StreamChunk {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -121,7 +121,7 @@ fn default_content_type() -> String {
 /// Older servers that predate the field will serialize nothing; `serde`'s
 /// default treats missing as `true`, preserving pre-tool-loop semantics.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct StreamEnd {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -160,7 +160,7 @@ fn default_true() -> bool {
 
 /// Generation phase change.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct Phase {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -180,7 +180,7 @@ pub use crate::protocol::types::MessageOrigin;
 /// envelope-level `origin` field this struct carried historically — only the
 /// Rust-side field moved.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct NewMessage {
     #[serde(default)]
     #[ts(type = "number")]
@@ -193,7 +193,7 @@ pub struct NewMessage {
 
 /// Tool invoked during generation.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ToolCall {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -209,7 +209,7 @@ pub struct ToolCall {
 
 /// Tool completed.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ToolResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -226,7 +226,7 @@ pub struct ToolResult {
 
 /// Server-generated image ready.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct SendImage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -244,7 +244,7 @@ pub struct SendImage {
 
 /// Unexpected cache invalidation warning.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct CacheWarning {
     pub expected_tokens: u32,
     pub message: String,
@@ -259,7 +259,7 @@ pub struct CacheWarning {
 /// itself — only the provider key, the friendly key names, the failure
 /// classification, and a sanitized human-readable reason.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ProviderFallbackWarning {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -282,7 +282,7 @@ pub struct ProviderFallbackWarning {
 
 /// A configured usage budget crossed one or more warning thresholds.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct UsageWarning {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rid: Option<String>,
@@ -319,7 +319,7 @@ pub struct UsageWarning {
 
 /// All server → client message types, tagged by "type".
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ServerMessage {
     Hello(ServerHello),

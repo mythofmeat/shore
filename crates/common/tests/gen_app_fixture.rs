@@ -5,7 +5,7 @@
 //! The fixture it writes is still frozen — see the header it emits.
 //!
 //! Drives the real `shore_common::config::app` types and writes
-//! `llm-sidecar/tests/config_fixtures/app_parity.json`.
+//! `daemon/tests/config_fixtures/app_parity.json`.
 //!
 //! Run with:
 //!   cargo test -p shore-common --test gen_app_fixture -- --test-threads=1 --ignored --nocapture
@@ -985,7 +985,7 @@ fn main_fixture() -> Value {
         "DefaultsConfig's display-name and background-model resolution and its",
         "deprecated-alias normalization, CompactionConfig::validate,",
         "ThinkingReplay::parse_wire, and the budget period/weekday/action tables.",
-        "Ports to llm-sidecar/src/config/app.ts.",
+        "Ports to daemon/src/config/app.ts.",
         "",
         "The generator IS committed, at crates/common/tests/gen_app_fixture.rs, on",
         "the reasoning recorded in 0b7b4261: development happens in ephemeral",
@@ -1051,7 +1051,7 @@ fn main_fixture() -> Value {
         "`display_name` cases record the $USER they ran under and the replay",
         "injects it, so the result does not depend on the account running it.",
         "",
-        "Note `notifications` is ALSO parsed by llm-sidecar/src/notifications.ts,",
+        "Note `notifications` is ALSO parsed by daemon/src/notifications.ts,",
         "which reads it off a document (`toml::from_str`) rather than a table and",
         "so reports unknown keys in document order. That port is correct for its",
         "own call path. app.ts must NOT reuse it: reaching the same section",
@@ -1083,7 +1083,7 @@ fn generate() {
     let fixture = main_fixture();
 
     let out = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../llm-sidecar/tests/config_fixtures/app_parity.json");
+        .join("../../daemon/tests/config_fixtures/app_parity.json");
     fs::create_dir_all(out.parent().expect("has parent")).expect("mkdir");
     fs::write(
         &out,

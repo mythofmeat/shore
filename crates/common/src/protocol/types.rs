@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 /// Role of a message participant.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
     User,
@@ -12,7 +12,7 @@ pub enum Role {
 
 /// Reference to an image file.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ImageRef {
     pub path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -137,7 +137,7 @@ impl<'de> Deserialize<'de> for ThinkingSignature {
 /// thinking/reasoning, tool invocations, and tool results. This preserves
 /// the full fidelity of what happened during generation.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
     Text {
@@ -174,7 +174,7 @@ pub enum ContentBlock {
 /// origin was not recorded (messages persisted before origin tracking, or
 /// ordinary user/assistant turns where the role already implies it).
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 #[serde(rename_all = "snake_case")]
 pub enum MessageOrigin {
     UserInput,
@@ -188,7 +188,7 @@ pub enum MessageOrigin {
 /// `content` is a derived convenience field (human-readable text summary).
 /// On disk, only `content_blocks` is stored; `content` is derived on load.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct Message {
     pub msg_id: String,
     pub role: Role,
@@ -238,7 +238,7 @@ pub struct Message {
 /// keep reading the active response. `alternatives` stores every selectable
 /// candidate, including the active one.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct MessageAlternative {
     #[serde(default)]
     pub content: String,
@@ -368,7 +368,7 @@ impl Message {
 
 /// Token usage counts from a generation.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct TokenCounts {
     #[ts(type = "number")]
     pub input: u64,
@@ -382,7 +382,7 @@ pub struct TokenCounts {
 
 /// Timing information for a generation.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct TimingInfo {
     pub total_ms: u32,
     pub ttft_ms: u32,
@@ -390,7 +390,7 @@ pub struct TimingInfo {
 
 /// Metadata attached to stream_end.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct StreamMetadata {
     pub tokens: TokenCounts,
     pub timing: TimingInfo,
@@ -444,7 +444,7 @@ pub fn derive_content_from_blocks(blocks: &[ContentBlock]) -> String {
 /// Base64-encoded character avatar for clients that cannot read the daemon's
 /// local config filesystem.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct CharacterAvatar {
     pub mime_type: String,
     pub data: String,
@@ -452,7 +452,7 @@ pub struct CharacterAvatar {
 
 /// Information about a character.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
-#[ts(export, export_to = "../../../llm-sidecar/src/protocol/")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct CharacterInfo {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]

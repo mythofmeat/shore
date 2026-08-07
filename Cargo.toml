@@ -2,7 +2,6 @@
 resolver = "2"
 members = [
     "crates/common",
-    "crates/daemon",
     "crates/cli",
     "crates/tui",
 ]
@@ -16,7 +15,6 @@ repository = "https://github.com/mythofmeat/shore"
 
 [workspace.dependencies]
 shore-common = { path = "crates/common" }
-shore-daemon = { path = "crates/daemon" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 toml = "0.8"

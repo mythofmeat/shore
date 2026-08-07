@@ -7,7 +7,7 @@
 //! frozen — see the header it emits.
 //!
 //! Drives the real `shore_common::config::load_config` end to end and writes
-//! `llm-sidecar/tests/config_fixtures/validate_parity.json`.
+//! `daemon/tests/config_fixtures/validate_parity.json`.
 //!
 //! Run with:
 //!   cargo test -p shore-common --test gen_validate_fixture -- --ignored --nocapture
@@ -1770,7 +1770,7 @@ fn header() -> Value {
         "case exercises the whole chain: raw table -> section extraction ->",
         "AppConfig -> deprecated-alias normalization -> ProviderRegistry ->",
         "ModelCatalog -> validate_config. Ports to the parse/validate half of",
-        "llm-sidecar/src/config/loader.ts and validate.ts.",
+        "daemon/src/config/loader.ts and validate.ts.",
         "",
         "The generator IS committed, at",
         "crates/common/tests/gen_validate_fixture.rs, on the reasoning recorded",
@@ -1829,7 +1829,7 @@ fn generate() {
     });
 
     let out = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../llm-sidecar/tests/config_fixtures/validate_parity.json");
+        .join("../../daemon/tests/config_fixtures/validate_parity.json");
     fs::create_dir_all(out.parent().expect("has parent")).expect("mkdir");
     fs::write(
         &out,

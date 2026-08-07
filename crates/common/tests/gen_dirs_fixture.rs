@@ -6,7 +6,7 @@
 //! is still frozen — see the header it emits.
 //!
 //! Drives the real `shore_common::config` and writes
-//! `llm-sidecar/tests/config_fixtures/dirs_parity.json`.
+//! `daemon/tests/config_fixtures/dirs_parity.json`.
 //!
 //! Run with:
 //!   cargo test -p shore-common --test gen_dirs_fixture -- --test-threads=1 --ignored --nocapture
@@ -569,7 +569,7 @@ fn generate() {
         "Driven against the real shore_common::config: ShoreDirs::resolve, the path",
         "helpers, deep_merge, load_raw_config_table, discover_characters,",
         "load_character_definition, resolve_user_definition and",
-        "resolve_prompt_template. Ports to llm-sidecar/src/config/dirs.ts and",
+        "resolve_prompt_template. Ports to daemon/src/config/dirs.ts and",
         "src/config/loader.ts.",
         "",
         "The generator IS committed, at crates/common/tests/gen_dirs_fixture.rs —",
@@ -616,7 +616,7 @@ fn generate() {
     });
 
     let out = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../llm-sidecar/tests/config_fixtures/dirs_parity.json");
+        .join("../../daemon/tests/config_fixtures/dirs_parity.json");
     fs::create_dir_all(out.parent().expect("has parent")).expect("mkdir");
     fs::write(&out, format!("{}\n", serde_json::to_string_pretty(&fixture).expect("json")))
         .expect("write fixture");
