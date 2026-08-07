@@ -17,7 +17,7 @@
  * global key.
  */
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 
 import { compareByCodePoint } from "../sort.ts";
 import {
@@ -265,6 +265,10 @@ function hasTomlExtension(name: string): boolean {
  * file and continues with an empty table. That write is a side effect on a
  * caller-supplied directory, so it is opt-in here via `createDefault` rather
  * than fired implicitly by a function whose name says "load".
+ *
+ * {@link createDefaultConfig} is that effect, and `startDaemon` is what opts in.
+ * Anything else — a reload, a `config --check`, a test — loads without it and
+ * writes nothing.
  */
 export function loadRawConfigTable(
   configPath: string | undefined,
@@ -390,6 +394,43 @@ export const DEFAULT_CONFIG_TOML = `# Shore configuration
 #                                     # env override: SHORE_UNSAFE_ALLOW_REMOTE_ACCESS
 # allowed_hosts = []                  # IP allowlist only; not auth/TLS
 `;
+
+/**
+ * Write {@link DEFAULT_CONFIG_TOML} into a config directory that has none,
+ * creating the directory first.
+ *
+ * This is the effect {@link loadRawConfigTable}'s `createDefault` hook exists
+ * for — kept here beside the template it writes, and passed in from the daemon's
+ * composition root rather than fired by the loader itself.
+ *
+ * Neither half is fatal. The Rust `warn!`s and continues on both, because a
+ * read-only config directory is a legitimate deployment — a container with the
+ * config baked in and `SHORE_ADDR` doing the rest — and a daemon that can talk
+ * must not refuse to start over a starter file nobody will edit.
+ *
+ * Returns the path written, or `undefined` if either half failed, so the caller
+ * can say where it went. A first run has no other way to find out.
+ */
+export function createDefaultConfig(
+  configDirectory: string,
+  onWarn: ConfigWarn = consoleConfigWarn,
+): string | undefined {
+  try {
+    mkdirSync(configDirectory, { recursive: true });
+  } catch (e) {
+    onWarn("Could not create config directory", [["error", String(e)]]);
+    return undefined;
+  }
+
+  const path = rustJoin(configDirectory, "config.toml");
+  try {
+    writeFileSync(path, DEFAULT_CONFIG_TOML);
+  } catch (e) {
+    onWarn("Could not write default config.toml", [["error", String(e)]]);
+    return undefined;
+  }
+  return path;
+}
 
 // --- warnings ---------------------------------------------------------------
 

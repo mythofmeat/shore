@@ -45,6 +45,7 @@ import { TurnAutonomyBridge } from "../autonomy/registration.ts";
 import { Diagnostics } from "../diagnostics.ts";
 import { emitNewMessageEvent } from "../handler/persistence.ts";
 import type { SessionTokens } from "../handler/persistence.ts";
+import { createDefaultConfig } from "../config/loader.ts";
 import { buildMessageHandlerDeps, configReloader } from "../handler/deps.ts";
 import { MessageHandler } from "../handler/router.ts";
 import { Instances, type InstanceInfo } from "../instances.ts";
@@ -121,7 +122,16 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   const env = options.env ?? process.env;
   const log = options.log;
   const cli = parseArgs(options.argv ?? []);
-  const startup = resolveStartup(cli, env);
+  // A first run has no `config.toml` and no config directory to put one in.
+  // This is the only caller that opts into writing them — see
+  // `createDefaultConfig`. Best-effort: it warns and returns `undefined` rather
+  // than throwing, and the daemon comes up on an empty table either way.
+  const startup = resolveStartup(cli, env, {
+    createDefault: (configDir) => {
+      const written = createDefaultConfig(configDir);
+      if (written !== undefined) log?.info?.("Created default config.toml", { path: written });
+    },
+  });
 
   log?.info?.("Startup configuration resolved", {
     config_path: startup.configPath,

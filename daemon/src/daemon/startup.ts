@@ -146,14 +146,27 @@ export function parseArgs(argv: readonly string[]): Cli {
  * The env is a parameter rather than read here so the precedence below can be
  * tested without a process-wide mutation, and so `--config` re-homing the
  * config directory reaches the loader as the same env the daemon runs under.
+ *
+ * `createDefault` is injected for the same reason: writing a starter
+ * `config.toml` on a first run is the one thing here that is not a pure
+ * function of `(argv, env, config)`, and threading it from `startDaemon` keeps
+ * it that way. Omitted, nothing is written — which is what every test that only
+ * wants the policy resolved should do.
  */
-export function resolveStartup(cli: Cli, env: NodeJS.ProcessEnv = process.env): StartupConfig {
+export function resolveStartup(
+  cli: Cli,
+  env: NodeJS.ProcessEnv = process.env,
+  options: { createDefault?: ((configDir: string) => void) | undefined } = {},
+): StartupConfig {
   const explicitConfigPath = resolveExplicitConfigPath(cli.config);
   const configPathForErrors = explicitConfigPath ?? defaultConfigPath(env);
 
   let loaded: LoadedConfig;
   try {
-    loaded = loadConfig(explicitConfigPath, { env });
+    loaded = loadConfig(explicitConfigPath, {
+      env,
+      ...(options.createDefault === undefined ? {} : { createDefault: options.createDefault }),
+    });
   } catch (e) {
     throw new StartupError(
       "load_config",
