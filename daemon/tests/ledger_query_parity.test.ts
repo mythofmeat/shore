@@ -53,6 +53,21 @@ interface Case {
   export_tsv: string;
 }
 
+/**
+ * Drop `tool_surface` from rows before comparing them to the frozen fixture.
+ *
+ * The column was added by #33 — a fingerprint of the tool definitions a call
+ * sent, so the cache tracker can tell a config change from an anomaly. The Rust
+ * that generated this fixture had no such column, and every seeded row here
+ * predates it, so it reads back null on all of them and is stripped rather than
+ * written into a fixture that records what the Rust returned. What it *is* on a
+ * fresh row is pinned in `cache_tracker.test.ts` and in the tool-surface tests;
+ * that it survives the round trip at all is asserted below.
+ */
+function withoutToolSurface<T extends { tool_surface: unknown }>(rows: T[]): Omit<T, "tool_surface">[] {
+  return rows.map(({ tool_surface: _dropped, ...rest }) => rest);
+}
+
 const doc = fixture as unknown as {
   seed: Record<string, unknown>[];
   cases: Case[];
@@ -133,12 +148,15 @@ test("cross-language ledger query parity", () => {
     expect(modelUsageSummary(db, filter!), at("model_usage")).toEqual(
       c.model_usage as never,
     );
-    expect(queryAnomalies(db, filter!), at("anomalies")).toEqual(
+    expect(withoutToolSurface(queryAnomalies(db, filter!)), at("anomalies")).toEqual(
       c.anomalies as never,
     );
-    expect(activeAnthropicCharacters(db, filter!), at("active_anthropic")).toEqual(
-      c.active_anthropic as never,
-    );
+    expect(
+      activeAnthropicCharacters(db, filter!).map(
+        ([character, row]) => [character, withoutToolSurface([row])[0]] as const,
+      ),
+      at("active_anthropic"),
+    ).toEqual(c.active_anthropic as never);
     expect(exportTsv(db, filter!), at("export_tsv")).toBe(c.export_tsv);
   }
 
@@ -147,4 +165,16 @@ test("cross-language ledger query parity", () => {
   }
   expect(nullCostRows(db), "null_cost_rows").toEqual(doc.null_cost_rows as never);
   expect(allCostRows(db), "all_cost_rows").toEqual(doc.all_cost_rows as never);
+
+  // What the stripping above gives up, taken back directly: the column has to
+  // be *there* and readable on a `CallRow`, or the tracker's fourth transition
+  // (#33) reads a field the query layer silently dropped. Null on every seeded
+  // row, because the fixture's rows all predate the column — which is also the
+  // "unknown, so compare nothing" case the tracker relies on.
+  const callRows = queryAnomalies(db, FILTERS["none"]!);
+  expect(callRows.length, "anomalies: seeded").toBeGreaterThan(0);
+  for (const row of callRows) {
+    expect(row).toHaveProperty("tool_surface");
+    expect(row.tool_surface, "seeded rows carry no tool surface").toBeNull();
+  }
 });

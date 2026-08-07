@@ -88,6 +88,128 @@ describe("warm/cold transitions", () => {
   });
 });
 
+/**
+ * The fourth cold trigger (#33).
+ *
+ * Tool definitions sit ahead of `system` and `messages` in the cached prefix,
+ * so changing them invalidates the whole cache. The tracker modelled three
+ * transitions and had no column describing the tools, so the resulting full
+ * write was labelled `unexpected_write` — correct as billing, wrong as
+ * diagnosis, and firing on a routine event. `unexpected_write` is the alert
+ * this repo relies on; a tracker that cries wolf on a flapping MCP server is
+ * worse than one that says nothing.
+ */
+describe("a tool-surface change", () => {
+  const SURFACE_A = "aaaaaaaaaaaaaaaa";
+  const SURFACE_B = "bbbbbbbbbbbbbbbb";
+
+  test("goes cold, deliberately, with no anomaly", () => {
+    const t = new CacheTracker();
+    t.observe(obs({ ts: at(0), cache_read_tokens: 500, tool_surface: SURFACE_A }));
+    const r = t.observe(obs({ ts: at(1), cache_read_tokens: 0, tool_surface: SURFACE_B }));
+    expect(r.state).toBe("cold");
+    expect(r.anomaly).toBeUndefined();
+  });
+
+  test("with the write that follows it, the row is warm again — as a model change is", () => {
+    // The convention `model` and `thinking_enabled` already set: the transition
+    // drops the state to cold, and a row that then *writes* has re-established
+    // the prefix by the time it ends, so it is recorded warm. Asserted beside
+    // the model change so the two cannot drift apart.
+    const surface = new CacheTracker();
+    surface.observe(obs({ ts: at(0), cache_read_tokens: 500, tool_surface: SURFACE_A }));
+    const bySurface = surface.observe(
+      obs({ ts: at(1), cache_write_tokens: 5000, tool_surface: SURFACE_B }),
+    );
+
+    const model = new CacheTracker();
+    model.observe(obs({ ts: at(0), cache_read_tokens: 500 }));
+    const byModel = model.observe(
+      obs({ ts: at(1), model: "claude-sonnet-4-6", cache_write_tokens: 5000 }),
+    );
+
+    expect(bySurface).toEqual(byModel);
+    expect(bySurface.anomaly).toBeUndefined();
+  });
+
+  test("is what the live run recorded as unexpected_write", () => {
+    // The rows from #33, verbatim: six ordinary turns, then `enabled_tools`
+    // gains one entry and the whole 5,034-token prompt is rewritten. Row 7 was
+    // `cold / unexpected_write`; it should be `cold` and nothing else.
+    const t = new CacheTracker();
+    t.observe(obs({ ts: at(0), cache_write_tokens: 4283, tool_surface: SURFACE_A }));
+    t.observe(
+      obs({ ts: at(1), cache_read_tokens: 4283, cache_write_tokens: 12, tool_surface: SURFACE_A }),
+    );
+    const afterReload = t.observe(
+      obs({ ts: at(2), cache_read_tokens: 0, cache_write_tokens: 5034, tool_surface: SURFACE_B }),
+    );
+    // The whole point: no anomaly. Nothing was anomalous — one tool definition
+    // moved the head of the prefix and the prompt was rewritten, exactly as a
+    // model change would.
+    expect(afterReload.anomaly).toBeUndefined();
+
+    // And the turn after it reads the new prefix and is warm again — the
+    // tool_loop row that followed in the recorded run.
+    const next = t.observe(
+      obs({
+        ts: at(3),
+        call_type: "tool_loop",
+        cache_read_tokens: 5034,
+        cache_write_tokens: 50,
+        tool_surface: SURFACE_B,
+      }),
+    );
+    expect(next.state).toBe("warm");
+    expect(next.anomaly).toBeUndefined();
+  });
+
+  test("an unchanged surface is not a transition", () => {
+    const t = new CacheTracker();
+    t.observe(obs({ ts: at(0), cache_write_tokens: 500, tool_surface: SURFACE_A }));
+    const r = t.observe(
+      obs({ ts: at(1), cache_read_tokens: 500, cache_write_tokens: 50, tool_surface: SURFACE_A }),
+    );
+    expect(r.state).toBe("warm");
+    expect(r.anomaly).toBeUndefined();
+  });
+
+  // The migration's safety property: `tool_surface` is null on every row
+  // written before it, and a null must mean *unknown* rather than "no tools".
+  // Otherwise the first row after the migration reports a change against a
+  // null, and every pre-migration ledger produces one spurious cold row.
+  test("unknown on either side changes nothing", () => {
+    const fromUnknown = new CacheTracker();
+    fromUnknown.observe(obs({ ts: at(0), cache_read_tokens: 500 }));
+    expect(
+      fromUnknown.observe(obs({ ts: at(1), cache_read_tokens: 500, tool_surface: SURFACE_A })).state,
+    ).toBe("warm");
+
+    const toUnknown = new CacheTracker();
+    toUnknown.observe(obs({ ts: at(0), cache_read_tokens: 500, tool_surface: SURFACE_A }));
+    expect(toUnknown.observe(obs({ ts: at(1), cache_read_tokens: 500 })).state).toBe("warm");
+  });
+
+  // A call that does not know its surface must not *erase* the one the tracker
+  // has, or the next real comparison is silently against nothing — a change
+  // straight after a keepalive would go unexplained again.
+  test("an unknown call does not erase a known surface", () => {
+    const t = new CacheTracker();
+    t.observe(obs({ ts: at(0), cache_read_tokens: 500, tool_surface: SURFACE_A }));
+    t.observe(obs({ ts: at(1), call_type: "keepalive", cache_read_tokens: 500 }));
+    const r = t.observe(obs({ ts: at(2), cache_read_tokens: 0, tool_surface: SURFACE_B }));
+    expect(r.state).toBe("cold");
+    expect(r.anomaly).toBeUndefined();
+  });
+
+  test("a cold tracker is unaffected by a surface change", () => {
+    const t = new CacheTracker();
+    const r = t.observe(obs({ ts: at(0), cache_write_tokens: 500, tool_surface: SURFACE_A }));
+    expect(r.state).toBe("warm");
+    expect(r.anomaly).toBeUndefined();
+  });
+});
+
 describe("unexpected_write", () => {
   test("a read below the baseline with a real write is an anomaly", () => {
     const t = new CacheTracker();

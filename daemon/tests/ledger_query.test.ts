@@ -47,6 +47,9 @@ const BASE: CallRow = {
   api_key_name: "default",
   model: "claude-opus-4-6",
   call_type: "message",
+  // Unknown, as every row written before #33 is: the query layer passes it
+  // through and nothing here is about the tool surface.
+  tool_surface: null,
   input_tokens: 100,
   output_tokens: 50,
   cache_read_tokens: 80,

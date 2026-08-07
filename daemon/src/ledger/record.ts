@@ -18,6 +18,7 @@
  */
 
 import { Ledger, type RecordCall, type Timing, type Usage } from "./store.ts";
+import { toolSurfaceFingerprint } from "./tool_surface.ts";
 import type { CallContext, GenerateResponse, SidecarRequest, StreamEvent } from "../llm/types.ts";
 
 /**
@@ -167,6 +168,10 @@ function record(ctx: CallContext, req: SidecarRequest, call: Recorded): void {
     thinking_enabled: ctx.thinking_enabled,
     cache_ttl: ctx.cache_ttl,
     reasoning_effort: ctx.reasoning_effort,
+    // From the request rather than the context: it is the tool array the
+    // adapter is about to send, which is the thing the provider's cache prefix
+    // is keyed on. Nothing has to be threaded through `CallContext` for it.
+    tool_surface: toolSurfaceFingerprint(req.tools),
   };
   const row = ledger.record(entry);
   if (row.cache_anomaly !== null) {

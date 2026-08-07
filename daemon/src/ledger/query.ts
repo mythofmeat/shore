@@ -142,6 +142,7 @@ function rowFromSqlite(r: Record<string, unknown>): CallRow {
     cache_write_tokens: count(r["cache_write_tokens"]),
     cache_ttl: optText(r["cache_ttl"]),
     reasoning_effort: optText(r["reasoning_effort"]),
+    tool_surface: optText(r["tool_surface"]),
     total_ms: count(r["total_ms"]),
     ttft_ms: count(r["ttft_ms"]),
     finish_reason: text(r["finish_reason"]),

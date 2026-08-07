@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS calls (
     cache_write_tokens  INTEGER NOT NULL,
     cache_ttl           TEXT    DEFAULT '1h',
     reasoning_effort    TEXT,
+    tool_surface        TEXT,
     total_ms            INTEGER NOT NULL,
     ttft_ms             INTEGER NOT NULL,
     finish_reason       TEXT    NOT NULL,
@@ -136,6 +137,12 @@ const MIGRATIONS: readonly string[] = [
   // change between rows explains an otherwise inexplicable message-level miss.
   // Null on pre-v6 rows, meaning unknown rather than "off".
   "ALTER TABLE calls ADD COLUMN reasoning_effort TEXT",
+  // v7: fingerprint of the tool definitions the call sent. Tool defs sit ahead
+  // of `system` in the cached prefix, so a change to them is a fourth reason a
+  // warm cache goes cold — and without this column it was recorded as an
+  // `unexpected_write` instead (#33). Null on pre-v7 rows, meaning unknown, so
+  // they compare to nothing and keep today's behaviour.
+  "ALTER TABLE calls ADD COLUMN tool_surface TEXT",
 ];
 
 /**
@@ -189,6 +196,8 @@ export interface RecordCall {
   thinking_enabled: boolean;
   cache_ttl?: string | undefined;
   reasoning_effort?: string | undefined;
+  /** Fingerprint of this call's tool definitions; absent means unknown. */
+  tool_surface?: string | undefined;
 }
 
 export interface CallRow {
@@ -204,6 +213,7 @@ export interface CallRow {
   cache_write_tokens: number;
   cache_ttl: string | null;
   reasoning_effort: string | null;
+  tool_surface: string | null;
   total_ms: number;
   ttft_ms: number;
   finish_reason: string;
@@ -223,14 +233,14 @@ export interface CallRow {
 const INSERT_SQL = `INSERT INTO calls (
   ts, character, provider, api_key_name, model, call_type,
   input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-  cache_ttl, reasoning_effort, total_ms, ttft_ms, finish_reason,
+  cache_ttl, reasoning_effort, tool_surface, total_ms, ttft_ms, finish_reason,
   thinking_enabled, cache_state, cache_anomaly,
   input_cost, output_cost, cache_read_cost, cache_write_cost,
   cost_source, total_cost
 ) VALUES (
   $ts, $character, $provider, $api_key_name, $model, $call_type,
   $input_tokens, $output_tokens, $cache_read_tokens, $cache_write_tokens,
-  $cache_ttl, $reasoning_effort, $total_ms, $ttft_ms, $finish_reason,
+  $cache_ttl, $reasoning_effort, $tool_surface, $total_ms, $ttft_ms, $finish_reason,
   $thinking_enabled, $cache_state, $cache_anomaly,
   $input_cost, $output_cost, $cache_read_cost, $cache_write_cost,
   $cost_source, $total_cost
@@ -241,7 +251,7 @@ const INSERT_SQL = `INSERT INTO calls (
  * `query.rs` use — `(provider = 'anthropic' OR model LIKE 'anthropic/%')` —
  * which cannot move until the ledger's readers do.
  */
-const LAST_ANTHROPIC_CALL_SQL = `SELECT ts, model, thinking_enabled, cache_read_tokens
+const LAST_ANTHROPIC_CALL_SQL = `SELECT ts, model, thinking_enabled, cache_read_tokens, tool_surface
   FROM calls
  WHERE character = $character
    AND (provider = 'anthropic' OR model LIKE 'anthropic/%')
@@ -254,6 +264,7 @@ interface SeedRow {
   model: string;
   thinking_enabled: number;
   cache_read_tokens: number;
+  tool_surface: string | null;
 }
 
 /**
@@ -374,6 +385,7 @@ export class Ledger {
       $cache_write_tokens: row.cache_write_tokens,
       $cache_ttl: row.cache_ttl,
       $reasoning_effort: row.reasoning_effort,
+      $tool_surface: row.tool_surface,
       $total_ms: row.total_ms,
       $ttft_ms: row.ttft_ms,
       $finish_reason: row.finish_reason,
@@ -415,6 +427,8 @@ export class Ledger {
         seed.thinking_enabled !== 0,
         seed.cache_read_tokens,
         this.#ttlSecs,
+        undefined,
+        seed.tool_surface ?? undefined,
       ),
     );
   }
@@ -459,6 +473,7 @@ export class Ledger {
       cache_read_tokens: record.usage.cache_read_tokens,
       cache_write_tokens: record.usage.cache_creation_tokens,
       call_type: record.call_type,
+      tool_surface: record.tool_surface,
     };
     const result = this.#trackers.forCharacter(record.character, this.#ttlSecs).observe(observation);
     const state: CacheState = result.state;
@@ -536,6 +551,7 @@ export class Ledger {
       cache_write_tokens: record.usage.cache_creation_tokens,
       cache_ttl: record.cache_ttl ?? null,
       reasoning_effort: record.reasoning_effort ?? null,
+      tool_surface: record.tool_surface ?? null,
       total_ms: record.timing.total_ms,
       ttft_ms: record.timing.time_to_first_token_ms,
       finish_reason: record.finish_reason,

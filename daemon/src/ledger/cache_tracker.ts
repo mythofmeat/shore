@@ -43,6 +43,13 @@ export interface Observation {
   cache_read_tokens: number;
   cache_write_tokens: number;
   call_type: string;
+  /**
+   * Fingerprint of the tool definitions this call sent, or `undefined` when
+   * unknown — a pre-migration row, or a call that carried no `tools` field at
+   * all. Unknown on either side of a comparison means no transition, so old
+   * rows keep behaving exactly as they did.
+   */
+  tool_surface?: string | undefined;
 }
 
 export interface ObservationResult {
@@ -117,6 +124,8 @@ export class CacheTracker {
   #lastTs: number | undefined;
   #lastModel: string | undefined;
   #lastThinking: boolean | undefined;
+  /** Fingerprint of the last call's tool surface; `undefined` means unknown. */
+  #lastToolSurface: string | undefined;
   #lastCallType: string | undefined;
   #lastCacheRead = 0;
   #lastToolLoopKind: string | undefined;
@@ -164,12 +173,15 @@ export class CacheTracker {
     lastCacheRead: number,
     ttlSecs: number,
     now: number = Date.now(),
+    /** The seed row's `tool_surface`; null on any row written before #33. */
+    lastToolSurface?: string | undefined,
   ): CacheTracker {
     const tracker = new CacheTracker(ttlSecs);
     const parsed = parseTs(lastTs);
     tracker.#lastTs = parsed;
     tracker.#lastModel = lastModel;
     tracker.#lastThinking = lastThinking;
+    tracker.#lastToolSurface = lastToolSurface;
     tracker.#lastCacheRead = lastCacheRead;
     tracker.#state = reconstructState(lastTs, lastCacheRead, ttlSecs, now);
     // Activity history is unknown, so the keepalive-miss window falls back to
@@ -196,7 +208,7 @@ export class CacheTracker {
       this.#lastCacheRead = 0;
       this.#clearToolLoopBaseline();
       this.#ttlExpiredSinceWarm = false;
-      this.#updateMetadata(obsTs, obs.model, obs.thinking_enabled);
+      this.#updateMetadata(obsTs, obs.model, obs.thinking_enabled, obs.tool_surface);
       this.#lastCallType = obs.call_type;
       return { state: this.#state, anomaly: undefined };
     }
@@ -231,6 +243,27 @@ export class CacheTracker {
       this.#state === "warm" &&
       this.#lastThinking !== undefined &&
       this.#lastThinking !== obs.thinking_enabled
+    ) {
+      this.#state = "cold";
+      this.#lastCacheRead = 0;
+      this.#clearToolLoopBaseline();
+      this.#ttlExpiredSinceWarm = false;
+    }
+
+    // 4b. Tool-surface change: warm → cold. Deliberate, and the fourth trigger
+    // the Rust could not have — its schema had no column describing the tools,
+    // so a config edit or an MCP server appearing was recorded as an
+    // `unexpected_write` with no cause attached (#33).
+    //
+    // Both sides must be known. `undefined` means unknown, not "no tools", so
+    // pre-migration rows and calls that carried no tool surface compare to
+    // nothing and change nothing — which is what stops the first row after the
+    // migration from reporting a change against a null.
+    if (
+      this.#state === "warm" &&
+      this.#lastToolSurface !== undefined &&
+      obs.tool_surface !== undefined &&
+      this.#lastToolSurface !== obs.tool_surface
     ) {
       this.#state = "cold";
       this.#lastCacheRead = 0;
@@ -294,7 +327,7 @@ export class CacheTracker {
     }
     // else: comparison skipped for a non-heartbeat call — leave the baseline alone.
 
-    this.#updateMetadata(obsTs, obs.model, obs.thinking_enabled);
+    this.#updateMetadata(obsTs, obs.model, obs.thinking_enabled, obs.tool_surface);
     this.#lastCallType = obs.call_type;
     if ((obs.call_type === "message" || obs.call_type === "tool_loop") && obsTs !== undefined) {
       this.#lastActivityTs = obsTs;
@@ -338,10 +371,20 @@ export class CacheTracker {
     return "unexpected_write";
   }
 
-  #updateMetadata(ts: number | undefined, model: string, thinking: boolean): void {
+  #updateMetadata(
+    ts: number | undefined,
+    model: string,
+    thinking: boolean,
+    toolSurface: string | undefined,
+  ): void {
     this.#lastTs = ts;
     this.#lastModel = model;
     this.#lastThinking = thinking;
+    // Only when this call knew its own surface. A row that did not — a
+    // pre-migration row, or a call with no `tools` field — must not erase a
+    // fingerprint the tracker already has, or the next real comparison would
+    // silently be against nothing.
+    if (toolSurface !== undefined) this.#lastToolSurface = toolSurface;
   }
 
   #clearToolLoopBaseline(): void {

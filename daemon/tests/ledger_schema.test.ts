@@ -100,6 +100,7 @@ describe("creating a ledger", () => {
       "api_key_name",
       "cost_source",
       "reasoning_effort",
+      "tool_surface",
       "cache_state",
       "cache_anomaly",
       "total_cost",
@@ -144,6 +145,34 @@ describe("migrating a ledger an older daemon made", () => {
     expect(cols.has("api_key_name")).toBe(true);
     expect(cols.has("cost_source")).toBe(true);
     expect(cols.has("reasoning_effort")).toBe(true);
+    expect(cols.has("tool_surface")).toBe(true);
+  });
+
+  test("the new column is null on the rows that predate it", () => {
+    // The property the tracker leans on: null means *unknown*, so a
+    // pre-migration row compares to nothing and produces no spurious cold row
+    // on the first call after an upgrade (#33).
+    const path = v1Ledger();
+    const seed = new Database(path);
+    seed
+      .query(
+        `INSERT INTO calls (ts, character, provider, model, call_type,
+           input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+           total_ms, ttft_ms, finish_reason, thinking_enabled, total_cost)
+         VALUES ('2026-01-01T00:00:00Z', 'ada', 'anthropic', 'claude', 'message',
+           10, 5, 0, 0, 100, 10, 'end_turn', 1, 1.25)`,
+      )
+      .run();
+    seed.close();
+
+    Ledger.create(path).close();
+
+    const db = new Database(path, { readonly: true });
+    const row = db.query("SELECT tool_surface FROM calls").get() as {
+      tool_surface: string | null;
+    };
+    db.close();
+    expect(row.tool_surface).toBeNull();
   });
 
   test("adds the tables that came after v1", () => {
