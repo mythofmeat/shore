@@ -212,6 +212,44 @@ describe("the adapter's schedule, against the modelled cache", () => {
     expect(afterChurn).toBeLessThan(steady);
   });
 
+  test("across three turns, each read equals every write before it", async () => {
+    // These are the invariants a live run against the real API produced, on
+    // 2026-08-07, with claude-haiku-4-5 and a ~4.3k-token system prompt:
+    //
+    //   turn 1   read      0   write 4259
+    //   turn 2   read   4259   write   12
+    //   turn 3   read   4271   write   12      (4259 + 12)
+    //
+    // Read equals the sum of every prior write, exactly, and the uncached tail
+    // stays constant. That is the whole model this mock encodes, so if the mock
+    // ever stops reproducing it, the mock is wrong rather than the test.
+    //
+    // The absolute numbers are Anthropic's tokeniser and are deliberately not
+    // asserted — only the relationships between them.
+    const m = await mock();
+    const messages: WireMessage[] = [user("Say the word: one")];
+
+    await drive(m.url, messages);
+    const t1 = m.lastUsage;
+    expect(t1.cache_read_input_tokens).toBe(0);
+    expect(t1.cache_creation_input_tokens).toBeGreaterThan(0);
+
+    messages.push(assistant("one"), user("Say the word: two"));
+    await drive(m.url, messages);
+    const t2 = m.lastUsage;
+    expect(t2.cache_read_input_tokens).toBe(t1.cache_creation_input_tokens);
+
+    messages.push(assistant("two"), user("Say the word: three"));
+    await drive(m.url, messages);
+    const t3 = m.lastUsage;
+    expect(t3.cache_read_input_tokens).toBe(
+      t1.cache_creation_input_tokens + t2.cache_creation_input_tokens,
+    );
+
+    // The tail after the last breakpoint is not cached and does not accumulate.
+    expect(t3.input_tokens).toBe(t2.input_tokens);
+  });
+
   test("an empty cache_ttl places no breakpoints at all", async () => {
     const m = await mock();
     await drive(m.url, [user("hello")], [{ text: "sys", label: "system" }], "");
