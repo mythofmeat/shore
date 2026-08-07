@@ -1,7 +1,10 @@
-//! Types and helpers shared by the Silvershore daemon and its clients.
+//! Types and helpers shared by the Silvershore clients.
 //!
-//! Everything here is used by at least two binaries; daemon-private code lives
-//! in `shore-daemon` instead.
+//! Everything here is used by `shore` and `shore-tui`, which are all the Rust
+//! left in the repo. The daemon is TypeScript under `daemon/` and speaks to
+//! both over SWP, so anything it needs is either on the wire (`protocol`) or
+//! duplicated deliberately (`config`, whose remaining job is finding the
+//! socket before there is anyone to ask).
 
 pub mod config;
 pub mod protocol;

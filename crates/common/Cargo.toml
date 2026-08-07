@@ -5,13 +5,11 @@ publish.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Wire protocol, configuration, client connection and diagnostics shared by the Silvershore daemon and its clients."
+description = "Wire protocol, client connection and directory resolution shared by the Silvershore clients."
 
 [dependencies]
 base64 = "0.22"
-chrono = { workspace = true }
 dirs = { workspace = true }
-dotenvy = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -25,9 +23,7 @@ tokio = { version = "1", features = [
 ] }
 toml = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
 ts-rs = "12.0.1"
-which = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
