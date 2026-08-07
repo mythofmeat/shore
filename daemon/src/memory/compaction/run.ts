@@ -76,7 +76,11 @@ import type { SidecarRequest } from "../../llm/types.ts";
 import { buildChatShapeRequestFromDisk } from "../../handler/context.ts";
 import { buildToolContext, credentialEntry, type ToolContextDeps } from "../../handler/tool_context.ts";
 import { dispatchTool } from "../../tools/dispatch.ts";
-import { ensureWorkspaceGitRepoBestEffort, gitCommitAll } from "../../tools/workspace.ts";
+import {
+  ensureWorkspaceGitRepoBestEffort,
+  gitCommitAll,
+  gitPushWorkspaceBestEffort,
+} from "../../tools/workspace.ts";
 import { MarkdownMemoryStore } from "../markdown_store.ts";
 import { applyDeferredEdits } from "../deferred_edits.ts";
 import type { CompactionRunner } from "../../handler/turn.ts";
@@ -187,9 +191,10 @@ export async function runCompactionPass(
     );
 
     // Opt-in and best-effort: a push that fails must never undo an archive that
-    // already happened.
+    // already happened. The pass's own writes were committed through the
+    // workspace `git` tool as they were made — this only sends them on.
     await pushAfterCompaction(resolved.effective.app.memory.git_push, outcome, async () => {
-      await gitCommitAll(resolved.tools.workspaceDir, character, "memory: compaction");
+      await gitPushWorkspaceBestEffort(resolved.tools.workspaceDir);
     });
 
     return outcome;
