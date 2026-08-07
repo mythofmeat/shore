@@ -34,9 +34,11 @@
 
 import {
   characterDataDir,
+  characterWorkspaceFile,
   discoverCharacters,
   loadCharacterDefinition,
   resolveUserDefinition,
+  SOUL_FILE,
 } from "./config/dirs.ts";
 import { loadCharacterConfig, type LoadedConfig } from "./config/loader.ts";
 import { ConversationEngine, type HistoryListener } from "./engine/conversation.ts";
@@ -75,10 +77,23 @@ export class CharacterError extends Error {
     );
   }
 
-  static noneAvailable(): CharacterError {
+  /**
+   * The empty-registry error, naming a path the user can actually act on.
+   *
+   * The Rust wrote `characters/<name>/workspace/SOUL.md`, relative to the
+   * config directory and saying so nowhere — and this is the first error a
+   * fresh install hits, from every command, so the working directory is the
+   * obvious wrong guess (#41). The path is resolved here instead, which also
+   * makes it honest under `SHORE_WORKSPACE_DIR`: with a workspace root set the
+   * file is at `<root>/<name>/SOUL.md` and the old string named a location
+   * that does not exist in that layout at all.
+   */
+  static noneAvailable(configDir: string, workspaceRoot?: string | undefined): CharacterError {
+    const soul = characterWorkspaceFile(configDir, "<name>", SOUL_FILE, workspaceRoot);
     return new CharacterError(
       "none_available",
-      "no characters available — create one at characters/<name>/workspace/SOUL.md",
+      `no characters available — create one at ${soul}, ` +
+        "or run: shore character --new <name>",
     );
   }
 
@@ -326,7 +341,9 @@ export class CharacterRegistry {
       if (this.hasCharacter(requested)) return requested;
       throw CharacterError.notFound(requested, this.#available);
     }
-    if (this.#available.length === 0) throw CharacterError.noneAvailable();
+    if (this.#available.length === 0) {
+      throw CharacterError.noneAvailable(this.#configDir, this.#workspaceRoot());
+    }
     if (this.#available.length === 1) return this.#available[0] as string;
     throw CharacterError.ambiguous(this.#available);
   }

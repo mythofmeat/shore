@@ -59,6 +59,8 @@ const FIXTURE_MODEL = {
 interface Harness {
   deps: CommandPathDeps;
   activeModel(): string | undefined;
+  /** Needed to rebuild the `none_available` message — see {@link RUST_NONE_AVAILABLE}. */
+  configDir: string;
 }
 
 async function harness(characters: readonly string[]): Promise<Harness> {
@@ -102,7 +104,7 @@ async function harness(characters: readonly string[]): Promise<Harness> {
       // The registry's own three-way resolution, reproduced here rather than
       // reached for: `characters.ts` owns it and is pinned by its own fixture,
       // and building a real registry would drag its config loading in too.
-      resolveCharacter: (selected) => resolveCharacter(selected, characters),
+      resolveCharacter: (selected) => resolveCharacter(selected, characters, dirs.config),
       getOrCreate: async (name) => {
         const existing = engines.get(name);
         if (existing !== undefined) return existing;
@@ -156,21 +158,44 @@ async function harness(characters: readonly string[]): Promise<Harness> {
     handshake: { history: async () => ({ messages: [], config: {} }) } as never,
   };
 
-  return { deps, activeModel: () => activeModel };
+  return { deps, activeModel: () => activeModel, configDir: dirs.config };
 }
 
 /**
  * `CharacterRegistry.resolveCharacter`'s three answers, which is what the
  * fixture's three failure cases are about.
  */
-function resolveCharacter(selected: string | undefined, available: readonly string[]): string {
+function resolveCharacter(
+  selected: string | undefined,
+  available: readonly string[],
+  configDir: string,
+): string {
   if (selected !== undefined) {
     if (!available.includes(selected)) throw CharacterError.notFound(selected, available);
     return selected;
   }
-  if (available.length === 0) throw CharacterError.noneAvailable();
+  if (available.length === 0) throw CharacterError.noneAvailable(configDir);
   if (available.length > 1) throw CharacterError.ambiguous(available);
   return available[0]!;
+}
+
+/**
+ * The `none_available` message the Rust returned, verbatim, and the absolute
+ * path the port answers with instead (#41).
+ *
+ * The reasoning lives in `characters_parity.test.ts`, which owns the message;
+ * this file replays a handler that only relays it. Both keyed on the exact old
+ * string for the same reason.
+ */
+const RUST_NONE_AVAILABLE =
+  "no characters available — create one at characters/<name>/workspace/SOUL.md";
+
+function expectedMessage(message: string, configDir: string): string {
+  if (message !== RUST_NONE_AVAILABLE) return message;
+  return (
+    `no characters available — create one at ${configDir}/characters/<name>/workspace/SOUL.md, ` +
+    "or run: shore character --new <name>"
+  );
 }
 
 function meta(selected: string | null, rid: string | null): RequestMeta {
@@ -251,7 +276,7 @@ describe("dispatchCommand", () => {
 
       if (want["kind"] === "error") {
         expect(got["code"]).toBe(want["code"] as never);
-        expect(got["message"]).toBe(want["message"] as string);
+        expect(got["message"]).toBe(expectedMessage(want["message"] as string, h.configDir));
       } else {
         expect(got["name"]).toBe(want["name"] as string);
         expect(got["data_keys"]).toEqual(want["data_keys"] as string[]);

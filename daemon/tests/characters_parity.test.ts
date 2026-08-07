@@ -109,6 +109,36 @@ function snapshotsOnDisk(dataDir: string): string[] {
     .sort(compareByCodePoint);
 }
 
+/**
+ * The `none_available` message the Rust returned, verbatim.
+ *
+ * It cites `characters/<name>/workspace/SOUL.md` relative to the config
+ * directory and says so nowhere, which is #41: it is the first error a fresh
+ * install hits, from every command, and the reader's working directory is the
+ * obvious wrong guess. The port resolves the path instead.
+ *
+ * The fixture keeps the Rust's string — that is the only thing it records —
+ * and {@link withResolvedSoulPath} rewrites it into the run's absolute form
+ * before comparing. The rewrite is deliberately keyed on the *exact* old
+ * string, so the day the message changes again this stops matching and the
+ * divergence has to be restated rather than silently widened.
+ */
+const RUST_NONE_AVAILABLE =
+  "no characters available — create one at characters/<name>/workspace/SOUL.md";
+
+/** The same failure, with the path resolved against `configDir` (#41). */
+function withResolvedSoulPath(result: unknown, configDir: string): unknown {
+  if (typeof result !== "object" || result === null) return result;
+  const record = result as Record<string, unknown>;
+  if (record["err"] !== RUST_NONE_AVAILABLE) return result;
+  return {
+    ...record,
+    err:
+      `no characters available — create one at ${configDir}/characters/<name>/workspace/SOUL.md, ` +
+      "or run: shore character --new <name>",
+  };
+}
+
 /** The generator's `config_marks()`. */
 function configMarks(config: LoadedConfig): unknown {
   return {
@@ -259,7 +289,7 @@ describe("CharacterRegistry", () => {
               if (!(e instanceof CharacterError)) throw e;
               got = { err: e.message, variant: e.kind };
             }
-            expect(got, where).toEqual(step.result);
+            expect(got, where).toEqual(withResolvedSoulPath(step.result, configDir));
             break;
           }
 
