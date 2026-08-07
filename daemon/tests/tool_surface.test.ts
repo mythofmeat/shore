@@ -12,6 +12,7 @@ import { Database } from "bun:sqlite";
 
 import { toolSurfaceFingerprint } from "../src/ledger/tool_surface.ts";
 import { Ledger } from "../src/ledger/store.ts";
+import { exportTsv } from "../src/ledger/query.ts";
 import { freshLedger } from "./support/ledger_fixture.ts";
 
 const cleanups: Array<() => void> = [];
@@ -133,6 +134,33 @@ describe("the ledger column", () => {
       .all() as { cache_state: string | null; cache_anomaly: string | null }[];
     expect(rows).toHaveLength(2);
     expect(rows[1]!.cache_anomaly).toBeNull();
+  });
+
+  test("the TSV export carries the tool surface", () => {
+    // `reasoning_effort` set the precedent: a column that explains a cache miss
+    // belongs in the export a person reaches for when one happens. This also
+    // pins the *index*, which is what makes it safe for the parity replay to
+    // cut the column out by position before comparing to the frozen string.
+    const { ledger: l, db } = ledger();
+    const fingerprint = toolSurfaceFingerprint([READ_TOOL])!;
+    l.record(call(fingerprint));
+
+    const tsv = exportTsv(db, {});
+    const [header, row] = tsv.split("\n");
+    const index = header!.split("\t").indexOf("tool_surface");
+    expect(index).toBe(12);
+    expect(header!.split("\t")[index - 1]).toBe("reasoning_effort");
+    expect(row!.split("\t")[index]).toBe(fingerprint);
+  });
+
+  test("an unknown surface exports as an empty field, not the word null", () => {
+    const { ledger: l, db } = ledger();
+    l.record(call(undefined));
+
+    const tsv = exportTsv(db, {});
+    const [header, row] = tsv.split("\n");
+    const index = header!.split("\t").indexOf("tool_surface");
+    expect(row!.split("\t")[index]).toBe("");
   });
 
   test("without the fingerprint, that same pair is an anomaly", () => {

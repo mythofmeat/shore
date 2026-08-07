@@ -68,6 +68,31 @@ function withoutToolSurface<T extends { tool_surface: unknown }>(rows: T[]): Omi
   return rows.map(({ tool_surface: _dropped, ...rest }) => rest);
 }
 
+/**
+ * The same removal for the TSV export, which is compared as one whole string.
+ *
+ * That comparison is the file's most valuable single assertion — it pins column
+ * order, boolean rendering and float notation at once, and has already caught a
+ * real bug in float notation — so it is worth keeping literal for the
+ * twenty-four columns the Rust wrote. `tool_surface` is column twelve on this
+ * side and does not exist on that one, so it is cut out by index rather than
+ * the fixture being rewritten around it. Position is asserted separately, in
+ * "the TSV export carries the tool surface" below: cutting by index is only
+ * safe if the index is itself pinned.
+ */
+const TOOL_SURFACE_TSV_INDEX = 12;
+
+function withoutToolSurfaceColumn(tsv: string): string {
+  return tsv
+    .split("\n")
+    .map((line) => {
+      const fields = line.split("\t");
+      fields.splice(TOOL_SURFACE_TSV_INDEX, 1);
+      return fields.join("\t");
+    })
+    .join("\n");
+}
+
 const doc = fixture as unknown as {
   seed: Record<string, unknown>[];
   cases: Case[];
@@ -157,7 +182,9 @@ test("cross-language ledger query parity", () => {
       ),
       at("active_anthropic"),
     ).toEqual(c.active_anthropic as never);
-    expect(exportTsv(db, filter!), at("export_tsv")).toBe(c.export_tsv);
+    expect(withoutToolSurfaceColumn(exportTsv(db, filter!)), at("export_tsv")).toBe(
+      c.export_tsv,
+    );
   }
 
   for (const [character, streak] of Object.entries(doc.warm_streak)) {

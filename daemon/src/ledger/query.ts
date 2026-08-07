@@ -391,6 +391,7 @@ export function queryAnomalies(
 const TSV_HEADER =
   "ts\tcharacter\tprovider\tapi_key_name\tmodel\tcall_type\t" +
   "input_tokens\toutput_tokens\tcache_read_tokens\tcache_write_tokens\tcache_ttl\treasoning_effort\t" +
+  "tool_surface\t" +
   "total_ms\tttft_ms\tfinish_reason\tthinking_enabled\t" +
   "cache_state\tcache_anomaly\t" +
   "input_cost\toutput_cost\tcache_read_cost\tcache_write_cost\tcost_source\ttotal_cost";
@@ -444,6 +445,7 @@ function rowToTsv(r: CallRow): string {
     r.cache_write_tokens,
     optStr(r.cache_ttl),
     optStr(r.reasoning_effort),
+    optStr(r.tool_surface),
     r.total_ms,
     r.ttft_ms,
     r.finish_reason,
@@ -460,7 +462,7 @@ function rowToTsv(r: CallRow): string {
   ].join("\t");
 }
 
-/** Tab-separated header + all matching rows (all 24 CallRow columns). */
+/** Tab-separated header + all matching rows (all 25 CallRow columns). */
 export function exportTsv(db: Database, filter: QueryFilter): string {
   const { where, values } = buildWhere(filter);
   const sql = `SELECT * FROM calls${where} ORDER BY id ASC`;
