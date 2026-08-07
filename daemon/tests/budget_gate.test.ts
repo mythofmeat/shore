@@ -12,17 +12,17 @@
  *
  * # Why there are two halves here
  *
- * The HTTP half below covers `server.ts`, which is the seam the Rust used: the
- * daemon POSTed to the sidecar and the sidecar gated `/v1/stream`. Absorbing
- * that hop into this process moved the chat turn to `runGeneration` and left
- * the gate behind on an endpoint nothing calls — so for the length of the port,
- * chat turns were the one spending path with no budget on them, and this file
- * passed the whole time because it was watching the door that still had one.
+ * Both halves now call production directly: the generate half drives
+ * `generate()`, the chat half drives `runGeneration`. Neither goes over HTTP.
  *
- * The chat half is therefore the half that has to outlive `server.ts`. It is
- * written against `runGeneration` directly rather than through the daemon, so
- * that deleting the HTTP handler subtracts tests from this file without
- * subtracting coverage of the gate.
+ * They are separate because their gates are separate lines of code. The chat
+ * turn is the path a person types into; `generate()` is the one compaction,
+ * dreaming and the image tool reach the provider through. A single test cannot
+ * cover both, and the reason is a scar: the gate used to sit on the sidecar's
+ * `/v1/stream`, and absorbing that hop moved the chat turn to `runGeneration`
+ * while leaving the gate behind on an endpoint nothing called. Chat turns were
+ * the one spending path with no budget on them, and this file passed the whole
+ * time because it was watching the door that still had one.
  */
 
 import { Database } from "bun:sqlite";
