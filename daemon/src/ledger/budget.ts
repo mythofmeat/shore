@@ -319,6 +319,15 @@ export interface BudgetBlock {
   period: UsageBudgetPeriod;
   reset_at: string;
   scope: BudgetScope;
+  /**
+   * Worst-case spend this refusal was weighed against, when it was a
+   * projection rather than money already spent (#14).
+   *
+   * Present only on a pre-flight refusal, which is the case where
+   * `current_cost` alone does not explain the block — it is under the limit,
+   * and what tripped is what the call was about to authorise.
+   */
+  projected_cost?: number;
   /** The Rust `Display` text, which reaches the user as an error. */
   message: string;
 }
@@ -341,7 +350,43 @@ export interface BudgetOptions {
   localZone?: string;
 }
 
+/**
+ * Extra spend to weigh against the limit without reporting it as spent.
+ *
+ * A tool loop is several provider calls behind one gate (#14). Passing the
+ * loop's worst case here refuses up front rather than partway through, which is
+ * the only refusal that leaves a well-formed transcript: stopping mid-loop
+ * abandons a turn whose `tool_use` blocks already have no `tool_result` after
+ * them, and Anthropic rejects that on the *next* request — turning a budget
+ * overrun into a wedged conversation.
+ *
+ * Deliberately applied to the enforcement comparison alone and never to
+ * {@link BudgetStatus.current_cost}. A projection is a forecast, and a forecast
+ * in `shore usage` is a number that does not reconcile with the ledger.
+ */
+export interface EnforceOptions extends BudgetOptions {
+  /** Worst-case additional USD this call is about to authorise. */
+  projectedCost?: number;
+}
+
 function blockMessage(block: Omit<BudgetBlock, "message">): string {
+  // A pre-flight refusal is under the limit until the call it is refusing, so
+  // the "is over limit" wording would be false where it is most likely to be
+  // read. It gets its own sentence naming the projection that tripped it —
+  // otherwise a person checks `shore usage`, sees room, and files a bug.
+  const projected = block.projected_cost;
+  if (projected !== undefined && projected > 0) {
+    const limit =
+      block.scope === "budget"
+        ? `$${formatFixed(block.cost_limit, 2)} for ${periodDebug(block.period)}`
+        : `the ${block.period} pace allowance of $${formatFixed(block.cost_limit, 2)}`;
+    return (
+      `Shore usage budget "${block.budget_name}" would be exceeded by this tool loop ` +
+      `($${formatFixed(block.current_cost, 2)} spent plus up to $${formatFixed(projected, 2)} projected, ` +
+      `against ${limit}); refused before starting, so the turn is not abandoned partway; ` +
+      `action ${actionDebug(block.action)}; resets at ${block.reset_at}`
+    );
+  }
   return block.scope === "budget"
     ? `Shore usage budget "${block.budget_name}" is over limit ($${formatFixed(block.current_cost, 2)}/$${formatFixed(block.cost_limit, 2)} for ${periodDebug(block.period)}); action ${actionDebug(block.action)}; resets at ${block.reset_at}`
     : `Shore usage budget "${block.budget_name}" ${block.period} pace is exhausted ($${formatFixed(block.current_cost, 2)}/$${formatFixed(block.cost_limit, 2)}); action ${actionDebug(block.action)}; pace resets at ${block.reset_at}`;
@@ -793,7 +838,7 @@ export function enforceBudgetForCall(
   config: UsageConfig,
   call: BudgetCallContext,
   now: number,
-  opts: BudgetOptions = {},
+  opts: EnforceOptions = {},
 ): BudgetBlock | undefined {
   const budgets = config.budgets ?? [];
   if (budgets.length === 0) {
@@ -820,10 +865,17 @@ export function enforceBudgetForCall(
       );
       continue;
     }
+    // The projection weighs against the limit but is never reported as spent —
+    // the message still names what the ledger holds, so a refusal a person
+    // reads reconciles with `shore usage`. Without that, a loop refused at
+    // $4.10 of a $5 budget would claim to be over $5 and nothing would agree.
+    const projected = opts.projectedCost ?? 0;
+    const overWithProjection = status.current_cost + projected >= status.cost_limit;
+
     // The budget cap is checked first: it is the harder stop, and naming it in
     // the error is more useful than naming the pace that also tripped.
     if (
-      status.over_limit &&
+      overWithProjection &&
       shouldBlock(config, budget, status.action, call.call_type)
     ) {
       return withMessage({
@@ -834,12 +886,13 @@ export function enforceBudgetForCall(
         period: status.period,
         reset_at: status.reset_at,
         scope: "budget",
+        ...(projected > 0 ? { projected_cost: projected } : {}),
       });
     }
     const pace = status.pace;
     if (
       pace !== undefined &&
-      pace.over_limit &&
+      pace.current_cost + projected >= pace.allowance &&
       shouldBlock(config, budget, pace.action, call.call_type)
     ) {
       return withMessage({
@@ -850,6 +903,7 @@ export function enforceBudgetForCall(
         period: pace.period,
         reset_at: pace.window_end,
         scope: "pace",
+        ...(projected > 0 ? { projected_cost: projected } : {}),
       });
     }
   }

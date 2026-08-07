@@ -34,6 +34,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { closeLedgers } from "../src/ledger/record.ts";
 import { generate } from "../src/llm/generate.ts";
+import { budgetBlockFor } from "../src/ledger/gate.ts";
+import { RECENT_COST_SAMPLE } from "../src/ledger/query.ts";
 import type {
   GenerateResponse,
   SidecarProvider,
@@ -217,6 +219,203 @@ test("no budgets configured means no gate", async () => {
 
   expect(error).toBeUndefined();
   expect(calls).toBe(1);
+});
+
+// ── the tool loop's pre-flight (#14) ────────────────────────────────────
+//
+// A loop makes up to `max_tool_iterations` provider calls behind one gate, so
+// a loop starting just under a hard limit could spend every iteration and
+// finish well past it. The gate now weighs the whole loop before it starts.
+//
+// It refuses *before* rather than *during* deliberately: a mid-loop refusal
+// leaves `tool_use` blocks with no `tool_result` after them, which Anthropic
+// rejects on the next request — turning an overrun into a wedged conversation.
+
+/** A ledger holding `count` calls of `each` dollars, all inside the window. */
+function ledgerWithHistory(count: number, each: number): string {
+  const f = freshLedger();
+  cleanups.push(f.cleanup);
+  const db = openLedger(f.path);
+  const ts = new Date().toISOString();
+  for (let i = 0; i < count; i++) {
+    db.query(
+      `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type,
+         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+         total_ms, ttft_ms, finish_reason, thinking_enabled, cost_source, total_cost)
+       VALUES (?1, 'aria', 'openai', 'default',
+         'openai/gpt-test', 'message', 10, 5, 0, 0, 100, 10, 'end_turn', 1,
+         'pricing_catalog', ?2)`,
+    ).run(ts, each);
+  }
+  db.close();
+  return f.path;
+}
+
+/** `req`, plus the two things that make a request a loop. */
+function loopReq(ledger: string, usage: unknown, iterations: number): SidecarRequest {
+  return {
+    ...req(ledger, usage),
+    max_tool_iterations: iterations,
+    tools: [{ name: "read", description: "", input_schema: {} }],
+  } as unknown as SidecarRequest;
+}
+
+/**
+ * $25, against a history that spends $20.25.
+ *
+ * Chosen so the *projection* is the only thing that can decide it: $9 more
+ * (the recent rate) breaches, $0.09 more (the lifetime rate) does not.
+ */
+const RECENT_WINDOW_BUDGET = {
+  timezone: "utc",
+  budgets: [
+    { name: "window", period: "month", cost_usd: 25.0, warn_at: [1.0], limit: "block" },
+  ],
+} as unknown as UsageConfig;
+
+/** $10 limit, so ten $1 calls is exactly the ceiling. */
+const TEN_DOLLAR_BUDGET = {
+  timezone: "utc",
+  budgets: [
+    { name: "ten", period: "month", cost_usd: 10.0, warn_at: [1.0], limit: "block" },
+  ],
+} as unknown as UsageConfig;
+
+test("a loop that would breach the budget is refused before it starts", () => {
+  // $4 spent, and a 10-iteration loop at the observed $1/call projects $9 more.
+  // The plain check passes — $4 is well under $10 — and the loop is what does
+  // not fit.
+  const ledger = ledgerWithHistory(4, 1.0);
+
+  const single = budgetBlockFor(req(ledger, TEN_DOLLAR_BUDGET));
+  expect(single, "one call on its own still fits").toBeUndefined();
+
+  const loop = budgetBlockFor(loopReq(ledger, TEN_DOLLAR_BUDGET, 10));
+  expect(loop?.budget_name).toBe("ten");
+  expect(loop?.projected_cost).toBeCloseTo(9.0, 5);
+});
+
+test("the refusal says it is a projection, and reports what was actually spent", () => {
+  // The wording matters more than usual here: the budget is *under* its limit
+  // at the moment of refusal, so "is over limit" would send someone to
+  // `shore usage`, where they would find room and file a bug.
+  const ledger = ledgerWithHistory(4, 1.0);
+  const block = budgetBlockFor(loopReq(ledger, TEN_DOLLAR_BUDGET, 10));
+
+  expect(block?.message).toContain("would be exceeded by this tool loop");
+  expect(block?.message).toContain("$4.00 spent");
+  expect(block?.message).toContain("projected");
+  expect(block?.message).not.toContain("is over limit");
+  // Reported spend stays what the ledger holds — the projection is never
+  // folded into it, or `shore usage` and this sentence would disagree.
+  expect(block?.current_cost).toBeCloseTo(4.0, 5);
+});
+
+test("a loop that fits is allowed", () => {
+  // $1 spent, nine more projected, against $10. Exactly at the line and under
+  // it — `>=` is the block, so this must pass.
+  const ledger = ledgerWithHistory(1, 1.0);
+  expect(budgetBlockFor(loopReq(ledger, TEN_DOLLAR_BUDGET, 9))).toBeUndefined();
+});
+
+test("no cost history means no projection, so a new model is not refused on a guess", () => {
+  // Rows exist, but on a different model. Averaging anything else would price
+  // this loop off a model it has nothing to do with.
+  const ledger = ledgerWithHistory(4, 1.0);
+  const other = {
+    ...loopReq(ledger, TEN_DOLLAR_BUDGET, 10),
+    model: "openai/gpt-unseen",
+  } as SidecarRequest;
+
+  expect(budgetBlockFor(other)).toBeUndefined();
+});
+
+test("a request with no tools is not a loop, whatever its iteration cap says", () => {
+  const ledger = ledgerWithHistory(4, 1.0);
+  // Both spellings of "no tools". An empty array is the one the assembler
+  // actually produces when every tool is disabled, and it is not `undefined`.
+  for (const tools of [undefined, []]) {
+    const capped = {
+      ...req(ledger, TEN_DOLLAR_BUDGET),
+      max_tool_iterations: 10,
+      ...(tools === undefined ? {} : { tools }),
+    } as unknown as SidecarRequest;
+    expect(budgetBlockFor(capped), "one call cannot overrun").toBeUndefined();
+  }
+});
+
+test("a cap of one or zero projects nothing, and never projects backwards", () => {
+  // $10 of $10 is already over, so the plain check must refuse. The danger is
+  // arithmetic: `cap - 1` at a cap of zero is *negative*, and a negative
+  // projection would subtract from the spend and let an over-budget call
+  // through. The guard is what stops the loop maths reaching a non-loop.
+  const spent = ledgerWithHistory(10, 1.0);
+  for (const cap of [0, 1]) {
+    expect(
+      budgetBlockFor(loopReq(spent, TEN_DOLLAR_BUDGET, cap))?.budget_name,
+      `cap ${cap} must not talk the gate out of a refusal`,
+    ).toBe("ten");
+  }
+
+  // And under budget, a cap of one is not inflated into a second call's worth.
+  const room = ledgerWithHistory(9, 1.0);
+  expect(budgetBlockFor(loopReq(room, TEN_DOLLAR_BUDGET, 1))).toBeUndefined();
+});
+
+test("the estimate follows the recent window, not the whole history", () => {
+  // A model that was cheap and is now expensive. Averaging everything ever
+  // recorded would price this loop off the old rate and wave it through.
+  const f = freshLedger();
+  cleanups.push(f.cleanup);
+  const db = openLedger(f.path);
+  const ts = new Date().toISOString();
+  const insert = (cost: number): void => {
+    db.query(
+      `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type,
+         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+         total_ms, ttft_ms, finish_reason, thinking_enabled, cost_source, total_cost)
+       VALUES (?1, 'aria', 'openai', 'default',
+         'openai/gpt-test', 'message', 10, 5, 0, 0, 100, 10, 'end_turn', 1,
+         'pricing_catalog', ?2)`,
+    ).run(ts, cost);
+  };
+  // 25 cheap calls, then a full sample window of expensive ones.
+  for (let i = 0; i < 25; i++) insert(0.01);
+  for (let i = 0; i < RECENT_COST_SAMPLE; i++) insert(1.0);
+  db.close();
+
+  // Recent mean is $1, so 9 more calls project $9. Averaging oldest-first
+  // would find $0.01 and project nine cents.
+  const block = budgetBlockFor(loopReq(f.path, RECENT_WINDOW_BUDGET, 10));
+  expect(block?.projected_cost).toBeCloseTo(9.0, 5);
+});
+
+test("free rows do not drag the mean toward zero", () => {
+  // A subscription provider records $0. Counting those as calls would project
+  // that a loop costs nothing, which is the one answer that makes the gate
+  // useless. Nine $0 rows and one $1 row must price a call at $1, not $0.10.
+  const f = freshLedger();
+  cleanups.push(f.cleanup);
+  const db = openLedger(f.path);
+  const ts = new Date().toISOString();
+  const insert = (cost: number): void => {
+    db.query(
+      `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type,
+         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+         total_ms, ttft_ms, finish_reason, thinking_enabled, cost_source, total_cost)
+       VALUES (?1, 'aria', 'openai', 'default',
+         'openai/gpt-test', 'message', 10, 5, 0, 0, 100, 10, 'end_turn', 1,
+         'pricing_catalog', ?2)`,
+    ).run(ts, cost);
+  };
+  for (let i = 0; i < 9; i++) insert(0);
+  insert(1.0);
+  db.close();
+
+  // Spend is $1. A 10-iteration loop projects 9 x $1 = $9, so $10 total: at
+  // the limit, and refused. Averaging the zeros would project $0.09 and allow.
+  const block = budgetBlockFor(loopReq(f.path, TEN_DOLLAR_BUDGET, 10));
+  expect(block?.projected_cost).toBeCloseTo(9.0, 5);
 });
 
 // ── the chat turn ───────────────────────────────────────────────────────

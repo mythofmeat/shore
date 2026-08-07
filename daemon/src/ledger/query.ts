@@ -594,3 +594,39 @@ export function updateCosts(
     id,
   );
 }
+
+/** How many recent calls the per-call cost estimate averages over. */
+export const RECENT_COST_SAMPLE = 20;
+
+/**
+ * Typical cost of one provider call on this provider and model, for projecting
+ * what a tool loop is about to spend (#14).
+ *
+ * The **mean of the most recent calls**, not of the whole budget window: a
+ * model switched to yesterday must not be priced off last week's. Rows with no
+ * cost are excluded rather than counted as free — a subscription provider or an
+ * unpriced model would otherwise drag the mean toward zero and project that a
+ * loop costs nothing, which is the one answer that makes the gate useless.
+ *
+ * `undefined` when there is nothing to average, and the caller must treat that
+ * as "cannot project" rather than as zero. A first call on a new model has no
+ * history, and refusing it on a guess would be worse than the overrun.
+ */
+export function recentCallCost(
+  db: Database,
+  provider: string,
+  model: string,
+): number | undefined {
+  const row = db
+    .query(
+      `SELECT AVG(total_cost) as mean FROM (
+         SELECT total_cost FROM calls
+          WHERE provider = ?1 AND model = ?2
+            AND total_cost IS NOT NULL AND total_cost > 0
+          ORDER BY id DESC LIMIT ?3
+       )`,
+    )
+    .get(provider, model, RECENT_COST_SAMPLE) as { mean: number | null } | null;
+  const mean = row?.mean;
+  return typeof mean === "number" && mean > 0 ? mean : undefined;
+}
