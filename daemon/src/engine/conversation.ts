@@ -1,37 +1,3 @@
-/**
- * The per-character conversation engine.
- *
- * Ported from `ConversationEngine` in `crates/daemon/src/engine/mod.rs`, pinned
- * by `tests/engine_fixtures/engine_parity.json`. It is a coordinator, not a
- * store: `MessageStore` owns `active.jsonl`, `SegmentReader` owns the frozen
- * segments, and this holds the two together, keeps the counters clients use to
- * detect change, and pushes a snapshot after anything that mutates.
- *
- * # Two counters, and they are not the same question
- *
- * `revision` answers "did anything change" and advances on every mutation.
- * `historyRewriteGeneration` answers "did history I already sent you change
- * *underneath* you", and advances only when existing turns are rewritten —
- * edit, delete, truncate, replace, alternate selection, reset, reload. A plain
- * append leaves it alone, and that is load-bearing rather than an
- * optimisation: long-lived provider subprocesses stay warm across an
- * append-only conversation and must be rotated when the past changes, because
- * they still remember turns that no longer exist.
- *
- * A truncate that removed nothing advances *neither*, and does not broadcast.
- * "Regenerate when there is nothing to regenerate" is a no-op, not an event.
- *
- * # Where the merge happens is observable
- *
- * `displayHistory` merges the archived half and the active half *separately*
- * and concatenates, rather than merging the concatenation. The two are not the
- * same: a tool loop split across the compaction boundary would fold into one
- * assistant turn under the second reading and swallow the boundary with it, so
- * `activeStart` — the index the client uses to grey out scrollback — would
- * point into the middle of a merged message. Merging each half keeps the
- * boundary an index that exists.
- */
-
 import { join } from "node:path";
 
 import { mergeToolLoopMessages } from "./merge";
@@ -42,13 +8,6 @@ import { embedMessagesImageData } from "./wire_images";
 
 const ACTIVE_JSONL_FILE = "active.jsonl";
 
-/**
- * A `History` frame, in the shape the Rust serialized.
- *
- * `rid`, `active_start` and `selected_character` are omitted rather than sent
- * null/zero — `skip_serializing_if` on the Rust struct — and clients read the
- * absence. Built by {@link ConversationEngine.historySnapshot}.
- */
 export interface History {
   rid?: string;
   messages: Message[];
@@ -58,7 +17,6 @@ export interface History {
   revision: number;
 }
 
-/** Told after every state change, with the snapshot to push. */
 export type HistoryListener = (history: History) => void;
 
 export class ConversationEngine {
@@ -84,10 +42,6 @@ export class ConversationEngine {
     this.#onHistory = onHistory;
   }
 
-  /**
-   * Open a character's conversation. `dataDir` is the shore data root; the
-   * per-character directory is derived from the name, as the Rust did.
-   */
   static async load(
     characterName: string,
     dataDir: string,
@@ -106,8 +60,6 @@ export class ConversationEngine {
   get characterDir(): string {
     return this.#characterDir;
   }
-
-  // ── Message access ────────────────────────────────────────────────────────
 
   messages(): readonly Message[] {
     return this.#messages.messages();
@@ -141,14 +93,6 @@ export class ConversationEngine {
     return this.#messages.pendingRegenAlt();
   }
 
-  /**
-   * Everything a client shows: archived scrollback first, then the active
-   * tail, with the index where active context begins.
-   *
-   * A segment that fails to load is logged and skipped rather than failing the
-   * call — the alternative is a client that can render nothing because one old
-   * file went bad.
-   */
   async displayHistory(): Promise<{ messages: Message[]; activeStart: number }> {
     const archivedRaw: Message[] = [];
     for (let index = 0; index < this.#segments.segmentCount(); index += 1) {
@@ -168,20 +112,12 @@ export class ConversationEngine {
     return { messages: [...archived, ...active], activeStart };
   }
 
-  // ── Mutations ─────────────────────────────────────────────────────────────
-
   async appendMessage(msg: Message): Promise<void> {
     await this.#messages.append(msg);
     this.#advanceRevision();
     this.broadcastHistory();
   }
 
-  /**
-   * Place a message at its chronological position rather than at the end.
-   *
-   * For work that finished out of order — a heartbeat tick that completed
-   * after a user message already landed.
-   */
   async insertMessageByTimestamp(msg: Message): Promise<void> {
     await this.#messages.insertByTimestamp(msg);
     this.#advanceRevision();
@@ -200,7 +136,6 @@ export class ConversationEngine {
     this.broadcastHistory();
   }
 
-  /** Drop everything after the last real user turn, for a regeneration. */
   async truncateAfterLastUserTurn(): Promise<number> {
     const removed = await this.#messages.truncateAfterLastUserTurn();
     if (removed > 0) {
@@ -217,12 +152,6 @@ export class ConversationEngine {
     return removed;
   }
 
-  /**
-   * Alternate-response bookkeeping. Setting or adding a candidate is not a
-   * rewrite — the stored turns do not change, only which one is marked
-   * current — but *selecting* one is, because it swaps the body of a message
-   * the client and any warm provider state already have.
-   */
   async setAlt(msgId: string, index: number, count: number): Promise<void> {
     await this.#messages.setAlt(msgId, index, count);
     this.#advanceRevision();
@@ -249,7 +178,6 @@ export class ConversationEngine {
     this.broadcastHistory();
   }
 
-  /** Re-read both halves from disk, after compaction rewrote them. */
   async reload(): Promise<void> {
     this.#messages = await MessageStore.load(join(this.#characterDir, ACTIVE_JSONL_FILE));
     this.#segments = await SegmentReader.load(this.#characterDir);
@@ -257,28 +185,8 @@ export class ConversationEngine {
     this.broadcastHistory();
   }
 
-  // ── Snapshots ─────────────────────────────────────────────────────────────
-
-  /**
-   * The active context, merged and with image bytes inlined.
-   *
-   * Active-only and `active_start` therefore absent: this drives both the
-   * push after every state change and the handshake/character-switch snapshot,
-   * neither of which carries scrollback. `displayHistory` is the one that does.
-   */
   historySnapshot(config: unknown): History {
-    // Deep-copied before embedding, and that is not defensive tidiness.
-    // `mergeToolLoopMessages` passes message objects straight through —
-    // untouched turns by reference, merged ones reusing the closing message's
-    // `images` array — where the Rust it was ported from returned owned
-    // clones. Embedding in place would therefore write base64 back into the
-    // live store, and `MessageStore` rewrites `active.jsonl` from exactly
-    // those objects on the next mutation. That is bytes on disk, in a file
-    // whose whole contract is that `data` is stripped from it.
     const messages = structuredClone(mergeToolLoopMessages([...this.#messages.messages()]));
-    // Embedding is not optional here. This snapshot is what a remote client
-    // rebuilds its whole view from on every change, so dropping the bytes
-    // makes attachments vanish the moment anything else happens.
     embedMessagesImageData(messages);
     const history: History = {
       messages,
@@ -289,7 +197,6 @@ export class ConversationEngine {
     return history;
   }
 
-  /** Push the current snapshot. No listener means nobody is connected. */
   broadcastHistory(): void {
     this.#onHistory?.(this.historySnapshot({}));
   }
@@ -298,7 +205,6 @@ export class ConversationEngine {
     this.#revision += 1;
   }
 
-  /** A rewrite advances both counters; every rewrite is also a change. */
   #advanceRewrite(): void {
     this.#historyRewriteGeneration += 1;
     this.#revision += 1;

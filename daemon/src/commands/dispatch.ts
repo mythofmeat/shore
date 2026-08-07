@@ -1,37 +1,3 @@
-/**
- * The command table: a name, and the handler it reaches.
- *
- * Ported from `crates/daemon/src/commands/mod.rs`, pinned by
- * `tests/commands_fixtures/dispatch_parity.json`.
- *
- * Every handler here has its own frozen fixture already. What this module adds
- * is the routing, and routing is where the silent failures live: an arm wired
- * to the wrong handler answers *something*, and a name missing from the table
- * becomes "unknown command" for a client that has been sending it for months.
- * So the fixture drives every name the Rust knows — and three it does not —
- * through the real dispatcher and records what came back.
- *
- * # One context, deliberately mutable
- *
- * `switch_model`, `reset_model`, `config` and `config_reset` write the active
- * model back through the context, and the dispatcher's caller mirrors it into
- * the session. That is the Rust's `&mut CommandContext`, and the same object
- * has to reach every arm for it to work — so this passes one
- * {@link CommandSession} rather than building a fresh narrow context per call.
- * The narrow contexts the individual commands declare still hold: this
- * satisfies each of them structurally.
- *
- * # Nothing is injected any more
- *
- * Two arms landed here unwired — `compact` and `keepalive_ping_now`, the only
- * two that reach an LLM — because each was blocked on a module that had not
- * ported. Both are real arms now. What they need is not a missing module but a
- * *runtime*: something that can make a provider call, reach the tool layer, or
- * ping a cached prefix. `deps.compaction` and `deps.keepalive` carry those the
- * way `deps.ledgerPath` carries `usage`'s, and an absent one still refuses with
- * `unwired` — which is what a build with no LLM client behind it would do.
- */
-
 import { describeError } from "../llm/errors.ts";
 import type { Command } from "../protocol/Command.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
@@ -85,17 +51,8 @@ import { usage } from "./usage.ts";
 import type { SessionTokens } from "../handler/persistence.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 
-/**
- * The dispatcher's own state, shared by every arm and written by four of them.
- *
- * Structurally this is `ConfigContext` and `ModelsContext` at once, which is
- * what lets the active-model writes be visible to the caller. The Rust called
- * it `CommandContext` and had the same double duty.
- */
 export interface CommandSession {
-  /** The character-effective config: global, with this character's overlay. */
   config: LoadedConfig;
-  /** The file the daemon was started with — not the character's overlay. */
   configPath: string;
   dataDir: string;
   characterName: string | undefined;
@@ -105,33 +62,19 @@ export interface CommandSession {
   env?: NodeJS.ProcessEnv;
 }
 
-/** What the table needs beyond the session, none of which any arm writes. */
 export interface CommandDeps {
   sessionTokens: SessionTokens;
   autonomy: AutonomyService;
   diagnostics: Diagnostics;
-  /** The observability store, for `call_log` and `transcript`. */
   callStore: CallStore | undefined;
-  /** `ledger.db`. Absent makes `usage` an internal error, as it did. */
   ledgerPath: string | undefined;
-  /** Wall clock, milliseconds. Injected so a replay can pin it. */
   now?: () => number;
-  /** The same clock read as local time, for the heartbeat's day boundaries. */
   localNow?: () => number;
   fetchImpl?: typeof fetch;
-  /**
-   * What a compaction pass runs against: the provider call, the tool layer, and
-   * the conversation's cached last request. Absent leaves `compact` unwired.
-   */
   compaction?: Omit<CompactContext, "config" | "autonomy">;
-  /**
-   * The armed prefix and the body behind it, for the `keepalive_ping_now`
-   * diagnostic. Absent leaves the arm unwired.
-   */
   keepalive?: Omit<KeepalivePingContext, "config" | "dataDir">;
 }
 
-/** The five names that answer without a character, and their handlers. */
 const CHARACTERLESS = new Set([
   "list_characters",
   "list_models",
@@ -140,14 +83,6 @@ const CHARACTERLESS = new Set([
   "list_provider_models",
 ]);
 
-/**
- * Run one command against a character's conversation.
- *
- * Throws {@link CommandError}; {@link commandFrame} is what turns either
- * outcome into a frame. The split is not the Rust's — it returned the frame
- * from `dispatch` — and it exists because the characterless path needs the same
- * envelope from a different table, and building it twice is how the two drift.
- */
 export async function runCommand(
   engine: ConversationEngine,
   session: CommandSession,
@@ -160,7 +95,6 @@ export async function runCommand(
   const workspaceRoot = session.config.dirs.workspace;
 
   switch (cmd.name) {
-    // ── navigation ──────────────────────────────────────────────────────
     case "list_characters":
       return listCharacters(configDir, character, workspaceRoot);
     case "switch_character":
@@ -171,7 +105,6 @@ export async function runCommand(
         args,
       );
 
-    // ── conversation ────────────────────────────────────────────────────
     case "log":
       return await log(engine, args);
     case "history_page":
@@ -189,7 +122,6 @@ export async function runCommand(
     case "inject_system":
       return await injectSystem(engine, args);
 
-    // ── state ───────────────────────────────────────────────────────────
     case "status":
       return await status(statusContext(engine, session, deps));
     case "list_models":
@@ -249,7 +181,6 @@ export async function runCommand(
     case "usage":
       return await usage(usageContext(session, deps), args);
 
-    // ── provider discovery ──────────────────────────────────────────────
     case "list_providers":
       return listProviders(providersContext(session, deps));
     case "refresh_provider_models":
@@ -264,13 +195,6 @@ export async function runCommand(
   }
 }
 
-/**
- * Run a command that needs no character.
- *
- * A strict subset of the table above, and the refusal is the point: it is what
- * tells a client that `status` is meaningless before a character is chosen,
- * rather than answering for an arbitrary one.
- */
 export function runCharacterlessCommand(
   session: CommandSession,
   deps: CommandDeps,
@@ -279,9 +203,6 @@ export function runCharacterlessCommand(
   const args = (cmd.args ?? {}) as Args;
   switch (cmd.name) {
     case "list_characters":
-      // No active character to mark, which is the whole difference from the
-      // character-backed arm: that one lists the current character first, and
-      // this one is in discovery order because there is no current character.
       return listCharacters(
         session.config.dirs.config,
         undefined,
@@ -300,39 +221,23 @@ export function runCharacterlessCommand(
   }
 }
 
-/** Whether a name can be answered without a character at all. */
 export function isCharacterless(name: string): boolean {
   return CHARACTERLESS.has(name);
 }
 
-/**
- * The frame a command's outcome becomes.
- *
- * A success carries the command's own name back, which is what lets a client
- * correlate an answer it did not ask for a rid on. A failure carries the code
- * the handler chose; anything thrown that is not a {@link CommandError} is an
- * internal error, because a handler that threw a bare `Error` has already
- * failed in a way no code describes.
- */
 export function commandFrame(name: string, outcome: { ok: unknown } | { err: unknown }): ServerMessage {
   if ("ok" in outcome) {
     return { type: "command_output", rid: null, name, data: outcome.ok };
   }
   const e = outcome.err;
-  // `describeError` rather than `String`: several commands reach the provider,
-  // and an `LlmError` is a plain object whose default stringification is
-  // `[object Object]`.
   const error = e instanceof CommandError ? e : internalError(describeError(e));
   console.warn(`shore: command ${name} failed: ${error.message}`);
   return { type: "error", rid: null, code: error.code, message: error.message };
 }
 
-/** An arm whose dependency has not been wired. See the module doc. */
 function unwired(name: string): CommandError {
   return internalError(`${name} is not available in this build`);
 }
-
-// ── the narrow contexts, built per call ─────────────────────────────────
 
 function statusContext(
   engine: ConversationEngine,

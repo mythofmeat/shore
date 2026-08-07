@@ -1,30 +1,3 @@
-/**
- * OpenRouter adapter (the sidecar contract shape) — the single path for every
- * NON-Anthropic provider.
- *
- * Built on OpenRouter's first-party `@openrouter/sdk` client. It replaces the
- * hand-cast `openai`-SDK adapter (`openai.ts`) and the Z.ai adapter (`zai.ts`):
- * DeepSeek, Kimi (Moonshot), GLM (Z.ai), MiniMax, GPT, xAI, etc. all reach
- * OpenRouter, which normalizes each vendor's bespoke reasoning shape
- * (`reasoning_content` / `reasoning_details` / `thinking.keep` / `clear_thinking`)
- * into ONE typed `reasoningDetails` array. So there is no per-provider reasoning
- * matrix here — we round-trip one opaque structure.
- *
- * The SDK is stateless (single call). The Rust daemon still owns the tool loop,
- * conversation state, prompt assembly, and memory — this is purely the wire.
- *
- * Reasoning handling:
- * - Inbound reasoning is SURFACED as `thinking` events (display/persistence).
- * - `reasoning_details` round-trips OPAQUELY: the response's `reasoningDetails`
- *   goes back to the daemon as its own `reasoning_details` event, rides the
- *   thinking block's `reasoning_details` field, and is replayed verbatim on the
- *   next turn. We NEVER reconstruct reasoning from
- *   thinking text — that wrong-shape reconstruction was the Rust deepseek/kimi
- *   400/hang bug. Preserving reasoning is a proven non-critical continuity win
- *   via OpenRouter (it does not crash-gate tool loops), so when the daemon does
- *   not yet carry the blob, replay is a safe no-op.
- */
-
 import { OpenRouter } from "@openrouter/sdk";
 import type {
   ChatAssistantMessage,
@@ -56,7 +29,7 @@ import { replayableMessages } from "../replay.ts";
 
 export class OpenRouterProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
-    const { client, chatRequest } = buildCall(req, /*streaming*/ true);
+    const { client, chatRequest } = buildCall(req, true);
     const stream = (await client.chat.send(
       { chatRequest: { ...chatRequest, stream: true } },
       signal ? { fetchOptions: { signal } } : undefined,
@@ -66,7 +39,7 @@ export class OpenRouterProvider implements SidecarProvider {
 
   async generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {
     const startedAt = Date.now();
-    const { client, chatRequest } = buildCall(req, /*streaming*/ false);
+    const { client, chatRequest } = buildCall(req, false);
     const result = await client.chat.send(
       { chatRequest: { ...chatRequest, stream: false } },
       signal ? { fetchOptions: { signal } } : undefined,
@@ -104,14 +77,6 @@ export class OpenRouterProvider implements SidecarProvider {
   }
 }
 
-/**
- * Pure chunk → `StreamEvent` mapping (no network), so it is unit-testable with
- * hand-built chunks and a fake clock. Emits `start`, incremental
- * `thinking`/`text`, a single `thinking_signature` carrying the consolidated
- * `reasoningDetails` (placed at the close of the thinking run so the consumer
- * attaches it to the thinking block), ONE consolidated `tool_use` per call, then
- * `done`.
- */
 export async function* openRouterStreamEvents(
   model: string,
   chunks: AsyncIterable<ChatStreamChunk>,
@@ -133,10 +98,6 @@ export async function* openRouterStreamEvents(
   let finishReason: string | undefined;
   let usage: Usage = emptyUsage();
 
-  // Emit the accumulated reasoning_details exactly once, while the thinking
-  // block is still open (before any text/tool_use flushes it). An orphan
-  // carrier (no preceding thinking) would be discarded, so we gate on having
-  // actually surfaced thinking.
   function* flushSignature(): Iterable<StreamEvent> {
     if (sigEmitted || !sawThinking) return;
     sigEmitted = true;
@@ -183,7 +144,6 @@ export async function* openRouterStreamEvents(
     if (chunk.usage) usage = extractUsage(chunk.usage);
   }
 
-  // Thinking-only turn (no text or tool deltas): close the block now.
   yield* flushSignature();
 
   for (const tc of [...toolCalls.entries()].sort((a, b) => a[0] - b[0])) {
@@ -203,8 +163,6 @@ export async function* openRouterStreamEvents(
     },
   };
 }
-
-// ── request construction ────────────────────────────────────────────────────
 
 export function buildCall(
   req: SidecarRequest,
@@ -228,17 +186,11 @@ export function buildCall(
   if (req.temperature !== undefined) chatRequest.temperature = req.temperature;
   if (req.top_p !== undefined) chatRequest.topP = req.top_p;
 
-  // Explicit disable (`reasoning_effort = "off"` → `thinking_enabled = false` in
-  // the daemon, issue #164): OpenRouter's `reasoning.effort = "none"` turns
-  // reasoning OFF even for always-on reasoning models (GLM/Kimi/DeepSeek), where
-  // simply omitting effort would leave them reasoning by default. `"none"` is a
-  // first-class value of the SDK's effort enum, so this rides the typed path.
   if (req.provider_options?.thinking_enabled === false) {
     chatRequest.reasoning = { effort: "none" as NonNullable<ChatRequest["reasoning"]>["effort"] };
   } else {
     const effortRaw = req.provider_options?.reasoning_effort;
     if (typeof effortRaw === "string") {
-      // foldEffort only ever returns an in-domain OpenRouter value (minimal/low/medium/high/xhigh/max).
       const effort = foldEffort("openrouter", effortRaw, req.model);
       if (effort) {
         chatRequest.reasoning = { effort: effort as NonNullable<ChatRequest["reasoning"]>["effort"] };
@@ -246,8 +198,6 @@ export function buildCall(
     }
   }
 
-  // Provider routing is config-owned (the daemon sets openrouter_provider); pass
-  // it through verbatim, never inferred from base_url.
   const routing = req.provider_options?.openrouter_provider;
   if (routing && typeof routing === "object") {
     chatRequest.provider = routing as ChatRequest["provider"];
@@ -268,8 +218,6 @@ function toTools(tools: ToolDefinition[] | undefined): ChatFunctionTool[] {
   } as ChatFunctionTool));
 }
 
-// ── message conversion ────────────────────────────────────────────────────────
-
 function buildMessages(req: SidecarRequest): ChatMessages[] {
   const messages: ChatMessages[] = [];
   const systemText = systemToText(req.system);
@@ -278,13 +226,6 @@ function buildMessages(req: SidecarRequest): ChatMessages[] {
   return messages;
 }
 
-/**
- * One canonical turn → OpenRouter chat message(s). Assistant turns replay prior
- * `reasoning_details` (decoded from the thinking block's opaque signature
- * carrier) so OpenRouter can preserve cross-turn reasoning continuity. We never
- * send thinking TEXT back as a reasoning field — only the structured opaque
- * blob, when present.
- */
 export function turnToOpenRouter(turn: TurnMessage): ChatMessages[] {
   if (turn.role === "system") {
     const text = turn.content
@@ -322,8 +263,6 @@ export function turnToOpenRouter(turn: TurnMessage): ChatMessages[] {
     return [{ ...msg, role: "assistant" }];
   }
 
-  // User turn: tool_results → one `role:tool` message each; text + images ride a
-  // single user message.
   const out: ChatMessages[] = [];
   for (const b of turn.content) {
     if (b.type === "tool_result") {
@@ -335,9 +274,6 @@ export function turnToOpenRouter(turn: TurnMessage): ChatMessages[] {
       out.push(toolMsg);
     }
   }
-  // `turn.images` is the legacy field; the daemon inlines images as `image`
-  // content blocks instead and never populates it. Honored first so anything
-  // that does set it keeps images-before-text ordering.
   const parts: Array<TextPart | ImagePart> = imagesToParts(turn.images);
   for (const b of turn.content) {
     if (b.type === "text") {
@@ -371,19 +307,11 @@ function imagesToParts(images: ImageRef[] | undefined): ImagePart[] {
   return out;
 }
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-
 function emptyUsage(): Usage {
   return { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 };
 }
 
 function extractUsage(u: ChatUsage | undefined): Usage {
-  // OpenAI-convention `promptTokens` is the TOTAL prompt, inclusive of the
-  // cached portion. Our ledger/pricing treats input/cache_read as disjoint
-  // buckets that are summed, so subtract the cache hits to leave only the
-  // cache-miss tokens in `input_tokens` (otherwise they bill twice). Note the
-  // billed cost for OpenRouter rows comes from `usage.cost` when present, but
-  // the token columns must still be disjoint.
   const cached =
     (u?.promptTokensDetails as { cachedTokens?: number } | null | undefined)?.cachedTokens ?? 0;
   const usage: Usage = {

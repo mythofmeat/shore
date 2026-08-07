@@ -1,31 +1,3 @@
-/**
- * The model half of the SWP command surface: listing what is selectable,
- * describing one, switching between them, and reading or writing the per-model
- * settings.
- *
- * Ported from the command half of `crates/daemon/src/commands/state/models.rs`,
- * pinned by `tests/commands_fixtures/models_parity.json`. The parsing and
- * capability half is in `./model_settings.ts`.
- *
- * # A discovered model's qualified name is not a resolver input
- *
- * `chat.<provider>.<model_id>` is a display-only synthetic name. Feeding it back
- * to the resolver always misses, which is why the session carries a
- * *pre-resolved* {@link ModelsContext.activeResolvedModel} beside the name the
- * user typed: every path that needs the active model reads that first and only
- * falls back to resolving a string when it is absent. Persistence uses
- * `(provider, model_id)` for the same reason — an alias survives a rename of
- * the catalog key, and a discovered model has no catalog key at all.
- *
- * # `include_hidden` is per-call, and it moves more than the list
- *
- * `discovery.ignore` hides a model from `list_models` *and* from selection. The
- * flag opts past both for one call, and — since the reported active model falls
- * back to the first entry when nothing is selected — passing it can change which
- * model a fresh session reports as active. That is the Rust's behaviour and the
- * fixture pins it.
- */
-
 import {
   EffectiveCatalogError,
   findEffectiveModel,
@@ -60,21 +32,8 @@ import { reasoningDomain } from "../llm/capabilities.ts";
 import { applySamplerValue, capabilityCheck, keyApplicability } from "./model_settings.ts";
 import { internalError, invalidRequest, notFound, type CommandError } from "./errors.ts";
 
-/** Args arrive as a decoded JSON object; every field is optional and untyped. */
 export type Args = Record<string, unknown>;
 
-/**
- * What these commands need from the session.
- *
- * The Rust's `CommandContext` carried a `data_dir` beside `config.dirs.data`.
- * They are the same path — `main.rs` builds the context from
- * `loaded.dirs.data` — and this module was the only place that read the
- * standalone one, so there is one field here.
- *
- * `activeModel` and `activeResolvedModel` are mutable: `switchModel` and
- * `resetModel` move them, and the next command in the same connection reads
- * what they left.
- */
 export interface ModelsContext {
   config: LoadedConfig;
   dataDir: string;
@@ -83,12 +42,9 @@ export interface ModelsContext {
   activeResolvedModel: ResolvedModel | undefined;
 }
 
-// ── shared resolution ─────────────────────────────────────────────────────
-
 const asStr = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
 const asBool = (v: unknown): boolean | undefined => (typeof v === "boolean" ? v : undefined);
 
-/** A non-empty string argument, which is how the Rust treated `""` — as absent. */
 const asName = (v: unknown): string | undefined => {
   const s = asStr(v);
   return s === undefined || s === "" ? undefined : s;
@@ -98,12 +54,9 @@ function catalogError(e: unknown): CommandError {
   if (!(e instanceof EffectiveCatalogError)) {
     return internalError(e instanceof Error ? e.message : String(e));
   }
-  // A name that is merely ambiguous is the caller's to disambiguate; one that is
-  // missing or hidden is a lookup that found nothing it may return.
   return e.kind === "ambiguous" ? invalidRequest(e.message) : notFound(e.message);
 }
 
-/** `findEffectiveModel`, with the catalog's failures already mapped. */
 function resolve(ctx: ModelsContext, name: string, includeHidden: boolean): ResolvedModel {
   try {
     return findEffectiveModel(configView(ctx.config), ctx.config.dirs.cache, name, includeHidden);
@@ -122,14 +75,6 @@ function requireCharacter(ctx: ModelsContext): string {
   return ctx.characterName;
 }
 
-/**
- * The model this session is on.
- *
- * The pre-resolved selection wins outright — see the note at the top about
- * synthetic qualified names — and `includeHidden` is true on the fallback path
- * because the user has already explicitly chosen this selection; hiding it from
- * them now would be refusing to describe what they are using.
- */
 function resolveActiveModel(ctx: ModelsContext): ResolvedModel {
   if (ctx.activeResolvedModel !== undefined) return ctx.activeResolvedModel;
   const name = ctx.activeModel ?? ctx.config.app.defaults.model;
@@ -146,15 +91,6 @@ function backgroundTask(selector: string): BackgroundTask {
   );
 }
 
-/**
- * The *base* model behind a background task: the config pin, or the character's
- * active chat model when there is none.
- *
- * Deliberately without the sampler overlay, unlike `resolveBackgroundModel` —
- * this only needs the `provider:model_id` identity to key a settings read or
- * write onto, so a user can tune the heartbeat's model without first switching
- * chat to it.
- */
 function backgroundTargetModel(ctx: ModelsContext, task: BackgroundTask): ResolvedModel {
   const pinned = ctx.config.app.defaults.background[task] ?? ctx.config.app.defaults.background.model;
   if (pinned !== undefined) return resolve(ctx, pinned, true);
@@ -169,11 +105,6 @@ function backgroundTargetModel(ctx: ModelsContext, task: BackgroundTask): Resolv
   return inherited;
 }
 
-/**
- * The model a `background_task` selector names. `"all"` only works when every
- * task collapses to one identity; otherwise it reports the mapping so the user
- * knows which task to target instead.
- */
 function backgroundSettingTarget(ctx: ModelsContext, selector: string): ResolvedModel {
   if (selector !== "all") return backgroundTargetModel(ctx, backgroundTask(selector));
 
@@ -192,7 +123,6 @@ function backgroundSettingTarget(ctx: ModelsContext, selector: string): Resolved
   );
 }
 
-/** A `background_task` selector beats an explicit `name`, which beats the active model. */
 function settingTarget(ctx: ModelsContext, args: Args): ResolvedModel {
   const selector = asStr(args["background_task"]);
   if (selector !== undefined) return backgroundSettingTarget(ctx, selector);
@@ -203,15 +133,6 @@ function settingTarget(ctx: ModelsContext, args: Args): ResolvedModel {
   return resolveActiveModel(ctx);
 }
 
-// ── background_models ─────────────────────────────────────────────────────
-
-/**
- * Which model each background task resolves to, and where that came from.
- *
- * Read-only companion to `[defaults.background]`. A pin that does not resolve
- * is reported as the raw name rather than as an error — this is a diagnostic,
- * and "you pinned something that is not there" is more useful than a failure.
- */
 export function backgroundModels(ctx: ModelsContext): unknown {
   const bg = ctx.config.app.defaults.background;
   const background = BACKGROUND_TASKS.map((task) => {
@@ -227,7 +148,6 @@ export function backgroundModels(ctx: ModelsContext): unknown {
           true,
         ).qualifiedName;
       } catch {
-        // Keep the name the user wrote.
       }
       return {
         task,
@@ -249,8 +169,6 @@ export function backgroundModels(ctx: ModelsContext): unknown {
   return { background };
 }
 
-// ── list_models ───────────────────────────────────────────────────────────
-
 function effectiveModelToJson(entry: EffectiveModel): unknown {
   const m = entry.resolved;
   return {
@@ -264,23 +182,9 @@ function effectiveModelToJson(entry: EffectiveModel): unknown {
   };
 }
 
-/**
- * The canonical name of the active selection, for the client's marker.
- *
- * Four sources in order: the pre-resolved model, the session's string, the
- * config default, and — when none of those is set — the first entry in the list
- * *as filtered*, which is why `include_hidden` can move it.
- *
- * The two string paths fall back through the plain catalog and then to the raw
- * string, so a name that resolves nowhere is still reported rather than
- * silently becoming "no active model".
- */
 function activeName(ctx: ModelsContext, entries: EffectiveModel[]): string | undefined {
   if (ctx.activeResolvedModel !== undefined) return ctx.activeResolvedModel.qualifiedName;
 
-  // The Rust had a second fallback here — retry through the plain catalog —
-  // which cannot fire: `findEffectiveModel` *starts* with that same lookup and
-  // only reaches its own paths once it has failed. Dropped rather than ported.
   const byName = (name: string): string => {
     try {
       return findEffectiveModel(configView(ctx.config), ctx.config.dirs.cache, name, true)
@@ -299,17 +203,11 @@ function activeName(ctx: ModelsContext, entries: EffectiveModel[]): string | und
   return entries[0]?.resolved.qualifiedName;
 }
 
-/**
- * The selectable chat models. Tool-only, embedding and image-generation
- * profiles are excluded on purpose: they are not chat targets.
- */
 export function listModels(ctx: ModelsContext, args: Args): unknown {
   const includeHidden = asBool(args["include_hidden"]) ?? false;
   const view = configView(ctx.config);
   const entries = listEffectiveModels(view, ctx.config.dirs.cache, includeHidden);
 
-  // The count is of everything hidden, not of what this call returned, so it
-  // stays a stable "and N more" no matter which way the flag went.
   const hiddenCount = (includeHidden
     ? entries
     : listEffectiveModels(view, ctx.config.dirs.cache, true)
@@ -323,9 +221,6 @@ export function listModels(ctx: ModelsContext, args: Args): unknown {
   };
 }
 
-// ── model_info ────────────────────────────────────────────────────────────
-
-/** The ten scope fields `model_info` reports — the vendor knobs are not among them. */
 const INFO_SCOPE_FIELDS = [
   ["temperature", "temperature"],
   ["top_p", "topP"],
@@ -348,7 +243,6 @@ function scopesJson(
   return out;
 }
 
-/** The sampler view in the fixture's spelling: every key present, absent as null. */
 function samplerJson(sampler: SamplerSettings): Record<string, unknown> {
   const wire = samplerToWire(sampler);
   const out: Record<string, unknown> = {};
@@ -381,13 +275,6 @@ function samplerToWire(s: SamplerSettings): Record<string, unknown> {
   };
 }
 
-/**
- * Everything about one model: the resolved catalog entry, plus — when a
- * character is attached — the effective sampler and which layer set each field.
- *
- * Without a character there is no preference stack to read, so the two extra
- * keys are absent rather than empty.
- */
 export function modelInfo(ctx: ModelsContext, args: Args): unknown {
   const name = asName(args["name"]);
   const resolved = name === undefined ? resolveActiveModel(ctx) : resolve(ctx, name, true);
@@ -418,16 +305,6 @@ function loadPreferencesFor(
   }
 }
 
-// ── switch_model / reset_model ────────────────────────────────────────────
-
-/**
- * Select a model, or report the current selection when given no name.
- *
- * The session keeps the *name the user typed* so CLI flows that echo it keep
- * working, while the file records `(provider, model_id)` so an alias survives.
- * The resolved model is parked alongside so the next command in the same
- * connection need not re-resolve — and for a discovered model, cannot.
- */
 export function switchModel(ctx: ModelsContext, args: Args): unknown {
   const name = asStr(args["name"]);
   if (name === undefined) return { active: ctx.activeModel ?? null };
@@ -452,7 +329,6 @@ export function switchModel(ctx: ModelsContext, args: Args): unknown {
   };
 }
 
-/** Clear the character's selection so it falls back through the config chain. */
 export function resetModel(ctx: ModelsContext): unknown {
   const character = requireCharacter(ctx);
   const prefs = loadCharacterPreferences(ctx, character);
@@ -488,16 +364,6 @@ function saveCharacter(ctx: ModelsContext, character: string, prefs: ModelPrefer
   }
 }
 
-// ── set_model_setting ─────────────────────────────────────────────────────
-
-/**
- * Write one sampler field into the character's or the global preferences.
- *
- * The order is load-bearing. The target model is resolved first, because the
- * capability check needs its sdk; the check runs before the file is read, so a
- * refused setting never touches it; and an entry whose sampler ends up empty is
- * removed rather than left as an empty table.
- */
 export function setModelSetting(ctx: ModelsContext, args: Args): unknown {
   const rawKey = asStr(args["key"]);
   if (rawKey === undefined) throw invalidRequest("missing key");
@@ -524,8 +390,6 @@ export function setModelSetting(ctx: ModelsContext, args: Args): unknown {
   const entry = prefs.models.get(entryKey) ?? { sampler: {} };
   applySamplerValue(entry.sampler, key, value);
 
-  // An entry whose sampler is now empty is dropped rather than left behind as
-  // an empty table, so the file stays a record of what the user actually set.
   if (samplerIsEmpty(entry.sampler)) prefs.models.delete(entryKey);
   else prefs.models.set(entryKey, entry);
 
@@ -559,9 +423,6 @@ function saveGlobal(ctx: ModelsContext, prefs: ModelPreferences): void {
   }
 }
 
-// ── model_settings ────────────────────────────────────────────────────────
-
-/** All fourteen keys, unlike `model_info`'s ten. */
 const SETTINGS_SCOPE_FIELDS = [
   ...INFO_SCOPE_FIELDS,
   ["openrouter_provider", "openrouterProvider"],
@@ -570,14 +431,6 @@ const SETTINGS_SCOPE_FIELDS = [
   ["zai_subscription", "zaiSubscription"],
 ] as const satisfies readonly (readonly [string, keyof SamplerSettings])[];
 
-/**
- * The effective settings for a model, what each layer saved, and how the sdk
- * treats every key.
- *
- * With no character attached both preference layers are empty — including the
- * *global* one, which does exist on disk. That is the Rust's behaviour: it
- * loads the pair or neither.
- */
 export function modelSettings(ctx: ModelsContext, args: Args): unknown {
   const target = settingTarget(ctx, args);
   const character = ctx.characterName;

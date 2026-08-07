@@ -1,60 +1,23 @@
-/**
- * Choosing the embedder from config.
- *
- * Ported from `crates/daemon/src/memory/retrieval.rs`, pinned by
- * `tests/memory_fixtures/workspace_index_parity.json`.
- *
- * There is no bundled local embedder. Semantic search needs an
- * OpenAI-compatible embeddings endpoint — hosted or self-hosted
- * (text-embedding-inference, llama.cpp's `/v1/embeddings`) — and when nothing
- * is configured, hybrid search degrades to lexical at the call site. That is
- * why every failure here is a plain sentence: it is shown to whoever has to
- * fix the config, and it is not an exception the caller must handle.
- *
- * Identity is a bare `provider:model_id`. Transport and credentials come from
- * `[providers.<provider>]`, on the same key-fallback contract chat uses;
- * optional `[embedding."provider:model_id"]` settings carry `dimensions`.
- */
-
 import { readCandidateEnv, resolveKeyCandidates, type ProviderEntry } from "../llm/credentials";
 import { cacheOrBuild, OpenAIEmbedder, type Embedder } from "../llm/embed";
 import { hardcodedProviderBaseUrl } from "../llm/request";
 
-/** Per-model embedding settings, from `[embedding."provider:model_id"]`. */
 export interface EmbeddingSettings {
-  /** Requested output width. Unset means the model's native width. */
   dimensions?: number;
 }
 
-/** What resolution needs to know about one `[providers.<key>]` entry. */
 export interface EmbeddingProvider {
   entry?: ProviderEntry;
-  /** The entry's own `base_url`, when it sets one. */
   baseUrl?: string;
 }
 
 export interface ResolveEmbedderOptions {
-  /** `defaults.embedding`. */
   defaultRef?: string;
-  /** `[embedding.*]`, keyed by `provider:model_id`. */
   embedding: Record<string, EmbeddingSettings>;
-  /** `[providers.*]`, keyed by provider. */
   providers: Record<string, EmbeddingProvider>;
-  /** Injected for tests; production uses the global `fetch`. */
   fetchImpl?: typeof fetch;
 }
 
-
-/**
- * The embedding identity to use: the configured default, else the sole
- * `[embedding.*]` key.
- *
- * With several entries and no default, this fails rather than picking one.
- * The Rust's comment for that was "the choice would be arbitrary (BTreeMap
- * order)" — which is also why a plain object is fine here despite the Rust
- * using an ordered map. The only branch that reads more than one key is the
- * one that refuses to choose.
- */
 function resolveTarget(
   defaultRef: string | undefined,
   embedding: Record<string, EmbeddingSettings>,
@@ -76,13 +39,6 @@ function resolveTarget(
   );
 }
 
-/**
- * The API key for an embedding provider, via the `[providers.<p>].keys[]`
- * fallback chain — the first candidate whose env var is set wins.
- *
- * An empty candidate list means the provider is *disabled*, which is a
- * different failure from having no key set, and says so.
- */
 function resolveApiKey(providerKey: string, entry: ProviderEntry | undefined): string {
   const candidates = resolveKeyCandidates(providerKey, entry);
   if (candidates.length === 0) {
@@ -100,13 +56,6 @@ function resolveApiKey(providerKey: string, entry: ProviderEntry | undefined): s
   );
 }
 
-/**
- * Build, or fetch from the process-wide cache, the configured embedder.
- *
- * @throws {Error} when nothing is configured, the identity is not a hosted
- * `provider:model_id`, the provider is disabled, or no key is set. Callers
- * degrade hybrid search to lexical on any of these.
- */
 export function resolveEmbedder(options: ResolveEmbedderOptions): Embedder {
   const { defaultRef, embedding, providers, fetchImpl } = options;
   const target = resolveTarget(defaultRef, embedding);
@@ -120,7 +69,6 @@ export function resolveEmbedder(options: ResolveEmbedderOptions): Embedder {
         "[providers.<provider>]; bundled local ids are not served at runtime.",
     );
   }
-  // Split on the *first* colon: a model id may contain more of them.
   const providerKey = target.slice(0, colon);
   const modelId = target.slice(colon + 1);
   if (providerKey === "" || modelId === "") {
@@ -129,13 +77,6 @@ export function resolveEmbedder(options: ResolveEmbedderOptions): Embedder {
     );
   }
 
-  // "Unset" stays unset so the wire request omits `dimensions` and the provider
-  // returns the model's native width. Substituting a default here would
-  // silently dimension-reduce any model that is not 1536 wide.
-  //
-  // The Rust also guarded a `usize::try_from` on this value; the field is a
-  // `u32`, so that conversion cannot fail on any platform shore runs on. The
-  // guard is dropped rather than reproduced as an unreachable branch.
   const dimensions = embedding[target]?.dimensions;
 
   const provider = providers[providerKey];

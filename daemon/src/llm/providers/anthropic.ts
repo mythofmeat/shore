@@ -1,28 +1,3 @@
-/**
- * Anthropic SDK adapter (sidecar contract shape).
- *
- * Consumes a `SidecarRequest` and emits the `StreamEvent` NDJSON vocabulary.
- * Owns the Anthropic wire behavior for the daemon's canonical request shape.
- * The pieces the SDK doesn't do natively (and we therefore keep):
- *
- *   1. cache_control breakpoint placement — default schedule only (last stable
- *      system block + last-stable-assistant + last message). The
- *      `cache_depth_turns`/`cache_pinned_position`
- *      override + env vars are intentionally NOT ported (advanced tuning,
- *      unused in practice; default placement is the parity baseline).
- *   2. per-model thinking-mode selection (`thinking_caps`) — adaptive vs
- *      enabled+budget; wrong mode is a hard 400.
- *   3. inline `role:"system"` → `<system_instruction>` user wrap (the API
- *      rejects role:system in messages[]). Always-wrap today, behind a
- *      `systemMessageStrategy` seam; opus-4.8 native system messages are a
- *      tracked post-parity follow-up.
- *   4. trivial plumbing: pass `provider_options.openrouter_provider` into
- *      `body.provider`, strip a trailing `/v1` from base_url.
- *
- * The SDK handles everything else: SSE, thinking/signature verbatim round-trip,
- * tool_use accumulation, retries, errors. Cache-forensics stays Rust-side.
- */
-
 import Anthropic from "@anthropic-ai/sdk";
 import type {
   ContentBlockParam,
@@ -61,9 +36,6 @@ export class AnthropicProvider implements SidecarProvider {
       { ...params, stream: true } as MessageCreateParamsStreaming,
       signal ? { signal } : undefined,
     )) as AsyncIterable<RawMessageStreamEvent>;
-    // Record on the terminal event — `done` and `error` both carry the usage
-    // the provider billed, and a stream that died mid-flight has already paid
-    // for any cache write reported in `message_start`.
     for await (const event of anthropicStreamEvents(req.model, stream)) {
       if (event.type === "done" || event.type === "error") {
         recordCacheCall(req.context, req.model, placement, event.usage, event.type);
@@ -109,22 +81,12 @@ export class AnthropicProvider implements SidecarProvider {
   }
 }
 
-// ── streaming event mapping (pure; injectable clock for tests) ──────────────
-
 type AccumState =
   | { kind: "text" }
   | { kind: "thinking"; signature: string }
   | { kind: "redacted_thinking" }
   | { kind: "tool_use"; id: string; name: string; partialJson: string };
 
-/**
- * Map the SDK's raw stream events to the `StreamEvent` contract. `start` first,
- * incremental `text`/`thinking`, `thinking_signature` at the close of a
- * thinking block (after its deltas, before the next block — where
- * `StreamConsumer` attaches it), `redacted_thinking` verbatim, ONE consolidated
- * `tool_use` per block, then `done`.
- */
-/** What one turn accumulated, for the caller to fold into a `done` event. */
 export interface TurnAccumulator {
   text: string;
   stopReason: string;
@@ -135,16 +97,6 @@ export function newTurnAccumulator(): TurnAccumulator {
   return { text: "", stopReason: "end_turn", usage: emptyUsage() };
 }
 
-/**
- * Map one turn's raw events to Shore events, without the surrounding `start`
- * and `done`.
- *
- * Split out because a tool loop emits many turns inside a single Shore stream:
- * one `start` at the front, one `done` at the end, and this in between for each
- * model call. Errors propagate — a caller that wants the partial usage should
- * catch and use `acc.usage`, which already holds the cache write the provider
- * reports before any output.
- */
 export async function* anthropicContentEvents(
   events: AsyncIterable<RawMessageStreamEvent>,
   acc: TurnAccumulator,
@@ -208,8 +160,6 @@ export async function* anthropicContentEvents(
   }
 }
 
-/** True for every event that counts as output arriving — a signature is
- * bookkeeping attached to thinking already emitted, not new output. */
 export const marksFirstToken = (event: StreamEvent): boolean =>
   event.type !== "thinking_signature";
 
@@ -230,10 +180,6 @@ export async function* anthropicStreamEvents(
       yield event;
     }
   } catch (err) {
-    // The Anthropic stream failed mid-flight. `acc.usage` already holds the
-    // cache write reported in `message_start` (which the provider bills
-    // before any output), so surface it instead of letting the failure drop
-    // the cost to zero. The daemon records this then still retries.
     yield streamErrorEvent(err, acc.usage, startedAt, firstTokenAt, now);
     return;
   }
@@ -251,10 +197,6 @@ export async function* anthropicStreamEvents(
   };
 }
 
-// ── request construction ────────────────────────────────────────────────────
-
-/** The wire params, plus the OpenRouter `provider` routing field the SDK type
- * doesn't model. (`output_config` IS typed by the SDK as of 0.100.1.) */
 type AnthropicParams = MessageCreateParams & {
   provider?: unknown;
 };
@@ -271,13 +213,6 @@ function buildAnthropicCall(
   return { client, params, placement };
 }
 
-/**
- * Pure request-body builder that also reports what it decided about caching.
- *
- * Placement is computed exactly once and both returned views come from it —
- * a second implementation for reporting would be free to drift from the one
- * that actually runs, which is the whole reason the forensic log matters.
- */
 export function buildAnthropicPlan(req: SidecarRequest): {
   params: AnthropicParams;
   placement: CachePlacement;
@@ -287,16 +222,6 @@ export function buildAnthropicPlan(req: SidecarRequest): {
   const cacheEnabled = cacheTtl !== "";
 
   const converted = convertInlineSystemMessages(replayableMessages(req), req.model);
-  // Recorded for forensics only. It used to *suppress* placement — "the daemon
-  // already placed markers, so leave them alone" — which could not work and was
-  // never merely a no-op: `toContentBlockParam` rebuilds every block field by
-  // field and does not copy `cache_control`, so deferring to incoming markers
-  // dropped them on the way to the wire and sent a request with no breakpoints
-  // at all. One marker leaked into `active.jsonl` by the tool loop therefore
-  // took prompt caching down for the whole conversation, permanently and
-  // silently, at roughly 5x the token cost per turn. `normalizeMessages` strips
-  // incoming markers and the schedule re-places them, which is the only
-  // handling of a stale marker that is actually correct.
   const hasExistingMarkers = messagesHaveCacheControl(converted);
 
   let messages: MessageParam[];
@@ -305,10 +230,7 @@ export function buildAnthropicPlan(req: SidecarRequest): {
   let sysBreakpoints: number[] = [];
   if (cacheEnabled) {
     const cc = makeCacheControl(cacheTtl);
-    const msgs = normalizeMessages(converted); // strip cc, string → block array
-    // Placement reads the labels (the system anchor skips `memory_index`), so
-    // it runs over the labelled blocks and emits provider blocks at the end.
-    // The label cannot leak to the provider now: it is not on `TextBlockParam`.
+    const msgs = normalizeMessages(converted);
     const labelled = req.system ?? [];
     const sys = systemToBlocks(labelled);
     const { msgBp, sysBp } = tsDefaultPlacement(msgs, labelled);
@@ -319,7 +241,7 @@ export function buildAnthropicPlan(req: SidecarRequest): {
     sysBreakpoints = sysBp;
   } else {
     messages = converted.map(toMessageParam);
-    system = systemToBlocks(req.system); // no cache_control
+    system = systemToBlocks(req.system);
   }
 
   const { thinking, outputConfig } = buildThinkingParams(opts, req.model, req.max_tokens);
@@ -332,14 +254,11 @@ export function buildAnthropicPlan(req: SidecarRequest): {
     ...(system.length > 0 ? { system } : {}),
     ...(tools.length > 0 ? { tools } : {}),
   };
-  // apply_common_params parity: temperature/top_p set unconditionally when
-  // present (Rust does NOT gate them on thinking).
   if (req.temperature !== undefined) params.temperature = req.temperature;
   if (req.top_p !== undefined) params.top_p = req.top_p;
   if (thinking) params.thinking = thinking;
   if (outputConfig) params.output_config = outputConfig;
 
-  // OpenRouter provider routing comes from config, not a base_url heuristic.
   const orProvider = opts.openrouter_provider;
   if (orProvider && typeof orProvider === "object") {
     const provider: Record<string, unknown> = { ...(orProvider as Record<string, unknown>) };
@@ -362,50 +281,13 @@ export function buildAnthropicPlan(req: SidecarRequest): {
   };
 }
 
-/**
- * Pure request-body builder. Exported for the parity test, which asserts the
- * cache-breakpoint placement, thinking config, and provider routing without
- * hitting the network.
- */
 export function buildAnthropicParams(req: SidecarRequest): AnthropicParams {
   return buildAnthropicPlan(req).params;
 }
 
-/** The SDK appends `/v1/messages`; Shore config writes base as `…/api/v1`, so
- * strip a trailing `/v1` to avoid `/v1/v1/messages`. Mirrors Rust's check. */
 function stripTrailingV1(baseUrl: string): string {
   return baseUrl.replace(/\/v1\/?$/, "");
 }
-
-// ── cache_control placement (default schedule, mirrors ts_default) ──────────
-//
-// This adapter owns the Anthropic breakpoint schedule. It places at most four
-// markers, the provider limit: one system anchor on the last non-`memory_index`
-// block, plus three message anchors at
-// `[prev_frozen_boundary, frozen_boundary, last_msg]`.
-//
-// The load-bearing rule is that **a message anchor must sit in the frozen
-// region** — strictly before the message at which the most-recent assistant
-// turn begins. That boundary only ever advances, so everything before it is
-// byte-stable for the life of the conversation. Anchoring the trailing turn
-// itself is the bug fixed in #191: under `none` that turn loses the thinking a
-// tool loop appended to it as soon as the next turn rebuilds from disk,
-// rewriting the very bytes the anchor covered, and the read collapses to the
-// system prefix alone. (The retired `last_turn` mode did this on *every* turn,
-// tool loop or not, which is why it was removed — see `ThinkingReplay` in
-// `crates/common/src/config/app.rs`.) A cache read resolves only up to a
-// *placed* breakpoint, not as a free-running longest-prefix match, which is
-// also why the second (older) frozen anchor is not redundant: after a
-// multi-round tool loop the boundary jumps past the whole loop in one step, and
-// that anchor is the only placed breakpoint left on a still-stable prefix. The
-// final user message *is* anchored — it is the tail write each request pays for.
-//
-// One derived constraint, enforced below:
-//   - A scheduled index whose message carries no `cache_control`-eligible block
-//     walks back to the nearest message that has one, rather than dropping the
-//     marker: `thinking` blocks reject `cache_control`, empty text blocks fail
-//     the whole request, and caption-less image messages carry no text block at
-//     all.
 
 type CacheControl = { type: "ephemeral" } | { type: "ephemeral"; ttl: "1h" };
 
@@ -420,9 +302,6 @@ function messagesHaveCacheControl(messages: WireMessage[]): boolean {
   );
 }
 
-/** Strip pre-existing cache_control and convert string content → block arrays
- * so the breakpoint can always land on a block. Mirrors the message half of
- * `normalize_for_caching`. */
 function normalizeMessages(messages: WireMessage[]): MessageParam[] {
   return messages.map((m): MessageParam => {
     const blocks = m.content.map(toContentBlockParam);
@@ -431,10 +310,6 @@ function normalizeMessages(messages: WireMessage[]): MessageParam[] {
   });
 }
 
-/** Last system block whose label is NOT `"memory_index"` — that block is
- * rewritten by every dreaming and compaction pass, so anchoring the system
- * breakpoint on it would throw the system prefix away each time. Returns -1
- * when there is no stable block. */
 function lastStableSystemIndex(system: SystemContent): number {
   for (let i = system.length - 1; i >= 0; i--) {
     if (system[i]?.label !== "memory_index") return i;
@@ -442,32 +317,12 @@ function lastStableSystemIndex(system: SystemContent): number {
   return -1;
 }
 
-/** A user message whose content is entirely `tool_result` blocks — a tool-loop
- * continuation, not a genuine user turn. Mirrors `is_tool_result_only_user` in
- * the daemon's `content_util.rs`. */
 function isToolResultOnlyUser(msg: MessageParam): boolean {
   const content = msg.content;
   if (!Array.isArray(content) || content.length === 0) return false;
   return content.every((b) => (b as { type?: string }).type === "tool_result");
 }
 
-/** Index at which the most-recent assistant turn begins — the first message of
- * the trailing assistant run, walking back over assistant messages and the
- * tool-result-only user messages between them and stopping at the first genuine
- * user turn. Returns `messages.length` when there is no assistant message.
- *
- * Exported for its test, which pins it against
- * `crates/daemon/tests/fixtures/turn_boundary_parity.json`. That fixture was
- * shared with a Rust implementation while `replay_prior_thinking = last_turn`
- * needed the same boundary daemon-side; the mode is gone and this is now the
- * only implementation, but the cases still pin the walk-back rules.
- *
- * Note this runs *after* `convertInlineSystemMessages`: merging a trailing
- * `role:"system"` turn into a preceding user message both removes a message and
- * can turn a tool-result-only user into a "genuine" one (it gains a text
- * block). That only ever ends a turn earlier or shortens the array, so the
- * boundary stays conservative. Do not move this call before the conversion: the
- * breakpoint must be placed on the messages that actually go on the wire. */
 export function mostRecentAssistantTurnStart(messages: MessageParam[]): number {
   let lastAssistant = -1;
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -490,43 +345,12 @@ export function mostRecentAssistantTurnStart(messages: MessageParam[]): number {
   return start;
 }
 
-/** `[prev_frozen_boundary, frozen_boundary, last_msg]`, deduped, sorted.
- *
- * `frozen_boundary` is the message just before the trailing assistant turn.
- * `replay_prior_thinking` strips thinking from assistant turns *before* that
- * boundary, and the boundary only ever moves forward as turns are appended, so
- * `[0, boundary)` is byte-stable for the life of the conversation under every
- * replay mode. An anchor there survives the strip.
- *
- * Anchoring on the trailing turn itself (the old `last_stable_assistant`) does
- * not: under `last_turn` that turn loses its thinking blocks as soon as another
- * turn lands, rewriting the very bytes the anchor covers. Both message anchors
- * then miss and the read collapses to the system prefix alone — a full re-cache
- * of the whole conversation on every committed turn.
- *
- * `prev_frozen_boundary` is the same boundary one turn back — the genuine-user
- * boundary of the turn *before* the trailing one. Under the normal turn cadence
- * it is exactly the previous request's `frozen_boundary`, so it is redundant.
- * It earns its slot on the request right after a multi-round tool loop: while
- * the loop runs, `frozen_boundary` is pinned at the loop start, and when the
- * loop ends and a new assistant turn lands the boundary jumps *past the whole
- * loop* in one step — stripping every round's thinking at once. The new
- * `frozen_boundary` sits after that rewritten region and misses; the still-
- * stable prefix (before the loop) is only readable because this second anchor
- * is sitting on it. Compaction and dreaming loops run well past Anthropic's
- * ~20-block automatic lookback, so without it those reads collapse to the
- * system prefix. Three message anchors plus the one system anchor is exactly
- * the four-breakpoint provider limit. */
 function tsMessageBreakpoints(messages: MessageParam[]): number[] {
   if (messages.length === 0) return [];
   const anchors = [messages.length - 1];
   const frozenIdx = mostRecentAssistantTurnStart(messages) - 1;
   if (frozenIdx >= 0) {
     anchors.push(frozenIdx);
-    // `messages[frozenIdx]` is a genuine user turn, so slicing it off leaves
-    // the preceding assistant run intact and the same walk-back finds where
-    // *that* turn began. A return of `frozenIdx` means no assistant message
-    // precedes the boundary (nothing older to anchor).
     const prevStart = mostRecentAssistantTurnStart(messages.slice(0, frozenIdx));
     if (prevStart < frozenIdx && prevStart - 1 >= 0) anchors.push(prevStart - 1);
   }
@@ -555,19 +379,10 @@ function placeBreakpoints(
     const block = system[idx];
     if (block) block.cache_control = cc;
   }
-  // A scheduled index whose message has no anchorable block walks back to the
-  // nearest older message that does, instead of silently dropping the
-  // breakpoint. Dropping it is what the frozen-boundary anchor exists to
-  // prevent: `messages[frozenIdx]` is always a genuine user message, and the
-  // daemon deliberately persists caption-less image messages with *no* text
-  // block (`handler/task.rs`), so before `image` became anchorable an
-  // image-only boundary silently reduced the schedule to the last message
-  // alone — the exact shape this schedule was written to fix. An assistant
-  // message of only thinking blocks is the remaining un-anchorable case.
   const placed = new Set<number>();
   for (const pos of msgBp) {
     for (let i = pos; i >= 0; i--) {
-      if (placed.has(i)) break; // collapsed into an anchor already at/behind i
+      if (placed.has(i)) break;
       const msg = messages[i];
       if (!msg || !Array.isArray(msg.content)) continue;
       if (applyMessageBreakpoint(msg.content, cc)) {
@@ -578,26 +393,6 @@ function placeBreakpoints(
   }
 }
 
-/** Apply the breakpoint to the last text/image/tool_use/tool_result block and
- * report whether one was found (thinking blocks reject cache_control). Empty
- * text blocks are skipped as anchors: Anthropic rejects "cache_control cannot
- * be set for empty text blocks" and fails the whole request, so the breakpoint
- * walks back to the previous eligible block. */
-/**
- * Re-place the cache breakpoints over a conversation that has grown.
- *
- * The schedule anchors partly on the *last* message, so inside a tool loop the
- * breakpoints have to move as assistant turns and tool results are appended.
- * Leaving them where the first request put them means every continuation
- * re-sends the loop's accumulated tail uncached.
- *
- * Existing markers are stripped first: the schedule places up to four, which is
- * also the per-request maximum, so re-placing without stripping would overflow
- * it within two turns. Both arrays are mutated in place — the caller owns them.
- *
- * A no-op when caching is off, which keeps a cache-disabled loop byte-identical
- * to one that never went through here.
- */
 export function placeContinuationBreakpoints(
   messages: MessageParam[],
   system: TextBlockParam[],
@@ -638,10 +433,6 @@ function applyMessageBreakpoint(content: ContentBlockParam[], cc: CacheControl):
   return false;
 }
 
-// ── system + inline-system handling ─────────────────────────────────────────
-
-/** Today: always "wrap" (parity with current Rust). The seam lets opus-4.8
- * native mid-conv system messages slot in later without restructuring. */
 function systemMessageStrategy(_model: string): "wrap" | "native" {
   return "wrap";
 }
@@ -650,23 +441,15 @@ export function wrapInlineSystemInstruction(text: string): string {
   return `<system_instruction>${text}</system_instruction>`;
 }
 
-/** Convert system → Anthropic text blocks. The label stays behind: it is not a
- * field on `TextBlockParam`, so it can no longer leak to the provider. */
 function systemToBlocks(system: SystemContent | undefined): TextBlockParam[] {
   return (system ?? []).map((b) => ({ type: "text", text: b.text }));
 }
 
-/**
- * Convert `role:"system"` turns into wrapped `role:"user"` turns (the API
- * rejects role:system in messages[]). Merge into a preceding user turn to avoid
- * consecutive user roles. Mirrors the daemon's established inline-system wire
- * behavior.
- */
 export function convertInlineSystemMessages(
   turns: WireMessage[],
   model: string,
 ): WireMessage[] {
-  if (systemMessageStrategy(model) === "native") return turns; // not reached today
+  if (systemMessageStrategy(model) === "native") return turns;
   if (!turns.some((t) => t.role === "system")) return turns;
 
   const out: WireMessage[] = [];
@@ -691,8 +474,6 @@ export function convertInlineSystemMessages(
   return out;
 }
 
-// ── message + tool conversion ───────────────────────────────────────────────
-
 function toMessageParam(m: WireMessage): MessageParam {
   return { role: m.role as "user" | "assistant", content: m.content.map(toContentBlockParam) };
 }
@@ -708,9 +489,6 @@ function toContentBlockParam(b: ContentBlock): ContentBlockParam {
     case "tool_use":
       return { type: "tool_use", id: b.id, name: b.name, input: (b.input ?? {}) as Record<string, unknown> };
     case "tool_result": {
-      // Block-shaped results come from the daemon's generated-image replay
-      // (an image plus its caption); Anthropic accepts text and image blocks
-      // there, which is exactly what that path produces.
       const content: NonNullable<ToolResultBlockParam["content"]> =
         typeof b.content === "string"
           ? b.content
@@ -720,9 +498,6 @@ function toContentBlockParam(b: ContentBlock): ContentBlockParam {
       return out;
     }
     case "image":
-      // Synthesized by the daemon from a message's `images` (base64 source).
-      // The shape already matches Anthropic's ImageBlockParam; only the
-      // media_type literal needs the same narrowing as imagesToAnthropicBlocks.
       return {
         type: "image",
         source: {
@@ -761,8 +536,6 @@ function imagesToAnthropicBlocks(images: ImageRef[] | undefined): ContentBlockPa
   return out;
 }
 
-// ── thinking params (port of build_thinking_params + thinking_caps) ─────────
-
 const NAMED_EFFORT_VALUES = ["max", "xhigh", "high", "medium", "low"] as const;
 type NamedEffort = (typeof NAMED_EFFORT_VALUES)[number];
 
@@ -770,7 +543,6 @@ function isEffortValue(s: string | undefined): s is NamedEffort {
   return s !== undefined && (NAMED_EFFORT_VALUES as readonly string[]).includes(s);
 }
 
-/** Clamp into `1024 <= budget < max_tokens`; undefined if no valid room. */
 function clampEnabledBudget(requested: number, maxTokens: number): number | undefined {
   const ceiling = maxTokens - 1;
   if (ceiling < 1024) return undefined;
@@ -781,9 +553,6 @@ type ThinkingParam =
   | { type: "adaptive"; display: "summarized" }
   | { type: "enabled"; budget_tokens: number };
 
-/** Returns the thinking + output_config the target model accepts.
- * `display:"summarized"` on adaptive is REQUIRED (Opus 4.7/4.8 default
- * `omitted`, which returns empty thinking text). */
 export function buildThinkingParams(
   opts: ProviderOptions,
   model: string,
@@ -793,10 +562,6 @@ export function buildThinkingParams(
   const namedEffort = isEffortValue(effort) ? effort : undefined;
   const wantsAdaptive = effort === "adaptive" || namedEffort !== undefined;
 
-  // `budget_tokens` is the only way to ask for thinking without naming an
-  // effort. There is no separate boolean knob — the daemon expresses "off" as
-  // `thinking_enabled: false`, which never reaches an Anthropic-family model
-  // that has thinking on by default.
   const budget = opts.budget_tokens;
   const wantsEnabled = budget !== undefined;
 
@@ -812,13 +577,11 @@ export function buildThinkingParams(
         ...(namedEffort !== undefined ? { outputConfig: { effort: namedEffort } } : {}),
       };
     }
-    // adaptive-incapable: map effort → budget.
     const derived = requestedBudget ?? effortBudget(effort ?? "medium");
     const b = clampEnabledBudget(derived, maxTokens);
     return b !== undefined ? { thinking: { type: "enabled", budget_tokens: b } } : {};
   }
 
-  // budget/flag request: prefer enabled, fall back to adaptive.
   if (caps.enabled) {
     const b = clampEnabledBudget(requestedBudget ?? 1024, maxTokens);
     if (b !== undefined) return { thinking: { type: "enabled", budget_tokens: b } };
@@ -826,8 +589,6 @@ export function buildThinkingParams(
   if (caps.adaptive) return { thinking: { type: "adaptive", display: "summarized" } };
   return {};
 }
-
-// ── usage ────────────────────────────────────────────────────────────────────
 
 function emptyUsage(): Usage {
   return { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 };
@@ -847,7 +608,6 @@ function anthropicUsage(u: {
   };
 }
 
-/** message_delta usage updates only the fields it carries. */
 function mergeAnthropicUsage(
   prev: Usage,
   u: {
@@ -874,5 +634,4 @@ function parseArgs(argsJson: string): unknown {
   }
 }
 
-// Image helper retained for when wire messages carry images.
 export { imagesToAnthropicBlocks };

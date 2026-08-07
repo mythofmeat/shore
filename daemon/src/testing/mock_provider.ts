@@ -1,53 +1,3 @@
-/**
- * An OpenAI-compatible provider that answers from a script.
- *
- * Point `[providers.*]` at it and the daemon makes real provider calls —
- * through the real `openai` SDK, the real adapter, the real stream consumer —
- * against something that costs nothing, never rate-limits, and says exactly
- * what the test told it to say. It is the piece that was missing for testing
- * anything above the wire: every suite in `tests/` either stops at the request
- * it would have sent or substitutes a fake adapter, so the path from
- * `handler/turn.ts` down through `providers/openai.ts` and back up into
- * `active.jsonl` had no coverage that ran it end to end.
- *
- * Two ways in:
- *
- * ```ts
- * const mock = await startMockProvider({ script: [{ text: "hi" }] });
- * // …point a daemon at mock.url, drive it, then:
- * expect(mock.requests[0].body.messages.at(-1).content).toBe("hello");
- * await mock.stop();
- * ```
- *
- * ```console
- * $ bun run src/testing/mock_provider.ts --port 8899
- * mock provider listening on http://127.0.0.1:8899/v1 (model: mock-model)
- * ```
- *
- * The standalone form echoes the user's last message, which is enough to hold
- * a conversation in the TUI and see turns land on disk.
- *
- * # Why OpenAI-compatible
- *
- * It is the dialect with the most adapters behind it — `providers/openai.ts`
- * fronts OpenAI, DeepSeek, Kimi, xAI and every other gateway that differs only
- * by `base_url` — so one mock exercises the widest path. `sdk = "anthropic"`
- * and `sdk = "gemini"` speak different wires and would each need their own;
- * they are worth adding when something needs them, not before.
- *
- * # What it is faithful to
- *
- * The shapes the `openai` SDK parses and the adapter reads, and no more:
- * `choices[0].delta.{content,reasoning_content,tool_calls}`, `finish_reason`,
- * and a trailing `usage` chunk (the adapter sends
- * `stream_options: {include_usage: true}`, so a stream without one reports
- * zero tokens and the ledger records a free call). Tool-call arguments are
- * emitted as fragments across chunks, because a mock that always sent them
- * whole would never exercise the adapter's accumulator — which is the part
- * that can break.
- */
-
-/** A `usage` block, in the OpenAI spelling the adapter's `extractUsage` reads. */
 export interface MockUsage {
   prompt_tokens: number;
   completion_tokens: number;
@@ -55,86 +5,51 @@ export interface MockUsage {
   prompt_tokens_details?: { cached_tokens?: number };
 }
 
-/** One tool call for the model to ask for. */
 export interface MockToolCall {
-  /** Defaults to `call_<n>` within the reply. */
   id?: string;
   name: string;
-  /** Serialized with `JSON.stringify` and split across chunks when streaming. */
   arguments: unknown;
 }
 
-/**
- * One answer.
- *
- * A reply with `status` is a failure and everything else on it is ignored —
- * that is how you make the daemon's retry and fallback paths run.
- */
 export interface MockReply {
-  /** Assistant text. */
   text?: string;
-  /** Emitted as `reasoning_content`, which the adapter turns into `thinking`. */
   thinking?: string;
   toolCalls?: MockToolCall[];
-  /** Defaults to `tool_calls` when `toolCalls` is set, else `stop`. */
   finishReason?: string;
   usage?: Partial<MockUsage>;
-  /** Non-2xx status. Makes this call fail instead of answering. */
   status?: number;
-  /** Body for a `status` reply. Defaults to an OpenAI-shaped error object. */
   errorBody?: unknown;
-  /** Wait before responding. For timeouts, cancellation and keepalives. */
   delayMs?: number;
 }
 
-/** What the mock saw, for assertions. */
 export interface RecordedRequest {
   path: string;
   method: string;
   headers: Record<string, string>;
-  /** Parsed JSON body, or `undefined` for a GET. */
   body: any;
-  /** True when the daemon asked for SSE. */
   streaming: boolean;
 }
 
 export interface MockProviderOptions {
-  /** 0 (the default) asks the kernel for a free one. */
   port?: number;
-  /** Answers, in order. When exhausted, {@link MockProviderOptions.fallback} takes over. */
   script?: MockReply[];
-  /**
-   * What to answer once the script runs out.
-   *
-   * Defaults to echoing the last user message, so the standalone server is
-   * usable without a script. Pass `null` to fail instead — which is what a
-   * test wants, since a turn nobody scripted is a turn nobody meant.
-   */
   fallback?: MockReply | ((req: RecordedRequest) => MockReply) | null;
-  /** Model ids `GET /v1/models` reports. Defaults to `["mock-model"]`. */
   models?: string[];
-  /** Characters per streamed text chunk. Defaults to 8. */
   chunkChars?: number;
-  /** Called for each request. For logging in the standalone server. */
   onRequest?: (req: RecordedRequest) => void;
 }
 
 export interface MockProvider {
-  /** The `base_url` to put in `[providers.<name>]` — includes the `/v1`. */
   readonly url: string;
   readonly port: number;
-  /** Every request, in arrival order. */
   readonly requests: RecordedRequest[];
-  /** Append to the script at runtime. */
   push(...replies: MockReply[]): void;
-  /** Drop recorded requests and any unconsumed script. */
   reset(): void;
   stop(): Promise<void>;
 }
 
 const DEFAULT_MODEL = "mock-model";
 
-/** Start the server and resolve once it is accepting. */
 export async function startMockProvider(
   options: MockProviderOptions = {},
 ): Promise<MockProvider> {
@@ -147,8 +62,6 @@ export async function startMockProvider(
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: options.port ?? 0,
-    // A scripted `delayMs` is the point of some tests, so the server must not
-    // be the thing that gives up first.
     idleTimeout: 0,
     async fetch(request) {
       const url = new URL(request.url);
@@ -215,7 +128,6 @@ export async function startMockProvider(
   };
 }
 
-/** The script first, then the fallback; `undefined` means answer with an error. */
 function nextReply(
   script: MockReply[],
   fallback: MockReply | ((req: RecordedRequest) => MockReply) | null,
@@ -227,13 +139,6 @@ function nextReply(
   return typeof fallback === "function" ? fallback(request) : fallback;
 }
 
-/**
- * Echo the last user message.
- *
- * Deliberately not an empty reply: a turn that persists an empty assistant
- * message looks the same on disk as a turn that never ran, and the standalone
- * server exists to make a working turn visible.
- */
 function echoLastUserMessage(request: RecordedRequest): MockReply {
   const messages = Array.isArray(request.body?.messages) ? request.body.messages : [];
   const lastUser = [...messages].reverse().find((m: any) => m?.role === "user");
@@ -241,7 +146,6 @@ function echoLastUserMessage(request: RecordedRequest): MockReply {
   return { text: `mock reply to: ${text || "(nothing)"}` };
 }
 
-/** OpenAI multipart content → its text, for the echo. */
 function contentText(content: unknown): string {
   if (!Array.isArray(content)) return "";
   return content
@@ -271,7 +175,6 @@ function toolCallId(call: MockToolCall, index: number): string {
   return call.id ?? `call_${index}`;
 }
 
-/** `POST /v1/chat/completions` without `stream`. */
 function completionResponse(reply: MockReply, model: string): unknown {
   const message: Record<string, unknown> = { role: "assistant" };
   if (reply.text) message.content = reply.text;
@@ -293,15 +196,6 @@ function completionResponse(reply: MockReply, model: string): unknown {
   };
 }
 
-/**
- * The same answer as SSE.
- *
- * Text and tool arguments go out in fragments rather than whole, because the
- * adapter accumulates both and an always-whole mock would leave that
- * accumulation untested. `usage` rides its own trailing chunk with an empty
- * `choices`, which is where the real API puts it under
- * `stream_options.include_usage`.
- */
 function streamResponse(reply: MockReply, model: string, chunkChars: number): Response {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -322,9 +216,6 @@ function streamResponse(reply: MockReply, model: string, chunkChars: number): Re
       for (const piece of split(reply.text ?? "", chunkChars)) chunk({ content: piece });
 
       reply.toolCalls?.forEach((call, index) => {
-        // The opening fragment carries id and name; the rest carry arguments
-        // only, keyed by `index`. That is the real wire's shape and the reason
-        // the adapter keys its accumulator on `index` rather than `id`.
         chunk({
           tool_calls: [
             { index, id: toolCallId(call, index), type: "function", function: { name: call.name, arguments: "" } },
@@ -358,14 +249,11 @@ function streamResponse(reply: MockReply, model: string, chunkChars: number): Re
   });
 }
 
-/** Split into pieces of at most `size`. An empty string yields nothing. */
 function split(text: string, size: number): string[] {
   const out: string[] = [];
   for (let i = 0; i < text.length; i += size) out.push(text.slice(i, i + size));
   return out;
 }
-
-// ── standalone ──────────────────────────────────────────────────────────────
 
 if (import.meta.main) {
   const argv = process.argv.slice(2);
@@ -378,9 +266,6 @@ if (import.meta.main) {
   const models = (flag("--model") ?? DEFAULT_MODEL).split(",");
   const quiet = argv.includes("--quiet");
 
-  // A JSON array of `MockReply`, consumed in order before the echo takes over.
-  // This is what makes a tool loop drivable by hand: script the tool call and
-  // the answer that follows it, then talk to the daemon normally.
   const scriptPath = flag("--script");
   const script: MockReply[] = scriptPath === undefined ? [] : await Bun.file(scriptPath).json();
   if (!Array.isArray(script)) {

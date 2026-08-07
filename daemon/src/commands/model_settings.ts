@@ -1,30 +1,3 @@
-/**
- * The write boundary for per-model settings: parsing the fourteen sampler keys,
- * and the capability check that guards them.
- *
- * Ported from the pure half of `crates/daemon/src/commands/state/models.rs`,
- * pinned by `tests/commands_fixtures/model_settings_parity.json`.
- *
- * # Two layers, and they reject different things
- *
- * {@link capabilityCheck} asks whether this *model* can do anything with the
- * key at all — a `gemini_generation` on an Anthropic model is refused here, and
- * so is a `reasoning_effort` value outside the sdk's graded domain. It runs
- * first, so nothing the wire would ignore reaches the preferences file.
- *
- * {@link applySamplerValue} then asks whether the value is well-typed for the
- * key, and writes it. `null` always clears, and clearing is never
- * capability-checked: there is no value to validate.
- *
- * # One list, not two
- *
- * The Rust declared `SAMPLER_KEYS` beside a fourteen-arm `match` that had to
- * agree with it, and the agreement was by hand. Here `config/preferences.ts`
- * already owns the key-to-field map, so the list, the parser table and the
- * settings type are the same fourteen entries by construction. A key that is
- * accepted but never stored is not expressible.
- */
-
 import {
   SAMPLER_FIELD_BY_KEY,
   SAMPLER_KEYS,
@@ -44,19 +17,8 @@ import { invalidRequest, type CommandError } from "./errors.ts";
 
 export { SAMPLER_KEYS };
 
-/**
- * How a value renders inside an error message.
- *
- * The Rust used two spellings — `{value}` (serde's `Display`) and `{s:?}`
- * (`Debug`) — which differ for everything except a string. Both `{s:?}` sites
- * are reached only with a string already in hand, so the distinction collapses
- * here and one helper covers both.
- */
 const show = (v: unknown): string => JSON.stringify(v) ?? "null";
 
-// ── the fourteen parsers ──────────────────────────────────────────────────
-
-/** Parsed value for the key, or the message explaining why it is not one. */
 type Parsed = { value: unknown } | { error: string };
 
 const number = (name: string) => (v: unknown): Parsed =>
@@ -68,10 +30,6 @@ const string = (name: string) => (v: unknown): Parsed =>
 const boolean = (name: string) => (v: unknown): Parsed =>
   typeof v === "boolean" ? { value: v } : { error: `${name} must be a boolean, got ${show(v)}` };
 
-/**
- * `as_u64` then `u32::try_from`: a negative number, a fraction and anything past
- * `u32::MAX` all fail, and they fail with one message rather than three.
- */
 const u32 = (name: string) => (v: unknown): Parsed =>
   typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 0xff_ff_ff_ff
     ? { value: v }
@@ -95,15 +53,6 @@ const PARSERS: Record<string, (v: unknown) => Parsed> = {
     return "err" in parsed ? { error: `cache_keepalive: ${parsed.err}` } : { value: parsed.ok };
   },
 
-  /**
-   * Rejected up front so the preferences file never carries a value the
-   * request-time overlay would have to discard.
-   *
-   * `moonshotai` is accepted — it is an alias the wire parser takes — and
-   * stored verbatim, so the file can hold a spelling the settings command
-   * itself never suggests. That is the Rust's behaviour: it validates with
-   * `parse_wire` and then stores the user's original string.
-   */
   sdk: (v) => {
     const raw = string("sdk")(v);
     if ("error" in raw) return raw;
@@ -114,7 +63,6 @@ const PARSERS: Record<string, (v: unknown) => Parsed> = {
   },
 
   replay_prior_thinking: (v) => {
-    // The legacy bool spelling predates the two-mode string and still loads.
     if (typeof v === "boolean") return { value: v ? "all" : "none" };
     if (typeof v !== "string") {
       return { error: `replay_prior_thinking must be "all" or "none"; got ${show(v)}` };
@@ -128,20 +76,11 @@ const PARSERS: Record<string, (v: unknown) => Parsed> = {
   max_tool_iterations: (v) => {
     const parsed = u32("max_tool_iterations")(v);
     if ("error" in parsed) return parsed;
-    // Unlimited is spelled by unsetting, so 0 would be an unreachable cap.
     return parsed.value === 0
       ? { error: "max_tool_iterations must be >= 1; unset it (null) for unlimited" }
       : parsed;
   },
 
-  /**
-   * Routing is an object (`{ order, allow_fallbacks, … }`); a scalar would be
-   * stored verbatim and mean nothing on the wire.
-   *
-   * The Rust then converted to `toml::Value`, which fails on JSON that TOML
-   * cannot hold — a `null` anywhere in the object, at any depth. Kept, because
-   * the value goes on to be written into a TOML preferences file either way.
-   */
   openrouter_provider: (v) => {
     if (typeof v !== "object" || v === null || Array.isArray(v)) {
       return { error: `openrouter_provider must be a routing object, got ${show(v)}` };
@@ -153,7 +92,6 @@ const PARSERS: Record<string, (v: unknown) => Parsed> = {
   },
 };
 
-/** The message `toml::Value::try_from` fails with, or `undefined` if it would not. */
 function tomlUnrepresentable(value: unknown): string | undefined {
   if (value === null) return "unsupported unit type";
   if (Array.isArray(value)) {
@@ -172,12 +110,6 @@ function tomlUnrepresentable(value: unknown): string | undefined {
   return undefined;
 }
 
-/**
- * Write one setting into `sampler`. `null` clears the field.
- *
- * Throws without touching `sampler` when the value is wrong for the key, so a
- * rejected write is never a partial one.
- */
 export function applySamplerValue(sampler: SamplerSettings, key: string, value: unknown): void {
   const field = SAMPLER_FIELD_BY_KEY.get(key);
   const parser = PARSERS[key];
@@ -196,22 +128,6 @@ export function applySamplerValue(sampler: SamplerSettings, key: string, value: 
   target[field] = parsed.value;
 }
 
-// ── the capability boundary ───────────────────────────────────────────────
-
-/**
- * Refuse a setting the model's resolved sdk cannot honor, and a value outside
- * the domain it does honor.
- *
- * Clearing is always allowed — there is no value to validate — and keys outside
- * the matrix (`sdk`, `max_tool_iterations`, and anything unknown) pass through
- * to the parser, which is what rejects them.
- *
- * The `off` sentinel is not a wire value: the overlay suppresses reasoning
- * rather than sending it, so it is absent from the graded domains. On an sdk
- * whose adapter honors the off-switch it skips the domain check; on one without
- * a disable path it deliberately falls through and is rejected as out of
- * domain, because there it would silently do nothing.
- */
 export function capabilityCheck(
   sdk: Sdk,
   modelId: string,
@@ -225,23 +141,11 @@ export function capabilityCheck(
   const reasoningOff =
     field === "reasoning_effort" && value === "off" && supportsReasoningOff(sdk);
 
-  // `validate` inspects the value only for the two fields with a domain; for
-  // every other field the check is pure applicability, so a non-string collapses
-  // to a bare `true` standing in for "some value".
   const probe: string | true = typeof value === "string" && !reasoningOff ? value : true;
   const failure = validate(sdk, modelId, field, probe);
   return failure === undefined ? undefined : invalidRequest(failure.message);
 }
 
-// ── the two tables clients read ───────────────────────────────────────────
-
-/**
- * How the resolved sdk treats each settable key: `honored` / `ignored` /
- * `rejected` from the matrix, or `always` for the Shore-only keys (`sdk`,
- * `max_tool_iterations`) that name no matrix field.
- *
- * Clients show only `honored` and `always` keys.
- */
 export function keyApplicability(sdk: Sdk, modelId: string): Record<string, Applicability | "always"> {
   const out: Record<string, Applicability | "always"> = {};
   for (const key of SAMPLER_KEYS) {
@@ -251,13 +155,4 @@ export function keyApplicability(sdk: Sdk, modelId: string): Record<string, Appl
   return out;
 }
 
-/** The accepted `reasoning_effort` values, shipped alongside the table above. */
 export const reasoningEffortDomain = reasoningDomain;
-
-/**
- * The Rust's `scope_str` has no counterpart here. It mapped a
- * `PreferenceScope` enum onto five snake_case strings; on this side
- * `PreferenceScope` *is* those five strings, so the mapping is the identity and
- * the two spellings cannot drift apart. The fixture still records all five, so
- * a rename on either side is caught.
- */

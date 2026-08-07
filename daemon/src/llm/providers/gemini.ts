@@ -1,13 +1,3 @@
-/**
- * Gemini SDK adapter (sidecar contract shape).
- *
- * Implements the Gemini sidecar wire behavior: canonical Anthropic-shape
- * messages become Gemini `contents`, system prompt becomes
- * `systemInstruction`, tools become `functionDeclarations`, thinking config is
- * generation-aware, safety filters are set to `OFF`, and function calls are
- * emitted as consolidated `tool_use` events.
- */
-
 import {
   GoogleGenAI,
   HarmBlockThreshold,
@@ -118,8 +108,6 @@ function buildGeminiConfig(req: SidecarRequest, signal?: AbortSignal): GenerateC
   return config;
 }
 
-// ── stream / generate mapping ───────────────────────────────────────────────
-
 export async function* geminiStreamEvents(
   model: string,
   chunks: AsyncIterable<GeminiResponse>,
@@ -229,8 +217,6 @@ export function geminiGenerateResponse(
   };
 }
 
-// ── request construction ────────────────────────────────────────────────────
-
 export function translateMessages(messages: WireMessage[]): Content[] {
   const toolIdToName = new Map<string, string>();
   for (const msg of messages) {
@@ -282,21 +268,11 @@ function translateParts(content: WireMessage["content"], toolIdToName: Map<strin
         break;
       }
       case "thinking":
-        // Gemini's stateless `contents` API requires thought signatures to be
-        // resent exactly as received; the model needs them to continue its own
-        // reasoning. https://ai.google.dev/gemini-api/docs/thinking
-        //
-        // Only signed blocks are replayed. An unsigned one carries nothing
-        // Gemini can use, and by this point anything reaching here has already
-        // passed the portability check, so a signature present is a signature
-        // this model minted.
         if (block.signature !== undefined && block.signature.length > 0) {
           parts.push({ text: block.thinking, thought: true, thoughtSignature: block.signature });
         }
         break;
       case "redacted_thinking":
-        // Never minted by this adapter, and a foreign one is dropped upstream
-        // as unportable. Nothing to send.
         break;
     }
   }
@@ -322,9 +298,6 @@ export function mergeConsecutiveRoles(contents: Content[]): void {
         continue;
       }
 
-      // Only merge into the immediately preceding part when it is itself plain
-      // text. Walking back past a functionCall/functionResponse would reorder
-      // the turn and corrupt tool-loop sequencing.
       const last = prev.parts[prev.parts.length - 1];
       if (last?.text !== undefined && last.thought !== true) {
         prev.parts[prev.parts.length - 1] = {
@@ -367,8 +340,6 @@ function buildThinkingConfig(req: SidecarRequest): ThinkingConfig | undefined {
   const budget = opts.budget_tokens;
   if (budget !== undefined) return { thinkingBudget: budget };
 
-  // `reasoning_effort` is always a string on the wire (Rust `Option<String>`);
-  // an empty one means unset, same as absent.
   const effort = opts.reasoning_effort;
   if (effort === undefined || effort.length === 0) return undefined;
 
@@ -387,8 +358,6 @@ export function detectGeminiGeneration(model: string): number {
   return digits === undefined ? 0 : Number.parseInt(digits, 10);
 }
 
-// The accepted Gemini effort set lives in capabilities.toml (via geminiLevelName);
-// this only binds each accepted name to the genai SDK's ThinkingLevel enum.
 function thinkingLevel(effort: string): ThinkingLevel | undefined {
   switch (geminiLevelName(effort)) {
     case "minimal":
@@ -445,10 +414,6 @@ function normalizeFinishReason(reason: string | undefined): string {
 }
 
 function extractGeminiUsage(meta: GeminiResponse["usageMetadata"] | undefined): Usage {
-  // `promptTokenCount` is the TOTAL prompt, inclusive of the cached portion
-  // (`cachedContentTokenCount`). Our ledger/pricing treats input/cache_read as
-  // disjoint buckets that are summed, so subtract the cache hits to leave only
-  // the cache-miss tokens in `input_tokens` (otherwise they bill twice).
   const cacheRead = meta?.cachedContentTokenCount ?? 0;
   return {
     input_tokens: Math.max(0, (meta?.promptTokenCount ?? 0) - cacheRead),

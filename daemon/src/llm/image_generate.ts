@@ -142,23 +142,13 @@ function providerError(message: string): HttpishError {
   return err;
 }
 
-// ── Configuration ───────────────────────────────────────────────────────
-
-/**
- * Per-model image-generation settings, from `[image_generation."provider:model_id"]`.
- */
 export interface ImageGenSettings {
-  /** Default size for the OpenAI path (e.g. `"1024x1024"`). */
   size?: string;
-  /** Optional quality hint for the OpenAI path (e.g. `"hd"`). */
   quality?: string;
-  /** OpenRouter aspect ratio (e.g. `"1:1"`, `"16:9"`). */
   aspect_ratio?: string;
-  /** OpenRouter image size (e.g. `"1K"`, `"2K"`, `"4K"`). */
   image_size?: string;
 }
 
-/** Image generation, fully resolved: identity, transport and credential. */
 export interface ImageGenConfig {
   provider: string;
   model_id: string;
@@ -171,34 +161,14 @@ export interface ImageGenConfig {
 }
 
 export interface ResolveImageGenOptions {
-  /** `defaults.image_generation` — a `provider:model_id` identity. */
   defaultRef?: string;
-  /** `[image_generation.*]`, keyed by the same identity. */
   imageGen: Record<string, ImageGenSettings>;
-  /** `[providers.*]`, keyed by provider. */
   providers: Record<string, { entry?: ProviderEntry; baseUrl?: string }>;
-  /** Injected for tests; production reads the real environment. */
   env?: NodeJS.ProcessEnv;
 }
 
 const DEFAULT_IMAGE_SIZE = "1024x1024";
 
-/**
- * Resolve image generation from the model catalog.
- *
- * Lived in `memory/compaction_impls.rs` for historical reasons only — it has
- * nothing to do with compaction, and its callers are the tool-context builders
- * in `autonomy` and `handler`. It belongs beside the thing it configures.
- *
- * Every failure is a plain sentence rather than an exception the caller must
- * classify: this is shown to whoever has to fix the config, and the only thing
- * a caller does with it is give up on image generation for the session.
- *
- * Identity is the configured default, or the sole settings-overlay key when
- * there is exactly one. Two overlay entries with no default is an error rather
- * than a pick: the choice would be `BTreeMap` order, which is not a decision
- * anyone made.
- */
 export function resolveImageGenConfig(
   opts: ResolveImageGenOptions,
 ): { ok: ImageGenConfig } | { err: string } {
@@ -240,13 +210,9 @@ export function resolveImageGenConfig(
     };
   }
 
-  // Transport: the registry's own `base_url`, else the hardcoded default, else
-  // the SDK's endpoint.
   const provider = opts.providers[providerKey];
   const baseUrl = provider?.baseUrl ?? hardcodedProviderBaseUrl(providerKey);
 
-  // Credentials: the `[providers.<p>].keys[]` fallback chain, first env-set
-  // candidate wins.
   const candidates = resolveKeyCandidates(providerKey, provider?.entry);
   if (candidates.length === 0) {
     return {

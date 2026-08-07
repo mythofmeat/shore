@@ -1,33 +1,3 @@
-/**
- * The writer half of compaction — the side that freezes conversation history.
- *
- * Ported from `RealConversationManager` in
- * `crates/daemon/src/memory/compaction_impls.rs`, pinned by
- * `tests/memory_fixtures/compaction_writer_parity.json`.
- *
- * `engine/segments.ts` is the reader and landed first, deliberately, with a
- * note that its writer "still lives in Rust and moves with the memory module".
- * This is that move: `compaction.json` and `segments/` are now written by
- * TypeScript, and #12's ownership rule is satisfied for both files.
- *
- * # This never parses a message
- *
- * `archiveAndRetain` is line-based from end to end. It splits `active.jsonl`
- * on newlines, moves a prefix of those lines into a segment file, and writes
- * the rest back. A line that is not valid JSON is carried across verbatim —
- * the fixture pins `not json at all` and a truncated `{"unclosed":` surviving
- * into a segment untouched. That is deliberate in the Rust and worth keeping:
- * compaction must not be able to destroy a message it merely failed to parse.
- *
- * # The manifest counts segments, not files
- *
- * The next segment number comes from `manifest.segments.length + 1`, so a
- * manifest that disagrees with what is on disk will overwrite an existing
- * segment rather than skip past it. Reproduced rather than fixed: the manifest
- * is the authority on the reader side too, and making the writer scan the
- * directory instead would make the two halves disagree about what exists.
- */
-
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -37,21 +7,10 @@ import { CompactionError } from "./compaction/types";
 import { rustLines, rustTrim } from "./lines";
 import { localRfc3339 } from "../time.ts";
 
-/** Matches `shore_common::config` — the three paths this module owns. */
 const ACTIVE_JSONL_FILE = "active.jsonl";
 const SEGMENTS_DIR = "segments";
 const COMPACTION_MANIFEST_FILE = "compaction.json";
 
-/**
- * A failure inside archive-and-retain.
- *
- * The Rust wrapped every one of these in `CompactionError::ConversationManager`,
- * whose Display is `conversation: {message}` — so this *is* a `CompactionError`,
- * and now says so. A compaction pass propagates it unchanged after rolling its
- * writes back, and the command surface branches on the variant when deciding
- * how to report a failed pass; without the shared base that branch would have
- * to match on a message prefix.
- */
 export class ConversationManagerError extends CompactionError {
   constructor(message: string) {
     super("conversation", `conversation: ${message}`);
@@ -59,48 +18,15 @@ export class ConversationManagerError extends CompactionError {
   }
 }
 
-/** Parameters for archiving with message retention. */
 export interface RetentionParams {
-  /** Number of messages to keep from the end of `active.jsonl`. */
   keepLastN: number;
-  /**
-   * Pre-read content of `active.jsonl` from when the messages were parsed.
-   *
-   * This is the authority, not the file — it closes the TOCTOU window where
-   * the file changes between the caller analysing messages and this write. The
-   * fixture pins a case where the two disagree and the parameter wins.
-   */
   activeContent: string;
 }
 
-/**
- * The message lines of an `active.jsonl`, matching the Rust's
- * `.lines().filter(|l| !l.trim().is_empty())`.
- *
- * The `\r` stripping in {@link rustLines} is what makes this correct on a CRLF
- * file: a plain `split("\n")` leaves the `\r` attached, and it would be
- * written straight through into the segment. Pinned by the fixture's CRLF
- * case. `rustLines`' other rule — no empty final element for a trailing
- * newline — is invisible here, since the blank filter would have removed it.
- */
 function messageLines(content: string): string[] {
   return rustLines(content).filter((l) => rustTrim(l) !== "");
 }
 
-
-/**
- * Parse `compaction.json` the way serde did — strictly.
- *
- * `CompactionManifest` derives `Default` but carries no `#[serde(default)]`,
- * so a manifest missing either field is a hard error rather than an empty
- * read. That distinction matters: silently treating a truncated manifest as
- * "no history" makes an unknown number of archived messages invisible, and
- * the next compaction would then overwrite `0001.jsonl`.
- *
- * `engine/segments.ts` got this wrong on the reader side — it claimed
- * `#[serde(default)]` in a comment and coalesced both fields — and the frozen
- * `engine_parity.json` had no case covering it. Fixed there in this commit.
- */
 function parseManifest(raw: string, path: string): CompactionManifest {
   let value: unknown;
   try {
@@ -133,10 +59,6 @@ function parseManifest(raw: string, path: string): CompactionManifest {
   };
 }
 
-/**
- * Archives conversation history into numbered segment files, keeping a tail of
- * recent messages live in `active.jsonl`.
- */
 export class ConversationArchiver {
   readonly #characterDir: string;
 
@@ -144,25 +66,11 @@ export class ConversationArchiver {
     this.#characterDir = characterDir;
   }
 
-  /**
-   * Move all but the last `keepLastN` messages into a new segment.
-   *
-   * Returns a fresh conversation id. The Rust returned a v4 UUID and no caller
-   * derives anything from it, so this does the same.
-   *
-   * Ordering is load-bearing: the segment and the manifest are written before
-   * `active.jsonl` is truncated. A crash between them re-archives on the next
-   * pass, which is recoverable; the reverse order would drop messages.
-   */
   async archiveAndRetain(params: RetentionParams): Promise<string> {
     const activePath = join(this.#characterDir, ACTIVE_JSONL_FILE);
 
     const lines = messageLines(params.activeContent);
 
-    // The clamp is load-bearing, not defensive. Without it a `keepLastN` above
-    // the line count gives a negative split point, and `slice(0, -n)` archives
-    // the *head* instead of nothing — silently moving live messages into a
-    // segment. Pinned by the keep=15/len=10 case.
     const keep = Math.min(params.keepLastN, lines.length);
     const splitAt = lines.length - keep;
     const archiveLines = lines.slice(0, splitAt);
@@ -187,7 +95,6 @@ export class ConversationArchiver {
           ? { segments: [], total_compacted_messages: 0 }
           : parseManifest(raw, manifestPath);
 
-      // Numbering follows the manifest, not the directory. See the module note.
       const segmentIndex = manifest.segments.length + 1;
       const segmentFile = `${String(segmentIndex).padStart(4, "0")}.jsonl`;
       const segmentsDir = join(this.#characterDir, SEGMENTS_DIR);
@@ -219,7 +126,6 @@ export class ConversationArchiver {
       });
       manifest.total_compacted_messages += archiveLines.length;
 
-      // `serde_json::to_string_pretty` — two-space indent, no trailing newline.
       try {
         await writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
       } catch (e) {

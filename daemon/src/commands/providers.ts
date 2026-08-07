@@ -1,30 +1,3 @@
-/**
- * Provider discovery commands: `list_providers`, `refresh_provider_models`,
- * `refresh_all_provider_models`, `list_provider_models`.
- *
- * Ported from `crates/daemon/src/commands/providers.rs`, pinned by
- * `tests/commands_fixtures/providers_parity.json`.
- *
- * # Secrets do not leave this module
- *
- * `list_providers` reports key *names*, whether each is enabled, and a boolean
- * for whether its env var currently holds a value. Not the env var's name, not
- * the value, not a prefix of it. A variable holding only whitespace reads as
- * unset — in the listing and in the key selection alike, so what the report
- * says and what a refresh would do agree.
- *
- * # A refresh only ever replaces a cache on success
- *
- * Every failure — a disabled provider, a missing key, a 500 from upstream —
- * leaves whatever was on disk exactly as it was. The daemon must never end a
- * refresh knowing about fewer models than it started with, so the write is the
- * last thing that happens and only on the success path.
- *
- * `refreshAll` follows from the same rule at the batch level: a per-provider
- * failure is aggregated into the report rather than aborting the run, because
- * one provider's expired key is no reason to leave the others stale.
- */
-
 import {
   cachePath,
   describeDiscoveryError,
@@ -43,17 +16,10 @@ import type { LoadedConfig } from "../config/loader.ts";
 import { enabledKeys, isVisible, type ProviderEntry } from "../config/providers.ts";
 import { internalError, invalidRequest, notFound, providerError } from "./errors.ts";
 
-/** Args arrive as a decoded JSON object; every field is optional and untyped. */
 export type Args = Record<string, unknown>;
 
-/**
- * What these commands need. They are characterless — runtime state about
- * configured providers, with no session attached — so this is the config and
- * the way out to the network.
- */
 export interface ProvidersContext {
   config: LoadedConfig;
-  /** Injected so the fixture can drive discovery against a local socket. */
   fetchImpl?: typeof fetch;
 }
 
@@ -67,10 +33,7 @@ function requireProvider(args: Args): string {
   return provider;
 }
 
-/** Whether the env var holds a non-blank value. The value itself never escapes. */
 const envSet = (name: string): boolean => (process.env[name]?.trim() ?? "") !== "";
-
-// ── list_providers ────────────────────────────────────────────────────────
 
 export function listProviders(ctx: ProvidersContext): unknown {
   const providers = ctx.config.providers.entries().map(([name, entry]) => {
@@ -92,9 +55,6 @@ export function listProviders(ctx: ProvidersContext): unknown {
         warn_on_fallback: k.warnOnFallback,
         env_set: envSet(k.env),
       })),
-      // An unparseable cache file reads as absent rather than failing the whole
-      // listing: this is a diagnostic, and a broken cache is what you called it
-      // to find out about.
       cache:
         cache === undefined
           ? { present: false, models: 0, visible: 0, hidden: 0, fetched_at: null }
@@ -111,25 +71,11 @@ export function listProviders(ctx: ProvidersContext): unknown {
   return { providers };
 }
 
-// ── refresh ───────────────────────────────────────────────────────────────
-
-/** What a successful refresh produced. */
 export interface RefreshOutcome {
   cache: ProviderModelsCache;
   cachePath: string;
 }
 
-/**
- * Fetch a provider's model list with the first usable key and write the cache.
- *
- * Deliberately decoupled from the command context so the auto-discovery
- * background loop can call it with only what it needs.
- *
- * There is no key rotation here, unlike chat traffic: the first enabled key
- * whose env var is non-blank is used, and a failure is reported so the user can
- * fix their credentials and retry. Rotating would mean a refresh that quietly
- * succeeded on a fallback key while the primary stayed broken.
- */
 export async function refreshOne(
   config: LoadedConfig,
   cacheDir: string,
@@ -164,15 +110,12 @@ export async function refreshOne(
       ? await discoverAnthropic(provider, baseUrl, key, fetchImpl)
       : await discoverOpenAiCompatible(provider, baseUrl, key, fetchImpl);
   if ("err" in discovered) {
-    // The previous cache stands.
     throw internalError(describeDiscoveryError(discovered.err));
   }
 
   const cache: ProviderModelsCache = {
     version: CACHE_VERSION,
     provider_key: provider,
-    // chrono writes the numeric offset, not `Z`; the cache reader compares
-    // these as text.
     fetched_at: toRfc3339(Date.now()),
     base_url: baseUrl,
     models: discovered.ok,
@@ -206,13 +149,6 @@ export async function refreshProviderModels(ctx: ProvidersContext, args: Args): 
   };
 }
 
-/**
- * Refresh every provider that is enabled and has discovery on.
- *
- * Skipped providers are reported separately from failed ones: "you turned this
- * off" and "this tried and could not" are different answers, and only the
- * second is a problem.
- */
 export async function refreshAllProviderModels(ctx: ProvidersContext): Promise<unknown> {
   const results: unknown[] = [];
   const skipped: unknown[] = [];
@@ -244,8 +180,6 @@ export async function refreshAllProviderModels(ctx: ProvidersContext): Promise<u
   return { results, skipped };
 }
 
-// ── list_provider_models ──────────────────────────────────────────────────
-
 function discoveredToJson(m: DiscoveredModel): unknown {
   return {
     source: "discovered",
@@ -263,17 +197,6 @@ function discoveredToJson(m: DiscoveredModel): unknown {
   };
 }
 
-/**
- * A provider's merged model list: discovered (from cache) plus statically
- * configured.
- *
- * Static entries are always returned, even with no cache at all — that is the
- * manual escape hatch, and they are never filtered by `discovery.ignore`
- * either, because a hand-written catalog entry is by definition intentional.
- *
- * A provider counts as known if the registry has it *or* a static entry
- * references it, so a config that predates the registry still answers.
- */
 export function listProviderModels(ctx: ProvidersContext, args: Args): unknown {
   const provider = requireProvider(args);
   const includeHidden = args["include_hidden"] === true;

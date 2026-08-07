@@ -1,53 +1,16 @@
-/**
- * The failure shapes the retry and credential-rotation layers branch on.
- *
- * Ported from `LlmError` in `crates/daemon/src/llm/mod.rs`. That enum is a
- * `thiserror` type wrapping a `reqwest::Error`, so it has no serde
- * representation; here it is a discriminated union, which is what the two
- * classifiers actually needed from it.
- *
- * `transport` covers the Rust's `LlmError::Request` — a network or connection
- * failure below the HTTP status. It is a separate variant rather than folded
- * into `incomplete_stream` because the two mean different things to a reader
- * even though both classifiers happen to treat them alike today.
- */
-
 import type { Timing, Usage } from "./types.ts";
 
 export type LlmError =
-  /** `LlmError::Request` — the request never produced a status. */
   | { kind: "transport"; message: string }
   | { kind: "http_status"; status: number; body: string }
   | { kind: "serialize"; message: string }
   | { kind: "deserialize"; message: string }
-  /** The stream ended without a terminal event. */
   | { kind: "incomplete_stream" }
-  /**
-   * The stream failed after some usage had already accrued. `usage` and
-   * `timing` are what the provider had reported by then — notably the Anthropic
-   * cache write announced in `message_start`, before any output — so the
-   * partial call is billed for what it actually cost instead of zeros. Neither
-   * classifier reads them; the stream accumulator that produces this error and
-   * the ledger that consumes it both do.
-   */
   | { kind: "stream_errored"; message: string; usage: Usage; timing: Timing }
   | { kind: "missing_api_key"; var: string }
   | { kind: "provider"; message: string }
-  /**
-   * `[usage]` refused the call before it was placed — see `ledger/gate.ts`.
-   *
-   * The Rust had no variant for this: the gate lived on the far side of an HTTP
-   * hop, so a refusal arrived as a 402 that `check_sidecar_response` flattened
-   * into `Provider`. That flattening cost two things now worth having back.
-   * Rotation was the accident it *didn't* cost — `Provider` classifies as
-   * `not_credential_failure`, so keys were safe — but retry was: `provider`
-   * retries, so the daemon re-POSTed a deterministic policy refusal until the
-   * attempt ceiling. Remote, that was a wasted round-trip. Local, it is a
-   * backoff sleep the user waits through for an answer that cannot change.
-   */
   | { kind: "budget_blocked"; message: string; scope?: string };
 
-/** The `kind` tags {@link isLlmError} recognises. */
 const LLM_ERROR_KINDS: ReadonlySet<string> = new Set([
   "transport",
   "http_status",
@@ -60,34 +23,18 @@ const LLM_ERROR_KINDS: ReadonlySet<string> = new Set([
   "budget_blocked",
 ]);
 
-/** Whether an unknown caught value is one of these. */
 export function isLlmError(value: unknown): value is LlmError {
   if (typeof value !== "object" || value === null) return false;
   const kind = (value as { kind?: unknown }).kind;
   return typeof kind === "string" && LLM_ERROR_KINDS.has(kind);
 }
 
-/**
- * The text to report for anything caught on a path that can raise an
- * {@link LlmError}.
- *
- * `LlmError` is a plain discriminated union rather than an `Error` subclass —
- * that is what the Rust enum ported to, and `throw`ing one is how the retry and
- * rotation layers signal upward. The consequence is that the usual
- * `e instanceof Error ? e.message : String(e)` produces the literal string
- * `[object Object]` for every one of them: a daemon with no API key configured
- * reported exactly that to the client, naming neither the provider nor the
- * variable it wanted. This is the extractor those call sites need instead.
- */
 export function describeError(e: unknown): string {
-  // `Error` first: `BudgetBlocked` is both, and its own message is the budget's
-  // sentence — which is what `describeLlmError` would return for it anyway.
   if (e instanceof Error) return e.message;
   if (isLlmError(e)) return describeLlmError(e);
   return String(e);
 }
 
-/** The `Display` text the Rust's `#[error(...)]` attributes produce. */
 export function describeLlmError(error: LlmError): string {
   switch (error.kind) {
     case "transport":
@@ -107,9 +54,6 @@ export function describeLlmError(error: LlmError): string {
     case "provider":
       return `provider error: ${error.message}`;
     case "budget_blocked":
-      // The budget's own sentence, unadorned. It is written to be read by the
-      // person who set the budget, and a prefix here would be the daemon
-      // explaining someone's own configuration back to them.
       return error.message;
   }
 }

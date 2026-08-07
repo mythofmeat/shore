@@ -1,76 +1,20 @@
-/**
- * Provider model discovery and its on-disk cache.
- *
- * Ported from `crates/daemon/src/llm/discovery.rs`, pinned by
- * `tests/llm_fixtures/discovery_parity.json`.
- *
- * OpenAI-compatible providers (OpenAI, OpenRouter, vLLM, Together, …) share one
- * fetcher; native Anthropic discovery needs its own auth and version headers.
- * Both land in the same `DiscoveredModel` shape and the same per-provider cache
- * file, so the rest of the daemon never has to know which dialect a catalog
- * came from.
- *
- * # Unknown is not false
- *
- * Every capability is a *tri-state*: `true`, `false`, or absent. A provider that
- * says nothing about tool use has not said it lacks tool use, and a UI that
- * collapses the two tells the user a model cannot do something it can. Every
- * accessor here returns `undefined` for "the provider did not say" and only
- * commits to `false` when the provider published a field that omitted the
- * capability.
- *
- * # The cache file is a cross-language contract
- *
- * Rust still reads and writes these files (`effective_catalog.rs`,
- * `commands/providers.rs`, `auto_discovery.rs`). Until those move, a cache
- * written here is read there and vice versa, so the serialized shape is pinned
- * byte-for-byte by the fixture — field order, two-space indent, no trailing
- * newline, and every absent optional omitted rather than written as `null`.
- * `undefined` values disappear under `JSON.stringify`, which is what makes the
- * omission fall out naturally; assigning `null` instead would produce a file
- * the Rust rejects.
- *
- * # Failures never destroy a good cache
- *
- * A corrupt or unreadable cache reads as *missing* rather than raising, because
- * a caller asking for cached models should not fall over on a bad file — the
- * user can refresh. Writes go to a sibling tmp file and rename in, so a
- * serialization or I/O failure leaves the previous catalog intact.
- */
-
 import { toRfc3339 } from "../ledger/zoned.ts";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-/**
- * Current cache schema version. Bump when adding a field older builds could not
- * reasonably ignore.
- */
 export const CACHE_VERSION = 1;
 
-/** How long a cached catalog stays fresh, in milliseconds (24h). */
 export const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
-/** Required by Anthropic's API on every native HTTP request. */
 const ANTHROPIC_VERSION = "2023-06-01";
 
-/** Longest response body kept in an error, in *bytes*. */
 const MAX_LOG_BODY_BYTES = 512;
 
-// ── DiscoveredModel ─────────────────────────────────────────────────────
-
-/**
- * One model record returned by a provider's discovery endpoint.
- *
- * The optional fields are optional in the "absent" sense, not the "nullable"
- * sense — see the note on the cache file above.
- */
 export interface DiscoveredModel {
   provider_key: string;
   model_id: string;
   display_name?: string;
-  /** Wire SDK family, usually the provider's own `sdk` — but see {@link effectiveModelSdk}. */
   sdk: string;
   base_url?: string;
   created_at?: number;
@@ -82,37 +26,22 @@ export interface DiscoveredModel {
   supports_images?: boolean;
   supports_reasoning?: boolean;
   supports_prompt_cache?: boolean;
-  /** The provider's original entry, verbatim, so later work needn't re-fetch. */
   raw_provider_metadata?: unknown;
-  /** RFC3339, as a string, matching the diagnostics ring-buffer convention. */
   discovered_at: string;
 }
 
-/** On-disk per-provider cache shape. */
 export interface ProviderModelsCache {
   version: number;
   provider_key: string;
-  /** RFC3339 timestamp of the last refresh. */
   fetched_at: string;
   base_url?: string;
   models: DiscoveredModel[];
 }
 
-// ── Cache file ──────────────────────────────────────────────────────────
-
-/** `<cacheDir>/providers/<provider>/models.json`. */
 export function cachePath(cacheDir: string, providerKey: string): string {
   return join(cacheDir, "providers", providerKey, "models.json");
 }
 
-/**
- * Read a provider's cache, or `undefined` when it is absent, corrupt, or
- * written by a newer build.
- *
- * Only genuine I/O failures propagate. Everything about the file's *contents*
- * that could go wrong resolves to "no cache", because the caller's fallback —
- * refetch, or show nothing — is better than an exception.
- */
 export async function readCache(path: string): Promise<ProviderModelsCache | undefined> {
   let bytes: string;
   try {
@@ -124,15 +53,6 @@ export async function readCache(path: string): Promise<ProviderModelsCache | und
   return decodeCache(bytes, path);
 }
 
-/**
- * The synchronous twin of {@link readCache}, for the model-resolution path.
- *
- * `find_effective_model` is synchronous in the Rust and is called from
- * preference resolution, which is itself synchronous; making the whole chain
- * async to read one small cached file would be a much larger change than the
- * behaviour warrants. Both readers share {@link decodeCache}, so the version
- * and shape checks cannot drift apart.
- */
 export function readCacheSync(path: string): ProviderModelsCache | undefined {
   let bytes: string;
   try {
@@ -144,7 +64,6 @@ export function readCacheSync(path: string): ProviderModelsCache | undefined {
   return decodeCache(bytes, path);
 }
 
-/** Validate raw cache bytes. Everything recoverable resolves to "no cache". */
 function decodeCache(bytes: string, path: string): ProviderModelsCache | undefined {
   let parsed: unknown;
   try {
@@ -156,9 +75,6 @@ function decodeCache(bytes: string, path: string): ProviderModelsCache | undefin
 
   const cache = asCache(parsed);
   if (cache === undefined) {
-    // Shape mismatch is the same class of problem as a syntax error: the Rust
-    // reached it through a failed `serde` deserialization, which is likewise
-    // swallowed into `Ok(None)`.
     console.warn(`Provider cache failed to parse — treating as missing: ${path}`);
     return undefined;
   }
@@ -171,14 +87,6 @@ function decodeCache(bytes: string, path: string): ProviderModelsCache | undefin
   return cache;
 }
 
-/**
- * Validate the cache envelope the way `serde` would.
- *
- * `version`, `provider_key`, `fetched_at` and `models` have no defaults in the
- * Rust struct, so a file missing any of them fails to deserialize and reads as
- * missing. Notably `models` is *not* defaulted: a cache without it is not an
- * empty catalog, it is a broken file. Unknown fields are ignored.
- */
 function asCache(value: unknown): ProviderModelsCache | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
   const v = value as Record<string, unknown>;
@@ -247,15 +155,6 @@ function optionalBoolean(key: string, v: Record<string, unknown>): Record<string
   return typeof v[key] === "boolean" ? { [key]: v[key] } : {};
 }
 
-/**
- * Milliseconds elapsed since `fetchedAt`, or `undefined` when the timestamp is
- * unparseable *or in the future*.
- *
- * The future case is not an oversight. The Rust converted a signed duration
- * into a `std::time::Duration`, which cannot be negative, and callers read
- * `undefined` as "stale" — so a clock that jumped, or a hand-edited file,
- * triggers a refresh instead of pinning a catalog as permanently fresh.
- */
 export function cacheAgeMs(fetchedAt: string, now: number = Date.now()): number | undefined {
   const parsed = parseRfc3339(fetchedAt);
   if (parsed === undefined) return undefined;
@@ -264,52 +163,27 @@ export function cacheAgeMs(fetchedAt: string, now: number = Date.now()): number 
   return elapsed;
 }
 
-/** A cache is stale when its age is unknown or at least {@link REFRESH_INTERVAL_MS}. */
 export function isStale(cache: ProviderModelsCache, now: number = Date.now()): boolean {
   const age = cacheAgeMs(cache.fetched_at, now);
   if (age === undefined) return true;
   return age >= REFRESH_INTERVAL_MS;
 }
 
-/**
- * Parse an RFC3339 timestamp to epoch milliseconds.
- *
- * `Date.parse` is far more permissive than `chrono`'s RFC3339 parser — it
- * accepts `2026-04-28`, `Apr 28 2026`, and assorted other shapes that the Rust
- * rejected. Since "unparseable" means "refresh this cache", being *more*
- * accepting here would silently keep stale catalogs alive, so the shape is
- * checked before the value is.
- */
 function parseRfc3339(value: string): number | undefined {
-  // date `T` time, then either `Z` or a `±HH:MM` offset. Fractional seconds
-  // optional; the separator may be a lowercase `t`, as RFC3339 permits.
   const shape = /^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})$/;
   if (!shape.test(value)) return undefined;
   const ms = Date.parse(value);
   return Number.isNaN(ms) ? undefined : ms;
 }
 
-/**
- * Write a provider cache atomically: serialize, write a tmp sibling, rename in.
- *
- * The rename is the commit point, so a previous good cache survives any failure
- * before it.
- */
 export async function writeCache(path: string, cache: ProviderModelsCache): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const bytes = serializeCache(cache);
-  // `.json` → `.json.tmp`, matching the Rust's `with_extension`.
   const tmp = `${path.replace(/\.json$/, "")}.json.tmp`;
   await writeFile(tmp, bytes);
   await rename(tmp, path);
 }
 
-/**
- * The exact bytes of a cache file.
- *
- * Field order follows the Rust struct declaration, not insertion convenience —
- * see the cross-language note at the top of the file.
- */
 export function serializeCache(cache: ProviderModelsCache): string {
   const ordered = {
     version: cache.version,
@@ -337,14 +211,10 @@ function serializeModel(m: DiscoveredModel): Record<string, unknown> {
     supports_images: m.supports_images,
     supports_reasoning: m.supports_reasoning,
     supports_prompt_cache: m.supports_prompt_cache,
-    // A null here is skipped on the Rust side just as an absent value is, so
-    // both collapse to omission.
     raw_provider_metadata: m.raw_provider_metadata ?? undefined,
     discovered_at: m.discovered_at,
   };
 }
-
-// ── Discovery errors ────────────────────────────────────────────────────
 
 export type DiscoveryError =
   | { kind: "discovery_disabled"; provider: string; discoveryKind: string }
@@ -371,17 +241,8 @@ export function describeDiscoveryError(e: DiscoveryError): string {
   }
 }
 
-/** Either a value or a discovery error — the shape `Result` collapses to here. */
 export type DiscoveryResult<T> = { ok: T } | { err: DiscoveryError };
 
-// ── Fetchers ────────────────────────────────────────────────────────────
-
-/**
- * Fetch and map a provider's `/v1/models` endpoint.
- *
- * `baseUrl` is the API root (e.g. `https://openrouter.ai/api/v1`); `/models` is
- * appended.
- */
 export async function discoverOpenAiCompatible(
   providerKey: string,
   baseUrl: string,
@@ -394,13 +255,6 @@ export async function discoverOpenAiCompatible(
   });
 }
 
-/**
- * Fetch and map Anthropic's native Models API.
- *
- * Anthropic authenticates with `x-api-key` rather than a bearer token and
- * requires a version header, and its conventional base URL is the API host — so
- * the version segment is appended when the caller did not supply one.
- */
 export async function discoverAnthropic(
   providerKey: string,
   baseUrl: string,
@@ -433,8 +287,6 @@ async function fetchModels(
   let body: string;
   try {
     resp = await fetchImpl(url, { method: "GET", headers });
-    // Reading the body is part of the network step: a stream that dies
-    // mid-transfer is a network error, not a bad status.
     body = await resp.text();
   } catch (e) {
     return { err: { kind: "network", provider: providerKey, message: String(e) } };
@@ -454,19 +306,10 @@ async function fetchModels(
   return parseModelsResponse(providerKey, baseUrl, sdk, body);
 }
 
-/** Append `/models` to a provider base URL, tolerating trailing slashes. */
 export function buildModelsUrl(baseUrl: string): string {
   return `${trimTrailingSlashes(baseUrl)}/models`;
 }
 
-/**
- * Append Anthropic's Models API path to either a host root or a caller-supplied
- * version root such as a gateway's `/api/v1`.
- *
- * The test is a literal `/v1` *suffix*, so `/v10` gets a version segment
- * appended and `/v1/beta` does too — a `v1` elsewhere in the path does not
- * count.
- */
 export function buildAnthropicModelsUrl(baseUrl: string): string {
   const trimmed = trimTrailingSlashes(baseUrl);
   return trimmed.endsWith("/v1") ? `${trimmed}/models` : `${trimmed}/v1/models`;
@@ -476,56 +319,23 @@ function trimTrailingSlashes(s: string): string {
   return s.replace(/\/+$/, "");
 }
 
-/**
- * Cap a response body kept in an error.
- *
- * The cap is **512 bytes, not 512 characters**, and the cut is moved back to a
- * UTF-8 character boundary so a multibyte character straddling the limit is
- * dropped whole rather than split into replacement junk. A `slice(0, 512)` on
- * the string would cut by UTF-16 code units, which is neither the same
- * threshold nor the same boundary.
- */
 export function truncateForLog(body: string): string {
   const bytes = Buffer.from(body, "utf8");
   if (bytes.length <= MAX_LOG_BODY_BYTES) return body;
   return `${bytes.toString("utf8", 0, floorCharBoundary(bytes, MAX_LOG_BODY_BYTES))}…`;
 }
 
-/**
- * The largest index at or below `index` that starts a UTF-8 character.
- *
- * Continuation bytes match `0b10xxxxxx`; walking back off them lands on a lead
- * byte. Well-formed UTF-8 never runs more than three continuations, so the walk
- * is bounded without needing a guard.
- */
 function floorCharBoundary(bytes: Buffer, index: number): number {
   let i = index;
   while (i > 0 && ((bytes[i] as number) & 0xc0) === 0x80) i -= 1;
   return i;
 }
 
-// ── Response mapping ────────────────────────────────────────────────────
-
-/**
- * Map a `{ "data": [...] }` envelope to models.
- *
- * `data` may be *absent* — that is an empty catalog — but an explicit `null` or
- * a non-array is a parse failure. The Rust reached that asymmetry through
- * `#[serde(default)]`, which fires on a missing field and not on a present one
- * holding the wrong type, and the difference is visible: a provider that
- * answers `{"data": null}` gets an error rather than being recorded as having
- * no models at all.
- */
 export function parseModelsResponse(
   providerKey: string,
   baseUrl: string,
   sdk: string,
   body: string,
-  // chrono's `to_rfc3339`, not `toISOString`: the Rust writes the numeric
-  // offset and no `Z`, and this string is written into the cache file and
-  // shown to clients verbatim. The default was never pinned before —
-  // every test injected it — so the two sides had been spelling the same
-  // instant differently.
   now: string = toRfc3339(Date.now()),
 ): DiscoveryResult<DiscoveredModel[]> {
   let envelope: unknown;
@@ -556,18 +366,6 @@ export function parseModelsResponse(
   return { ok: out };
 }
 
-/**
- * Resolve the wire SDK for one discovered model.
- *
- * OpenAI-compatible discovery stamps one blanket `sdk` across a feed, which is
- * right for single-dialect gateways. OpenCode Go is not one: it fronts open
- * models across two dialects behind a single `/models` feed, where MiniMax and
- * Qwen speak the Anthropic `/messages` format and everything else speaks
- * `/chat/completions`.
- *
- * Note that for `opencode-go` the caller's `defaultSdk` is *discarded* — a
- * non-Qwen, non-MiniMax model there is `openai` whatever the feed claimed.
- */
 export function effectiveModelSdk(
   providerKey: string,
   modelId: string,
@@ -575,18 +373,10 @@ export function effectiveModelSdk(
 ): string {
   if (providerKey !== "opencode-go") return defaultSdk;
   const id = modelId.toLowerCase();
-  // Strip any leading `vendor/` namespace some feeds prepend, so the family
-  // test looks at the model name and not at who published it.
   const bare = id.slice(id.lastIndexOf("/") + 1);
   return bare.startsWith("qwen") || bare.startsWith("minimax") ? "anthropic" : "openai";
 }
 
-/**
- * Map one raw provider entry, or `undefined` when it has no usable `id`.
- *
- * A malformed entry is skipped rather than failing the whole catalog: one bad
- * record in a 300-model feed should not cost the user the other 299.
- */
 export function mapEntry(
   providerKey: string,
   baseUrl: string,
@@ -624,27 +414,11 @@ function maybe<K extends string, V>(key: K, value: V | undefined): Record<K, V> 
   return value === undefined ? ({} as Record<K, never>) : ({ [key]: value } as Record<K, V>);
 }
 
-/**
- * `name`, else `display_name`.
- *
- * The fallback is keyed on the *presence* of `name`, not on whether it held a
- * string: an entry with a numeric `name` and a perfectly good `display_name`
- * ends up with no display name at all. That is what the Rust's
- * `get("name").or_else(|| get("display_name")).and_then(as_str)` does — the
- * `or_else` runs before the string check — and a `??` chain in its place would
- * quietly disagree.
- */
 function displayName(r: Record<string, unknown>): string | undefined {
   const picked = "name" in r ? r.name : r.display_name;
   return str(picked);
 }
 
-/**
- * `created` as epoch seconds, else `created_at` parsed from RFC3339.
- *
- * The fallback runs whenever `created` did not yield an integer — including
- * when it was present but fractional, since a JSON float is not an `i64`.
- */
 function createdAt(r: Record<string, unknown>): number | undefined {
   const created = signedInt(r.created);
   if (created !== undefined) return created;
@@ -654,7 +428,6 @@ function createdAt(r: Record<string, unknown>): number | undefined {
   return ms === undefined ? undefined : Math.floor(ms / 1000);
 }
 
-/** OpenRouter nests it under `top_provider`; other feeds put it at the top level. */
 function maxOutputTokens(r: Record<string, unknown>): number | undefined {
   const top = r.top_provider;
   if (typeof top === "object" && top !== null && !Array.isArray(top)) {
@@ -664,13 +437,6 @@ function maxOutputTokens(r: Record<string, unknown>): number | undefined {
   return unsignedInt(r.max_completion_tokens);
 }
 
-/**
- * OpenRouter-style `supported_parameters: [...]`, checked for any of `names`.
- *
- * `undefined` means the field was absent — unknown, not unsupported. An *empty*
- * array is knowledge, and yields `false`. Non-string members are dropped before
- * matching rather than coerced.
- */
 function supportedParam(r: Record<string, unknown>, names: string[]): boolean | undefined {
   const arr = r.supported_parameters;
   if (!Array.isArray(arr)) return undefined;
@@ -678,13 +444,6 @@ function supportedParam(r: Record<string, unknown>, names: string[]): boolean | 
   return names.some((n) => values.includes(n));
 }
 
-/**
- * OpenRouter-style `architecture.{input,output}_modalities`.
- *
- * Only the requested side is consulted: a model that *emits* images but cannot
- * accept them reports `supports_images: false`, which is the question the
- * caller is actually asking.
- */
 function modalityIncludes(
   r: Record<string, unknown>,
   side: string,
@@ -701,17 +460,10 @@ function str(v: unknown): string | undefined {
   return typeof v === "string" ? v : undefined;
 }
 
-/**
- * A JSON number that is an `i64`.
- *
- * Fractional values are rejected, matching `serde_json::Value::as_i64`, which
- * answers for the number's *representation* rather than rounding it.
- */
 function signedInt(v: unknown): number | undefined {
   return typeof v === "number" && Number.isInteger(v) ? v : undefined;
 }
 
-/** A JSON number that is a `u64` — integral and non-negative. */
 function unsignedInt(v: unknown): number | undefined {
   return typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : undefined;
 }

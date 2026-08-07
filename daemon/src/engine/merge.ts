@@ -1,35 +1,9 @@
-/**
- * Collapsing a tool loop into one assistant turn.
- *
- * Storage keeps the rounds apart because the provider APIs need them that way —
- * assistant `tool_use`, user `tool_result`, assistant text are separate
- * messages. Anything showing a conversation to a person wants one message:
- *
- *     [user, asst(tool_use), user(tool_result), asst(text)]
- *       -> [user, asst(thinking + tool_use + tool_result + text)]
- *
- * Ported from `crates/common/src/protocol/merge.rs` and pinned by
- * `tests/engine_fixtures/merge_parity.json`.
- *
- * That file lived in `common` because it was filed as client-side rendering,
- * but no Rust client ever called it — `merge_tool_loop_messages` was its only
- * export and its three consumers were all in the daemon. It comes across with
- * the daemon rather than staying behind with the TUI and CLI.
- */
-
 import type { ContentBlock, Message, Role } from "./types";
 
-/** Any `tool_use` block makes an assistant part of a tool loop.
- *
- *  Note this is *not* the same predicate as `prompt.ts`'s orphan check, which
- *  additionally requires the message to carry no non-empty text. An assistant
- *  that says "let me check" and then calls a tool is a tool-loop assistant here
- *  and is not an orphan there. Two similar names, two different questions. */
 function isToolLoopAssistant(msg: Message): boolean {
   return msg.role === "assistant" && msg.content_blocks.some((b) => b.type === "tool_use");
 }
 
-/** A results message is a user turn carrying *only* `tool_result` blocks. */
 function isToolResultOnly(msg: Message): boolean {
   return (
     msg.role === "user" &&
@@ -38,15 +12,6 @@ function isToolResultOnly(msg: Message): boolean {
   );
 }
 
-/**
- * The `content` string for a merged message: text blocks only, each trimmed,
- * empties dropped, joined with newlines.
- *
- * Tool results are deliberately excluded even though they are in
- * `content_blocks` — this mirrors `derive_content_from_blocks_with(_, false)`.
- * Putting them in would mean a tool's entire output landing in the field
- * clients use for a one-line summary.
- */
 function deriveContentTextOnly(blocks: ContentBlock[]): string {
   const parts: string[] = [];
   for (const block of blocks) {
@@ -57,19 +22,6 @@ function deriveContentTextOnly(blocks: ContentBlock[]): string {
   return parts.join("\n");
 }
 
-/**
- * One round's blocks: the assistant's, with each `tool_use` followed by the
- * matching `tool_result` from the paired user message.
- *
- * Ordering is the point. Blocks come out in the assistant's own order, so
- * thinking and text stay where the model put them, and a result sits directly
- * after the call it answers rather than in a clump at the end.
- *
- * Two behaviours here are easy to lose:
- *   - whitespace-only text blocks are dropped, as model noise;
- *   - a `tool_use` whose id matches nothing emits no result, rather than
- *     borrowing the next one.
- */
 function collectRound(
   assistant: Message,
   results: Message | undefined,
@@ -89,14 +41,6 @@ function collectRound(
   }
 }
 
-/**
- * Merge tool-loop messages into logical assistant turns.
- *
- * Messages outside a loop pass through untouched — including their `content`,
- * which is *not* re-derived. Tool-result-only user messages are consumed and do
- * not appear in the output at all, which is also what happens to one that is
- * left orphaned at the head of a trimmed history.
- */
 export function mergeToolLoopMessages(messages: Message[]): Message[] {
   const output: Message[] = [];
   let i = 0;
@@ -116,7 +60,6 @@ export function mergeToolLoopMessages(messages: Message[]): Message[] {
       continue;
     }
 
-    // ── a loop starts here ────────────────────────────────────────────
     const mergedBlocks: ContentBlock[] = [];
     let lastAssistant = msg;
 
@@ -133,24 +76,17 @@ export function mergeToolLoopMessages(messages: Message[]): Message[] {
 
       const following = messages[i]!;
       if (following.role === "assistant" && isToolLoopAssistant(following)) {
-        continue; // another round
+        continue;
       }
       if (following.role === "assistant") {
-        // The closing message. Its blocks are appended **raw** — not through
-        // `collectRound` — so unlike every other round, a whitespace-only text
-        // block here survives and a `tool_use` here is not paired with a
-        // result. Faithful to the Rust; the fixture pins both.
         mergedBlocks.push(...following.content_blocks);
         lastAssistant = following;
         i += 1;
         break;
       }
-      break; // a user turn interrupted the loop
+      break;
     }
 
-    // Everything but the blocks and the derived content comes from the last
-    // assistant seen — the closing message when there was one, otherwise the
-    // final tool-calling round.
     output.push({
       msg_id: lastAssistant.msg_id,
       role: "assistant" as Role,

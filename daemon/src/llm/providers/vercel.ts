@@ -1,25 +1,3 @@
-/**
- * Vercel AI SDK adapter — the path for DIRECT (non-OpenRouter) DeepSeek and
- * Moonshot (Kimi) access (issue #164). Both are OpenAI-compatible wires, but
- * their reasoning controls are vendor-specific; the first-party Vercel providers
- * (`@ai-sdk/deepseek`, `@ai-sdk/moonshotai`) model them as typed `providerOptions`
- * and handle `reasoning_content` round-tripping (the area that caused the old
- * Rust deepseek/kimi tool-loop bug), so we don't hand-code each vendor's quirks.
- *
- * One adapter serves both: the AI SDK exposes a unified `LanguageModel` /
- * `streamText` interface, so only the provider factory differs by `req.sdk`.
- *
- * Reasoning controls (from `provider_options`, set by the Rust daemon):
- *   - `thinking_enabled === false` (from `reasoning_effort = "off"`) → thinking
- *     `{ type: "disabled" }` — a real off-switch for always-on reasoning models.
- *   - DeepSeek `reasoning_effort` → `reasoningEffort` (low|medium|high|xhigh|max).
- *   - Moonshot `budget_tokens` → `thinking.budgetTokens`.
- *
- * Prior-turn reasoning is replayed as an assistant `reasoning` content part
- * (DeepSeek/Kimi hard-require it during a tool loop); there is no opaque
- * signature carrier as on the OpenRouter path — the text round-trips directly.
- */
-
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import { createMoonshotAI } from "@ai-sdk/moonshotai";
 import {
@@ -110,8 +88,6 @@ export class VercelProvider implements SidecarProvider {
 
   async generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {
     const startedAt = Date.now();
-    // `buildCall` is typed against `streamText`'s params; `generateText` takes a
-    // structurally-identical (but nominally distinct) settings object, so cast.
     const result = await generateText(buildCall(req, signal) as Parameters<typeof generateText>[0]);
 
     const content_blocks: ContentBlock[] = [];
@@ -134,8 +110,6 @@ export class VercelProvider implements SidecarProvider {
     };
   }
 }
-
-// ── request construction ────────────────────────────────────────────────────
 
 type VercelCall = Parameters<typeof streamText>[0];
 
@@ -165,26 +139,18 @@ function buildModel(req: SidecarRequest): LanguageModel {
     : createMoonshotAI(settings)(req.model);
 }
 
-/**
- * Map Shore's `provider_options` onto the AI SDK provider's typed reasoning
- * options. The key is the provider id (`deepseek` / `moonshotai`). Returns
- * `undefined` when nothing applies.
- */
 type ProviderOptionsValue = NonNullable<VercelCall["providerOptions"]>;
 
 export function buildProviderOptions(req: SidecarRequest): ProviderOptionsValue | undefined {
   const opts = req.provider_options ?? {};
   const inner: Record<string, unknown> = {};
 
-  // `thinking_enabled === false` (from `reasoning_effort = "off"`) is a hard
-  // disable and wins over any effort/budget.
   if (opts.thinking_enabled === false) {
     inner["thinking"] = { type: "disabled" };
   } else if (req.sdk === "deepseek") {
     const effort = opts.reasoning_effort;
     if (typeof effort === "string" && effort !== "off") inner["reasoningEffort"] = effort;
   } else {
-    // moonshot: a positive budget enables thinking with that budget.
     const budget = opts.budget_tokens;
     if (typeof budget === "number" && budget > 0) {
       inner["thinking"] = { type: "enabled", budgetTokens: budget };
@@ -193,8 +159,6 @@ export function buildProviderOptions(req: SidecarRequest): ProviderOptionsValue 
 
   if (Object.keys(inner).length === 0) return undefined;
   const key = req.sdk === "deepseek" ? "deepseek" : "moonshotai";
-  // The values are plain JSON; the SDK's JSONObject index type is satisfied at
-  // runtime — assert it to stay on the typed providerOptions path.
   return { [key]: inner } as ProviderOptionsValue;
 }
 
@@ -202,8 +166,6 @@ function buildTools(tools: ToolDefinition[] | undefined): ToolSet | undefined {
   if (!tools || tools.length === 0) return undefined;
   const out: Record<string, Tool> = {};
   for (const t of tools) {
-    // No `execute`: the Rust daemon owns the tool loop, so the SDK surfaces the
-    // tool-call and stops (finishReason "tool-calls").
     out[t.name] = tool({
       description: t.description,
       inputSchema: jsonSchema(t.input_schema ?? EMPTY_TOOL_SCHEMA),
@@ -212,18 +174,10 @@ function buildTools(tools: ToolDefinition[] | undefined): ToolSet | undefined {
   return out;
 }
 
-// ── message conversion ────────────────────────────────────────────────────────
-
 function buildMessages(req: SidecarRequest): ModelMessage[] {
   const messages: ModelMessage[] = [];
   const systemText = systemToText(req.system);
   if (systemText) messages.push({ role: "system", content: systemText });
-  // AI SDK tool-result parts require the tool NAME, but Shore's tool_result
-  // block carries only the id — recover names from prior assistant tool_use.
-  // The name map is built incrementally as turns are processed, so a turn's
-  // tool_result can only resolve a tool_use from an EARLIER turn: this enforces
-  // causality (a result pointing at a later call is rejected), not just
-  // existence anywhere in the transcript.
   const toolNames = new Map<string, string>();
   for (const turn of replayableMessages(req)) {
     const norm = toTurn(turn);
@@ -242,11 +196,6 @@ function textOf(turn: TurnMessage): string {
     .join("");
 }
 
-/**
- * One canonical turn → AI SDK `ModelMessage`(s). Assistant turns replay a prior
- * thinking block as a `reasoning` content part (DeepSeek/Kimi require it across
- * a tool loop). User tool_results become a separate `role:"tool"` message.
- */
 export function turnToVercel(turn: TurnMessage, toolNames: Map<string, string>): ModelMessage[] {
   if (turn.role === "system") {
     return [{ role: "system", content: textOf(turn) }];
@@ -274,16 +223,10 @@ export function turnToVercel(turn: TurnMessage, toolNames: Map<string, string>):
     return parts.length > 0 ? [{ role: "assistant", content: parts }] : [];
   }
 
-  // User turn: tool_results → one `role:"tool"` message; text + images ride a
-  // single user message.
   const out: ModelMessage[] = [];
   const toolParts = turn.content
     .filter((b): b is Extract<ContentBlock, { type: "tool_result" }> => b.type === "tool_result")
     .map((b) => {
-      // The originating tool_use must be in this request's history (orphan
-      // tool_result blocks are stripped upstream in the daemon). A missing name
-      // means a malformed turn — surface a clear error instead of an empty
-      // toolName, which the AI SDK would forward as an invalid tool-result.
       const toolName = toolNames.get(b.tool_use_id);
       if (toolName === undefined) {
         throw new Error(`tool_result references unknown tool_use_id: ${b.tool_use_id}`);
@@ -300,9 +243,6 @@ export function turnToVercel(turn: TurnMessage, toolNames: Map<string, string>):
   const userParts: Array<
     { type: "text"; text: string } | { type: "image"; image: string; mediaType: string }
   > = [];
-  // `turn.images` is the legacy field; the daemon inlines images as `image`
-  // content blocks instead and never populates it. Honored first so anything
-  // that does set it keeps images-before-text ordering.
   for (const img of imageParts(turn.images)) userParts.push(img);
   for (const b of turn.content) {
     if (b.type === "text") {
@@ -331,19 +271,11 @@ function imageParts(
   return out;
 }
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-
 function emptyUsage(): Usage {
   return { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 };
 }
 
 export function toUsage(u: LanguageModelUsage | undefined): Usage {
-  // The AI SDK's `inputTokens` is the TOTAL prompt, inclusive of the cache-read
-  // and cache-write portions (verified against DeepSeek native usage). Our
-  // ledger/pricing follows the Anthropic convention where input/cache_read/
-  // cache_creation are disjoint and summed, so subtract both to leave only the
-  // cache-miss tokens in `input_tokens`. Without this the cached tokens are
-  // billed twice — once at the full input rate (the DeepSeek overcost bug).
   const cacheRead = u?.inputTokenDetails?.cacheReadTokens ?? 0;
   const cacheWrite = u?.inputTokenDetails?.cacheWriteTokens ?? 0;
   return {

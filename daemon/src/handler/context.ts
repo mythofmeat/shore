@@ -1,20 +1,3 @@
-/**
- * The shared "build the chat-shaped request inputs" pipeline.
- *
- * Ported from `crates/daemon/src/handler/context.rs`, pinned by
- * `tests/handler_fixtures/context_parity.json`.
- *
- * Two sites need to take a character plus its conversation history and produce
- * the message list, the system blocks, and the tool definitions an outgoing
- * request is built from: chat generation, and the heartbeat's cold rebuild.
- * They had nearly byte-identical thirty-line stretches doing it, and that
- * duplication was load-bearing in the worst way — a drift as small as one
- * forgotten step silently broke cache reuse between chat and heartbeat, which
- * shows up as a bill rather than as a failure.
- *
- * This module is the one place those steps live.
- */
-
 import type { LoadedConfig } from "../config/loader.ts";
 import { resolveDisplayName } from "../config/app.ts";
 import { anyToolEnabled } from "../config/app.ts";
@@ -45,29 +28,11 @@ export interface PrepareChatContextParams {
   resolved: ResolvedModel;
   messages: Message[];
   hasPriorContext: boolean;
-  /**
-   * Pre-filtered MCP tool defs, already in the registry's pinned sort. The
-   * caller builds these from the live registry, filtered by `enabled_tools`;
-   * pass `[]` when no registry is wired, as background rebuilds do.
-   * {@link assembleToolSurface} decides where they land.
-   */
   mcpToolDefs: readonly ToolDefinition[];
-  /** The image-resize ladder. Omitted means encode images at stored size. */
   resize?: CachedResize;
-  /**
-   * The zone time markers render in. Defaults to the host's, which is what the
-   * Rust's `chrono::Local` resolved to. A parameter only because the Rust's
-   * implicit host lookup is untestable — the parity replay has to pin a zone
-   * or it passes on the generator's machine and nowhere else.
-   */
   timeZone?: string;
 }
 
-/**
- * The three pieces every chat-shaped request needs, plus the assembled prompt
- * for callers that want to do more work before building the request — warming
- * the image cache, most of all, which needs the prompt's own `messages`.
- */
 export interface PreparedChatContext {
   llmMessages: WireMessage[];
   system: SystemBlock[];
@@ -75,15 +40,6 @@ export interface PreparedChatContext {
   prompt: AssembledPrompt;
 }
 
-/**
- * Load the four active-prompt files plus the memory index, assemble the prompt,
- * convert it to wire messages, and render the tool surface.
- *
- * A prompt file that will not load is not fatal — the slot goes empty, which is
- * what the Rust did, and is the difference between a character with a missing
- * USER.md and a character that cannot talk. The snapshot-ensure step is
- * best-effort for the same reason: it is warned about and stepped over.
- */
 export async function prepareChatContext(
   params: PrepareChatContextParams,
 ): Promise<PreparedChatContext> {
@@ -131,9 +87,6 @@ export async function prepareChatContext(
       ? assemblePrompt(promptParams)
       : assemblePrompt(promptParams, params.timeZone);
 
-  // MCP alone is enough: a character with no `enabled_tools` still has a
-  // non-empty surface if a server is connected, and `tools: []` is not the same
-  // request as no `tools` param at all.
   const toolsAvailable = anyToolEnabled(config.app.tools) || mcpToolDefs.length > 0;
 
   const { messages: llmMessages, system } = await buildLlmMessages(
@@ -144,12 +97,6 @@ export async function prepareChatContext(
     params.resize,
   );
 
-  // Offer order is cache-load-bearing; `assembleToolSurface` owns it.
-  //
-  // `displayName` reaches `renderToolDefs` for `{{user}}` substitution, and no
-  // registered tool description currently contains one — so passing the wrong
-  // name there is unobservable today, and the mutation pass records it as an
-  // equivalent rather than a gap. The subagent path below does template it.
   const toolDefs = toolsAvailable
     ? assembleToolSurface(
         renderToolDefs(config.app.tools, character, displayName),
@@ -166,36 +113,6 @@ export async function prepareChatContext(
   return { llmMessages, system, toolDefs, prompt };
 }
 
-/**
- * Build the chat-shape request from disk — the request chat's handler would
- * build for its next turn.
- *
- * The fallback for when an in-memory `last_request` is unavailable: a daemon
- * restart, a post-compaction invalidation, a manual compact before any chat has
- * run. Both the heartbeat's cold rebuild and the compaction tail builder lean on
- * it, and the reason is the cache rather than convenience — whatever chat would
- * have sent is what they send, so the prefix lines up across all three.
- *
- * `resolved` is the model the request is anchored on: system, tools and the
- * provider key all flow from it. Compaction passes the *chat* model here on
- * purpose, because its own tool loop rebuilds against the compaction model
- * later; this call only establishes the wire shape.
- *
- * # `mcpToolDefs` is not optional in the way it looks
- *
- * The Rust had two of these, and they disagreed about MCP tools on purpose.
- * `handler/context.rs` passed `&[]` with a comment saying "not wired on this
- * path yet"; `autonomy/manager.rs`'s passed the registry's filtered defs with a
- * comment saying that omitting them would make the keepalive *strictly
- * negative* — a warmed prefix missing tools chat includes is a prefix the next
- * chat turn cannot reuse, so the ping pays for a write and buys nothing.
- *
- * Which caller is which decides it. Compaction rebuilds only to establish a
- * wire shape it immediately re-anchors on the compaction model, so its tool
- * surface never has to match chat's byte for byte. The keepalive's whole job is
- * that it does. Defaulting to empty keeps compaction's behaviour and makes the
- * keepalive's a thing its caller states.
- */
 export async function buildChatShapeRequestFromDisk(
   character: string,
   characterDataDir: string,
@@ -206,8 +123,6 @@ export async function buildChatShapeRequestFromDisk(
   options: {
     resize?: CachedResize;
     mcpToolDefs?: readonly ToolDefinition[];
-    /** Injected so a replay can pin the time markers. Production reads the
-     *  process zone, which is what the Rust's `chrono::Local` did. */
     timeZone?: string;
   } = {},
 ): Promise<BuiltRequest> {

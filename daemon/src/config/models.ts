@@ -1,17 +1,3 @@
-/**
- * The model catalog: the nested `[chat.<provider>.<model>]` structure, the
- * cascade that resolves it, and the hardcoded provider defaults underneath.
- *
- * Port of `crates/common/src/config/models.rs`.
- *
- * This is the first module on the TypeScript side to own *configuration*
- * rather than receive it. Everything ported before it took a narrow view
- * struct handed down by the Rust daemon, because the Rust daemon owned config.
- * `preferences` and `effective_catalog` are the resolution layer themselves, so
- * there is nobody upstream left to hand them a view — the parsing has to live
- * here.
- */
-
 import { applicability, defaultValue, type Field, type Sdk } from "../llm/capabilities.ts";
 import { ConfigDuration, type ParseResult } from "./duration.ts";
 import { compareByCodePoint, sortedKeys } from "../sort.ts";
@@ -20,29 +6,12 @@ import type { ResolvedModel as RequestResolvedModel } from "../llm/request.ts";
 
 export type { Sdk };
 
-// ── Cache keepalive cadence ─────────────────────────────────────────────
-
-/**
- * Per-model cache-keepalive cadence (`cache_keepalive` in `[models.*]`).
- *
- * `"off"` disables keepalive pings; any duration string sets the interval
- * between pings while the character is idle. The duration is a *literal* ping
- * interval — it is not derived from the provider's cache TTL, and is
- * deliberately independent of the Anthropic-only `cache_ttl` wire setting.
- */
 export type CacheKeepaliveSetting =
   | { kind: "off" }
   | { kind: "every"; interval: ConfigDuration };
 
 const KEEPALIVE_OFF_SPELLINGS = ["off", "none", "disabled", "false", "0"];
 
-/**
- * Parse from a TOML string: `off`/`none`/`disabled`/`false`/`0` disable it,
- * any non-zero duration string sets the interval.
- *
- * A zero-length interval (`"0s"`, `"0ms"`) is rejected: it would re-arm the
- * timer at `now` on every tick and spin a ping loop. Use `"off"` to disable.
- */
 export function parseCacheKeepalive(raw: string): ParseResult<CacheKeepaliveSetting> {
   const trimmed = raw.trim();
   if (KEEPALIVE_OFF_SPELLINGS.includes(asciiLowercase(trimmed))) return { ok: { kind: "off" } };
@@ -55,12 +24,10 @@ export function parseCacheKeepalive(raw: string): ParseResult<CacheKeepaliveSett
   return { ok: { kind: "every", interval: interval.ok } };
 }
 
-/** The resolved ping interval in milliseconds, or `undefined` when off. */
 export function keepaliveIntervalMs(setting: CacheKeepaliveSetting): number | undefined {
   return setting.kind === "off" ? undefined : setting.interval.asMillis();
 }
 
-/** The TOML spelling — `"off"` or the duration's canonical form. */
 export function keepaliveToString(setting: CacheKeepaliveSetting): string {
   return setting.kind === "off" ? "off" : setting.interval.toString();
 }
@@ -70,20 +37,9 @@ export function keepaliveEquals(a: CacheKeepaliveSetting, b: CacheKeepaliveSetti
   return a.interval.equals(b.interval);
 }
 
-/**
- * `to_ascii_lowercase`, not `toLowerCase`.
- *
- * No current input distinguishes the two: every off spelling is pure ASCII, so
- * for a full-Unicode fold to reach one, the input would already have to be
- * ASCII. This is a guarantee about the *next* spelling rather than a live
- * behavioural difference — add a non-ASCII one (or one containing `k`, which
- * the Kelvin sign U+212A folds into) and the two rules diverge immediately.
- */
 function asciiLowercase(s: string): string {
   return s.replace(/[A-Z]/g, (c) => c.toLowerCase());
 }
-
-// ── SDK ─────────────────────────────────────────────────────────────────
 
 const SDK_VARIANTS: readonly Sdk[] = [
   "anthropic",
@@ -95,20 +51,11 @@ const SDK_VARIANTS: readonly Sdk[] = [
   "moonshot",
 ];
 
-/**
- * Parse a wire-protocol string into an `Sdk`, or `undefined` for unknown
- * strings — the caller decides whether to fall back or error.
- *
- * `moonshotai` is an accepted alias for `moonshot`. Note this is *not* the
- * config deserializer: {@link deserializeSdk} additionally accepts the
- * deprecated `zhipuai` and reports unknown variants as an error.
- */
 export function sdkFromWire(s: string): Sdk | undefined {
   if (s === "moonshotai") return "moonshot";
   return (SDK_VARIANTS as readonly string[]).includes(s) ? (s as Sdk) : undefined;
 }
 
-/** The config-file spelling, which tolerates one deprecated alias. */
 function deserializeSdk(raw: string): ParseResult<Sdk> {
   if (raw === "zhipuai") {
     console.warn(
@@ -125,42 +72,14 @@ function deserializeSdk(raw: string): ParseResult<Sdk> {
   return { ok: sdk };
 }
 
-/**
- * Whether this SDK's wire protocol requires the daemon to echo **unsigned**
- * reasoning text back to the provider on the next request.
- *
- * Anthropic signs its thinking blocks and rejects requests carrying unsigned
- * reasoning text from a prior turn; OpenAI and Z.AI expect the assistant's
- * prior `reasoning_content` to round-trip verbatim, and DeepSeek/Moonshot hard
- * require it during a tool loop. Gemini does not accept reasoning replay.
- */
 export function sdkEchoesUnsignedThinking(sdk: Sdk): boolean {
   return sdk === "openai" || sdk === "zai" || sdk === "deepseek" || sdk === "moonshot";
 }
 
-/**
- * Whether requests for this SDK ultimately hit Anthropic's prompt-cache
- * machinery — so a background task reusing the chat-warmed prefix has to
- * preserve `request.system` verbatim and attach trailing instructions as an
- * inline `role:"system"` entry instead.
- */
 export function sdkUsesAnthropicPromptCache(sdk: Sdk): boolean {
   return sdk === "anthropic";
 }
 
-// ── Shared model config fields ──────────────────────────────────────────
-
-/**
- * The configuration fields shared by provider configs, model entries and
- * resolved models. Every field is optional — absent means "inherit from the
- * next level up" (model → provider → hardcoded defaults).
- *
- * The first three — `sdk` / `apiKeyEnv` / `baseUrl` — are **transport**, not
- * behavioral overlay. Transport has a single authoritative home, the
- * `[providers.<name>]` registry entry; these survive here only for the legacy
- * static `ModelEntry` path and for {@link ResolvedModel}, where they hold
- * *resolved* transport. Don't reintroduce them as an overlay knob.
- */
 export interface ModelConfigFields {
   sdk?: Sdk;
   apiKeyEnv?: string;
@@ -197,20 +116,15 @@ const FIELD_KEYS = [
   "zaiSubscription",
 ] as const satisfies readonly (keyof ModelConfigFields)[];
 
-/** Overwrite `target`'s fields with any present field from `overlay`. */
 export function mergeFrom(target: ModelConfigFields, overlay: ModelConfigFields): void {
   for (const key of FIELD_KEYS) {
     const value = overlay[key];
     if (value !== undefined) {
-      // Each key indexes the same property on both sides, but TypeScript
-      // widens `overlay[key]` to the union of every field type across the
-      // loop, so the per-key correspondence has to be asserted.
       (target as Record<string, unknown>)[key] = value;
     }
   }
 }
 
-/** A new set of fields taking each value from `self` if present, else `fallback`. */
 export function orFallback(
   self: ModelConfigFields,
   fallback: ModelConfigFields,
@@ -223,29 +137,19 @@ export function orFallback(
   return out;
 }
 
-/** Provider-level configuration — the scalar keys under `[chat.<provider>]`. */
 export interface ProviderConfig {
   fields: ModelConfigFields;
 }
 
-/** Per-model configuration — sub-tables under `[chat.<provider>.<model>]`. */
 export interface ModelEntry {
-  /** The upstream model identifier (e.g. `claude-opus-4-6`). Required. */
   modelId?: string;
   fields: ModelConfigFields;
 }
 
-// ── Resolved model ──────────────────────────────────────────────────────
-
-/** A fully resolved model profile with all provider defaults merged in. */
 export interface ResolvedModel {
-  /** Short name — the TOML key under the provider (e.g. `opus`). */
   name: string;
-  /** Qualified path (e.g. `chat.anthropic.opus`). */
   qualifiedName: string;
-  /** Category: `chat`, `tools`, … */
   category: string;
-  /** Provider key (e.g. `anthropic`, `openrouter`). */
   providerKey: string;
   sdk: Sdk;
   modelId: string;
@@ -263,30 +167,10 @@ export interface ResolvedModel {
   geminiGeneration?: number;
   zaiClearThinking?: boolean;
   zaiSubscription?: boolean;
-  /**
-   * Per-model override for preserving prior-turn extended-thinking blocks.
-   * Absent means "inherit the global `[memory.thinking].replay_prior_thinking`".
-   * Not sourced from the static catalog — stamped here by the runtime
-   * preference overlay. Reach for `none` only when a backend rejects inbound
-   * reasoning; it is a compatibility escape hatch, not a cost knob.
-   */
   replayPriorThinking?: ThinkingReplay;
-  /**
-   * Maximum tool-loop iterations per turn, governing every agentic tool loop.
-   * Absent means **unlimited** — the loop runs until the model stops requesting
-   * tools. Like `replayPriorThinking`, stamped by the runtime overlay rather
-   * than the static catalog.
-   */
   maxToolIterations?: number;
 }
 
-/**
- * Prior-thinking replay for this model: the per-model overlay when set,
- * otherwise the global `[memory.thinking]` default.
- *
- * The one place the two-level fallback is resolved, so a caller cannot
- * silently ship the global default to a model that overrode it.
- */
 export function resolvedReplayPriorThinking(
   model: ResolvedModel,
   globalDefault: ThinkingReplay,
@@ -294,24 +178,6 @@ export function resolvedReplayPriorThinking(
   return model.replayPriorThinking ?? globalDefault;
 }
 
-/**
- * The same model in the shape `llm/request.ts` reads.
- *
- * Rust has one `ResolvedModel`. Here there are two, because the request builder
- * was ported against the sidecar's snake_case wire mirror months before the
- * catalog itself moved and grew this camelCase one. They describe the same
- * struct and the split is a port artefact rather than a design — but collapsing
- * them touches every adapter, so until that happens the conversion lives here,
- * in the module that owns the catalog spelling, and nowhere else. Do not
- * open-code it at a call site.
- *
- * Two fields are not a rename. `cacheKeepalive` is parsed here and stringly
- * over there, so it goes back through {@link ConfigDuration.toString}, which is
- * documented to round-trip through `parse` — the request builder re-parses it
- * immediately. `replayPriorThinking` and `maxToolIterations` have no
- * counterpart at all: the builder takes the replay policy as an explicit
- * argument, and nothing about a tool loop reaches a single request.
- */
 export function toRequestModel(model: ResolvedModel): RequestResolvedModel {
   return {
     name: model.name,
@@ -338,8 +204,6 @@ export function toRequestModel(model: ResolvedModel): RequestResolvedModel {
   };
 }
 
-/** `exactOptionalPropertyTypes` means an absent field and a `undefined` one are
- * different types, so an absent one has to be spread in rather than assigned. */
 function opt<K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } {
   return (value === undefined ? {} : { [key]: value }) as { [P in K]?: V };
 }
@@ -349,10 +213,6 @@ function keepaliveString(setting: CacheKeepaliveSetting | undefined): string | u
   return setting.kind === "off" ? "off" : setting.interval.toString();
 }
 
-/**
- * Build a `ResolvedModel` from metadata plus merged config fields.
- * `sdkFallback` is used when `fields.sdk` is absent.
- */
 export function resolvedModelFromParts(
   name: string,
   qualifiedName: string,
@@ -364,41 +224,22 @@ export function resolvedModelFromParts(
 ): ResolvedModel {
   const merged: ModelConfigFields = { ...fields };
 
-  // Anthropic-slug auto-promotion: OpenRouter and similar gateways accept
-  // Anthropic-shape `/v1/messages` for `anthropic/*` models, and the Anthropic
-  // SDK is the only path that emits `cache_control`. If the user didn't pin an
-  // SDK, route any `anthropic/*` model_id through the Anthropic SDK so caching
-  // works by default.
   const sdk: Sdk =
     merged.sdk ?? (modelId.startsWith("anthropic/") ? "anthropic" : sdkFallback);
 
-  // Anthropic prompt caching is opt-in on the wire — `cache_control` blocks
-  // are only added when `cache_ttl` is present and non-empty. Fill only when
-  // unset so user/provider config wins (set `cache_ttl = ""` to disable).
   if (merged.cacheTtl === undefined) {
     const fallbackTtl = defaultValue(sdk, "cache_ttl");
     if (fallbackTtl !== undefined) merged.cacheTtl = fallbackTtl;
   }
 
-  // The keepalive cadence default is also sdk-keyed. Fill only when unset so
-  // an explicit `cache_keepalive = "off"` (or any interval) wins. Separate
-  // from `cache_ttl`: keepalive can run on any provider with a cache, but is
-  // opt-in everywhere except Anthropic.
   if (merged.cacheKeepalive === undefined) {
     const raw = defaultValue(sdk, "cache_keepalive");
     if (raw !== undefined) {
       const parsed = parseCacheKeepalive(raw);
-      // `.ok()` in the Rust: an unparseable baked-in default leaves the field
-      // unset rather than failing the catalog.
       if ("ok" in parsed) merged.cacheKeepalive = parsed.ok;
     }
   }
 
-  // Drop sampler knobs the model's wire rejects so a baked-in default never
-  // 400s. The `temperature = 1.0` baseline from the provider defaults is
-  // dropped silently; an explicit non-default value is dropped with a warning.
-  // `top_p` and `budget_tokens` have no code default, so any present value is
-  // user-set and warns.
   stripRejectedSampler(sdk, modelId, "temperature", merged, "temperature", 1.0);
   stripRejectedSampler(sdk, modelId, "top_p", merged, "topP", undefined);
   stripRejectedSampler(sdk, modelId, "budget_tokens", merged, "budgetTokens", undefined);
@@ -413,9 +254,6 @@ export function resolvedModelFromParts(
     sdk,
     modelId,
   };
-  // `exactOptionalPropertyTypes` is on, so an absent field has to stay absent
-  // rather than becoming an explicit `undefined` — `"cacheTtl" in model` is
-  // observable, and the Rust distinguishes `None` from a set value.
   assignIfPresent(resolved, "apiKeyEnv", merged.apiKeyEnv);
   assignIfPresent(resolved, "baseUrl", merged.baseUrl);
   assignIfPresent(resolved, "maxContextTokens", merged.maxContextTokens);
@@ -430,10 +268,6 @@ export function resolvedModelFromParts(
   assignIfPresent(resolved, "geminiGeneration", merged.geminiGeneration);
   assignIfPresent(resolved, "zaiClearThinking", merged.zaiClearThinking);
   assignIfPresent(resolved, "zaiSubscription", merged.zaiSubscription);
-  // `replayPriorThinking` and `maxToolIterations` are deliberately left unset:
-  // the static catalog has no such fields, and the runtime preference overlay
-  // stamps them later. Absent means "inherit the global default" and
-  // "unlimited" respectively.
   return resolved;
 }
 
@@ -445,11 +279,6 @@ function assignIfPresent<K extends keyof ResolvedModel>(
   if (value !== undefined) target[key] = value;
 }
 
-/**
- * Drop a sampler field the resolved `(sdk, modelId)` wire rejects. A value
- * equal to `silentDefault` (the baked-in code default) goes quietly; any other
- * present value is dropped with a warning, since sending it would be a 400.
- */
 function stripRejectedSampler(
   sdk: Sdk,
   modelId: string,
@@ -470,11 +299,6 @@ function stripRejectedSampler(
   delete fields[key];
 }
 
-/**
- * Warn about — but keep — every present field the resolved sdk silently
- * ignores. Harmless on the wire, but a likely misconfiguration worth surfacing
- * (e.g. `cache_ttl` on a non-Anthropic sdk).
- */
 function warnIgnoredFields(sdk: Sdk, modelId: string, fields: ModelConfigFields): void {
   const checks: readonly [Field, boolean][] = [
     ["cache_ttl", fields.cacheTtl !== undefined],
@@ -492,47 +316,20 @@ function warnIgnoredFields(sdk: Sdk, modelId: string, fields: ModelConfigFields)
   }
 }
 
-// ── Auxiliary model categories ──────────────────────────────────────────
-
-/**
- * Per-model settings for an `[embedding."provider:model_id"]` table.
- *
- * Identity (`provider:model_id`) is the map key; transport comes from
- * `[providers.<provider>]`. Unknown keys are rejected so leftover inline
- * transport from the retired flat shape fails loudly.
- */
 export interface EmbeddingSettings {
-  /** Embedding vector dimensions. Absent falls back to the resolver default. */
   dimensions?: number;
 }
 
-/** Per-model settings for an `[image_generation."provider:model_id"]` table. */
 export interface ImageGenSettings {
-  /** Default size for the OpenAI path (e.g. `1024x1024`). */
   size?: string;
-  /** Optional quality hint for the OpenAI path (e.g. `hd`). */
   quality?: string;
-  /** OpenRouter aspect ratio (e.g. `1:1`, `16:9`). */
   aspectRatio?: string;
-  /** OpenRouter image size (e.g. `1K`, `2K`, `4K`). */
   imageSize?: string;
 }
 
-// ── Model catalog ───────────────────────────────────────────────────────
-
-/**
- * The parsed model catalog.
- *
- * Every map is in Rust `BTreeMap` order — code-point sorted by key, not
- * insertion order. `firstChatModel` reads the first entry, so the order is
- * load-bearing, not cosmetic.
- */
 export interface ModelCatalog {
-  /** Chat models keyed by qualified name. */
   chat: Map<string, ResolvedModel>;
-  /** Embedding settings keyed by `provider:model_id`. */
   embedding: Map<string, EmbeddingSettings>;
-  /** Image-generation settings keyed by `provider:model_id`. */
   imageGeneration: Map<string, ImageGenSettings>;
 }
 
@@ -540,7 +337,6 @@ export function emptyCatalog(): ModelCatalog {
   return { chat: new Map(), embedding: new Map(), imageGeneration: new Map() };
 }
 
-/** Every variant of a catalog parse or lookup failure. */
 export type CatalogErrorKind =
   | "missing_model_id"
   | "parse_entry"
@@ -550,7 +346,6 @@ export type CatalogErrorKind =
   | "provider_scalar_retired"
   | "aux_profile_invalid";
 
-/** Errors from model catalog parsing and lookup. */
 export class CatalogError extends Error {
   constructor(
     readonly kind: CatalogErrorKind,
@@ -627,24 +422,10 @@ export class CatalogError extends Error {
   }
 }
 
-/**
- * Transport keys that belong on the `[providers.<name>]` entry itself rather
- * than its `[.defaults]` behavioral bag.
- */
 const TRANSPORT_SCALAR_KEYS = ["sdk", "api_key_env", "base_url", "keys"];
 
-/**
- * Dict-valued TOML keys at the provider level that are config fields, NOT
- * model sub-tables.
- */
 const RESERVED_DICT_KEYS = ["openrouter_provider"];
 
-/**
- * The slice of the `[providers.*]` registry the catalog cascade needs.
- *
- * Declared as an interface rather than imported so this module does not depend
- * on the registry's own parsing; `providers.ts` supplies the implementation.
- */
 export interface ProviderRegistryView {
   get(name: string): ProviderRegistryEntry | undefined;
 }
@@ -655,17 +436,6 @@ export interface ProviderRegistryEntry {
   defaults: ModelConfigFields;
 }
 
-/**
- * Build a catalog from the raw TOML sections, optionally letting the
- * `[providers.<name>]` registry cascade transport defaults into static model
- * entries.
- *
- * With a registry, each `[chat.<name>]` entry inherits its `sdk` and
- * `base_url` as defaults — lower precedence than per-model fields, higher than
- * the hardcoded provider defaults. This lets a custom OpenAI-compatible
- * provider configured solely under `[providers.<name>]` route its static
- * aliases through the right transport without duplicating fields.
- */
 export function catalogFromSections(
   chat: Record<string, unknown> | undefined,
   embedding: Record<string, unknown> | undefined,
@@ -674,10 +444,6 @@ export function catalogFromSections(
 ): ModelCatalog {
   const chatModels = chat === undefined ? new Map() : parseCategory("chat", chat, providers);
 
-  // Embedding and image_generation are keyed by `provider:model_id`; identity
-  // is the key, transport resolves through `[providers.*]`, and the table body
-  // holds only category settings. The old flat shape (bare alias key with
-  // inline transport) is rejected here.
   const embeddingProfiles =
     embedding === undefined
       ? new Map<string, EmbeddingSettings>()
@@ -690,16 +456,6 @@ export function catalogFromSections(
   return { chat: chatModels, embedding: embeddingProfiles, imageGeneration: imageGenProfiles };
 }
 
-/**
- * Look up a model by short name or qualified name.
- *
- * Qualified names (`chat.anthropic.opus`) are tried first. Short names
- * (`opus`) search across all providers and error on ambiguity.
- *
- * Both miss paths throw a `CatalogError` and neither warns: this lookup is
- * also used as a speculative probe, where a miss is expected. Terminal callers
- * that treat a miss as real misconfiguration log it themselves.
- */
 export function findModel(catalog: ModelCatalog, name: string): ResolvedModel {
   for (const model of catalog.chat.values()) {
     if (model.qualifiedName === name) return model;
@@ -711,42 +467,19 @@ export function findModel(catalog: ModelCatalog, name: string): ResolvedModel {
   throw CatalogError.ambiguousName(name, matches.map((m) => m.qualifiedName).join(", "));
 }
 
-/**
- * What to say when the catalog is empty: the state, and the two edits that fix it.
- *
- * Shared rather than written twice. `config --check` has always said this well
- * and a `send` into the same empty catalog used to answer "No model configured"
- * — true, and no help at all about where to go next (#31). One constant is what
- * keeps the two from drifting apart again.
- */
 export const NO_CHAT_MODELS_MESSAGE =
   "No chat models configured. Add a [providers.*] entry and set " +
   "[defaults].model to a provider:model_id.";
 
-/** The first chat model in catalog order, if any. */
 export function firstChatModel(catalog: ModelCatalog): ResolvedModel | undefined {
   for (const model of catalog.chat.values()) return model;
   return undefined;
 }
 
-/** Every chat model's qualified name, in catalog order. */
 export function chatModelNames(catalog: ModelCatalog): string[] {
   return [...catalog.chat.keys()];
 }
 
-// ── Category parser ─────────────────────────────────────────────────────
-
-/**
- * Parse a category section (`[chat]`) into resolved models keyed by qualified
- * name.
- *
- * Provider-level defaults no longer live here — they were rehomed onto
- * `[providers.<provider>.defaults]`. Scalar keys directly under
- * `[<category>.<provider>]` are therefore rejected with a migration error.
- *
- * Keys are walked in `BTreeMap` order because the first offending key is the
- * one that throws, and that key has to be the same one Rust picks.
- */
 function parseCategory(
   category: string,
   section: Record<string, unknown>,
@@ -755,9 +488,6 @@ function parseCategory(
   const models: [string, ResolvedModel][] = [];
 
   for (const providerKey of sortedKeys(section)) {
-    // The Claude Code transport was removed; reject leftover sections
-    // explicitly so the breaking change surfaces as a clear config error
-    // rather than silently routing through `defaultSdk("claude_code")`.
     if (providerKey === "claude_code") throw CatalogError.removedProvider(category);
 
     const providerValue = section[providerKey];
@@ -766,9 +496,6 @@ function parseCategory(
       continue;
     }
 
-    // Provider-level scalars were retired in favor of
-    // `[providers.<provider>.defaults]`. Reject any leftover so a stale config
-    // fails loudly instead of silently dropping (e.g.) routing.
     for (const k of sortedKeys(providerValue)) {
       if (!isTable(providerValue[k]) || RESERVED_DICT_KEYS.includes(k)) {
         const target = TRANSPORT_SCALAR_KEYS.includes(k)
@@ -778,17 +505,6 @@ function parseCategory(
       }
     }
 
-    // Cascade order, lowest to highest precedence:
-    //   1. hardcoded provider defaults
-    //   2. `[providers.<provider>]` registry transport (sdk + base_url)
-    //   3. `[providers.<provider>.defaults]` behavioral/vendor defaults
-    //   4. `[<category>.<provider>.<model>]` per-model fields
-    //
-    // Credentials intentionally do NOT cascade through this path: the
-    // registry's compact `api_key_env` is folded into its `keys[]` list at
-    // parse time and the credential resolver reads that list directly.
-    // Overlaying a single env name back onto the static model would defeat the
-    // multi-key fallback machinery.
     const providerConfig = hardcodedProviderDefaults(providerKey);
 
     const entry = providers?.get(providerKey);
@@ -796,19 +512,12 @@ function parseCategory(
       const registryOverlay: ModelConfigFields = {};
       if (entry.sdk !== undefined) registryOverlay.sdk = entry.sdk;
       if (entry.baseUrl !== undefined) registryOverlay.baseUrl = entry.baseUrl;
-      // These two merges cannot currently observe each other's order:
-      // `registryOverlay` carries only transport, and `[.defaults]` rejects
-      // transport keys at parse time, so the two sets are disjoint. The order
-      // is kept because it states the intended precedence for the day
-      // `[.defaults]` accepts a key that overlaps.
       mergeFrom(providerConfig.fields, registryOverlay);
       mergeFrom(providerConfig.fields, entry.defaults);
     }
 
     for (const modelName of sortedKeys(providerValue)) {
       const modelValue = providerValue[modelName];
-      // Scalars and reserved dict keys are rejected above; only model
-      // sub-tables remain here.
       if (!isTable(modelValue) || RESERVED_DICT_KEYS.includes(modelName)) continue;
 
       const parsed = readModelEntry(modelValue);
@@ -837,11 +546,6 @@ function parseCategory(
     }
   }
 
-  // Deprecation window: `[chat.*]` is no longer the primary model-definition
-  // mechanism. Identity is now `provider:model_id`, transport lives in
-  // `[providers.<p>]`, and behavioral knobs in `[models."<p>:<id>"]`. The
-  // static entries are still honored, but warn once per non-empty category so
-  // configs migrate before the entries are physically removed.
   if (models.length > 0) {
     console.warn(
       `shore: \`[${category}.*]\` is deprecated and will be removed: define models via ` +
@@ -854,15 +558,6 @@ function parseCategory(
   return new Map(models.sort((a, b) => compareByCodePoint(a[0], b[0])));
 }
 
-// ── Auxiliary category parser ───────────────────────────────────────────
-
-/**
- * Parse an `[embedding]` or `[image_generation]` section keyed by
- * `provider:model_id`. Each value table holds only category settings;
- * transport and identity come from the key plus `[providers.*]`. The retired
- * flat shape — a bare alias key, or inline transport in the table body — is
- * rejected with a migration error.
- */
 function parseAuxSection<T>(
   category: string,
   section: Record<string, unknown>,
@@ -871,9 +566,6 @@ function parseAuxSection<T>(
 ): Map<string, T> {
   const out: [string, T][] = [];
   for (const key of sortedKeys(section)) {
-    // The new shape requires a `provider:model_id` identity key with both
-    // halves non-empty. A bare alias (no colon) is the retired flat shape;
-    // `:model` and `provider:` are malformed.
     const colon = key.indexOf(":");
     if (colon < 0) {
       throw CatalogError.auxProfileInvalid(
@@ -902,8 +594,6 @@ function parseAuxSection<T>(
       );
     }
 
-    // Unknown keys are rejected, which is what catches leftover inline
-    // transport/identity from the old shape as well as misspelled settings.
     const settings = read(value);
     if ("err" in settings) {
       throw CatalogError.auxProfileInvalid(category, key, settings.err, example);
@@ -913,31 +603,16 @@ function parseAuxSection<T>(
   return new Map(out.sort((a, b) => compareByCodePoint(a[0], b[0])));
 }
 
-// ── Provider defaults ───────────────────────────────────────────────────
-
-/** Shared baseline for all known providers. */
 function baseProviderDefaults(): ModelConfigFields {
   return { temperature: 1.0, maxOutputTokens: 8192, maxContextTokens: 200_000 };
 }
 
-/**
- * Hardcoded provider defaults — the lowest, code-level tier of the cascade,
- * below `[providers.<provider>.defaults]`.
- *
- * Public so the effective-catalog merger can synthesize `ResolvedModel`
- * records for discovered and trusted models on the same footing.
- */
 export function hardcodedProviderDefaults(providerKey: string): ProviderConfig {
   const base = baseProviderDefaults();
   switch (providerKey) {
     case "anthropic":
       return { fields: { ...base, sdk: "anthropic", apiKeyEnv: "ANTHROPIC_API_KEY" } };
     case "openrouter":
-      // Non-Anthropic OpenRouter models route through the first-party
-      // `@openrouter/sdk` adapter — the normalized path that folds each
-      // vendor's reasoning shape into one `reasoning_details` array.
-      // Claude-over-OpenRouter uses a separate `openrouter-anthropic` provider
-      // with an explicit `sdk = "anthropic"`.
       return {
         fields: {
           ...base,
@@ -947,8 +622,6 @@ export function hardcodedProviderDefaults(providerKey: string): ProviderConfig {
         },
       };
     case "deepseek":
-      // Native DeepSeek via the Vercel AI SDK provider, which adds reasoning
-      // control over the old plain OpenAI-compatible path.
       return {
         fields: {
           ...base,
@@ -959,7 +632,6 @@ export function hardcodedProviderDefaults(providerKey: string): ProviderConfig {
       };
     case "moonshot":
     case "moonshotai":
-      // Native Moonshot (Kimi): native thinking on/off plus reasoningHistory.
       return {
         fields: {
           ...base,
@@ -1002,11 +674,6 @@ export function hardcodedProviderDefaults(providerKey: string): ProviderConfig {
         },
       };
     case "opencode-go":
-      // A flat-rate subscription gateway serving open models across two wire
-      // dialects behind one key: most via the OpenAI `/chat/completions` path,
-      // MiniMax/Qwen via the Anthropic `/messages` path. `sdk` is deliberately
-      // left unset so the per-model SDK that discovery stamps wins, rather
-      // than a blanket provider default.
       return {
         fields: {
           ...base,
@@ -1015,20 +682,14 @@ export function hardcodedProviderDefaults(providerKey: string): ProviderConfig {
         },
       };
     default:
-      // Note: no `baseProviderDefaults()` for an unknown provider — an unknown
-      // key gets a completely empty config, not the shared baseline.
       return { fields: {} };
   }
 }
 
-/** Default SDK for a provider key, when neither hardcoded nor TOML specifies one. */
 export function defaultSdk(providerKey: string): Sdk {
   switch (providerKey) {
     case "anthropic":
       return "anthropic";
-    // OpenRouter's non-Anthropic models route through the first-party adapter
-    // by default; `anthropic/*` model_ids are still auto-promoted in
-    // `resolvedModelFromParts`.
     case "openrouter":
       return "openrouter";
     case "gemini":
@@ -1040,20 +701,15 @@ export function defaultSdk(providerKey: string): Sdk {
     case "moonshot":
     case "moonshotai":
       return "moonshot";
-    // Everything else (xai, zhipuai, custom) defaults to the direct
-    // OpenAI-compatible path.
     default:
       return "openai";
   }
 }
 
-// ── TOML readers ────────────────────────────────────────────────────────
-
 function isTable(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** The `serde` spelling of a TOML value's type, for error messages. */
 function tomlTypeName(value: unknown): string {
   if (typeof value === "string") return "string";
   if (typeof value === "boolean") return "boolean";
@@ -1063,22 +719,11 @@ function tomlTypeName(value: unknown): string {
   return "unit";
 }
 
-/**
- * How `serde::de::Unexpected` renders a value: strings in double quotes,
- * every other scalar in backticks.
- *
- * Sequences and maps render as the bare type name with no value — serde's
- * `Unexpected::Seq` and `Unexpected::Map` carry nothing to print. Nothing in
- * the model catalog reaches either (its fields are all scalars), but `AppConfig`
- * does, and `[defaults] model = []` must say `invalid type: sequence, expected
- * a string` rather than inventing a rendering of the array.
- */
 function tomlValueRepr(value: unknown): string | undefined {
   if (Array.isArray(value) || isTable(value)) return undefined;
   return typeof value === "string" ? `"${value}"` : `\`${String(value)}\``;
 }
 
-/** The serde phrasing for a value of the wrong type. */
 export function invalidType(value: unknown, expected: string): string {
   const repr = tomlValueRepr(value);
   const got = repr === undefined ? tomlTypeName(value) : `${tomlTypeName(value)} ${repr}`;
@@ -1111,14 +756,6 @@ function readU32(table: Record<string, unknown>, key: string): ParseResult<numbe
   return { ok: value };
 }
 
-/**
- * A TOML float. Rust's `f64` deserializer rejects a bare integer, so
- * `temperature = 1` is an error where `temperature = 1.0` is fine — and a
- * round-tripped TOML float that happens to be integral (`1.0`) arrives here as
- * the JavaScript number `1`, indistinguishable from the integer. The
- * distinction is therefore only enforceable at the raw-text level, which is
- * where the TOML parser already sits; this reader accepts both.
- */
 function readF64(table: Record<string, unknown>, key: string): ParseResult<number | undefined> {
   const value = table[key];
   if (value === undefined) return { ok: undefined };
@@ -1126,7 +763,6 @@ function readF64(table: Record<string, unknown>, key: string): ParseResult<numbe
   return { ok: value };
 }
 
-/** Read the shared config fields out of a table, ignoring anything else. */
 export function readModelConfigFields(table: Record<string, unknown>): ParseResult<ModelConfigFields> {
   const out: ModelConfigFields = {};
 
@@ -1190,7 +826,6 @@ export function readModelConfigFields(table: Record<string, unknown>): ParseResu
     out.cacheKeepalive = keepalive.ok;
   }
 
-  // `openrouter_provider` is an opaque TOML value forwarded verbatim.
   if (table["openrouter_provider"] !== undefined) {
     out.openrouterProvider = table["openrouter_provider"];
   }
@@ -1208,7 +843,6 @@ function readModelEntry(table: Record<string, unknown>): ParseResult<ModelEntry>
   return { ok: entry };
 }
 
-/** Reject unknown keys, mirroring `deny_unknown_fields` on the aux settings. */
 function denyUnknown(table: Record<string, unknown>, known: readonly string[]): string | undefined {
   for (const key of sortedKeys(table)) {
     if (!known.includes(key)) {
@@ -1257,17 +891,6 @@ function readImageGenSettings(table: Record<string, unknown>): ParseResult<Image
   return { ok: out };
 }
 
-/**
- * `ResolvedModel` as serde wrote it, for the command surface that ships one to
- * a client.
- *
- * Not {@link toRequestModel}, and the differences are deliberate rather than
- * incidental: this writes **every** field, spelling absent as `null` where the
- * request builder omits it, and it carries `replay_prior_thinking`, which the
- * request builder drops because the wire takes the replay policy as a separate
- * argument. Field order follows the Rust struct so a diff against a recorded
- * payload reads in the same order as the declaration.
- */
 export function resolvedModelToWire(model: ResolvedModel): Record<string, unknown> {
   const or = <T>(v: T | undefined): T | null => v ?? null;
   return {

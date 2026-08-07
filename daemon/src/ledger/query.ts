@@ -1,31 +1,7 @@
-/**
- * Aggregation and filter queries over `ledger.db`.
- *
- * Ported from `crates/daemon/src/ledger/query.rs`. The SQL is kept
- * character-for-character where it can be, because these queries are the
- * definition of what `shore usage` reports and what a usage budget counts —
- * a subtly different `WHERE` is a subtly different bill.
- *
- * Two deliberate departures from the Rust:
- *
- *   - **No `with_conn`.** Rust wraps every query in a mutex because the daemon
- *     is multi-threaded. This process is single-threaded per handle, so the
- *     functions take a `Database` directly. That also collapses Rust's
- *     `usage_totals` / `usage_totals_on` pair — the `_on` variant exists only so
- *     a caller running several totals can take the lock once, which is not a
- *     distinction here.
- *   - **Reads clamp, they do not throw.** Mirrors `ledger/convert.rs`: SQLite
- *     stores every integer as i64, and a negative or oversized count in a
- *     non-negative column is corruption, for which `0` is the only sensible
- *     reading.
- */
-
 import type { Database } from "bun:sqlite";
 
 import type { CostBreakdown } from "./pricing.ts";
 import type { CallRow } from "./store.ts";
-
-// ── Filter ───────────────────────────────────────────────────────────────────
 
 export interface QueryFilter {
   since?: string | undefined;
@@ -38,11 +14,6 @@ export interface QueryFilter {
   usage_kinds?: string[] | undefined;
 }
 
-/**
- * Raw `call_type` collapsed into the product-level kind `shore usage` reports.
- * A `message` that stopped at `tool_use` is the first leg of a tool loop, so it
- * counts as message-with-tools alongside the `tool_loop` rows that follow it.
- */
 const USAGE_KIND_EXPR = `CASE
     WHEN call_type = 'heartbeat_tool_loop' THEN 'heartbeat'
     WHEN call_type = 'message' AND finish_reason = 'tool_use' THEN 'message_with_tools'
@@ -53,7 +24,6 @@ END`;
 
 type Bindable = string | number;
 
-/** WHERE clause fragments and their bound values, or an empty clause. */
 function buildWhere(filter: QueryFilter): {
   where: string;
   values: Bindable[];
@@ -97,19 +67,14 @@ function buildWhere(filter: QueryFilter): {
   };
 }
 
-/** Append a condition to whatever `buildWhere` produced. */
 function andWhere(where: string, condition: string): string {
   return where === "" ? ` WHERE ${condition}` : `${where} AND ${condition}`;
 }
 
-// ── SQLite read boundary ─────────────────────────────────────────────────────
-
-/** Read a count column, clamping anything outside the non-negative domain to 0. */
 function count(v: unknown): number {
   return typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : 0;
 }
 
-/** Read a nullable REAL cost column. */
 function cost(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
@@ -122,12 +87,6 @@ function optText(v: unknown): string | null {
   return typeof v === "string" ? v : null;
 }
 
-/**
- * Map a `SELECT *` row to a {@link CallRow}, by column name rather than
- * position. Migrations append columns to the end of the table on existing
- * databases, which makes positional indexing return the wrong column on
- * migrated rows — the same reason Rust's `row_from_sqlite` uses names.
- */
 function rowFromSqlite(r: Record<string, unknown>): CallRow {
   return {
     ts: text(r["ts"]),
@@ -162,8 +121,6 @@ function rows(db: Database, sql: string, values: Bindable[]) {
   return db.query(sql).all(...values) as Record<string, unknown>[];
 }
 
-// ── Summary ──────────────────────────────────────────────────────────────────
-
 export interface UsageSummary {
   provider: string;
   model: string;
@@ -184,7 +141,6 @@ export interface UsageTotals {
   total_cost: number;
 }
 
-/** The aggregate columns every summary query selects, in one place. */
 const SUM_COLUMNS = `COUNT(*) as call_count,
                   SUM(input_tokens) as total_input,
                   SUM(output_tokens) as total_output,
@@ -199,12 +155,10 @@ function totalsFrom(r: Record<string, unknown>): UsageTotals {
     total_output: count(r["total_output"]),
     total_cache_read: count(r["total_cache_read"]),
     total_cache_write: count(r["total_cache_write"]),
-    // `TOTAL()` returns 0.0 rather than NULL over an empty set, unlike `SUM()`.
     total_cost: typeof r["total_cost"] === "number" ? r["total_cost"] : 0,
   };
 }
 
-/** Sums calls matching the filter without grouping. */
 export function usageTotals(db: Database, filter: QueryFilter): UsageTotals {
   const { where, values } = buildWhere(filter);
   const sql = `SELECT COUNT(*) as call_count,
@@ -228,10 +182,6 @@ export function usageTotals(db: Database, filter: QueryFilter): UsageTotals {
     : totalsFrom(row);
 }
 
-/**
- * Groups calls by provider + model, sums token counts and cost.
- * Orders by total_cost DESC (nulls last).
- */
 export function usageSummary(
   db: Database,
   filter: QueryFilter,
@@ -250,13 +200,10 @@ export function usageSummary(
   }));
 }
 
-// ── Summary by call type ─────────────────────────────────────────────────────
-
 export interface CallTypeSummary extends UsageTotals {
   call_type: string;
 }
 
-/** Groups calls by `call_type`. Ordered by total_cost DESC, then call_count DESC. */
 export function usageSummaryByCallType(
   db: Database,
   filter: QueryFilter,
@@ -274,8 +221,6 @@ export function usageSummaryByCallType(
   }));
 }
 
-// ── Model usage history ──────────────────────────────────────────────────────
-
 export interface ModelUsageRow {
   model: string;
   provider: string;
@@ -285,11 +230,6 @@ export interface ModelUsageRow {
   call_count: number;
 }
 
-/**
- * Per-(model, provider, call_type) usage over the filtered window: first and
- * last call timestamps plus call count, ordered by first appearance. Backs the
- * `model_history` character tool ("which models generated my words, and when").
- */
 export function modelUsageSummary(
   db: Database,
   filter: QueryFilter,
@@ -315,16 +255,10 @@ export function modelUsageSummary(
   }));
 }
 
-// ── Summary by usage kind ────────────────────────────────────────────────────
-
 export interface UsageKindSummary extends UsageTotals {
   usage_kind: string;
 }
 
-/**
- * Groups calls by a higher-level usage kind. This keeps raw call types
- * available while surfacing product concepts such as message-with-tools.
- */
 export function usageSummaryByUsageKind(
   db: Database,
   filter: QueryFilter,
@@ -347,14 +281,11 @@ export function usageSummaryByUsageKind(
   }));
 }
 
-// ── Summary by API key ───────────────────────────────────────────────────────
-
 export interface ApiKeySummary extends UsageTotals {
   provider: string;
   api_key_name: string;
 }
 
-/** Groups calls by provider + friendly configured API key name. */
 export function usageSummaryByApiKey(
   db: Database,
   filter: QueryFilter,
@@ -374,9 +305,6 @@ export function usageSummaryByApiKey(
   }));
 }
 
-// ── Anomalies ────────────────────────────────────────────────────────────────
-
-/** Rows where `cache_anomaly IS NOT NULL`, ordered by id DESC. */
 export function queryAnomalies(
   db: Database,
   filter: QueryFilter,
@@ -385,8 +313,6 @@ export function queryAnomalies(
   const sql = `SELECT * FROM calls${andWhere(where, "cache_anomaly IS NOT NULL")} ORDER BY id DESC`;
   return rows(db, sql, values).map(rowFromSqlite);
 }
-
-// ── TSV export ───────────────────────────────────────────────────────────────
 
 const TSV_HEADER =
   "ts\tcharacter\tprovider\tapi_key_name\tmodel\tcall_type\t" +
@@ -398,18 +324,6 @@ const TSV_HEADER =
 
 const optStr = (v: string | null): string => v ?? "";
 
-/**
- * Render a cost the way Rust's `f64::to_string` does.
- *
- * Both runtimes emit the *shortest* digits that round-trip, so `String(v)`
- * already agrees with Rust on the digits — `0.01` is `0.01` in both, and
- * reaching for `toFixed` instead would print `0.01000000000000000021`.
- *
- * They part company only on notation: Rust's `Display` is always positional,
- * while JavaScript switches to exponent form below 1e-6 and at/above 1e21. A
- * heartbeat costing 1.5e-7 is well inside that range, so expand the exponent
- * back to positional and keep the digits untouched.
- */
 function tsvNumber(v: number | null): string {
   if (v === null) {
     return "";
@@ -449,7 +363,6 @@ function rowToTsv(r: CallRow): string {
     r.total_ms,
     r.ttft_ms,
     r.finish_reason,
-    // Rust renders `bool` as `true`/`false`; the column is stored as 0/1.
     r.thinking_enabled === 0 ? "false" : "true",
     optStr(r.cache_state),
     optStr(r.cache_anomaly),
@@ -462,7 +375,6 @@ function rowToTsv(r: CallRow): string {
   ].join("\t");
 }
 
-/** Tab-separated header + all matching rows (all 25 CallRow columns). */
 export function exportTsv(db: Database, filter: QueryFilter): string {
   const { where, values } = buildWhere(filter);
   const sql = `SELECT * FROM calls${where} ORDER BY id ASC`;
@@ -473,25 +385,15 @@ export function exportTsv(db: Database, filter: QueryFilter): string {
   return out;
 }
 
-// ── Active Anthropic characters ──────────────────────────────────────────────
-
-/**
- * Distinct characters with recent Anthropic calls, paired with their last call
- * row. Backs the cache health display.
- */
 export function activeAnthropicCharacters(
   db: Database,
   filter: QueryFilter,
 ): [string, CallRow][] {
   const { where, values } = buildWhere(filter);
-  // Match either native anthropic or OpenRouter-routed anthropic (model_id
-  // resolved to `anthropic/...` regardless of the custom provider key).
-  // Mirrors `isAnthropicPricing` in pricing.ts.
   const providerCond = andWhere(
     where,
     "(provider = 'anthropic' OR model LIKE 'anthropic/%')",
   );
-  // Subquery: for each character, find the max id among matching Anthropic rows.
   const sql = `SELECT c.* FROM calls c
            INNER JOIN (
                SELECT character, MAX(id) as max_id
@@ -506,12 +408,6 @@ export function activeAnthropicCharacters(
   });
 }
 
-// ── Warm streak ──────────────────────────────────────────────────────────────
-
-/**
- * Consecutive warm calls counting back from the most recent for `character`.
- * Bounded so a high-volume character cannot load unbounded rows.
- */
 export function warmStreak(db: Database, character: string): number {
   const sql =
     "SELECT cache_state FROM calls WHERE character = ?1 ORDER BY id DESC LIMIT 10000";
@@ -525,9 +421,6 @@ export function warmStreak(db: Database, character: string): number {
   return streak;
 }
 
-// ── Recalculate ──────────────────────────────────────────────────────────────
-
-/** A row whose cost may need recomputing from the pricing catalog. */
 export interface CostRow {
   id: number;
   provider: string;
@@ -555,24 +448,11 @@ function costRowFrom(r: Record<string, unknown>): CostRow {
   };
 }
 
-/** Rows with NULL total_cost. */
 export function nullCostRows(db: Database): CostRow[] {
   const sql = `SELECT ${COST_ROW_COLUMNS} FROM calls WHERE total_cost IS NULL`;
   return rows(db, sql, []).map(costRowFrom);
 }
 
-/**
- * Every repriceable row, for a forced recalculation.
- *
- * `provider_reported` rows carry the provider's own total, and `subscription`
- * rows are billed by a flat plan — repricing either from the catalog would
- * replace a true cost with an invented one. The subscription exclusion is not
- * belt-and-braces: {@link updateCosts} unconditionally rewrites `cost_source`
- * to `pricing_catalog` and sets a non-zero total, so a subscription row that
- * priced would start accruing against usage budgets. Nothing catches it today
- * only because `opencode-go/<model>` is never in OpenRouter's catalog, which is
- * luck, not a rule. The rule itself lives in `store.ts`, which writes the marker.
- */
 export function allCostRows(db: Database): CostRow[] {
   const sql = `SELECT ${COST_ROW_COLUMNS} \
 FROM calls \
@@ -580,7 +460,6 @@ WHERE COALESCE(cost_source, 'pricing_catalog') NOT IN ('provider_reported', 'sub
   return rows(db, sql, []).map(costRowFrom);
 }
 
-/** Update costs for a single row by id. */
 export function updateCosts(
   db: Database,
   id: number,
@@ -598,33 +477,8 @@ export function updateCosts(
   );
 }
 
-/** How many recent calls the per-call cost estimate averages over. */
 export const RECENT_COST_SAMPLE = 20;
 
-/**
- * Typical cost of one *continuation* on this provider and model, for
- * projecting what a tool loop is about to spend (#14).
- *
- * Filtered by `callType`, and that filter is the whole point. A loop's
- * continuations are not priced like the turn that opened it: measured over two
- * weeks of real traffic, a `tool_loop` call averaged **$0.0145** against
- * **$0.0416** for a `message` on the same models. Averaging both together
- * prices every projected continuation at roughly three times what it costs, and
- * the gate then demands three times the headroom it needs — refusing turns that
- * would have fit, which is the failure mode nobody reports as a bug because it
- * looks like the daemon being broken.
- *
- * The **mean of the most recent calls**, not of the whole budget window: a model
- * switched to yesterday must not be priced off last week's. Rows with no cost
- * are excluded rather than counted as free — a subscription provider or an
- * unpriced model would otherwise drag the mean toward zero and project that a
- * loop costs nothing, which is the one answer that makes the gate useless.
- *
- * `undefined` when there is nothing to average, and the caller must treat that
- * as "cannot project" rather than as zero. A first loop on a new model has no
- * continuations to learn from, and refusing it on a guess would be worse than
- * the overrun.
- */
 export function recentCallCost(
   db: Database,
   provider: string,

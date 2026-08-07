@@ -1,25 +1,3 @@
-/**
- * Z.ai adapter (sidecar contract shape).
- *
- * Z.ai speaks OpenAI chat completions for messages/tools, but has provider
- * specific base URLs and thinking controls. Keep it separate from the generic
- * OpenAI adapter so the Z.ai-only body fields and finish reasons stay explicit.
- *
- * Reasoning handling (Preserved Thinking, `clear_thinking: false`):
- * - Inbound `reasoning_content` is surfaced as `thinking` events AND stashed
- *   verbatim on the thinking block's own `reasoning_content` field, so it
- *   round-trips byte-exact even if the display text is later normalized.
- * - On the next turn, when Preserved Thinking is on, assistant turns replay that
- *   field as outbound `reasoning_content`. Z.ai's documented contract requires
- *   the complete, unmodified prior reasoning_content be fed back, so we replay
- *   ONLY from that field — never from display text, and never from another
- *   provider's carrier, which now cannot be mistaken for ours because it
- *   arrives under a different name. Cross-provider replay is additionally gated
- *   daemon-side by `provider_key`.
- * - When `clear_thinking` is true/omitted (Z.ai default, stateless), we never
- *   replay; the model re-thinks fresh each turn.
- */
-
 import OpenAI from "openai";
 import type {
   ChatCompletionChunk,
@@ -54,7 +32,7 @@ export type ZaiChatCompletionCreateParams = Omit<ChatCompletionCreateParams, "st
 
 export class ZaiProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
-    const { client, params } = buildZaiCall(req, /*streaming*/ true);
+    const { client, params } = buildZaiCall(req, true);
     const stream = (await client.chat.completions.create(
       params as ChatCompletionCreateParams,
       signal ? { signal } : undefined,
@@ -64,7 +42,7 @@ export class ZaiProvider implements SidecarProvider {
 
   async generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {
     const startedAt = Date.now();
-    const { client, params } = buildZaiCall(req, /*streaming*/ false);
+    const { client, params } = buildZaiCall(req, false);
     const completion = await client.chat.completions.create(
       params as ChatCompletionCreateParams,
       signal ? { signal } : undefined,
@@ -94,12 +72,6 @@ export function buildZaiParams(
   req: SidecarRequest,
   streaming: boolean,
 ): ZaiChatCompletionCreateParams {
-  // `thinking_enabled: false` (the daemon's mapping of `reasoning_effort = "off"`)
-  // disables reasoning via Z.ai's documented `thinking.type = "disabled"`.
-  // Otherwise thinking is on, and the `clear_thinking` flag (nested here, NOT a
-  // top-level field) selects Preserved Thinking. `clear_thinking` is only sent
-  // when the operator set it explicitly and only matters while thinking is on, so
-  // we omit it under `disabled` and otherwise let Z.ai's default (true) apply.
   const thinkingDisabled = req.provider_options?.thinking_enabled === false;
   const thinking: ZaiChatCompletionCreateParams["thinking"] = thinkingDisabled
     ? { type: "disabled" }
@@ -131,10 +103,6 @@ export function buildZaiMessages(req: SidecarRequest): ChatCompletionMessagePara
   const messages: ChatCompletionMessageParam[] = [];
   const systemText = systemToText(req.system);
   if (systemText) messages.push({ role: "system", content: systemText });
-  // Preserved Thinking is on ONLY when thinking is enabled AND the operator
-  // explicitly set `clear_thinking: false`; otherwise Z.ai's default (true)
-  // clears prior reasoning and replay would be rejected (and disabled thinking
-  // takes no reasoning_content at all).
   const preserveThinking =
     req.provider_options?.thinking_enabled !== false &&
     req.provider_options?.zai_clear_thinking === false;
@@ -144,15 +112,6 @@ export function buildZaiMessages(req: SidecarRequest): ChatCompletionMessagePara
   return messages;
 }
 
-/**
- * Turn → Z.ai message(s). Identical to the OpenAI conversion EXCEPT that, under
- * Preserved Thinking, assistant turns replay the prior `reasoning_content`
- * verbatim from the thinking block's `reasoning_content` field. We reuse
- * `turnToOpenAI` for the message shell with thinking blocks filtered out —
- * `turnToOpenAI` would replay their (possibly mutated) *text* as
- * `reasoning_content`, but Z.ai's documented contract wants the verbatim
- * carrier bytes or nothing — and graft the reasoning field on afterward.
- */
 function turnToZai(turn: TurnMessage, preserveThinking: boolean): ChatCompletionMessageParam[] {
   const msgs = turnToOpenAI({
     role: turn.role,
@@ -197,9 +156,6 @@ export async function* zaiStreamEvents(
   let finishReason: string | undefined;
   let usage: Usage = emptyUsage();
 
-  // Emit the verbatim reasoning carrier exactly once, while the thinking block is
-  // still open (before any text/tool_use closes it). Gated on having surfaced
-  // thinking so an orphan carrier is never emitted.
   const flushSignature = function* (): Iterable<StreamEvent> {
     if (sigEmitted || !sawThinking) return;
     sigEmitted = true;
@@ -253,8 +209,6 @@ export async function* zaiStreamEvents(
   }
 
   yield* sendStart();
-  // Close the thinking block for thinking-only or tool-after-thinking turns
-  // (no text delta flushed it inline).
   yield* flushSignature();
 
   for (const [, tc] of [...toolCalls.entries()].sort((a, b) => a[0] - b[0])) {
@@ -387,12 +341,6 @@ function emptyUsage(): Usage {
 }
 
 function extractUsage(u: RawUsage | undefined): Usage {
-  // OpenAI-convention `prompt_tokens` is the TOTAL prompt, inclusive of the
-  // cached (read) and cache-write portions. Our ledger/pricing follows the
-  // Anthropic convention where input/cache_read/cache_creation are disjoint and
-  // summed, so subtract both to leave only the cache-miss tokens in
-  // `input_tokens`. Without this the cached tokens are billed twice (once at
-  // the full input rate).
   const cacheRead = u?.prompt_tokens_details?.cached_tokens ?? 0;
   const cacheWrite = u?.prompt_tokens_details?.cache_write_tokens ?? 0;
   const usage: Usage = {

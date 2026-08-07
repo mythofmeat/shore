@@ -1,84 +1,37 @@
-/**
- * MCP (Model Context Protocol) client.
- *
- * Ported from `crates/daemon/src/mcp/mod.rs`. The daemon is an MCP *client*:
- * each `[mcp.<name>]` config entry points at an external server — a stdio child
- * process or a remote HTTP endpoint — that it connects to, discovers tools from
- * via `tools/list`, and invokes via `tools/call`. Servers are never daemon
- * code; anything speaking standard MCP works unchanged.
- *
- * A thin, transport-agnostic wrapper, the same shape the Rust had over `rmcp`.
- * Namespacing lives in `tools/mcp_registry.ts`, not here.
- */
-
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
-/** How to reach an MCP server. */
 export type Transport =
   | {
       kind: "stdio";
       command: string;
       args: string[];
       env: Record<string, string>;
-      /** Working directory for the child. Absent inherits the daemon's. */
       cwd?: string;
     }
   | {
       kind: "http";
       url: string;
-      /** Sent on every request. Empty when none are configured. */
       headers: Record<string, string>;
     };
 
-/** A named MCP server to connect to. */
 export interface McpServerSpec {
   name: string;
   transport: Transport;
 }
 
-/** A single tool discovered from a server via `tools/list`. */
 export interface McpTool {
-  /** The server this tool belongs to (the `[mcp.<name>]` key). */
   server: string;
-  /** The server-side tool name (e.g. `set_light`), without namespacing. */
   name: string;
   description: string;
-  /** The tool's JSON Schema for its arguments. */
   input_schema: Record<string, unknown>;
 }
 
-/** Anything that went wrong talking to a server. */
 export class McpError extends Error {}
 
-/**
- * The request itself did not complete — the transport, not the tool.
- *
- * Split out from {@link McpError} because the registry has to tell "the server
- * is not there" apart from "the tool ran and said no", and the two arrive at
- * the same catch. Only the former means the connection is worth rebuilding;
- * treating a tool's own error as a dead socket would reconnect on every failed
- * tool call.
- *
- * **Not a signal that the call did not happen.** A request can fail after the
- * server has acted on it — the response is what got lost. Anything reacting to
- * this must not re-send the call. See `McpRegistry.call`.
- */
 export class McpTransportError extends McpError {}
 
-/**
- * Environment variables a stdio server inherits.
- *
- * **The daemon's environment is not passed through.** MCP servers are
- * third-party code and the daemon's environment holds every provider API key,
- * so the child starts from a clean slate with only what a server needs to run —
- * `PATH` to resolve its command, `HOME` for tool caches and config — plus the
- * explicitly configured `env`.
- *
- * The SDK's own `getDefaultEnvironment()` inherits a wider set and is
- * deliberately not used.
- */
 export function childEnvironment(
   configured: Record<string, string>,
   parent: Record<string, string | undefined> = process.env,
@@ -91,7 +44,6 @@ export function childEnvironment(
   return { ...env, ...configured };
 }
 
-/** A live connection to one MCP server. */
 export class McpClient {
   private readonly serverName: string;
   private readonly client: Client;
@@ -101,12 +53,10 @@ export class McpClient {
     this.client = client;
   }
 
-  /** The server name (the `[mcp.<name>]` key). */
   get server(): string {
     return this.serverName;
   }
 
-  /** Connect to `spec`, performing the MCP `initialize` handshake. */
   static async connect(spec: McpServerSpec): Promise<McpClient> {
     const client = new Client({ name: "shore", version: "1.0.0" });
     try {
@@ -117,27 +67,14 @@ export class McpClient {
             command,
             args,
             env: childEnvironment(env),
-            // Relay the server's diagnostics rather than letting them land on
-            // the daemon's own stderr uninvited.
             stderr: "pipe",
             ...(cwd === undefined ? {} : { cwd }),
           }),
         );
       } else {
         const { url, headers } = spec.transport;
-        // `requestInit` is merged into every fetch the transport makes — the
-        // POST, the GET that opens the SSE stream, and the DELETE that ends
-        // the session — so a token set here gates all three, which is what
-        // servers putting `requireBearerAuth` on `/mcp` expect.
-        //
-        // Passed only when non-empty so the no-headers case builds the exact
-        // transport it did before this option existed.
         const opts =
           Object.keys(headers).length === 0 ? undefined : { requestInit: { headers } };
-        // The cast is `exactOptionalPropertyTypes` friction, not a real
-        // mismatch: the SDK declares `sessionId?: string` on the interface and
-        // `string | undefined` on the class, which this project's stricter
-        // setting treats as different types.
         await client.connect(
           new StreamableHTTPClientTransport(
             new URL(url),
@@ -151,18 +88,6 @@ export class McpClient {
     return new McpClient(spec.name, client);
   }
 
-  /**
-   * List the server's tools.
-   *
-   * Called once at connect; the registry pins the result for the session so the
-   * tool surface — and the cache prefix built on it — is stable. A server that
-   * gains a tool mid-session does not get it offered until the next reload.
-   *
-   * That holds across a reconnect too. When `McpRegistry` rebuilds a dead
-   * connection it deliberately does *not* call this again: re-listing is what
-   * would let the surface move, and moving it is the cost the reconnect exists
-   * to avoid.
-   */
   async listTools(): Promise<McpTool[]> {
     let result: Awaited<ReturnType<Client["listTools"]>>;
     try {
@@ -173,19 +98,11 @@ export class McpClient {
     return result.tools.map((tool) => ({
       server: this.serverName,
       name: tool.name,
-      // A server may omit the description; the Rust defaulted it to empty
-      // rather than dropping the tool.
       description: tool.description ?? "",
       input_schema: tool.inputSchema as Record<string, unknown>,
     }));
   }
 
-  /**
-   * Invoke `tool` with `args`, returning a flattened JSON result.
-   *
-   * `args` must be a JSON object or null — a bare scalar or array is a caller
-   * error, not something to forward and let the server reject.
-   */
   async call(tool: string, args: unknown): Promise<unknown> {
     let argumentsMap: Record<string, unknown> | undefined;
     if (args === null || args === undefined) {
@@ -214,7 +131,6 @@ export class McpClient {
     return flattenResult(result);
   }
 
-  /** Gracefully close the connection, and for stdio the child process. */
   async shutdown(): Promise<void> {
     try {
       await this.client.close();
@@ -224,26 +140,11 @@ export class McpClient {
   }
 }
 
-/**
- * Reduce a tool result to JSON: prefer structured content, else join text.
- *
- * Typed loosely on purpose. The SDK's `callTool` return is a union that
- * includes a legacy `{ toolResult }` shape carrying neither field, and a
- * narrower parameter would reject it outright rather than flattening it to the
- * empty string the Rust produced.
- */
 export function flattenResult(result: Record<string, unknown>): unknown {
   if (result["structuredContent"] !== undefined) return result["structuredContent"];
   return flattenText(result);
 }
 
-/**
- * Join all text content blocks with newlines.
- *
- * Non-text blocks — images, embedded resources — are dropped rather than
- * described. The Rust did the same: a tool returning only an image flattens to
- * an empty string, which reads to the model as a tool that returned nothing.
- */
 export function flattenText(result: Record<string, unknown>): string {
   const content = result["content"];
   if (!Array.isArray(content)) return "";

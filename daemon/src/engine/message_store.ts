@@ -1,19 +1,3 @@
-/**
- * The conversation store — `active.jsonl` and everything that reads or writes
- * it.
- *
- * Ported from `crates/daemon/src/engine/messages.rs`, pinned by
- * `tests/engine_fixtures/messages_parity.json`. That fixture is operation
- * *traces* rather than single calls, because a store is stateful and the
- * interesting behaviour is what a sequence leaves on disk.
- *
- * One line of JSON per message, rewritten whole on every mutation through a
- * temporary file and a rename, so a reader never sees half a conversation. The
- * whole-file rewrite is not an oversight: edits, deletes and alternate
- * selection all change messages in place, and an append-only log would need
- * compaction to stay readable by the CLI that tails it.
- */
-
 import { rename, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
@@ -21,7 +5,6 @@ import { rustTrim } from "../memory/lines.ts";
 import { mergeToolLoopMessages } from "./merge";
 import type { ContentBlock, ImageRef, Message, MessageAlternative, Role } from "./types";
 
-/** What the Rust's `EngineError` says, so callers can match on the same text. */
 export class MessageNotFound extends Error {
   constructor(msgId: string) {
     super(`message not found: ${msgId}`);
@@ -43,12 +26,10 @@ export class JsonParseError extends Error {
   }
 }
 
-/** Alternatives captured before a regeneration replaces the active response. */
 export interface PendingAlt {
   alternatives: MessageAlternative[];
 }
 
-/** What selecting a stored alternate produced. */
 export interface AltSelection {
   msg_id: string;
   alt_index: number;
@@ -56,21 +37,6 @@ export interface AltSelection {
   content: string;
 }
 
-// ── content derivation ──────────────────────────────────────────────────────
-
-/**
- * The human-readable summary of a set of blocks: text (and optionally tool
- * results), each trimmed, empties dropped, joined by newlines.
- *
- * Mirrors `derive_content_from_blocks_with`. Thinking and tool_use never
- * contribute — the first is not for the reader and the second is not prose.
- *
- * The trim is Rust's, not JavaScript's. The two disagree at both ends: `.trim()`
- * strips U+FEFF, which Rust keeps, and keeps U+0085, which Rust strips. A block
- * whose text is only one of those is dropped by one and preserved by the other,
- * and this function decides both what a message reads as and whether a
- * completion notification has anything to say.
- */
 export function deriveContentFromBlocks(
   blocks: ContentBlock[],
   includeToolResults: boolean,
@@ -89,19 +55,7 @@ export function deriveContentFromBlocks(
   return parts.join("\n");
 }
 
-/**
- * Reconcile `content` and `content_blocks` after a read, and clamp the alt
- * counters.
- *
- * Two storage generations meet here: old messages have `content` and no blocks,
- * new ones have blocks and derive `content`. Blocks win when both are present,
- * which means a hand-edited `content` in the file is silently discarded.
- */
 export function normalizeMessage(msg: Message): Message {
-  // `content`, `images` and `content_blocks` are all `#[serde(default)]` in the
-  // Rust, and `serialize_for_storage` *omits* `content` — so every line on disk
-  // is missing it. Left undefined, the branch below would build a text block
-  // holding `undefined`.
   const m: Message = {
     ...msg,
     content: msg.content ?? "",
@@ -139,40 +93,13 @@ function normalizeAlternative(alt: MessageAlternative): MessageAlternative {
   return a;
 }
 
-// ── serialization ───────────────────────────────────────────────────────────
-
 const stripImageData = (images: ImageRef[] | undefined): ImageRef[] | undefined =>
   images?.map(({ path, caption }) => ({
     path,
     ...(caption !== undefined ? { caption } : {}),
   }));
 
-/**
- * One message as its `active.jsonl` line.
- *
- * Two things here look wrong and are not.
- *
- * **`content` is dropped.** It is derived from `content_blocks` on load, so
- * storing it would let the two disagree, and the disagreement would survive a
- * round trip. The wire protocol still carries it; only disk does not.
- *
- * **The key order is strange, and it is reproduced deliberately.** The Rust
- * builds the full object in field order and then calls `Map::remove("content")`
- * — and with serde_json's `preserve_order` that map is an `IndexMap`, whose
- * `remove` is a *swap*-remove. The last key is moved into the hole. So a plain
- * message serializes `msg_id, role, timestamp, images, content_blocks` with
- * `timestamp` sitting third, and a message carrying `origin` puts `origin`
- * there instead. Which key lands in slot 2 depends on which optionals are
- * present.
- *
- * Nothing depends on key order to parse, so this could be normalised — but the
- * daemon is still writing this file too, and byte-identity is the only version
- * of parity that cannot quietly drift. Worth normalising once the Rust side is
- * gone; it costs one whole-file rewrite when it happens.
- */
 export function serializeForStorage(msg: Message): string {
-  // Declaration order from `shore_common::protocol::types::Message`, skipping
-  // what serde skips: absent options and empty `alternatives`.
   const ordered: [string, unknown][] = [
     ["msg_id", msg.msg_id],
     ["role", msg.role],
@@ -201,7 +128,6 @@ export function serializeForStorage(msg: Message): string {
   if (msg.model !== undefined) ordered.push(["model", msg.model]);
   if (msg.origin !== undefined) ordered.push(["origin", msg.origin]);
 
-  // The swap-remove: drop `content` at index 2 and move the last entry there.
   const contentAt = 2;
   const last = ordered.pop()!;
   if (ordered.length > contentAt) ordered[contentAt] = last;
@@ -211,9 +137,6 @@ export function serializeForStorage(msg: Message): string {
   return JSON.stringify(obj);
 }
 
-// ── predicates ──────────────────────────────────────────────────────────────
-
-/** A user turn carrying only tool results is part of the previous turn. */
 export function isToolResultOnly(m: Message): boolean {
   return (
     m.role === "user" &&
@@ -224,14 +147,6 @@ export function isToolResultOnly(m: Message): boolean {
 
 const isRealUserTurn = (m: Message): boolean => m.role === "user" && !isToolResultOnly(m);
 
-/**
- * An alternative captured from a message: its non-blank text blocks only.
- *
- * Thinking, tool calls and tool results are all dropped — an alternative is a
- * response a person chooses between, and the machinery that produced it is not
- * part of that choice. When nothing survives, the message's own `content` is
- * used so an alternative is never empty for a message that said something.
- */
 function alternativeFromMessage(msg: Message): MessageAlternative {
   let blocks: ContentBlock[] = msg.content_blocks.filter(
     (b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text" && b.text.trim() !== "",
@@ -251,14 +166,6 @@ function alternativeFromMessage(msg: Message): MessageAlternative {
   };
 }
 
-/**
- * Rebuild a message from one of its own alternatives.
- *
- * Provenance prefers the alternative's own and falls back to the template's,
- * for alternatives stored before per-alternative tracking existed. The same
- * rule covers the timestamp, where the marker for "not recorded" is an empty
- * string rather than an absent field.
- */
 function messageFromAlternative(template: Message, index: number): Message | undefined {
   const alt = template.alternatives?.[index];
   if (alt === undefined) return undefined;
@@ -280,8 +187,6 @@ function messageFromAlternative(template: Message, index: number): Message | und
   });
 }
 
-// ── the store ───────────────────────────────────────────────────────────────
-
 export class MessageStore {
   #messages: Message[];
   readonly #path: string;
@@ -291,24 +196,14 @@ export class MessageStore {
     this.#messages = messages;
   }
 
-  /** An empty store that will persist to `path`. */
   static create(path: string): MessageStore {
     return new MessageStore(path, []);
   }
 
-  /** Read a store from disk. A file that does not exist is an empty store —
-   *  a character that has not spoken yet is not an error. */
   static async load(path: string): Promise<MessageStore> {
     return (await MessageStore.loadWithRaw(path)).store;
   }
 
-  /**
-   * Load, and hand back the raw bytes alongside.
-   *
-   * Compaction wants both views — the parsed messages to decide what to
-   * archive, the exact bytes to write into the archive — and reading the file
-   * twice is neither cheap nor guaranteed to see the same thing.
-   */
   static async loadWithRaw(path: string): Promise<{ store: MessageStore; raw: string }> {
     let raw: string;
     try {
@@ -327,9 +222,6 @@ export class MessageStore {
       try {
         parsed = JSON.parse(line) as Message;
       } catch (e) {
-        // A corrupt line fails the whole load rather than being skipped:
-        // silently dropping a turn would leave a conversation with a hole in
-        // it and no indication why.
         throw new JsonParseError(path, (e as Error).message);
       }
       messages.push(normalizeMessage(parsed));
@@ -349,14 +241,10 @@ export class MessageStore {
     return this.#messages.length;
   }
 
-  /** Real user turns. Tool exchanges belong to the turn that provoked them. */
   turnCount(): number {
     return this.#messages.filter(isRealUserTurn).length;
   }
 
-  /** Everything up to and including the last real user turn — the history a
-   *  regeneration prompts against, so the model does not see the reply it is
-   *  being asked to replace. */
   messagesThroughLastUserTurn(): Message[] {
     return this.#messages.slice(0, this.#keepIndex());
   }
@@ -371,15 +259,6 @@ export class MessageStore {
     await this.#persist();
   }
 
-  /**
-   * Insert at the position the timestamp implies, rather than at the end.
-   *
-   * A heartbeat tick can finish after a user message has already landed, and
-   * appending would put it out of order. An unparseable timestamp on the *new*
-   * message falls back to appending; an unparseable one already in the file
-   * compares as "before", so the new message lands after it — neither silently
-   * reorders data that is already malformed.
-   */
   async insertByTimestamp(msg: Message): Promise<void> {
     const at = Date.parse(msg.timestamp);
     let pos: number;
@@ -399,8 +278,6 @@ export class MessageStore {
     await this.#persist();
   }
 
-  /** Rewrite a message's text. Blocks are replaced wholesale by a single text
-   *  block, so an edit discards thinking and tool calls. */
   async edit(msgId: string, newContent: string): Promise<void> {
     const msg = this.#messages.find((m) => m.msg_id === msgId);
     if (msg === undefined) throw new MessageNotFound(msgId);
@@ -409,7 +286,6 @@ export class MessageStore {
     await this.#persist();
   }
 
-  /** Drop everything after the last real user turn. Returns how many went. */
   async truncateAfterLastUserTurn(): Promise<number> {
     const keep = this.#keepIndex();
     const removed = this.#messages.length - keep;
@@ -420,7 +296,6 @@ export class MessageStore {
     return removed;
   }
 
-  /** Swap the tail for a freshly generated one, atomically. */
   async replaceAfterLastUserTurn(newMessages: Message[]): Promise<number> {
     const keep = this.#keepIndex();
     const removed = this.#messages.length - keep;
@@ -445,7 +320,6 @@ export class MessageStore {
     await this.#persist();
   }
 
-  /** Bump the candidate count and point at the newest. */
   async addAltCandidate(msgId: string): Promise<number> {
     const msg = this.#messages.find((m) => m.msg_id === msgId);
     if (msg === undefined) throw new MessageNotFound(msgId);
@@ -456,14 +330,6 @@ export class MessageStore {
     return next;
   }
 
-  /**
-   * The alternatives a regeneration is about to replace.
-   *
-   * The tail is merged first, so a response that took a tool loop is captured
-   * as the one turn a person would see rather than as its rounds. When the
-   * message already has alternatives, the active slot is overwritten with what
-   * is currently there — the stored copy can be stale after an edit.
-   */
   pendingRegenAlt(): PendingAlt | undefined {
     const tail = this.#messages.slice(this.#keepIndex());
     const merged = mergeToolLoopMessages(tail);
@@ -482,15 +348,6 @@ export class MessageStore {
     return { alternatives };
   }
 
-  /**
-   * Stamp `prior` plus the just-generated response onto the last assistant
-   * message in `messages`.
-   *
-   * Static because it runs on a tail that has not been committed to the store
-   * yet. The merge is only used to *find* which message is active; the fields
-   * are written to the raw message with that id, since the merged copy is a
-   * clone and would be thrown away.
-   */
   static attachGeneratedAlt(
     messages: Message[],
     prior: MessageAlternative[],
@@ -512,15 +369,6 @@ export class MessageStore {
     return [altIndex, all.length];
   }
 
-  /**
-   * Switch a message to one of its stored alternates.
-   *
-   * Two paths, and the difference matters. When the message is the current
-   * tail, everything after the last real user turn is dropped and the selected
-   * body replaces it — which discards the tool loop that produced the reply,
-   * because that loop belongs to the response being replaced. When it is an
-   * older message, it is swapped in place and the conversation after it stands.
-   */
   async selectAlt(msgId: string, index: number): Promise<AltSelection> {
     const merged = mergeToolLoopMessages([...this.#messages]);
     const target = merged.find((m) => m.msg_id === msgId);
@@ -537,8 +385,6 @@ export class MessageStore {
     if (index >= altCount) throw outOfRange();
 
     if ((target.alt_index ?? 0) === index) {
-      // Already showing it. Reported from the merged view, so the content is
-      // the whole turn rather than the raw message's fragment.
       return { msg_id: target.msg_id, alt_index: index, alt_count: altCount, content: target.content };
     }
 
@@ -575,14 +421,12 @@ export class MessageStore {
     return 0;
   }
 
-  /** Rewrite the whole file through a temp file and a rename. */
   async #persist(): Promise<void> {
     let buf = "";
     for (const msg of this.#messages) buf += `${serializeForStorage(msg)}\n`;
 
     const dir = dirname(this.#path);
     await mkdir(dir, { recursive: true });
-    // Same-directory temp so the rename stays on one filesystem and is atomic.
     const tmp = join(dir, `.${crypto.randomUUID()}.tmp`);
     await writeFile(tmp, buf, "utf8");
     await rename(tmp, this.#path);

@@ -1,35 +1,3 @@
-/**
- * OpenAI-compatible adapter (the sidecar contract shape).
- *
- * Fronts OpenAI and every OpenAI-compatible gateway — DeepSeek, Kimi (Moonshot),
- * xAI, NanoGPT, etc. — which differ only by `base_url`. It consumes a
- * `SidecarRequest` (canonical Anthropic-shape blocks, as the Rust daemon
- * assembled them) and emits the `StreamEvent` NDJSON vocabulary the daemon's
- * `StreamConsumer` parses.
- *
- * No client-side cache markers: OpenAI-compatible backends cache server-side.
- *
- * **Thinking replay is decided upstream, transmitted faithfully here.** The
- * `replay_prior_thinking` projection in `llm/replay.ts` controls which assistant
- * turns still carry thinking blocks by the time a request reaches this adapter;
- * whatever survives is emitted as `reasoning_content` on the corresponding
- * assistant message. Kimi K2.5+/K3 are trained in preserved-thinking-history
- * mode and degrade erratically without it.
- *
- * This comment used to claim DeepSeek rejects inbound `reasoning_content` and
- * that `replay_prior_thinking = "none"` was the fix. Measured against the live
- * API on 2026-08-08, it doesn't: the request succeeds and the field costs zero
- * prompt tokens, so DeepSeek is accepting and discarding it. `none` remains the
- * escape hatch for a backend that *does* reject the field — that failure mode
- * is real on some OpenAI-compatible gateways — but it surfaces as an API error,
- * never a silent drop here.
- *
- * The retired Rust adapter's deepseek/kimi tool-loop bug was replaying reasoning
- * in the WRONG SHAPE unconditionally; the conversion regression test now pins
- * the faithful mapping in both directions (thinking block ⇄ `reasoning_content`,
- * absent ⇄ absent).
- */
-
 import OpenAI from "openai";
 import type {
   ChatCompletionAssistantMessageParam,
@@ -59,7 +27,7 @@ import { replayableMessages } from "../replay.ts";
 
 export class OpenAIProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
-    const { client, params } = buildOpenAICall(req, /*streaming*/ true);
+    const { client, params } = buildOpenAICall(req, true);
     const stream = (await client.chat.completions.create(
       params,
       signal ? { signal } : undefined,
@@ -69,14 +37,11 @@ export class OpenAIProvider implements SidecarProvider {
 
   async generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {
     const startedAt = Date.now();
-    const { client, params } = buildOpenAICall(req, /*streaming*/ false);
+    const { client, params } = buildOpenAICall(req, false);
     const completion = await client.chat.completions.create(
       params,
       signal ? { signal } : undefined,
     );
-    // `params.stream` is false → the SDK returns a single ChatCompletion. Its
-    // discriminated union doesn't narrow on a runtime boolean, so we read it
-    // through a structural view.
     const c = completion as unknown as {
       choices: Array<{
         message: {
@@ -123,15 +88,6 @@ export class OpenAIProvider implements SidecarProvider {
   }
 }
 
-/**
- * Pure chunk → `StreamEvent` mapping. Separated from the SDK call so it can be
- * unit-tested with hand-built chunks and a fake clock.
- *
- * Emits: `start` (once), incremental `text`/`thinking`, then ONE consolidated
- * `tool_use` per call (full parsed input — not deltas), then `done`. Tool-call
- * argument fragments are accumulated internally; the daemon's `StreamConsumer`
- * expects a single `tool_use` event, not start/delta/stop.
- */
 export async function* openAIStreamEvents(
   model: string,
   chunks: AsyncIterable<ChatCompletionChunk>,
@@ -192,7 +148,6 @@ export async function* openAIStreamEvents(
     if (chunk.usage) usage = extractUsage(chunk.usage as RawUsage);
   }
 
-  // One consolidated tool_use event per call, in index order, with full input.
   for (const tc of [...toolCalls.entries()].sort((a, b) => a[0] - b[0])) {
     yield { type: "tool_use", id: tc[1].id, name: tc[1].name, input: parseArgs(tc[1].argsJson) };
   }
@@ -209,8 +164,6 @@ export async function* openAIStreamEvents(
     },
   };
 }
-
-// ── request construction ──────────────────────────────────────────────────
 
 function buildOpenAICall(
   req: SidecarRequest,
@@ -239,11 +192,8 @@ function buildOpenAICall(
   if (req.temperature !== undefined) params.temperature = req.temperature;
   if (req.top_p !== undefined) params.top_p = req.top_p;
 
-  // reasoning_effort comes via provider_options (the daemon only sets it for
-  // models that accept it). Map to the OpenAI-valid set; unknown → omit.
   const effortRaw = req.provider_options?.reasoning_effort;
   if (typeof effortRaw === "string") {
-    // foldEffort only ever returns an in-domain OpenAI value (minimal/low/medium/high/xhigh/max).
     const effort = foldEffort("openai", effortRaw, req.model);
     if (effort) {
       params.reasoning_effort = effort as NonNullable<ChatCompletionCreateParams["reasoning_effort"]>;
@@ -265,20 +215,8 @@ function toOpenAITools(tools: ToolDefinition[] | undefined): ChatCompletionTool[
   }));
 }
 
-// ── message conversion ──────────────────────────────────────────────────────
-
-/** Canonical wire turn → the converter's turn shape (string content → block). */
-/**
- * Convert one canonical turn into OpenAI chat-completion message(s). Exported
- * for the conversion regression test: assistant thinking blocks map to
- * `reasoning_content` exactly when present (the daemon's replay setting
- * already decided what survives — see the module docs), the bare `reasoning`
- * field is never emitted, and tool-call-only assistant turns must omit
- * `content` (not emit `null`).
- */
 export function turnToOpenAI(turn: TurnMessage): ChatCompletionMessageParam[] {
   if (turn.role === "system") {
-    // OpenAI accepts mid-history `role:"system"` natively — pass through.
     const text = turn.content
       .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
       .map((b) => b.text)
@@ -300,9 +238,6 @@ export function turnToOpenAI(turn: TurnMessage): ChatCompletionMessageParam[] {
     );
     const msg: ChatCompletionAssistantMessageParam = { role: "assistant" };
     if (text) msg.content = text;
-    // `reasoning_content` is not in the OpenAI SDK's param type — it's the
-    // DeepSeek/Kimi/GLM dialect extension the daemon's replay setting opted
-    // into by leaving the thinking block in place.
     if (reasoning) {
       (msg as unknown as Record<string, unknown>)["reasoning_content"] = reasoning;
     }
@@ -316,13 +251,7 @@ export function turnToOpenAI(turn: TurnMessage): ChatCompletionMessageParam[] {
     return [msg];
   }
 
-  // User turn: tool_results → one `role:tool` message each; text + images ride
-  // on a single user message, in content order (the daemon already inlines
-  // image blocks ahead of the text they accompany).
   const out: ChatCompletionMessageParam[] = [];
-  // `turn.images` is the legacy field; the daemon inlines images as `image`
-  // content blocks instead and never populates it. Honored first so anything
-  // that does set it keeps images-before-text ordering.
   const parts: Array<OpenAITextPart | OpenAIImagePart> = imagesToOpenAIParts(turn.images);
   for (const b of turn.content) {
     if (b.type === "tool_result") {
@@ -366,8 +295,6 @@ function imagesToOpenAIParts(images: ImageRef[] | undefined): OpenAIImagePart[] 
   return out;
 }
 
-// ── helpers ─────────────────────────────────────────────────────────────────
-
 interface RawUsage {
   prompt_tokens?: number;
   completion_tokens?: number;
@@ -385,11 +312,6 @@ function emptyUsage(): Usage {
 }
 
 function extractUsage(u: RawUsage | undefined): Usage {
-  // OpenAI-convention `prompt_tokens` is the TOTAL prompt, inclusive of the
-  // cached portion. Our ledger/pricing follows the Anthropic convention where
-  // input/cache_read/cache_creation are disjoint and summed, so subtract the
-  // cache hits to leave only the cache-miss tokens in `input_tokens`. Without
-  // this the cached tokens are billed twice (once at the full input rate).
   const cacheRead = u?.prompt_tokens_details?.cached_tokens ?? 0;
   const usage: Usage = {
     input_tokens: Math.max(0, (u?.prompt_tokens ?? 0) - cacheRead),
@@ -397,7 +319,6 @@ function extractUsage(u: RawUsage | undefined): Usage {
     cache_read_tokens: cacheRead,
     cache_creation_tokens: 0,
   };
-  // OpenRouter reports total spend on `usage.cost`.
   if (typeof u?.cost === "number") usage.total_cost_usd = u.cost;
   return usage;
 }
@@ -410,7 +331,6 @@ function parseArgs(argsJson: string): unknown {
     return {};
   }
 }
-
 
 function mapStopReason(finish: string): string {
   switch (finish) {

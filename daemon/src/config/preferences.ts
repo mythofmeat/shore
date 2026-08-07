@@ -1,19 +1,3 @@
-/**
- * Daemon-owned, durable model preferences.
- *
- * Port of `crates/daemon/src/preferences/mod.rs`.
- *
- * Storage layout:
- *
- * - `<data_dir>/preferences/models.toml` — global
- * - `<data_dir>/<character>/preferences/models.toml` — per-character
- *
- * Per-model entries are keyed by **stable provider key + upstream model_id**,
- * joined by `:` — never by display name or short alias — so preferences
- * survive renames in the static catalog and follow the same model across
- * discovered and manual entries.
- */
-
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -42,8 +26,6 @@ import { resolveBackgroundModelName, type DefaultsConfig } from "./app.ts";
 const PREFERENCES_DIR = "preferences";
 const PREFERENCES_FILE = "models.toml";
 
-// ── Errors ──────────────────────────────────────────────────────────────
-
 export type PreferenceErrorKind = "read" | "write" | "parse" | "serialize";
 
 export class PreferenceError extends Error {
@@ -68,33 +50,16 @@ export class PreferenceError extends Error {
   }
 }
 
-// ── Sampler settings ────────────────────────────────────────────────────
-
-/**
- * Per-model sampler overrides written by the user.
- *
- * Every field is optional — absent means "inherit from the next layer up".
- */
 export interface SamplerSettings {
   temperature?: number;
   topP?: number;
-  /** `"low" | "medium" | "high"`, or `"off"` to explicitly disable reasoning. */
   reasoningEffort?: string;
   budgetTokens?: number;
   maxOutputTokens?: number;
   cacheTtl?: string;
   cacheKeepalive?: CacheKeepaliveSetting;
-  /** Wire SDK override. Lets a user force, e.g., the Anthropic wire shape for
-   *  a model the discovery cache labelled `openai`. Validated on write. */
   sdk?: string;
-  /** Per-model override for `[memory.thinking].replay_prior_thinking`. Set
-   *  `none` only for a backend that rejects inbound reasoning — it is a
-   *  compatibility escape hatch, not a cost knob (see `config/app.ts`). The
-   *  Kimi reasoning-replay floor is orthogonal and still enforced regardless. */
   replayPriorThinking?: ThinkingReplay;
-  /** Maximum tool-loop iterations per turn. Absent means **unlimited**. The
-   *  single surface governing every agentic loop — chat, heartbeat,
-   *  compaction, dreaming. Honored by every sdk, not capability-gated. */
   maxToolIterations?: number;
   openrouterProvider?: unknown;
   geminiGeneration?: number;
@@ -102,7 +67,6 @@ export interface SamplerSettings {
   zaiSubscription?: boolean;
 }
 
-/** Field name pairs: the TypeScript property and its TOML key. */
 const SAMPLER_FIELDS = [
   ["temperature", "temperature"],
   ["topP", "top_p"],
@@ -120,17 +84,12 @@ const SAMPLER_FIELDS = [
   ["zaiSubscription", "zai_subscription"],
 ] as const satisfies readonly (readonly [keyof SamplerSettings, string])[];
 
-/** Every settable sampler key, in the order the Rust listed them — the order
- *  matters because `set_model_setting` joins it into its rejection message. */
 export const SAMPLER_KEYS: readonly string[] = SAMPLER_FIELDS.map(([, key]) => key);
 
-/** The TOML key -> settings-property map, for callers that write one key. */
 export const SAMPLER_FIELD_BY_KEY: ReadonlyMap<string, keyof SamplerSettings> = new Map(
   SAMPLER_FIELDS.map(([field, key]) => [key, field]),
 );
 
-/** Apply `overlay` on top of `target`: each field set in `overlay` replaces
- *  the corresponding field. Absent overlay fields leave `target` alone. */
 export function applyOverlay(target: SamplerSettings, overlay: SamplerSettings): void {
   for (const [field] of SAMPLER_FIELDS) {
     const value = overlay[field];
@@ -138,7 +97,6 @@ export function applyOverlay(target: SamplerSettings, overlay: SamplerSettings):
   }
 }
 
-/** The TOML spelling of a keepalive setting, or `undefined` when unset. */
 export function keepaliveOrUndefined(
   setting: CacheKeepaliveSetting | undefined,
 ): string | undefined {
@@ -149,7 +107,6 @@ export function samplerIsEmpty(settings: SamplerSettings): boolean {
   return SAMPLER_FIELDS.every(([field]) => settings[field] === undefined);
 }
 
-/** The sampler-shaped fields of a resolved static-catalog model. */
 export function samplerFromResolvedModel(model: ResolvedModel): SamplerSettings {
   const out: SamplerSettings = { sdk: model.sdk };
   const copy = [
@@ -174,12 +131,6 @@ export function samplerFromResolvedModel(model: ResolvedModel): SamplerSettings 
   return out;
 }
 
-// ── Selected model ──────────────────────────────────────────────────────
-
-/**
- * The `[selected]` block. Both fields must be set for the selection to be
- * valid — a partial selection is treated as "not selected".
- */
 export interface SelectedModel {
   provider?: string;
   modelId?: string;
@@ -189,7 +140,6 @@ export function selectionIsSet(selected: SelectedModel): boolean {
   return selected.provider !== undefined && selected.modelId !== undefined;
 }
 
-/** `[provider, modelId]` if both are set. */
 export function selectionPair(selected: SelectedModel): [string, string] | undefined {
   const { provider, modelId } = selected;
   return provider !== undefined && modelId !== undefined ? [provider, modelId] : undefined;
@@ -200,23 +150,17 @@ export function selectionKey(selected: SelectedModel): string | undefined {
   return pair === undefined ? undefined : preferenceKey(pair[0], pair[1]);
 }
 
-// ── File shape ──────────────────────────────────────────────────────────
-
-/** A `[models."<provider>:<model_id>"]` entry — today just a sampler bag. */
 export interface ModelPreference {
   sampler: SamplerSettings;
 }
 
-/** The `[defaults]` block. */
 export interface PreferenceDefaults {
   sampler: SamplerSettings;
 }
 
-/** Top-level shape of `models.toml`, global or character-scoped. */
 export interface ModelPreferences {
   selected: SelectedModel;
   defaults: PreferenceDefaults;
-  /** Per-model entries keyed by `<provider>:<model_id>`, in BTreeMap order. */
   models: Map<string, ModelPreference>;
 }
 
@@ -232,7 +176,6 @@ export function preferencesAreEmpty(prefs: ModelPreferences): boolean {
   );
 }
 
-/** Stable preference key: `<provider>:<model_id>`. */
 export function preferenceKey(provider: string, modelId: string): string {
   return `${provider}:${modelId}`;
 }
@@ -245,12 +188,6 @@ export function modelPreference(
   return prefs.models.get(preferenceKey(provider, modelId));
 }
 
-/**
- * Insert or update a per-model entry.
- *
- * Clearing every sampler field and calling this does NOT delete the entry —
- * {@link clearModelPreference} does.
- */
 export function setModelPreference(
   prefs: ModelPreferences,
   provider: string,
@@ -274,8 +211,6 @@ export function clearModelPreference(
   return previous;
 }
 
-// ── Paths ───────────────────────────────────────────────────────────────
-
 export function globalPreferencesPath(dataDir: string): string {
   return join(dataDir, PREFERENCES_DIR, PREFERENCES_FILE);
 }
@@ -284,15 +219,6 @@ export function characterPreferencesPath(dataDir: string, character: string): st
   return join(dataDir, character, PREFERENCES_DIR, PREFERENCES_FILE);
 }
 
-// ── Load / save ─────────────────────────────────────────────────────────
-
-/**
- * Load preferences from `path`.
- *
- * A missing file is empty defaults. Malformed TOML or an unknown field is a
- * `PreferenceError` so the caller can surface it instead of silently
- * overwriting the user's settings.
- */
 export function loadPreferences(path: string): ModelPreferences {
   let content: string;
   try {
@@ -315,7 +241,6 @@ export function loadPreferences(path: string): ModelPreferences {
   return parsed.ok;
 }
 
-/** Save preferences to `path`, creating parent directories as needed. */
 export function savePreferences(path: string, prefs: ModelPreferences): void {
   const parent = join(path, "..");
   try {
@@ -330,7 +255,6 @@ export function savePreferences(path: string, prefs: ModelPreferences): void {
   }
 }
 
-/** Load `(global, character)` preferences. Either file may be missing. */
 export function loadForCharacter(
   dataDir: string,
   character: string,
@@ -353,12 +277,6 @@ export function saveGlobalPreferences(dataDir: string, prefs: ModelPreferences):
   savePreferences(globalPreferencesPath(dataDir), prefs);
 }
 
-// ── Resolver ────────────────────────────────────────────────────────────
-
-/**
- * Which model is selected after layering global and character.
- * Character beats global; a partial selection is ignored at its layer.
- */
 export function resolveSelectedModel(
   global: ModelPreferences,
   character: ModelPreferences | undefined,
@@ -370,21 +288,6 @@ export function resolveSelectedModel(
   return selectionPair(global.selected);
 }
 
-/**
- * Resolve sampler settings for `(provider, modelId)`.
- *
- * Layer order, lowest to highest precedence:
- *
- * 0. `staticDefault` — the sampler-shaped fields of a catalog `ResolvedModel`.
- *    Pass `undefined` from callers that merge the static catalog separately
- *    (the chat request path, which applies the overlay via
- *    {@link applySamplerOverlay}); pass the model from display paths so the
- *    effective view matches what a request would use.
- * 1. `global.defaults.sampler`
- * 2. `character.defaults.sampler`
- * 3. `global.models[<key>]`
- * 4. `character.models[<key>]`
- */
 export function resolveSamplerSettings(
   global: ModelPreferences,
   character: ModelPreferences | undefined,
@@ -401,7 +304,6 @@ export function resolveSamplerSettings(
   return effective;
 }
 
-/** The four preference layers in precedence order, skipping absent ones. */
 function preferenceLayers(
   global: ModelPreferences,
   character: ModelPreferences | undefined,
@@ -419,18 +321,6 @@ function preferenceLayers(
   return layers;
 }
 
-/**
- * Strip overlay fields the patch path would silently discard, so an
- * inspection view shows the values a real request would use.
- *
- * Two cases. An `sdk` string {@link sdkFromWire} cannot parse — a corrupted
- * hand-edit shouldn't make the effective sampler diverge from
- * {@link applySamplerOverlay}'s result. And `maxToolIterations = 0`, which is
- * not a valid persisted value: absent already means unlimited and the setter
- * rejects 0, but a hand-edited file can still carry it, and left intact the
- * tool loops would read it as "cap reached before the first round" — a silent
- * no-op that contradicts the documented default.
- */
 function sanitizePersistedOverlay(layer: SamplerSettings): SamplerSettings {
   const badSdk = layer.sdk !== undefined && sdkFromWire(layer.sdk) === undefined;
   const zeroCap = layer.maxToolIterations === 0;
@@ -447,11 +337,7 @@ function sanitizePersistedOverlay(layer: SamplerSettings): SamplerSettings {
   return cleaned;
 }
 
-// ── Scopes ──────────────────────────────────────────────────────────────
-
-/** Where in the preference stack a sampler field landed. */
 export type PreferenceScope =
-  /** Unset at every layer; the static catalog default is in effect. */
   | "static_default"
   | "global_default"
   | "character_default"
@@ -460,10 +346,6 @@ export type PreferenceScope =
 
 export type SamplerScopes = Partial<Record<keyof SamplerSettings, PreferenceScope>>;
 
-/**
- * Which layer last set each sampler field. Higher precedence wins; fields no
- * layer set stay absent.
- */
 export function resolveSamplerScopes(
   global: ModelPreferences,
   character: ModelPreferences | undefined,
@@ -498,15 +380,6 @@ export function resolveSamplerScopes(
   return scopes;
 }
 
-// ── Catalog bridging ────────────────────────────────────────────────────
-
-/**
- * The static-catalog model matching `(provider, modelId)`.
- *
- * The inverse of "save selection" for static entries: users select by short
- * name, the catalog resolves it, and `(providerKey, modelId)` is persisted.
- * Discovered-model lookups go through the effective catalog instead.
- */
 export function findStaticModel(
   catalog: ModelCatalog,
   provider: string,
@@ -518,15 +391,6 @@ export function findStaticModel(
   return undefined;
 }
 
-/**
- * The config surface the resolver needs.
- *
- * Declared here rather than imported because this module predates the loader:
- * when it landed there was no `LoadedConfig` on this side to depend on. There is
- * now — see {@link configView}, which is how a real config gets in — but the
- * narrowing has earned its keep and stays. `app` carries only the two
- * `[defaults]` keys the chain reads.
- */
 export interface LoadedConfigView {
   models: ModelCatalog;
   providers: ProviderRegistry;
@@ -534,7 +398,6 @@ export interface LoadedConfigView {
   app: {
     defaults: {
       model?: string;
-      /** `defaults.background.<task>` falling back to `defaults.background.model`. */
       backgroundModelName: (task: BackgroundTask) => string | undefined;
     };
   };
@@ -542,15 +405,6 @@ export interface LoadedConfigView {
 
 export type BackgroundTask = "heartbeat" | "compaction";
 
-/**
- * A real config, narrowed to what the resolver reads.
- *
- * Everything structurally matches already except `backgroundModelName`, which is
- * a *function* here and two plain fields on `DefaultsConfig` — the view names
- * the two-level `background.<task> → background.model` fallback so no caller can
- * resolve it a fourth way. The Rust had one type throughout and did that
- * fallback at each call site; this is the same fallback, resolved once.
- */
 export function configView(config: {
   models: ModelCatalog;
   providers: ProviderRegistry;
@@ -570,8 +424,6 @@ export function configView(config: {
   };
 }
 
-/** Injected so preferences does not import the effective catalog, which
- *  imports preferences' own types. Mirrors the Rust module boundary. */
 export type FindEffectiveModel = (
   config: LoadedConfigView,
   cacheDir: string,
@@ -579,16 +431,6 @@ export type FindEffectiveModel = (
   includeHidden: boolean,
 ) => ResolvedModel;
 
-/**
- * Resolve a saved `(provider, modelId)` selection against the effective
- * catalog. If the discovery cache was deleted, the pair is reconstructed from
- * the provider registry so cache deletion does not lose the selection.
- *
- * `includeHidden` is always true here: a previously selected discovered model
- * should keep resolving across restarts even if `discovery.ignore` would now
- * hide it. The user chose it explicitly; `discovery.ignore` scopes listing,
- * not restoration.
- */
 function resolveProviderModel(
   config: LoadedConfigView,
   provider: string,
@@ -605,11 +447,6 @@ function resolveProviderModel(
   }
 }
 
-/**
- * Rebuild a previously selected discovered model when its disposable
- * discovery cache has been deleted. Selection durability comes from the
- * preferences file; the cache only supplies richer metadata.
- */
 function synthesizeSelectedProviderModel(
   config: LoadedConfigView,
   provider: string,
@@ -625,8 +462,6 @@ function synthesizeSelectedProviderModel(
 
   return resolvedModelFromParts(
     modelId,
-    // Canonical `provider:model_id` identity, not the retired
-    // `chat.<provider>.<model_id>` cosplay.
     `${provider}:${modelId}`,
     "chat",
     provider,
@@ -636,18 +471,6 @@ function synthesizeSelectedProviderModel(
   );
 }
 
-/**
- * The active model for a session.
- *
- * 1. Character preferences `[selected]` → effective catalog by
- *    `(providerKey, modelId)`.
- * 2. Global preferences `[selected]` → same lookup.
- * 3. Legacy `runtime_state.json` active model → catalog by name. Migration
- *    fallback for installs that have not written preferences yet.
- * 4. `app.defaults.model`, through the effective catalog so it accepts a
- *    static alias *or* a `provider:model_id` ref.
- * 5. First chat model in the static catalog.
- */
 export function resolveActiveForCharacter(
   config: LoadedConfigView,
   global: ModelPreferences,
@@ -672,23 +495,15 @@ export function resolveActiveForCharacter(
   }
 
   if (appDefaultModel !== undefined) {
-    // May be a static alias *or* a `provider:model_id` reference, so route
-    // through the effective catalog — a config with zero `[chat.*]` entries
-    // can still name its default model.
     try {
       return findEffective(config, config.dirs.cache, appDefaultModel, true);
     } catch {
-      // Fall through to the first-chat-model default.
     }
   }
 
   return firstChatModel(config.models);
 }
 
-/**
- * Patch a `ResolvedModel` with a sampler overlay. Returns a fresh model —
- * never mutates the catalog entry.
- */
 export function applySamplerOverlay(
   model: ResolvedModel,
   overlay: SamplerSettings,
@@ -698,11 +513,6 @@ export function applySamplerOverlay(
   const direct = [
     ["temperature", "temperature"],
     ["topP", "topP"],
-    // `"off"` is the explicit-disable sentinel and is PRESERVED here rather
-    // than collapsed away: the request builder translates it into an explicit
-    // thinking-off signal, which is what lets the OpenRouter adapter send
-    // `reasoning.effort = "none"`. Merely omitting the field would leave an
-    // always-on reasoning model reasoning by default.
     ["reasoningEffort", "reasoningEffort"],
     ["budgetTokens", "budgetTokens"],
     ["maxOutputTokens", "maxOutputTokens"],
@@ -718,14 +528,10 @@ export function applySamplerOverlay(
 
   for (const [field, target] of direct) {
     const value = overlay[field];
-    // The pairs above are checked by `satisfies`, but TypeScript widens both
-    // sides across the loop, so the per-pair correspondence has to be asserted.
     if (value !== undefined) (patched as unknown as Record<string, unknown>)[target] = value;
   }
 
   if (overlay.sdk !== undefined) {
-    // The setter validates before this reaches the file, so anything
-    // unparseable here is a corrupted edit: log and keep the catalog's sdk.
     const sdk = sdkFromWire(overlay.sdk);
     if (sdk === undefined) {
       console.warn(
@@ -740,13 +546,6 @@ export function applySamplerOverlay(
   return patched;
 }
 
-/**
- * Layer the global+character overlay onto a resolved model.
- *
- * A missing preferences file produces empty defaults rather than a warning;
- * other errors are logged with `op` for forensics and the raw model returned
- * so the caller can proceed.
- */
 export function overlayForCharacter(
   dataDir: string,
   character: string,
@@ -774,24 +573,6 @@ export function overlayForCharacter(
   return applySamplerOverlay(base, overlay);
 }
 
-/**
- * The model for a background task, with the per-character overlay applied.
- *
- * 1. `defaults.background.<task>`
- * 2. `defaults.background.model`
- * 3. The character's currently-selected chat model
- * 4. `defaults.model`
- * 5. First chat model in the catalog
- *
- * Steps 3–5 are {@link resolveChatModelForCharacter}'s chain, so an unset
- * `[defaults.background]` means background tasks follow whatever model the
- * character uses for chat.
- *
- * Before this existed, every background-task site re-implemented the chain and
- * either forgot the overlay or copy-pasted it inconsistently. The missing
- * overlay silently dropped per-character `max_output_tokens`, capping
- * responses at 4096 and truncating compaction XML mid-element.
- */
 export function resolveBackgroundModel(
   config: LoadedConfigView,
   task: BackgroundTask,
@@ -800,20 +581,13 @@ export function resolveBackgroundModel(
 ): ResolvedModel | undefined {
   const name = config.app.defaults.backgroundModelName(task);
   if (name === undefined) {
-    // No background-specific model configured — follow the character's chat
-    // model so a `shore model <name>` swap moves background work too.
     return resolveChatModelForCharacter(config, character, findEffective);
   }
 
   let base: ResolvedModel;
   try {
-    // Route through the effective catalog so a pin written as
-    // `provider:model_id` resolves with no static `[chat.*]` entry.
     base = findEffective(config, config.dirs.cache, name, true);
   } catch (e) {
-    // The user *explicitly* configured a model for this task but it doesn't
-    // resolve — almost always a typo. Warn loudly and fall back so the daemon
-    // stays up.
     console.warn(
       `shore: configured ${task} model "${name}" not found in catalog for ${character}; ` +
         `falling back to active chat model: ${(e as Error).message}`,
@@ -823,13 +597,6 @@ export function resolveBackgroundModel(
   return overlayForCharacter(config.dirs.data, character, base, task);
 }
 
-/**
- * The user's currently-selected chat model with the sampler overlay applied,
- * mirroring what a fresh chat request would build.
- *
- * Used by the heartbeat cold-rebuild path so the rebuilt request shares
- * chat's cache prefix instead of diverging on a stale `defaults.model`.
- */
 export function resolveChatModelForCharacter(
   config: LoadedConfigView,
   character: string,
@@ -843,12 +610,6 @@ export function resolveChatModelForCharacter(
   );
   if (resolved === undefined) return undefined;
 
-  // `resolved` as the static default, as the Rust had it. It changes nothing
-  // at this call site — the overlay goes straight back onto the model it was
-  // read from, and it sits at the lowest layer — but callers here want one
-  // merged model and never see the overlay, so there is nothing to gain by
-  // dropping it. `resolveActiveModelAndOverlay`, which returns the overlay,
-  // does gain something and passes `undefined`.
   const overlay = resolveSamplerSettings(
     global,
     charPrefs,
@@ -859,26 +620,6 @@ export function resolveChatModelForCharacter(
   return applySamplerOverlay(resolved, overlay);
 }
 
-/**
- * The active model for a chat turn, and its overlay, kept apart.
- *
- * Ported from `resolve_active_model_and_overlay` in
- * `crates/daemon/src/handler/mod.rs`. The pair goes straight to
- * `resolveGenerationModel` in `handler/setup.ts`, which decides what to do
- * when there is no model and applies the overlay itself.
- *
- * Same chain as {@link resolveChatModelForCharacter} — that is why they share
- * {@link activeSelection} — and it differs in exactly one argument: the static
- * default is `undefined`, so the overlay carries *only* what preferences say.
- *
- * The catalog's own values would change no field, since the overlay is applied
- * to the model they came from and they sit at the lowest layer. What they would
- * change is whether the overlay is *empty*, because
- * {@link samplerFromResolvedModel} always contributes `sdk` — and emptiness is
- * read twice. It is what lets the request keep the catalog entry itself as its
- * model instead of a copy, and it is what the generation log means by an
- * overlay being active. Fold the catalog in and both are true forever.
- */
 export function resolveActiveModelAndOverlay(
   config: LoadedConfigView,
   character: string,
@@ -904,13 +645,6 @@ export function resolveActiveModelAndOverlay(
   };
 }
 
-/**
- * The preferences a character resolves under, and the model they select.
- *
- * A preferences file that cannot be read is a warning and empty defaults, not
- * a failure: it would otherwise take a character's chat down over a file that
- * only holds overrides, and the chain below still has four more steps.
- */
 function activeSelection(
   config: LoadedConfigView,
   character: string,
@@ -939,9 +673,6 @@ function activeSelection(
   );
   return { global, charPrefs, resolved };
 }
-
-
-// ── TOML reading and writing ────────────────────────────────────────────
 
 type ReadResult<T> = { ok: T } | { err: string };
 
@@ -1035,7 +766,6 @@ function readSampler(table: Record<string, unknown>): ReadResult<SamplerSettings
   return { ok: out };
 }
 
-/** `all` | `none`, with legacy bool configs still accepted. */
 function readThinkingReplay(value: unknown): ReadResult<ThinkingReplay> {
   if (typeof value === "boolean") return { ok: value ? "all" : "none" };
   if (value === "all" || value === "none") return { ok: value };
@@ -1092,27 +822,15 @@ function readPreferences(table: Record<string, unknown>): ReadResult<ModelPrefer
       if ("err" in read) return read;
       entries.push([key, { sampler: read.ok }]);
     }
-    // Already in BTreeMap order: `sortedKeys` above walks the table in it.
     out.models = new Map(entries);
   }
 
   return { ok: out };
 }
 
-/**
- * Serialize to TOML.
- *
- * Hand-rolled rather than delegated: Bun ships a TOML *parser* but no
- * serializer, and this file is user-facing — it is what `cat models.toml`
- * shows. Written in the same section order `toml::to_string_pretty` produces
- * so a round-trip through the daemon does not reshuffle a user's file.
- */
 export function serializePreferences(prefs: ModelPreferences): string {
   const blocks: string[] = [];
 
-  // `toml::to_string_pretty` emits every top-level table header, populated or
-  // not, so an empty file still shows the schema. Reproduced because the file
-  // is user-facing and both implementations may write it during migration.
   const selected: string[] = ["[selected]"];
   if (prefs.selected.provider !== undefined) {
     selected.push(`provider = ${tomlString(prefs.selected.provider)}`);
@@ -1143,10 +861,6 @@ function samplerLines(sampler: SamplerSettings): string[] {
     if (field === "cacheKeepalive") {
       out.push(`${key} = ${tomlString(keepaliveToString(value as CacheKeepaliveSetting))}`);
     } else if (field === "temperature" || field === "topP") {
-      // A TOML float must keep its decimal point: `temperature = 1` re-reads
-      // as an integer, which the Rust `f64` field rejects outright. This is
-      // the one place the port has to know a field's TOML type, because a
-      // JavaScript number carries no such distinction.
       out.push(`${key} = ${tomlFloat(value as number)}`);
     } else if (typeof value === "string") {
       out.push(`${key} = ${tomlString(value)}`);
@@ -1167,7 +881,6 @@ function tomlScalar(value: number | boolean): string {
   return String(value);
 }
 
-/** Always emits a decimal point, so the value re-reads as a TOML float. */
 function tomlFloat(value: number): string {
   return Number.isInteger(value) ? `${value}.0` : String(value);
 }
@@ -1186,11 +899,6 @@ function tomlInline(value: unknown): string {
 
 export type { Sdk };
 
-/**
- * How serde phrases the accepted set. Two fields get `a` or `b`; three or more
- * get a comma list under `one of`. Matching this exactly is what makes the
- * unknown-field errors compare byte for byte.
- */
 function expectedList(known: readonly string[]): string {
   if (known.length === 1) return `\`${known[0]}\``;
   if (known.length === 2) return `\`${known[0]}\` or \`${known[1]}\``;

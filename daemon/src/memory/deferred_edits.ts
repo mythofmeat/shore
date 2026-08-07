@@ -1,36 +1,3 @@
-/**
- * Deferred prompt edits — the rule that editing SOUL.md does not change the
- * prompt until the next compaction boundary.
- *
- * Ported from `crates/daemon/src/memory/deferred_edits.rs`, pinned by
- * `tests/memory_fixtures/deferred_edits_parity.json`.
- *
- * # Why a snapshot exists at all
- *
- * The canonical prompt-visible files live in the config workspace and a user
- * (or a tool call) may edit them at any moment. The prompt cannot follow them
- * live: Anthropic's prefix cache is keyed on exact bytes, so a mid-conversation
- * change to SOUL.md would invalidate the prefix for every subsequent turn. So
- * the daemon keeps a snapshot under `active_prompt/`, serves the prompt from
- * that, and only re-copies at a boundary where the prefix is being rebuilt
- * anyway.
- *
- * `deferred_edits.jsonl` is the queue of edits waiting for such a boundary.
- * Ownership of that file moves to TypeScript here, per #12.
- *
- * # Blank is missing
- *
- * Every read in this module filters whitespace-only content down to absent,
- * and `changedPromptFiles` compares those filtered values — so a file that
- * goes from missing to blank is *not* a change. Between two non-blank
- * versions, though, any byte difference counts, trailing newline included.
- * Both halves are pinned; the asymmetry is deliberate in the Rust and it is
- * the prefix cache that motivates it.
- *
- * The path-normalisation helpers this module used to own were ported earlier
- * and live in `tools/workspace_path.ts`.
- */
-
 import { constants } from "node:fs";
 import {
   access,
@@ -58,31 +25,12 @@ import {
 } from "../tools/workspace_path";
 import { localRfc3339 } from "../time.ts";
 
-/** Workspace-root files that are editable now but prompt-active only later. */
 const PROTECTED_PATHS = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md"] as const;
 
-/**
- * The memory index, under the one name it has.
- *
- * The Rust carried two constants here — `MEMORY_INDEX_FILE` for the file on
- * disk and `MEMORY_INDEX_DEFERRED_PATH` for the path a deferred edit names —
- * and branched on the difference in two places: which file to copy from, and
- * what to call the snapshot. Both are `"MEMORY.md"`, so neither branch was
- * reachable, which mutation testing showed by leaving them unkillable.
- * Collapsed to one name. If the index ever needs a distinct on-disk name, the
- * split goes back into `canonicalFile` and the snapshot naming, and the
- * fixture needs a case where the two differ.
- */
 export const MEMORY_INDEX_FILE = "MEMORY.md";
 
 const QUEUE_FILE = "deferred_edits.jsonl";
 
-/**
- * Snapshots left behind by prompt files that no longer exist: the pre-rename
- * `<recent_memory>` block, and `HEARTBEAT.md` from before heartbeat
- * carry-forward folded into `MEMORY.md`. Removed opportunistically when the
- * snapshot directory is re-seeded, so they do not accumulate forever.
- */
 const LEGACY_SNAPSHOTS = ["RECENT_MEMORY.md", "HEARTBEAT.md"];
 
 const DEFAULT_TOOLS_GUIDANCE = `# TOOLS
@@ -94,28 +42,11 @@ Use tools when they materially help.
 - Prefer concise, direct tool use over busywork.
 `;
 
-// --- config layout ---------------------------------------------------------
-//
-// These four were private copies here until `config/dirs.ts` landed the layout
-// they duplicate. They now come from there, so a change to where a character's
-// files live is made once. The shared versions join like `PathBuf::push` rather
-// than like `node:path`, which differs only for a character name that is
-// absolute or carries redundant separators — the frozen fixture below uses
-// neither, and still passes unchanged.
-
-// Every entry point below takes the workspace root the same way `config/dirs.ts`
-// does — trailing and optional, undefined meaning the workspace sits under the
-// config directory. It is threaded rather than read from the environment so
-// these stay drivable from a fixture, and so a test can put a workspace
-// anywhere without touching the process.
-
 export const memoryIndexPath = (
   configDir: string,
   charName: string,
   workspaceRoot?: string | undefined,
 ) => join(characterWorkspaceDir(configDir, charName, workspaceRoot), MEMORY_INDEX_FILE);
-
-// --- small fs helpers ------------------------------------------------------
 
 async function exists(p: string): Promise<boolean> {
   try {
@@ -126,14 +57,6 @@ async function exists(p: string): Promise<boolean> {
   }
 }
 
-/**
- * Content of a file if it is present and not blank, else undefined.
- *
- * Mirrors the Rust's `read_to_string(..).ok().filter(non-blank)` — note that
- * an unreadable file is indistinguishable from a missing one here. That is
- * load-bearing at every call site: a permissions error on SOUL.md degrades to
- * "no soul" rather than failing the turn.
- */
 async function effectiveContent(p: string): Promise<string | undefined> {
   try {
     const content = await readFile(p, "utf8");
@@ -143,11 +66,6 @@ async function effectiveContent(p: string): Promise<string | undefined> {
   }
 }
 
-/**
- * The canonical source a prompt-visible path is copied from. The memory index
- * needs no special case: `memoryIndexPath` resolves to exactly this, since
- * both live at the workspace root. See MEMORY_INDEX_FILE.
- */
 const canonicalFile = (
   configDir: string,
   charName: string,
@@ -155,28 +73,15 @@ const canonicalFile = (
   workspaceRoot: string | undefined,
 ) => characterWorkspaceFile(configDir, charName, path, workspaceRoot);
 
-// --- reads -----------------------------------------------------------------
-
-/** Snapshot content for a prompt file, or undefined if absent or blank. */
 export const loadActivePromptFile = (characterDataDir: string, name: string) =>
   effectiveContent(activePromptFile(characterDataDir, name));
 
-/** Canonical memory index, ignoring any snapshot. */
 export const loadCanonicalMemoryIndex = (
   configDir: string,
   charName: string,
   workspaceRoot?: string | undefined,
 ) => effectiveContent(memoryIndexPath(configDir, charName, workspaceRoot));
 
-/**
- * Memory index as the prompt should see it.
- *
- * The snapshot wins when it *exists*, even if blank — a blank snapshot is the
- * sentinel meaning "an edit is queued, keep showing nothing until it applies",
- * so falling through to canonical there would defeat the deferral. Only a
- * genuinely absent snapshot reads canonical. Pinned by the case named
- * "does NOT fall through when the snapshot is blank".
- */
 export async function loadMemoryIndex(
   characterDataDir: string,
   configDir: string,
@@ -188,15 +93,6 @@ export async function loadMemoryIndex(
   return effectiveContent(memoryIndexPath(configDir, charName, workspaceRoot));
 }
 
-/**
- * Prompt-visible paths waiting for activation, deduplicated and sorted.
- *
- * Sorted because the Rust collected into a `BTreeSet`, so callers see
- * alphabetical order rather than the order edits arrived. Unparseable lines,
- * lines without a string `path`, and paths that are not prompt-visible are all
- * skipped rather than failing the read — a corrupt queue must not be able to
- * block a compaction boundary.
- */
 export async function pendingDeferredEditPaths(
   characterDataDir: string,
 ): Promise<string[]> {
@@ -227,13 +123,6 @@ export async function pendingDeferredEditPaths(
   return [...paths].sort();
 }
 
-// --- writes ----------------------------------------------------------------
-
-/**
- * Queue a deferred refresh. A path that is not prompt-visible is silently
- * ignored — most workspace writes are ordinary memory files and must not
- * enqueue anything.
- */
 export async function queueDeferredEdit(
   characterDataDir: string,
   requestedPath: string,
@@ -243,9 +132,6 @@ export async function queueDeferredEdit(
 
   await mkdir(characterDataDir, { recursive: true });
 
-  // A first-ever memory index needs an empty snapshot file to exist, or
-  // `loadMemoryIndex` would fall through to the canonical copy and activate
-  // the very edit being deferred.
   if (path === MEMORY_INDEX_FILE) {
     const sentinel = activePromptFile(characterDataDir, MEMORY_INDEX_FILE);
     if (!(await exists(sentinel))) {
@@ -258,18 +144,9 @@ export async function queueDeferredEdit(
   await appendFile(join(characterDataDir, QUEUE_FILE), `${line}\n`, "utf8");
 }
 
-/** Queue a deferred refresh of the memory index. */
 export const noteMemoryIndexDeferred = (characterDataDir: string) =>
   queueDeferredEdit(characterDataDir, MEMORY_INDEX_FILE);
 
-/**
- * Which prompt-visible files would change if the snapshot were refreshed now.
- *
- * Order follows the protected list with the memory index last, not the
- * alphabetical order `pendingDeferredEditPaths` returns. The two functions
- * answer different questions — what *would* change versus what was *asked* to
- * change — and the fixture pins both orders.
- */
 export async function changedPromptFiles(
   characterDataDir: string,
   configDir: string,
@@ -289,15 +166,6 @@ export async function changedPromptFiles(
   return changed;
 }
 
-/**
- * Copy one canonical file into the snapshot.
- *
- * `seedOnly` is the difference between "make sure something is there" and
- * "make it current". The third branch is the interesting one: on a refresh,
- * a canonical file that has been *deleted* removes the snapshot too, so
- * deleting SOUL.md eventually takes it out of the prompt. On a seed it does
- * not, because a seed must never destroy a snapshot it did not create.
- */
 async function copyPromptVisibleFile(
   characterDataDir: string,
   configDir: string,
@@ -317,20 +185,10 @@ async function copyPromptVisibleFile(
   if (await exists(src)) {
     await copyFile(src, dst);
   } else if (await exists(dst)) {
-    // Only reachable on a refresh: the early return above already took the
-    // seeding case with a snapshot present.
     await rm(dst);
   }
 }
 
-/**
- * Create the workspace-first layout and migrate anything left by the older
- * per-character config layout into it.
- *
- * Every step is "copy if the destination is missing" — never overwrite. A
- * character that has already been migrated must survive this being run again
- * on every snapshot check, which it is.
- */
 export async function ensureCharacterWorkspace(
   characterDataDir: string,
   configDir: string,
@@ -357,7 +215,6 @@ export async function ensureCharacterWorkspace(
     join(workspaceDir, "AGENTS.md"),
   );
 
-  // A global user.md seeds a character that has none of its own.
   const globalUser = join(configDir, "user.md");
   const workspaceUser = join(workspaceDir, "USER.md");
   if ((await exists(globalUser)) && !(await exists(workspaceUser))) {
@@ -374,10 +231,6 @@ export async function ensureCharacterWorkspace(
   }
 }
 
-/**
- * Make sure a snapshot exists, without disturbing one that already does —
- * this runs on ordinary turns, so it must not activate a pending edit.
- */
 export async function ensureActivePromptSnapshot(
   characterDataDir: string,
   configDir: string,
@@ -399,7 +252,6 @@ export async function ensureActivePromptSnapshot(
   }
 }
 
-/** Re-copy every prompt-visible file, activating whatever has changed. */
 export async function refreshActivePromptSnapshot(
   characterDataDir: string,
   configDir: string,
@@ -412,7 +264,6 @@ export async function refreshActivePromptSnapshot(
   }
 }
 
-/** Refresh the snapshot and clear the queue — the compaction boundary. */
 export async function applyDeferredEdits(
   characterDataDir: string,
   configDir: string,
@@ -429,7 +280,6 @@ async function migrateLegacyFile(src: string, dst: string): Promise<void> {
   }
 }
 
-/** Recursive copy that never overwrites an existing destination file. */
 async function copyTreeIfMissing(src: string, dst: string): Promise<void> {
   await mkdir(dst, { recursive: true });
   for (const entry of await readdir(src, { withFileTypes: true })) {

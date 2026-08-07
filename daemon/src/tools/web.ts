@@ -1,18 +1,5 @@
-/**
- * `web_search` and `fetch_url`.
- *
- * Ported from `crates/daemon/src/tools/web.rs`, pinned by
- * `tests/tools_fixtures/web_images_parity.json`.
- *
- * The HTTP is not what needed care. {@link stripHtml} and the byte-accurate
- * truncation are: both walk UTF-8 by byte offset, and JavaScript measures
- * strings in UTF-16 code units, so the naive port is wrong on every non-ASCII
- * page in a way no ASCII test reveals.
- */
-
 import { InvalidArgs, ToolIoError } from "./errors.ts";
 
-/** Reported as `http:` — a remote call that failed, not the caller's mistake. */
 export class ToolHttpError extends Error {
   constructor(message: string) {
     super(`http: ${message}`);
@@ -22,54 +9,21 @@ export class ToolHttpError extends Error {
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
-/**
- * The signal a request should actually carry.
- *
- * The 30-second cap is this module's own and always applies. A caller's signal
- * — the tool deadline from `dispatch.ts` — is *added* to it rather than
- * replacing it, so whichever fires first wins and neither can be lengthened by
- * the other. Combining them is what makes the tool deadline able to interrupt
- * a hung request at all: JavaScript cannot cancel a promise, only abort the
- * fetch underneath it.
- */
 function requestSignal(caller: AbortSignal | undefined): AbortSignal {
   const own = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
   return caller === undefined ? own : AbortSignal.any([caller, own]);
 }
 
-/**
- * The part of `fetch` these handlers use.
- *
- * Narrower than `typeof fetch` on purpose: Bun's `fetch` carries extras like
- * `preconnect`, and requiring those of an injected stub would mean every test
- * double had to fake them.
- */
 export type FetchLike = (
   input: string | URL | Request,
   init?: RequestInit,
 ) => Promise<Response>;
 
-/** Maximum content returned to the model, in **bytes**, cut on a char boundary. */
 export const MAX_CONTENT_BYTES = 50_000;
-
-// ── Byte-accurate truncation ────────────────────────────────────────────
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-/**
- * Truncate to at most `maxBytes` **UTF-8 bytes**, never splitting a character.
- *
- * This is `String::len()` plus `floor_char_boundary`, and there is no way to
- * spell either in terms of JavaScript string indices: `.length` counts UTF-16
- * code units (so `"🎵".length` is 2 where Rust sees 4 bytes), and `.slice()`
- * will happily cut a surrogate pair in half. Encoding to bytes and decoding
- * back is the honest translation.
- *
- * `TextDecoder` with `fatal: false` would replace a partial trailing sequence
- * with U+FFFD, which is not what `floor_char_boundary` does — it backs the cut
- * off instead — so the boundary is found first and the slice is always valid.
- */
 export function truncateToBytes(
   text: string,
   maxBytes: number,
@@ -77,12 +31,6 @@ export function truncateToBytes(
   const bytes = encoder.encode(text);
   if (bytes.length <= maxBytes) return { content: text, truncated: false };
 
-  // Back off to a UTF-8 boundary: continuation bytes are 0b10xxxxxx.
-  //
-  // The parentheses around the cast are load-bearing. `bytes[end] as number &
-  // 0b1100_0000` parses as `bytes[end] as (number & 0b1100_0000)` — a type
-  // intersection, not a bitwise AND — so the mask silently vanishes and the
-  // loop only backs off a byte that happens to equal 0x80.
   let end = maxBytes;
   while (end > 0 && ((bytes[end] as number) & 0b1100_0000) === 0b1000_0000) {
     end -= 1;
@@ -90,18 +38,8 @@ export function truncateToBytes(
   return { content: decoder.decode(bytes.subarray(0, end)), truncated: true };
 }
 
-// ── HTML extraction ─────────────────────────────────────────────────────
-
-/** Blocks dropped whole, content included. */
 const SKIPPED_BLOCKS = ["script", "style", "head"] as const;
 
-/**
- * Entity decoding, applied as an ordered sequence of whole-string replacements.
- *
- * The order is behaviour, not style. `&amp;` runs **first**, so an escaped
- * entity is decoded twice: `&amp;lt;` becomes `&lt;` and then `<`. Reordering
- * this table, or decoding in a single pass, changes what the model reads.
- */
 const ENTITIES: readonly (readonly [string, string])[] = [
   ["&amp;", "&"],
   ["&lt;", "<"],
@@ -114,32 +52,11 @@ const ENTITIES: readonly (readonly [string, string])[] = [
   ["&#x2F;", "/"],
 ];
 
-/** `str::to_ascii_lowercase` — ASCII only, so `ｓ` is not `s`. */
 function asciiLowercase(s: string): string {
   return s.replace(/[A-Z]/g, (c) => c.toLowerCase());
 }
 
-/**
- * Strip HTML tags and extract readable text.
- *
- * Three phases, and they interact in ways worth knowing:
- *
- * 1. **Block removal.** `<script>`, `<style>` and `<head>` go with their
- *    contents, matched case-insensitively in ASCII. An *unclosed* one drops
- *    everything after it — the Rust breaks out of the walk rather than
- *    recovering, so a page with a stray `<script` returns only its prefix.
- * 2. **Tag removal.** Any other `<…>` becomes a single space, because block
- *    elements are word boundaries. A `<` with no `>` after it is not a tag at
- *    all and survives as literal text.
- * 3. **Entity decoding, then whitespace collapse.** Decoding runs *after* tag
- *    stripping, so `&lt;script&gt;` decodes to the literal text `<script>` and
- *    is *not* treated as a tag. This is not a sanitizer and must not be used
- *    as one.
- */
 export function stripHtml(html: string): string {
-  // Phase 1 & 2. Indices are JavaScript string indices rather than the Rust's
-  // byte offsets; every one is derived from a search over the same string, so
-  // the substrings they cut are identical either way.
   let cleaned = "";
   let i = 0;
 
@@ -158,7 +75,6 @@ export function stripHtml(html: string): string {
             continue;
           }
         }
-        // No closing tag — the rest of the document is dropped.
         break;
       }
 
@@ -168,32 +84,20 @@ export function stripHtml(html: string): string {
         i = gt + 1;
         continue;
       }
-      // A `<` with no `>` after it falls through and is kept verbatim.
     }
 
-    // One UTF-16 unit at a time is enough, even for astral characters: the
-    // surrogates are copied in order and reassemble on their own, and neither
-    // half can be `<`. The Rust advances by `len_utf8()` for the same reason —
-    // it is walking bytes, not characters.
     cleaned += html[i] as string;
     i += 1;
   }
 
-  // Phase 3a: entities, in order.
   let decoded = cleaned;
   for (const [from, to] of ENTITIES) {
     decoded = decoded.split(from).join(to);
   }
 
-  // Phase 3b: collapse whitespace runs to one space, then trim.
-  // `\p{White_Space}` is exactly `char::is_whitespace`; JavaScript's own `\s`
-  // and `trim` use a different set — see `memory/lines.ts`.
   return decoded.replace(/\p{White_Space}+/gu, " ").replace(/^ | $/g, "");
 }
 
-// ── web_search ──────────────────────────────────────────────────────────
-
-/** The `[tools.web_search]` fields this module reads. */
 export interface SearchConfigView {
   api_key_env: string;
   result_limit: number;
@@ -209,14 +113,6 @@ export interface WebSearchResult {
 
 const TAVILY_ENDPOINT = "https://api.tavily.com/search";
 
-/**
- * Handle `web_search`.
- *
- * A result field the provider omits becomes `""`, not `undefined` — the model
- * reads a uniform shape and a missing title is not an error worth failing the
- * whole search over. `answer` is the exception: it is present only when Tavily
- * returned one, because an empty answer and no answer mean different things.
- */
 export async function handleWebSearch(
   input: Record<string, unknown>,
   searchConfig: SearchConfigView,
@@ -291,8 +187,6 @@ export async function handleWebSearch(
   };
 }
 
-// ── fetch_url ───────────────────────────────────────────────────────────
-
 export interface FetchUrlResult {
   url: string;
   content_type: string;
@@ -300,14 +194,6 @@ export interface FetchUrlResult {
   truncated: boolean;
 }
 
-/**
- * Handle `fetch_url`.
- *
- * HTML is detected by a substring match on the content type, not a parse — a
- * `text/html; charset=utf-8` and an `application/xhtml+xml` both extract, and
- * anything else is returned as-is. A response with no content type at all
- * reports `"unknown"` and is treated as non-HTML.
- */
 export async function handleFetchUrl(
   input: Record<string, unknown>,
   fetchImpl: FetchLike = fetch,
@@ -348,5 +234,4 @@ export async function handleFetchUrl(
   return { url, content_type: contentType, content, truncated };
 }
 
-// Re-exported so a caller catching tool failures has one import.
 export { InvalidArgs, ToolIoError };

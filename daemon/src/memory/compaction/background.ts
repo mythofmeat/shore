@@ -1,22 +1,3 @@
-/**
- * What runs around a compaction pass: loading the conversation, and turning the
- * outcome into a number and a notification.
- *
- * Ported from `crates/daemon/src/memory/compaction/background.rs`.
- *
- * # Deliberately partial
- *
- * `run_compaction` itself is dependency resolution and nothing else: it
- * resolves the effective config, the background model and the prompt templates
- * (`preferences`), builds a `SharedToolContext` (`tools`), and resolves the
- * chat-shape request compaction extends (`handler::build_chat_shape_request_from_disk`).
- * All three of those modules are later units of this phase. Wiring it here
- * against stubs would mean writing the wiring twice, so what came across now is
- * the part that is genuinely this module's: the load, the outcome mapping, and
- * the push rule. The assembly lands with `handler/`, which is also where its
- * one caller lives.
- */
-
 import { join } from "node:path";
 
 import { MessageStore, isToolResultOnly } from "../../engine/message_store";
@@ -28,12 +9,10 @@ const ACTIVE_JSONL_FILE = "active.jsonl";
 export interface LoadedConversation {
   store: MessageStore;
   characterDir: string;
-  /** The raw bytes of `active.jsonl`, for the archive write. */
   rawContent: string;
   messages: ConversationMessage[];
 }
 
-/** Flatten a stored message into what the compaction split logic reads. */
 export function toConversationMessage(msg: Message): ConversationMessage {
   return {
     role: msg.role,
@@ -44,15 +23,6 @@ export function toConversationMessage(msg: Message): ConversationMessage {
   };
 }
 
-/**
- * Load a character's active conversation for compaction.
- *
- * One read, not two: the parse and the raw bytes come back together. The
- * separate `read_to_string` this replaced re-read a potentially multi-megabyte
- * file, and the archive needs the exact bytes the messages were parsed from —
- * taking them from the same read is what closes the window where the file
- * changes in between.
- */
 export async function loadMessagesForCompaction(
   dataDir: string,
   character: string,
@@ -67,21 +37,8 @@ export async function loadMessagesForCompaction(
   };
 }
 
-/** A desktop notification: a title and a body. */
 export type Notify = (title: string, body: string) => void;
 
-/**
- * Report a finished pass and return the retained turn count the caller reports
- * upward.
- *
- * A `no_memory_writes` pass returns zero and says so loudly: the model ran but
- * produced nothing the filter allowed — usually one that ignored the tool
- * prompt, hit its round cap, or only tried disallowed paths — and the next
- * trigger will retry against a conversation that is still intact.
- *
- * A dry run cannot reach here from the background path, which hard-codes
- * `dryRun: false`. It returns zero rather than throwing, as the Rust did.
- */
 export function handleCompactionOutcome(
   character: string,
   notify: Notify,
@@ -118,15 +75,6 @@ export function handleCompactionOutcome(
   return 0;
 }
 
-/**
- * Push the workspace memory history after a successful pass, when
- * `[memory] git_push` is on.
- *
- * Only for `compacted` — a pass that archived nothing has nothing new to push —
- * and best-effort, since a failed push must never undo an archive that already
- * happened. Shared by the background and manual compaction paths, which is why
- * it is a function rather than four lines at each call site.
- */
 export async function pushAfterCompaction(
   gitPushEnabled: boolean,
   outcome: CompactionOutcome,

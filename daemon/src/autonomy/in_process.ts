@@ -1,27 +1,3 @@
-/**
- * Running an autonomy action in this process, instead of asking the daemon to.
- *
- * The replacement for `RpcAutonomyExecutor`. That one exists because the three
- * things a tick can decide to do all reached the filesystem, MCP and sub-agents
- * — none of which lived on this side — so each became a call back over the
- * daemon's socket. All three have ported, so each becomes a function call.
- *
- * # This class holds almost nothing
- *
- * Every action is already a module: `heartbeat_tick.ts`, `idle_compaction.ts`,
- * `deep_archive.ts`. What is left here is the wiring each one needs and cannot
- * assemble for itself — the character's effective config, its conversation
- * engine, the provider adapters, the tool surface — and one translation per
- * action. Anything that looks like a decision in this file is a bug in it.
- *
- * # Where `set_next_wake` comes from
- *
- * Not from here. The clock a heartbeat moves belongs to `CharacterAutonomy`,
- * which is also what calls this, so the scheduling function arrives per tick as
- * {@link TickHooks} rather than being reached for. The alternative — this
- * holding the service that holds this — is the same wiring with a cycle in it.
- */
-
 import { runHeartbeatTick } from "./heartbeat_tick.ts";
 import { runIdleCompaction } from "./idle_compaction.ts";
 import { runDeepIdleArchive } from "./deep_archive.ts";
@@ -40,30 +16,14 @@ import { dispatchTool } from "../tools/dispatch.ts";
 import type { CallStore } from "../call_store.ts";
 import { recordTranscript } from "../transcript_capture.ts";
 
-/** What every action needs, assembled once. */
 export interface InProcessExecutorDeps {
-  /** Effective config and conversation engines, both per character. */
   registry: CharacterRegistry;
-  /** The body a heartbeat reuses and a compaction extends. */
   cache: LastRequestCache;
-  /** Provider adapters by sdk, as `server.ts` assembles them. */
   providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
-  /** Push a delivered autonomous message to connected clients. */
   emit?: (character: string, revision: number, msg: Message) => void;
-  /**
-   * Desktop notifications, one hook per event rather than one hook.
-   *
-   * `[notifications.events]` has a toggle per event, so which event an action
-   * files under is the difference between a switch the user set doing what they
-   * meant and doing nothing. The Rust chose per call site —
-   * `AutonomousMessage` at `manager.rs:1837`, `CompactionComplete` at
-   * `manager.rs:625` — and this is the same choice made in the same place.
-   */
   notifyAutonomousMessage?: (title: string, body: string) => void;
   notifyCompactionComplete?: (title: string, body: string) => void;
-  /** The curated `shore log --heartbeat` view. */
   callStore?: Pick<CallStore, "recordTranscript">;
-  /** What the tool context needs beyond the config. */
   tools?: ToolContextDeps;
   env?: NodeJS.ProcessEnv;
 }
@@ -89,9 +49,6 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
       ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
 
       generate: async (request, iteration, callType) => {
-        // The call type is per round — the first is the tick, the rest are its
-        // loop — and it reaches the ledger through the request's own context,
-        // which is also where the character and the budget live.
         request.context = { ...request.context, character, call_type: callType } as never;
         try {
           const { response, fallbacks } = await generate(request, this.#generateDeps(config));
@@ -103,9 +60,6 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
           }
           return response;
         } catch (e) {
-          // `undefined` ends the loop. A heartbeat that cannot reach its model
-          // has nothing to retry against and the next tick is an hour away at
-          // worst, so this is a log line rather than a thrown tick.
           console.error(
             `shore: heartbeat call for ${character} failed on round ${iteration}: ${String(e)}`,
           );
@@ -113,12 +67,6 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
         }
       },
 
-      // Neither truncated nor deadlined, which is the Rust's
-      // `dispatch_heartbeat_tools` exactly: it called `dispatch_tool` bare,
-      // while the chat path went through the `[tools]` caps. Worth knowing
-      // rather than worth fixing here — a heartbeat's only bound on a wedged
-      // or enormous tool result is the loop's own 30-minute deadline, and
-      // changing that is a behaviour change, not a port.
       dispatch: async (name, input) => {
         try {
           const value = await dispatchTool(name, input as Record<string, unknown>, toolCtx);
@@ -128,17 +76,11 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
             value,
           };
         } catch (e) {
-          // A tool's failure is text the model reads, with a flag — never a
-          // throw. The variant prefixes (`invalid args: `, `io: `) are part of
-          // that contract, so it is the message rather than `String(e)`.
           return { output: e instanceof Error ? e.message : String(e), isError: true };
         }
       },
 
       scheduleNextWake: (hours, reason) => {
-        // The clock applies the bound and answers with what it used, so the
-        // model is told the hour it actually got rather than the one it asked
-        // for.
         const used = hooks.scheduleNextWake(hours, reason);
         return `Scheduled next moment in ${used.toFixed(1)} hours.`;
       },
@@ -169,10 +111,6 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
   }
 
   async runCompaction(character: string, reason: CompactionReason): Promise<AutonomyActionResult> {
-    // Only the idle trigger's pass is this executor's. `max_turns` fires inline
-    // from the turn that crossed the threshold — the generation driver runs it
-    // with the config for the turn it is finishing, which is not something this
-    // can reconstruct after the fact.
     if (reason !== "idle") {
       return {
         events: [],
@@ -185,12 +123,6 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
       cache: this.#deps.cache,
       run: this.#compactionDeps(config),
       engine: { reload: async (name: string) => void (await this.#deps.registry.getOrCreate(name)) },
-      // No notification hook, and not an oversight. The Rust's
-      // `compaction_complete` for this path is fired from *inside* the pass,
-      // where the "ran but wrote no memory" outcome exists; that half has not
-      // ported (see `memory/compaction/run.ts`). Notifying from here would send
-      // "compaction complete" for the outcome that most needs a different
-      // sentence — the one where the conversation was not archived.
     });
   }
 
@@ -224,35 +156,17 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
   } {
     return {
       generate: compactionGenerate(this.#generateDeps(config)),
-      // `runSubagent` is stripped rather than merely absent from the type: the
-      // shared backends carry the background one, and compaction is the one
-      // context the Rust left without it, so `ask_*` answers `NotImplemented`
-      // during a compaction pass.
       ...(this.#deps.tools === undefined ? {} : { tools: withoutSubagent(this.#deps.tools) }),
     };
   }
 }
 
-/** The provider call a compaction pass makes, however it was triggered. */
 export type CompactionGenerate = (
   request: SidecarRequest,
   model: { provider_key: string; api_key_env?: string | undefined },
   character: string,
 ) => Promise<GenerateResponse>;
 
-/**
- * The compaction seam's `generate`, which is told its model rather than
- * resolving one.
- *
- * Passed through rather than re-derived: the pass built the request against
- * that exact model, and `resolveModelForRequest` would have to find it again in
- * the static catalog — which a discovered model or a `provider:model_id` pin is
- * never in. Re-resolving would silently drop those passes to a single key.
- *
- * Exported because a chat turn's inline compaction is the same pass with a
- * different trigger, and `handler/deps.ts` needs the same call. Two spellings of
- * it would be two credential-rotation policies for one operation.
- */
 export function compactionGenerate(deps: GenerateDeps): CompactionGenerate {
   return async (request, model, character) => {
     request.context = { ...request.context, character } as never;
@@ -271,7 +185,6 @@ export function compactionGenerate(deps: GenerateDeps): CompactionGenerate {
   };
 }
 
-/** A tool-deps object with `runSubagent` removed. See {@link InProcessAutonomyExecutor}. */
 function withoutSubagent(tools: ToolContextDeps): Omit<ToolContextDeps, "runSubagent"> {
   const { runSubagent: _dropped, ...rest } = tools;
   return rest;

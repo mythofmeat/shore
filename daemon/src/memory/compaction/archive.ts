@@ -1,38 +1,3 @@
-/**
- * The write half of a compaction pass: archive what was compacted, keep the
- * rest.
- *
- * Ported from `RealConversationManager::archive_and_retain` in
- * `crates/daemon/src/memory/compaction_impls.rs`, pinned by
- * `tests/memory_fixtures/compaction_assembly_parity.json`.
- *
- * `engine/segments.ts` has been waiting for this since it ported — it is the
- * reader for exactly these files, and until now nothing on this side wrote
- * them. Three things happen, in this order:
- *
- * 1. The conversation is split **by line**, from the end. Not by message and
- *    not by turn: `keepLastN` arrives already computed by the pass, which did
- *    the turn arithmetic, and this only has to agree with it about what a line
- *    is. Blank lines are dropped first, so a stray newline cannot shift the
- *    split by one.
- * 2. The archived part becomes the next numbered segment, and the manifest
- *    grows an entry. The number comes off the manifest's own length, so a
- *    manifest that was never written starts at `0001`.
- * 3. What is left is written back to `active.jsonl`, atomically.
- *
- * # The split is computed against what the pass read, not what is on disk
- *
- * `activeContent` is the bytes the pass parsed its messages from, and they are
- * what gets split — the file may have grown since. That is deliberate in the
- * Rust and kept here: computing the split against a file that moved underneath
- * the pass would archive a different set of messages than the one the model was
- * shown.
- *
- * It has a cost, and the fixture records it rather than hiding it: a turn that
- * arrives *during* a pass is in neither half, so the retained write drops it.
- * Fixing that means merging, which is a design decision rather than a port's.
- */
-
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -45,12 +10,6 @@ const ACTIVE_JSONL_FILE = "active.jsonl";
 const COMPACTION_MANIFEST_FILE = "compaction.json";
 const SEGMENTS_DIR = "segments";
 
-/**
- * A {@link ConversationManager} over one character's directory.
- *
- * `now` is injected for the manifest's timestamp, which is the only
- * non-deterministic thing here besides the id it returns.
- */
 export function conversationManager(
   characterDir: string,
   now: () => string = () => new Date().toISOString(),
@@ -62,12 +21,6 @@ export function conversationManager(
   };
 }
 
-/**
- * Split, archive, and rewrite. Returns a fresh conversation id.
- *
- * The id is a plain uuid and nothing reads it back — the Rust returned one and
- * the pass logs it. It is here because the interface says so.
- */
 export async function archiveAndRetain(
   characterDir: string,
   keepLastN: number,
@@ -85,8 +38,6 @@ export async function archiveAndRetain(
     await writeSegment(characterDir, archived, now);
   }
 
-  // An empty conversation is written as empty, not as a blank line: the reader
-  // filters blanks, but a file that is one newline is not the same file.
   const retainedContent = retained.length === 0 ? "" : retained.join("\n") + "\n";
   try {
     await atomicWrite(join(characterDir, ACTIVE_JSONL_FILE), retainedContent);
@@ -97,7 +48,6 @@ export async function archiveAndRetain(
   return newId();
 }
 
-/** Write the next numbered segment and record it in the manifest. */
 async function writeSegment(
   characterDir: string,
   archived: readonly string[],
@@ -106,9 +56,6 @@ async function writeSegment(
   const manifestPath = join(characterDir, COMPACTION_MANIFEST_FILE);
   const manifest = await readManifest(manifestPath);
 
-  // The index is the manifest's length plus one, so it survives a segments
-  // directory that has been tidied by hand — the manifest is the record, and
-  // the files are what it points at.
   const segmentIndex = manifest.segments.length + 1;
   const segmentFile = `${String(segmentIndex).padStart(4, "0")}.jsonl`;
   const segmentsDir = join(characterDir, SEGMENTS_DIR);
@@ -138,14 +85,11 @@ async function writeSegment(
   }
 }
 
-/** The manifest on disk, or a fresh one. A malformed manifest is fatal. */
 async function readManifest(path: string): Promise<CompactionManifest> {
   let raw: string;
   try {
     raw = await readFile(path, "utf8");
   } catch {
-    // Absent is the ordinary first-pass case and not an error; anything else
-    // that stops the read shows up on the write below.
     return { segments: [], total_compacted_messages: 0 };
   }
   try {
@@ -155,21 +99,6 @@ async function readManifest(path: string): Promise<CompactionManifest> {
   }
 }
 
-/**
- * How many segments a character has, for the callers that only want the count.
- *
- * The **manifest**, not the directory. This counted `.jsonl` files when it
- * landed and that was wrong: the Rust's `SegmentReader::load(dir).segment_count()`
- * reads `compaction.json`, and `engine/segments.ts` says in its own header that
- * the manifest is the authority and the files are not — with a fixture pinning
- * a manifest that disagrees with what is on disk.
- *
- * The two answers differ exactly when an archive crashed between writing a
- * segment and updating the manifest, or when a segment file was removed by
- * hand. Both callers use this for `has_prior_context`, which decides whether the
- * model is told it is missing earlier context, so the looser count would have
- * claimed prior context from an orphan file the reader cannot actually read.
- */
 export async function segmentCount(characterDir: string): Promise<number> {
   try {
     return (await readManifest(join(characterDir, COMPACTION_MANIFEST_FILE))).segments.length;

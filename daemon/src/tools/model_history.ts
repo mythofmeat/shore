@@ -1,18 +1,6 @@
-/**
- * `model_history` — which models spoke for this character, and when.
- *
- * Ported from `crates/daemon/src/tools/model_history.rs`, pinned by
- * `tests/tools_fixtures/tool_handlers_parity.json`.
- *
- * What the underlying query *returns* is pinned where the query runs, in
- * `ledger_usage.test.ts` — character scoping, grouping, the rows themselves.
- * What lives here is the argument handling and the response shape.
- */
-
 import { parseTimeBound } from "./history.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
 
-/** One grouped row from the ledger. */
 export interface ModelHistoryRow {
   model: string;
   provider: string;
@@ -22,21 +10,12 @@ export interface ModelHistoryRow {
   call_count: number;
 }
 
-/** The ledger query this tool is a thin shell over. */
 export type ModelHistoryQuery = (
   character: string,
   since: string | undefined,
   until: string | undefined,
 ) => Promise<ModelHistoryRow[]>;
 
-/**
- * Voice attribution for a ledger call type.
- *
- * `tool_loop` is genuinely mixed — chat tool-loop continuations and delegated
- * sub-agent continuations share the tag — so rows keep their raw `call_type`
- * and this is advisory. Anything unrecognised is `background`, which is why
- * historical rows for deleted features (`dreaming`) still classify.
- */
 export function kindFor(callType: string): string {
   switch (callType) {
     case "message":
@@ -50,21 +29,6 @@ export function kindFor(callType: string): string {
   }
 }
 
-/**
- * A bound rebased to UTC, spelled the way chrono's `to_rfc3339` spells it.
- *
- * Ledger timestamps are stored as RFC3339 in UTC and the query compares them
- * **lexicographically**, so a bound left at `+10:00` would sort as though its
- * wall-clock reading were UTC and silently select the wrong window.
- *
- * Two spellings matter and neither is what `Date.toISOString()` produces:
- *
- * - UTC is written `+00:00`, not `Z`.
- * - Sub-second precision is preserved at chrono's `AutoSi` widths — 0, 3, 6 or
- *   9 digits. `Date` cannot hold nanoseconds at all, so the fraction is carried
- *   through as text rather than round-tripped through a timestamp. Offsets are
- *   always whole minutes, so rebasing never disturbs it.
- */
 export function utcBound(
   input: Record<string, unknown>,
   field: string,
@@ -72,8 +36,6 @@ export function utcBound(
   const bound = parseTimeBound(input, field);
   if (bound === undefined) return undefined;
 
-  // `parseTimeBound` already normalized the fraction and the offset spelling,
-  // and kept the caller's offset. Split that apart and shift it to UTC.
   const m = /^(.+?)([+-]\d{2}:\d{2})$/.exec(bound.rfc3339);
   if (m === null) return bound.rfc3339;
   const [, localPart, offset] = m as unknown as [string, string, string];
@@ -88,9 +50,6 @@ export function utcBound(
   const offsetMinutes =
     sign * (Number(offset.slice(1, 3)) * 60 + Number(offset.slice(4, 6)));
 
-  // Read the wall-clock reading as if it were UTC, then subtract the offset to
-  // get the true UTC instant. Millisecond granularity is enough: the fraction
-  // is reattached verbatim below.
   const asIfUtc = Date.parse(`${secondsPart}Z`);
   const shifted = new Date(asIfUtc - offsetMinutes * 60_000);
   const iso = shifted.toISOString();
@@ -116,14 +75,6 @@ export interface ModelHistoryResult {
   count: number;
 }
 
-/**
- * Handle `model_history`.
- *
- * A context with no ledger reports `io:`, not "not implemented" — the latter is
- * reserved for tool names that reached dispatch without an arm, and confusing
- * the two tells the model to stop asking for a tool that merely happens to be
- * unavailable on this path.
- */
 export async function handleModelHistory(
   input: Record<string, unknown>,
   character: string,
@@ -138,7 +89,6 @@ export async function handleModelHistory(
 
   const since = utcBound(input, "start_time");
   const until = utcBound(input, "end_time");
-  // Both are UTC and RFC3339 by here, so a string compare is a time compare.
   if (since !== undefined && until !== undefined && since > until) {
     throw new InvalidArgs("start_time must be before or equal to end_time");
   }

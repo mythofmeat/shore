@@ -1,60 +1,5 @@
-/**
- * An Anthropic Messages API that models the prompt cache.
- *
- * The OpenAI mock beside this one (`mock_provider.ts`) answers from a script,
- * which is enough for turn mechanics and useless for the cache: OpenAI-compatible
- * backends cache server-side and put nothing on the request to assert on.
- * `cache_control` is an Anthropic concept, and the prompt cache is where shore's
- * expensive failures live — a prefix byte moves, a 0.1× read silently becomes a
- * 2.0× write, and nothing in the response says so.
- *
- * So this mock does not just return canned SSE. It keeps a table of prefixes it
- * has seen and reports `cache_read_input_tokens` / `cache_creation_input_tokens`
- * accordingly. **A divergent byte arrives as a cache write in the ledger** —
- * the production symptom itself, not a proxy for it — which means a test can
- * assert the thing an operator would actually check:
- *
- * ```ts
- * await turn("hello");
- * await turn("and again");
- * expect(mock.lastUsage.cache_creation_input_tokens).toBe(0);  // nothing moved
- * ```
- *
- * # How the cache is modelled
- *
- * Anthropic caches at *placed breakpoints*, not as a free-running
- * longest-prefix match, and the adapter's schedule places at most four (see
- * `providers/anthropic.ts`). So:
- *
- * 1. Walk system blocks then messages in wire order, accumulating tokens.
- * 2. At every block carrying `cache_control`, hash the prefix **up to and
- *    including** that block and remember its cumulative token count.
- * 3. On a request, take the longest of those prefixes that is already in the
- *    table and unexpired — that is `cache_read_input_tokens`.
- * 4. Everything between that and the last breakpoint is
- *    `cache_creation_input_tokens`; everything after the last breakpoint is
- *    plain `input_tokens`. The three sum to the total, as they do upstream.
- * 5. Store every breakpoint prefix, so the next request can hit it.
- *
- * TTL is honoured per entry (`cache_control.ttl: "1h"`, else five minutes)
- * against an injectable clock, so warm→cold is testable without waiting.
- *
- * # What this does not prove
- *
- * That Anthropic's cache behaves the way this models it. The mock establishes
- * that **we sent identical bytes** and that our accounting of the answer is
- * right. That is the half we control and the half that has broken; the other
- * half is what the live-key check against the real API is for. Do not read a
- * green suite here as a guarantee about the provider.
- *
- * Token counts are a deterministic estimate (`~4 chars`), not Anthropic's
- * tokeniser. Tests should assert on the *split* between read/creation/input and
- * on whether a count changed between turns — never on an absolute number.
- */
-
 import { createHash } from "node:crypto";
 
-/** Usage in the Anthropic spelling, which is what the adapter's `anthropicUsage` reads. */
 export interface AnthropicUsage {
   input_tokens: number;
   output_tokens: number;
@@ -62,43 +7,29 @@ export interface AnthropicUsage {
   cache_creation_input_tokens: number;
 }
 
-/** One tool call for the model to ask for. */
 export interface MockToolUse {
-  /** Defaults to `toolu_<n>` within the reply. */
   id?: string;
   name: string;
   input: unknown;
 }
 
-/** One answer. A reply with `status` fails instead of answering. */
 export interface AnthropicReply {
   text?: string;
-  /** Emitted as a `thinking` block. */
   thinking?: string;
-  /** Signature for the thinking block. Defaults to a fixed non-empty string,
-   *  because an unsigned thinking block is rejected on replay. */
   thinkingSignature?: string;
   toolUses?: MockToolUse[];
-  /** Defaults to `tool_use` when `toolUses` is set, else `end_turn`. */
   stopReason?: string;
-  /** Overrides the modelled cache accounting. For testing the consumer, not the cache. */
   usage?: Partial<AnthropicUsage>;
   status?: number;
   errorBody?: unknown;
   delayMs?: number;
 }
 
-/** One breakpoint the mock saw, for asserting on placement directly. */
 export interface SeenBreakpoint {
-  /** `system` or `messages`. */
   where: "system" | "messages";
-  /** Index within that array. */
   index: number;
-  /** Cumulative tokens up to and including this block. */
   prefixTokens: number;
-  /** Whether this exact prefix was already in the table. */
   hit: boolean;
-  /** `5m` or `1h`. */
   ttl: string;
 }
 
@@ -106,64 +37,43 @@ export interface AnthropicRequestRecord {
   body: any;
   streaming: boolean;
   headers: Record<string, string>;
-  /** Breakpoints found on this request, in wire order. */
   breakpoints: SeenBreakpoint[];
-  /** What the mock reported back. */
   usage: AnthropicUsage;
 }
 
 export interface MockAnthropicOptions {
   port?: number;
   script?: AnthropicReply[];
-  /** Defaults to echoing the last user message. `null` fails an unscripted turn. */
   fallback?: AnthropicReply | ((req: AnthropicRequestRecord) => AnthropicReply) | null;
-  /** Injectable clock in ms, for TTL expiry without waiting. Defaults to `Date.now`. */
   now?: () => number;
-  /** Characters per streamed delta. Defaults to 8. */
   chunkChars?: number;
   onRequest?: (req: AnthropicRequestRecord) => void;
 }
 
 export interface MockAnthropic {
-  /** The `base_url` for `[providers.<name>]`. The SDK appends `/v1/messages`. */
   readonly url: string;
   readonly port: number;
   readonly requests: AnthropicRequestRecord[];
-  /** Usage reported for the most recent request. */
   readonly lastUsage: AnthropicUsage;
-  /** Breakpoints seen on the most recent request. */
   readonly lastBreakpoints: SeenBreakpoint[];
   push(...replies: AnthropicReply[]): void;
-  /** Forget every cached prefix, leaving requests and script alone. Models a cold cache. */
   evictCache(): void;
   reset(): void;
   stop(): Promise<void>;
 }
 
-/** Five minutes, Anthropic's default ephemeral TTL. */
 const DEFAULT_TTL_MS = 5 * 60 * 1000;
 const HOUR_TTL_MS = 60 * 60 * 1000;
 
-/**
- * Rough token estimate: four characters to a token, at least one per block.
- *
- * Deliberately not a real tokeniser. What the cache tests assert is *which*
- * bucket tokens land in and whether a prefix changed, and both survive a crude
- * estimator. An exact count would imply a precision the mock does not have and
- * invite tests that pin numbers the real API would not produce.
- */
 export function estimateTokens(value: unknown): number {
   const text = typeof value === "string" ? value : JSON.stringify(value) ?? "";
   return Math.max(1, Math.ceil(text.length / 4));
 }
 
-/** Stable hash of a prefix. Key order matters, which is the point — a reordered
- *  serialization is a different prefix upstream too. */
 function hashPrefix(parts: unknown[]): string {
   return createHash("sha256").update(JSON.stringify(parts)).digest("hex");
 }
 
-/** `cache_control` on a block, if any. */
 function cacheControlOf(block: unknown): { ttl?: string } | undefined {
   if (typeof block !== "object" || block === null) return undefined;
   const cc = (block as { cache_control?: unknown }).cache_control;
@@ -180,24 +90,11 @@ interface CacheEntry {
   expiresAt: number;
 }
 
-/**
- * The prefix table.
- *
- * Separated from the server so it can be unit-tested and reasoned about on its
- * own — it is the part of this file that encodes a claim about how Anthropic
- * behaves, and the live-key check validates exactly this.
- */
 export class PrefixCache {
   readonly #entries = new Map<string, CacheEntry>();
 
   constructor(private readonly now: () => number = Date.now) {}
 
-  /**
-   * Account for one request.
-   *
-   * Returns the three input buckets and what was seen, and records every
-   * breakpoint prefix so a later request can read it.
-   */
   account(
     system: unknown,
     messages: unknown[],
@@ -212,8 +109,6 @@ export class PrefixCache {
         parts.push(block);
         cumulative += estimateTokens(block);
         const cc = cacheControlOf(block);
-        // A message's `cache_control` sits on one of its content blocks, so a
-        // message-level walk has to look inside. System blocks carry it directly.
         const inner =
           cc === undefined && where === "messages" ? innerCacheControl(block) : cc;
         if (inner === undefined) return;
@@ -234,9 +129,6 @@ export class PrefixCache {
     walk("messages", messages);
 
     const total = cumulative;
-    // The longest breakpoint prefix that was already live. Anthropic resolves a
-    // read to a *placed* breakpoint, so this walks the placed ones backwards
-    // rather than looking for the longest common prefix.
     let read = 0;
     for (let i = breakpoints.length - 1; i >= 0; i--) {
       if (breakpoints[i]!.hit) {
@@ -260,7 +152,6 @@ export class PrefixCache {
   }
 }
 
-/** `cache_control` on any content block of a message. */
 function innerCacheControl(message: unknown): { ttl?: string } | undefined {
   if (typeof message !== "object" || message === null) return undefined;
   const content = (message as { content?: unknown }).content;
@@ -342,8 +233,6 @@ export async function startMockAnthropic(
 
   const port = server.port ?? 0;
   return {
-    // The SDK appends `/v1/messages`, and the adapter strips a trailing `/v1`
-    // from a configured base_url, so this is the bare origin.
     url: `http://127.0.0.1:${port}`,
     port,
     requests,
@@ -410,11 +299,8 @@ function toolUseId(use: MockToolUse, index: number): string {
   return use.id ?? `toolu_${index}`;
 }
 
-/** The content blocks this reply becomes, in wire order. */
 function blocksOf(reply: AnthropicReply): any[] {
   const blocks: any[] = [];
-  // Thinking first: the adapter's consumer flushes on a block-type change, so
-  // the order here decides the order the turn persists in.
   if (reply.thinking) {
     blocks.push({
       type: "thinking",
@@ -442,13 +328,6 @@ function messageResponse(reply: AnthropicReply, model: string, usage: AnthropicU
   };
 }
 
-/**
- * The Messages API SSE stream.
- *
- * Both an `event:` line and a `data:` line per frame — the SDK dispatches on
- * the former. `message_start` carries the full input accounting, which is why
- * the adapter can record a cache write for a call that then fails mid-stream.
- */
 function streamResponse(
   reply: AnthropicReply,
   model: string,
@@ -472,7 +351,6 @@ function streamResponse(
           content: [],
           stop_reason: null,
           stop_sequence: null,
-          // Output is not known yet upstream either; it arrives on message_delta.
           usage: { ...usage, output_tokens: 1 },
         },
       });
@@ -505,8 +383,6 @@ function streamResponse(
           index,
           content_block: { type: "tool_use", id: toolUseId(use, i), name: use.name, input: {} },
         });
-        // Fragmented, so the adapter's `partialJson` accumulation is exercised
-        // rather than bypassed.
         for (const piece of split(JSON.stringify(use.input), chunkChars)) {
           send("content_block_delta", {
             index,
@@ -540,8 +416,6 @@ function split(text: string, size: number): string[] {
   for (let i = 0; i < text.length; i += size) out.push(text.slice(i, i + size));
   return out;
 }
-
-// ── standalone ──────────────────────────────────────────────────────────────
 
 if (import.meta.main) {
   const argv = process.argv.slice(2);
