@@ -392,7 +392,8 @@ export const DEFAULT_CONFIG_TOML = `# Shore configuration
 # addr = "127.0.0.1:7320"             # env override: SHORE_ADDR
 # unsafe_allow_remote_access = false  # required for non-loopback binds
 #                                     # env override: SHORE_UNSAFE_ALLOW_REMOTE_ACCESS
-# allowed_hosts = []                  # IP allowlist only; not auth/TLS
+# allowed_hosts = []                  # IPs or CIDR ranges, e.g. ["10.0.0.5", "172.18.0.0/16"]
+#                                     # allowlist only; not auth/TLS
 `;
 
 /**

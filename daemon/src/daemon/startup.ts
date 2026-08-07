@@ -22,6 +22,7 @@ import { statSync } from "node:fs";
 
 import { rustJoin, configDir } from "../config/dirs.ts";
 import { loadConfig, type LoadedConfig } from "../config/loader.ts";
+import { invalidAllowedHosts } from "../swp/allowlist.ts";
 
 /**
  * Environment override for `[daemon].unsafe_allow_remote_access`.
@@ -323,7 +324,18 @@ export function validateRemoteAccessPolicy(
   if (loopback === undefined) {
     return `Invalid daemon listen address ${JSON.stringify(addr)}. Expected HOST:PORT or [IPv6]:PORT.`;
   }
-  if (loopback) return [];
+
+  // An entry the allowlist cannot parse is dropped, and dropping one only ever
+  // rejects *more* peers — so this is a warning, not a refusal. It is checked
+  // before the loopback return because a typo here is silent either way, and a
+  // daemon nobody can reach is a confusing thing to debug without the hint.
+  const malformed = invalidAllowedHosts(allowedHosts).map(
+    ({ entry, reason }) =>
+      `Ignoring [daemon].allowed_hosts entry ${JSON.stringify(entry)}: ${reason}. ` +
+      `Expected an IP address or a CIDR range, e.g. "10.0.0.5" or "172.18.0.0/16".`,
+  );
+
+  if (loopback) return malformed;
 
   if (!unsafeAllowRemoteAccess) {
     return (
@@ -334,6 +346,7 @@ export function validateRemoteAccessPolicy(
   }
 
   const warnings = [
+    ...malformed,
     "Remote TCP access is enabled. Shore does not provide authentication or TLS. Restrict Shore to trusted private or overlay networks; [daemon].allowed_hosts only narrows peer IPs and is not a complete security boundary.",
   ];
   if (allowedHosts.length === 0) {
