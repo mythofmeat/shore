@@ -15,8 +15,8 @@
  *   transient outage at one provider and a daemon with no model lists.
  */
 
-import { describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -27,11 +27,19 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { cachePath, CACHE_VERSION, writeCache } from "../src/llm/discovery.ts";
 
+/** Removed after each test: a harness runs this suite once per mutant, and
+ *  `/tmp` is a tmpfs with a fixed inode budget. */
+const roots: string[] = [];
+afterEach(async () => {
+  for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
+});
+
 /** A config whose `[providers]` section is the given table. */
 async function configWith(
   providers: Record<string, unknown>,
 ): Promise<{ config: LoadedConfig; cacheDir: string }> {
   const root = await mkdtemp(join(tmpdir(), "shore-discovery-"));
+  roots.push(root);
   return {
     cacheDir: root,
     config: {

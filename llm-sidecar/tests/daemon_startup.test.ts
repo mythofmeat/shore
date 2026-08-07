@@ -18,8 +18,8 @@
  *   container hits by exporting an empty variable.
  */
 
-import { describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -42,6 +42,13 @@ import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 
+/** Removed after each test: a harness runs this suite once per mutant, and
+ *  `/tmp` is a tmpfs with a fixed inode budget. */
+const roots: string[] = [];
+afterEach(async () => {
+  for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
+});
+
 function configWith(daemon: Partial<LoadedConfig["app"]["daemon"]> = {}): LoadedConfig {
   const app = defaultAppConfig();
   return {
@@ -58,6 +65,7 @@ async function configRoot(
   contents: string,
 ): Promise<{ path: string; env: NodeJS.ProcessEnv }> {
   const root = await mkdtemp(join(tmpdir(), "shore-startup-"));
+  roots.push(root);
   const dir = join(root, "config");
   await mkdir(dir, { recursive: true });
   const path = join(dir, "config.toml");
@@ -262,6 +270,7 @@ describe("--config", () => {
 
   test("a directory is refused", async () => {
     const root = await mkdtemp(join(tmpdir(), "shore-startup-"));
+  roots.push(root);
     let caught: unknown;
     try {
       resolveExplicitConfigPath(root);

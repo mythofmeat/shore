@@ -17,7 +17,7 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -27,9 +27,21 @@ const DIR = "/tmp/shore-test-config";
 const FILE = join(DIR, "config.toml");
 
 const stoppers: (() => void)[] = [];
-afterEach(() => {
+/** Removed after each test: a harness runs this suite once per mutant, and
+ *  `/tmp` is a tmpfs with a fixed inode budget. */
+const roots: string[] = [];
+
+afterEach(async () => {
   for (const stop of stoppers.splice(0)) stop();
+  for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
+
+/** A temp directory this suite will clean up. */
+async function tempRoot(): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), "shore-watch-"));
+  roots.push(root);
+  return root;
+}
 
 /** Wait until `check` holds, or give up. */
 async function until(check: () => boolean, timeoutMs = 3_000): Promise<void> {
@@ -88,7 +100,7 @@ describe("which paths are config", () => {
 
 describe("the watcher", () => {
   test("a burst of edits is one reload, carrying every path", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "shore-watch-"));
+    const dir = await tempRoot();
     const configPath = join(dir, "config.toml");
     await writeFile(configPath, "");
     const reloads: string[][] = [];
@@ -119,7 +131,7 @@ describe("the watcher", () => {
   });
 
   test("events spread across the window are still one reload", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "shore-watch-"));
+    const dir = await tempRoot();
     const configPath = join(dir, "config.toml");
     await writeFile(configPath, "");
     const reloads: string[][] = [];
@@ -152,7 +164,7 @@ describe("the watcher", () => {
   });
 
   test("a reload queued behind a slow one is dropped when the watcher stops", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "shore-watch-"));
+    const dir = await tempRoot();
     const configPath = join(dir, "config.toml");
     await writeFile(configPath, "");
     let calls = 0;
@@ -188,7 +200,7 @@ describe("the watcher", () => {
   });
 
   test("a workspace save does not wake it at all", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "shore-watch-"));
+    const dir = await tempRoot();
     const configPath = join(dir, "config.toml");
     await writeFile(configPath, "");
     const workspace = join(dir, "characters", "ada", "workspace", "memory");
@@ -214,7 +226,7 @@ describe("the watcher", () => {
   });
 
   test("stopping stops it, including a debounce already ticking", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "shore-watch-"));
+    const dir = await tempRoot();
     const configPath = join(dir, "config.toml");
     await writeFile(configPath, "");
     let reloads = 0;

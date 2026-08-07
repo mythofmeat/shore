@@ -23,7 +23,7 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { connect, createServer, type Socket } from "node:net";
-import { mkdir, mkdtemp, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -35,12 +35,22 @@ import type { SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 
 /** Every daemon a test started, stopped after it whatever happened. */
 const running: RunningDaemon[] = [];
+/**
+ * Every temp root, removed after it.
+ *
+ * Not tidiness: a mutation harness runs this whole suite once per mutant, so a
+ * root left behind is multiplied by the mutant count. `/tmp` is a tmpfs with a
+ * fixed inode budget, and exhausting it fails every test in the repository
+ * with `ENOSPC` — which looks nothing like the leak that caused it.
+ */
+const roots: string[] = [];
 
 afterEach(async () => {
   for (const daemon of running.splice(0)) {
     daemon.stop();
     await daemon.done;
   }
+  for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 
 interface Layout {
@@ -60,6 +70,7 @@ interface Layout {
  */
 async function layout(config = "", characters: readonly string[] = ["ada"]): Promise<Layout> {
   const root = await mkdtemp(join(tmpdir(), "shore-daemon-"));
+  roots.push(root);
   const configDir = join(root, "config");
   await mkdir(configDir, { recursive: true });
   const configPath = join(configDir, "shore.toml");
