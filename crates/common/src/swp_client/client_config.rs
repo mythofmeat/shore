@@ -17,7 +17,7 @@ pub struct ClientConfig {
 
 /// Return the default path to `client.toml`.
 pub fn client_config_path() -> PathBuf {
-    crate::config::config_dir().join("client.toml")
+    crate::dirs::config_dir().join("client.toml")
 }
 
 /// Load client config from the standard path.

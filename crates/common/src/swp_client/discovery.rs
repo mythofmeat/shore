@@ -30,10 +30,10 @@ type InstancesFile = Vec<InstanceEntry>;
 
 /// Return the default path to the Shore instances file.
 ///
-/// Uses `crate::config::runtime_dir()` so that `SHORE_RUNTIME_DIR`,
+/// Uses `crate::dirs::runtime_dir()` so that `SHORE_RUNTIME_DIR`,
 /// `XDG_RUNTIME_DIR`, and platform defaults are respected consistently.
 pub fn instances_path() -> PathBuf {
-    crate::config::runtime_dir().join("instances.json")
+    crate::dirs::runtime_dir().join("instances.json")
 }
 
 /// Read the instances file and return all live entries (dead PIDs are skipped).

@@ -116,8 +116,7 @@ fn main() -> io::Result<()> {
 
 fn init_logging() {
     // TUI owns the terminal, so log to a file instead of stdout/stderr.
-    let runtime_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into());
-    let log_dir = std::path::Path::new(&runtime_dir).join("shore");
+    let log_dir = shore_common::dirs::runtime_dir();
     let _ = std::fs::create_dir_all(&log_dir);
     let log_file = std::fs::OpenOptions::new()
         .create(true)
@@ -406,11 +405,10 @@ fn resolve_character(cli_character: Option<String>) -> Option<String> {
             return Some(val);
         }
     }
-    // Try the CLI's active_character state file.
-    let runtime_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into());
-    let state_path = std::path::Path::new(&runtime_dir)
-        .join("shore")
-        .join("active_character");
+    // Try the CLI's active_character state file. This must resolve the runtime
+    // directory exactly the way `shore` does when it writes the file
+    // (crates/cli/src/state.rs), or the handoff silently reads nothing.
+    let state_path = shore_common::dirs::runtime_dir().join("active_character");
     if let Ok(name) = std::fs::read_to_string(state_path) {
         let name = name.trim().to_string();
         if !name.is_empty() {
@@ -421,24 +419,13 @@ fn resolve_character(cli_character: Option<String>) -> Option<String> {
 }
 
 fn prefs_path() -> std::path::PathBuf {
-    let config_dir = std::env::var_os("XDG_CONFIG_HOME")
-        .map(std::path::PathBuf::from)
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or_else(|| {
-            let home = std::env::var_os("HOME").unwrap_or_else(|| ".".into());
-            std::path::Path::new(&home).join(".config")
-        });
-    config_dir.join("shore").join("tui_prefs.json")
+    shore_common::dirs::config_dir().join("tui_prefs.json")
 }
 
-/// Pre-0.1.12 prefs lived in the runtime dir (XDG_RUNTIME_DIR or /tmp),
-/// which is wiped on logout/reboot. Kept only to migrate old files into
-/// [`prefs_path`] on first run.
+/// Pre-0.1.12 prefs lived in the runtime dir, which is wiped on logout/reboot.
+/// Kept only to migrate old files into [`prefs_path`] on first run.
 fn legacy_prefs_path() -> std::path::PathBuf {
-    let runtime_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into());
-    std::path::Path::new(&runtime_dir)
-        .join("shore")
-        .join("tui_prefs.json")
+    shore_common::dirs::runtime_dir().join("tui_prefs.json")
 }
 
 fn load_prefs(app: &mut App) {
@@ -1029,7 +1016,7 @@ async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
 
     // Reprint any errors raised this session to the now-restored normal screen
     // so they survive in terminal scrollback for copy/paste debugging. They're
-    // also in the log file ($XDG_RUNTIME_DIR/shore/tui.log).
+    // also in the log file (`tui.log` under the Shore runtime directory).
     if !app.error_log.is_empty() {
         eprintln!("\n{} error(s) during this session:", app.error_log.len());
         for line in &app.error_log {

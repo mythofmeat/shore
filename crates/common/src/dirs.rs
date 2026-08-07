@@ -1,19 +1,21 @@
-//! Directory and character-name resolution for the Shore clients.
+//! Where Shore keeps things, and how the `SHORE_*_DIR` overrides resolve.
 //!
-//! This module used to parse Shore's config files too. That job belongs to the
-//! TypeScript daemon now (`daemon/src/config/`), which was the only thing that
-//! ever consumed the result — see #29. What is left is the path logic the CLI
-//! and TUI need *before* they have talked to a daemon: finding the socket,
-//! naming a character, and scaffolding a new one.
+//! This is the Rust counterpart of `daemon/src/config/dirs.ts`, and the two
+//! must agree. It is duplicated rather than shared for the reason the whole
+//! module exists: a client resolves these paths *before* it has a daemon to
+//! ask — `instances.json` under the runtime dir is how it finds one at all.
 //!
-//! Anything here that the daemon also needs is duplicated in
-//! `daemon/src/config/dirs.ts` rather than shared. The two must agree on the
-//! `SHORE_*_DIR` precedence rules; they are small, and the alternative is the
-//! client asking a daemon it has not connected to yet where things live.
+//! Deliberately not a config parser. The file this used to live in also loaded
+//! and validated `config.toml`; that is the TypeScript daemon's job now, and
+//! #29 deleted the Rust copy.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Resolved XDG directory paths for Shore.
+///
+/// Mirrors `ShoreDirs` in `daemon/src/config/dirs.ts`. Fields are kept even
+/// where the clients do not read them yet, so a reader comparing the two files
+/// finds the same shape on both sides.
 #[derive(Debug, Clone)]
 pub struct ShoreDirs {
     /// Config directory: $XDG_CONFIG_HOME/shore/
@@ -34,6 +36,9 @@ pub struct ShoreDirs {
 ///
 /// Precedence: `override_var` → `xdg_var`+"/shore" → `platform_fn()`+"/shore" → `fallback`+"/shore".
 /// If `fallback` is empty, `std::env::temp_dir()` is used.
+///
+/// Note that an override is used **as-is**: no `/shore` is appended to it.
+/// Anything reimplementing this by hand gets that wrong — see #44.
 fn resolve_xdg_dir(
     override_var: &str,
     xdg_var: &str,
@@ -118,99 +123,14 @@ pub fn config_dir() -> PathBuf {
     ShoreDirs::resolve().config
 }
 
-/// Convenience: resolved Shore data directory.
-pub fn data_dir() -> PathBuf {
-    ShoreDirs::resolve().data
-}
-
 /// Convenience: resolved Shore runtime directory.
 pub fn runtime_dir() -> PathBuf {
     ShoreDirs::resolve().runtime
 }
 
-pub const CHARACTER_WORKSPACE_DIR: &str = "workspace";
-pub const SOUL_FILE: &str = "SOUL.md";
-
-/// Return `characters/{name}/`.
-pub fn character_config_dir(config_dir: &Path, character_name: &str) -> PathBuf {
-    config_dir.join("characters").join(character_name)
-}
-
-/// Return `characters/{name}/workspace/` — the default layout, where a
-/// workspace lives inside the character's config directory.
-pub fn character_workspace_dir(config_dir: &Path, character_name: &str) -> PathBuf {
-    character_workspace_dir_in(None, config_dir, character_name)
-}
-
-/// Return `{workspace_root}/{name}/`, or the default layout when there is no
-/// root. `workspace_root` is `ShoreDirs::workspace`.
-pub fn character_workspace_dir_in(
-    workspace_root: Option<&Path>,
-    config_dir: &Path,
-    character_name: &str,
-) -> PathBuf {
-    match workspace_root {
-        Some(root) => root.join(character_name),
-        None => character_config_dir(config_dir, character_name).join(CHARACTER_WORKSPACE_DIR),
-    }
-}
-
-/// Discover available characters by scanning `characters/` directory.
-///
-/// Returns the names of all subdirectories under `{config_dir}/characters/`
-/// that contain either `workspace/SOUL.md` or the legacy `character.md`.
-pub fn discover_characters(config_dir: &Path) -> Vec<String> {
-    let chars_dir = config_dir.join("characters");
-    let Ok(entries) = std::fs::read_dir(&chars_dir) else {
-        return vec![];
-    };
-
-    let mut names = Vec::new();
-    for entry in entries.flatten() {
-        if entry.path().is_dir() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if entry
-                .path()
-                .join(CHARACTER_WORKSPACE_DIR)
-                .join(SOUL_FILE)
-                .exists()
-                || entry.path().join("character.md").exists()
-            {
-                names.push(name);
-            }
-        }
-    }
-    names.sort();
-    names
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn setup_config_dir(files: &[(&str, &str)]) -> tempfile::TempDir {
-        let tmp = tempfile::tempdir().unwrap();
-        for (path, content) in files {
-            let full_path = tmp.path().join(path);
-            if let Some(parent) = full_path.parent() {
-                std::fs::create_dir_all(parent).unwrap();
-            }
-            std::fs::write(&full_path, content).unwrap();
-        }
-        tmp
-    }
-
-    #[test]
-    fn discover_characters_finds_valid_chars() {
-        let tmp = setup_config_dir(&[
-            ("characters/Alice/workspace/SOUL.md", "Alice character"),
-            ("characters/Bob/character.md", "Bob character"),
-            ("characters/EmptyDir/.gitkeep", ""), // no character.md
-        ]);
-
-        let chars = discover_characters(tmp.path());
-        assert_eq!(chars, vec!["Alice", "Bob"]);
-    }
 
     #[test]
     fn xdg_dirs_resolve() {
@@ -219,26 +139,6 @@ mod tests {
         assert!(dirs.config.ends_with("shore"));
         assert!(dirs.data.ends_with("shore"));
         assert!(dirs.runtime.ends_with("shore"));
-    }
-
-    #[test]
-    fn workspace_root_replaces_the_whole_workspace_segment() {
-        // Pure, and deliberately not env-driven: `ShoreDirs::resolve` reads the
-        // process environment, and the tests here run in parallel.
-        let root = PathBuf::from("/srv/ws");
-        assert_eq!(
-            character_workspace_dir_in(Some(&root), Path::new("/cfg"), "ada"),
-            PathBuf::from("/srv/ws/ada")
-        );
-        assert_eq!(
-            character_workspace_dir_in(None, Path::new("/cfg"), "ada"),
-            PathBuf::from("/cfg/characters/ada/workspace")
-        );
-        // The two-argument helper is the no-root case, unchanged.
-        assert_eq!(
-            character_workspace_dir(Path::new("/cfg"), "ada"),
-            character_workspace_dir_in(None, Path::new("/cfg"), "ada")
-        );
     }
 
     #[test]
@@ -289,5 +189,13 @@ mod tests {
         // Should use std::env::temp_dir() + "/shore"
         assert!(dir.ends_with("shore"));
         assert!(dir.parent().unwrap().exists(), "parent should be temp_dir");
+    }
+
+    /// `SHORE_WORKSPACE_DIR` is the one override where empty means unset.
+    #[test]
+    fn empty_workspace_root_counts_as_unset() {
+        std::env::set_var("SHORE_WORKSPACE_DIR", "");
+        assert_eq!(workspace_root(), None);
+        std::env::remove_var("SHORE_WORKSPACE_DIR");
     }
 }

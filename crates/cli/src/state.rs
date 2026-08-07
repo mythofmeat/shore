@@ -12,7 +12,7 @@ use tracing::debug;
 
 /// Return the directory used for Shore runtime state.
 fn runtime_dir() -> PathBuf {
-    shore_common::config::runtime_dir()
+    shore_common::dirs::runtime_dir()
 }
 
 /// Return the path to the active character state file.

@@ -853,11 +853,33 @@ async fn handle_complete_query(
     Ok(())
 }
 
+/// The directory under a character's config dir holding its workspace, in the
+/// default layout.
+const CHARACTER_WORKSPACE_DIR: &str = "workspace";
+/// The file that defines a character. Its presence is what makes a directory
+/// under `characters/` a character rather than a stray folder.
+const SOUL_FILE: &str = "SOUL.md";
+
+/// Return `{workspace_root}/{name}/`, or `characters/{name}/workspace/` under
+/// `config_dir` when there is no root.
+fn character_workspace_dir_in(
+    workspace_root: Option<&Path>,
+    config_dir: &Path,
+    character_name: &str,
+) -> PathBuf {
+    match workspace_root {
+        Some(root) => root.join(character_name),
+        None => config_dir
+            .join("characters")
+            .join(character_name)
+            .join(CHARACTER_WORKSPACE_DIR),
+    }
+}
+
 /// Create a new character scaffold directory.
 fn handle_create_character(name: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let workspace_root = shore_common::config::workspace_root();
-    let workspace_dir =
-        create_character_scaffold(workspace_root.as_deref(), &config_dir(), name)?;
+    let workspace_root = shore_common::dirs::workspace_root();
+    let workspace_dir = create_character_scaffold(workspace_root.as_deref(), &config_dir(), name)?;
     cli_out!("Created character scaffold: {}", workspace_dir.display());
     Ok(())
 }
@@ -866,19 +888,18 @@ fn handle_create_character(name: &str) -> Result<(), Box<dyn std::error::Error>>
 /// under `config_dir`, or `<workspace_root>/<name>/` when one is set.
 ///
 /// Errors if the character already exists in either the canonical
-/// (`workspace/SOUL.md`) or legacy (`character.md`) layout, matching
-/// `shore_common::config::discover_characters`. Returns the workspace directory,
-/// which is where the file a person is about to edit actually is — with a
-/// workspace root that is no longer under the character's config directory.
+/// (`workspace/SOUL.md`) or legacy (`character.md`) layout, matching what the
+/// daemon counts as a character. Returns the workspace directory, which is
+/// where the file a person is about to edit actually is — with a workspace root
+/// that is no longer under the character's config directory.
 fn create_character_scaffold(
     workspace_root: Option<&Path>,
     config_dir: &Path,
     name: &str,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let char_dir = config_dir.join("characters").join(name);
-    let workspace_dir =
-        shore_common::config::character_workspace_dir_in(workspace_root, config_dir, name);
-    let soul_md = workspace_dir.join(shore_common::config::SOUL_FILE);
+    let workspace_dir = character_workspace_dir_in(workspace_root, config_dir, name);
+    let soul_md = workspace_dir.join(SOUL_FILE);
 
     if soul_md.exists() || char_dir.join("character.md").exists() {
         return Err(format!(
@@ -899,7 +920,7 @@ fn create_character_scaffold(
 
 /// Resolve the Shore config directory.
 fn config_dir() -> PathBuf {
-    shore_common::config::config_dir()
+    shore_common::dirs::config_dir()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1091,7 +1112,7 @@ fn cache_avatar_icon(
     character: &str,
     avatar: &CharacterAvatar,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let cache_dir = shore_common::config::ShoreDirs::resolve()
+    let cache_dir = shore_common::dirs::ShoreDirs::resolve()
         .cache
         .join("notification-icons");
     cache_avatar_icon_in_dir(&cache_dir, character, avatar)
@@ -1826,7 +1847,7 @@ mod tests {
             | CliCommand::Config { .. }
             | CliCommand::Tools { .. }
             | CliCommand::Usage { .. }
-                | CliCommand::Completions { .. }
+            | CliCommand::Completions { .. }
             | CliCommand::Complete { .. }) => {
                 let (name, args) = crate::cli::to_swp_command(other).unwrap();
                 let _ignored = conn.send_command(name, args).await.unwrap();
@@ -2247,11 +2268,8 @@ mod tests {
         let workspace_dir = super::create_character_scaffold(None, dir.path(), "ada")
             .expect("scaffold should succeed");
         let char_dir = dir.path().join("characters").join("ada");
-        assert_eq!(
-            workspace_dir,
-            char_dir.join(shore_common::config::CHARACTER_WORKSPACE_DIR)
-        );
-        let content = std::fs::read_to_string(workspace_dir.join(shore_common::config::SOUL_FILE))
+        assert_eq!(workspace_dir, char_dir.join(super::CHARACTER_WORKSPACE_DIR));
+        let content = std::fs::read_to_string(workspace_dir.join(super::SOUL_FILE))
             .expect("SOUL.md should exist");
         assert!(content.starts_with("You are ada."));
         assert!(
@@ -2271,7 +2289,7 @@ mod tests {
             super::create_character_scaffold(Some(workspace.path()), config.path(), "ada")
                 .expect("scaffold should succeed");
         assert_eq!(workspace_dir, workspace.path().join("ada"));
-        assert!(workspace_dir.join(shore_common::config::SOUL_FILE).exists());
+        assert!(workspace_dir.join(super::SOUL_FILE).exists());
         assert!(
             !config.path().join("characters").exists(),
             "the config tree should be untouched"
