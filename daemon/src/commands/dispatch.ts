@@ -157,16 +157,17 @@ export async function runCommand(
   const args = (cmd.args ?? {}) as Args;
   const character = engine.characterName;
   const configDir = session.config.dirs.config;
+  const workspaceRoot = session.config.dirs.workspace;
 
   switch (cmd.name) {
     // ── navigation ──────────────────────────────────────────────────────
     case "list_characters":
-      return listCharacters(configDir, character);
+      return listCharacters(configDir, character, workspaceRoot);
     case "switch_character":
-      return switchCharacter(configDir, character, args);
+      return switchCharacter(configDir, character, args, workspaceRoot);
     case "character_info":
       return await characterInfo(
-        { configDir, dataDir: session.dataDir, active: character },
+        { configDir, dataDir: session.dataDir, active: character, workspaceRoot },
         args,
       );
 
@@ -206,7 +207,7 @@ export async function runCommand(
     case "background_models":
       return backgroundModels(session);
     case "memory":
-      return await memory(configDir, character, args);
+      return await memory(configDir, character, args, workspaceRoot);
     case "compact":
       if (deps.compaction === undefined) throw unwired("compact");
       return await compact(
@@ -281,7 +282,11 @@ export function runCharacterlessCommand(
       // No active character to mark, which is the whole difference from the
       // character-backed arm: that one lists the current character first, and
       // this one is in discovery order because there is no current character.
-      return listCharacters(session.config.dirs.config);
+      return listCharacters(
+        session.config.dirs.config,
+        undefined,
+        session.config.dirs.workspace,
+      );
     case "list_models":
       return listModels(session, args);
     case "background_models":

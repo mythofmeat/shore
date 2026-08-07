@@ -147,13 +147,14 @@ export class CharacterRegistry {
    * unwritable character directory must not stop the daemon seeing the others.
    */
   async #scan(): Promise<string[]> {
-    const found = discoverCharacters(this.#configDir);
+    const found = discoverCharacters(this.#configDir, this.#workspaceRoot());
     for (const name of found) {
       try {
         await ensureActivePromptSnapshot(
           characterDataDir(this.#dataDir, name),
           this.#configDir,
           name,
+          this.#workspaceRoot(),
         );
       } catch (e) {
         console.warn(
@@ -209,14 +210,23 @@ export class CharacterRegistry {
     return engine;
   }
 
+  /**
+   * Where workspaces live, read from the config the registry is holding *now*
+   * rather than cached — a reload can replace it, and every path below has to
+   * follow the config that is current when it is asked.
+   */
+  #workspaceRoot(): string | undefined {
+    return this.#globalConfig.dirs.workspace;
+  }
+
   /** The character's system prompt: `workspace/SOUL.md`, else `character.md`. */
   characterDefinition(name: string): string | undefined {
-    return loadCharacterDefinition(this.#configDir, name);
+    return loadCharacterDefinition(this.#configDir, name, this.#workspaceRoot());
   }
 
   /** The character's user context: `workspace/USER.md`, else `user.md`. */
   userDefinition(name: string): string | undefined {
-    return resolveUserDefinition(this.#configDir, name);
+    return resolveUserDefinition(this.#configDir, name, this.#workspaceRoot());
   }
 
   /**

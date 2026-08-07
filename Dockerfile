@@ -33,16 +33,25 @@ RUN pacman -Syu --noconfirm unzip
 ENV EDITOR=nvim
 
 ENV HOME=/home/shore
-RUN chown -R 1000:1000 /home/shore /shared
+# The mount points are created and owned here so a named volume inherits uid
+# 1000 rather than root. A bind mount takes its owner from the host either way.
+RUN mkdir -p /config /data /cache /workspace \
+    && chown -R 1000:1000 /home/shore /shared /config /data /cache /workspace
 WORKDIR /shared
 
 ENV SHORE_CONFIG_DIR=/config
 ENV SHORE_DATA_DIR=/data
 ENV SHORE_CACHE_DIR=/cache
-# ENV SHORE_WORKSPACE_DIR=/workspace
+ENV SHORE_WORKSPACE_DIR=/workspace
 ENV SHORE_UNSAFE_ALLOW_REMOTE_ACCESS=1
 ENV SHORE_ADDR=0.0.0.0:7320
 
 EXPOSE 7320
+
+# Everything above needs root — pacman, useradd, chown. Nothing below does:
+# the daemon binds 7320, which is not privileged. Running as the owner of the
+# mounts is also what keeps git usable inside the workspace, which is a real
+# repository the memory passes commit to.
+USER shore
 
 CMD ["shore-daemon"]

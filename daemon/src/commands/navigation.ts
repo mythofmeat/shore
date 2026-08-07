@@ -162,12 +162,19 @@ export async function characterInfo(ctx: CharacterInfoContext, args: Args): Prom
   const name = requested === undefined || requested === "" ? ctx.active : requested;
 
   const charDir = characterConfigDir(ctx.configDir, name);
-  if (!pathExists(charDir) && name !== ctx.active) {
+  const workspaceDir = characterWorkspaceDir(ctx.configDir, name, ctx.workspaceRoot);
+  // With workspaces outside the config tree a character need not have a config
+  // directory at all, so either half being present is enough to answer for it.
+  if (!pathExists(charDir) && !pathExists(workspaceDir) && name !== ctx.active) {
     throw notFound(`Character not found: ${name}`);
   }
 
-  const workspaceDir = characterWorkspaceDir(ctx.configDir, name);
-  const definitionPath = characterWorkspaceFile(ctx.configDir, name, SOUL_FILE);
+  const definitionPath = characterWorkspaceFile(
+    ctx.configDir,
+    name,
+    SOUL_FILE,
+    ctx.workspaceRoot,
+  );
   const hasDefinition = pathExists(definitionPath);
   const definition = hasDefinition ? readOrUndefined(definitionPath) : undefined;
 
@@ -186,7 +193,7 @@ export async function characterInfo(ctx: CharacterInfoContext, args: Args): Prom
     // half at the boundary.
     definition_preview: definition === undefined ? null : [...definition].slice(0, PREVIEW_CHARS).join(""),
     bootstrap_files: [SOUL_FILE, USER_FILE, AGENTS_FILE, TOOLS_FILE].filter((file) =>
-      pathExists(characterWorkspaceFile(ctx.configDir, name, file)),
+      pathExists(characterWorkspaceFile(ctx.configDir, name, file, ctx.workspaceRoot)),
     ),
     has_config_override: pathExists(rustJoin(charDir, "config.toml")),
     pending_deferred_edits: pending,
@@ -204,13 +211,23 @@ export async function characterInfo(ctx: CharacterInfoContext, args: Args): Prom
  * The same-name check runs before the directory probe, so staying put succeeds
  * for a character with nothing on disk.
  */
-export function switchCharacter(configDir: string, active: string, args: Args): unknown {
+export function switchCharacter(
+  configDir: string,
+  active: string,
+  args: Args,
+  workspaceRoot?: string | undefined,
+): unknown {
   const name = asStr(args["name"]);
   if (name === undefined) throw invalidRequest("Missing required argument: name");
 
   if (name === active) return { character: name, changed: false };
 
-  if (!pathExists(characterConfigDir(configDir, name))) {
+  // Either directory is proof the character exists: with a workspace root set,
+  // a character created there has no config directory until it needs one.
+  if (
+    !pathExists(characterConfigDir(configDir, name)) &&
+    !pathExists(characterWorkspaceDir(configDir, name, workspaceRoot))
+  ) {
     throw notFound(`Character not found: ${name}`);
   }
   return { character: name, changed: true };

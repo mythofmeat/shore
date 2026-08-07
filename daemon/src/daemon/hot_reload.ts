@@ -45,6 +45,15 @@ export interface ConfigWatcherOptions {
    * is the behaviour without it.
    */
   readonly knownCharacter?: ((name: string) => boolean) | undefined;
+  /**
+   * `SHORE_WORKSPACE_DIR`, when workspaces live outside the config tree.
+   *
+   * Watched as a *second* tree, under {@link workspacePathTriggersReload} —
+   * which lets through only the appearance of a character and nothing else, so
+   * the rule the module doc describes is the same rule either way. Omitted,
+   * only the config directory is watched, which is the default layout.
+   */
+  readonly workspaceDir?: string | undefined;
   readonly log?: {
     info?: (msg: string, fields?: Record<string, unknown>) => void;
     warn?: (msg: string, fields?: Record<string, unknown>) => void;
@@ -87,36 +96,60 @@ export function startConfigWatcher(
     });
   };
 
-  let watcher: FSWatcher;
-  try {
-    watcher = watch(options.configDir, { recursive: true }, (_event, name) => {
-      if (name === null || name === undefined) return;
-      const path = resolve(options.configDir, name.toString());
-      if (
-        !pathTriggersReload(options.configDir, options.configPath, path, options.knownCharacter)
-      ) {
-        return;
-      }
-      pending.add(path);
-      if (timer !== undefined) clearTimeout(timer);
-      timer = setTimeout(fire, debounceMs);
-      timer.unref?.();
-    });
-  } catch (e) {
-    options.log?.warn?.("Config hot reload watcher could not start", {
-      config_dir: options.configDir,
-      error: String(e),
-    });
-    return undefined;
-  }
+  const note = (path: string) => {
+    pending.add(path);
+    if (timer !== undefined) clearTimeout(timer);
+    timer = setTimeout(fire, debounceMs);
+    timer.unref?.();
+  };
 
-  watcher.on("error", (e) => {
-    options.log?.warn?.("Config hot reload watcher error", { error: String(e) });
-  });
+  /** Start one recursive watch, or warn and answer nothing. */
+  const start = (dir: string, triggers: (path: string) => boolean): FSWatcher | undefined => {
+    let w: FSWatcher;
+    try {
+      w = watch(dir, { recursive: true }, (_event, name) => {
+        if (name === null || name === undefined) return;
+        const path = resolve(dir, name.toString());
+        if (triggers(path)) note(path);
+      });
+    } catch (e) {
+      options.log?.warn?.("Config hot reload watcher could not start", {
+        config_dir: dir,
+        error: String(e),
+      });
+      return undefined;
+    }
+    w.on("error", (e) => {
+      options.log?.warn?.("Config hot reload watcher error", { error: String(e) });
+    });
+    return w;
+  };
+
+  const watcher = start(options.configDir, (path) =>
+    pathTriggersReload(options.configDir, options.configPath, path, options.knownCharacter),
+  );
+  if (watcher === undefined) return undefined;
+
+  // A second watch, and only when workspaces are somewhere else. The config
+  // tree cannot see a character appear under `SHORE_WORKSPACE_DIR`, and a
+  // character nothing notices is one that stays invisible until an unrelated
+  // config edit happens to reload — the same failure the `SOUL.md` exemption
+  // exists to prevent, in the layout that moved the file out of reach.
+  const workspaceWatcher =
+    options.workspaceDir === undefined
+      ? undefined
+      : start(options.workspaceDir, (path) =>
+          workspacePathTriggersReload(
+            options.workspaceDir as string,
+            path,
+            options.knownCharacter,
+          ),
+        );
 
   options.log?.info?.("Config hot reload watcher started", {
     config_path: options.configPath,
     config_dir: options.configDir,
+    ...(options.workspaceDir === undefined ? {} : { workspace_dir: options.workspaceDir }),
   });
 
   return {
@@ -124,9 +157,41 @@ export function startConfigWatcher(
       stopped = true;
       if (timer !== undefined) clearTimeout(timer);
       watcher.close();
+      workspaceWatcher?.close();
       options.log?.info?.("Config hot reload watcher stopped");
     },
   };
+}
+
+/**
+ * Whether a path under `SHORE_WORKSPACE_DIR` is worth a reload.
+ *
+ * Almost nothing is. A workspace root holds *only* workspaces — prompts and
+ * memory, written mid-turn — so the single case that reloads is the one that
+ * changes what characters exist: `<root>/<name>/SOUL.md` appearing for a name
+ * the registry does not hold yet. Everything else, including edits to a known
+ * character's own `SOUL.md`, is ignored for the reason in the module doc: a
+ * save must not become a prompt activation boundary.
+ *
+ * Without `knownCharacter` nothing here triggers, matching the config-tree
+ * rule, where a caller that does not care gets no workspace reloads at all.
+ */
+export function workspacePathTriggersReload(
+  workspaceDirIn: string,
+  pathIn: string,
+  knownCharacter?: ((name: string) => boolean) | undefined,
+): boolean {
+  const relative = stripPrefix(absolutize(workspaceDirIn), absolutize(pathIn));
+  if (relative === undefined) return false;
+  const parts = relative.split(sep).filter((part) => part !== "" && part !== ".");
+  const name = parts[0];
+  return (
+    parts.length === 2 &&
+    parts[1] === SOUL_FILE &&
+    name !== undefined &&
+    knownCharacter !== undefined &&
+    !knownCharacter(name)
+  );
 }
 
 /**

@@ -245,7 +245,9 @@ async function resolveDeps(character: string, deps: CompactionRunDeps): Promise<
 
   let markdownStore: MarkdownMemoryStore | undefined;
   try {
-    markdownStore = await MarkdownMemoryStore.open(characterMemoryDir(configDir, character));
+    markdownStore = await MarkdownMemoryStore.open(
+      characterMemoryDir(configDir, character, effective.dirs.workspace),
+    );
   } catch (e) {
     // A dry run can proceed without one; a live pass cannot, and `compact`
     // refuses on its own with a message that says so.
@@ -402,7 +404,7 @@ export function compactionRunner(
         ...(cached === undefined ? {} : { cachedRequest: cached }),
       });
     },
-    applyDeferredEdits: (charDataDir, configDir, charName) =>
-      applyDeferredEdits(charDataDir, configDir, charName),
+    applyDeferredEdits: (charDataDir, configDir, charName, workspaceRoot) =>
+      applyDeferredEdits(charDataDir, configDir, charName, workspaceRoot),
   };
 }

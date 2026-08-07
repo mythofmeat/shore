@@ -105,7 +105,7 @@ export async function buildToolContext(
 
   const charDataDir = characterDataDir(dataDir, charName);
   const configDir = config.dirs.config;
-  const workspaceDir = characterWorkspaceDir(configDir, charName);
+  const workspaceDir = characterWorkspaceDir(configDir, charName, config.dirs.workspace);
 
   let embedder: ToolContext["embedder"];
   try {
@@ -124,7 +124,7 @@ export async function buildToolContext(
   }
 
   try {
-    await ensureActivePromptSnapshot(charDataDir, configDir, charName);
+    await ensureActivePromptSnapshot(charDataDir, configDir, charName, config.dirs.workspace);
   } catch (e) {
     console.warn(`shore: failed to prepare active prompt snapshot for ${charName}: ${String(e)}`);
   }

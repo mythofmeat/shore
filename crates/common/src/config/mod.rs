@@ -72,6 +72,10 @@ pub struct ShoreDirs {
     pub runtime: PathBuf,
     /// Cache directory: $XDG_CACHE_HOME/shore/
     pub cache: PathBuf,
+    /// Workspace root: `SHORE_WORKSPACE_DIR`, when set. Each character's
+    /// workspace is `<root>/<character>/`; `None` keeps every workspace inside
+    /// the character's own config directory, which is the default layout.
+    pub workspace: Option<PathBuf>,
 }
 
 /// Resolve an XDG-style directory path with Shore-specific overrides.
@@ -138,8 +142,23 @@ impl ShoreDirs {
                 dirs::cache_dir,
                 "~/.cache",
             ),
+            workspace: workspace_root(),
         }
     }
+}
+
+/// `SHORE_WORKSPACE_DIR`, or `None` for the default layout.
+///
+/// Used as-is, like the other `SHORE_*_DIR` overrides: no `/shore` suffix and
+/// no XDG variable behind it. Unlike them, **an empty value counts as unset** —
+/// they have no default but the one they compute, whereas this has a perfectly
+/// good one, and an empty root would scatter every character's workspace into
+/// whatever directory the process happened to start in.
+pub fn workspace_root() -> Option<PathBuf> {
+    std::env::var("SHORE_WORKSPACE_DIR")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
 }
 
 /// Convenience: resolved Shore config directory.
@@ -233,9 +252,23 @@ pub fn character_config_dir(config_dir: &Path, character_name: &str) -> PathBuf 
     config_dir.join("characters").join(character_name)
 }
 
-/// Return `characters/{name}/workspace/`.
+/// Return `characters/{name}/workspace/` — the default layout, where a
+/// workspace lives inside the character's config directory.
 pub fn character_workspace_dir(config_dir: &Path, character_name: &str) -> PathBuf {
-    character_config_dir(config_dir, character_name).join(CHARACTER_WORKSPACE_DIR)
+    character_workspace_dir_in(None, config_dir, character_name)
+}
+
+/// Return `{workspace_root}/{name}/`, or the default layout when there is no
+/// root. `workspace_root` is `ShoreDirs::workspace`.
+pub fn character_workspace_dir_in(
+    workspace_root: Option<&Path>,
+    config_dir: &Path,
+    character_name: &str,
+) -> PathBuf {
+    match workspace_root {
+        Some(root) => root.join(character_name),
+        None => character_config_dir(config_dir, character_name).join(CHARACTER_WORKSPACE_DIR),
+    }
 }
 
 /// Return `characters/{name}/workspace/{name}`.
@@ -1882,6 +1915,26 @@ c = 4
         assert!(dirs.config.ends_with("shore"));
         assert!(dirs.data.ends_with("shore"));
         assert!(dirs.runtime.ends_with("shore"));
+    }
+
+    #[test]
+    fn workspace_root_replaces_the_whole_workspace_segment() {
+        // Pure, and deliberately not env-driven: `ShoreDirs::resolve` reads the
+        // process environment, and the tests here run in parallel.
+        let root = PathBuf::from("/srv/ws");
+        assert_eq!(
+            character_workspace_dir_in(Some(&root), Path::new("/cfg"), "ada"),
+            PathBuf::from("/srv/ws/ada")
+        );
+        assert_eq!(
+            character_workspace_dir_in(None, Path::new("/cfg"), "ada"),
+            PathBuf::from("/cfg/characters/ada/workspace")
+        );
+        // The two-argument helper is the no-root case, unchanged.
+        assert_eq!(
+            character_workspace_dir(Path::new("/cfg"), "ada"),
+            character_workspace_dir_in(None, Path::new("/cfg"), "ada")
+        );
     }
 
     // ── Per-character config override tests ───────────────────────────

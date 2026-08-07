@@ -37,9 +37,13 @@ const asStr = (v: unknown): string | undefined => (typeof v === "string" ? v : u
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 /** Open the character's store, or fail with the prefix only `open` adds. */
-async function openStore(configDir: string, character: string): Promise<MarkdownMemoryStore> {
+async function openStore(
+  configDir: string,
+  character: string,
+  workspaceRoot: string | undefined,
+): Promise<MarkdownMemoryStore> {
   try {
-    return await MarkdownMemoryStore.open(characterMemoryDir(configDir, character));
+    return await MarkdownMemoryStore.open(characterMemoryDir(configDir, character, workspaceRoot));
   } catch (e) {
     throw internalError(`Failed to open markdown store: ${message(e)}`);
   }
@@ -51,16 +55,25 @@ async function openStore(configDir: string, character: string): Promise<Markdown
  * The character is the session's — there is no name argument, so this always
  * answers for whoever is talking.
  */
-export async function memory(configDir: string, character: string, args: Args): Promise<unknown> {
+export async function memory(
+  configDir: string,
+  character: string,
+  args: Args,
+  workspaceRoot?: string | undefined,
+): Promise<unknown> {
   const query = asStr(args["query"]);
   return query === undefined || query === ""
-    ? await memoryStatusCommand(configDir, character)
-    : await memoryQueryCommand(configDir, character, query);
+    ? await memoryStatusCommand(configDir, character, workspaceRoot)
+    : await memoryQueryCommand(configDir, character, query, workspaceRoot);
 }
 
 /** File counts by bucket. The three always sum to `entries`. */
-async function memoryStatusCommand(configDir: string, character: string): Promise<unknown> {
-  const store = await openStore(configDir, character);
+async function memoryStatusCommand(
+  configDir: string,
+  character: string,
+  workspaceRoot: string | undefined,
+): Promise<unknown> {
+  const store = await openStore(configDir, character, workspaceRoot);
   let status;
   try {
     status = await memoryStatus(store);
@@ -86,8 +99,9 @@ async function memoryQueryCommand(
   configDir: string,
   character: string,
   query: string,
+  workspaceRoot: string | undefined,
 ): Promise<unknown> {
-  const store = await openStore(configDir, character);
+  const store = await openStore(configDir, character, workspaceRoot);
   let hits;
   try {
     hits = await store.searchText(query);

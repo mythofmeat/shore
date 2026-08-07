@@ -78,7 +78,12 @@ export type Env = Readonly<Record<string, string | undefined>>;
  * unset `XDG_RUNTIME_DIR` yields `None` and the caller drops to its own
  * fallback — which for runtime is the empty string, meaning the temp dir.
  */
-const PLATFORM: Record<keyof ShoreDirs, (env: Env, home: HomeLookup) => string | undefined> = {
+const PLATFORM: Record<
+  // The four XDG directories, which is not every field of `ShoreDirs`:
+  // `workspace` has no XDG variable and no platform default to look up.
+  "config" | "data" | "runtime" | "cache",
+  (env: Env, home: HomeLookup) => string | undefined
+> = {
   config: (env, home) => xdgOrHome(env, home, ".config"),
   data: (env, home) => xdgOrHome(env, home, ".local/share"),
   // No fallback at all, matching the crate: an absent XDG_RUNTIME_DIR yields

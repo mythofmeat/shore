@@ -40,6 +40,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { mkdirSync } from "node:fs";
 
 import { TurnAutonomyBridge } from "../autonomy/registration.ts";
 import { Diagnostics } from "../diagnostics.ts";
@@ -198,6 +199,23 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     data_dir: loaded.dirs.data,
   });
 
+  // Made before anything looks at it. A workspace root is created per character
+  // by `ensureCharacterWorkspace`, so with no characters yet the root itself
+  // never appears — and the watcher below cannot watch a directory that is not
+  // there, which is exactly the first run where a character is about to be
+  // created. Best-effort: a root that cannot be made is a warning here and an
+  // error at the point something actually writes to it.
+  if (loaded.dirs.workspace !== undefined) {
+    try {
+      mkdirSync(loaded.dirs.workspace, { recursive: true });
+    } catch (e) {
+      log?.warn?.("Could not create the workspace directory", {
+        workspace_dir: loaded.dirs.workspace,
+        error: String(e),
+      });
+    }
+  }
+
   const runtime = await createRuntime({
     config: loaded,
     configPath: startup.configPath,
@@ -261,6 +279,9 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
         // is that the answer changes the moment a reload adopts the character
         // this predicate let through.
         knownCharacter: (name) => runtime.registry.hasCharacter(name),
+        ...(loaded.dirs.workspace === undefined
+          ? {}
+          : { workspaceDir: loaded.dirs.workspace }),
         ...(log === undefined ? {} : { log }),
       });
 
