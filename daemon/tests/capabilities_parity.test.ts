@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import fixture from "../../crates/common/capability_parity_fixture.toml";
+import fixture from "./capability_parity_fixture.toml";
 import {
   claudeThinkingCaps,
   parseClaudeModel,

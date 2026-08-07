@@ -1,10 +1,14 @@
-# Cross-language parity fixture for the Claude model classifier.
+# Parity fixture for the Claude model classifier.
 #
-# Loaded by BOTH the Rust tests (`capabilities.rs`) and the TS sidecar tests
-# (`tests/capabilities_parity.test.ts`). Each side asserts its `parse` +
-# `rejects_sampling` + `claude_thinking_caps` agree with these expected values —
-# so the two reimplementations of the parser/rule-evaluator (driven by
-# `capabilities.toml`) cannot silently diverge.
+# Was cross-language: both the Rust tests and the TS sidecar tests loaded it,
+# so the two reimplementations of the parser/rule-evaluator could not silently
+# diverge. Rust's copy went with the config layer in #29, so only
+# `tests/capabilities_parity.test.ts` loads it now and it moved here from
+# `crates/common/` to match.
+#
+# It still earns its keep: these are frozen expectations for `parse` +
+# `rejects_sampling` + `claude_thinking_caps`, and a diff against them is a
+# change in the classifier, whether or not anyone meant it.
 #
 # `rejects_sampling` is the COMBINED verdict (Claude >=4.7 cutoff OR a per-model
 # `[[model_override]]`, issue #164), matching `applicability` for temperature.

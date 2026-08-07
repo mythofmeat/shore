@@ -6,7 +6,7 @@
  * gate, and now the reports all here, the daemon holds no ledger logic at all
  * and the Rust `ledger/query.rs` and `ledger/budget.rs` could go.
  *
- * **The payloads are the protocol.** `crates/cli/src/output/commands.rs` renders
+ * **The payloads are the protocol.** `client/shore-cli/src/output/commands.rs` renders
  * these objects by key — `mode`, `period`, `summary`, `budgets`, and the rest —
  * so the shapes here are not an internal detail to tidy up. They are reproduced
  * field for field, in the same order, and pinned by a parity fixture generated

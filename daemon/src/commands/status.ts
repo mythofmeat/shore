@@ -10,7 +10,7 @@
  *
  * `AutonomyService.status()` answers in epoch milliseconds, deliberately — how
  * a status *reads* is the CLI's business, and the CLI is the part of shore that
- * stayed Rust. `crates/cli/src/output/commands.rs` reads
+ * stayed Rust. `client/shore-cli/src/output/commands.rs` reads
  * `dormant_after_heartbeat_turns`, `effective_interval_secs`,
  * `seconds_until_wake` and `next_wake_at` by those names, so this command
  * renders into that vocabulary rather than passing the sidecar's own through.

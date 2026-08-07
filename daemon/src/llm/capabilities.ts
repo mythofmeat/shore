@@ -1,17 +1,19 @@
 /**
  * Model capability matrix — typed accessors over the SINGLE SOURCE OF TRUTH
- * `crates/common/capabilities.toml`, which `bun build` inlines into the sidecar
- * bundle (so this is compiled in, not read from disk at runtime).
+ * `capabilities.toml` beside this file, which `bun build` inlines into the
+ * sidecar bundle (so this is compiled in, not read from disk at runtime).
  *
- * The Rust daemon reads the same file (`crates/common/src/config/capabilities.rs`); the
- * model parser + rule evaluator here mirror the Rust ones, kept in lockstep by
- * the cross-language parity fixtures (this module's tests + the Rust tests).
+ * It used to live in `crates/common/` and be read by both languages. Rust's
+ * reader went with the config layer in #29, so this is now the only consumer
+ * and the file moved here to match. `capability_parity_fixture.toml` came
+ * along to `tests/`; nothing cross-language is left to keep in lockstep, and
+ * the fixture now pins this parser against its own frozen expectations.
  *
  * Each adapter calls into here instead of hand-coding effort/thinking tables.
  */
 
 // Bun resolves this `.toml` import at build time and inlines the parsed object.
-import rawCaps from "../../../crates/common/capabilities.toml";
+import rawCaps from "./capabilities.toml";
 
 import { parseCacheKeepalive } from "../config/models.ts";
 

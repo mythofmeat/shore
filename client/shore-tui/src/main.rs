@@ -407,7 +407,7 @@ fn resolve_character(cli_character: Option<String>) -> Option<String> {
     }
     // Try the CLI's active_character state file. This must resolve the runtime
     // directory exactly the way `shore` does when it writes the file
-    // (crates/cli/src/state.rs), or the handoff silently reads nothing.
+    // (client/shore-cli/src/state.rs), or the handoff silently reads nothing.
     let state_path = shore_common::dirs::runtime_dir().join("active_character");
     if let Ok(name) = std::fs::read_to_string(state_path) {
         let name = name.trim().to_string();

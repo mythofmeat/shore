@@ -1,6 +1,9 @@
 FROM rust:latest AS rust
 WORKDIR /src
 COPY . .
+# The Cargo workspace root is client/, not the repo root — the repo is organised
+# by concern, and all remaining Rust is client code.
+WORKDIR /src/client
 RUN cargo build --release --bin shore
 RUN cargo build --release --bin shore-tui
 
@@ -12,8 +15,8 @@ RUN bun install
 RUN bun run build
 
 FROM archlinux:latest AS entry
-COPY --from=rust    /src/target/release/shore /usr/bin/shore
-COPY --from=rust    /src/target/release/shore-tui /usr/bin/shore-tui
+COPY --from=rust    /src/client/target/release/shore /usr/bin/shore
+COPY --from=rust    /src/client/target/release/shore-tui /usr/bin/shore-tui
 COPY --from=bun     /src/daemon/dist/shore-daemon /usr/bin/shore-daemon
 
 RUN groupadd --gid 1000 shore \

@@ -1,6 +1,6 @@
 ---
 name: run-shore-cli
-description: Build, test, and preview the shore CLI's terminal output rendering. Use when asked to run shore-cli, see/preview/screenshot how its transcript or streaming output looks, check colors/separators/thinking rendering, or verify a change to crates/cli/src/output without standing up a daemon.
+description: Build, test, and preview the shore CLI's terminal output rendering. Use when asked to run shore-cli, see/preview/screenshot how its transcript or streaming output looks, check colors/separators/thinking rendering, or verify a change to client/shore-cli/src/output without standing up a daemon.
 ---
 
 `shore-cli` is the `shore` command-line client for the Silvershore daemon.
@@ -15,7 +15,7 @@ The agent path here drives the **real renderers** through `#[ignore]`-d preview
 tests and dumps the colorized bytes to your terminal:
 **`.claude/skills/run-shore-cli/preview.sh`**.
 
-All paths below are relative to `crates/cli/` (the unit). The driver also
+All paths below are relative to `client/shore-cli/` (the unit). The driver also
 works from the repo root.
 
 ## Prerequisites

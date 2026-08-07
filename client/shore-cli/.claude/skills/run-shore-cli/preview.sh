@@ -14,7 +14,7 @@
 #   .claude/skills/run-shore-cli/preview.sh stream     # just live streaming
 #
 # Add a new preview by writing another `#[ignore]`-d `render_preview_*` test in
-# crates/cli/src/output/{transcript.rs,styling.rs}; it is picked up here
+# client/shore-cli/src/output/{transcript.rs,styling.rs}; it is picked up here
 # automatically by the `render_preview` filter.
 set -euo pipefail
 

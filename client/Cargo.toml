@@ -1,9 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/common",
-    "crates/cli",
-    "crates/tui",
+    "shore-common",
+    "shore-cli",
+    "shore-tui",
 ]
 
 [workspace.package]
@@ -14,7 +14,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/mythofmeat/shore"
 
 [workspace.dependencies]
-shore-common = { path = "crates/common" }
+shore-common = { path = "shore-common" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 toml = "0.8"

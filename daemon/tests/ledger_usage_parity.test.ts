@@ -7,7 +7,7 @@
  * fixture is frozen, and this is what keeps the port honest against it.
  *
  * What is actually at stake here is narrower than the budget fixture but no
- * less load-bearing: these payloads are what `crates/cli/src/output/commands.rs`
+ * less load-bearing: these payloads are what `client/shore-cli/src/output/commands.rs`
  * renders, key by key. A renamed field prints a blank column, and a `--last`
  * boundary an hour out reports the wrong window — quietly, and in the
  * reassuring direction, because a window that starts too late shows *less*

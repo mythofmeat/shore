@@ -1,5 +1,5 @@
 /**
- * Wire-shape types mirroring `crates/common/src/protocol/types.rs`.
+ * Wire-shape types mirroring `client/shore-common/src/protocol/types.rs`.
  *
  * `Message` is the canonical form post-normalize: `content` is always
  * present (derived from blocks or kept as-is for legacy data),

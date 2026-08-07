@@ -39,7 +39,7 @@
 import type { ClientMessage } from "../protocol/ClientMessage";
 import type { ServerMessage } from "../protocol/ServerMessage";
 
-/** Mirrors `MAX_WIRE_MESSAGE_SIZE` in `crates/common/src/protocol/mod.rs`. */
+/** Mirrors `MAX_WIRE_MESSAGE_SIZE` in `client/shore-common/src/protocol/mod.rs`. */
 export const MAX_WIRE_MESSAGE_SIZE = 128 * 1024 * 1024;
 
 const NEWLINE = 0x0a;

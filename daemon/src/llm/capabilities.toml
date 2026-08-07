@@ -1,19 +1,20 @@
 # Model capability matrix — the SINGLE SOURCE OF TRUTH for per-sdk / per-model
 # reasoning, thinking, and sampler behavior.
 #
-# Compiled into BOTH:
-#   * the Rust daemon  — `crates/common/src/config/capabilities.rs` via `include_str!`
-#   * the TS sidecar   — `daemon/src/llm/capabilities.ts` via a
-#                        `.toml` import that `bun build` inlines into the bundle.
+# Compiled into `capabilities.ts` beside this file, via a `.toml` import that
+# `bun build` inlines into the bundle. It is therefore NOT runtime- or
+# user-editable: edit this file and rebuild.
 #
-# It is therefore NOT runtime- or user-editable: edit this file and rebuild.
-# Each consumer reads the slice it needs (Rust: domain + sampler_rule +
-# model_override; TS: fold, budget, gemini levels, thinking_rule +
-# model_override). Keep both green via the cross-language
-# parity fixtures in capabilities.rs tests and the sidecar `*_adapter.test.ts`.
+# There used to be a second consumer — the Rust daemon read it through
+# `include_str!` in `crates/common/src/config/capabilities.rs`, and this file
+# lived in `crates/common/` to serve them both. That reader was deleted with the
+# rest of the Rust config layer in #29, so the file moved here to sit beside its
+# only remaining one. What was a cross-language parity check is now a one-sided
+# freeze: `tests/capability_parity_fixture.toml` plus the sidecar
+# `*_adapter.test.ts` still pin this file's meaning, with nothing to diverge from.
 
 # ── reasoning_effort: accepted value set + wire mapping, per sdk ──────────────
-# `domain`  — accepted values (Rust validates `shore model setting` against it).
+# `domain`  — accepted values (`shore model setting` is validated against it).
 # `fold`    — named effort → the value actually sent (unlisted = passthrough).
 # `budget`  — effort → budget_tokens for Anthropic "enabled" thinking mode.
 

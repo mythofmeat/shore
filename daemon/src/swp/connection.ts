@@ -35,7 +35,7 @@ import { WireReader, writeMessage, type ByteSink } from "./framing";
 import { eventMatchesSession, msgTypeName, resolveHandshakeCharacter, routeClientMessage } from "./routing";
 import { sessionMetaOf, type ClientInfo, type RoutedMessage, type SessionMeta, type SessionRouter } from "./session";
 
-/** Mirrors `SWP_V1` in `crates/common/src/protocol/mod.rs`. */
+/** Mirrors `SWP_V1` in `client/shore-common/src/protocol/mod.rs`. */
 export const SWP_V1 = 1;
 
 /** Mirrors `PING_INTERVAL`. */

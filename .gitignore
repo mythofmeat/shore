@@ -1,5 +1,6 @@
-# Rust
-/target/
+# Rust. Deliberately not root-anchored: the Cargo workspace lives in client/,
+# and a `/target/` rule would silently stop matching if it moved again.
+target/
 **/*.rs.bk
 *.profraw
 *.profdata
