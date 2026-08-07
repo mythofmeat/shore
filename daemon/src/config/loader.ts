@@ -846,8 +846,9 @@ function validateBudgetAnchors(idx: number, budget: UsageBudgetConfig): void {
  * an equal pace makes the allowance the budget itself, and a longer one has no
  * defined division.
  *
- * `pace_action` / `pace_warn_at` with no `pace_period` are rejected rather than
- * ignored, so a typo fails at load instead of silently doing nothing.
+ * `pace_action` / `pace_warn_at` / `pace_warn_action` with no `pace_period` are
+ * rejected rather than ignored, so a typo fails at load instead of silently
+ * doing nothing.
  */
 function validateBudgetPace(idx: number, budget: UsageBudgetConfig): void {
   const pace = budget.pace_period;
@@ -857,6 +858,9 @@ function validateBudgetPace(idx: number, budget: UsageBudgetConfig): void {
     }
     if (budget.pace_warn_at !== undefined) {
       throw validationError(`usage.budgets[${idx}].pace_warn_at requires pace_period`);
+    }
+    if (budget.pace_warn_action !== undefined) {
+      throw validationError(`usage.budgets[${idx}].pace_warn_action requires pace_period`);
     }
     return;
   }

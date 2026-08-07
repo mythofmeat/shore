@@ -35,6 +35,8 @@ import type { HeartbeatEventKind } from "./heartbeat_log.ts";
 import type { AutonomyActionResult } from "./runner.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import type { Message } from "../engine/types.ts";
+import { budgetBlockFor } from "../ledger/gate.ts";
+import type { BudgetBlock } from "../ledger/budget.ts";
 import type { SidecarRequest } from "../llm/types.ts";
 
 /** The engine half of delivery: append to the conversation, and say where. */
@@ -63,6 +65,9 @@ export interface HeartbeatTickDeps
   notify?: (title: string, body: string) => void;
   newId?: () => string;
   nowIso?: () => string;
+  /** The budget pre-flight. Defaults to the real gate; injected only by tests,
+   *  which have no ledger to answer from. */
+  budgetBlockFor?: (request: SidecarRequest) => BudgetBlock | undefined;
 }
 
 /** The first 80 characters, as `chars().take(80)` counts them. */
@@ -164,6 +169,18 @@ export async function runHeartbeatTick(
 
   const prepared = await prepareHeartbeatRequest(character, config, deps);
   if (prepared === undefined) return { events };
+
+  // The pre-flight the keepalive has had all along (`keepalive.ts`, the
+  // `budgetBlockFor` before `#send`). Without it a paused heartbeat is not
+  // paused at all: the tick builds its whole request, reaches the gate inside
+  // `generate`, and throws `BudgetBlocked` — once per tick, for as long as the
+  // budget is over. Same decision, taken one layer earlier, where "skip" is a
+  // thing the tick can actually do.
+  const blocked = (deps.budgetBlockFor ?? budgetBlockFor)(prepared.request);
+  if (blocked !== undefined) {
+    note("budget_paused", `Tick skipped — usage budget "${blocked.budget_name}"`);
+    return { events };
+  }
 
   const loop = await runHeartbeatToolLoop(prepared.request, {
     ...deps,

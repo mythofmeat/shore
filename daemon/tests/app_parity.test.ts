@@ -90,6 +90,52 @@ function parseToml(src: string): unknown {
   return Bun.TOML.parse(src);
 }
 
+// ── Fields the fixture predates ─────────────────────────────────────────
+
+/**
+ * `[[usage.budgets]]` keys added after the fixture was frozen (#35).
+ *
+ * The fixture is a capture of a Rust that no longer exists, so it cannot grow
+ * a field — and regenerating it is not possible. The technique is the one
+ * `tool_surface` used for the frozen export strings: **cut the new keys back
+ * out of our own answer before comparing**, so every field the Rust really
+ * wrote stays compared literally, and only the additions are exempt.
+ *
+ * Both are asserted below to be genuinely absent from the fixture, so this
+ * cannot quietly start hiding a field the Rust did have.
+ */
+const BUDGET_FIELDS_ADDED_SINCE = ["warn_action", "pace_warn_action"] as const;
+
+/** The same value with the added keys dropped from every budget. */
+function withoutAddedBudgetFields(value: unknown): unknown {
+  const budgets = (value as { usage?: { budgets?: unknown } } | null)?.usage?.budgets;
+  if (!Array.isArray(budgets)) return value;
+  return {
+    ...(value as object),
+    usage: {
+      ...(value as { usage: object }).usage,
+      budgets: budgets.map((b) => {
+        const copy = { ...(b as Record<string, unknown>) };
+        for (const key of BUDGET_FIELDS_ADDED_SINCE) delete copy[key];
+        return copy;
+      }),
+    },
+  };
+}
+
+/**
+ * The Rust's field count for `UsageBudgetConfig`, which the positional-array
+ * error message interpolates and which the added keys move.
+ */
+const RUST_BUDGET_FIELD_COUNT = 18;
+
+function withRustBudgetFieldCount(err: string): string {
+  return err.replace(
+    `UsageBudgetConfig with ${RUST_BUDGET_FIELD_COUNT + BUDGET_FIELDS_ADDED_SINCE.length} elements`,
+    `UsageBudgetConfig with ${RUST_BUDGET_FIELD_COUNT} elements`,
+  );
+}
+
 // ── Cases the TypeScript deliberately cannot match ──────────────────────
 
 /**
@@ -121,6 +167,17 @@ describe("the fixture is real", () => {
 
   test("it names `main` as its source, not a worktree", () => {
     expect(fixture._header.join(" ")).toContain("GENERATED from `main`");
+  });
+
+  test("the exempted budget fields really are ones it never had", () => {
+    // The exemption above is only honest if these keys are absent from every
+    // budget the Rust recorded. If one ever appears, the replay is hiding a
+    // real disagreement rather than a field that postdates the capture.
+    const text = JSON.stringify(fixture);
+    for (const key of BUDGET_FIELDS_ADDED_SINCE) {
+      expect(text).not.toContain(`"${key}"`);
+    }
+    expect(text).toContain(`UsageBudgetConfig with ${RUST_BUDGET_FIELD_COUNT} elements`);
   });
 
   test("it records both parse paths, and they genuinely differ somewhere", () => {
@@ -172,10 +229,10 @@ describe("parsing config.toml", () => {
 
       if ("err" in want) {
         if ("ok" in parsed) throw new Error("expected a parse error, got a config");
-        expect(parsed.err).toBe(want.err);
+        expect(withRustBudgetFieldCount(parsed.err)).toBe(want.err);
       } else {
         if ("err" in parsed) throw new Error(`expected a parse, got: ${parsed.err}`);
-        expect(canonical(parsed.ok)).toEqual(want.ok);
+        expect(withoutAddedBudgetFields(canonical(parsed.ok))).toEqual(want.ok);
       }
     });
   }
