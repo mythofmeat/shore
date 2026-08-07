@@ -55,6 +55,21 @@ impl std::fmt::Display for TokenError {
 
 impl std::error::Error for TokenError {}
 
+/// The token to present to the daemon at `daemon_config_dir`.
+///
+/// `None` means discovery could not say where that daemon keeps its config, so
+/// this client's own resolution is used — which is right whenever the daemon
+/// runs with default directories, and is the best guess available otherwise.
+///
+/// The distinction exists because `--config` re-homes a daemon's config
+/// directory: it writes its token beside the file it was pointed at, not where
+/// an unrelated client would look. Passing the daemon's own directory is what
+/// makes `shore-daemon --config /elsewhere/shore.toml` work with a local client
+/// and no `SHORE_TOKEN`.
+pub fn resolve_client_token(daemon_config_dir: Option<PathBuf>) -> Result<String, TokenError> {
+    resolve_token(&daemon_config_dir.unwrap_or_else(crate::dirs::config_dir))
+}
+
 /// The token for this client: `$SHORE_TOKEN`, else `<config_dir>/token`.
 ///
 /// An empty or whitespace-only value counts as unset in both sources.

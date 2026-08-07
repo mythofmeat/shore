@@ -64,6 +64,11 @@ const REMOVED = [
   "memory.dreaming",
   "tools.sandbox",
   "connections.matrix",
+  // Deleted when every client started presenting a token: an address is not a
+  // credential, and a flag asking you to acknowledge a risk is worse than not
+  // having the risk. `[daemon]` is `addr` alone now.
+  "daemon.unsafe_allow_remote_access",
+  "daemon.allowed_hosts",
 ] as const;
 
 /** Drop `REMOVED` from a serialized `AppConfig` blob. */

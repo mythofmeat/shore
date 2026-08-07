@@ -3088,11 +3088,11 @@ mod tests {
         // Regression for #73: keys used to butt up against values because the
         // column was a fixed 24. Now the column is computed per-section from
         // the longest visible scalar key. The longest key here is
-        // `unsafe_allow_remote_access` (26 chars) -> column = 27.
+        // `allow_compaction_over_budget` (28 chars) -> column = 29.
         set_color_enabled(false);
         let data = serde_json::json!({
             "addr": "0.0.0.0:1112",
-            "unsafe_allow_remote_access": true,
+            "allow_compaction_over_budget": true,
             "max_embed_chars_per_file": 4000,
         });
         let mut buf: Vec<u8> = Vec::new();
@@ -3108,15 +3108,15 @@ mod tests {
         );
         // All rows should align to column 27 (longest key + 1 space).
         assert!(
-            rendered.contains(&format!("addr{:23}0.0.0.0:1112", "")),
+            rendered.contains(&format!("addr{:25}0.0.0.0:1112", "")),
             "short key not padded to section column:\n{rendered}"
         );
         assert!(
-            rendered.contains("unsafe_allow_remote_access true"),
+            rendered.contains("allow_compaction_over_budget true"),
             "longest key should get a single trailing space:\n{rendered}"
         );
         assert!(
-            rendered.contains(&format!("max_embed_chars_per_file{:3}4000", "")),
+            rendered.contains(&format!("max_embed_chars_per_file{:5}4000", "")),
             "mid-length key not padded to section column:\n{rendered}"
         );
     }
@@ -3147,15 +3147,15 @@ mod tests {
 
     #[test]
     fn print_config_section_realistic_shape_renders_cleanly() {
-        // Mirrors the bug report in issue #73: long keys in the daemon section
-        // used to collide with their values. Confirms the per-section column
+        // Mirrors the bug report in issue #73, where long keys collided with
+        // their values. Confirms the per-section column
         // produces consistent alignment on a realistic payload.
         set_color_enabled(false);
         let config = serde_json::json!({
-            "daemon": {
-                "addr": "0.0.0.0:1112",
-                "unsafe_allow_remote_access": true,
-                "allowed_hosts": ["100.84.100.99", "127.0.0.1"],
+            "usage": {
+                "timezone": "local",
+                "allow_compaction_over_budget": true,
+                "budgets": ["a", "b"],
             },
         });
         let mut buf: Vec<u8> = Vec::new();
@@ -3167,9 +3167,9 @@ mod tests {
             .collect();
         assert!(
             !daemon_lines.is_empty(),
-            "expected scalar rows under daemon"
+            "expected scalar rows under the section"
         );
-        // Every scalar row under `daemon` must start at the same column for
+        // Every scalar row in the section must start at the same column for
         // the value (i.e. consistent indent + matching pad column).
         let value_columns: Vec<usize> = daemon_lines
             .iter()

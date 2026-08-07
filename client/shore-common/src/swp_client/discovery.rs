@@ -181,6 +181,41 @@ pub fn discover_config_dir() -> Result<Option<PathBuf>> {
         .map(PathBuf::from))
 }
 
+/// The config directory of the daemon listening on `addr`, when one is
+/// registered there.
+///
+/// Used to find that daemon's **token**, which is why it matches on the address
+/// rather than taking the first entry the way its neighbours do. `--config`
+/// re-homes a daemon's config directory, so its token is not where a client's
+/// own XDG resolution would look — and with two daemons running, the first
+/// entry is as likely to be the wrong one as the right one. The address is the
+/// thing the client actually chose, so it is the thing to match on.
+///
+/// Every failure answers `None`: an absent, unreadable or corrupt registry
+/// means "I cannot tell you", and the caller falls back to its own config
+/// directory. A daemon whose address is spelled differently here than the
+/// client spelled it (`localhost` versus `127.0.0.1`) also lands here, which is
+/// no worse than the behaviour before there were tokens.
+pub fn config_dir_for_addr(addr: &str) -> Option<PathBuf> {
+    match read_instances() {
+        Ok(entries) => config_dir_of(&entries, addr),
+        Err(e) => {
+            debug!(error = %e, "no instance registry to resolve a token directory from");
+            None
+        }
+    }
+}
+
+/// The matching half of [`config_dir_for_addr`], split out so it is testable
+/// without a registry file on disk.
+fn config_dir_of(entries: &[InstanceEntry], addr: &str) -> Option<PathBuf> {
+    entries
+        .iter()
+        .find(|e| e.addr == addr)
+        .and_then(|e| e.config_dir.as_deref())
+        .map(PathBuf::from)
+}
+
 pub const DEFAULT_ADDR: &str = "127.0.0.1:7320";
 
 /// Convenience: check client.toml, then discover, then fall back to the
@@ -228,6 +263,49 @@ fn should_fallback_to_default(err: &ClientError) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── config_dir_of ────────────────────────────────────────────────
+
+    fn entry(addr: &str, config_dir: Option<&str>) -> InstanceEntry {
+        InstanceEntry {
+            id: None,
+            addr: addr.into(),
+            pid: None,
+            data_dir: None,
+            config_dir: config_dir.map(str::to_owned),
+        }
+    }
+
+    /// The address decides, not the position. With two daemons running, taking
+    /// the first entry would hand a client the *other* daemon's token
+    /// directory — which is why this matches rather than taking `.first()`
+    /// the way its neighbours do.
+    #[test]
+    fn config_dir_of_matches_on_address() {
+        let entries = [
+            entry("127.0.0.1:7320", Some("/home/u/.config/shore")),
+            entry("127.0.0.1:9999", Some("/elsewhere")),
+        ];
+        assert_eq!(
+            config_dir_of(&entries, "127.0.0.1:9999"),
+            Some(PathBuf::from("/elsewhere"))
+        );
+        assert_eq!(
+            config_dir_of(&entries, "127.0.0.1:7320"),
+            Some(PathBuf::from("/home/u/.config/shore"))
+        );
+    }
+
+    /// No match, or an entry from a daemon too old to record the field, is
+    /// `None` — the caller falls back to its own config directory, which is
+    /// what every client did before there were tokens.
+    #[test]
+    fn config_dir_of_is_none_when_it_cannot_tell() {
+        let entries = [entry("127.0.0.1:7320", Some("/a")), entry("[::1]:7320", None)];
+        assert_eq!(config_dir_of(&entries, "127.0.0.1:1234"), None);
+        assert_eq!(config_dir_of(&entries, "[::1]:7320"), None);
+        assert_eq!(config_dir_of(&[], "127.0.0.1:7320"), None);
+    }
 
     // ── entry_alive ──────────────────────────────────────────────────
 

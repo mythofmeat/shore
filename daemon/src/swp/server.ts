@@ -26,7 +26,6 @@
 import { createServer, type Server as NetServer, type Socket } from "node:net";
 
 import type { ServerMessage } from "../protocol/ServerMessage";
-import { buildAllowlist, type PeerAllowlist } from "./allowlist";
 import { Broadcast } from "./broadcast";
 import {
   DEFAULT_HANDSHAKE,
@@ -39,18 +38,6 @@ import { SessionRouter, type RoutedMessage } from "./session";
 export interface ServerConfig {
   /** `host:port`. Port 0 asks the kernel to choose. */
   readonly addr: string;
-  /**
-   * Optional peer-IP allowlist. Empty allows every peer.
-   *
-   * Entries are bare addresses or CIDR ranges, v4 or v6; see
-   * {@link buildAllowlist} for how they are matched and why it is not a string
-   * compare.
-   *
-   * The Rust's comment is worth carrying over verbatim in spirit: this is not
-   * authentication and not transport security. It is a guard against casual
-   * exposure when the daemon is bound to something other than loopback.
-   */
-  readonly allowedHosts?: readonly string[];
   readonly serverName: string;
   readonly handshake?: HandshakeProvider;
   /**
@@ -115,7 +102,6 @@ export class Server {
   readonly #events = new Broadcast();
   readonly #routes = new RouteQueue();
   readonly #connections = new Set<Promise<void>>();
-  readonly #allowlist: PeerAllowlist | null;
   #handshake: HandshakeProvider | undefined;
   #nextId = 1;
   #listener: NetServer | null = null;
@@ -124,7 +110,6 @@ export class Server {
 
   constructor(config: ServerConfig) {
     this.#config = config;
-    this.#allowlist = buildAllowlist(config.allowedHosts ?? []);
     this.#handshake = config.handshake;
     this.#shutdownSignal = new Promise<void>((resolve) => {
       this.#shutdown = resolve;
@@ -228,15 +213,6 @@ export class Server {
   }
 
   #accept(socket: Socket): void {
-    if (this.#allowlist !== null) {
-      const peer = socket.remoteAddress ?? "";
-      if (!this.#allowlist.check(peer)) {
-        this.#config.log?.warn?.("TCP connection rejected: not in allowed_hosts", { addr: peer });
-        socket.destroy();
-        return;
-      }
-    }
-
     const clientId = this.#nextId;
     this.#nextId += 1;
     this.#config.log?.info?.("TCP client connected", { addr: socket.remoteAddress ?? "" });

@@ -46,8 +46,13 @@ ENV SHORE_CONFIG_DIR=/config
 ENV SHORE_DATA_DIR=/data
 ENV SHORE_CACHE_DIR=/cache
 ENV SHORE_WORKSPACE_DIR=/workspace
-ENV SHORE_UNSAFE_ALLOW_REMOTE_ACCESS=1
 ENV SHORE_ADDR=0.0.0.0:7320
+
+# No remote-access opt-in any more: every client presents a token, so binding
+# 0.0.0.0 is not an exposure to acknowledge. The daemon writes /config/token on
+# first start — that is a mounted volume, so the value is readable from the
+# host. Set SHORE_TOKEN on the daemon and its clients alike to supply your own
+# instead, which is what a compose stack should do.
 
 EXPOSE 7320
 

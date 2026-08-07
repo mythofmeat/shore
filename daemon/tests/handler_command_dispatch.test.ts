@@ -175,10 +175,6 @@ describe("restartRequiredChanges", () => {
     expect(changes((c) => (c.app.daemon.addr = "127.0.0.1:9999"))).toEqual(["[daemon]"]);
   });
 
-  test("the listener's allowed hosts, which are a list", () => {
-    expect(changes((c) => c.app.daemon.allowed_hosts.push("example.test"))).toEqual(["[daemon]"]);
-  });
-
   test("a notification setting nested two levels down", () => {
     expect(changes((c) => (c.app.notifications.events.error = false))).toEqual(["[notifications]"]);
   });

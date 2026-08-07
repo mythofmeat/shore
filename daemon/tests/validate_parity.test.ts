@@ -71,7 +71,20 @@ const BUN_TOML_NONFINITE = new Set([
   "NaN budget cost_usd passes",
 ]);
 
-const replayable = cases.filter((c) => !BUN_TOML_NONFINITE.has(c.name));
+/**
+ * Cases whose TOML sets a `[daemon]` key this schema no longer has.
+ *
+ * `unsafe_allow_remote_access` and `allowed_hosts` went when every client
+ * started presenting a token, so a document carrying them is now a rejection
+ * rather than a load. Unlike {@link BUN_TOML_NONFINITE} this is not a gap to
+ * be reclaimed later — it is the intended behaviour, asserted on its own in
+ * `a config with the deleted [daemon] keys` below.
+ */
+const USES_DELETED_DAEMON_KEYS = new Set(["unified config"]);
+
+const replayable = cases.filter(
+  (c) => !BUN_TOML_NONFINITE.has(c.name) && !USES_DELETED_DAEMON_KEYS.has(c.name),
+);
 
 /**
  * Dirs are not what this layer decides — they are `dirs_parity.json`'s subject
@@ -181,6 +194,21 @@ describe("the fixture is real", () => {
 });
 
 // ── The loads ───────────────────────────────────────────────────────────
+
+describe("the deleted [daemon] keys", () => {
+  test("a config that still sets them is rejected, naming the key", () => {
+    // The excluded `unified config` case, asserted as what it became. Failing
+    // at load is the point: an allowlist that stayed in a file and silently
+    // stopped being consulted is the one outcome worth avoiding.
+    for (const name of USES_DELETED_DAEMON_KEYS) {
+      const c = cases.find((x) => x.name === name);
+      expect(c, name).toBeDefined();
+      const { error } = run(c!.toml);
+      expect(error?.kind, name).toBe("parse_app");
+      expect(error?.message, name).toContain("allowed_hosts");
+    }
+  });
+});
 
 describe("parseConfigTable + validateConfig", () => {
   for (const c of replayable) {

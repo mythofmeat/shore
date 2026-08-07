@@ -58,6 +58,11 @@ export function restartRequiredChanges(old: LoadedConfig, fresh: LoadedConfig): 
  * since both configs come out of the same field-by-field builders, but nothing
  * says it has to stay that way.
  *
+ * The array branch of `equal` is in the same position since
+ * `[daemon].allowed_hosts` was removed: none of the three sections compared
+ * here holds a list any more, so nothing reachable from this function exercises
+ * it. It stays for the same reason the key-count check does.
+ *
  * For the same reason, the key-*count* check in `equal` cannot be observed
  * through this function and no test can kill a mutant that drops it: `readStruct`
  * builds every section from its defaults and rejects any field it does not know,

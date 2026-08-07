@@ -139,8 +139,6 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     config_path: startup.configPath,
     bind_addr: startup.bindAddr,
     bind_addr_source: sourceLabel(startup.bindAddrSource),
-    allow_remote_access: startup.allowRemoteAccess,
-    allow_remote_access_source: startup.allowRemoteAccessSource,
     // Where the secret came from — never the secret. A person debugging "my
     // client is rejected" needs to know which of the two sides is answering
     // from where, and that is the whole of what this says.
@@ -155,18 +153,9 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       hint: `clients elsewhere need this value in $${TOKEN_ENV}`,
     });
   }
-  for (const warning of startup.remoteAccessWarnings) {
-    log?.warn?.("Daemon remote access warning", {
-      addr: warning.addr,
-      bind_addr_source: sourceLabel(warning.bindAddrSource),
-      warning: warning.message,
-    });
-  }
-
   const { loaded } = startup;
   const server = new Server({
     addr: startup.bindAddr,
-    allowedHosts: loaded.app.daemon.allowed_hosts,
     serverName: "shore-daemon",
     authenticate: (presented) => tokenMatches(startup.token.token, presented),
     ...(log === undefined ? {} : { log }),

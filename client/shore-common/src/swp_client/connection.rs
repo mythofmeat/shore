@@ -64,7 +64,12 @@ impl SWPConnection {
     ) -> Result<(Self, ServerHello, History)> {
         let mut conn = Self::open(addr).await?;
         let (server_hello, history) = conn
-            .do_handshake(client_type.into(), client_name.into(), character)
+            .do_handshake(
+                client_type.into(),
+                client_name.into(),
+                character,
+                Some(&addr.0),
+            )
             .await?;
         Ok((conn, server_hello, history))
     }
@@ -75,16 +80,25 @@ impl SWPConnection {
         client_type: String,
         client_name: String,
         character: Option<String>,
+        addr: Option<&str>,
     ) -> Result<(ServerHello, History)> {
         debug!(client_type = %client_type, client_name = %client_name, character = ?character, "starting SWP handshake");
 
         // Resolved here rather than passed in, so that neither the CLI nor the
         // TUI has to know a token exists: both reach the daemon through this
-        // one function, and both resolve the same config directory they already
-        // use to *find* the daemon. There is one way to authenticate and no
-        // caller-side plumbing that could get it wrong.
-        let token = crate::token::resolve_token(&crate::dirs::config_dir())
-            .map_err(|e| ClientError::Unauthorized(e.to_string()))?;
+        // one function. There is one way to authenticate and no caller-side
+        // plumbing that could get it wrong.
+        //
+        // The directory is the *daemon's*, found by matching the address being
+        // connected to against the instance registry — not this client's own
+        // XDG resolution. `--config` re-homes a daemon's config directory, so
+        // its token sits beside the file it was pointed at; guessing from the
+        // client's environment would look in the wrong place and reject every
+        // local client of a `--config` daemon.
+        let token = crate::token::resolve_client_token(
+            addr.and_then(crate::swp_client::discovery::config_dir_for_addr),
+        )
+        .map_err(|e| ClientError::Unauthorized(e.to_string()))?;
 
         let server_hello = self.recv_server_hello().await?;
 
@@ -373,8 +387,10 @@ impl SWPConnection {
         S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin + 'static,
     {
         let mut conn = Self::from_raw_stream(stream);
+        // No address, so no daemon to look up: the token comes from this
+        // client's own config directory. Tests drive this path.
         let (server_hello, history) = conn
-            .do_handshake(client_type.into(), client_name.into(), character)
+            .do_handshake(client_type.into(), client_name.into(), character, None)
             .await?;
         Ok((conn, server_hello, history))
     }
