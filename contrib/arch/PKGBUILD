@@ -1,14 +1,14 @@
 pkgbase=shore
 pkgname=('shore' 'shore-daemon' 'shore-tui')
-pkgver=4.2.1_alpha
+pkgver=4.3.0
 pkgrel=1
 pkgdesc="Persistent AI character engine"
 arch=('x86_64')
 url="https://github.com/mythofmeat/shore"
 license=('MIT' 'Apache-2.0')
-makedepends=('cargo' 'bun')
+makedepends=('rust' 'bun' 'git')
 # source=("git+ssh://git@github.com/mythofmeat/shore.git")
-source=("git+ssh://git@github.com/mythofmeat/shore.git")
+source=("git+$url.git")
 options=(!lto !debug strip)
 sha256sums=('SKIP')
 
