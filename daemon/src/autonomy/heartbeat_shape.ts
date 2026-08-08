@@ -10,7 +10,7 @@ export interface WireMessageLike {
   content: { type: string; [key: string]: unknown }[];
 }
 
-export function extractTag(content: string, startTag: string, endTag: string): string | undefined {
+function extractTag(content: string, startTag: string, endTag: string): string | undefined {
   let result: string | undefined;
   let searchFrom = 0;
   for (;;) {

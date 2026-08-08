@@ -169,7 +169,7 @@ export interface DaemonConfig {
   addr: string;
 }
 
-export const defaultDaemonConfig = (): DaemonConfig => ({
+const defaultDaemonConfig = (): DaemonConfig => ({
   addr: "127.0.0.1:7320",
 });
 
@@ -187,7 +187,7 @@ export interface BackgroundDefaultsConfig {
   compaction: string | undefined;
 }
 
-export const defaultBackgroundDefaults = (): BackgroundDefaultsConfig => ({
+const defaultBackgroundDefaults = (): BackgroundDefaultsConfig => ({
   model: undefined,
   heartbeat: undefined,
   compaction: undefined,
@@ -215,7 +215,7 @@ export interface DefaultsConfig {
   stream: boolean;
 }
 
-export const defaultDefaultsConfig = (): DefaultsConfig => ({
+const defaultDefaultsConfig = (): DefaultsConfig => ({
   model: undefined,
   background: defaultBackgroundDefaults(),
   heartbeat: undefined,
@@ -290,7 +290,7 @@ export interface HeartbeatConfig {
   wrap_up_grace_rounds: number;
 }
 
-export const defaultHeartbeatConfig = (): HeartbeatConfig => ({
+const defaultHeartbeatConfig = (): HeartbeatConfig => ({
   enabled: true,
   fallback_heartbeat_interval: ConfigDuration.fromSecs(3600),
   dormant_after_heartbeat_turns: 3,
@@ -318,7 +318,7 @@ export interface AutonomyConfig {
   cache_keepalive_max: ConfigDuration;
 }
 
-export const defaultAutonomyConfig = (): AutonomyConfig => ({
+const defaultAutonomyConfig = (): AutonomyConfig => ({
   enabled: false,
   heartbeat: defaultHeartbeatConfig(),
   cache_keepalive_max: ConfigDuration.fromSecs(43_200),
@@ -339,7 +339,7 @@ export interface BehaviorConfig {
   user_message_timestamps: UserTimestampMode;
 }
 
-export const defaultBehaviorConfig = (): BehaviorConfig => ({
+const defaultBehaviorConfig = (): BehaviorConfig => ({
   autonomy: defaultAutonomyConfig(),
   user_message_timestamps: "auto",
 });
@@ -546,7 +546,7 @@ export interface ThinkingConfig {
   replay_prior_thinking: ThinkingReplay;
 }
 
-export const defaultThinkingConfig = (): ThinkingConfig => ({
+const defaultThinkingConfig = (): ThinkingConfig => ({
   replay_prior_thinking: "all",
 });
 
@@ -587,7 +587,7 @@ export interface RetrievalConfig {
   binary: RetrievalBinaryMode;
 }
 
-export const defaultRetrievalConfig = (): RetrievalConfig => ({
+const defaultRetrievalConfig = (): RetrievalConfig => ({
   mode: "auto",
   max_file_bytes: 2 * 1024 * 1024,
   max_indexed_files: 50_000,
@@ -616,7 +616,7 @@ export interface MemoryConfig {
   git_push: boolean;
 }
 
-export const defaultMemoryConfig = (): MemoryConfig => ({
+const defaultMemoryConfig = (): MemoryConfig => ({
   compaction: defaultCompactionConfig(),
   thinking: defaultThinkingConfig(),
   retrieval: defaultRetrievalConfig(),
@@ -670,7 +670,7 @@ export interface ConnectionsConfig {
   matrix: MatrixConfig | undefined;
 }
 
-export const defaultConnectionsConfig = (): ConnectionsConfig => ({
+const defaultConnectionsConfig = (): ConnectionsConfig => ({
   telegram: undefined,
   discord: undefined,
   matrix: undefined,
@@ -700,7 +700,7 @@ export interface NtfyConfig {
   token: string;
 }
 
-export const defaultNtfyConfig = (): NtfyConfig => ({
+const defaultNtfyConfig = (): NtfyConfig => ({
   url: "https://ntfy.sh",
   topic: "",
   token: "",
@@ -908,7 +908,7 @@ export interface UsageSpikeWarningsConfig {
   min_cost_usd: number;
 }
 
-export const defaultSpikeWarnings = (): UsageSpikeWarningsConfig => ({
+const defaultSpikeWarnings = (): UsageSpikeWarningsConfig => ({
   enabled: false,
   period: "hour",
   multiplier: 3.0,
@@ -933,7 +933,7 @@ export interface UsageConfig {
   spike_warnings: UsageSpikeWarningsConfig;
 }
 
-export const defaultUsageConfig = (): UsageConfig => ({
+const defaultUsageConfig = (): UsageConfig => ({
   timezone: "local",
   allow_compaction_over_budget: true,
   budgets: [],
@@ -959,7 +959,7 @@ export interface AdvancedConfig {
   max_image_size: number;
 }
 
-export const defaultAdvancedConfig = (): AdvancedConfig => ({
+const defaultAdvancedConfig = (): AdvancedConfig => ({
   cache_forensics: false,
   editor: undefined,
   max_retries: undefined,

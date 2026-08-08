@@ -608,7 +608,7 @@ async function archiveCompactPrefix(
   }
 }
 
-export async function queueMemoryIndexRefresh(
+async function queueMemoryIndexRefresh(
   memoryIndexUpdated: boolean,
   tools: CompactionTools,
   dataDir: string | undefined,

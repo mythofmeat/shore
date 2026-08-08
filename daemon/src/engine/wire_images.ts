@@ -20,7 +20,7 @@ export function embedImageData(images: ImageRef[] | undefined): void {
   }
 }
 
-export function embedMessageImageData(message: Message): void {
+function embedMessageImageData(message: Message): void {
   embedImageData(message.images);
   for (const alt of message.alternatives ?? []) {
     embedImageData(alt.images);

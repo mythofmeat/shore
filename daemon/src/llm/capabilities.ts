@@ -173,7 +173,7 @@ export function claudeThinkingCaps(model: string): { adaptive: boolean; enabled:
   return { adaptive: caps.claude.default_adaptive, enabled: caps.claude.default_enabled };
 }
 
-export function claudeRejectsSampling(model: string): boolean {
+function claudeRejectsSampling(model: string): boolean {
   const lower = model.toLowerCase();
   const v = parseClaudeModel(model);
   for (const rule of caps.claude.sampler_rule ?? []) {
@@ -316,7 +316,7 @@ export function supportsReasoningOff(sdk: Sdk): boolean {
   return sdk === "anthropic" || sdk === "deepseek" || sdk === "moonshot" || sdk === "openrouter" || sdk === "zai";
 }
 
-export class CapabilityError extends Error {
+class CapabilityError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "CapabilityError";

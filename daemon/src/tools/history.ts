@@ -20,7 +20,7 @@ const RECENCY_WEIGHT = 15.0;
 
 export { InvalidArgs, ToolIoError };
 
-export function optionalTrimmedString(
+function optionalTrimmedString(
   input: Record<string, unknown>,
   field: string,
 ): string | undefined {

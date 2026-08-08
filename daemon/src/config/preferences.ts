@@ -90,7 +90,7 @@ export const SAMPLER_FIELD_BY_KEY: ReadonlyMap<string, keyof SamplerSettings> = 
   SAMPLER_FIELDS.map(([field, key]) => [key, field]),
 );
 
-export function applyOverlay(target: SamplerSettings, overlay: SamplerSettings): void {
+function applyOverlay(target: SamplerSettings, overlay: SamplerSettings): void {
   for (const [field] of SAMPLER_FIELDS) {
     const value = overlay[field];
     if (value !== undefined) (target as Record<string, unknown>)[field] = value;
@@ -107,7 +107,7 @@ export function samplerIsEmpty(settings: SamplerSettings): boolean {
   return SAMPLER_FIELDS.every(([field]) => settings[field] === undefined);
 }
 
-export function samplerFromResolvedModel(model: ResolvedModel): SamplerSettings {
+function samplerFromResolvedModel(model: ResolvedModel): SamplerSettings {
   const out: SamplerSettings = { sdk: model.sdk };
   const copy = [
     ["temperature", "temperature"],
@@ -140,7 +140,7 @@ export function selectionIsSet(selected: SelectedModel): boolean {
   return selected.provider !== undefined && selected.modelId !== undefined;
 }
 
-export function selectionPair(selected: SelectedModel): [string, string] | undefined {
+function selectionPair(selected: SelectedModel): [string, string] | undefined {
   const { provider, modelId } = selected;
   return provider !== undefined && modelId !== undefined ? [provider, modelId] : undefined;
 }
@@ -188,7 +188,7 @@ export function modelPreference(
   return prefs.models.get(preferenceKey(provider, modelId));
 }
 
-export function setModelPreference(
+function setModelPreference(
   prefs: ModelPreferences,
   provider: string,
   modelId: string,
@@ -200,7 +200,7 @@ export function setModelPreference(
   );
 }
 
-export function clearModelPreference(
+function clearModelPreference(
   prefs: ModelPreferences,
   provider: string,
   modelId: string,
@@ -550,7 +550,7 @@ export function applySamplerOverlay(
   return patched;
 }
 
-export function overlayForCharacter(
+function overlayForCharacter(
   dataDir: string,
   character: string,
   base: ResolvedModel,

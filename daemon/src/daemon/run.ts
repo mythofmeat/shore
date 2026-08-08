@@ -23,7 +23,7 @@ import { startAutoDiscovery } from "./auto_discovery.ts";
 import { startConfigWatcher } from "./hot_reload.ts";
 import { parseArgs, resolveStartup, sourceLabel, StartupError } from "./startup.ts";
 
-export const SHUTDOWN_TIMEOUT_MS = 10_000;
+const SHUTDOWN_TIMEOUT_MS = 10_000;
 
 export interface DaemonOptions {
   argv?: readonly string[] | undefined;
@@ -235,7 +235,7 @@ export function describeRejection(reason: unknown): string {
   return String(reason);
 }
 
-export async function runDaemon(options: DaemonOptions): Promise<void> {
+async function runDaemon(options: DaemonOptions): Promise<void> {
   const daemon = await startDaemon(options);
 
   const stop = (signal: NodeJS.Signals) => () => {

@@ -2,7 +2,7 @@ import { jsonSidecar, type Sidecar } from "./store.ts";
 
 export type EventOrigin = "assistant" | "mirrored_user" | "matrix_user";
 
-export const BOT_EDITABLE: ReadonlySet<EventOrigin> = new Set<EventOrigin>([
+const BOT_EDITABLE: ReadonlySet<EventOrigin> = new Set<EventOrigin>([
   "assistant",
   "mirrored_user",
 ]);

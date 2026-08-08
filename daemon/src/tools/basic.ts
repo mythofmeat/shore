@@ -149,14 +149,14 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-export function formatFriendlyDate(now: Date = new Date()): string {
+function formatFriendlyDate(now: Date = new Date()): string {
   const day = now.getDate();
   const weekday = WEEKDAYS[now.getDay()] as string;
   const month = MONTHS[now.getMonth()] as string;
   return `${weekday}, ${month} ${day}${ordinalSuffix(day)}, ${now.getFullYear()}`;
 }
 
-export function formatFriendlyTime(now: Date = new Date()): string {
+function formatFriendlyTime(now: Date = new Date()): string {
   const hours24 = now.getHours();
   const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
   const minutes = String(now.getMinutes()).padStart(2, "0");

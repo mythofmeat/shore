@@ -7,11 +7,11 @@ export interface CharacterRuntimeState {
   activeModel?: string;
 }
 
-export function characterRuntimeStatePath(characterDataDir: string): string {
+function characterRuntimeStatePath(characterDataDir: string): string {
   return join(characterDataDir, RUNTIME_STATE_FILE);
 }
 
-export function loadCharacterRuntimeState(characterDataDir: string): CharacterRuntimeState {
+function loadCharacterRuntimeState(characterDataDir: string): CharacterRuntimeState {
   const path = characterRuntimeStatePath(characterDataDir);
   let content: string;
   try {
@@ -25,7 +25,7 @@ export function loadCharacterRuntimeState(characterDataDir: string): CharacterRu
   return typeof activeModel === "string" ? { activeModel } : {};
 }
 
-export function saveCharacterRuntimeState(
+function saveCharacterRuntimeState(
   characterDataDir: string,
   state: CharacterRuntimeState,
 ): void {
@@ -42,7 +42,7 @@ export function loadActiveModel(characterDataDir: string): string | undefined {
   }
 }
 
-export function saveActiveModel(characterDataDir: string, activeModel: string | undefined): void {
+function saveActiveModel(characterDataDir: string, activeModel: string | undefined): void {
   saveCharacterRuntimeState(
     characterDataDir,
     activeModel === undefined ? {} : { activeModel },

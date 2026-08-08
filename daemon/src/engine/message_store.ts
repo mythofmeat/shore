@@ -99,7 +99,7 @@ const stripImageData = (images: ImageRef[] | undefined): ImageRef[] | undefined 
     ...(caption !== undefined ? { caption } : {}),
   }));
 
-export function serializeForStorage(msg: Message): string {
+function serializeForStorage(msg: Message): string {
   const ordered: [string, unknown][] = [
     ["msg_id", msg.msg_id],
     ["role", msg.role],

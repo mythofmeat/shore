@@ -177,7 +177,7 @@ async function resolveDeps(character: string, deps: CompactionRunDeps): Promise<
   };
 }
 
-export function compactionTools(ctx: Parameters<typeof dispatchTool>[2]): CompactionTools {
+function compactionTools(ctx: Parameters<typeof dispatchTool>[2]): CompactionTools {
   return {
     workspaceDir: ctx.workspaceDir,
     configDir: ctx.configDir,
@@ -228,7 +228,7 @@ async function resolveChatRequest(
   return built.request;
 }
 
-export function characterDir(dataDir: string, character: string): string {
+function characterDir(dataDir: string, character: string): string {
   return join(dataDir, character);
 }
 

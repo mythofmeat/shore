@@ -43,7 +43,7 @@ export interface TurnBody {
   image_data: readonly ImageUpload[];
 }
 
-export function bodyHasContent(body: TurnBody): boolean {
+function bodyHasContent(body: TurnBody): boolean {
   return body.text !== "" || body.images.length > 0 || body.image_data.length > 0;
 }
 
@@ -92,7 +92,7 @@ export async function appendUserTurn(
   return undefined;
 }
 
-export const ACTIVITY_BACKFILL_DAYS = 90;
+const ACTIVITY_BACKFILL_DAYS = 90;
 
 export async function ensureAndBackfillAutonomy(
   ctx: TurnContext,
@@ -198,7 +198,7 @@ export async function maybeCompact(
   return true;
 }
 
-export async function runInlineCompaction(
+async function runInlineCompaction(
   ctx: TurnContext,
   engine: TurnEngine,
   charName: string,

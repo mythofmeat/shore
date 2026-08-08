@@ -22,7 +22,7 @@ export interface KeepalivePingContext {
   rebuild?: RebuildDeps;
 }
 
-export async function pingNow(
+async function pingNow(
   character: string,
   ctx: KeepalivePingContext,
 ): Promise<KeepalivePing> {

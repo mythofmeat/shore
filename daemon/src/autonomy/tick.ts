@@ -42,7 +42,7 @@ export function tickDecision(i: TickInputs): TickDecision {
   };
 }
 
-export function compactionReason(i: TickInputs): CompactionReason | undefined {
+function compactionReason(i: TickInputs): CompactionReason | undefined {
   if (!(i.autonomyEnabled && i.compactionEnabled && !i.compactionTriggered)) {
     return undefined;
   }

@@ -146,12 +146,12 @@ export function resolveListenAddr(
   return [loaded.app.daemon.addr, "config"];
 }
 
-export function startupEnvAddr(env: NodeJS.ProcessEnv): string | undefined {
+function startupEnvAddr(env: NodeJS.ProcessEnv): string | undefined {
   const raw = env["SHORE_ADDR"];
   if (raw === undefined || raw.trim() === "") return undefined;
   return raw;
 }
 
-export function defaultConfigPath(env?: NodeJS.ProcessEnv): string {
+function defaultConfigPath(env?: NodeJS.ProcessEnv): string {
   return rustJoin(configDir(env), "config.toml");
 }

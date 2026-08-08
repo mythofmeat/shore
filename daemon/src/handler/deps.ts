@@ -261,7 +261,7 @@ export function buildCommandPathDeps(a: CommandAssembly): CommandPathDeps {
   };
 }
 
-export class ProcessSessionCache implements SessionCache {
+class ProcessSessionCache implements SessionCache {
   readonly #models = new Map<number, string>();
 
   activeModel(sessionId: number): string | undefined {
@@ -278,7 +278,7 @@ export class ProcessSessionCache implements SessionCache {
   }
 }
 
-export function configRuntime(a: CommandAssembly): ConfigRuntime {
+function configRuntime(a: CommandAssembly): ConfigRuntime {
   const { runtime } = a;
   return {
     reloadRuntimeConfig: () => {
@@ -299,7 +299,7 @@ export function configRuntime(a: CommandAssembly): ConfigRuntime {
   };
 }
 
-export function dispatchRuntime(
+function dispatchRuntime(
   a: CommandAssembly,
   sessions: ProcessSessionCache,
 ): DispatchRuntime {
@@ -456,7 +456,7 @@ async function pushHistorySnapshots(a: CommandAssembly): Promise<void> {
   }
 }
 
-export function commandDeps(a: CommandAssembly): CommandDeps {
+function commandDeps(a: CommandAssembly): CommandDeps {
   const { runtime } = a;
   const ledgerPath = rustJoin(runtime.config.dirs.data, "ledger.db");
   return {

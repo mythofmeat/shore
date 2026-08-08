@@ -491,14 +491,14 @@ function toolLimits(config: LoadedConfig): ToolLimitsView {
   };
 }
 
-export function thinkingEnabled(opts: ProviderOptions | undefined): boolean {
+function thinkingEnabled(opts: ProviderOptions | undefined): boolean {
   if (opts === undefined) return false;
   if (opts.thinking_enabled === false) return false;
   return (opts.budget_tokens !== undefined && opts.budget_tokens > 0) ||
     opts.reasoning_effort !== undefined;
 }
 
-export function resolvedReasoningEffort(opts: ProviderOptions | undefined): string | undefined {
+function resolvedReasoningEffort(opts: ProviderOptions | undefined): string | undefined {
   if (opts?.reasoning_effort !== undefined) return opts.reasoning_effort;
   return opts?.thinking_enabled === false ? "off" : undefined;
 }

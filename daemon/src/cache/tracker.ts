@@ -20,7 +20,7 @@ export interface ObservationResult {
   anomaly: Anomaly | undefined;
 }
 
-export const DEFAULT_MAX_IDLE_SECS = 12 * 3600;
+const DEFAULT_MAX_IDLE_SECS = 12 * 3600;
 
 const DEFAULT_TTL_SECS = 3600;
 

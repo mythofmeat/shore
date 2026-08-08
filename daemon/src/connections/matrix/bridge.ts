@@ -51,7 +51,7 @@ interface PendingCommand {
 
 const MAX_PENDING_ECHOES = 32;
 
-export const COMMAND_TIMEOUT_MS = 15_000;
+const COMMAND_TIMEOUT_MS = 15_000;
 
 export class Bridge {
   readonly #options: BridgeOptions;

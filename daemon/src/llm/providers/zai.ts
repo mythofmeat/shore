@@ -56,7 +56,7 @@ export function resolveZaiBaseUrl(req: SidecarRequest): string {
   return req.provider_options?.zai_subscription === true ? ZAI_CODING_BASE_URL : ZAI_BASE_URL;
 }
 
-export function buildZaiCall(
+function buildZaiCall(
   req: SidecarRequest,
   streaming: boolean,
 ): { client: OpenAI; params: ZaiChatCompletionCreateParams } {

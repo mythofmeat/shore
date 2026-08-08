@@ -12,7 +12,7 @@ export function runnerConfigFor(config: LoadedConfig): AutonomyRunnerConfig {
   };
 }
 
-export function compactionConfigFor(config: LoadedConfig): CompactionRunnerConfig {
+function compactionConfigFor(config: LoadedConfig): CompactionRunnerConfig {
   const compaction = config.app.memory.compaction;
   return {
     compactionEnabled: compaction.enabled,

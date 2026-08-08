@@ -13,7 +13,7 @@ export interface LoadedConversation {
   messages: ConversationMessage[];
 }
 
-export function toConversationMessage(msg: Message): ConversationMessage {
+function toConversationMessage(msg: Message): ConversationMessage {
   return {
     role: msg.role,
     content: msg.content,

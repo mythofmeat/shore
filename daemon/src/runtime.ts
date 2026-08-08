@@ -26,9 +26,9 @@ import { NotificationService } from "./notifications.ts";
 import { McpRegistry, type McpServerConfigView } from "./tools/mcp_registry.ts";
 import { McpHolder } from "./tools/mcp_holder.ts";
 
-export const CALL_STORE_RETENTION_DAYS = 14;
-export const CALL_STORE_MAX_BYTES = 536_870_912;
-export const CALL_STORE_ROTATE_MS = 3_600_000;
+const CALL_STORE_RETENTION_DAYS = 14;
+const CALL_STORE_MAX_BYTES = 536_870_912;
+const CALL_STORE_ROTATE_MS = 3_600_000;
 
 export interface RuntimeOptions {
   providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;

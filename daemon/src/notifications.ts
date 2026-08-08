@@ -33,7 +33,7 @@ export function ntfyUrl(config: NtfyConfig): string {
 
 const HTTP_TIMEOUT_MS = 10_000;
 
-export const SUMMARY_MAX_BYTES = 200;
+const SUMMARY_MAX_BYTES = 200;
 
 export interface NotificationSink {
   notifySend(title: string, body: string): Promise<void>;

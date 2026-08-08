@@ -122,7 +122,7 @@ export function extractThinking(blocks: readonly ContentBlock[]): string | undef
   return parts.length === 0 ? undefined : parts.join("\n\n");
 }
 
-export function pendingImages(images: readonly ImageRef[]): PendingImage[] {
+function pendingImages(images: readonly ImageRef[]): PendingImage[] {
   return images.map((image) => ({
     path: image.path,
     caption: image.caption ?? undefined,

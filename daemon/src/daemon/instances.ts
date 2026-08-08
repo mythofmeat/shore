@@ -23,13 +23,13 @@ export interface InstanceInfo {
   config_dir?: string;
 }
 
-export const STALE_LOCK_MS = 10_000;
+const STALE_LOCK_MS = 10_000;
 
-export const LOCK_TIMEOUT_MS = 5_000;
+const LOCK_TIMEOUT_MS = 5_000;
 
 const LOCK_RETRY_MS = 20;
 
-export function defaultInstancesPath(env?: NodeJS.ProcessEnv): string {
+function defaultInstancesPath(env?: NodeJS.ProcessEnv): string {
   return join(runtimeDir(env), "instances.json");
 }
 

@@ -25,7 +25,7 @@ function hasForeignCarrier(block: ContentBlock): boolean {
   return block.reasoning_details !== undefined || block.reasoning_content !== undefined;
 }
 
-export function isPortable(
+function isPortable(
   block: ContentBlock,
   mintingProvider: string | undefined,
   mintingModel: string | undefined,

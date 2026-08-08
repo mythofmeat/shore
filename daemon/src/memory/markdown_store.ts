@@ -23,7 +23,7 @@ const ERROR_PREFIX: Record<MarkdownStoreErrorKind, string> = {
   "not-found": "not found",
 };
 
-export class MarkdownStoreError extends Error {
+class MarkdownStoreError extends Error {
   readonly kind: MarkdownStoreErrorKind;
 
   constructor(kind: MarkdownStoreErrorKind, detail: string) {

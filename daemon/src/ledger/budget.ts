@@ -106,7 +106,7 @@ const budgetWarnAction = (b: UsageBudgetConfig): UsageBudgetAction =>
 const paceWarnAction = (b: UsageBudgetConfig): UsageBudgetAction =>
   b.pace_warn_action ?? budgetWarnAction(b);
 
-export function formatFixed(value: number, digits: number): string {
+function formatFixed(value: number, digits: number): string {
   if (!Number.isFinite(value)) {
     return value > 0 ? "inf" : Number.isNaN(value) ? "NaN" : "-inf";
   }
@@ -476,7 +476,7 @@ interface PaceBounds {
   periods_remaining: number;
 }
 
-export function paceBoundsNaive(
+function paceBoundsNaive(
   window: Pick<PeriodWindow, "start_naive" | "end_naive">,
   nowNaive: Naive,
   stepMs: number,

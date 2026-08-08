@@ -49,7 +49,7 @@ export interface ToolContext {
   fetchImpl?: FetchLike;
 }
 
-export function defaultSearchMode(
+function defaultSearchMode(
   mode: RetrievalMode,
   embedderAvailable: boolean,
   indexPathAvailable: boolean,

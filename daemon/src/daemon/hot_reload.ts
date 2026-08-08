@@ -3,7 +3,7 @@ import { isAbsolute, resolve, sep } from "node:path";
 
 import { CHARACTER_WORKSPACE_DIR, SOUL_FILE } from "../config/dirs.ts";
 
-export const DEBOUNCE_MS = 500;
+const DEBOUNCE_MS = 500;
 
 export interface ConfigWatcherOptions {
   readonly configPath: string;

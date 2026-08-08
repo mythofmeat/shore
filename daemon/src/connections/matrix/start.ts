@@ -16,7 +16,7 @@ export const PASSWORD_ENV = "SHORE_MATRIX_PASSWORD";
 
 export const DEVICE_ID_ENV = "SHORE_MATRIX_DEVICE_ID";
 
-export const STATE_DIR = "matrix";
+const STATE_DIR = "matrix";
 
 export interface MatrixCredentials {
   readonly accessToken: string | undefined;

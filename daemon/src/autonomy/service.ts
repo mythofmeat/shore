@@ -11,7 +11,7 @@ import {
 import { loadState, STATE_FILENAME, type PersistedKeepalive } from "./state_file.ts";
 import type { KeepaliveSnapshot } from "../cache/schedule.ts";
 
-export const AUTONOMY_TICK_MS = 10_000;
+const AUTONOMY_TICK_MS = 10_000;
 
 export const HEARTBEAT_LOG_FILENAME = "heartbeat.jsonl";
 

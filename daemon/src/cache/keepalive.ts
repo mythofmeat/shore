@@ -3,7 +3,7 @@ import { budgetBlockFor } from "../ledger/gate.ts";
 import { recordGenerate, recordGenerateError } from "../ledger/record.ts";
 import type { GenerateResponse, SidecarRequest, Usage, WireMessage } from "../llm/types.ts";
 
-export const KEEPALIVE_TICK_MS = 10_000;
+const KEEPALIVE_TICK_MS = 10_000;
 
 export const DEFAULT_KEEPALIVE_MAX_SECS = 12 * 60 * 60;
 const DEFAULT_MAX_IDLE_SECS = DEFAULT_KEEPALIVE_MAX_SECS;

@@ -131,7 +131,7 @@ export interface ProviderEntry extends ProviderRegistryEntry {
   defaults: ModelConfigFields;
 }
 
-export function defaultProviderEntry(): ProviderEntry {
+function defaultProviderEntry(): ProviderEntry {
   return { enabled: true, keys: [], discovery: defaultDiscovery(), defaults: {} };
 }
 
@@ -237,7 +237,7 @@ function parseEntry(provider: string, value: unknown): ProviderEntry {
   return parsed;
 }
 
-export function transportFieldInDefaults(defaults: ModelConfigFields): string | undefined {
+function transportFieldInDefaults(defaults: ModelConfigFields): string | undefined {
   if (defaults.sdk !== undefined) return "sdk";
   if (defaults.baseUrl !== undefined) return "base_url";
   if (defaults.apiKeyEnv !== undefined) return "api_key_env";

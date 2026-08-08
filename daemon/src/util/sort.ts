@@ -14,6 +14,6 @@ export function sortedKeys(table: Record<string, unknown>): string[] {
   return Object.keys(table).sort(compareByCodePoint);
 }
 
-export function sortedMap<T>(entries: Iterable<readonly [string, T]>): Map<string, T> {
+function sortedMap<T>(entries: Iterable<readonly [string, T]>): Map<string, T> {
   return new Map([...entries].sort((a, b) => compareByCodePoint(a[0], b[0])));
 }

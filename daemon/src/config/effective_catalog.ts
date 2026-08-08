@@ -209,7 +209,7 @@ function findStaticByUpstream(
   return undefined;
 }
 
-export function buildResolvedFromProvider(
+function buildResolvedFromProvider(
   providerKey: string,
   entry: ProviderEntry,
   modelId: string,

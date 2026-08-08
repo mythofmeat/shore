@@ -352,7 +352,7 @@ function validationError(message: string): ConfigError {
   return new ConfigError("validation", message);
 }
 
-export function validateConfig(
+function validateConfig(
   app: AppConfig,
   catalog: ModelCatalog,
   providers: ProviderRegistry,

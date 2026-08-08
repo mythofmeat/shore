@@ -61,7 +61,7 @@ export interface Logger {
   warn?(msg: string, fields?: Record<string, unknown>): void;
 }
 
-export class HandshakeError extends Error {
+class HandshakeError extends Error {
   override readonly name = "HandshakeError";
 }
 

@@ -419,7 +419,7 @@ export class Ledger {
   }
 }
 
-export function sqlitePricingStore(db: Database): PricingStore {
+function sqlitePricingStore(db: Database): PricingStore {
   return {
     get(modelId) {
       const row = db

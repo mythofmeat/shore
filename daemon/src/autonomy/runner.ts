@@ -14,7 +14,7 @@ import {
   type PersistedKeepalive,
 } from "./state_file.ts";
 
-export const TICK_INTERVAL_MS = 10_000;
+const TICK_INTERVAL_MS = 10_000;
 
 const MIN_WAKE_HOURS = 1;
 const MAX_WAKE_HOURS = 48;

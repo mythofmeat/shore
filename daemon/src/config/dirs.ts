@@ -9,12 +9,12 @@ export const SOUL_FILE = "SOUL.md";
 export const USER_FILE = "USER.md";
 export const AGENTS_FILE = "AGENTS.md";
 export const TOOLS_FILE = "TOOLS.md";
-export const MEMORY_DIR = "memory";
+const MEMORY_DIR = "memory";
 
-export const ACTIVE_JSONL_FILE = "active.jsonl";
-export const SEGMENTS_DIR = "segments";
-export const COMPACTION_MANIFEST_FILE = "compaction.json";
-export const PLUGINS_DIR = "plugins";
+const ACTIVE_JSONL_FILE = "active.jsonl";
+const SEGMENTS_DIR = "segments";
+const COMPACTION_MANIFEST_FILE = "compaction.json";
+const PLUGINS_DIR = "plugins";
 
 const LEGACY_CHARACTER_FILE = "character.md";
 const LEGACY_USER_FILE = "user.md";
@@ -113,7 +113,7 @@ export function workspaceRoot(env: Env = process.env): string | undefined {
 }
 
 export const configDir = (env?: Env): string => resolveShoreDirs(env).config;
-export const dataDir = (env?: Env): string => resolveShoreDirs(env).data;
+const dataDir = (env?: Env): string => resolveShoreDirs(env).data;
 export const runtimeDir = (env?: Env): string => resolveShoreDirs(env).runtime;
 
 export function rustJoin(base: string, ...parts: string[]): string {

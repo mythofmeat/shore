@@ -32,7 +32,7 @@ export function keepaliveToString(setting: CacheKeepaliveSetting): string {
   return setting.kind === "off" ? "off" : setting.interval.toString();
 }
 
-export function keepaliveEquals(a: CacheKeepaliveSetting, b: CacheKeepaliveSetting): boolean {
+function keepaliveEquals(a: CacheKeepaliveSetting, b: CacheKeepaliveSetting): boolean {
   if (a.kind === "off" || b.kind === "off") return a.kind === b.kind;
   return a.interval.equals(b.interval);
 }

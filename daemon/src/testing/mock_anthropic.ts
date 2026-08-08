@@ -65,7 +65,7 @@ export interface MockAnthropic {
 const DEFAULT_TTL_MS = 5 * 60 * 1000;
 const HOUR_TTL_MS = 60 * 60 * 1000;
 
-export function estimateTokens(value: unknown): number {
+function estimateTokens(value: unknown): number {
   const text = typeof value === "string" ? value : JSON.stringify(value) ?? "";
   return Math.max(1, Math.ceil(text.length / 4));
 }

@@ -437,7 +437,7 @@ function systemMessageStrategy(_model: string): "wrap" | "native" {
   return "wrap";
 }
 
-export function wrapInlineSystemInstruction(text: string): string {
+function wrapInlineSystemInstruction(text: string): string {
   return `<system_instruction>${text}</system_instruction>`;
 }
 
@@ -445,7 +445,7 @@ function systemToBlocks(system: SystemContent | undefined): TextBlockParam[] {
   return (system ?? []).map((b) => ({ type: "text", text: b.text }));
 }
 
-export function convertInlineSystemMessages(
+function convertInlineSystemMessages(
   turns: WireMessage[],
   model: string,
 ): WireMessage[] {

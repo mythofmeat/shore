@@ -12,7 +12,7 @@ import { truncateSummary } from "../notifications.ts";
 import type { CapturedTool } from "../transcript_capture.ts";
 export type { CapturedTool };
 
-export const HEARTBEAT_LOOP_DEADLINE_MS = 30 * 60 * 1000;
+const HEARTBEAT_LOOP_DEADLINE_MS = 30 * 60 * 1000;
 
 export interface HeartbeatToolResult {
   output: string;

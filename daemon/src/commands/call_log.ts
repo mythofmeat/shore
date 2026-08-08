@@ -64,7 +64,7 @@ export function transcript(ctx: CallLogContext, args: Args): Json {
   };
 }
 
-export function orderTranscriptRows(rows: readonly TranscriptRow[]): TranscriptRow[] {
+function orderTranscriptRows(rows: readonly TranscriptRow[]): TranscriptRow[] {
   const ticks: TranscriptRow[][] = [];
   let previous: number | undefined;
   for (let i = rows.length - 1; i >= 0; i -= 1) {

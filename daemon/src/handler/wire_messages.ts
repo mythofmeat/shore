@@ -16,7 +16,7 @@ interface AssistantImageRender {
   toolResults: ContentBlock[];
 }
 
-export function syntheticToolUseId(path: string, index: number): string {
+function syntheticToolUseId(path: string, index: number): string {
   const stem = fileStem(path) ?? "image";
   const safe = [...stem]
     .map((c) => (/[0-9A-Za-z]/.test(c) ? c : "_"))

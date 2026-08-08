@@ -1,14 +1,14 @@
 import { jsonSidecar, type Sidecar } from "./store.ts";
 
-export const VIEW_KEYS = ["thinking", "tools", "usage"] as const;
+const VIEW_KEYS = ["thinking", "tools", "usage"] as const;
 
 export type ViewKey = (typeof VIEW_KEYS)[number];
 
 export type RoomView = Record<ViewKey, boolean>;
 
-export const defaultRoomView = (): RoomView => ({ thinking: false, tools: false, usage: false });
+const defaultRoomView = (): RoomView => ({ thinking: false, tools: false, usage: false });
 
-export function isViewKey(key: string): key is ViewKey {
+function isViewKey(key: string): key is ViewKey {
   return (VIEW_KEYS as readonly string[]).includes(key);
 }
 

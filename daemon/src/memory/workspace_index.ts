@@ -180,7 +180,7 @@ export interface RefreshOutcome {
   dirty: boolean;
 }
 
-export function pruneAndScope(
+function pruneAndScope(
   index: WorkspaceIndex,
   candidates: FileCandidate[],
   pathFilter: string | undefined,
@@ -362,7 +362,7 @@ function describeEmbedFailure(error: unknown): string {
   return String(error);
 }
 
-export function scoreCandidates(
+function scoreCandidates(
   candidates: FileCandidate[],
   index: WorkspaceIndex,
   queryVector: number[],

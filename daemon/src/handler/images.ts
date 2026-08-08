@@ -136,7 +136,7 @@ export async function createAttachmentFile(
   throw new Error(`could not find a free attachment name for ${fileName}`);
 }
 
-export async function saveAttachment(
+async function saveAttachment(
   attachmentsDir: string,
   sourceName: string,
   declaredMime: string | undefined,

@@ -18,7 +18,7 @@ import {
 
 import { normalizeEvent, type MatrixEvent, type RawEvent } from "./events.ts";
 
-export const TYPING_TIMEOUT_MS = 20_000;
+const TYPING_TIMEOUT_MS = 20_000;
 
 export interface BotConfig {
   readonly homeserver: string;
