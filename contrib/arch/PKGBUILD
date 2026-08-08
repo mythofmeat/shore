@@ -1,34 +1,45 @@
 pkgbase=shore
 pkgname=('shore' 'shore-daemon' 'shore-tui')
-pkgver=0
+pkgver=4.2.1_alpha
 pkgrel=1
 pkgdesc="Persistent AI character engine"
 arch=('x86_64')
 url="https://github.com/mythofmeat/shore"
 license=('MIT' 'Apache-2.0')
 makedepends=('cargo' 'bun')
+# source=("git+ssh://git@github.com/mythofmeat/shore.git")
 source=("git+ssh://git@github.com/mythofmeat/shore.git")
 options=(!lto !debug strip)
 sha256sums=('SKIP')
 
 pkgver() {
     cd "$srcdir/$pkgbase"
-    git describe --tags --abbrev=0 | sed 's/^v//'
+    git describe --tags --abbrev=0 | sed 's/^v//; s/-/_/'
 }
 
 build() {
-    cd "$srcdir/$pkgbase"
-    cargo build --workspace --release
+    CARGO_PACKAGES=('shore-cli' 'shore-tui')
 
-    cd "$srcdir/$pkgbase/llm-sidecar"
+    for package in "${CARGO_PACKAGES[@]}"; do
+        cd "$srcdir/$pkgbase/client/$package"
+        cargo build --release
+    done
+
+    cd "$srcdir/$pkgbase/daemon"
     bun install
-    bun update
     bun run build
 }
 
 check() {
-    cd "$srcdir/$pkgbase"
-    cargo test --workspace
+    CARGO_PACKAGES=('shore-cli' 'shore-tui')
+
+    for package in "${CARGO_PACKAGES[@]}"; do
+        cd "$srcdir/$pkgbase/client/$package"
+        cargo test
+    done
+
+    cd "$srcdir/$pkgbase/daemon"
+    bun test
 }
 
 _install_licenses() {
@@ -46,19 +57,19 @@ package_shore() {
         'libnotify: desktop notifications via `shore notify`'
     )
 
-    install -Dm755 "$srcdir/$pkgbase/target/release/shore" "$pkgdir/usr/bin/shore"
+    install -Dm755 "$srcdir/$pkgbase/client/target/release/shore" "$pkgdir/usr/bin/shore"
 
-    install -Dm644 "$srcdir/$pkgbase/contrib/shore-notify.service" \
+    install -Dm644 "$srcdir/$pkgbase/contrib/systemd/shore-notify.service" \
         "$pkgdir/usr/lib/systemd/user/shore-notify.service"
 
     install -dm755 "$pkgdir/usr/share/fish/vendor_completions.d"
-    "$srcdir/$pkgbase/target/release/shore" completions fish \
+    "$srcdir/$pkgbase/client/target/release/shore" completions fish \
         > "$pkgdir/usr/share/fish/vendor_completions.d/shore.fish"
     install -dm755 "$pkgdir/usr/share/bash-completion/completions"
-    "$srcdir/$pkgbase/target/release/shore" completions bash \
+    "$srcdir/$pkgbase/client/target/release/shore" completions bash \
         > "$pkgdir/usr/share/bash-completion/completions/shore"
     install -dm755 "$pkgdir/usr/share/zsh/site-functions"
-    "$srcdir/$pkgbase/target/release/shore" completions zsh \
+    "$srcdir/$pkgbase/client/target/release/shore" completions zsh \
         > "$pkgdir/usr/share/zsh/site-functions/_shore"
 
     _install_licenses
@@ -66,27 +77,15 @@ package_shore() {
 
 package_shore-daemon() {
     pkgdesc="Persistent AI character engine — daemon"
-    # bun runs the sidecar (see build()); git is shelled out to by the
-    # workspace memory history and the character-facing git tool.
     depends=('gcc-libs' 'glibc' 'openssl' 'bun' 'git')
     optdepends=('shore: CLI client'
-                'shore-tui: terminal chat client'
-                'shore-matrix: Matrix bridge')
+                'shore-tui: terminal chat client')
 
-    install -Dm755 "$srcdir/$pkgbase/target/release/shore-daemon" \
+    install -Dm755 "$srcdir/$pkgbase/daemon/dist/shore-daemon" \
         "$pkgdir/usr/bin/shore-daemon"
-    install -Dm755 "$srcdir/$pkgbase/llm-sidecar/dist/shore-llm-sidecar" \
-        "$pkgdir/usr/lib/shore/shore-llm-sidecar"
 
-    # The checked-in unit points at install.sh's default prefix
-    # (/usr/local/lib/shore). Rewrite it to the packaged libexec dir: without
-    # this the daemon's own fallback order would find a stale
-    # /usr/local/lib/shore left behind by an earlier install.sh run and run
-    # that sidecar instead of the one shipped here.
-    install -dm755 "$pkgdir/usr/lib/systemd/user"
-    sed 's|/usr/local/lib/shore|/usr/lib/shore|g' \
-        "$srcdir/$pkgbase/contrib/shore-daemon.service" \
-        > "$pkgdir/usr/lib/systemd/user/shore-daemon.service"
+    install -dm755 "$pkgdir/usr/lib/systemd/user" \
+        "$pkgdir/usr/lib/systemd/user/shore-daemon.service"
     chmod 644 "$pkgdir/usr/lib/systemd/user/shore-daemon.service"
 
     _install_licenses
@@ -97,23 +96,8 @@ package_shore-tui() {
     depends=('gcc-libs' 'glibc')
     optdepends=('wl-clipboard: ctrl+v image paste from clipboard (Wayland)')
 
-    install -Dm755 "$srcdir/$pkgbase/target/release/shore-tui" "$pkgdir/usr/bin/shore-tui"
+    install -Dm755 "$srcdir/$pkgbase/client/target/release/shore-tui" "$pkgdir/usr/bin/shore-tui"
 
     _install_licenses
 }
 
-package_shore-matrix() {
-    pkgdesc="Persistent AI character engine — Matrix bridge"
-    depends=('gcc-libs' 'glibc' 'openssl')
-    optdepends=('continuwuity: embedded Matrix homeserver'
-                'conduwuit: embedded Matrix homeserver (alternative)'
-                'tuwunel: embedded Matrix homeserver (alternative)')
-
-    # Off $PATH like the sidecar: the daemon supervises the bridge and finds it
-    # via SHORE_MATRIX_BIN or the libexec dirs. Installing this package is what
-    # enables bridge supervision; removing it is what disables it.
-    install -Dm755 "$srcdir/$pkgbase/target/release/shore-matrix" \
-        "$pkgdir/usr/lib/shore/shore-matrix"
-
-    _install_licenses
-}
