@@ -32,11 +32,11 @@ use std::path::{Path, PathBuf};
 pub const TOKEN_ENV: &str = "SHORE_TOKEN";
 
 /// The daemon-written file, under the config directory.
-pub const TOKEN_FILE: &str = "token";
+pub(crate) const TOKEN_FILE: &str = "token";
 
 /// Why no token could be found.
 #[derive(Debug, Clone)]
-pub struct TokenError {
+pub(crate) struct TokenError {
     /// Where the file was looked for, for the message.
     pub path: PathBuf,
 }
@@ -66,7 +66,7 @@ impl std::error::Error for TokenError {}
 /// an unrelated client would look. Passing the daemon's own directory is what
 /// makes `shore-daemon --config /elsewhere/shore.toml` work with a local client
 /// and no `SHORE_TOKEN`.
-pub fn resolve_client_token(daemon_config_dir: Option<PathBuf>) -> Result<String, TokenError> {
+pub(crate) fn resolve_client_token(daemon_config_dir: Option<PathBuf>) -> Result<String, TokenError> {
     resolve_token(&daemon_config_dir.unwrap_or_else(crate::dirs::config_dir))
 }
 
@@ -77,7 +77,7 @@ pub fn resolve_client_token(daemon_config_dir: Option<PathBuf>) -> Result<String
 /// variable in a compose `.env` expands to — treating it as a real (empty)
 /// secret would send an empty token and produce a confusing rejection instead
 /// of a clear "you have not set this".
-pub fn resolve_token(config_dir: &Path) -> Result<String, TokenError> {
+pub(crate) fn resolve_token(config_dir: &Path) -> Result<String, TokenError> {
     resolve_token_with(std::env::var(TOKEN_ENV).ok(), config_dir)
 }
 
@@ -87,7 +87,7 @@ pub fn resolve_token(config_dir: &Path) -> Result<String, TokenError> {
 /// TypeScript side: the process environment is global and the test binary is
 /// parallel, so a test that sets `SHORE_TOKEN` to exercise one branch would
 /// otherwise decide the answer for every test running beside it.
-pub fn resolve_token_with(
+pub(crate) fn resolve_token_with(
     env_token: Option<String>,
     config_dir: &Path,
 ) -> Result<String, TokenError> {

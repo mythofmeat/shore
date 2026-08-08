@@ -9,14 +9,14 @@ use serde::Deserialize;
 /// on a different machine and will eventually be packaged independently.
 #[derive(Debug, Default, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ClientConfig {
+pub(crate) struct ClientConfig {
     /// Default server address (`host:port`).
     /// Used when no `--addr` flag is provided.
     pub default_address: Option<String>,
 }
 
 /// Return the default path to `client.toml`.
-pub fn client_config_path() -> PathBuf {
+pub(crate) fn client_config_path() -> PathBuf {
     crate::dirs::config_dir().join("client.toml")
 }
 
@@ -24,7 +24,7 @@ pub fn client_config_path() -> PathBuf {
 ///
 /// Returns `None` if the file does not exist. Logs a warning and returns
 /// `None` if the file exists but cannot be parsed.
-pub fn load_client_config() -> Option<ClientConfig> {
+pub(crate) fn load_client_config() -> Option<ClientConfig> {
     let path = client_config_path();
     let content = match std::fs::read_to_string(&path) {
         Ok(c) => c,

@@ -350,36 +350,6 @@ pub enum ServerMessage {
 }
 
 impl ServerMessage {
-    /// Attach a request ID to request-scoped responses.
-    ///
-    /// Unsolicited push/broadcast messages intentionally ignore `rid`.
-    #[must_use]
-    pub fn with_rid(mut self, rid: Option<String>) -> Self {
-        // Exactly one arm runs per call, so `rid` is moved into the matched
-        // field rather than cloned per variant.
-        match &mut self {
-            ServerMessage::History(msg) => msg.rid = rid,
-            ServerMessage::CommandOutput(msg) => msg.rid = rid,
-            ServerMessage::Error(msg) => msg.rid = rid,
-            ServerMessage::StreamStart(msg) => msg.rid = rid,
-            ServerMessage::StreamChunk(msg) => msg.rid = rid,
-            ServerMessage::StreamEnd(msg) => msg.rid = rid,
-            ServerMessage::Phase(msg) => msg.rid = rid,
-            ServerMessage::ToolCall(msg) => msg.rid = rid,
-            ServerMessage::ToolResult(msg) => msg.rid = rid,
-            ServerMessage::SendImage(msg) => msg.rid = rid,
-            ServerMessage::ProviderFallbackWarning(msg) => msg.rid = rid,
-            ServerMessage::UsageWarning(msg) => msg.rid = rid,
-            ServerMessage::Hello(_)
-            | ServerMessage::Shutdown(_)
-            | ServerMessage::Ping(_)
-            | ServerMessage::NewMessage(_)
-            | ServerMessage::CacheWarning(_)
-            | ServerMessage::Unknown => {}
-        }
-        self
-    }
-
     /// The sub-agent name tagged on this frame, if any. `None` is primary-model
     /// (or non-stream) activity. Lets clients bracket nested `ask_<name>` output
     /// by watching the tag transition on/off.

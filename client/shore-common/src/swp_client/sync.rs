@@ -1,7 +1,7 @@
 use crate::protocol::server_msg::ServerMessage;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SyncDecision {
+pub(crate) enum SyncDecision {
     Deliver,
     DropStale,
 }
@@ -23,7 +23,7 @@ pub enum SyncDecision {
 /// never advances `message_revision`, so it can't shadow the push that follows
 /// it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SyncState {
+pub(crate) struct SyncState {
     /// Highest revision delivered as a `NewMessage`; gates `NewMessage`.
     message_revision: u64,
     /// Highest revision delivered as a `History`; gates `History`.
@@ -31,7 +31,7 @@ pub struct SyncState {
 }
 
 impl SyncState {
-    pub fn new(initial_revision: u64) -> Self {
+    pub(crate) fn new(initial_revision: u64) -> Self {
         Self {
             message_revision: initial_revision,
             snapshot_revision: initial_revision,
@@ -39,11 +39,11 @@ impl SyncState {
     }
 
     /// Highest revision observed on either stream — for diagnostics only.
-    pub fn latest_revision(&self) -> u64 {
+    pub(crate) fn latest_revision(&self) -> u64 {
         self.message_revision.max(self.snapshot_revision)
     }
 
-    pub fn observe(&mut self, msg: &ServerMessage) -> SyncDecision {
+    pub(crate) fn observe(&mut self, msg: &ServerMessage) -> SyncDecision {
         match msg {
             ServerMessage::History(history) => {
                 if history.revision < self.snapshot_revision {

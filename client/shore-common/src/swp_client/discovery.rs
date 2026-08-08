@@ -8,7 +8,7 @@ use crate::swp_client::error::{ClientError, DiscoveryKind, Result};
 
 /// One entry in `$XDG_RUNTIME_DIR/shore/instances.json`.
 #[derive(Deserialize, Debug, Clone)]
-pub struct InstanceEntry {
+pub(crate) struct InstanceEntry {
     /// Instance ID.
     #[serde(default)]
     pub id: Option<String>,
@@ -17,9 +17,6 @@ pub struct InstanceEntry {
     /// PID of the daemon process.
     #[serde(default)]
     pub pid: Option<u32>,
-    /// Resolved data directory (written by daemon at registration).
-    #[serde(default)]
-    pub data_dir: Option<String>,
     /// Resolved config directory (written by daemon at registration).
     #[serde(default)]
     pub config_dir: Option<String>,
@@ -32,12 +29,12 @@ type InstancesFile = Vec<InstanceEntry>;
 ///
 /// Uses `crate::dirs::runtime_dir()` so that `SHORE_RUNTIME_DIR`,
 /// `XDG_RUNTIME_DIR`, and platform defaults are respected consistently.
-pub fn instances_path() -> PathBuf {
+pub(crate) fn instances_path() -> PathBuf {
     crate::dirs::runtime_dir().join("instances.json")
 }
 
 /// Read the instances file and return all live entries (dead PIDs are skipped).
-pub fn read_instances() -> Result<Vec<InstanceEntry>> {
+pub(crate) fn read_instances() -> Result<Vec<InstanceEntry>> {
     read_instances_from_path(&instances_path())
 }
 
@@ -115,17 +112,6 @@ fn pid_state(_pid: u32) -> ProcessState {
     ProcessState::Unknown
 }
 
-/// Find the `ServerAddr` for a daemon whose identity matches `selector`.
-///
-/// A selector is matched first against `InstanceEntry::id` (for callers
-/// that know the exact instance ID, e.g. `shore-mcp`) and then against
-/// `InstanceEntry::config_dir` (for callers that know the daemon by its
-/// config directory, e.g. `shore-tui`). If `selector` is `None`,
-/// returns the first (default) entry.
-pub fn discover(selector: Option<&str>) -> Result<ServerAddr> {
-    discover_from_path(&instances_path(), selector)
-}
-
 fn discover_from_path(path: &Path, selector: Option<&str>) -> Result<ServerAddr> {
     let entries = read_instances_from_path(path)?;
 
@@ -158,16 +144,6 @@ fn discover_from_path(path: &Path, selector: Option<&str>) -> Result<ServerAddr>
     Ok(ServerAddr(entry.addr.clone()))
 }
 
-/// Discover the data directory from the first live daemon instance.
-///
-/// Returns `Ok(None)` if no instance is registered or the entry lacks `data_dir`.
-pub fn discover_data_dir() -> Result<Option<PathBuf>> {
-    Ok(read_instances()?
-        .first()
-        .and_then(|e| e.data_dir.as_deref())
-        .map(PathBuf::from))
-}
-
 /// Discover the config directory from the first live daemon instance.
 ///
 /// Lets clients read the same `config.toml` the daemon is using without
@@ -196,7 +172,7 @@ pub fn discover_config_dir() -> Result<Option<PathBuf>> {
 /// directory. A daemon whose address is spelled differently here than the
 /// client spelled it (`localhost` versus `127.0.0.1`) also lands here, which is
 /// no worse than the behaviour before there were tokens.
-pub fn config_dir_for_addr(addr: &str) -> Option<PathBuf> {
+pub(crate) fn config_dir_for_addr(addr: &str) -> Option<PathBuf> {
     match read_instances() {
         Ok(entries) => config_dir_of(&entries, addr),
         Err(e) => {
@@ -216,7 +192,7 @@ fn config_dir_of(entries: &[InstanceEntry], addr: &str) -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-pub const DEFAULT_ADDR: &str = "127.0.0.1:7320";
+pub(crate) const DEFAULT_ADDR: &str = "127.0.0.1:7320";
 
 /// Convenience: check client.toml, then discover, then fall back to the
 /// default TCP address when discovery is simply absent.
@@ -271,7 +247,6 @@ mod tests {
             id: None,
             addr: addr.into(),
             pid: None,
-            data_dir: None,
             config_dir: config_dir.map(str::to_owned),
         }
     }
@@ -315,7 +290,6 @@ mod tests {
             id: None,
             addr: "127.0.0.1:7320".into(),
             pid: None,
-            data_dir: None,
             config_dir: None,
         };
         assert!(entry_alive(&entry));
@@ -327,7 +301,6 @@ mod tests {
             id: None,
             addr: "127.0.0.1:7320".into(),
             pid: Some(std::process::id()),
-            data_dir: None,
             config_dir: None,
         };
         assert!(entry_alive(&entry));
@@ -339,7 +312,6 @@ mod tests {
             id: None,
             addr: "127.0.0.1:7320".into(),
             pid: Some(u32::MAX - 1),
-            data_dir: None,
             config_dir: None,
         };
         assert!(!entry_alive(&entry));
@@ -362,7 +334,6 @@ mod tests {
         assert_eq!(entry.id.as_deref(), Some("default"));
         assert_eq!(entry.addr, "127.0.0.1:7320");
         assert_eq!(entry.pid, Some(12345));
-        assert_eq!(entry.data_dir.as_deref(), Some("/home/user/data"));
         assert_eq!(entry.config_dir.as_deref(), Some("/home/user/config"));
     }
 

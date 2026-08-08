@@ -2,7 +2,7 @@ use std::fs;
 use std::io::{self, Write};
 
 use base64::Engine;
-pub(crate) use shore_common::swp_client::image_protocol::{detect_protocol, ImageProtocol};
+pub(crate) use shore_common::image_protocol::{detect_protocol, ImageProtocol};
 use tracing::{debug, warn};
 
 /// Render an image inline using the detected protocol, or fall back to text.
@@ -117,7 +117,7 @@ fn render_iterm2(data: &[u8], name: &str) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shore_common::swp_client::image_protocol::detect_protocol_from_env;
+    use shore_common::image_protocol::detect_protocol_from_env;
 
     // ── Protocol detection from env ──────────────────────────────────
 

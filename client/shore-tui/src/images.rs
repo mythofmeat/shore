@@ -4,9 +4,9 @@ use std::io::Write;
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 
-pub(crate) use shore_common::swp_client::image_protocol::detect_protocol as detect_protocol_from_env;
-pub(crate) use shore_common::swp_client::image_protocol::detect_protocol_probe;
-pub(crate) use shore_common::swp_client::image_protocol::ImageProtocol;
+pub(crate) use shore_common::image_protocol::detect_protocol as detect_protocol_from_env;
+pub(crate) use shore_common::image_protocol::detect_protocol_probe;
+pub(crate) use shore_common::image_protocol::ImageProtocol;
 
 pub(crate) type KittyImageId = u32;
 
@@ -445,7 +445,7 @@ fn image_dimensions(data: &[u8]) -> Option<(u32, u32)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shore_common::swp_client::image_protocol::detect_protocol_from_env as detect_protocol;
+    use shore_common::image_protocol::detect_protocol_from_env as detect_protocol;
 
     #[test]
     fn detect_kitty_from_env() {

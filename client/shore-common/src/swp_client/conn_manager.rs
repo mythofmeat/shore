@@ -6,7 +6,8 @@
 
 use crate::protocol::client_msg::ClientMessage;
 use crate::protocol::server_msg::ServerMessage;
-use crate::swp_client::{discover_or_default, SWPConnection, ServerAddr, SyncDecision, SyncState};
+use crate::swp_client::sync::{SyncDecision, SyncState};
+use crate::swp_client::{discover_or_default, SWPConnection, ServerAddr};
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};
 use tracing::{debug, error, info, warn};

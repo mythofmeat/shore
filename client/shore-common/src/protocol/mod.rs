@@ -16,7 +16,7 @@ pub const SWP_V1: u32 = 1;
 /// server would terminate the connection mid-upload with "Message exceeds
 /// maximum size". 128MB gives plenty of margin for any practical chat-image
 /// workload while still bounding worst-case memory use per frame.
-pub const MAX_WIRE_MESSAGE_SIZE: usize = 128 * 1024 * 1024;
+pub(crate) const MAX_WIRE_MESSAGE_SIZE: usize = 128 * 1024 * 1024;
 
 #[cfg(test)]
 mod tests {
