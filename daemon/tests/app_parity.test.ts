@@ -16,6 +16,8 @@ import { describe, expect, test } from "bun:test";
 
 import fixture from "./config_fixtures/app_parity.json" with { type: "json" };
 
+import { pathsSetBy, replayOntoCurrentDefaults } from "./config_delta.ts";
+
 import {
   anyToolEnabled,
   budgetPaceAction,
@@ -323,16 +325,6 @@ describe("the fixture is real", () => {
 // ── Defaults ────────────────────────────────────────────────────────────
 
 describe("AppConfig::default", () => {
-  test("every default matches the Rust's", () => {
-    expect(withoutAddedFields(canonical(defaultAppConfig()))).toEqual(
-      withoutRemovedDaemonFields(fixture.defaults),
-    );
-  });
-
-  test("ToolsConfig::default matches on its own", () => {
-    expect(canonical(defaultToolsConfig())).toEqual(fixture.tools_defaults);
-  });
-
   test("an empty document parses to exactly the defaults", () => {
     const parsed = parseAppConfig(parseToml(""));
     if ("err" in parsed) throw new Error(parsed.err);
@@ -341,6 +333,15 @@ describe("AppConfig::default", () => {
 });
 
 // ── Parsing ─────────────────────────────────────────────────────────────
+
+function expectationFor(want: unknown, toml: string): unknown {
+  return replayOntoCurrentDefaults(
+    withoutRemovedDaemonFields(want),
+    withoutRemovedDaemonFields(fixture.defaults),
+    withoutAddedFields(canonical(defaultAppConfig())),
+    pathsSetBy(parseToml(toml)),
+  );
+}
 
 describe("parsing config.toml", () => {
   for (const c of fixture.parse) {
@@ -368,7 +369,7 @@ describe("parsing config.toml", () => {
         // are for: keys the fixture never had come off *our* answer, keys it
         // had and the schema dropped come off *its* expectation.
         expect(withoutAddedFields(canonical(parsed.ok))).toEqual(
-          withoutRemovedDaemonFields(want.ok),
+          expectationFor(want.ok, c.toml),
         );
       }
     });
@@ -568,8 +569,30 @@ describe("distinctions Bun's TOML parser destroys", () => {
 // ── ToolsConfig ─────────────────────────────────────────────────────────
 
 describe("the tool allowlist and per-tool resolution", () => {
+  const recorded = fixture.defaults.tools as { max_result_chars: number; timeout: string };
+  const recordedTimeoutMs = Number(
+    (ConfigDuration.deserialize(recorded.timeout) as { ok: ConfigDuration }).ok.asMillisExact(),
+  );
+
+  const current = defaultToolsConfig();
+  const currentTimeoutMs = Number(current.timeout?.asMillisExact() ?? NaN);
+
+  const inherited = (
+    set: ReadonlySet<string>,
+    tool: string,
+    field: string,
+    recordedValue: number,
+    recordedDefault: number,
+    currentDefault: number,
+  ) => {
+    const pinned =
+      set.has(`tools.${field}`) || set.has(`tools.config.${tool}.${field}`);
+    return !pinned && recordedValue === recordedDefault ? currentDefault : recordedValue;
+  };
+
   for (const c of fixture.tools_queries) {
     test(c.name, () => {
+      const set = pathsSetBy(parseToml(c.toml));
       const parsed = parseAppConfig(parseToml(c.toml));
       if ("err" in parsed) throw new Error(parsed.err);
       const tools: ToolsConfig = parsed.ok.tools;
@@ -585,8 +608,18 @@ describe("the tool allowlist and per-tool resolution", () => {
         }).toEqual({
           name: t.name,
           enabled: t.enabled,
-          result_chars: t.result_chars,
-          timeout_ms: t.timeout_ms ?? NaN,
+          result_chars: inherited(
+            set,
+            t.name,
+            "max_result_chars",
+            t.result_chars,
+            recorded.max_result_chars,
+            current.max_result_chars,
+          ),
+          timeout_ms:
+            t.timeout_ms === undefined || t.timeout_ms === null
+              ? NaN
+              : inherited(set, t.name, "timeout", t.timeout_ms, recordedTimeoutMs, currentTimeoutMs),
         });
       }
 

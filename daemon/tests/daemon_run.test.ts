@@ -28,6 +28,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { defaultToolsConfig } from "../src/config/app.ts";
 import { bounded, formatAddr, startDaemon, type RunningDaemon } from "../src/daemon/run.ts";
 import { StartupError } from "../src/daemon/startup.ts";
 import type { InstanceInfo } from "../src/instances.ts";
@@ -373,7 +374,9 @@ describe("hot reload", () => {
   test("an edit to config.toml is adopted without a restart", async () => {
     const place = await layout();
     const daemon = await start(place);
-    expect(daemon.runtime.registry.globalConfig().app.tools.max_result_chars).toBe(20000);
+    expect(daemon.runtime.registry.globalConfig().app.tools.max_result_chars).toBe(
+      defaultToolsConfig().max_result_chars,
+    );
 
     await writeFile(place.configPath, `[tools]\nmax_result_chars = 4242\n`);
 

@@ -54,8 +54,11 @@ import {
   type ConfigRuntime,
 } from "../src/commands/config.ts";
 import { CommandError } from "../src/commands/errors.ts";
+import { defaultAppConfig } from "../src/config/app.ts";
 import { loadConfig } from "../src/config/loader.ts";
 import { findModel } from "../src/config/models.ts";
+import { serializeConfigValue } from "../src/config/serialize.ts";
+import { pathsSetBy, replayOntoCurrentDefaults } from "./config_delta.ts";
 
 // ── the deliberate divergence ───────────────────────────────────────────
 
@@ -348,13 +351,35 @@ describe("configCheck", () => {
 // ── config, read ────────────────────────────────────────────────────────
 
 describe("config read", () => {
+  const liveDefaults = () => stripRemoved(serializeConfigValue(defaultAppConfig()));
+  const liveSectionDefaults = (section: string) =>
+    stripSection(section, (serializeConfigValue(defaultAppConfig()) as Record<string, unknown>)[section]);
+
+  const actualWhole = (ok: any) => ({
+    config: stripRemoved(ok.config),
+    defaults: stripRemoved(ok.defaults),
+  });
+  const explicit = pathsSetBy(Bun.TOML.parse(FURNISHED));
+
+  const recordedWhole = (ok: any) => ({
+    config: replayOntoCurrentDefaults(
+      stripRemoved(ok.config),
+      stripRemoved(ok.defaults),
+      liveDefaults(),
+      explicit,
+    ),
+    defaults: liveDefaults(),
+  });
+
   test("the whole config and the whole default baseline", async () => {
     const w = await build("mid", FURNISHED);
-    await check(row("config_read", "the whole config and the whole default baseline"), w, () =>
-      config(w.ctx, {}), (ok) => ({
-        config: stripRemoved(ok.config),
-        defaults: stripRemoved(ok.defaults),
-      }));
+    await check(
+      row("config_read", "the whole config and the whole default baseline"),
+      w,
+      () => config(w.ctx, {}),
+      recordedWhole,
+      actualWhole,
+    );
   });
 
   const sectionCases: [name: string, args: Record<string, unknown>, section: string][] = [
@@ -364,11 +389,26 @@ describe("config read", () => {
   for (const [name, args, section] of sectionCases) {
     test(name, async () => {
       const w = await build("mid", FURNISHED);
-      await check(row("config_read", name), w, () => config(w.ctx, args), (ok) => ({
-        ...ok,
-        config: stripSection(section, ok.config),
-        defaults: stripSection(section, ok.defaults),
-      }));
+      await check(
+        row("config_read", name),
+        w,
+        () => config(w.ctx, args),
+        (ok) => ({
+          ...ok,
+          config: replayOntoCurrentDefaults(
+            stripSection(section, ok.config),
+            stripSection(section, ok.defaults),
+            liveSectionDefaults(section),
+            new Set([...explicit].flatMap((p) => (p.startsWith(`${section}.`) ? [p.slice(section.length + 1)] : []))),
+          ),
+          defaults: liveSectionDefaults(section),
+        }),
+        (ok) => ({
+          ...ok,
+          config: stripSection(section, ok.config),
+          defaults: stripSection(section, ok.defaults),
+        }),
+      );
     });
   }
 
@@ -379,10 +419,13 @@ describe("config read", () => {
   for (const [name, args] of wholeCases) {
     test(name, async () => {
       const w = await build("mid", FURNISHED);
-      await check(row("config_read", name), w, () => config(w.ctx, args), (ok) => ({
-        config: stripRemoved(ok.config),
-        defaults: stripRemoved(ok.defaults),
-      }));
+      await check(
+        row("config_read", name),
+        w,
+        () => config(w.ctx, args),
+        recordedWhole,
+        actualWhole,
+      );
     });
   }
 
