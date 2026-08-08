@@ -18,7 +18,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 
 import {
   BudgetBlocked,
@@ -36,6 +35,7 @@ import { closeLedgers } from "../src/ledger/record.ts";
 import { openLedger, rowsIn } from "./support/ledger_fixture.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import type { LlmError } from "../src/llm/errors.ts";
+import { testTmp } from "./support/tmp.ts";
 
 afterEach(() => {
   closeLedgers();
@@ -345,7 +345,7 @@ describe("calling the model", () => {
 
 /** A ledger this side created, which is the point: nothing else does now. */
 function freshLedger(): string {
-  const path = join(mkdtempSync(join(tmpdir(), "shore-gen-ledger-")), "ledger.db");
+  const path = join(mkdtempSync(testTmp("shore-gen-ledger-")), "ledger.db");
   Ledger.create(path).close();
   return path;
 }

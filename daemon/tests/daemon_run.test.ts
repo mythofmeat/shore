@@ -580,9 +580,6 @@ describe("formatAddr", () => {
 });
 
 describe("describeRejection", () => {
-  // Bun exits 1 on an unhandled rejection, so a rejection from a `setInterval`
-  // callback takes the daemon down with a stack pointing at the timer. What is
-  // logged has to name the original throw site instead.
   test("an Error is described by its stack, not its message", () => {
     const err = new Error("boom from tick");
     const described = describeRejection(err);

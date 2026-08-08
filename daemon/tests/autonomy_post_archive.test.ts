@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 
 import { CharacterRegistry } from "../src/characters.ts";
 import { LastRequestCache } from "../src/autonomy/last_request.ts";
@@ -14,6 +13,7 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import type { Message } from "../src/engine/types.ts";
 import type { GenerateResponse, SidecarProvider } from "../src/llm/types.ts";
+import { testTmp } from "./support/tmp.ts";
 
 const FIXTURE_MODEL = {
   name: "fixture",
@@ -52,7 +52,7 @@ function conversation(): Message[] {
 }
 
 async function world(): Promise<{ config: LoadedConfig; characterDir: string }> {
-  const root = await mkdtemp(join(tmpdir(), "shore-postarchive-"));
+  const root = await mkdtemp(testTmp("shore-postarchive-"));
   const dirs = {
     config: join(root, "config"),
     data: root,

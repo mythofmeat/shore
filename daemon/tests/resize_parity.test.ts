@@ -12,7 +12,6 @@
 
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import sharp from "sharp";
@@ -33,6 +32,7 @@ import {
   warmImageCache,
   writeCache,
 } from "../src/handler/resize.ts";
+import { testTmp } from "./support/tmp.ts";
 
 /** Directory listing that reads an absent directory as empty. */
 async function readdirSafe(dir: string): Promise<string[]> {
@@ -44,7 +44,7 @@ async function readdirSafe(dir: string): Promise<string[]> {
 }
 
 async function tmp(): Promise<string> {
-  return await mkdtemp(join(tmpdir(), "shore-resize-"));
+  return await mkdtemp(testTmp("shore-resize-"));
 }
 
 /**

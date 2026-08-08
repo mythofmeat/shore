@@ -30,7 +30,6 @@
 
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import fixture from "./commands_fixtures/conversation_parity.json" with { type: "json" };
@@ -49,6 +48,7 @@ import {
 import { CommandError } from "../src/commands/errors.ts";
 import { ConversationEngine } from "../src/engine/conversation.ts";
 import type { Message } from "../src/engine/types.ts";
+import { testTmp } from "./support/tmp.ts";
 
 // ── fixture shapes ──────────────────────────────────────────────────────
 
@@ -127,7 +127,7 @@ const STUB_NOW = "2026-01-02T03:04:05.678+00:00";
 async function buildScenario(
   scenario: Scenario,
 ): Promise<{ engine: ConversationEngine; pushes: () => number; root: string }> {
-  const root = await mkdtemp(join(tmpdir(), "shore-conv-"));
+  const root = await mkdtemp(testTmp("shore-conv-"));
   const characterDir = join(root, "TestChar");
   await mkdir(characterDir, { recursive: true });
 

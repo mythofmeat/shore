@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { defaultAppConfig, defaultMatrixConfig, type MatrixConfig } from "../src/config/app.ts";
@@ -15,6 +14,7 @@ import {
   unusableReason,
 } from "../src/connections/matrix/start.ts";
 import { Server } from "../src/swp/server.ts";
+import { testTmp } from "./support/tmp.ts";
 
 const usable = (): MatrixConfig => ({
   ...defaultMatrixConfig(),
@@ -75,7 +75,7 @@ describe("what makes the section unusable", () => {
 describe("starting", () => {
   const loaded = (
     matrix: MatrixConfig | undefined,
-    configDir = mkdtempSync(join(tmpdir(), "shore-matrix-start-")),
+    configDir = mkdtempSync(testTmp("shore-matrix-start-")),
   ): LoadedConfig =>
     ({
       app: { ...defaultAppConfig(), connections: { telegram: undefined, discord: undefined, matrix } },

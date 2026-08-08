@@ -29,7 +29,6 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import fixture from "./commands_fixtures/model_commands_parity.json" with { type: "json" };
@@ -67,6 +66,7 @@ import {
 } from "../src/config/preferences.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { cachePath } from "../src/llm/discovery.ts";
+import { testTmp } from "./support/tmp.ts";
 
 // ── fixture shapes ──────────────────────────────────────────────────────
 
@@ -122,7 +122,7 @@ const parseToml = (src: string): unknown => Bun.TOML.parse(src);
 // ── rebuilding the world the generator built ────────────────────────────
 
 async function buildContext(setup: Setup): Promise<ModelsContext> {
-  const root = await mkdtemp(join(tmpdir(), "shore-modelcmd-"));
+  const root = await mkdtemp(testTmp("shore-modelcmd-"));
   const dirs: ShoreDirs = {
     config: join(root, "config"),
     data: join(root, "data"),

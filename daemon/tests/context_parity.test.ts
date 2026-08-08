@@ -34,7 +34,6 @@
 
 import { describe, expect, test } from "bun:test";
 import { lstat, mkdtemp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import fixture from "./handler_fixtures/context_parity.json" with { type: "json" };
@@ -56,6 +55,7 @@ import {
   buildLlmMessages,
   type AssistantImageMode,
 } from "../src/handler/wire_messages.ts";
+import { testTmp } from "./support/tmp.ts";
 
 // ── Fixture shapes ──────────────────────────────────────────────────────
 
@@ -173,7 +173,7 @@ let imagesDir: string | undefined;
 /** The shared image directory, built once from the fixture's own bytes. */
 async function images(): Promise<string> {
   if (imagesDir !== undefined) return imagesDir;
-  const dir = join(await mkdtemp(join(tmpdir(), "shore-ctx-")), "images");
+  const dir = join(await mkdtemp(testTmp("shore-ctx-")), "images");
   await mkdir(dir, { recursive: true });
   for (const [name, data] of recordedImages()) {
     await writeFile(join(dir, name), Buffer.from(data, "base64"));
@@ -262,7 +262,7 @@ async function contextFixture(c: ContextCase): Promise<{
   activeDir: string;
   resolved: ResolvedModel;
 }> {
-  const root = await mkdtemp(join(tmpdir(), "shore-ctx-case-"));
+  const root = await mkdtemp(testTmp("shore-ctx-case-"));
   const configDir = join(root, "config");
   const dataDir = join(root, "data");
   const cacheDir = join(root, "cache");

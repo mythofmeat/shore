@@ -15,7 +15,6 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 
 import fixture from "./memory_fixtures/compaction_assembly_parity.json" with { type: "json" };
 import { archiveAndRetain } from "../src/memory/compaction/archive.ts";
@@ -28,6 +27,7 @@ import type { LoadedConfig } from "../src/config/loader.ts";
 import { configView, resolveBackgroundModel } from "../src/config/preferences.ts";
 import { findEffectiveModel } from "../src/config/effective_catalog.ts";
 import { InvalidArgs, ToolIoError } from "../src/tools/errors.ts";
+import { testTmp } from "./support/tmp.ts";
 
 const STAMP = "2026-01-01T00:00:00-05:00";
 const NEW_ID = "11111111-2222-4333-8444-555555555555";
@@ -46,7 +46,7 @@ const FIXTURE_MODEL = {
 } as never;
 
 async function tempRoot(): Promise<string> {
-  return await mkdtemp(join(tmpdir(), "shore-compaction-"));
+  return await mkdtemp(testTmp("shore-compaction-"));
 }
 
 // ── archive_and_retain ──────────────────────────────────────────────────

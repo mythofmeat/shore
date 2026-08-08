@@ -15,7 +15,8 @@
  *   transient outage at one provider and a daemon with no model lists.
  */
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -26,6 +27,8 @@ import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { cachePath, CACHE_VERSION, writeCache } from "../src/llm/discovery.ts";
+
+afterAll(restoreTestEnv);
 
 /** Removed after each test: a harness runs this suite once per mutant, and
  *  `/tmp` is a tmpfs with a fixed inode budget. */
@@ -67,7 +70,7 @@ function modelsFetch(asked: string[]): typeof fetch {
 
 describe("who gets refreshed", () => {
   test("a disabled provider, and one with discovery off, are both skipped", async () => {
-    process.env["SHORE_DISCOVERY_TEST_KEY"] = "sk-test";
+    setTestEnv("SHORE_DISCOVERY_TEST_KEY", "sk-test");
     const asked: string[] = [];
     const warnings: string[] = [];
     const { config } = await configWith({
@@ -92,7 +95,7 @@ describe("who gets refreshed", () => {
   });
 
   test("an enabled provider with discovery on is fetched and cached", async () => {
-    process.env["SHORE_DISCOVERY_TEST_KEY"] = "sk-test";
+    setTestEnv("SHORE_DISCOVERY_TEST_KEY", "sk-test");
     const asked: string[] = [];
     const { config, cacheDir } = await configWith({
       upstream: {
@@ -114,7 +117,7 @@ describe("who gets refreshed", () => {
 
 describe("when", () => {
   test("a cache inside its TTL is not refetched", async () => {
-    process.env["SHORE_DISCOVERY_TEST_KEY"] = "sk-test";
+    setTestEnv("SHORE_DISCOVERY_TEST_KEY", "sk-test");
     const asked: string[] = [];
     const { config, cacheDir } = await configWith({
       upstream: {
@@ -137,7 +140,7 @@ describe("when", () => {
   });
 
   test("a cache past its TTL is refetched", async () => {
-    process.env["SHORE_DISCOVERY_TEST_KEY"] = "sk-test";
+    setTestEnv("SHORE_DISCOVERY_TEST_KEY", "sk-test");
     const asked: string[] = [];
     const { config, cacheDir } = await configWith({
       upstream: {
@@ -162,7 +165,7 @@ describe("when", () => {
 
 describe("what a failure costs", () => {
   test("the previous cache stands, and the next provider still gets its turn", async () => {
-    process.env["SHORE_DISCOVERY_TEST_KEY"] = "sk-test";
+    setTestEnv("SHORE_DISCOVERY_TEST_KEY", "sk-test");
     const { config, cacheDir } = await configWith({
       broken: {
         base_url: "https://broken.test/v1",
@@ -241,7 +244,7 @@ describe("what a failure costs", () => {
 
 describe("the loop", () => {
   test("the first pass runs at once, not one interval later", async () => {
-    process.env["SHORE_DISCOVERY_TEST_KEY"] = "sk-test";
+    setTestEnv("SHORE_DISCOVERY_TEST_KEY", "sk-test");
     const asked: string[] = [];
     const { config } = await configWith({
       upstream: {
@@ -271,7 +274,7 @@ describe("the loop", () => {
   });
 
   test("a pass that overruns the interval is not joined by a second", async () => {
-    process.env["SHORE_DISCOVERY_TEST_KEY"] = "sk-test";
+    setTestEnv("SHORE_DISCOVERY_TEST_KEY", "sk-test");
     const asked: string[] = [];
     const { config } = await configWith({
       slow: {
@@ -304,7 +307,7 @@ describe("the loop", () => {
   });
 
   test("stopping ends the schedule", async () => {
-    process.env["SHORE_DISCOVERY_TEST_KEY"] = "sk-test";
+    setTestEnv("SHORE_DISCOVERY_TEST_KEY", "sk-test");
     const asked: string[] = [];
     const { config, cacheDir } = await configWith({
       upstream: {

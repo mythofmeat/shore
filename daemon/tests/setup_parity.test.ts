@@ -25,7 +25,6 @@
 
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import fixture from "./handler_fixtures/setup_parity.json" with { type: "json" };
@@ -54,6 +53,7 @@ import {
   type MessageOverrides,
   type SetupEngine,
 } from "../src/handler/setup.ts";
+import { testTmp } from "./support/tmp.ts";
 
 const ZONE = fixture.timezone as string;
 
@@ -250,7 +250,7 @@ function baseConfig(dirs: ShoreDirs, app: AppConfig, models: ModelCatalog): Load
 describe("resolveGenerationModel", () => {
   for (const c of resolveCases) {
     test(c.name, async () => {
-      const root = await mkdtemp(join(tmpdir(), "shore-resolve-"));
+      const root = await mkdtemp(testTmp("shore-resolve-"));
       const dirs: ShoreDirs = {
         config: join(root, "config"),
         data: join(root, "data"),
@@ -344,7 +344,7 @@ function engineFor(c: BuildCase): SetupEngine {
 describe("buildGenerationRequest", () => {
   for (const c of buildCases) {
     test(c.name, async () => {
-      const root = await mkdtemp(join(tmpdir(), "shore-build-"));
+      const root = await mkdtemp(testTmp("shore-build-"));
       const dirs: ShoreDirs = {
         config: join(root, "config"),
         data: join(root, "data"),

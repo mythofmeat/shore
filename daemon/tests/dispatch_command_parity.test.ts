@@ -23,7 +23,6 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 
 import fixture from "./commands_fixtures/dispatch_parity.json" with { type: "json" };
 import { ConversationEngine } from "../src/engine/conversation.ts";
@@ -41,6 +40,7 @@ import {
   type CommandDeps,
   type CommandSession,
 } from "../src/commands/dispatch.ts";
+import { testTmp } from "./support/tmp.ts";
 
 /**
  * The one arm this build does not wire, and what the fixture recorded for it.
@@ -128,7 +128,7 @@ const FIXTURE_MODEL = {
 // ── harness ─────────────────────────────────────────────────────────────
 
 async function tempRoot(): Promise<string> {
-  return await mkdtemp(join(tmpdir(), "shore-dispatch-"));
+  return await mkdtemp(testTmp("shore-dispatch-"));
 }
 
 async function harness(): Promise<{
@@ -332,6 +332,10 @@ async function run(
 // ── dispatch ────────────────────────────────────────────────────────────
 
 describe("runCommand", () => {
+  test("the fixture key is unset, which the compact arm's expected error depends on", () => {
+    expect(process.env["SHORE_FIXTURE_API_KEY"]).toBeUndefined();
+  });
+
   for (const c of fixture.dispatch) {
     test(c.name === "" ? "(the empty name)" : c.name, async () => {
       const { frame, activeModelAfter } = await run(c.name, c.args);

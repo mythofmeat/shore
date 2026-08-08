@@ -37,11 +37,11 @@
  * inside a generation, and the Rust's generations reached an LLM.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
+import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 
 import fixture from "./handler_fixtures/generation_parity.json" with { type: "json" };
 import { ConversationEngine } from "../src/engine/conversation.ts";
@@ -69,6 +69,9 @@ import {
 } from "../src/handler/generation.ts";
 import { buildToolContext } from "../src/handler/tool_context.ts";
 import type { TurnAutonomy } from "../src/handler/turn.ts";
+import { testTmp } from "./support/tmp.ts";
+
+afterAll(restoreTestEnv);
 
 // ── normalisation, mirroring the generator ──────────────────────────────
 
@@ -191,7 +194,7 @@ async function loadedConfig(root: string, knobs: Knobs): Promise<LoadedConfig> {
   let providers = ProviderRegistry.empty();
   if (knobs.image_generation != null || knobs.embedding_key_set === true) {
     const env = knobs.image_generation != null ? IMAGE_KEY_ENV : EMBED_KEY_ENV;
-    process.env[env] = "fixture-key";
+    setTestEnv(env, "fixture-key");
     providers = ProviderRegistry.fromSection({
       openai: { keys: [{ name: "default", env }] },
     });
@@ -221,7 +224,7 @@ function model(): ResolvedModel {
 }
 
 async function tempRoot(name: string): Promise<string> {
-  return await mkdtemp(join(tmpdir(), `shore-gen-${name}-`));
+  return await mkdtemp(testTmp(`shore-gen-${name}-`));
 }
 
 // ── apply_intermediate_messages ─────────────────────────────────────────
@@ -358,7 +361,7 @@ async function replayTurn(c: Record<string, any>): Promise<Run> {
     subagent: input["subagent"],
     ...(input["max_retries"] === undefined ? {} : { max_retries: input["max_retries"] }),
   });
-  process.env[MODEL_KEY_ENV] = "fixture-key";
+  setTestEnv(MODEL_KEY_ENV, "fixture-key");
 
   await mkdir(join(config.dirs.config, "characters", "ada"), { recursive: true });
   await writeFile(join(config.dirs.config, "characters", "ada", "character.md"), "ada system prompt");
@@ -646,7 +649,7 @@ describe("runGeneration", () => {
 test("a sampler preference set for the character reaches the outgoing request", async () => {
   const root = await tempRoot("overlay");
   const config = await loadedConfig(root, { with_model: true });
-  process.env[MODEL_KEY_ENV] = "fixture-key";
+  setTestEnv(MODEL_KEY_ENV, "fixture-key");
 
   await mkdir(join(config.dirs.config, "characters", "ada"), { recursive: true });
   await writeFile(join(config.dirs.config, "characters", "ada", "character.md"), "ada");

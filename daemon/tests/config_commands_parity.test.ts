@@ -38,7 +38,6 @@
 
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import fixture from "./commands_fixtures/config_commands_parity.json" with { type: "json" };
@@ -59,6 +58,7 @@ import { loadConfig } from "../src/config/loader.ts";
 import { findModel } from "../src/config/models.ts";
 import { serializeConfigValue } from "../src/config/serialize.ts";
 import { pathsSetBy, replayOntoCurrentDefaults } from "./config_delta.ts";
+import { testTmp } from "./support/tmp.ts";
 
 // ── the deliberate divergence ───────────────────────────────────────────
 
@@ -150,7 +150,7 @@ async function build(
   configToml: string,
   extra: [path: string, text: string][] = [],
 ): Promise<World> {
-  const root = await mkdtemp(join(tmpdir(), "shore-config-cmd-"));
+  const root = await mkdtemp(testTmp("shore-config-cmd-"));
   for (const [path, text] of extra) {
     const target = join(root, path);
     await mkdir(dirname(target), { recursive: true });

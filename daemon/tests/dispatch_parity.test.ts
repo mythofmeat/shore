@@ -6,7 +6,8 @@
  * and is frozen. A diff here is a defect in the port, not a fixture to update.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
+import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 
 import fixture from "./tools_fixtures/dispatch_parity.json" with { type: "json" };
 
@@ -25,6 +26,8 @@ import {
 } from "../src/tools/dispatch.ts";
 import { DEFAULT_RETRIEVAL_CONFIG } from "../src/tools/workspace.ts";
 import type { Embedder } from "../src/llm/embed.ts";
+
+afterAll(restoreTestEnv);
 
 // ── The bare context the fixture was generated against ──────────────────
 
@@ -361,7 +364,7 @@ describe("context fields reach their handler argument", () => {
         });
       },
     });
-    process.env["DISPATCH_TEST_KEY"] = "secret";
+    setTestEnv("DISPATCH_TEST_KEY", "secret");
     try {
       await dispatchTool("web_search", { query: "x" }, ctx);
     } finally {

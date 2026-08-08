@@ -21,7 +21,6 @@
 
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
@@ -35,6 +34,7 @@ import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import type { ConversationEngine, History } from "../src/engine/conversation.ts";
+import { testTmp } from "./support/tmp.ts";
 
 const MODEL = {
   name: "fixture",
@@ -97,7 +97,7 @@ function registry(
 
 describe("the hello snapshot", () => {
   test("names every character on disk and inlines the avatars it finds", async () => {
-    const root = await mkdtemp(join(tmpdir(), "shore-handshake-hello-"));
+    const root = await mkdtemp(testTmp("shore-handshake-hello-"));
     const config = configFor(root);
     await mkdir(join(config.dirs.config, "characters", "ada"), { recursive: true });
     await writeFile(join(config.dirs.config, "characters", "ada", "avatar.png"), "PNGBYTES");
@@ -116,7 +116,7 @@ describe("the hello snapshot", () => {
   });
 
   test("no characters is an empty list, not a placeholder", async () => {
-    const root = await mkdtemp(join(tmpdir(), "shore-handshake-none-"));
+    const root = await mkdtemp(testTmp("shore-handshake-none-"));
     // `DEFAULT_HANDSHAKE` answers with one character called `default`, which is
     // the stub. A real daemon with nothing configured says so.
     expect(helloSnapshot(registry({ globalConfig: () => configFor(root) })).characters).toEqual([]);
@@ -125,7 +125,7 @@ describe("the hello snapshot", () => {
 
 describe("the history snapshot", () => {
   test("no character selected is an empty conversation with a config block", async () => {
-    const root = await mkdtemp(join(tmpdir(), "shore-handshake-nochar-"));
+    const root = await mkdtemp(testTmp("shore-handshake-nochar-"));
     const config = configFor(root, { model: "chat.fixture" });
 
     const snapshot = await buildSessionHistorySnapshot(
@@ -142,7 +142,7 @@ describe("the history snapshot", () => {
   });
 
   test("a character that is gone answers empty rather than refusing the handshake", async () => {
-    const root = await mkdtemp(join(tmpdir(), "shore-handshake-gone-"));
+    const root = await mkdtemp(testTmp("shore-handshake-gone-"));
     const config = configFor(root, { model: "chat.fixture" });
 
     const snapshot = await buildSessionHistorySnapshot(
@@ -160,7 +160,7 @@ describe("the history snapshot", () => {
   });
 
   test("a live character carries its conversation, revision and resolved name", async () => {
-    const root = await mkdtemp(join(tmpdir(), "shore-handshake-live-"));
+    const root = await mkdtemp(testTmp("shore-handshake-live-"));
     const config = configFor(root, { model: "chat.fixture" });
     const messages = [{ msg_id: "m_1", role: "user", content: "hi" }] as never;
 
@@ -182,7 +182,7 @@ describe("the history snapshot", () => {
   });
 
   test("a push snapshot starts at zero, because it carries no scrollback", async () => {
-    const root = await mkdtemp(join(tmpdir(), "shore-handshake-start-"));
+    const root = await mkdtemp(testTmp("shore-handshake-start-"));
     const config = configFor(root, { model: "chat.fixture" });
 
     const snapshot = await buildSessionHistorySnapshot(
@@ -199,7 +199,7 @@ describe("the history snapshot", () => {
   });
 
   test("with no character selected the registry is never asked for an engine", async () => {
-    const root = await mkdtemp(join(tmpdir(), "shore-handshake-unasked-"));
+    const root = await mkdtemp(testTmp("shore-handshake-unasked-"));
     const config = configFor(root, { model: "chat.fixture" });
     const asked: unknown[] = [];
 
@@ -220,7 +220,7 @@ describe("the history snapshot", () => {
   });
 
   test("the snapshot reports the engine's own name, not the one asked for", async () => {
-    const root = await mkdtemp(join(tmpdir(), "shore-handshake-resolved-"));
+    const root = await mkdtemp(testTmp("shore-handshake-resolved-"));
     const config = configFor(root, { model: "chat.fixture" });
 
     const snapshot = await buildSessionHistorySnapshot(
@@ -238,7 +238,7 @@ describe("the history snapshot", () => {
   });
 
   test("a selected character is read through its effective config", async () => {
-    const root = await mkdtemp(join(tmpdir(), "shore-handshake-effective-"));
+    const root = await mkdtemp(testTmp("shore-handshake-effective-"));
     // The two configs differ in the catalog rather than only in
     // `defaults.model`, because the per-character resolver consults the
     // catalog first — a name that resolves nowhere falls through and both
@@ -263,7 +263,7 @@ describe("the history snapshot", () => {
 
 describe("which model the config block reports", () => {
   test("the caller's choice outranks anything resolved", async () => {
-    const root = await mkdtemp(join(tmpdir(), "shore-handshake-given-"));
+    const root = await mkdtemp(testTmp("shore-handshake-given-"));
     const config = configFor(root, { model: "chat.fixture" });
 
     const snapshot = await buildSessionHistorySnapshot(
@@ -281,7 +281,7 @@ describe("which model the config block reports", () => {
   });
 
   test("with no default configured it falls back to the first model in the catalog", async () => {
-    const root = await mkdtemp(join(tmpdir(), "shore-handshake-first-"));
+    const root = await mkdtemp(testTmp("shore-handshake-first-"));
     const config = configFor(root);
 
     const snapshot = await buildSessionHistorySnapshot(
@@ -295,7 +295,7 @@ describe("which model the config block reports", () => {
   });
 
   test("a character's saved pick outranks the config default", async () => {
-    const root = await mkdtemp(join(tmpdir(), "shore-handshake-prefs-"));
+    const root = await mkdtemp(testTmp("shore-handshake-prefs-"));
     // Two chat models, and the config default is the other one — so only the
     // saved preference can produce this answer.
     const config = configFor(root, { model: "chat.fixture" });
@@ -321,7 +321,7 @@ describe("which model the config block reports", () => {
   });
 
   test("with nothing to report at all it is null rather than absent", async () => {
-    const root = await mkdtemp(join(tmpdir(), "shore-handshake-empty-"));
+    const root = await mkdtemp(testTmp("shore-handshake-empty-"));
     const config = configFor(root, { catalog: false });
 
     const snapshot = await buildSessionHistorySnapshot(
@@ -335,7 +335,7 @@ describe("which model the config block reports", () => {
 
 describe("the provider the transport is handed", () => {
   test("answers both snapshots from the live registry", async () => {
-    const root = await mkdtemp(join(tmpdir(), "shore-handshake-provider-"));
+    const root = await mkdtemp(testTmp("shore-handshake-provider-"));
     const config = configFor(root, { model: "chat.fixture" });
     await mkdir(join(config.dirs.config, "characters", "ada"), { recursive: true });
 

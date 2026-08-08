@@ -15,7 +15,6 @@
 
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import fixture from "./commands_fixtures/navigation_parity.json" with { type: "json" };
@@ -28,6 +27,7 @@ import {
   listCharactersStandalone,
   switchCharacter,
 } from "../src/commands/navigation.ts";
+import { testTmp } from "./support/tmp.ts";
 
 // ── fixture shapes ──────────────────────────────────────────────────────
 
@@ -56,7 +56,7 @@ interface World {
 }
 
 async function build(entries: Entry[]): Promise<World> {
-  const root = await mkdtemp(join(tmpdir(), "shore-navigation-"));
+  const root = await mkdtemp(testTmp("shore-navigation-"));
   for (const [path, bytes] of entries) {
     const target = join(root, path);
     if (path.endsWith("/")) {

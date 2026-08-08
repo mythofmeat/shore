@@ -16,13 +16,13 @@
 
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import fixture from "./commands_fixtures/memory_command_parity.json" with { type: "json" };
 
 import { CommandError } from "../src/commands/errors.ts";
 import { memory } from "../src/commands/memory.ts";
+import { testTmp } from "./support/tmp.ts";
 
 // ── fixture shapes ──────────────────────────────────────────────────────
 
@@ -46,7 +46,7 @@ const row = (section: "status" | "query", name: string): Row => {
 type Entry = [path: string, text?: string];
 
 async function build(entries: Entry[]): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "shore-memory-cmd-"));
+  const root = await mkdtemp(testTmp("shore-memory-cmd-"));
   for (const [path, text] of entries) {
     const target = join(root, path);
     if (path.endsWith("/")) {

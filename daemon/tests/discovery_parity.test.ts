@@ -23,7 +23,6 @@
 
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
@@ -46,6 +45,7 @@ import {
   type DiscoveredModel,
   type ProviderModelsCache,
 } from "../src/llm/discovery";
+import { testTmp } from "./support/tmp.ts";
 
 interface UrlCase {
   base_url: string;
@@ -139,7 +139,7 @@ const fixture = (await Bun.file(
 const byteLen = (s: string) => Buffer.byteLength(s, "utf8");
 
 async function scratch(): Promise<string> {
-  return await mkdtemp(join(tmpdir(), "discovery-parity-"));
+  return await mkdtemp(testTmp("discovery-parity-"));
 }
 
 describe("the fixture is real", () => {

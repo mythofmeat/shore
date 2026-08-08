@@ -24,7 +24,6 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 
 import fixture from "./autonomy_fixtures/deep_archive_parity.json" with { type: "json" };
 import { MessageStore } from "../src/engine/message_store.ts";
@@ -42,6 +41,7 @@ import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
+import { testTmp } from "./support/tmp.ts";
 
 // ── harness ─────────────────────────────────────────────────────────────
 
@@ -84,7 +84,7 @@ async function world(
   priorSegment = false,
   opts: { backgroundModel?: boolean } = {},
 ): Promise<{ config: LoadedConfig; dataDir: string; characterDir: string }> {
-  const root = await mkdtemp(join(tmpdir(), "shore-deeparch-"));
+  const root = await mkdtemp(testTmp("shore-deeparch-"));
   const dirs = {
     config: join(root, "config"),
     data: root,

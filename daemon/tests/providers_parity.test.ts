@@ -24,7 +24,6 @@
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import fixture from "./commands_fixtures/providers_parity.json" with { type: "json" };
@@ -43,6 +42,7 @@ import type { LoadedConfig } from "../src/config/loader.ts";
 import { catalogFromSections, emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { cachePath } from "../src/llm/discovery.ts";
+import { testTmp } from "./support/tmp.ts";
 
 // ── fixture shapes ──────────────────────────────────────────────────────
 
@@ -149,7 +149,7 @@ async function build(
   caches: [string, unknown][],
   fetchImpl?: typeof fetch,
 ): Promise<World> {
-  const root = await mkdtemp(join(tmpdir(), "shore-providers-"));
+  const root = await mkdtemp(testTmp("shore-providers-"));
   const dirs: ShoreDirs = {
     config: join(root, "config"),
     data: join(root, "data"),

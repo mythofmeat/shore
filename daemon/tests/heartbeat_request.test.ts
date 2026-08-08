@@ -20,10 +20,10 @@
  * provider quietly charging cache-write prices from then on.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
+import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 
 import {
   applyHeartbeatModelOverride,
@@ -38,6 +38,9 @@ import { ConfigDuration } from "../src/config/duration.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import type { Message } from "../src/engine/types.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
+import { testTmp } from "./support/tmp.ts";
+
+afterAll(restoreTestEnv);
 
 // ── harness ─────────────────────────────────────────────────────────────
 
@@ -73,7 +76,7 @@ function catalogWithTwoModels() {
 }
 
 async function baseConfig(heartbeat?: string): Promise<LoadedConfig> {
-  const root = await mkdtemp(join(tmpdir(), "shore-hbreq-"));
+  const root = await mkdtemp(testTmp("shore-hbreq-"));
   const dirs = {
     config: join(root, "config"),
     data: root,
@@ -114,8 +117,8 @@ const ENV = { [CHAT_ENV]: "chat-secret", [OVERRIDE_ENV]: "slowthink-secret" };
 // The cold rebuild builds a chat request through the handler, which reads the
 // ambient environment rather than an injected one. `env` above stays injected
 // because the override tests need to control which keys are *missing*.
-process.env[CHAT_ENV] = "chat-secret";
-process.env[OVERRIDE_ENV] = "slowthink-secret";
+setTestEnv(CHAT_ENV, "chat-secret");
+setTestEnv(OVERRIDE_ENV, "slowthink-secret");
 
 // ── the override, from the Rust ─────────────────────────────────────────
 

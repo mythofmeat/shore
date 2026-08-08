@@ -20,7 +20,6 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 
 import fixture from "./handler_fixtures/command_path_parity.json" with { type: "json" };
 import { CharacterError } from "../src/characters.ts";
@@ -33,6 +32,7 @@ import { Diagnostics } from "../src/diagnostics.ts";
 import { AutonomyService } from "../src/autonomy/service.ts";
 import { dispatchCommand, type CommandPathDeps } from "../src/handler/commands.ts";
 import type { RequestMeta } from "../src/swp/session.ts";
+import { testTmp } from "./support/tmp.ts";
 
 /**
  * The three names the Rust answered with a null rid, whatever the request
@@ -64,7 +64,7 @@ interface Harness {
 }
 
 async function harness(characters: readonly string[]): Promise<Harness> {
-  const root = await mkdtemp(join(tmpdir(), "shore-cmdpath-"));
+  const root = await mkdtemp(testTmp("shore-cmdpath-"));
   const dirs = {
     config: join(root, "config"),
     data: join(root, "data"),

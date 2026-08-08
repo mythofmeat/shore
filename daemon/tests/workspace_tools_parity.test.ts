@@ -41,7 +41,6 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { mkdir, readdir, readlink, lstat, readFile, symlink, utimes, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import {
@@ -63,6 +62,7 @@ import {
   DEFAULT_RETRIEVAL_CONFIG,
   type ToolInput,
 } from "../src/tools/workspace";
+import { testTmp } from "./support/tmp.ts";
 
 const fixture = JSON.parse(
   readFileSync(new URL("./tools_fixtures/workspace_parity.json", import.meta.url), "utf8"),
@@ -142,7 +142,7 @@ async function makeCase(
   tree: TreeNode[],
   missing = false,
 ): Promise<{ workspace: string; data: string }> {
-  const root = mkdtempSync(join(tmpdir(), "shore-ws-"));
+  const root = mkdtempSync(testTmp("shore-ws-"));
   const workspace = join(root, "workspace");
   const data = join(root, "char", "data");
   await mkdir(data, { recursive: true });

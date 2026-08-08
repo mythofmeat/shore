@@ -18,7 +18,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 
 import fixture from "./autonomy_fixtures/last_request_parity.json" with { type: "json" };
 import { defaultAppConfig } from "../src/config/app.ts";
@@ -39,6 +38,7 @@ import { LastRequestCache, reprimeDecision } from "../src/autonomy/last_request.
 import type { KeepalivePrefix, PingNowOutcome } from "../src/autonomy/keepalive.ts";
 import { classify, keepalivePingNowCommand } from "../src/commands/keepalive.ts";
 import { CommandError } from "../src/commands/errors.ts";
+import { testTmp } from "./support/tmp.ts";
 
 // ── harness ─────────────────────────────────────────────────────────────
 
@@ -90,7 +90,7 @@ async function world(
   messages: Message[],
   segments: [number, number] = [0, 0],
 ): Promise<{ config: LoadedConfig; dataDir: string }> {
-  const root = await mkdtemp(join(tmpdir(), "shore-lastreq-"));
+  const root = await mkdtemp(testTmp("shore-lastreq-"));
   const dirs = {
     config: join(root, "config"),
     data: root,

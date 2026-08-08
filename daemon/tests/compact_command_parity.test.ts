@@ -15,7 +15,6 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 
 import fixture from "./commands_fixtures/compact_parity.json" with { type: "json" };
 import { ConversationEngine } from "../src/engine/conversation.ts";
@@ -38,6 +37,7 @@ import {
   type CompactContext,
 } from "../src/commands/compact.ts";
 import { CommandError } from "../src/commands/errors.ts";
+import { testTmp } from "./support/tmp.ts";
 
 // ── harness ─────────────────────────────────────────────────────────────
 
@@ -72,7 +72,7 @@ interface World {
  * has to mean to be worth recording.
  */
 async function world(messages: unknown[]): Promise<World> {
-  const root = await mkdtemp(join(tmpdir(), "shore-compact-"));
+  const root = await mkdtemp(testTmp("shore-compact-"));
   const dirs = {
     config: join(root, "config"),
     data: root,

@@ -16,10 +16,10 @@
  *   is a bill.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
+import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 
 import {
   InProcessAutonomyExecutor,
@@ -33,11 +33,14 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
+import { testTmp } from "./support/tmp.ts";
+
+afterAll(restoreTestEnv);
 
 // ── harness ─────────────────────────────────────────────────────────────
 
 const KEY_ENV = "SHORE_INPROC_KEY";
-process.env[KEY_ENV] = "secret";
+setTestEnv(KEY_ENV, "secret");
 
 const MODEL = {
   name: "fixture",
@@ -65,7 +68,7 @@ function message(role: "user" | "assistant", id: string, text: string): Message 
 }
 
 async function world(): Promise<LoadedConfig> {
-  const root = await mkdtemp(join(tmpdir(), "shore-inproc-"));
+  const root = await mkdtemp(testTmp("shore-inproc-"));
   const dirs = {
     config: join(root, "config"),
     data: root,

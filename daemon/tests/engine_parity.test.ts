@@ -23,13 +23,13 @@
 
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { ConversationEngine, type History } from "../src/engine/conversation";
 import { MessageNotFound } from "../src/engine/message_store";
 import { SegmentReader } from "../src/engine/segments";
 import type { Message } from "../src/engine/types";
+import { testTmp } from "./support/tmp.ts";
 
 interface SegmentRead {
   index: number;
@@ -81,7 +81,7 @@ const fixture = (await Bun.file(
 ).json()) as Fixture;
 
 async function scratch(): Promise<string> {
-  return await mkdtemp(join(tmpdir(), "shore-engine-"));
+  return await mkdtemp(testTmp("shore-engine-"));
 }
 
 /** Lay a character directory out the way the generator's temp dir was. */

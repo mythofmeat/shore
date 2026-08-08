@@ -30,7 +30,8 @@ import { mkdtemp, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { rmSync } from "node:fs";
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 
 import { closeLedgers } from "../src/ledger/record.ts";
 import { generate } from "../src/llm/generate.ts";
@@ -55,6 +56,8 @@ import {
   type GenerationDeps,
 } from "../src/handler/generation.ts";
 import type { TurnAutonomy } from "../src/handler/turn.ts";
+
+afterAll(restoreTestEnv);
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -543,8 +546,8 @@ async function chatConfig(root: string, spareKey: boolean): Promise<LoadedConfig
   const models = emptyCatalog();
   models.chat.set("chat.gpt-test", chatModel());
 
-  process.env[CHAT_KEY_ENV] = "sk-test";
-  process.env[SPARE_KEY_ENV] = "sk-spare";
+  setTestEnv(CHAT_KEY_ENV, "sk-test");
+  setTestEnv(SPARE_KEY_ENV, "sk-spare");
   const providers = ProviderRegistry.fromSection({
     openai: {
       keys: spareKey

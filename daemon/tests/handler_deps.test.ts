@@ -941,14 +941,6 @@ describe("reloading [mcp]", () => {
     }
   });
 
-  /**
-   * The cached body carries the tool definitions it was built with
-   * (`llm/request.ts`, `tools: inputs.tools`), and `prepareHeartbeatRequest`
-   * prefers the cache over a rebuild. So between an `[mcp]` reload and the next
-   * chat turn, heartbeats sent the old surface while chat turns sent the new
-   * one — two prefixes, and the heartbeat paid a cache write that bought the
-   * next chat turn nothing.
-   */
   test("a changed [mcp] drops the cached request that still holds the old tool surface", async () => {
     const server = fakeServer("set_light");
     const { root, runtime } = await runtimeWithMcp(server);
@@ -980,9 +972,6 @@ describe("reloading [mcp]", () => {
   });
 
   test("an unrelated reload leaves the cached request in place", async () => {
-    // The invalidation is a cache *write* on the next heartbeat, so it must
-    // follow the same comparison the reconnect does rather than fire on any
-    // config edit.
     const server = fakeServer("set_light");
     const { root, runtime } = await runtimeWithMcp(server);
     try {

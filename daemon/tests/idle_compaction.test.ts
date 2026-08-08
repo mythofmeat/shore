@@ -24,7 +24,6 @@ import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 
 import type { Message } from "../src/engine/types.ts";
 import { LastRequestCache } from "../src/autonomy/last_request.ts";
@@ -33,6 +32,7 @@ import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
+import { testTmp } from "./support/tmp.ts";
 
 // ── harness ─────────────────────────────────────────────────────────────
 
@@ -79,7 +79,7 @@ function conversation(): Message[] {
 async function world(
   messages: Message[] = conversation(),
 ): Promise<{ config: LoadedConfig; dataDir: string; characterDir: string }> {
-  const root = await mkdtemp(join(tmpdir(), "shore-idlecompact-"));
+  const root = await mkdtemp(testTmp("shore-idlecompact-"));
   const dirs = {
     config: join(root, "config"),
     data: root,

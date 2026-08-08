@@ -19,10 +19,10 @@
  *   clock tries again on its own schedule.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
+import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 
 import {
   persistHeartbeatMessage,
@@ -37,11 +37,14 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
 import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
+import { testTmp } from "./support/tmp.ts";
+
+afterAll(restoreTestEnv);
 
 // ── harness ─────────────────────────────────────────────────────────────
 
 const KEY_ENV = "SHORE_HB_TICK_KEY";
-process.env[KEY_ENV] = "secret";
+setTestEnv(KEY_ENV, "secret");
 
 const MODEL = {
   name: "fixture",
@@ -71,7 +74,7 @@ function message(role: "user" | "assistant", id: string, text: string): Message 
 async function world(
   messages: Message[] = [message("user", "m_1", "hi"), message("assistant", "m_2", "hello")],
 ): Promise<LoadedConfig> {
-  const root = await mkdtemp(join(tmpdir(), "shore-hbtick-"));
+  const root = await mkdtemp(testTmp("shore-hbtick-"));
   const dirs = {
     config: join(root, "config"),
     data: root,

@@ -534,13 +534,6 @@ describe("what reaches the heartbeat log and the state file", () => {
     expect(h.service.scheduleFor(CHARACTER)).toBeUndefined();
   });
 
-  /**
-   * `tick` runs from a bare `setInterval(() => { void service.tick(); })`, so a
-   * rejection escaping it is unhandled and Bun exits 1. Both things that can
-   * throw inside `#ping` are injected from outside the class — the sender at
-   * the constructor and the sink through `onEvent` — which is why this is the
-   * class's problem and not the caller's.
-   */
   test("a throwing event sink does not reject the tick, and the character stays schedulable", async () => {
     const h = harness();
     h.service.onEvent(() => {

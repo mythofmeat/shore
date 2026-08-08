@@ -21,7 +21,6 @@
 
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
@@ -36,6 +35,7 @@ import {
   QueryMatcher,
   rangeIsEmpty,
 } from "../src/tools/history";
+import { testTmp } from "./support/tmp.ts";
 
 type Json = Record<string, unknown>;
 
@@ -97,7 +97,7 @@ const fixture = (await Bun.file(
 
 /** Write the fixture's corpus bytes into a fresh directory. */
 async function corpusDir(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), "history-parity-"));
+  const dir = await mkdtemp(testTmp("history-parity-"));
   await mkdir(join(dir, "segments"), { recursive: true });
   for (const seg of fixture.corpus.segments) {
     await writeFile(join(dir, "segments", seg.file), seg.body);
@@ -353,7 +353,7 @@ describe("end to end", () => {
   }
 
   test("an empty character directory searches nothing and does not fail", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "history-parity-empty-"));
+    const dir = await mkdtemp(testTmp("history-parity-empty-"));
     expect(await run({ query: "tea" }, dir)).toEqual(fixture.empty_character_dir as never);
   });
 
