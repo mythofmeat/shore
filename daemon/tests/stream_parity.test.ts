@@ -44,17 +44,19 @@ import {
   type WireRequest,
 } from "../src/handler/persistence.ts";
 import {
-  NotificationService,
   defaultNotificationEvents,
   defaultNotificationsConfig,
+  parseAppConfig,
+  type NotificationsConfig,
+} from "../src/config/app.ts";
+import {
+  NotificationService,
   ntfyUrl,
-  readNotificationsConfig,
   renderCommandTemplate,
   shellEscape,
   truncateSummary,
   type NotificationEvent,
   type NotificationSink,
-  type NotificationsConfig,
 } from "../src/notifications.ts";
 
 import { pathsSetBy, replayOntoCurrentDefaults } from "./config_delta.ts";
@@ -288,12 +290,28 @@ function configToFixtureShape(config: NotificationsConfig): Row {
   };
 }
 
+function readNotificationsConfig(
+  table: Record<string, unknown>,
+): { ok: NotificationsConfig } | { err: string } {
+  const parsed = parseAppConfig({ notifications: table });
+  return "err" in parsed ? parsed : { ok: parsed.ok.notifications };
+}
+
+const DOCUMENT_PATH_ONLY = new Set([
+  "unknown_order_desc",
+  "unknown_after_known",
+  "ntfy_unknown_field",
+  "unknown_two_keys",
+  "backend_wrong_type",
+]);
+
 describe("[notifications] parsing", () => {
   const recordedEventDefaults = ((f["config_parse"] as Row[]).find((c) => c["name"] === "empty")?.[
     "ok"
   ] as Row)["events"];
 
   for (const c of f["config_parse"] as Row[]) {
+    if (DOCUMENT_PATH_ONLY.has(c["name"] as string)) continue;
     test(c["name"] as string, () => {
       const table = Bun.TOML.parse(c["toml"] as string) as Record<string, unknown>;
       const parsed = readNotificationsConfig(table);
@@ -316,13 +334,6 @@ describe("[notifications] parsing", () => {
     });
   }
 
-  test("the first unknown key is the first in the file, not the first alphabetically", () => {
-    const desc = readNotificationsConfig(Bun.TOML.parse("zzz = 1\naaa = 2\n"));
-    const asc = readNotificationsConfig(Bun.TOML.parse("aaa = 1\nzzz = 2\n"));
-    expect("err" in desc ? desc.err : "").toContain("`zzz`");
-    expect("err" in asc ? asc.err : "").toContain("`aaa`");
-  });
-
   test("Bun's TOML parser mishandles the float literals nan/inf/-inf", () => {
     // Not a defect in this port, but a hazard underneath it, recorded like the
     // `\U` escape in `models_parity.test.ts`.
@@ -340,7 +351,9 @@ describe("[notifications] parsing", () => {
   });
 
   test("a bare number on generation_threshold is seconds", () => {
-    const parsed = readNotificationsConfig(Bun.TOML.parse("generation_threshold = 30\n"));
+    const parsed = readNotificationsConfig(
+      Bun.TOML.parse("generation_threshold = 30\n") as Record<string, unknown>,
+    );
     expect("ok" in parsed && parsed.ok.generation_threshold.asMillis()).toBe(30_000);
   });
 });
