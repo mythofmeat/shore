@@ -6,6 +6,7 @@
     "start": "bun run src/daemon/run.ts",
     "build": "bun build src/daemon/run.ts --outfile dist/shore-daemon --target=bun --banner='#!/usr/bin/env bun' && chmod +x dist/shore-daemon",
     "typecheck": "tsc --noEmit",
+    "lint:comments": "bun run scripts/check_no_comments.ts",
     "test": "bun test"
   },
   "dependencies": {
