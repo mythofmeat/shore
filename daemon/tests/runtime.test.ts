@@ -141,14 +141,14 @@ describe("what assembly wires together", () => {
         connectMcp: NO_MCP,
       });
 
-      // Arming reads the cadence off the body, which is why the cache is built
-      // after the keepalive and holds it rather than the other way round.
+      // Arming takes the cadence beside the body, which is why the cache is
+      // built after the keepalive and holds it rather than the other way round.
       runtime.cache.set("ada", {
         model: "claude-fixture",
         sdk: "anthropic",
         messages: [],
         context: { character: "ada", ledger: join(config.dirs.data, "ledger.db"), call_type: "message" },
-      } as never);
+      } as never, undefined);
 
       await runtime.keepalive.pingNow("ada");
       expect(seen).toEqual(["claude-fixture"]);
@@ -169,7 +169,7 @@ describe("what assembly wires together", () => {
         sdk: "anthropic",
         messages: [],
         context: { character: "ada", ledger: join(config.dirs.data, "ledger.db"), call_type: "message" },
-      } as never);
+      } as never, undefined);
 
       const outcome = await runtime.keepalive.pingNow("ada");
       expect(JSON.stringify(outcome)).toContain("unsupported sdk");

@@ -291,7 +291,7 @@ describe("preparing a heartbeat body", () => {
     await withConversation(config);
     const cache = new LastRequestCache();
     const cached = minimalRequest("claude-sonnet-chat");
-    cache.set("alice", cached);
+    cache.set("alice", cached, undefined);
     const beforeLength = cached.messages.length;
 
     const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
@@ -308,7 +308,7 @@ describe("preparing a heartbeat body", () => {
     const config = await baseConfig();
     await withConversation(config);
     const cache = new LastRequestCache();
-    cache.set("alice", minimalRequest("claude-sonnet-chat"));
+    cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
 
     const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
 
@@ -325,7 +325,7 @@ describe("preparing a heartbeat body", () => {
       ConfigDuration.fromSecs(10_800);
     await withConversation(config);
     const cache = new LastRequestCache();
-    cache.set("alice", minimalRequest("claude-sonnet-chat"));
+    cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
 
     const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
 
@@ -339,7 +339,7 @@ describe("preparing a heartbeat body", () => {
     const cache = new LastRequestCache();
     const cached = minimalRequest("claude-sonnet-chat");
     cached.context = { character: "alice", call_type: "message", thinking_enabled: false, rid: "r_1" };
-    cache.set("alice", cached);
+    cache.set("alice", cached, undefined);
 
     const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
 
@@ -392,7 +392,7 @@ describe("preparing a heartbeat body", () => {
     // A plain file where the snapshot directory belongs, so `mkdir` throws.
     await writeFile(join(config.dirs.data, "alice", "active_prompt"), "not a directory\n");
     const cache = new LastRequestCache();
-    cache.set("alice", minimalRequest("claude-sonnet-chat"));
+    cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
 
     const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
 
@@ -407,7 +407,7 @@ describe("preparing a heartbeat body", () => {
     const config = await baseConfig("slowthink");
     await withConversation(config);
     const cache = new LastRequestCache();
-    cache.set("alice", minimalRequest("claude-sonnet-chat"));
+    cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
 
     const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
 
@@ -421,7 +421,7 @@ describe("preparing a heartbeat body", () => {
     const config = await baseConfig();
     await withConversation(config);
     const cache = new LastRequestCache();
-    cache.set("alice", minimalRequest("claude-sonnet-chat"));
+    cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
 
     const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
 

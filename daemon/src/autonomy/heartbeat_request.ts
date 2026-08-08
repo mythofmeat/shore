@@ -104,7 +104,7 @@ export function applyHeartbeatModelOverride(
 
 export interface PrepareHeartbeatDeps {
   cache: LastRequestCache;
-  rebuild?: RebuildDeps & { keepaliveIntervalMs?: number };
+  rebuild?: RebuildDeps;
   env?: NodeJS.ProcessEnv;
   now?: () => number;
   timeZone?: string;
@@ -123,14 +123,20 @@ export async function prepareHeartbeatRequest(
 ): Promise<PreparedHeartbeat | undefined> {
   let source = deps.cache.get(character);
   if (source === undefined) {
-    source = await rebuildRequestFromDisk(character, config.dirs.data, config, deps.rebuild ?? {});
-    if (source === undefined) {
+    const rebuilt = await rebuildRequestFromDisk(
+      character,
+      config.dirs.data,
+      config,
+      deps.rebuild ?? {},
+    );
+    if (rebuilt === undefined) {
       console.info(
         `shore: heartbeat skipping tick for ${character} (conversation mid-turn or model unresolved)`,
       );
       return undefined;
     }
-    deps.cache.set(character, source, deps.rebuild?.keepaliveIntervalMs);
+    source = rebuilt.request;
+    deps.cache.set(character, source, rebuilt.keepalive_interval_ms);
   }
 
   const { request, override } = applyHeartbeatModelOverride(

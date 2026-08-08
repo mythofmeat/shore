@@ -995,6 +995,7 @@ describe("persist_and_notify", () => {
       resolvedProviderKey: "anthropic",
       result: resultWith("hi", [{ type: "text", text: "hi" }]),
       request: { model: "claude-opus-5", provider_key: "anthropic", messages: [] },
+      keepaliveIntervalMs: undefined,
       toolIntermediateMessages: [],
       wallClockMs: 500,
     });
@@ -1020,6 +1021,7 @@ describe("persist_and_notify", () => {
       resolvedProviderKey: "p",
       result: withCost,
       request: { model: "m", messages: [] },
+      keepaliveIntervalMs: undefined,
       toolIntermediateMessages: [],
       wallClockMs: 1,
     });
@@ -1028,6 +1030,7 @@ describe("persist_and_notify", () => {
       resolvedProviderKey: "p",
       result: resultWith("hi", [{ type: "text", text: "hi" }]),
       request: { model: "m", messages: [] },
+      keepaliveIntervalMs: undefined,
       toolIntermediateMessages: [],
       wallClockMs: 1,
     });
@@ -1045,6 +1048,7 @@ describe("persist_and_notify", () => {
       resolvedProviderKey: "anthropic",
       result: resultWith("", []),
       request: { model: "claude-opus-5", messages: [] },
+      keepaliveIntervalMs: undefined,
       toolIntermediateMessages: [],
       wallClockMs: 500,
     });
@@ -1073,6 +1077,7 @@ describe("persist_and_notify", () => {
       resolvedProviderKey: "anthropic",
       result: resultWith("done", [{ type: "text", text: "done" }]),
       request: { model: "m", messages: [] },
+      keepaliveIntervalMs: undefined,
       toolIntermediateMessages: [intermediate],
       wallClockMs: 1,
     });
@@ -1099,6 +1104,7 @@ describe("persist_and_notify", () => {
       resolvedProviderKey: "anthropic",
       result: resultWith("again", [{ type: "text", text: "again" }]),
       request: { model: "m", messages: [] },
+      keepaliveIntervalMs: undefined,
       toolIntermediateMessages: [],
       wallClockMs: 1,
       regenAlt: prior,
@@ -1121,6 +1127,7 @@ describe("persist_and_notify", () => {
       resolvedProviderKey: "anthropic",
       result: resultWith("again", [{ type: "text", text: "again" }]),
       request: { model: "m", messages: [] },
+      keepaliveIntervalMs: undefined,
       toolIntermediateMessages: [],
       wallClockMs: 1,
       regenAlt: { alternatives: [] },
@@ -1149,6 +1156,7 @@ describe("persist_and_notify", () => {
       resolvedProviderKey: "anthropic",
       result: resultWith("again", [{ type: "text", text: "again" }]),
       request: { model: "m", messages: [] },
+      keepaliveIntervalMs: undefined,
       toolIntermediateMessages: [intermediate],
       wallClockMs: 1,
       regenAlt: { alternatives: [] },
@@ -1166,6 +1174,7 @@ describe("persist_and_notify", () => {
       resolvedProviderKey: "fallback",
       result: resultWith("hi", [{ type: "text", text: "hi" }]),
       request: { model: "m", provider_key: "from-request", messages: [] },
+      keepaliveIntervalMs: undefined,
       toolIntermediateMessages: [],
       wallClockMs: 1,
     });
@@ -1183,6 +1192,7 @@ describe("persist_and_notify", () => {
       resolvedProviderKey: "p",
       result,
       request: { model: "requested-model", messages: [] },
+      keepaliveIntervalMs: undefined,
       toolIntermediateMessages: [],
       wallClockMs: 1,
     });
@@ -1228,6 +1238,7 @@ describe("persist_and_notify", () => {
       resolvedProviderKey: "p",
       result: resultWith("hi", [{ type: "text", text: "hi" }]),
       request: { model: "m", messages: [], rid: "req-1" },
+      keepaliveIntervalMs: undefined,
       toolIntermediateMessages: [],
       wallClockMs: 1,
     });
@@ -1249,6 +1260,7 @@ describe("persist_and_notify", () => {
       resolvedProviderKey: "p",
       result: resultWith("hi", [{ type: "text", text: "hi" }]),
       request: { model: "m", messages: [] },
+      keepaliveIntervalMs: undefined,
       toolIntermediateMessages: [],
       wallClockMs: 1,
     });
@@ -1264,6 +1276,7 @@ describe("persist_and_notify", () => {
       resolvedProviderKey: "p",
       result: resultWith("hi", [{ type: "text", text: "hi" }]),
       request: { model: "m", messages: [] },
+      keepaliveIntervalMs: undefined,
       toolIntermediateMessages: [],
       wallClockMs: 1,
     });

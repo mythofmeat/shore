@@ -7,7 +7,7 @@ import { findEffectiveModel } from "../config/effective_catalog.ts";
 import { MessageStore, isToolResultOnly } from "../engine/message_store.ts";
 import type { Message } from "../engine/types.ts";
 import { buildChatShapeRequestFromDisk } from "../handler/context.ts";
-import type { SidecarRequest } from "../llm/types.ts";
+import type { BuiltRequest } from "../llm/request.ts";
 import { segmentCount } from "../memory/compaction/archive.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 
@@ -78,7 +78,7 @@ export async function rebuildRequestFromDisk(
   dataDir: string,
   config: LoadedConfig,
   deps: RebuildDeps = {},
-): Promise<SidecarRequest | undefined> {
+): Promise<BuiltRequest | undefined> {
   const characterDir = join(dataDir, character);
 
   let store: MessageStore;
@@ -116,7 +116,7 @@ export async function rebuildRequestFromDisk(
       { mcpToolDefs, ...(deps.timeZone === undefined ? {} : { timeZone: deps.timeZone }) },
     );
     console.info(`shore: heartbeat rebuilt the request for ${character} from disk`);
-    return built.request;
+    return built;
   } catch (e) {
     console.warn(`shore: heartbeat rebuild for ${character} failed: ${String(e)}`);
     return undefined;

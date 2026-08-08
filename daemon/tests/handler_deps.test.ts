@@ -285,7 +285,7 @@ describe("the autonomy surface a turn drives", () => {
     });
 
     autonomy.ensureState("ada", configFor("/tmp/shore-deps-none"));
-    autonomy.notifyLastRequest("ada", { model: "m", messages: [] });
+    autonomy.notifyLastRequest("ada", { model: "m", messages: [] }, undefined);
 
     // Arming the keepalive needs no runner. Queueing it would leave a live
     // prefix unprotected for as long as the state read takes.
@@ -703,7 +703,7 @@ describe("the command path", () => {
     const { root, runtime } = await runtimeUnder("shore-deps-cmd-prompt-");
     try {
       const deps = buildCommandPathDeps(commandAssembly(runtime));
-      runtime.cache.set("ada", { model: "m", messages: [] } as never);
+      runtime.cache.set("ada", { model: "m", messages: [] } as never, undefined);
       expect(runtime.cache.get("ada")).toBeDefined();
 
       deps.runtime.notifyPromptSnapshotRefreshed("ada");
@@ -765,7 +765,7 @@ describe("the command path", () => {
   test("the compaction a command runs extends this character's body", async () => {
     const { root, runtime } = await runtimeUnder("shore-deps-cmd-compact-");
     try {
-      runtime.cache.set("ada", { model: "m", messages: [] } as never);
+      runtime.cache.set("ada", { model: "m", messages: [] } as never, undefined);
       const deps = buildCommandPathDeps(commandAssembly(runtime));
 
       // `shore compact` and an inline pass must not disagree about what was in
@@ -983,7 +983,7 @@ describe("the shape of what is cached", () => {
       model: "m",
       provider_key: "anthropic",
       messages: [{ role: "user", content: "hi" } as never],
-    });
+    }, undefined);
 
     // A ping rebuilt from `model` and `messages` alone drops the system blocks
     // and the tool surface, which is what the cache prefix is keyed on.

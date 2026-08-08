@@ -117,8 +117,8 @@ export function turnAutonomy(
     notifyAssistantMessage: (character, turnCount) => {
       bridge.onAssistantMessage(character, turnCount);
     },
-    notifyLastRequest: (character, request) => {
-      cache.set(character, request as SidecarRequest);
+    notifyLastRequest: (character, request, keepaliveIntervalMs) => {
+      cache.set(character, request as SidecarRequest, keepaliveIntervalMs);
     },
   };
 }
