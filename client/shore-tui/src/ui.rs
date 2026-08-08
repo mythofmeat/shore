@@ -3627,7 +3627,7 @@ mod scenario_tests {
     // would push a premature empty Assistant entry with per-call metadata, producing
     // a duplicate character header and a misleading stats line mid-turn.
     //
-    // Real sequence (per crates/daemon/tests/suite/pipeline.rs):
+    // Real sequence:
     //   StreamStart → StreamEnd(tool_use) → ToolCall → ToolResult
     //   → StreamStart → chunks → StreamEnd(end_turn)
 
