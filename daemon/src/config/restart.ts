@@ -8,14 +8,8 @@ export function restartRequiredChanges(old: LoadedConfig, fresh: LoadedConfig): 
   if (!same(a.daemon, b.daemon)) changes.push("[daemon]");
   if (!same(a.notifications, b.notifications)) changes.push("[notifications]");
   if (!same(a.connections, b.connections)) changes.push("[connections]");
-  if (a.advanced.api_payload_logging !== b.advanced.api_payload_logging) {
-    changes.push("[advanced].api_payload_logging");
-  }
   if (a.advanced.cache_forensics !== b.advanced.cache_forensics) {
     changes.push("[advanced].cache_forensics");
-  }
-  if (!same(a.advanced.llm_sidecar, b.advanced.llm_sidecar)) {
-    changes.push("[advanced].llm_sidecar");
   }
   return changes;
 }

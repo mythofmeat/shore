@@ -951,41 +951,20 @@ const USAGE: StructSpec<UsageConfig> = {
   },
 };
 
-export interface LlmSidecarConfig {
-  enabled: boolean;
-  socket_path: string | undefined;
-}
-
-export const defaultLlmSidecarConfig = (): LlmSidecarConfig => ({
-  enabled: true,
-  socket_path: undefined,
-});
-
-const LLM_SIDECAR: StructSpec<LlmSidecarConfig> = {
-  name: "LlmSidecarConfig",
-  noDefault: ["socket_path"],
-  make: defaultLlmSidecarConfig,
-  fields: { enabled: readBool, socket_path: optional(readPath) },
-};
-
 export interface AdvancedConfig {
-  api_payload_logging: boolean;
   cache_forensics: boolean;
   editor: string | undefined;
   max_retries: number | undefined;
   retry_backoff: ConfigDuration | undefined;
   max_image_size: number;
-  llm_sidecar: LlmSidecarConfig;
 }
 
 export const defaultAdvancedConfig = (): AdvancedConfig => ({
-  api_payload_logging: false,
   cache_forensics: false,
   editor: undefined,
   max_retries: undefined,
   retry_backoff: undefined,
   max_image_size: 2_000_000,
-  llm_sidecar: defaultLlmSidecarConfig(),
 });
 
 const ADVANCED: StructSpec<AdvancedConfig> = {
@@ -993,13 +972,11 @@ const ADVANCED: StructSpec<AdvancedConfig> = {
   noDefault: ["editor", "max_retries", "retry_backoff"],
   make: defaultAdvancedConfig,
   fields: {
-    api_payload_logging: readBool,
     cache_forensics: readBool,
     editor: optional(readString),
     max_retries: optional(readU32),
     retry_backoff: optional(readDuration),
     max_image_size: readU64,
-    llm_sidecar: (v) => readStruct(LLM_SIDECAR, v),
   },
 };
 

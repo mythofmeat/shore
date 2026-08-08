@@ -193,40 +193,20 @@ describe("restartRequiredChanges", () => {
     ).toEqual([]);
   });
 
-  test("the two advanced logging switches, named individually", () => {
-    expect(changes((c) => (c.app.advanced.api_payload_logging = true))).toEqual([
-      "[advanced].api_payload_logging",
-    ]);
+  test("the advanced switch that has a reader, named individually", () => {
     expect(changes((c) => (c.app.advanced.cache_forensics = true))).toEqual([
       "[advanced].cache_forensics",
     ]);
   });
 
-  test("the sidecar, including a socket path appearing from nothing", () => {
-    expect(changes((c) => (c.app.advanced.llm_sidecar.enabled = false))).toEqual([
-      "[advanced].llm_sidecar",
-    ]);
-    expect(changes((c) => (c.app.advanced.llm_sidecar.socket_path = "/run/llm.sock"))).toEqual([
-      "[advanced].llm_sidecar",
-    ]);
-  });
-
-  test("all five at once, in the order a client prints them", () => {
+  test("all three at once, in the order a client prints them", () => {
     expect(
       changes((c) => {
         c.app.daemon.addr = "0.0.0.0:1";
         c.app.notifications.enabled = true;
-        c.app.advanced.api_payload_logging = true;
         c.app.advanced.cache_forensics = true;
-        c.app.advanced.llm_sidecar.enabled = false;
       }),
-    ).toEqual([
-      "[daemon]",
-      "[notifications]",
-      "[advanced].api_payload_logging",
-      "[advanced].cache_forensics",
-      "[advanced].llm_sidecar",
-    ]);
+    ).toEqual(["[daemon]", "[notifications]", "[advanced].cache_forensics"]);
   });
 });
 

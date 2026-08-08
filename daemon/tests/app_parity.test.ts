@@ -249,6 +249,12 @@ const DELIBERATELY_DIVERGENT = new Set([
   "the daemon section",
   "the removed matrix connection is rejected",
   "the removed embedded matrix connection is rejected",
+  "the advanced section",
+  "seq: AdvancedConfig",
+  "seq: AdvancedConfig, at its minimum",
+  "seq: LlmSidecarConfig",
+  "seq: LlmSidecarConfig, at its minimum",
+  "integer where a path is expected",
 ]);
 
 const BUN_CANNOT_SEE = new Set([
@@ -393,6 +399,67 @@ describe("parsing config.toml", () => {
     const ok = parseAppConfig(parseToml(`[daemon]\naddr = "0.0.0.0:9999"\n`));
     if ("err" in ok) throw new Error(ok.err);
     expect(ok.ok.daemon).toEqual({ addr: "0.0.0.0:9999" });
+  });
+
+  test("a config still setting the deleted [advanced] keys is now rejected", () => {
+    const c = fixture.parse.find((x) => x.name === "the advanced section");
+    expect(c).toBeDefined();
+
+    const parsed = parseAppConfig(parseToml(c!.toml));
+    expect("err" in parsed).toBe(true);
+    expect((parsed as { err: string }).err).toBe(
+      "unknown field `api_payload_logging`, expected one of `cache_forensics`, `editor`, " +
+        "`max_retries`, `retry_backoff`, `max_image_size`",
+    );
+  });
+
+  test("[advanced.llm_sidecar] is rejected as a section, not just as a key", () => {
+    const parsed = parseAppConfig(
+      parseToml(`[advanced.llm_sidecar]\nenabled = false\nsocket_path = "/tmp/s.sock"\n`),
+    );
+    expect("err" in parsed).toBe(true);
+    expect((parsed as { err: string }).err).toContain("unknown field `llm_sidecar`");
+  });
+
+  test("the surviving [advanced] keys still parse, positionally and by name", () => {
+    const byName = parseAppConfig(
+      parseToml(
+        `[advanced]\ncache_forensics = true\neditor = "hx"\nmax_retries = 5\n` +
+          `retry_backoff = "250ms"\nmax_image_size = 5000000\n`,
+      ),
+    );
+    if ("err" in byName) throw new Error(byName.err);
+    expect(byName.ok.advanced.cache_forensics).toBe(true);
+    expect(byName.ok.advanced.editor).toBe("hx");
+    expect(byName.ok.advanced.max_image_size).toBe(5_000_000);
+
+    const positional = parseAppConfig(parseToml(`advanced = [true, "hx", 3, "1s"]\n`));
+    if ("err" in positional) throw new Error(positional.err);
+    expect(positional.ok.advanced.editor).toBe("hx");
+
+    const tooLong = parseAppConfig(parseToml(`advanced = [true, "hx", 3, "1s", 1, 2]\n`));
+    expect("err" in tooLong).toBe(true);
+    expect((tooLong as { err: string }).err).toBe(
+      "invalid length 6, expected fewer elements in array",
+    );
+
+    const tooShort = parseAppConfig(parseToml(`advanced = []\n`));
+    expect("err" in tooShort).toBe(true);
+    expect((tooShort as { err: string }).err).toBe(
+      "invalid length 1, expected struct AdvancedConfig with 5 elements",
+    );
+  });
+
+  test("[connections].telegram and .discord are reservations: an empty table, nothing inside", () => {
+    const empty = parseAppConfig(parseToml(`[connections.telegram]\n[connections.discord]\n`));
+    if ("err" in empty) throw new Error(empty.err);
+    expect(empty.ok.connections.telegram).toBeDefined();
+    expect(empty.ok.connections.discord).toBeDefined();
+
+    for (const name of ["telegram", "discord"]) {
+      const withKey = parseAppConfig(parseToml(`[connections.${name}]\nenabled = true\n`));
+      expect("err" in withKey, `[connections.${name}] accepted a key`).toBe(true);
+    }
   });
 
   test("the matrix connection the fixture rejects now parses, in its external-only shape", () => {
