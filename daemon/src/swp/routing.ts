@@ -64,8 +64,10 @@ const UNCONDITIONAL_EVENTS = new Set([
   "cache_warning",
 ]);
 
+const UNROUTABLE_EVENTS = new Set(["unknown"]);
+
 export function eventMatchesSession(msg: ServerMessage, sessionRegistered: boolean): boolean {
-  if (msg.type === "unknown") return false;
+  if (UNROUTABLE_EVENTS.has(msg.type)) return false;
   if (UNCONDITIONAL_EVENTS.has(msg.type)) return true;
   return sessionRegistered;
 }

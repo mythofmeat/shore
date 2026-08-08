@@ -345,6 +345,7 @@ pub enum ServerMessage {
     /// daemon instead of erroring the connection. Clients should treat this as
     /// a benign no-op. Re-serializing it is lossy and must be avoided.
     #[serde(other)]
+    #[ts(skip)]
     Unknown,
 }
 
