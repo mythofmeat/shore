@@ -36,6 +36,7 @@ import {
   resolveInZone,
   toRfc3339,
   zoneFor,
+  asNaive,
   type Naive,
 } from "./zoned.ts";
 
@@ -62,7 +63,7 @@ function calendarStartNaive(naive: Naive, window: CalendarWindow): Naive {
     case "day":
       return midnight;
     case "week":
-      return midnight - daysFromMonday(naive) * DAY_MS;
+      return asNaive(midnight - daysFromMonday(naive) * DAY_MS);
     case "month":
       return naiveFrom(year, month, 1, 0);
   }

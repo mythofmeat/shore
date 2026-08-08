@@ -44,6 +44,7 @@ import {
   resolveSamplerScopes,
   resolveSamplerSettings,
   resolveSelectedModel,
+  setModelPreference,
   savePreferences,
   selectionIsSet,
   selectionKey,
@@ -754,6 +755,63 @@ describe("resolveActiveForCharacter", () => {
         findEffectiveModel,
       ),
     ).toBeUndefined();
+  });
+});
+
+describe("the layer order exists once", () => {
+  const LAYERS = [
+    "static_default",
+    "global_default",
+    "character_default",
+    "global_model",
+    "character_model",
+  ] as const;
+
+  function prefsFor(set: ReadonlySet<string>) {
+    const global = emptyPreferences();
+    const character = emptyPreferences();
+    if (set.has("global_default")) global.defaults.sampler.temperature = 0.11;
+    if (set.has("character_default")) character.defaults.sampler.temperature = 0.22;
+    if (set.has("global_model")) {
+      setModelPreference(global, "anthropic", "m", { sampler: { temperature: 0.33 } });
+    }
+    if (set.has("character_model")) {
+      setModelPreference(character, "anthropic", "m", { sampler: { temperature: 0.44 } });
+    }
+    const staticDefault = set.has("static_default")
+      ? ({ sdk: "anthropic", temperature: 0.55 } as unknown as ResolvedModel)
+      : undefined;
+    return { global, character, staticDefault };
+  }
+
+  const VALUE_OF: Record<string, number> = {
+    static_default: 0.55,
+    global_default: 0.11,
+    character_default: 0.22,
+    global_model: 0.33,
+    character_model: 0.44,
+  };
+
+  test("resolveSamplerScopes attributes every value to the layer that supplied it", () => {
+    for (let mask = 0; mask < 1 << LAYERS.length; mask += 1) {
+      const set = new Set(LAYERS.filter((_, i) => (mask & (1 << i)) !== 0));
+      const { global, character, staticDefault } = prefsFor(set);
+
+      const settings = resolveSamplerSettings(global, character, "anthropic", "m", staticDefault);
+      const scopes = resolveSamplerScopes(global, character, "anthropic", "m", staticDefault);
+
+      if (set.size === 0) {
+        expect(settings.temperature).toBeUndefined();
+        expect(scopes.temperature).toBeUndefined();
+        continue;
+      }
+
+      const winner = [...LAYERS].reverse().find((l) => set.has(l))!;
+      expect(scopes.temperature, `mask ${mask} attributed the wrong layer`).toBe(winner);
+      expect(settings.temperature, `mask ${mask} resolved the wrong value`).toBe(
+        VALUE_OF[winner]!,
+      );
+    }
   });
 });
 

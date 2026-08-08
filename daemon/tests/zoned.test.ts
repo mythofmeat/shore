@@ -18,11 +18,13 @@ import {
   daysInMonth,
   formatLocalAmPm,
   HOUR_MS,
+  asNaive,
   naiveFrom,
   naiveInZone,
   partsOf,
   resolveInZone,
   toRfc3339,
+  type Naive,
 } from "../src/ledger/zoned.ts";
 
 const NY = "America/New_York";
@@ -35,7 +37,7 @@ const wall = (
   d: number,
   h: number,
   min = 0,
-): number => Date.UTC(y, m - 1, d, h, min, 0, 0);
+): Naive => asNaive(Date.UTC(y, m - 1, d, h, min, 0, 0));
 
 const iso = (s: string) => Date.parse(s);
 
@@ -102,11 +104,11 @@ describe("wall clock → instant", () => {
     // where no instant carries that reading at all.
     for (const day of ["2026-03-08", "2026-11-01"]) {
       for (let h = 0; h < 24; h += 1) {
-        const naive = Date.parse(`${day}T00:00:00Z`) + h * HOUR_MS;
+        const naive = asNaive(Date.parse(`${day}T00:00:00Z`) + h * HOUR_MS);
         const instant = resolveInZone(naive, NY);
         const readBack = naiveInZone(instant, NY);
         const isGap = readBack !== naive;
-        expect(isGap ? naive + HOUR_MS : naive, `${day} ${h}:00`).toBe(readBack);
+        expect(asNaive(isGap ? naive + HOUR_MS : naive), `${day} ${h}:00`).toBe(readBack);
       }
     }
   });

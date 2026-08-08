@@ -188,7 +188,7 @@ export function modelPreference(
   return prefs.models.get(preferenceKey(provider, modelId));
 }
 
-function setModelPreference(
+export function setModelPreference(
   prefs: ModelPreferences,
   provider: string,
   modelId: string,
@@ -299,9 +299,14 @@ export function resolveSamplerSettings(
     staticDefault === undefined ? {} : samplerFromResolvedModel(staticDefault);
 
   for (const layer of preferenceLayers(global, character, provider, modelId)) {
-    applyOverlay(effective, sanitizePersistedOverlay(layer));
+    applyOverlay(effective, sanitizePersistedOverlay(layer.sampler));
   }
   return effective;
+}
+
+interface PreferenceLayer {
+  sampler: SamplerSettings;
+  scope: PreferenceScope;
 }
 
 function preferenceLayers(
@@ -309,14 +314,22 @@ function preferenceLayers(
   character: ModelPreferences | undefined,
   provider: string,
   modelId: string,
-): SamplerSettings[] {
-  const layers: SamplerSettings[] = [global.defaults.sampler];
-  if (character !== undefined) layers.push(character.defaults.sampler);
+): PreferenceLayer[] {
+  const layers: PreferenceLayer[] = [
+    { sampler: global.defaults.sampler, scope: "global_default" },
+  ];
+  if (character !== undefined) {
+    layers.push({ sampler: character.defaults.sampler, scope: "character_default" });
+  }
   const globalModel = modelPreference(global, provider, modelId);
-  if (globalModel !== undefined) layers.push(globalModel.sampler);
+  if (globalModel !== undefined) {
+    layers.push({ sampler: globalModel.sampler, scope: "global_model" });
+  }
   if (character !== undefined) {
     const charModel = modelPreference(character, provider, modelId);
-    if (charModel !== undefined) layers.push(charModel.sampler);
+    if (charModel !== undefined) {
+      layers.push({ sampler: charModel.sampler, scope: "character_model" });
+    }
   }
   return layers;
 }
@@ -363,19 +376,8 @@ export function resolveSamplerScopes(
   if (staticDefault !== undefined) {
     note(samplerFromResolvedModel(staticDefault), "static_default");
   }
-  note(sanitizePersistedOverlay(global.defaults.sampler), "global_default");
-  if (character !== undefined) {
-    note(sanitizePersistedOverlay(character.defaults.sampler), "character_default");
-  }
-  const globalModel = modelPreference(global, provider, modelId);
-  if (globalModel !== undefined) {
-    note(sanitizePersistedOverlay(globalModel.sampler), "global_model");
-  }
-  if (character !== undefined) {
-    const charModel = modelPreference(character, provider, modelId);
-    if (charModel !== undefined) {
-      note(sanitizePersistedOverlay(charModel.sampler), "character_model");
-    }
+  for (const layer of preferenceLayers(global, character, provider, modelId)) {
+    note(sanitizePersistedOverlay(layer.sampler), layer.scope);
   }
   return scopes;
 }

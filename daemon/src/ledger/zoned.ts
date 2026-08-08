@@ -1,4 +1,10 @@
-export type Naive = number;
+declare const NaiveBrand: unique symbol;
+
+export type Naive = number & { readonly [NaiveBrand]: true };
+
+export function asNaive(value: number): Naive {
+  return value as Naive;
+}
 
 export const SECOND_MS = 1000;
 const MINUTE_MS = 60 * SECOND_MS;
@@ -45,7 +51,7 @@ export function naiveInZone(instant: number, timeZone: string): Naive {
   const d = new Date(0);
   d.setUTCFullYear(year, get("month") - 1, get("day"));
   d.setUTCHours(get("hour"), get("minute"), get("second"), 0);
-  return d.getTime();
+  return asNaive(d.getTime());
 }
 
 function offsetAt(instant: number, timeZone: string): number {
@@ -67,7 +73,7 @@ export function resolveInZone(naive: Naive, timeZone: string): number {
   if (direct.length > 0) {
     return direct[direct.length - 1]!;
   }
-  const shifted = candidatesFor(naive + HOUR_MS, timeZone);
+  const shifted = candidatesFor(asNaive(naive + HOUR_MS), timeZone);
   return shifted.length > 0 ? shifted[0]! : naive;
 }
 
@@ -106,7 +112,7 @@ export function naiveFrom(
   const d = new Date(0);
   d.setUTCFullYear(year, month - 1, day);
   d.setUTCHours(hour, 0, 0, 0);
-  return d.getTime();
+  return asNaive(d.getTime());
 }
 
 export function daysInMonth(year: number, month: number): number {

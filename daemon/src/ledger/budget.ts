@@ -18,6 +18,7 @@ import {
   SECOND_MS,
   toRfc3339,
   zoneFor,
+  asNaive,
   type Naive,
 } from "./zoned.ts";
 
@@ -374,16 +375,16 @@ function periodStartNaive(
       if (now >= todayReset) {
         return todayReset;
       }
-      return atHour(now - DAY_MS, anchors.hour);
+      return atHour(asNaive(now - DAY_MS), anchors.hour);
     }
     case "week": {
       const todayDow = daysFromMonday(now);
       const daysBack = (todayDow + 7 - anchors.day_of_week) % 7;
-      const candidate = atHour(now - daysBack * DAY_MS, anchors.hour);
+      const candidate = atHour(asNaive(now - daysBack * DAY_MS), anchors.hour);
       if (now >= candidate) {
         return candidate;
       }
-      return atHour(candidate - 7 * DAY_MS, anchors.hour);
+      return atHour(asNaive(candidate - 7 * DAY_MS), anchors.hour);
     }
     case "month": {
       const { year, month } = partsOf(now);
@@ -406,11 +407,11 @@ function periodEndNaive(
   const anchors = anchorsOpt ?? DEFAULT_ANCHORS;
   switch (period) {
     case "hour":
-      return start + HOUR_MS;
+      return asNaive(start + HOUR_MS);
     case "day":
-      return start + DAY_MS;
+      return asNaive(start + DAY_MS);
     case "week":
-      return start + 7 * DAY_MS;
+      return asNaive(start + 7 * DAY_MS);
     case "month": {
       const { year, month } = partsOf(start);
       const nextYear = month === 12 ? year + 1 : year;
@@ -493,8 +494,8 @@ function paceBoundsNaive(
     0,
   );
   const offsetSecs = Math.trunc(elapsedSecs / stepSecs) * stepSecs;
-  const start = window.start_naive + offsetSecs * SECOND_MS;
-  const end = Math.min(start + stepSecs * SECOND_MS, window.end_naive);
+  const start = asNaive(window.start_naive + offsetSecs * SECOND_MS);
+  const end = asNaive(Math.min(start + stepSecs * SECOND_MS, window.end_naive));
   const remainingSecs = Math.max(
     Math.trunc((window.end_naive - start) / SECOND_MS),
     0,
