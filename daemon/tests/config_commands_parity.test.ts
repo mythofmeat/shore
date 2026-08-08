@@ -468,6 +468,19 @@ describe("config read walks dots", () => {
     });
   }
 
+  test("`advanced.editor` reads back, which is the wire the CLI composes on", async () => {
+    const w = await build("mid", `${FURNISHED}\n[advanced]\neditor = "hx"\n`);
+    const ok = config(w.ctx, { key: "advanced.editor" }) as { key: string; config: unknown };
+    expect(ok.key).toBe("advanced.editor");
+    expect(ok.config).toBe("hx");
+  });
+
+  test("`advanced.editor` reads back as null when it is unset, rather than missing", async () => {
+    const w = await build("mid", FURNISHED);
+    const ok = config(w.ctx, { key: "advanced.editor" }) as { config: unknown };
+    expect(ok.config ?? null).toBeNull();
+  });
+
   /**
    * The relationship the help text always claimed: everything settable can be
    * read back. Not always at the same spelling — the bare aliases (`model`,

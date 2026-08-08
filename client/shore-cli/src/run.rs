@@ -596,7 +596,8 @@ async fn handle_send_command(
     } else if !io::stdin().is_terminal() {
         read_stdin()?
     } else {
-        edit_message_in_editor()?
+        let configured = configured_editor(conn).await;
+        edit_message_in_editor(configured)?
     };
     if text.is_empty() && images.is_empty() {
         return Ok(());
@@ -1391,12 +1392,48 @@ fn read_stdin() -> Result<String, Box<dyn std::error::Error>> {
     Ok(buf.trim().to_owned())
 }
 
-/// Open `$EDITOR` (or `$VISUAL`) with a temp file and return the composed text.
+/// Ask the daemon for `[advanced].editor`, or `None` if it is unset or unreachable.
+///
+/// A failure here must not stop the user composing a message: the environment
+/// fallback below is a correct answer, so an unreadable key is silently no
+/// preference rather than an error.
+async fn configured_editor(conn: &mut SWPConnection) -> Option<String> {
+    _ = conn
+        .send_command("config", serde_json::json!({ "key": "advanced.editor" }))
+        .await
+        .ok()?;
+    let data = recv_command_data(conn).await.ok()?;
+    let editor = data.get("config")?.as_str()?.trim();
+    (!editor.is_empty()).then(|| editor.to_owned())
+}
+
+/// Pick the editor to launch, ignoring candidates that are set but blank.
+fn resolve_editor(
+    configured: Option<String>,
+    visual: Option<String>,
+    editor: Option<String>,
+) -> String {
+    [configured, visual, editor]
+        .into_iter()
+        .flatten()
+        .map(|c| c.trim().to_owned())
+        .find(|c| !c.is_empty())
+        .unwrap_or_else(|| "vi".into())
+}
+
+/// Open the configured editor with a temp file and return the composed text.
+///
+/// Precedence is `[advanced].editor`, then `$VISUAL`, then `$EDITOR`, then `vi`
+/// — the config wins over the ambient environment, because a user who set it
+/// stated an intent for shore specifically.
+///
 /// Returns an empty string if the user saves an empty file or the editor exits non-zero.
-fn edit_message_in_editor() -> Result<String, Box<dyn std::error::Error>> {
-    let editor = std::env::var("VISUAL")
-        .or_else(|_| std::env::var("EDITOR"))
-        .unwrap_or_else(|_| "vi".into());
+fn edit_message_in_editor(configured: Option<String>) -> Result<String, Box<dyn std::error::Error>> {
+    let editor = resolve_editor(
+        configured,
+        std::env::var("VISUAL").ok(),
+        std::env::var("EDITOR").ok(),
+    );
 
     let tmp = tempfile::Builder::new()
         .prefix("shore-")
@@ -2408,6 +2445,43 @@ mod tests {
     fn an_unprinted_error_is_not_marked() {
         let failure: Box<dyn std::error::Error> = "connection refused".into();
         assert!(!super::already_reported(failure.as_ref()));
+    }
+
+    /// `[advanced].editor` was accepted, validated and stored by the daemon and
+    /// read by nobody: `shore send` with no message went straight to `$VISUAL`.
+    /// Config wins over the ambient environment — a user who set it stated an
+    /// intent for shore, where `$EDITOR` is whatever the shell happened to have.
+    #[test]
+    fn the_configured_editor_outranks_the_environment() {
+        assert_eq!(
+            super::resolve_editor(
+                Some("nvim".into()),
+                Some("code -w".into()),
+                Some("nano".into())
+            ),
+            "nvim"
+        );
+    }
+
+    #[test]
+    fn without_config_the_environment_order_is_visual_then_editor_then_vi() {
+        assert_eq!(
+            super::resolve_editor(None, Some("code -w".into()), Some("nano".into())),
+            "code -w"
+        );
+        assert_eq!(super::resolve_editor(None, None, Some("nano".into())), "nano");
+        assert_eq!(super::resolve_editor(None, None, None), "vi");
+    }
+
+    /// An exported-but-empty `EDITOR=` is the common shell accident. Taking it
+    /// literally spawns nothing and loses the message the user just wrote.
+    #[test]
+    fn a_blank_candidate_is_skipped_rather_than_launched() {
+        assert_eq!(
+            super::resolve_editor(Some("  ".into()), Some(String::new()), Some("nano".into())),
+            "nano"
+        );
+        assert_eq!(super::resolve_editor(Some(String::new()), None, None), "vi");
     }
 
     #[test]
