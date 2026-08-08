@@ -32,7 +32,11 @@ export interface PersistEngine {
 }
 
 export interface PersistAutonomy {
-  notifyLastRequest(character: string, request: WireRequest): void;
+  notifyLastRequest(
+    character: string,
+    request: WireRequest,
+    keepaliveIntervalMs: number | undefined,
+  ): void;
   notifyAssistantMessage(character: string, turnCount: number): void;
 }
 
@@ -60,6 +64,7 @@ export interface PersistParams {
   resolvedProviderKey: string;
   result: StreamResult;
   request: WireRequest;
+  keepaliveIntervalMs: number | undefined;
   toolIntermediateMessages: Message[];
   wallClockMs: number;
   regenAlt?: PendingAlt;
@@ -76,7 +81,11 @@ export async function persistAndNotify(
 
   const completedMessages = completedResponseMessages(result);
 
-  ctx.autonomy.notifyLastRequest(charName, lastRequestWithResponse(request, completedMessages));
+  ctx.autonomy.notifyLastRequest(
+    charName,
+    lastRequestWithResponse(request, completedMessages),
+    params.keepaliveIntervalMs,
+  );
   const notifyContent = notifyContentFromResponseMessages(completedMessages);
 
   const mintingProvider = request.provider_key ?? resolvedProviderKey;

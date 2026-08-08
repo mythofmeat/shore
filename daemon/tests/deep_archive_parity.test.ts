@@ -326,7 +326,7 @@ describe("runDeepIdleArchive", () => {
       arm: (p: { context?: { character: string } }) => armed.push(p.context?.character ?? "?"),
       disarm: (c: string) => disarmed.push(c),
     } as never);
-    cache.set("ada", { model: "stale" } as never);
+    cache.set("ada", { model: "stale" } as never, undefined);
 
     await runDeepIdleArchive("ada", deps(config, { cache }), kase.covered_turn_count);
 

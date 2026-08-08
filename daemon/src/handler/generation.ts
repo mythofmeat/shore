@@ -246,6 +246,7 @@ export async function runGeneration(
       ...sentBody,
       ...(params.rid === null ? {} : { rid: params.rid }),
     },
+    keepaliveIntervalMs: built.keepalive_interval_ms,
     toolIntermediateMessages: intermediate,
     wallClockMs: clock() - startedAt,
     ...(regenAlt === undefined ? {} : { regenAlt }),

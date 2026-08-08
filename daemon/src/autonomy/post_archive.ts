@@ -13,7 +13,7 @@ export interface PostArchiveDeps {
   config: LoadedConfig;
   cache: LastRequestCache;
   engine?: PostArchiveEngine;
-  rebuild?: RebuildDeps & { keepaliveIntervalMs?: number };
+  rebuild?: RebuildDeps;
 }
 
 export async function reloadAndApplyDeferred(

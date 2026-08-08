@@ -30,6 +30,8 @@ import { dirname, join } from "node:path";
 
 import fixture from "./handler_fixtures/setup_parity.json" with { type: "json" };
 
+import { withoutDefaultedKeepalive } from "./support/keepalive_default.ts";
+
 import { defaultAppConfig, type AppConfig } from "../src/config/app.ts";
 import { characterDataDir, characterWorkspaceDir } from "../src/config/dirs.ts";
 import type { ShoreDirs } from "../src/config/dirs.ts";
@@ -314,7 +316,9 @@ describe("resolveGenerationModel", () => {
         );
         return;
       }
-      expect(fromModel(resolveGenerationModel(active, config, overlay))).toEqual(c.result.ok);
+      expect(fromModel(resolveGenerationModel(active, config, overlay))).toEqual(
+        withoutDefaultedKeepalive(c.result.ok),
+      );
     });
   }
 });

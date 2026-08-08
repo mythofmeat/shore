@@ -22,6 +22,7 @@ import { tmpdir } from "node:os";
 
 import fixture from "./autonomy_fixtures/last_request_parity.json" with { type: "json" };
 import { defaultAppConfig } from "../src/config/app.ts";
+import { ConfigDuration } from "../src/config/duration.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
@@ -302,7 +303,7 @@ describe("rebuildRequestFromDisk", () => {
         expect(request).toBeUndefined();
         return;
       }
-      expect(normalise(request)).toEqual(c.request as never);
+      expect(normalise(request?.request)).toEqual(c.request as never);
     });
   }
 
@@ -325,8 +326,8 @@ describe("rebuildRequestFromDisk", () => {
     });
     const withoutMcp = await rebuildRequestFromDisk("ada", dataDir, config);
 
-    expect(withMcp?.tools?.map((t) => t.name)).toContain("mcp__notes__search");
-    expect(withoutMcp?.tools?.map((t) => t.name) ?? []).not.toContain("mcp__notes__search");
+    expect(withMcp?.request.tools?.map((t) => t.name)).toContain("mcp__notes__search");
+    expect(withoutMcp?.request.tools?.map((t) => t.name) ?? []).not.toContain("mcp__notes__search");
   });
 });
 
@@ -386,13 +387,13 @@ describe("LastRequestCache", () => {
 
   test("no cadence means no interval key at all — absent is off, not zero", () => {
     const k = spy();
-    new LastRequestCache(k.service as never).set("ada", body("claude-fixture"));
+    new LastRequestCache(k.service as never).set("ada", body("claude-fixture"), undefined);
     expect("keepalive_interval_ms" in (k.armed[0] ?? {})).toBe(false);
   });
 
   test("call_type is left for the ping to stamp, so the two cannot disagree", () => {
     const k = spy();
-    new LastRequestCache(k.service as never).set("ada", body("claude-fixture"));
+    new LastRequestCache(k.service as never).set("ada", body("claude-fixture"), undefined);
     expect(k.armed[0]?.context?.call_type).toBe("message");
   });
 
@@ -409,14 +410,14 @@ describe("LastRequestCache", () => {
       ...body("claude-fixture"),
       context: { character: "bob", call_type: "message", thinking_enabled: false },
     } as SidecarRequest;
-    new LastRequestCache(k.service as never).set("ada", stale);
+    new LastRequestCache(k.service as never).set("ada", stale, undefined);
     expect(k.armed[0]?.context?.character).toBe("ada");
   });
 
   test("a body with no context at all still arms under the right character", () => {
     const k = spy();
     const { context: _dropped, ...bare } = body("claude-fixture");
-    new LastRequestCache(k.service as never).set("ada", bare as SidecarRequest);
+    new LastRequestCache(k.service as never).set("ada", bare as SidecarRequest, undefined);
     expect(k.armed[0]?.context?.character).toBe("ada");
     expect(k.armed[0]?.context?.call_type).toBe("keepalive");
   });
@@ -424,7 +425,7 @@ describe("LastRequestCache", () => {
   test("invalidating drops the body and touches the keepalive not at all", () => {
     const k = spy();
     const cache = new LastRequestCache(k.service as never);
-    cache.set("ada", body("claude-fixture"));
+    cache.set("ada", body("claude-fixture"), undefined);
     cache.invalidate("ada", "compaction");
 
     expect(cache.get("ada")).toBeUndefined();
@@ -449,10 +450,45 @@ describe("LastRequestCache", () => {
     expect(k.disarmed).toEqual([]);
   });
 
+  /**
+   * #47: repriming is one of the three places a prefix is armed, and the only
+   * one whose cadence comes back off disk rather than out of the turn that is
+   * running. `rebuildRequestFromDisk` returns the whole `BuiltRequest` for
+   * exactly this — returning `built.request` alone is what dropped it.
+   */
+  test("the cadence the rebuilt model asks for is armed with it", async () => {
+    const k = spy();
+    const cache = new LastRequestCache(k.service as never);
+    const { config, dataDir } = await world([
+      fromShape({ role: "user", msg_id: "m_1", content: "hello", autonomous: false, tool_result_only: false }),
+      fromShape({ role: "assistant", msg_id: "m_2", content: "hi", autonomous: false, tool_result_only: false }),
+    ]);
+    config.models.chat.set("chat.fixture", {
+      ...(FIXTURE_MODEL as object),
+      cacheKeepalive: { kind: "every", interval: ConfigDuration.fromSecs(3300) },
+    } as never);
+
+    const decision = await cache.reprimeFromDisk("ada", dataDir, config);
+    expect(decision.kind === "push" && decision.keepaliveIntervalMs).toBe(3_300_000);
+    expect(k.armed[0]?.keepalive_interval_ms).toBe(3_300_000);
+  });
+
+  test("a rebuilt model that asks for nothing arms with no interval key", async () => {
+    const k = spy();
+    const cache = new LastRequestCache(k.service as never);
+    const { config, dataDir } = await world([
+      fromShape({ role: "user", msg_id: "m_1", content: "hello", autonomous: false, tool_result_only: false }),
+      fromShape({ role: "assistant", msg_id: "m_2", content: "hi", autonomous: false, tool_result_only: false }),
+    ]);
+
+    await cache.reprimeFromDisk("ada", dataDir, config);
+    expect("keepalive_interval_ms" in (k.armed[0] ?? {})).toBe(false);
+  });
+
   test("repriming a mid-turn conversation disarms rather than leaving the old body armed", async () => {
     const k = spy();
     const cache = new LastRequestCache(k.service as never);
-    cache.set("ada", body("claude-fixture"));
+    cache.set("ada", body("claude-fixture"), undefined);
     const { config, dataDir } = await world([
       fromShape({ role: "user", msg_id: "m_1", content: "hello", autonomous: false, tool_result_only: false }),
     ]);
@@ -468,7 +504,7 @@ describe("LastRequestCache", () => {
   test("two caches do not share bodies", () => {
     const a = new LastRequestCache();
     const b = new LastRequestCache();
-    a.set("ada", body("claude-fixture"));
+    a.set("ada", body("claude-fixture"), undefined);
     expect(b.get("ada")).toBeUndefined();
   });
 });

@@ -15,6 +15,11 @@ import { join } from "node:path";
 
 import fixture from "./config_fixtures/preferences_parity.json" with { type: "json" };
 
+import {
+  withoutDefaultedKeepalive,
+  withoutDefaultedKeepaliveScope,
+} from "./support/keepalive_default.ts";
+
 import { catalogFromSections, type ResolvedModel } from "../src/config/models.ts";
 import {
   ProviderRegistry,
@@ -514,7 +519,7 @@ describe("resolveSamplerSettings", () => {
         row.model_id,
         staticModel,
       );
-      expect(samplerToWire(settings)).toEqual(row.settings);
+      expect(samplerToWire(settings)).toEqual(withoutDefaultedKeepalive(row.settings));
 
       const scopes = resolveSamplerScopes(
         global,
@@ -527,13 +532,13 @@ describe("resolveSamplerSettings", () => {
       for (const [field, scope] of Object.entries(scopes)) {
         if (scope !== undefined) wireScopes[SCOPE_TOML_KEYS[field] as string] = scope;
       }
-      expect(wireScopes).toEqual(parseScopes(row.scopes));
+      expect(wireScopes).toEqual(withoutDefaultedKeepaliveScope(parseScopes(row.scopes)));
 
       expect(resolveSelectedModel(global, character) ?? null).toEqual(row.selected);
 
       if (staticModel !== undefined) {
         expect(modelToWire(applySamplerOverlay(staticModel, settings))).toEqual(
-          row.patched as Record<string, unknown>,
+          withoutDefaultedKeepalive(row.patched) as Record<string, unknown>,
         );
       }
     });
@@ -626,7 +631,9 @@ describe("findEffectiveModel", () => {
           const error = catchError(EffectiveCatalogError, run);
           expect(error.message).toBe(lookup.err);
         } else {
-          expect(modelToWire(run())).toEqual(lookup.resolved as Record<string, unknown>);
+          expect(modelToWire(run())).toEqual(
+            withoutDefaultedKeepalive(lookup.resolved) as Record<string, unknown>,
+          );
         }
       }
 

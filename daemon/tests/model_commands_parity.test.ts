@@ -34,6 +34,8 @@ import { dirname, join } from "node:path";
 
 import fixture from "./commands_fixtures/model_commands_parity.json" with { type: "json" };
 
+import { deepWithoutDefaultedKeepalive } from "./support/keepalive_default.ts";
+
 import { CommandError } from "../src/commands/errors.ts";
 import {
   backgroundModels,
@@ -293,9 +295,11 @@ describe("model commands", () => {
     test(scenario.name, async () => {
       const ctx = await buildContext(scenario.setup);
 
-      expect(readSession(ctx), "initial session").toEqual(scenario.initial.session as never);
+      expect(readSession(ctx), "initial session").toEqual(
+        deepWithoutDefaultedKeepalive(scenario.initial.session) as never,
+      );
       expect(readPrefs(ctx, scenario.initial.prefs), "initial prefs").toEqual(
-        scenario.initial.prefs as never,
+        deepWithoutDefaultedKeepalive(scenario.initial.prefs) as never,
       );
 
       for (const step of scenario.steps) {
@@ -314,11 +318,15 @@ describe("model commands", () => {
           expect((thrown as CommandError).message, label).toBe(step.err.message);
         } else {
           expect(thrown, label).toBeUndefined();
-          expect(result, label).toEqual(step.ok as never);
+          expect(result, label).toEqual(deepWithoutDefaultedKeepalive(step.ok) as never);
         }
 
-        expect(readSession(ctx), `${label} — session`).toEqual(step.session as never);
-        expect(readPrefs(ctx, step.prefs), `${label} — prefs`).toEqual(step.prefs as never);
+        expect(readSession(ctx), `${label} — session`).toEqual(
+          deepWithoutDefaultedKeepalive(step.session) as never,
+        );
+        expect(readPrefs(ctx, step.prefs), `${label} — prefs`).toEqual(
+          deepWithoutDefaultedKeepalive(step.prefs) as never,
+        );
       }
     });
   }

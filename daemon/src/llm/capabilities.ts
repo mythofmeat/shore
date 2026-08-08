@@ -309,7 +309,6 @@ function replayApplicability(sdk: Sdk): Applicability {
 export function defaultValue(sdk: Sdk, field: Field): string | undefined {
   if (sdk !== "anthropic") return undefined;
   if (field === "cache_ttl") return "1h";
-  if (field === "cache_keepalive") return "55m";
   return undefined;
 }
 

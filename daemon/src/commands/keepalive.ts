@@ -19,7 +19,7 @@ export interface KeepalivePingContext {
   lastRequest: LastRequestCache;
   config: LoadedConfig;
   dataDir: string;
-  rebuild?: RebuildDeps & { keepaliveIntervalMs?: number };
+  rebuild?: RebuildDeps;
 }
 
 export async function pingNow(

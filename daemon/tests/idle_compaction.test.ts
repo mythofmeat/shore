@@ -231,7 +231,7 @@ describe("runIdleCompaction: the pass", () => {
     cache.set("ada", {
       model: "claude-fixture",
       messages: [{ role: "user", content: "a body only the cache has" }],
-    } as never);
+    } as never, undefined);
 
     const seen: { messages: unknown[] }[] = [];
     await withKey(() =>
@@ -355,7 +355,7 @@ describe("runIdleCompaction: putting the world back in step", () => {
   test("re-points the keepalive at the rebuilt prefix, not the pre-pass one", async () => {
     const { config } = await world();
     const { cache, armed, disarmed } = spyingCache();
-    cache.set("ada", stale());
+    cache.set("ada", stale(), undefined);
 
     await withKey(() => runIdleCompaction("ada", deps(config, { cache })));
 
@@ -377,7 +377,7 @@ describe("runIdleCompaction: putting the world back in step", () => {
     const { config } = await world();
     config.models.chat.delete("chat.fixture");
     const cache = new LastRequestCache();
-    cache.set("ada", stale());
+    cache.set("ada", stale(), undefined);
 
     await runIdleCompaction("ada", deps(config, { cache }));
 

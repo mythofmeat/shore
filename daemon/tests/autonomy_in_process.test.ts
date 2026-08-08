@@ -357,7 +357,7 @@ describe("running a heartbeat", () => {
         call_type: "message",
         thinking_enabled: false,
       },
-    } as never);
+    } as never, undefined);
 
     const executor = new InProcessAutonomyExecutor({
       registry: registryFor(config),

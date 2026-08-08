@@ -12,6 +12,7 @@ import { describe, expect, test } from "bun:test";
 
 import fixture from "./config_fixtures/models_parity.json" with { type: "json" };
 
+import { expectedKeepalive, withoutDefaultedKeepalive } from "./support/keepalive_default.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
 import {
   applicability,
@@ -416,7 +417,9 @@ describe("applicability", () => {
 describe("defaultValue", () => {
   for (const row of fx.default_value) {
     test(`${row.sdk} / ${row.field}`, () => {
-      expect(defaultValue(row.sdk as Sdk, row.field as Field) ?? null).toBe(row.default);
+      expect(defaultValue(row.sdk as Sdk, row.field as Field) ?? null).toBe(
+        row.field === "cache_keepalive" ? expectedKeepalive(row.default) : row.default,
+      );
     });
   }
 });
@@ -477,7 +480,7 @@ describe("resolvedModelFromParts", () => {
         row.sdk_fallback as Sdk,
         fields,
       );
-      expect(toWire(resolved)).toEqual(row.resolved);
+      expect(toWire(resolved)).toEqual(withoutDefaultedKeepalive(row.resolved));
     });
   }
 
@@ -504,17 +507,28 @@ describe("resolvedModelFromParts", () => {
     expect(model.cacheTtl).toBe("");
   });
 
-  test("an explicit keepalive wins over the sdk default", () => {
+  test("an explicit keepalive is carried, and nothing is defaulted in beside it", () => {
     const off = resolvedModelFromParts(
       "m", "chat.p.m", "chat", "p", "claude-opus-4-6", "anthropic",
       { cacheKeepalive: { kind: "off" } },
     );
     expect(keepaliveToString(off.cacheKeepalive as never)).toBe("off");
 
+    const every = resolvedModelFromParts(
+      "m", "chat.p.m", "chat", "p", "claude-opus-4-6", "anthropic",
+      { cacheKeepalive: { kind: "every", interval: ConfigDuration.fromSecs(3300) } as never },
+    );
+    expect(keepaliveToString(every.cacheKeepalive as never)).toBe("55m");
+
+    // #47: the Rust defaulted this to `55m` for every Anthropic model. Turning
+    // a cache keepalive on is a spend decision, and `off` is the only default
+    // that does not make it for the user. `cache_ttl` still defaults to `1h`,
+    // because a longer TTL costs nothing until something pings.
     const defaulted = resolvedModelFromParts(
       "m", "chat.p.m", "chat", "p", "claude-opus-4-6", "anthropic", {},
     );
-    expect(keepaliveToString(defaulted.cacheKeepalive as never)).toBe("55m");
+    expect(defaulted.cacheKeepalive).toBeUndefined();
+    expect(defaulted.cacheTtl).toBe("1h");
   });
 
   test("the input fields are not mutated", () => {
@@ -586,7 +600,9 @@ describe("catalogFromSections", () => {
 
       expect([...catalog.chat.keys()]).toEqual(expected.chat_order);
       for (const [key, model] of catalog.chat) {
-        expect(toWire(model)).toEqual(expected.chat[key] as Record<string, unknown>);
+        expect(toWire(model)).toEqual(
+          withoutDefaultedKeepalive(expected.chat[key]) as Record<string, unknown>,
+        );
       }
 
       expect([...catalog.embedding.keys()]).toEqual(expected.embedding_order);
