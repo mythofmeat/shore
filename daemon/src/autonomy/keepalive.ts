@@ -158,7 +158,15 @@ export class KeepaliveService {
       entry.inFlight = true;
       due.push(character);
     }
-    await Promise.all(due.map((character) => this.#ping(character)));
+    await Promise.all(
+      due.map(async (character) => {
+        try {
+          await this.#ping(character);
+        } catch (e) {
+          console.error(`shore: keepalive ping failed for ${character}: ${String(e)}`);
+        }
+      }),
+    );
   }
 
   restore(character: string, snapshot: KeepaliveSnapshot, maxIdleSecs: number): boolean {

@@ -29,7 +29,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { defaultToolsConfig } from "../src/config/app.ts";
-import { bounded, formatAddr, startDaemon, type RunningDaemon } from "../src/daemon/run.ts";
+import {
+  bounded,
+  describeRejection,
+  formatAddr,
+  startDaemon,
+  type RunningDaemon,
+} from "../src/daemon/run.ts";
 import { StartupError } from "../src/daemon/startup.ts";
 import type { InstanceInfo } from "../src/instances.ts";
 import type { SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
@@ -570,5 +576,28 @@ describe("formatAddr", () => {
   test("an IPv6 host is bracketed, so the string splits back on its last colon", () => {
     expect(formatAddr("127.0.0.1", 7320)).toBe("127.0.0.1:7320");
     expect(formatAddr("::1", 7320)).toBe("[::1]:7320");
+  });
+});
+
+describe("describeRejection", () => {
+  // Bun exits 1 on an unhandled rejection, so a rejection from a `setInterval`
+  // callback takes the daemon down with a stack pointing at the timer. What is
+  // logged has to name the original throw site instead.
+  test("an Error is described by its stack, not its message", () => {
+    const err = new Error("boom from tick");
+    const described = describeRejection(err);
+    expect(described).toContain("boom from tick");
+    expect(described).toContain("daemon_run.test.ts");
+  });
+
+  test("a stackless Error still names itself", () => {
+    const err = new Error("no stack here");
+    delete (err as { stack?: string }).stack;
+    expect(describeRejection(err)).toBe("Error: no stack here");
+  });
+
+  test("a thrown non-Error is stringified", () => {
+    expect(describeRejection("just a string")).toBe("just a string");
+    expect(describeRejection(undefined)).toBe("undefined");
   });
 });

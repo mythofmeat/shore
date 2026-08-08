@@ -534,6 +534,29 @@ describe("what reaches the heartbeat log and the state file", () => {
     expect(h.service.scheduleFor(CHARACTER)).toBeUndefined();
   });
 
+  /**
+   * `tick` runs from a bare `setInterval(() => { void service.tick(); })`, so a
+   * rejection escaping it is unhandled and Bun exits 1. Both things that can
+   * throw inside `#ping` are injected from outside the class — the sender at
+   * the constructor and the sink through `onEvent` — which is why this is the
+   * class's problem and not the caller's.
+   */
+  test("a throwing event sink does not reject the tick, and the character stays schedulable", async () => {
+    const h = harness();
+    h.service.onEvent(() => {
+      throw new Error("sink blew up");
+    });
+    armWarm(h);
+    h.clock.advance(INTERVAL_MS + 1);
+
+    await h.service.tick();
+
+    expect(h.sent.length, "the ping still went out").toBe(1);
+    h.clock.advance(INTERVAL_MS + 1);
+    await h.service.tick();
+    expect(h.sent.length, "inFlight was cleared, so the next window pings again").toBe(2);
+  });
+
   test("schedules survive a restart through restore", () => {
     const h = harness();
     armWarm(h);

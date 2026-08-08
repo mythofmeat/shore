@@ -230,6 +230,11 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   };
 }
 
+export function describeRejection(reason: unknown): string {
+  if (reason instanceof Error) return reason.stack ?? `${reason.name}: ${reason.message}`;
+  return String(reason);
+}
+
 export async function runDaemon(options: DaemonOptions): Promise<void> {
   const daemon = await startDaemon(options);
 
@@ -243,10 +248,18 @@ export async function runDaemon(options: DaemonOptions): Promise<void> {
   ];
   for (const [signal, handler] of handlers) process.on(signal, handler);
 
+  const onUnhandledRejection = (reason: unknown) => {
+    options.log?.warn?.("Unhandled rejection; the daemon is still running", {
+      error: describeRejection(reason),
+    });
+  };
+  process.on("unhandledRejection", onUnhandledRejection);
+
   try {
     await daemon.done;
   } finally {
     for (const [signal, handler] of handlers) process.off(signal, handler);
+    process.off("unhandledRejection", onUnhandledRejection);
   }
 }
 
