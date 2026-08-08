@@ -1,14 +1,19 @@
 import { createServer, type Server as NetServer, type Socket } from "node:net";
 
+import type { CharacterInfo } from "../protocol/CharacterInfo";
+import type { ClientMessage } from "../protocol/ClientMessage";
 import type { ServerMessage } from "../protocol/ServerMessage";
 import { Broadcast } from "./broadcast";
 import {
   DEFAULT_HANDSHAKE,
   handleConnection,
+  historyMessage,
   type HandshakeProvider,
+  type HistorySnapshot,
   type Logger,
 } from "./connection";
-import { SessionRouter, type RoutedMessage } from "./session";
+import { eventMatchesSession, resolveHandshakeCharacter, routeClientMessage } from "./routing";
+import { sessionMetaOf, SessionRouter, type ClientInfo, type RoutedMessage, type SessionMeta } from "./session";
 
 export interface ServerConfig {
   readonly addr: string;
@@ -40,6 +45,57 @@ class RouteQueue {
   async *drain(): AsyncGenerator<RoutedMessage> {
     for (;;) {
       const next = this.#items.shift();
+      if (next !== undefined) {
+        yield next;
+        continue;
+      }
+      if (this.#closed) return;
+      await new Promise<void>((resolve) => {
+        this.#wake = resolve;
+      });
+    }
+  }
+}
+
+export interface LocalClientOptions {
+  readonly clientType: string;
+  readonly clientName: string;
+  readonly capabilities?: readonly string[];
+  readonly character?: string | undefined;
+  readonly onLag?: (skipped: number) => void;
+}
+
+export interface LocalPeer {
+  readonly session: SessionMeta;
+  readonly characters: readonly CharacterInfo[];
+  readonly history: HistorySnapshot;
+  send(msg: ClientMessage): Promise<void>;
+  events(): AsyncGenerator<ServerMessage>;
+  detach(): Promise<void>;
+}
+
+class Inbox {
+  readonly #queue: ServerMessage[] = [];
+  #wake: (() => void) | null = null;
+  #closed = false;
+
+  push(msg: ServerMessage): void {
+    this.#queue.push(msg);
+    const wake = this.#wake;
+    this.#wake = null;
+    wake?.();
+  }
+
+  close(): void {
+    this.#closed = true;
+    const wake = this.#wake;
+    this.#wake = null;
+    wake?.();
+  }
+
+  async *drain(): AsyncGenerator<ServerMessage> {
+    for (;;) {
+      const next = this.#queue.shift();
       if (next !== undefined) {
         yield next;
         continue;
@@ -86,6 +142,79 @@ export class Server {
 
   broadcast(msg: ServerMessage): void {
     this.#events.send(msg);
+  }
+
+  async attachLocal(options: LocalClientOptions): Promise<LocalPeer> {
+    const provider = this.#handshake ?? DEFAULT_HANDSHAKE;
+    const hello = await provider.hello();
+    const requested = options.character ?? null;
+    const history = await provider.history(resolveHandshakeCharacter(requested, hello.characters));
+
+    const clientId = this.#nextId;
+    this.#nextId += 1;
+    const client: ClientInfo = {
+      id: clientId,
+      clientType: options.clientType,
+      clientName: options.clientName,
+      capabilities: options.capabilities ?? [],
+      character: history.selectedCharacter,
+    };
+
+    const inbox = new Inbox();
+    this.#router.registerSession(client, (msg) => {
+      inbox.push(msg);
+      return Promise.resolve();
+    });
+    inbox.push(historyMessage(history));
+
+    const subscription = this.#events.subscribe();
+    const relay = (async () => {
+      for (;;) {
+        const result = await subscription.recv();
+        if (result.kind === "closed") break;
+        if (result.kind === "lagged") {
+          options.onLag?.(result.skipped);
+          this.#config.log?.warn?.("Local client lagged on broadcast", {
+            client_id: clientId,
+            skipped: result.skipped,
+          });
+          continue;
+        }
+        if (eventMatchesSession(result.msg, this.#router.has(clientId))) inbox.push(result.msg);
+      }
+      inbox.close();
+    })();
+
+    this.#config.log?.info?.("Local client attached", {
+      client_id: clientId,
+      client_name: options.clientName,
+    });
+
+    let detached = false;
+    return {
+      session: sessionMetaOf(client),
+      characters: hello.characters,
+      history,
+      send: async (msg) => {
+        const outcome = routeClientMessage(
+          msg,
+          sessionMetaOf(client),
+          this.#router.characterFor(clientId),
+        );
+        if (outcome.action === "reply") inbox.push(outcome.reply);
+        else this.#routes.push(outcome.routed);
+      },
+      events: () => inbox.drain(),
+      detach: async () => {
+        if (detached) return;
+        detached = true;
+        subscription.unsubscribe();
+        const { allGone } = this.#router.unregisterSession(clientId);
+        this.#config.log?.info?.("Local client detached", { client_id: clientId });
+        if (allGone) this.#routes.push({ kind: "all_clients_disconnected" });
+        await relay;
+      },
+    };
   }
 
   async bind(): Promise<{ readonly host: string; readonly port: number }> {
