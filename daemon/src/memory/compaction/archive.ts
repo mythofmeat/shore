@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import { atomicWrite } from "../../engine/atomic.ts";
 import type { CompactionManifest } from "../../engine/segments.ts";
+import { rustLines, rustTrim } from "../lines.ts";
 import { CompactionError } from "./types.ts";
 import type { ConversationManager } from "./types.ts";
 
@@ -28,7 +29,7 @@ export async function archiveAndRetain(
   now: () => string = () => new Date().toISOString(),
   newId: () => string = () => crypto.randomUUID(),
 ): Promise<string> {
-  const lines = activeContent.split("\n").filter((l) => l.trim() !== "");
+  const lines = rustLines(activeContent).filter((l) => rustTrim(l) !== "");
   const keep = Math.min(keepLastN, lines.length);
   const splitAt = lines.length - keep;
   const archived = lines.slice(0, splitAt);
@@ -92,11 +93,21 @@ async function readManifest(path: string): Promise<CompactionManifest> {
   } catch {
     return { segments: [], total_compacted_messages: 0 };
   }
+  let parsed: Partial<CompactionManifest>;
   try {
-    return JSON.parse(raw) as CompactionManifest;
+    parsed = JSON.parse(raw) as Partial<CompactionManifest>;
   } catch (e) {
     throw CompactionError.conversationManager(`failed to parse compaction.json: ${message(e)}`);
   }
+  if (typeof parsed !== "object" || parsed === null || !Array.isArray(parsed.segments)) {
+    throw CompactionError.conversationManager(
+      "failed to parse compaction.json: missing field `segments`",
+    );
+  }
+  return {
+    segments: parsed.segments,
+    total_compacted_messages: parsed.total_compacted_messages ?? 0,
+  };
 }
 
 export async function segmentCount(characterDir: string): Promise<number> {

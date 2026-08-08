@@ -1,6 +1,13 @@
 /**
- * Replays `memory_fixtures/compaction_writer_parity.json` against the
- * TypeScript compaction writer.
+ * Replays `memory_fixtures/compaction_writer_parity.json` against the live
+ * archiver, `memory/compaction/archive.ts`.
+ *
+ * The fixture was captured against a literal port of the Rust writer that the
+ * daemon never called; that port is deleted and these 18 cases now hold the
+ * implementation the daemon does call. Nine of them have no counterpart in
+ * `compaction_assembly_parity.json` — CRLF handling, four-digit segment
+ * padding, malformed JSONL passing through unparsed, a manifest disagreeing
+ * with what is on disk.
  *
  * Every expected value in that file is what the real Rust
  * `RealConversationManager::archive_and_retain` left on disk in a throwaway
@@ -31,10 +38,8 @@ import { mkdtemp, mkdir, readFile, readdir, writeFile, rm } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 
-import {
-  ConversationArchiver,
-  ConversationManagerError,
-} from "../src/memory/compaction_writer";
+import { archiveAndRetain } from "../src/memory/compaction/archive";
+import { CompactionError } from "../src/memory/compaction/types";
 
 interface Case {
   name: string;
@@ -136,14 +141,10 @@ describe("compaction writer parity", () => {
           }
         }
 
-        const archiver = new ConversationArchiver(dir);
         let returned: string | undefined;
         let threw: unknown;
         try {
-          returned = await archiver.archiveAndRetain({
-            keepLastN: c.keep_last_n,
-            activeContent: b64(c.active_content_b64),
-          });
+          returned = await archiveAndRetain(dir, c.keep_last_n, b64(c.active_content_b64));
         } catch (e) {
           threw = e;
         }
@@ -156,10 +157,10 @@ describe("compaction writer parity", () => {
         } else {
           // serde's inner text is not reproducible, but the failure and its
           // `conversation:` prefix are this port's contract.
-          expect(threw).toBeInstanceOf(ConversationManagerError);
+          expect(threw).toBeInstanceOf(CompactionError);
           // The Rust's variant, which the command surface branches on. Carried
           // by the class rather than recovered from the message prefix.
-          expect((threw as ConversationManagerError).kind).toBe("conversation");
+          expect((threw as CompactionError).kind).toBe("conversation");
           expect((threw as Error).message).toStartWith("conversation:");
           expect(c.outcome.err).toStartWith("conversation:");
         }
