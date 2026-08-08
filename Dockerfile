@@ -1,15 +1,13 @@
 FROM archlinux:latest AS builder
-RUN pacman --noconfirm -Syu --needed base-devel sudo
-RUN useradd -m builduser && \
+RUN pacman --noconfirm -Syu --needed base-devel sudo git && \
+    useradd -m builduser && \
     passwd -d builduser && \
     echo "builduser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-RUN mkdir /pkg
-RUN chown -R builduser /pkg
+USER builduser
 WORKDIR /src
-COPY . .
-WORKDIR contrib/arch
-RUN chown -R builduser /src/contrib/arch
-RUN sudo -u builduser PKGDEST=/pkg makepkg -s --noconfirm
+RUN git clone https://github.com/mythofmeat/shore.git .
+WORKDIR /pkg
+RUN PKGDEST=/pkg makepkg -D /src/contrib/arch -s --noconfirm
 FROM archlinux:latest AS entry
 RUN pacman -Syu --noconfirm \
     git \
