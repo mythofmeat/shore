@@ -1,63 +1,43 @@
-FROM rust:latest AS rust
+FROM archlinux:latest AS builder
+RUN pacman --noconfirm -Syu --needed base-devel sudo
+RUN useradd -m builduser && \
+    passwd -d builduser && \
+    echo "builduser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 WORKDIR /src
 COPY . .
-WORKDIR /src/client
-RUN cargo build --release --bin shore
-RUN cargo build --release --bin shore-tui
-
-FROM oven/bun:latest AS bun
-WORKDIR /src
-COPY . .
-WORKDIR /src/daemon
-RUN bun install
-RUN bun run build
-
+WORKDIR /src/contrib/arch
+RUN mkdir /pkg
+RUN chown -R builduser /pkg
+RUN chown -R builduser /src/contrib/arch
+RUN sudo -u builduser PKGDEST=/pkg makepkg -s --noconfirm
 FROM archlinux:latest AS entry
-COPY --from=rust    /src/client/target/release/shore /usr/bin/shore
-COPY --from=rust    /src/client/target/release/shore-tui /usr/bin/shore-tui
-COPY --from=bun     /src/daemon/dist/shore-daemon /usr/bin/shore-daemon
-
+RUN pacman -Syu --noconfirm \
+    git \
+    bun
+WORKDIR /pkg
+COPY --from=builder /pkg .
+RUN pacman -U --noconfirm ./*.pkg.tar.zst
 RUN groupadd --gid 1000 shore \
     && useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash shore
-RUN mkdir -p /home/shore/.config/nvim /home/shore/.local/share/nvim /shared
-
-RUN pacman -Syu --noconfirm neovim
+RUN mkdir -p /shared
 RUN pacman -Syu --noconfirm yazi
-RUN pacman -Syu --noconfirm fd
-RUN pacman -Syu --noconfirm ripgrep
-RUN pacman -Syu --noconfirm fzf
-RUN pacman -Syu --noconfirm git
-RUN pacman -Syu --noconfirm tree-sitter-cli
-RUN pacman -Syu --noconfirm python
-RUN pacman -Syu --noconfirm bun
-RUN pacman -Syu --noconfirm unzip
+RUN pacman -Syu --noconfirm neovim \
+    fd \
+    ripgrep \
+    fzf \
+    tree-sitter-cli \
+    python \
+    unzip
+RUN mkdir -p /home/shore/.config/nvim \
+    /home/shore/.local/share/nvim
 ENV EDITOR=nvim
-
 ENV HOME=/home/shore
-# The mount points are created and owned here so a named volume inherits uid
-# 1000 rather than root. A bind mount takes its owner from the host either way.
-RUN mkdir -p /config /data /cache /workspace \
-    && chown -R 1000:1000 /home/shore /shared /config /data /cache /workspace
-WORKDIR /shared
-
 ENV SHORE_CONFIG_DIR=/config
 ENV SHORE_DATA_DIR=/data
 ENV SHORE_CACHE_DIR=/cache
 ENV SHORE_WORKSPACE_DIR=/workspace
 ENV SHORE_ADDR=0.0.0.0:7320
-
-# No remote-access opt-in any more: every client presents a token, so binding
-# 0.0.0.0 is not an exposure to acknowledge. The daemon writes /config/token on
-# first start — that is a mounted volume, so the value is readable from the
-# host. Set SHORE_TOKEN on the daemon and its clients alike to supply your own
-# instead, which is what a compose stack should do.
-
 EXPOSE 7320
-
-# Everything above needs root — pacman, useradd, chown. Nothing below does:
-# the daemon binds 7320, which is not privileged. Running as the owner of the
-# mounts is also what keeps git usable inside the workspace, which is a real
-# repository the memory passes commit to.
 USER shore
-
+WORKDIR /shared
 CMD ["shore-daemon"]
