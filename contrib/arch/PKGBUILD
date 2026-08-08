@@ -10,6 +10,7 @@ makedepends=('rust' 'bun' 'git')
 options=(!lto !debug strip)
 
 pkgver() {
+    cd "$srcdir"
     git describe --tags --abbrev=0 | sed 's/^v//; s/-/_/'
 }
 
