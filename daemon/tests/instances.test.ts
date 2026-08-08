@@ -24,6 +24,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  CorruptInstances,
   Instances,
   pidState,
   shouldPrune,
@@ -202,6 +203,33 @@ describe("corrupt JSON", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  test("says the backup failed rather than naming a file that was never written", () => {
+    const failed = new CorruptInstances(
+      "/srv/instances.json",
+      {
+        written: false,
+        path: "/srv/instances.corrupt-1.json",
+        cause: new Error("EROFS: read-only file system"),
+      },
+      new SyntaxError("Unexpected token"),
+    );
+
+    expect(failed.message).toContain("corrupt registry JSON in /srv/instances.json");
+    expect(failed.message).toContain("could NOT be preserved");
+    expect(failed.message).toContain("EROFS");
+    expect(failed.message).not.toContain("Preserved backup at");
+  });
+
+  test("names the backup when it was written", () => {
+    const ok = new CorruptInstances(
+      "/srv/instances.json",
+      { written: true, path: "/srv/instances.corrupt-1.json" },
+      new SyntaxError("Unexpected token"),
+    );
+
+    expect(ok.message).toContain("Preserved backup at /srv/instances.corrupt-1.json");
   });
 
   test("does not overwrite the file it could not read", async () => {

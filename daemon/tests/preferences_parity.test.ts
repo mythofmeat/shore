@@ -713,6 +713,33 @@ describe("resolveActiveForCharacter", () => {
     });
   }
 
+  test("an unresolvable [defaults].model still falls through, but says so", () => {
+    const root = tempRoot();
+    mkdirSync(join(root, "cache"), { recursive: true });
+    const config = buildConfig(STATIC_CHAT, "", root);
+
+    const warnings: string[] = [];
+    const original = console.warn;
+    console.warn = (msg: unknown) => void warnings.push(String(msg));
+    let resolved;
+    try {
+      resolved = resolveActiveForCharacter(
+        config,
+        emptyPreferences(),
+        emptyPreferences(),
+        undefined,
+        "nosuchprovider:nosuchmodel",
+        findEffectiveModel,
+      );
+    } finally {
+      console.warn = original;
+    }
+
+    expect(resolved).toBeDefined();
+    expect(warnings.join("\n")).toContain("nosuchprovider:nosuchmodel");
+    expect(warnings.join("\n")).toContain("[defaults].model");
+  });
+
   test("an empty catalog resolves to nothing rather than throwing", () => {
     const root = tempRoot();
     mkdirSync(join(root, "cache"), { recursive: true });

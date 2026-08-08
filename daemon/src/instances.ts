@@ -33,13 +33,22 @@ export function defaultInstancesPath(env?: NodeJS.ProcessEnv): string {
   return join(runtimeDir(env), "instances.json");
 }
 
+export type PreservedBackup =
+  | { written: true; path: string }
+  | { written: false; path: string; cause: unknown };
+
 export class CorruptInstances extends Error {
   constructor(
     readonly path: string,
-    readonly backup: string,
+    readonly backup: PreservedBackup,
     cause: unknown,
   ) {
-    super(`corrupt registry JSON in ${path}: ${String(cause)}. Preserved backup at ${backup}`);
+    super(
+      `corrupt registry JSON in ${path}: ${String(cause)}. ` +
+        (backup.written
+          ? `Preserved backup at ${backup.path}`
+          : `The original bytes could NOT be preserved at ${backup.path}: ${String(backup.cause)}`),
+    );
     this.name = "CorruptInstances";
   }
 }
@@ -122,13 +131,14 @@ export class Instances {
     renameSync(tmp, this.path);
   }
 
-  #preserve(content: string): string {
-    const backup = this.#corruptBackupPath();
+  #preserve(content: string): PreservedBackup {
+    const path = this.#corruptBackupPath();
     try {
-      writeFileSync(backup, content);
-    } catch {
+      writeFileSync(path, content);
+      return { written: true, path };
+    } catch (cause) {
+      return { written: false, path, cause };
     }
-    return backup;
   }
 
   #corruptBackupPath(): string {

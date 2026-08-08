@@ -497,7 +497,11 @@ export function resolveActiveForCharacter(
   if (appDefaultModel !== undefined) {
     try {
       return findEffective(config, config.dirs.cache, appDefaultModel, true);
-    } catch {
+    } catch (e) {
+      console.warn(
+        `shore: [defaults].model "${appDefaultModel}" could not be resolved, ` +
+          `falling back to the first configured chat model: ${String(e)}`,
+      );
     }
   }
 
