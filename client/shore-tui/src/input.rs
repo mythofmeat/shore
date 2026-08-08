@@ -10,7 +10,7 @@ use crate::connection::ConnCommand;
 const HISTORY_PAGE_TURNS: u32 = 64;
 
 /// Action resulting from a key press.
-pub enum Action {
+pub(crate) enum Action {
     None,
     Send(ConnCommand),
     /// Send multiple commands at once.
@@ -30,7 +30,7 @@ pub enum Action {
 }
 
 /// Handle a crossterm input event and return the resulting action.
-pub fn handle_event(app: &mut App, event: Event) -> Action {
+pub(crate) fn handle_event(app: &mut App, event: Event) -> Action {
     match event {
         Event::Key(key) => handle_key(app, key),
         Event::Paste(text) => handle_paste(app, text),
@@ -831,11 +831,11 @@ fn parse_command(app: &mut App, input: &str) -> Action {
             }
             let enabled = match value.to_ascii_lowercase().as_str() {
                 "on" | "true" | "yes" | "1" => {
-                    app.set_view_option(key, true);
+                    let _ = app.set_view_option(key, true);
                     true
                 }
                 "off" | "false" | "no" | "0" => {
-                    app.set_view_option(key, false);
+                    let _ = app.set_view_option(key, false);
                     false
                 }
                 "toggle" => app.toggle_view_option(key).unwrap_or(false),
@@ -1053,7 +1053,7 @@ fn parse_command(app: &mut App, input: &str) -> Action {
             app.start_alt_picker(target_ref.clone());
             let mut args = serde_json::Map::new();
             if let Some(msg_ref) = target_ref {
-                args.insert("ref".into(), serde_json::json!(msg_ref));
+                let _ = args.insert("ref".into(), serde_json::json!(msg_ref));
             }
             let msg = ClientMessage::Command(Command {
                 rid: None,
@@ -1299,23 +1299,23 @@ mod tests {
         // Explicit modes, including the warn-only mode that the boolean
         // on/off path can't express. (parse_command receives the command with
         // its leading colon already stripped.)
-        parse_command(&mut app, "view usage warn");
+        let _ = parse_command(&mut app, "view usage warn");
         assert_eq!(app.usage_display, UsageDisplay::Warn);
-        parse_command(&mut app, "view usage always");
+        let _ = parse_command(&mut app, "view usage always");
         assert_eq!(app.usage_display, UsageDisplay::Always);
-        parse_command(&mut app, "view usage off");
+        let _ = parse_command(&mut app, "view usage off");
         assert_eq!(app.usage_display, UsageDisplay::Off);
 
         // `on` is an alias for `always`; `toggle` cycles off → always → warn.
-        parse_command(&mut app, "view usage on");
+        let _ = parse_command(&mut app, "view usage on");
         assert_eq!(app.usage_display, UsageDisplay::Always);
-        parse_command(&mut app, "view usage toggle");
+        let _ = parse_command(&mut app, "view usage toggle");
         assert_eq!(app.usage_display, UsageDisplay::Warn);
-        parse_command(&mut app, "view usage toggle");
+        let _ = parse_command(&mut app, "view usage toggle");
         assert_eq!(app.usage_display, UsageDisplay::Off);
 
         // A bogus mode is rejected without changing state.
-        parse_command(&mut app, "view usage sometimes");
+        let _ = parse_command(&mut app, "view usage sometimes");
         assert_eq!(app.usage_display, UsageDisplay::Off);
     }
 
@@ -1332,25 +1332,25 @@ mod tests {
         assert_eq!(app.budget_focus, BudgetFocus::default());
 
         // Scope pins, the case the pace exists for.
-        parse_command(&mut app, "view budget pace");
+        let _ = parse_command(&mut app, "view budget pace");
         assert_eq!(app.budget_focus.as_token(), "pace");
-        parse_command(&mut app, "view budget cap");
+        let _ = parse_command(&mut app, "view budget cap");
         assert_eq!(app.budget_focus.as_token(), "cap");
 
         // Name and name:scope pins.
-        parse_command(&mut app, "view budget brainwife:pace");
+        let _ = parse_command(&mut app, "view budget brainwife:pace");
         assert_eq!(app.budget_focus.as_token(), "brainwife:pace");
-        parse_command(&mut app, "view budget brainwife");
+        let _ = parse_command(&mut app, "view budget brainwife");
         assert_eq!(app.budget_focus.as_token(), "brainwife");
 
         // Back to following the most urgent budget; toggle then cycles on.
-        parse_command(&mut app, "view budget auto");
+        let _ = parse_command(&mut app, "view budget auto");
         assert_eq!(app.budget_focus, BudgetFocus::default());
-        parse_command(&mut app, "view budget toggle");
+        let _ = parse_command(&mut app, "view budget toggle");
         assert_eq!(app.budget_focus.as_token(), "cap");
 
         // A bogus scope is rejected without changing state.
-        parse_command(&mut app, "view budget brainwife:yearly");
+        let _ = parse_command(&mut app, "view budget brainwife:yearly");
         assert_eq!(app.budget_focus.as_token(), "cap");
     }
 
@@ -1510,9 +1510,9 @@ mod tests {
     fn scroll_shortcuts() {
         let mut app = App::default();
         app.input.mode = InputMode::Normal;
-        handle_key(&mut app, make_key(KeyModifiers::NONE, KeyCode::Char('k')));
+        let _ = handle_key(&mut app, make_key(KeyModifiers::NONE, KeyCode::Char('k')));
         assert_eq!(app.scroll_offset, 1);
-        handle_key(&mut app, make_key(KeyModifiers::NONE, KeyCode::Char('j')));
+        let _ = handle_key(&mut app, make_key(KeyModifiers::NONE, KeyCode::Char('j')));
         assert_eq!(app.scroll_offset, 0);
     }
 
@@ -1541,7 +1541,7 @@ mod tests {
         for c in "line1".chars() {
             app.input.insert_char(c);
         }
-        handle_key(&mut app, make_key(KeyModifiers::SHIFT, KeyCode::Enter));
+        let _ = handle_key(&mut app, make_key(KeyModifiers::SHIFT, KeyCode::Enter));
         assert!(app.input.text.contains('\n'));
     }
 

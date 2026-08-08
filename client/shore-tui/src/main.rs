@@ -53,7 +53,7 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, DisableLineWrap, EnableLineWrap, EnterAlternateScreen,
     LeaveAlternateScreen,
 };
-use crossterm::ExecutableCommand;
+use crossterm::execute;
 use futures_util::StreamExt;
 use ratatui::backend::{CrosstermBackend, TestBackend};
 use ratatui::buffer::Buffer;
@@ -412,7 +412,7 @@ impl FrameDump {
 fn render_app_to_string(app: &mut App, width: u16, height: u16) -> io::Result<String> {
     let backend = TestBackend::new(width, height);
     let mut terminal = Terminal::new(backend)?;
-    terminal.draw(|frame| ui::draw(frame, app))?;
+    let _ = terminal.draw(|frame| ui::draw(frame, app))?;
     Ok(buffer_to_string(terminal.backend().buffer()))
 }
 
@@ -551,17 +551,19 @@ fn open_in_editor(
     let tmp = std::env::temp_dir().join("shore_input.md");
     std::fs::write(&tmp, input.text.as_str())?;
 
-    io::stdout().execute(DisableBracketedPaste)?;
-    io::stdout().execute(EnableLineWrap)?;
+    execute!(io::stdout(), DisableBracketedPaste, EnableLineWrap)?;
     disable_raw_mode()?;
-    io::stdout().execute(LeaveAlternateScreen)?;
+    execute!(io::stdout(), LeaveAlternateScreen)?;
 
     let _ = std::process::Command::new(&editor).arg(&tmp).status();
 
     enable_raw_mode()?;
-    io::stdout().execute(EnterAlternateScreen)?;
-    io::stdout().execute(DisableLineWrap)?;
-    io::stdout().execute(EnableBracketedPaste)?;
+    execute!(
+        io::stdout(),
+        EnterAlternateScreen,
+        DisableLineWrap,
+        EnableBracketedPaste
+    )?;
     terminal.clear()?;
 
     if let Ok(contents) = std::fs::read_to_string(&tmp) {
@@ -584,17 +586,19 @@ fn pick_image(
 
     let start = start_dir.unwrap_or(".");
 
-    io::stdout().execute(DisableBracketedPaste)?;
-    io::stdout().execute(EnableLineWrap)?;
+    execute!(io::stdout(), DisableBracketedPaste, EnableLineWrap)?;
     disable_raw_mode()?;
-    io::stdout().execute(LeaveAlternateScreen)?;
+    execute!(io::stdout(), LeaveAlternateScreen)?;
 
     let result = try_yazi(&chooser_file, start).or_else(|| try_fzf(&chooser_file, start));
 
     enable_raw_mode()?;
-    io::stdout().execute(EnterAlternateScreen)?;
-    io::stdout().execute(DisableLineWrap)?;
-    io::stdout().execute(EnableBracketedPaste)?;
+    execute!(
+        io::stdout(),
+        EnterAlternateScreen,
+        DisableLineWrap,
+        EnableBracketedPaste
+    )?;
     terminal.clear()?;
 
     match result {
@@ -876,9 +880,12 @@ async fn handle_action(
 async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
     // Set up terminal
     enable_raw_mode()?;
-    io::stdout().execute(EnterAlternateScreen)?;
-    io::stdout().execute(DisableLineWrap)?;
-    io::stdout().execute(EnableBracketedPaste)?;
+    execute!(
+        io::stdout(),
+        EnterAlternateScreen,
+        DisableLineWrap,
+        EnableBracketedPaste
+    )?;
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;
 
@@ -931,7 +938,7 @@ async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
                 terminal.clear()?;
                 needs_full_redraw = false;
             }
-            terminal.draw(|frame| ui::draw(frame, &mut app))?;
+            let _ = terminal.draw(|frame| ui::draw(frame, &mut app))?;
             if let Some(dump) = &mut frame_dump {
                 let area = terminal.size()?;
                 dump.dump(&mut app, area.width, area.height)?;
@@ -1045,10 +1052,9 @@ async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
     }
 
     // Restore terminal
-    io::stdout().execute(DisableBracketedPaste)?;
-    io::stdout().execute(EnableLineWrap)?;
+    execute!(io::stdout(), DisableBracketedPaste, EnableLineWrap)?;
     disable_raw_mode()?;
-    io::stdout().execute(LeaveAlternateScreen)?;
+    execute!(io::stdout(), LeaveAlternateScreen)?;
 
     // Reprint any errors raised this session to the now-restored normal screen
     // so they survive in terminal scrollback for copy/paste debugging. They're
@@ -1296,12 +1302,12 @@ fn prepend_history_page(app: &mut App, data: &serde_json::Value) {
         {
             *archived_count = archived_count.saturating_add(loaded_turns);
         }
-        app.entries.splice(0..0, page_entries);
+        drop(app.entries.splice(0..0, page_entries));
     } else {
         page_entries.push(ConversationEntry::ArchiveBoundary {
             archived_count: loaded_turns,
         });
-        app.entries.splice(0..0, page_entries);
+        drop(app.entries.splice(0..0, page_entries));
     }
 
     app.history_version = app.history_version.wrapping_add(1);
@@ -1429,9 +1435,9 @@ fn transmit_image_ref(
     max_rows: u16,
 ) {
     if let Some(b64) = &img.data {
-        cache.ensure_transmitted_from_b64(&img.path, b64, max_cols, max_rows);
+        let _ = cache.ensure_transmitted_from_b64(&img.path, b64, max_cols, max_rows);
     } else {
-        cache.ensure_transmitted(&img.path, max_cols, max_rows);
+        let _ = cache.ensure_transmitted(&img.path, max_cols, max_rows);
     }
 }
 
@@ -1685,10 +1691,12 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         ServerMessage::SendImage(img) => {
             let (max_cols, max_rows) = image_max_cells();
             if let Some(b64) = &img.data {
-                app.image_cache
-                    .ensure_transmitted_from_b64(&img.path, b64, max_cols, max_rows);
+                let _ =
+                    app.image_cache
+                        .ensure_transmitted_from_b64(&img.path, b64, max_cols, max_rows);
             } else {
-                app.image_cache
+                let _ = app
+                    .image_cache
                     .ensure_transmitted(&img.path, max_cols, max_rows);
             }
             RedrawEffect::Immediate
@@ -2332,7 +2340,7 @@ mod redraw_tests {
     fn usage_warning_notifies_when_monitor_hidden() {
         let mut app = App::default(); // usage_display defaults to Off
 
-        handle_server_message(&mut app, usage_warning(0.82));
+        let _ = handle_server_message(&mut app, usage_warning(0.82));
 
         assert_eq!(
             app.notifications.len(),
@@ -2352,7 +2360,7 @@ mod redraw_tests {
             ..Default::default()
         };
 
-        handle_server_message(&mut app, usage_warning(0.82));
+        let _ = handle_server_message(&mut app, usage_warning(0.82));
 
         assert_eq!(
             system_entry_count(&app),
@@ -2379,7 +2387,7 @@ mod redraw_tests {
             pace: None,
         }];
 
-        handle_conn_event(&mut app, ConnEvent::Disconnected("server gone".into()));
+        let _ = handle_conn_event(&mut app, ConnEvent::Disconnected("server gone".into()));
 
         assert!(
             app.usage_budgets.is_empty(),
@@ -2391,7 +2399,7 @@ mod redraw_tests {
     fn usage_command_output_populates_budgets_silently() {
         let mut app = App::default();
 
-        handle_server_message(
+        let _ = handle_server_message(
             &mut app,
             ServerMessage::CommandOutput(CommandOutput {
                 rid: None,
@@ -2418,7 +2426,7 @@ mod redraw_tests {
         // is the binding constraint, so it's what the chip reports.
         let mut app = App::default();
 
-        handle_server_message(
+        let _ = handle_server_message(
             &mut app,
             ServerMessage::CommandOutput(CommandOutput {
                 rid: None,
@@ -2458,7 +2466,7 @@ mod redraw_tests {
         // nothing shown at all in warn-only visibility mode.
         let mut app = App::default();
 
-        handle_server_message(
+        let _ = handle_server_message(
             &mut app,
             ServerMessage::CommandOutput(CommandOutput {
                 rid: None,
@@ -3113,7 +3121,7 @@ mod redraw_tests {
             None,
         ));
 
-        handle_server_message(
+        let _ = handle_server_message(
             &mut app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
@@ -3156,7 +3164,7 @@ mod redraw_tests {
             None,
         ));
 
-        handle_server_message(
+        let _ = handle_server_message(
             &mut app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,

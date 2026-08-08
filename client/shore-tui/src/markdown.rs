@@ -14,7 +14,7 @@ fn render_markdown(text: &str) -> Vec<Line<'static>> {
 
 /// Convert markdown text into styled ratatui Lines and pre-wrap each rendered
 /// line so outer indentation is preserved by ratatui's paragraph widget.
-pub fn render_markdown_wrapped(text: &str, max_width: usize) -> Vec<Line<'static>> {
+pub(crate) fn render_markdown_wrapped(text: &str, max_width: usize) -> Vec<Line<'static>> {
     let max_width = (max_width > 0).then_some(max_width);
     render_markdown_inner(text, max_width)
 }
@@ -388,7 +388,7 @@ impl MarkdownRenderer {
             }
             TagEnd::List(_) => {
                 self.flush_current();
-                self.list_stack.pop();
+                let _ = self.list_stack.pop();
             }
             TagEnd::Item | TagEnd::FootnoteDefinition | TagEnd::DefinitionListDefinition => {
                 self.flush_current();
@@ -467,7 +467,7 @@ impl MarkdownRenderer {
 
     fn pop_style(&mut self) {
         if self.style_stack.len() > 1 {
-            self.style_stack.pop();
+            let _ = self.style_stack.pop();
         }
     }
 

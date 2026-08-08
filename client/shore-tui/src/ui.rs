@@ -15,7 +15,7 @@ use crate::images;
 use crate::markdown;
 
 /// Render the full TUI layout.
-pub fn draw(frame: &mut Frame, app: &mut App) {
+pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
     let size = frame.area();
 
     // Main layout: conversation | input | picker (only when active)
@@ -1733,7 +1733,7 @@ mod scenario_tests {
 
         /// Render current app state and return the frame as text.
         fn render(&mut self, label: &str) -> String {
-            self.terminal
+            let _ = self.terminal
                 .draw(|frame| draw(frame, &mut self.app))
                 .unwrap();
             let buf = self.terminal.backend().buffer();
@@ -1756,7 +1756,7 @@ mod scenario_tests {
 
         /// Render current app state and preserve empty rows in the frame text.
         fn render_with_blank_rows(&mut self, label: &str) -> String {
-            self.terminal
+            let _ = self.terminal
                 .draw(|frame| draw(frame, &mut self.app))
                 .unwrap();
             let buf = self.terminal.backend().buffer();
@@ -1932,7 +1932,7 @@ mod scenario_tests {
         h.type_str("setting");
         let cmd = sent_command(h.press_action(KeyCode::Enter));
         assert_eq!(cmd.name, "model_settings");
-        crate::handle_server_message(&mut h.app, sampler_settings_output());
+        let _ = crate::handle_server_message(&mut h.app, sampler_settings_output());
     }
 
     fn assert_set_model_setting(action: input::Action, key: &str, value: serde_json::Value) {
@@ -1988,7 +1988,7 @@ mod scenario_tests {
         h.app.model = "claude-3".into();
 
         // 1. Initial
-        h.render("initial");
+        let _ = h.render("initial");
 
         // 2. Type a message
         h.type_str("Hello, world!");
@@ -2016,7 +2016,7 @@ mod scenario_tests {
 
         // 4. Stream starts
         h.stream_start();
-        h.render("stream started");
+        let _ = h.render("stream started");
 
         // 5. First chunk
         h.stream_chunk("Hi there");
@@ -2097,7 +2097,7 @@ mod scenario_tests {
             },
         ];
 
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::History(History {
                 rid: None,
@@ -2222,7 +2222,7 @@ mod scenario_tests {
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.input.mode = InputMode::Normal;
 
-        h.render("normal mode");
+        let _ = h.render("normal mode");
 
         // Open command palette with ':'
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
@@ -2299,7 +2299,7 @@ mod scenario_tests {
         // remain enumerable. We look for the row containing the input
         // border title on the right side.
         fn input_row(h: &mut Harness, label: &str) -> u16 {
-            h.terminal.draw(|frame| draw(frame, &mut h.app)).unwrap();
+            let _ = h.terminal.draw(|frame| draw(frame, &mut h.app)).unwrap();
             let buf = h.terminal.backend().buffer();
             let area = buf.area;
             for y in 0..area.height {
@@ -2346,7 +2346,7 @@ mod scenario_tests {
         h.app.input.mode = InputMode::Normal;
 
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
-        h.render("palette open");
+        let _ = h.render("palette open");
         let total = h.app.completion.candidates.len();
         assert!(total >= 3, "need >=3 candidates for cycle test");
 
@@ -2734,7 +2734,7 @@ mod scenario_tests {
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
         h.type_str("model");
         h.press_mod(KeyModifiers::NONE, KeyCode::Char(' '));
-        h.render("after space");
+        let _ = h.render("after space");
 
         assert!(
             matches!(h.app.completion.mode, crate::app::PaletteMode::Submenu(_)),
@@ -2758,11 +2758,11 @@ mod scenario_tests {
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
         h.type_str("model");
         h.press(KeyCode::Enter);
-        h.render("submenu opened");
+        let _ = h.render("submenu opened");
 
         // Filter to "alpha".
         h.type_str("alpha");
-        h.render("filtered");
+        let _ = h.render("filtered");
 
         let names: Vec<&str> = h
             .app
@@ -2782,7 +2782,7 @@ mod scenario_tests {
 
         // Esc → pop back to Top, cmd_text restored to "model".
         h.press(KeyCode::Esc);
-        h.render("after esc");
+        let _ = h.render("after esc");
         assert!(
             matches!(h.app.completion.mode, crate::app::PaletteMode::Top),
             "Esc should pop submenu back to Top"
@@ -2983,7 +2983,7 @@ mod scenario_tests {
             _ => panic!("expected to stay in setting submenu while loading"),
         }
 
-        crate::handle_server_message(&mut h.app, sampler_settings_output());
+        let _ = crate::handle_server_message(&mut h.app, sampler_settings_output());
         h.press(KeyCode::Enter);
         assert!(matches!(
             h.app.completion.mode,
@@ -3013,7 +3013,7 @@ mod scenario_tests {
             _ => panic!("expected to stay in setting submenu while loading"),
         }
 
-        crate::handle_server_message(&mut h.app, sampler_settings_output());
+        let _ = crate::handle_server_message(&mut h.app, sampler_settings_output());
         h.press(KeyCode::Enter);
         match &h.app.completion.mode {
             crate::app::PaletteMode::Submenu(s) => {
@@ -3139,7 +3139,7 @@ mod scenario_tests {
             ));
         }
 
-        h.render("many messages - auto scroll");
+        let _ = h.render("many messages - auto scroll");
 
         // Start streaming
         h.stream_start();
@@ -3152,7 +3152,7 @@ mod scenario_tests {
 
         // Scroll up (exit auto_scroll)
         h.press_mod(KeyModifiers::CONTROL, KeyCode::Char('u'));
-        h.render("scrolled up");
+        let _ = h.render("scrolled up");
         assert!(!h.app.auto_scroll, "auto_scroll disabled after scroll up");
 
         // New chunk arrives while scrolled up
@@ -3213,13 +3213,13 @@ mod scenario_tests {
         let mut h = Harness::new();
 
         h.app.connection_status = ConnectionStatus::Disconnected;
-        h.render("disconnected");
+        let _ = h.render("disconnected");
 
         h.app.connection_status = ConnectionStatus::Connecting;
-        h.render("connecting");
+        let _ = h.render("connecting");
 
         h.app.connection_status = ConnectionStatus::Connected;
-        h.render("connected");
+        let _ = h.render("connected");
     }
 
     // ── Scenario: long message wrapping ─────────────────────────────────────
@@ -3541,7 +3541,7 @@ mod scenario_tests {
             .push(ConversationEntry::user("hi".into(), vec![], "t1".into()));
 
         // Phase 1: model thinks, then decides to call a tool.
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
@@ -3549,7 +3549,7 @@ mod scenario_tests {
                 regen: false,
             }),
         );
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamChunk(StreamChunk {
                 subagent: None,
@@ -3558,7 +3558,7 @@ mod scenario_tests {
                 content_type: "thinking".into(),
             }),
         );
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
@@ -3585,7 +3585,7 @@ mod scenario_tests {
             "phase-1 thinking must be committed on tool_use phase end"
         );
 
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::ToolCall(ToolCall {
                 subagent: None,
@@ -3676,7 +3676,7 @@ mod scenario_tests {
         ));
 
         // Phase 1: the model decides to call a tool; no text chunks.
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
@@ -3684,7 +3684,7 @@ mod scenario_tests {
                 regen: false,
             }),
         );
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
@@ -3697,7 +3697,7 @@ mod scenario_tests {
                 is_final: false,
             }),
         );
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::ToolCall(ToolCall {
                 subagent: None,
@@ -3721,7 +3721,7 @@ mod scenario_tests {
             "intermediate per-call stats must not appear mid-turn\n{f_mid}"
         );
 
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::ToolResult(ToolResult {
                 subagent: None,
@@ -3734,7 +3734,7 @@ mod scenario_tests {
         );
 
         // Phase 2: model emits the real response.
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
@@ -3742,7 +3742,7 @@ mod scenario_tests {
                 regen: false,
             }),
         );
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamChunk(StreamChunk {
                 subagent: None,
@@ -3751,7 +3751,7 @@ mod scenario_tests {
                 content_type: "text".into(),
             }),
         );
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
@@ -3897,7 +3897,7 @@ mod scenario_tests {
             .entries
             .push(ConversationEntry::user("hi".into(), vec![], "t1".into()));
 
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
@@ -3905,7 +3905,7 @@ mod scenario_tests {
                 regen: false,
             }),
         );
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamChunk(StreamChunk {
                 subagent: None,
@@ -3922,7 +3922,7 @@ mod scenario_tests {
         );
 
         // The tool-use phase ends, then the tool call arrives.
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
@@ -3935,7 +3935,7 @@ mod scenario_tests {
                 is_final: false,
             }),
         );
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::ToolCall(ToolCall {
                 subagent: None,
@@ -4058,7 +4058,7 @@ mod scenario_tests {
             "t1".into(),
         ));
 
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
@@ -4066,7 +4066,7 @@ mod scenario_tests {
                 regen: false,
             }),
         );
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamChunk(StreamChunk {
                 subagent: None,
@@ -4111,7 +4111,7 @@ mod scenario_tests {
             },
             persisted_assistant,
         ];
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::History(History {
                 rid: None,
@@ -4136,7 +4136,7 @@ mod scenario_tests {
                 ttft_ms: 80,
             },
         };
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
@@ -4220,7 +4220,7 @@ mod scenario_tests {
 
         // A completed prior exchange, then the user sends a new message and the
         // stream starts before the daemon has persisted any new reply.
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
@@ -4230,7 +4230,7 @@ mod scenario_tests {
         );
 
         // The snapshot the daemon broadcasts ends on the user's new message.
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::History(History {
                 rid: None,
@@ -4295,7 +4295,7 @@ mod scenario_tests {
             "t1".into(),
         ));
 
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
                 subagent: None,
@@ -4304,7 +4304,7 @@ mod scenario_tests {
             }),
         );
         for chunk in reply.as_bytes().chunks(96) {
-            crate::handle_server_message(
+            let _ = crate::handle_server_message(
                 &mut h.app,
                 ServerMessage::StreamChunk(StreamChunk {
                     subagent: None,
@@ -4349,7 +4349,7 @@ mod scenario_tests {
                 origin: None,
             },
         ];
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::History(History {
                 rid: None,
@@ -4361,7 +4361,7 @@ mod scenario_tests {
             }),
         );
 
-        crate::handle_server_message(
+        let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
                 subagent: None,
@@ -4494,7 +4494,7 @@ mod scenario_tests {
 
         // Stream starts (but no text yet)
         h.stream_start();
-        h.render("stream started, no text yet");
+        let _ = h.render("stream started, no text yet");
 
         // First chunk arrives
         h.stream_chunk("The answer is...");
@@ -4517,16 +4517,16 @@ mod scenario_tests {
 
         // Single line
         h.type_str("line 1");
-        h.render("1 line input");
+        let _ = h.render("1 line input");
 
         // Add lines
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Enter);
         h.type_str("line 2");
-        h.render("2 line input");
+        let _ = h.render("2 line input");
 
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Enter);
         h.type_str("line 3");
-        h.render("3 line input");
+        let _ = h.render("3 line input");
 
         // The input area should have grown, eating into conversation space
 
@@ -5113,7 +5113,7 @@ mod scenario_tests {
             ..App::default()
         };
         h2.app.set_status("loaded");
-        h2.render("narrow terminal with status");
+        let _ = h2.render("narrow terminal with status");
     }
 
     // ── Scenario: character name shows in assistant responses ─────────────────
@@ -5281,7 +5281,7 @@ mod scenario_tests {
         // Stream starts
         h.stream_start();
         h.stream_chunk("Starting to respond...");
-        h.render("streaming");
+        let _ = h.render("streaming");
 
         // Error arrives — stream aborts, error in status
         h.app.abort_stream();
@@ -5315,7 +5315,7 @@ mod scenario_tests {
 
         h.stream_start();
         h.stream_chunk("Partial response that gets cut off because");
-        h.render("streaming before disconnect");
+        let _ = h.render("streaming before disconnect");
 
         // Connection drops — stream state is cleared by disconnect handler
         h.app.connection_status = ConnectionStatus::Connecting;

@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 #[derive(Debug)]
-pub enum ClipboardError {
+pub(crate) enum ClipboardError {
     NoImage,
     ClipboardUnavailable(String),
     WriteFailed(io::Error),
@@ -59,7 +59,7 @@ fn fresh_temp_path() -> PathBuf {
 /// Synchronous and blocking — designed to be invoked via
 /// `tokio::task::spawn_blocking`. The caller is expected to wrap this in
 /// a timeout in case `wl-paste` stalls on a wedged compositor.
-pub fn read_image_to_temp() -> Result<PathBuf, ClipboardError> {
+pub(crate) fn read_image_to_temp() -> Result<PathBuf, ClipboardError> {
     if std::env::var_os("WAYLAND_DISPLAY").is_none() {
         return Err(ClipboardError::ClipboardUnavailable(
             "not a Wayland session".into(),

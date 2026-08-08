@@ -4,14 +4,14 @@ use std::io::Write;
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 
-pub use shore_common::swp_client::image_protocol::detect_protocol as detect_protocol_from_env;
-pub use shore_common::swp_client::image_protocol::detect_protocol_probe;
-pub use shore_common::swp_client::image_protocol::ImageProtocol;
+pub(crate) use shore_common::swp_client::image_protocol::detect_protocol as detect_protocol_from_env;
+pub(crate) use shore_common::swp_client::image_protocol::detect_protocol_probe;
+pub(crate) use shore_common::swp_client::image_protocol::ImageProtocol;
 
-pub type KittyImageId = u32;
+pub(crate) type KittyImageId = u32;
 
 /// An image that has been transmitted to the terminal and is ready for display.
-pub struct TransmittedImage {
+pub(crate) struct TransmittedImage {
     pub id: KittyImageId,
     pub cols: u16,
     pub rows: u16,
@@ -22,7 +22,7 @@ pub struct TransmittedImage {
 }
 
 /// Cache of transmitted images, keyed by file path.
-pub struct ImageCache {
+pub(crate) struct ImageCache {
     next_id: u32,
     cache: HashMap<String, TransmittedImage>,
     protocol: Option<ImageProtocol>,
@@ -136,7 +136,7 @@ const DIACRITICS: [u32; 256] = [
 ];
 
 impl ImageCache {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let (cw, ch) = query_cell_size().unwrap_or((8, 16));
         Self {
             next_id: 1,
@@ -149,7 +149,7 @@ impl ImageCache {
 
     /// Re-detect protocol using terminal probe (requires raw mode).
     /// Also refreshes cell pixel dimensions.
-    pub fn probe_protocol(&mut self) {
+    pub(crate) fn probe_protocol(&mut self) {
         if self.protocol.is_none() {
             self.protocol = detect_protocol_probe();
         }
@@ -161,7 +161,7 @@ impl ImageCache {
 
     /// Transmit an image to kitty if not already cached.
     /// Returns a reference to the cached image on success.
-    pub fn ensure_transmitted(
+    pub(crate) fn ensure_transmitted(
         &mut self,
         path: &str,
         max_cols: u16,
@@ -188,7 +188,7 @@ impl ImageCache {
         place_kitty(&mut tty, id, cols, rows);
         let _ = tty.flush();
 
-        self.cache.insert(
+        let _ = self.cache.insert(
             path.to_string(),
             TransmittedImage {
                 id,
@@ -203,7 +203,7 @@ impl ImageCache {
 
     /// Transmit an image from base64 data if not already cached.
     /// Uses `key` (typically the server path) as the cache key.
-    pub fn ensure_transmitted_from_b64(
+    pub(crate) fn ensure_transmitted_from_b64(
         &mut self,
         key: &str,
         b64_data: &str,
@@ -234,7 +234,7 @@ impl ImageCache {
         place_kitty(&mut tty, id, cols, rows);
         let _ = tty.flush();
 
-        self.cache.insert(
+        let _ = self.cache.insert(
             key.to_string(),
             TransmittedImage {
                 id,
@@ -248,7 +248,7 @@ impl ImageCache {
     }
 
     /// Look up a previously transmitted image.
-    pub fn get(&self, path: &str) -> Option<&TransmittedImage> {
+    pub(crate) fn get(&self, path: &str) -> Option<&TransmittedImage> {
         self.cache.get(path)
     }
 
@@ -256,12 +256,12 @@ impl ImageCache {
     /// by the renderer. `next_id` is monotonic across the cache's lifetime
     /// (insertions only ever bump it), so combined with `cache.len()` it
     /// uniquely identifies "the set of images currently visible."
-    pub fn version(&self) -> u64 {
+    pub(crate) fn version(&self) -> u64 {
         ((self.next_id as u64) << 32) | (self.cache.len() as u64)
     }
 
     /// Delete all transmitted images and clear the cache.
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         if self.protocol == Some(ImageProtocol::Kitty) && !self.cache.is_empty() {
             if let Some(mut tty) = open_tty_write() {
                 let _ = write!(tty, "\x1b_Ga=d,q=2\x1b\\");
@@ -271,7 +271,7 @@ impl ImageCache {
         self.cache.clear();
     }
 
-    pub fn calculate_cells(&self, pw: u32, ph: u32, max_cols: u16, max_rows: u16) -> (u16, u16) {
+    pub(crate) fn calculate_cells(&self, pw: u32, ph: u32, max_cols: u16, max_rows: u16) -> (u16, u16) {
         let cw = self.cell_width as f64;
         let ch = self.cell_height as f64;
 
@@ -300,7 +300,7 @@ impl ImageCache {
 /// `unicode-width`) so that ratatui allocates exactly one cell per placeholder.
 /// After rendering, call [`fixup_placeholder_cells`] to swap U+2800 → U+10EEEE
 /// before the frame is flushed.
-pub fn placeholder_lines(img: &TransmittedImage) -> Vec<Line<'static>> {
+pub(crate) fn placeholder_lines(img: &TransmittedImage) -> Vec<Line<'static>> {
     let style = id_to_style(img.id);
     let mut lines = Vec::with_capacity(img.rows as usize);
     for row in 0..img.rows {
@@ -319,7 +319,7 @@ pub fn placeholder_lines(img: &TransmittedImage) -> Vec<Line<'static>> {
 
 /// Generate placeholder lines for an image at arbitrary cell dimensions.
 /// Used for fullscreen display where dimensions differ from the cached inline size.
-pub fn placeholder_lines_at(id: KittyImageId, cols: u16, rows: u16) -> Vec<Line<'static>> {
+pub(crate) fn placeholder_lines_at(id: KittyImageId, cols: u16, rows: u16) -> Vec<Line<'static>> {
     let style = id_to_style(id);
     let mut lines = Vec::with_capacity(rows as usize);
     for row in 0..rows {
@@ -337,7 +337,7 @@ pub fn placeholder_lines_at(id: KittyImageId, cols: u16, rows: u16) -> Vec<Line<
 /// Replace U+2800 stand-in characters with U+10EEEE kitty placeholders in a
 /// rendered buffer. Must be called after Paragraph renders but before the
 /// frame is flushed to the terminal.
-pub fn fixup_placeholder_cells(buf: &mut ratatui::buffer::Buffer, area: ratatui::layout::Rect) {
+pub(crate) fn fixup_placeholder_cells(buf: &mut ratatui::buffer::Buffer, area: ratatui::layout::Rect) {
     for y in area.y..(area.y + area.height) {
         for x in area.x..(area.x + area.width) {
             let cell = &buf[(x, y)];
@@ -347,7 +347,7 @@ pub fn fixup_placeholder_cells(buf: &mut ratatui::buffer::Buffer, area: ratatui:
                     let mut new_sym = String::with_capacity(4 + rest.len());
                     new_sym.push('\u{10EEEE}');
                     new_sym.push_str(rest);
-                    buf[(x, y)].set_symbol(&new_sym);
+                    let _ = buf[(x, y)].set_symbol(&new_sym);
                 }
             }
         }

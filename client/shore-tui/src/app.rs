@@ -12,7 +12,7 @@ use crate::images::ImageCache;
 /// (entries length + last-entry summary + stream/toggle state + image cache
 /// version + width) matches the previous build.
 #[derive(Default)]
-pub struct ConvCache {
+pub(crate) struct ConvCache {
     pub fingerprint: ConvFingerprint,
     pub lines: Vec<Line<'static>>,
     pub content_visual: u16,
@@ -26,7 +26,7 @@ pub struct ConvCache {
 /// equality would defeat the purpose by being as expensive as the work
 /// being cached.
 #[derive(Default, PartialEq, Eq, Clone)]
-pub struct ConvFingerprint {
+pub(crate) struct ConvFingerprint {
     pub width: u16,
     pub entries_len: u32,
     pub last_entry: u64,
@@ -55,7 +55,7 @@ pub struct ConvFingerprint {
 /// `usage {budget:true}` reply (and refreshed in-place by `UsageWarning`
 /// pushes). Carries just the fields the on-screen usage chip needs.
 #[derive(Clone, Debug, Default)]
-pub struct UsageBudget {
+pub(crate) struct UsageBudget {
     pub name: String,
     /// Fraction used, e.g. 0.8 for 80%.
     pub percent_used: f64,
@@ -70,7 +70,7 @@ pub struct UsageBudget {
 
 /// One measured limit: a budget's period cap, or its pace allowance.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct UsageLevel {
+pub(crate) struct UsageLevel {
     /// Fraction used, e.g. 0.8 for 80%.
     pub percent_used: f64,
     pub crossed_warn_at: Vec<f64>,
@@ -78,7 +78,7 @@ pub struct UsageLevel {
 }
 
 impl UsageLevel {
-    pub fn in_warning(&self) -> bool {
+    pub(crate) fn in_warning(&self) -> bool {
         self.over_limit || !self.crossed_warn_at.is_empty()
     }
 }
@@ -86,14 +86,14 @@ impl UsageLevel {
 /// Which limit a `usage_warning` push refers to — and, via [`BudgetFocus`],
 /// which limit the usage chip tracks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum UsageScope {
+pub(crate) enum UsageScope {
     Cap,
     Pace,
 }
 
 impl UsageScope {
     /// Canonical token used in `:view budget <target>` and prefs.
-    pub fn as_token(self) -> &'static str {
+    pub(crate) fn as_token(self) -> &'static str {
         match self {
             UsageScope::Cap => "cap",
             UsageScope::Pace => "pace",
@@ -102,7 +102,7 @@ impl UsageScope {
 
     /// Parse a scope token. `budget` is accepted for `cap` because that is the
     /// daemon's wire name for the period limit.
-    pub fn from_token(token: &str) -> Option<Self> {
+    pub(crate) fn from_token(token: &str) -> Option<Self> {
         match token.to_ascii_lowercase().as_str() {
             "cap" | "budget" => Some(UsageScope::Cap),
             "pace" => Some(UsageScope::Pace),
@@ -119,7 +119,7 @@ impl UsageScope {
 /// much is left today?") and only the user knows which one they steer by, so
 /// the choice is pinnable.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct BudgetFocus {
+pub(crate) struct BudgetFocus {
     /// Budget to follow, matched case-insensitively by name. `None` follows
     /// whichever configured budget is closest to its limit.
     pub name: Option<String>,
@@ -143,7 +143,7 @@ impl BudgetFocus {
     }
 
     /// Canonical token used in the `:view budget <target>` command and prefs.
-    pub fn as_token(&self) -> String {
+    pub(crate) fn as_token(&self) -> String {
         match (&self.name, self.scope) {
             (None, None) => "auto".to_string(),
             (None, Some(scope)) => scope.as_token().to_string(),
@@ -157,7 +157,7 @@ impl BudgetFocus {
     ///
     /// `auto`, `cap` and `pace` are reserved, so a budget actually named one of
     /// them has to be written with an explicit scope (`pace:cap`).
-    pub fn from_token(token: &str) -> Option<Self> {
+    pub(crate) fn from_token(token: &str) -> Option<Self> {
         let token = token.trim();
         if let Some((name, scope)) = token.split_once(':') {
             let name = name.trim();
@@ -212,7 +212,7 @@ impl UsageBudget {
     /// are configured independently, so a pace past its own threshold is a
     /// warning even while the period cap is still calm. Narrowing this to the
     /// headline would let the cap hide a warning the user asked to see.
-    pub fn in_warning(&self) -> bool {
+    pub(crate) fn in_warning(&self) -> bool {
         self.cap().in_warning() || self.pace.as_ref().is_some_and(UsageLevel::in_warning)
     }
 
@@ -229,7 +229,7 @@ impl UsageBudget {
     /// of the two, otherwise the cap. This is the figure the usage chip
     /// renders, extending "show the most pressing constraint" to budgets that
     /// pace themselves.
-    pub fn headline(&self) -> UsageLevel {
+    pub(crate) fn headline(&self) -> UsageLevel {
         match self.pace.as_ref() {
             Some(pace) if self.pace_leads(pace) => pace.clone(),
             _ => self.cap(),
@@ -238,7 +238,7 @@ impl UsageBudget {
 
     /// [`Self::headline`]'s percentage without the vector clones. The chip's
     /// "most urgent budget" scan runs this on every frame, once per budget.
-    pub fn headline_percent(&self) -> f64 {
+    pub(crate) fn headline_percent(&self) -> f64 {
         match self.pace.as_ref() {
             Some(pace) if self.pace_leads(pace) => pace.percent_used,
             _ => self.percent_used,
@@ -267,7 +267,7 @@ impl UsageBudget {
     ///
     /// A budget that configures no pace falls back to its cap, so pinning
     /// `pace` never blanks the chip for budgets that don't pace themselves.
-    pub fn level(&self, scope: Option<UsageScope>) -> UsageLevel {
+    pub(crate) fn level(&self, scope: Option<UsageScope>) -> UsageLevel {
         match scope {
             None => self.headline(),
             Some(UsageScope::Cap) => self.cap(),
@@ -277,7 +277,7 @@ impl UsageBudget {
 
     /// [`Self::level`]'s percentage without the vector clones, for the
     /// per-frame scan that ranks budgets.
-    pub fn level_percent(&self, scope: Option<UsageScope>) -> f64 {
+    pub(crate) fn level_percent(&self, scope: Option<UsageScope>) -> f64 {
         match scope {
             None => self.headline_percent(),
             Some(UsageScope::Cap) => self.percent_used,
@@ -291,7 +291,7 @@ impl UsageBudget {
     /// Whether [`Self::level`] reports the pace rather than the period cap.
     /// The chip labels those: a pace percentage read as a period percentage is
     /// badly misleading in either direction.
-    pub fn level_is_pace(&self, scope: Option<UsageScope>) -> bool {
+    pub(crate) fn level_is_pace(&self, scope: Option<UsageScope>) -> bool {
         match scope {
             Some(UsageScope::Cap) => false,
             Some(UsageScope::Pace) => self.pace.is_some(),
@@ -302,7 +302,7 @@ impl UsageBudget {
 
 /// When the usage chip is shown on the input border.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum UsageDisplay {
+pub(crate) enum UsageDisplay {
     /// Never show the chip; usage warnings fall back to a notification.
     #[default]
     Off,
@@ -314,7 +314,7 @@ pub enum UsageDisplay {
 
 impl UsageDisplay {
     /// Canonical token used in the `:view usage <mode>` command and prefs.
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             UsageDisplay::Off => "off",
             UsageDisplay::Always => "always",
@@ -324,7 +324,7 @@ impl UsageDisplay {
 
     /// Parse a command/pref token. `on` is accepted as an alias for `always`
     /// so the boolean `:view` muscle-memory (and older prefs) keep working.
-    pub fn from_token(token: &str) -> Option<Self> {
+    pub(crate) fn from_token(token: &str) -> Option<Self> {
         match token {
             "off" => Some(UsageDisplay::Off),
             "always" | "on" => Some(UsageDisplay::Always),
@@ -334,7 +334,7 @@ impl UsageDisplay {
     }
 
     /// Next mode in the off → always → warn → off cycle (submenu Enter / toggle).
-    pub fn cycled(self) -> Self {
+    pub(crate) fn cycled(self) -> Self {
         match self {
             UsageDisplay::Off => UsageDisplay::Always,
             UsageDisplay::Always => UsageDisplay::Warn,
@@ -351,7 +351,7 @@ impl UsageDisplay {
 /// Images are *not* a block — they live as a turn-level field, matching the
 /// wire `Message.images` (which is separate from `content_blocks`).
 #[derive(Clone, Debug)]
-pub enum Block {
+pub(crate) enum Block {
     Text(String),
     Thinking(String),
     ToolUse {
@@ -384,7 +384,7 @@ pub enum Block {
 /// streaming deltas mutate its blocks in place. `StreamEnd` flips it to
 /// `Complete`. No separate streaming-text entry, no phase-boundary drop.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TurnState {
+pub(crate) enum TurnState {
     Complete,
     Streaming,
 }
@@ -393,7 +393,7 @@ pub enum TurnState {
 /// mirroring the wire `Message { role, content_blocks }`. One header is
 /// rendered per turn, then `blocks` in order.
 #[derive(Clone, Debug)]
-pub struct Turn {
+pub(crate) struct Turn {
     pub role: Role,
     /// Used for msg_id-matched reconciliation and metadata attach.
     pub msg_id: Option<String>,
@@ -407,7 +407,7 @@ pub struct Turn {
 impl Turn {
     /// A completed turn carrying a single text block (the common case for
     /// user messages and plain assistant replies).
-    pub fn text(
+    pub(crate) fn text(
         role: Role,
         msg_id: Option<String>,
         content: String,
@@ -433,7 +433,7 @@ impl Turn {
 
     /// The turn's textual content — every `Text` block joined with newlines.
     /// Used for ref resolution (`:edit`) and tests, not rendering.
-    pub fn joined_text(&self) -> String {
+    pub(crate) fn joined_text(&self) -> String {
         let parts: Vec<&str> = self
             .blocks
             .iter()
@@ -445,7 +445,7 @@ impl Turn {
         parts.join("\n")
     }
 
-    pub fn is_streaming(&self) -> bool {
+    pub(crate) fn is_streaming(&self) -> bool {
         self.state == TurnState::Streaming
     }
 }
@@ -454,7 +454,7 @@ impl Turn {
 /// `Turn`; `System` (TUI status / injected system messages) and
 /// `ArchiveBoundary` are display-only markers that aren't wire turns.
 #[derive(Clone, Debug)]
-pub enum ConversationEntry {
+pub(crate) enum ConversationEntry {
     Turn(Turn),
     System {
         content: String,
@@ -471,7 +471,7 @@ pub enum ConversationEntry {
 
 impl ConversationEntry {
     /// Construct a completed user turn carrying a single text block.
-    pub fn user(content: String, images: Vec<ImageRef>, timestamp: String) -> Self {
+    pub(crate) fn user(content: String, images: Vec<ImageRef>, timestamp: String) -> Self {
         ConversationEntry::Turn(Turn::text(
             Role::User,
             None,
@@ -483,7 +483,7 @@ impl ConversationEntry {
     }
 
     /// Construct a completed assistant turn carrying a single text block.
-    pub fn assistant(
+    pub(crate) fn assistant(
         msg_id: Option<String>,
         content: String,
         images: Vec<ImageRef>,
@@ -501,7 +501,7 @@ impl ConversationEntry {
     }
 
     /// Borrow the inner `Turn`, if this entry is one.
-    pub fn as_turn(&self) -> Option<&Turn> {
+    pub(crate) fn as_turn(&self) -> Option<&Turn> {
         match self {
             ConversationEntry::Turn(turn) => Some(turn),
             _ => None,
@@ -509,7 +509,7 @@ impl ConversationEntry {
     }
 
     /// Mutably borrow the inner `Turn`, if this entry is one.
-    pub fn as_turn_mut(&mut self) -> Option<&mut Turn> {
+    pub(crate) fn as_turn_mut(&mut self) -> Option<&mut Turn> {
         match self {
             ConversationEntry::Turn(turn) => Some(turn),
             _ => None,
@@ -521,7 +521,7 @@ impl ConversationEntry {
 /// whether the message is recorded to the session error log that is flushed
 /// to stderr on exit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum NotificationLevel {
+pub(crate) enum NotificationLevel {
     Info,
     Warning,
     Error,
@@ -533,7 +533,7 @@ pub enum NotificationLevel {
 /// carry ephemeral chatter (command acks, connection state, errors); genuine
 /// requested output (model lists, memory dumps) stays a `System` entry.
 #[derive(Clone, Debug)]
-pub struct Notification {
+pub(crate) struct Notification {
     pub content: String,
     pub level: NotificationLevel,
     /// Count of consecutive identical toasts collapsed into this one.
@@ -543,14 +543,14 @@ pub struct Notification {
 }
 
 /// How long a toast stays on screen before auto-dismissing.
-pub const NOTIFICATION_TTL: std::time::Duration = std::time::Duration::from_secs(5);
+pub(crate) const NOTIFICATION_TTL: std::time::Duration = std::time::Duration::from_secs(5);
 /// Maximum simultaneously-stacked toasts; older ones are dropped.
 const MAX_NOTIFICATIONS: usize = 4;
 /// Cap on retained error-log lines flushed to stderr on exit.
 const MAX_ERROR_LOG: usize = 200;
 
 #[derive(Clone, Debug)]
-pub struct AltChoice {
+pub(crate) struct AltChoice {
     pub index: u32,
     pub position: u32,
     pub active: bool,
@@ -560,7 +560,7 @@ pub struct AltChoice {
 }
 
 #[derive(Clone, Debug)]
-pub struct AltPickerState {
+pub(crate) struct AltPickerState {
     pub target_ref: Option<String>,
     pub msg_id: Option<String>,
     pub choices: Vec<AltChoice>,
@@ -578,7 +578,7 @@ pub struct AltPickerState {
 /// belong to any one block. Accumulated text and metadata are no longer
 /// tracked here: text is the turn's blocks, metadata accumulates on the turn.
 #[derive(Default)]
-pub struct StreamState {
+pub(crate) struct StreamState {
     pub active: bool,
     pub regen: bool,
     pub phase: String,
@@ -591,7 +591,7 @@ pub struct StreamState {
 }
 
 impl StreamState {
-    pub fn reset(&mut self) {
+    pub(crate) fn reset(&mut self) {
         self.active = false;
         self.regen = false;
         self.phase.clear();
@@ -602,14 +602,14 @@ impl StreamState {
 
 /// Input editor mode.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum InputMode {
+pub(crate) enum InputMode {
     Normal,
     Insert,
     Command,
 }
 
 /// Input editor state.
-pub struct InputState {
+pub(crate) struct InputState {
     pub text: String,
     pub cursor: usize,
     pub mode: InputMode,
@@ -631,45 +631,45 @@ impl Default for InputState {
 }
 
 impl InputState {
-    pub fn insert_char(&mut self, c: char) {
+    pub(crate) fn insert_char(&mut self, c: char) {
         self.text.insert(self.cursor, c);
         self.cursor += c.len_utf8();
     }
 
-    pub fn insert_newline(&mut self) {
+    pub(crate) fn insert_newline(&mut self) {
         self.insert_char('\n');
     }
 
     /// Insert a string at the cursor position (used for paste).
-    pub fn insert_str(&mut self, s: &str) {
+    pub(crate) fn insert_str(&mut self, s: &str) {
         self.text.insert_str(self.cursor, s);
         self.cursor += s.len();
     }
 
-    pub fn backspace(&mut self) {
+    pub(crate) fn backspace(&mut self) {
         if self.cursor > 0 {
             let prev = self.text[..self.cursor]
                 .char_indices()
                 .next_back()
                 .map(|(i, _)| i)
                 .unwrap_or(0);
-            self.text.drain(prev..self.cursor);
+            drop(self.text.drain(prev..self.cursor));
             self.cursor = prev;
         }
     }
 
-    pub fn delete(&mut self) {
+    pub(crate) fn delete(&mut self) {
         if self.cursor < self.text.len() {
             let next = self.text[self.cursor..]
                 .char_indices()
                 .nth(1)
                 .map(|(i, _)| self.cursor + i)
                 .unwrap_or(self.text.len());
-            self.text.drain(self.cursor..next);
+            drop(self.text.drain(self.cursor..next));
         }
     }
 
-    pub fn backspace_word(&mut self) {
+    pub(crate) fn backspace_word(&mut self) {
         if self.cursor == 0 {
             return;
         }
@@ -678,11 +678,11 @@ impl InputState {
         let after_ws = before.trim_end_matches(|c: char| c.is_whitespace());
         let after_word = after_ws.trim_end_matches(|c: char| !c.is_whitespace());
         let new_cursor = after_word.len();
-        self.text.drain(new_cursor..self.cursor);
+        drop(self.text.drain(new_cursor..self.cursor));
         self.cursor = new_cursor;
     }
 
-    pub fn delete_word(&mut self) {
+    pub(crate) fn delete_word(&mut self) {
         if self.cursor >= self.text.len() {
             return;
         }
@@ -691,10 +691,10 @@ impl InputState {
         let after_ws = after.trim_start_matches(|c: char| c.is_whitespace());
         let after_word = after_ws.trim_start_matches(|c: char| !c.is_whitespace());
         let delete_len = after.len() - after_word.len();
-        self.text.drain(self.cursor..self.cursor + delete_len);
+        drop(self.text.drain(self.cursor..self.cursor + delete_len));
     }
 
-    pub fn move_left(&mut self) {
+    pub(crate) fn move_left(&mut self) {
         if self.cursor > 0 {
             self.cursor = self.text[..self.cursor]
                 .char_indices()
@@ -704,7 +704,7 @@ impl InputState {
         }
     }
 
-    pub fn move_right(&mut self) {
+    pub(crate) fn move_right(&mut self) {
         if self.cursor < self.text.len() {
             self.cursor = self.text[self.cursor..]
                 .char_indices()
@@ -714,13 +714,13 @@ impl InputState {
         }
     }
 
-    pub fn move_home(&mut self) {
+    pub(crate) fn move_home(&mut self) {
         // Move to start of current line
         let before = &self.text[..self.cursor];
         self.cursor = before.rfind('\n').map(|i| i + 1).unwrap_or(0);
     }
 
-    pub fn move_end(&mut self) {
+    pub(crate) fn move_end(&mut self) {
         // Move to end of current line
         let after = &self.text[self.cursor..];
         self.cursor = after
@@ -729,24 +729,24 @@ impl InputState {
             .unwrap_or(self.text.len());
     }
 
-    pub fn take_text(&mut self) -> String {
+    pub(crate) fn take_text(&mut self) -> String {
         let text = std::mem::take(&mut self.text);
         self.cursor = 0;
         text
     }
 
-    pub fn set_text(&mut self, text: String) {
+    pub(crate) fn set_text(&mut self, text: String) {
         self.cursor = text.len();
         self.text = text;
     }
 
     #[cfg(test)]
-    pub fn line_count(&self) -> usize {
+    pub(crate) fn line_count(&self) -> usize {
         self.text.lines().count().max(1)
     }
 
     /// Visual line count accounting for word-wrap at the given content width.
-    pub fn visual_line_count(&self, content_width: usize) -> usize {
+    pub(crate) fn visual_line_count(&self, content_width: usize) -> usize {
         let starts = word_wrap_offsets(&self.text, content_width);
         let count = starts.len();
 
@@ -767,36 +767,36 @@ impl InputState {
         count.max(1)
     }
 
-    pub fn enter_command_mode(&mut self) {
+    pub(crate) fn enter_command_mode(&mut self) {
         self.mode = InputMode::Command;
         self.cmd_text.clear();
         self.cmd_cursor = 0;
     }
 
-    pub fn exit_command_mode(&mut self) {
+    pub(crate) fn exit_command_mode(&mut self) {
         self.mode = InputMode::Normal;
         self.cmd_text.clear();
         self.cmd_cursor = 0;
     }
 
-    pub fn cmd_insert_char(&mut self, c: char) {
+    pub(crate) fn cmd_insert_char(&mut self, c: char) {
         self.cmd_text.insert(self.cmd_cursor, c);
         self.cmd_cursor += c.len_utf8();
     }
 
-    pub fn cmd_backspace(&mut self) {
+    pub(crate) fn cmd_backspace(&mut self) {
         if self.cmd_cursor > 0 {
             let prev = self.cmd_text[..self.cmd_cursor]
                 .char_indices()
                 .next_back()
                 .map(|(i, _)| i)
                 .unwrap_or(0);
-            self.cmd_text.drain(prev..self.cmd_cursor);
+            drop(self.cmd_text.drain(prev..self.cmd_cursor));
             self.cmd_cursor = prev;
         }
     }
 
-    pub fn take_cmd_text(&mut self) -> String {
+    pub(crate) fn take_cmd_text(&mut self) -> String {
         let text = std::mem::take(&mut self.cmd_text);
         self.cmd_cursor = 0;
         self.mode = InputMode::Normal;
@@ -810,7 +810,7 @@ impl InputState {
 /// line begins. The first entry is always `0`. Breaks happen at word
 /// boundaries (spaces) when possible; falls back to character wrapping for
 /// words longer than `max_width`.
-pub fn word_wrap_offsets(text: &str, max_width: usize) -> Vec<usize> {
+pub(crate) fn word_wrap_offsets(text: &str, max_width: usize) -> Vec<usize> {
     let mut starts = vec![0usize];
 
     if max_width == 0 {
@@ -880,7 +880,7 @@ pub fn word_wrap_offsets(text: &str, max_width: usize) -> Vec<usize> {
 
 /// Connection status for the status bar.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum ConnectionStatus {
+pub(crate) enum ConnectionStatus {
     Disconnected,
     Connecting,
     Connected,
@@ -889,7 +889,7 @@ pub enum ConnectionStatus {
 /// Whether the palette is showing the top-level command list, a child
 /// picker scoped to a command, or a focused value editor.
 #[derive(Default, Clone)]
-pub enum PaletteMode {
+pub(crate) enum PaletteMode {
     #[default]
     Top,
     Submenu(SubmenuState),
@@ -899,7 +899,7 @@ pub enum PaletteMode {
 /// Per-submenu state. `cmd_text` doubles as the live filter while in
 /// submenu mode; saved fields restore the parent input on Esc.
 #[derive(Clone)]
-pub struct SubmenuState {
+pub(crate) struct SubmenuState {
     pub parent: String,
     pub saved_cmd_text: String,
     pub saved_cmd_cursor: usize,
@@ -908,7 +908,7 @@ pub struct SubmenuState {
 /// Per-value-editor state. The saved fields restore the parent command
 /// input on Esc, matching submenu cancellation semantics.
 #[derive(Clone)]
-pub struct ValueEditorState {
+pub(crate) struct ValueEditorState {
     pub key: String,
     pub kind: ValueEditorKind,
     pub saved_cmd_text: String,
@@ -916,7 +916,7 @@ pub struct ValueEditorState {
 }
 
 #[derive(Clone)]
-pub enum ValueEditorKind {
+pub(crate) enum ValueEditorKind {
     Slider {
         min: f64,
         max: f64,
@@ -928,7 +928,7 @@ pub enum ValueEditorKind {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct EffectiveSamplerField {
+pub(crate) struct EffectiveSamplerField {
     pub value: Option<String>,
     pub scope: Option<String>,
 }
@@ -936,7 +936,7 @@ pub struct EffectiveSamplerField {
 /// Effective sampler values plus their provenance scopes, as returned by
 /// the daemon's `model_settings` command.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct EffectiveSamplerSnapshot {
+pub(crate) struct EffectiveSamplerSnapshot {
     pub model: Option<String>,
     pub provider: Option<String>,
     pub model_id: Option<String>,
@@ -964,7 +964,7 @@ pub struct EffectiveSamplerSnapshot {
 }
 
 impl EffectiveSamplerSnapshot {
-    pub fn from_model_settings(data: &serde_json::Value) -> Option<Self> {
+    pub(crate) fn from_model_settings(data: &serde_json::Value) -> Option<Self> {
         let sampler = data.get("effective_sampler")?;
         let scopes = data.get("scopes");
         Some(Self {
@@ -1019,7 +1019,7 @@ impl EffectiveSamplerSnapshot {
     /// daemon's capability matrix and the CLI's `visible_setting_keys`. A key
     /// absent from `applicability` (no opinion, or an older daemon that didn't
     /// send the map) is treated as visible.
-    pub fn key_honored(&self, key: &str) -> bool {
+    pub(crate) fn key_honored(&self, key: &str) -> bool {
         match self.applicability.get(key).map(String::as_str) {
             Some(label) => label == "honored" || label == "always",
             None => true,
@@ -1053,7 +1053,7 @@ impl EffectiveSamplerSnapshot {
         }
     }
 
-    pub fn field_for_key(&self, key: &str) -> Option<&EffectiveSamplerField> {
+    pub(crate) fn field_for_key(&self, key: &str) -> Option<&EffectiveSamplerField> {
         match key {
             "temperature" => Some(&self.temperature),
             "top_p" => Some(&self.top_p),
@@ -1073,22 +1073,22 @@ impl EffectiveSamplerSnapshot {
         }
     }
 
-    pub fn display_value(&self, key: &str) -> Option<&str> {
+    pub(crate) fn display_value(&self, key: &str) -> Option<&str> {
         self.field_for_key(key).and_then(|f| f.value.as_deref())
     }
 
-    pub fn scope(&self, key: &str) -> Option<&str> {
+    pub(crate) fn scope(&self, key: &str) -> Option<&str> {
         self.field_for_key(key).and_then(|f| f.scope.as_deref())
     }
 
-    pub fn numeric_value(&self, key: &str) -> Option<f64> {
+    pub(crate) fn numeric_value(&self, key: &str) -> Option<f64> {
         self.display_value(key)?.parse().ok()
     }
 }
 
 /// Completion state for the command palette.
 #[derive(Default)]
-pub struct CompletionState {
+pub(crate) struct CompletionState {
     /// Filtered candidates matching current input.
     pub candidates: Vec<String>,
     /// Currently selected index (None = no selection).
@@ -1103,7 +1103,7 @@ pub struct CompletionState {
 
 impl CompletionState {
     /// Reset the menu to a hidden state.
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.candidates.clear();
         self.selected = None;
         self.header = None;
@@ -1113,7 +1113,7 @@ impl CompletionState {
 
 /// An image in the conversation, with its position in the rendered line list.
 #[derive(Clone, Debug)]
-pub struct ImageEntry {
+pub(crate) struct ImageEntry {
     /// Cache key (image path).
     pub path: String,
     /// Display name for the status bar.
@@ -1123,7 +1123,7 @@ pub struct ImageEntry {
 }
 
 /// Main application state.
-pub struct App {
+pub(crate) struct App {
     pub entries: Vec<ConversationEntry>,
     pub stream: StreamState,
     pub input: InputState,
@@ -1270,7 +1270,7 @@ impl App {
     /// rather than full string contents — mutations to entry text grow
     /// `content.len()`, so a length match plus an `entries.len()` match
     /// is a tight enough proxy for "no change" without scanning bodies.
-    pub fn conversation_fingerprint(&self, width: u16) -> ConvFingerprint {
+    pub(crate) fn conversation_fingerprint(&self, width: u16) -> ConvFingerprint {
         let entry_summary = |e: &ConversationEntry| -> u64 {
             // Pack a kind tag plus a content-size signature into a u64.
             // Different variants distinguish themselves via the high tag
@@ -1348,19 +1348,19 @@ impl App {
         }
     }
 
-    pub fn scroll_up(&mut self, amount: u16) {
+    pub(crate) fn scroll_up(&mut self, amount: u16) {
         self.scroll_offset = self.scroll_offset.saturating_add(amount);
         self.auto_scroll = false;
     }
 
-    pub fn scroll_down(&mut self, amount: u16) {
+    pub(crate) fn scroll_down(&mut self, amount: u16) {
         self.scroll_offset = self.scroll_offset.saturating_sub(amount);
         if self.scroll_offset == 0 {
             self.auto_scroll = true;
         }
     }
 
-    pub fn scroll_to_bottom(&mut self) {
+    pub(crate) fn scroll_to_bottom(&mut self) {
         self.scroll_offset = 0;
         self.auto_scroll = true;
     }
@@ -1370,7 +1370,7 @@ impl App {
     /// assistant `Turn` whose blocks the stream handlers mutate in place.
     /// Public so `StreamEnd` can attach metadata to (or open) the turn even
     /// when a tool-use phase ends before any content has streamed.
-    pub fn ensure_streaming_turn(&mut self) -> &mut Turn {
+    pub(crate) fn ensure_streaming_turn(&mut self) -> &mut Turn {
         let needs_new = !matches!(
             self.entries.last(),
             Some(ConversationEntry::Turn(turn)) if turn.is_streaming()
@@ -1399,7 +1399,7 @@ impl App {
     ///
     /// A no-op (and no turn is forced into existence) when the tag is unchanged,
     /// which is every frame of an ordinary, sub-agent-free generation.
-    pub fn sync_subagent_section(&mut self, tag: Option<&str>) {
+    pub(crate) fn sync_subagent_section(&mut self, tag: Option<&str>) {
         if self.stream.subagent.as_deref() == tag {
             return;
         }
@@ -1419,7 +1419,7 @@ impl App {
     /// Append a live thinking delta to the in-flight turn. Merges into the
     /// trailing `Thinking` block when the previous block was also thinking,
     /// otherwise opens a new one — preserving interleaving with tool calls.
-    pub fn stream_append_thinking(&mut self, text: &str) {
+    pub(crate) fn stream_append_thinking(&mut self, text: &str) {
         let turn = self.ensure_streaming_turn();
         match turn.blocks.last_mut() {
             Some(Block::Thinking(content)) => content.push_str(text),
@@ -1431,7 +1431,7 @@ impl App {
     /// trailing `Text` block, otherwise opens a new one. Because text is just
     /// another block, pre-tool text streams live and stays interleaved — no
     /// phase-boundary drop, no single-header constraint.
-    pub fn stream_append_text(&mut self, text: &str) {
+    pub(crate) fn stream_append_text(&mut self, text: &str) {
         let turn = self.ensure_streaming_turn();
         match turn.blocks.last_mut() {
             Some(Block::Text(content)) => content.push_str(text),
@@ -1440,7 +1440,7 @@ impl App {
     }
 
     /// Append a tool-call block to the in-flight turn.
-    pub fn stream_push_tool_call(
+    pub(crate) fn stream_push_tool_call(
         &mut self,
         tool_id: String,
         tool_name: String,
@@ -1454,7 +1454,7 @@ impl App {
     }
 
     /// Append a tool-result block to the in-flight turn.
-    pub fn stream_push_tool_result(
+    pub(crate) fn stream_push_tool_result(
         &mut self,
         tool_id: String,
         tool_name: String,
@@ -1473,12 +1473,12 @@ impl App {
     /// optimistic, unconfirmed turn entirely and clear the stream scalars. A
     /// reconnect's History rebuild reconciles the authoritative turn, so
     /// dropping the whole in-flight turn (tool blocks included) is safe.
-    pub fn abort_stream(&mut self) {
+    pub(crate) fn abort_stream(&mut self) {
         if matches!(
             self.entries.last(),
             Some(ConversationEntry::Turn(turn)) if turn.is_streaming()
         ) {
-            self.entries.pop();
+            let _ = self.entries.pop();
         }
         self.stream.reset();
     }
@@ -1492,7 +1492,7 @@ impl App {
     // The daemon now makes regeneration non-destructive by storing the old
     // reply as an alternate response; the History refresh after persistence
     // swaps the active visible response.
-    pub fn begin_regen_optimistic(&mut self) {
+    pub(crate) fn begin_regen_optimistic(&mut self) {
         self.stream.reset();
         self.stream.active = true;
         self.stream.regen = true;
@@ -1502,7 +1502,7 @@ impl App {
 
     /// Resolve a ref (e.g. "last", "-1", "-2") to the content of a
     /// User or Assistant entry for local editing preview.
-    pub fn resolve_ref_content(&self, raw_ref: &str) -> Option<String> {
+    pub(crate) fn resolve_ref_content(&self, raw_ref: &str) -> Option<String> {
         // Filter to finalized User/Assistant turns (what the daemon considers
         // messages). The in-flight streaming turn is an optimistic partial, not
         // a ref target — exclude it so `:edit last` targets the last committed
@@ -1533,22 +1533,22 @@ impl App {
 
     /// Raise an informational toast. The bulk of status chatter (command
     /// acks, connection state) flows through here.
-    pub fn set_status(&mut self, msg: impl Into<String>) {
+    pub(crate) fn set_status(&mut self, msg: impl Into<String>) {
         self.notify(NotificationLevel::Info, msg);
     }
 
     /// Raise a warning-level toast (yellow).
-    pub fn set_warning(&mut self, msg: impl Into<String>) {
+    pub(crate) fn set_warning(&mut self, msg: impl Into<String>) {
         self.notify(NotificationLevel::Warning, msg);
     }
 
     /// Raise an error-level toast (red) and record it to the session error log
     /// so it is reprinted to stderr on exit for copy/paste debugging.
-    pub fn set_error(&mut self, msg: impl Into<String>) {
+    pub(crate) fn set_error(&mut self, msg: impl Into<String>) {
         let msg = msg.into();
         tracing::error!("{msg}");
         if self.error_log.len() >= MAX_ERROR_LOG {
-            self.error_log.remove(0);
+            let _ = self.error_log.remove(0);
         }
         self.error_log.push(msg.clone());
         self.notify(NotificationLevel::Error, msg);
@@ -1557,7 +1557,7 @@ impl App {
     /// Core toast raise: dedupes against the newest toast (a reconnect storm
     /// bumps a `×N` count instead of stacking), caps the stack, and refreshes
     /// the dismissal timer.
-    pub fn notify(&mut self, level: NotificationLevel, msg: impl Into<String>) {
+    pub(crate) fn notify(&mut self, level: NotificationLevel, msg: impl Into<String>) {
         let msg = msg.into();
         if let Some(last) = self.notifications.last_mut() {
             if last.content == msg && last.level == level {
@@ -1574,13 +1574,13 @@ impl App {
         });
         if self.notifications.len() > MAX_NOTIFICATIONS {
             let overflow = self.notifications.len() - MAX_NOTIFICATIONS;
-            self.notifications.drain(0..overflow);
+            drop(self.notifications.drain(0..overflow));
         }
     }
 
     /// Drop toasts whose lifetime has elapsed. Returns true if any were
     /// removed, so the event loop can trigger a redraw.
-    pub fn expire_notifications(&mut self, now: std::time::Instant) -> bool {
+    pub(crate) fn expire_notifications(&mut self, now: std::time::Instant) -> bool {
         let before = self.notifications.len();
         self.notifications
             .retain(|n| now.duration_since(n.created) < NOTIFICATION_TTL);
@@ -1588,18 +1588,18 @@ impl App {
     }
 
     /// Immediately clear all toasts (e.g. on a fresh user turn).
-    pub fn dismiss_notifications(&mut self) {
+    pub(crate) fn dismiss_notifications(&mut self) {
         self.notifications.clear();
     }
 
     /// Dismiss the newest toast — the one drawn at the top of the stack.
     /// Returns whether a toast was removed, so the caller can decide whether
     /// the keypress was consumed.
-    pub fn dismiss_latest_notification(&mut self) -> bool {
+    pub(crate) fn dismiss_latest_notification(&mut self) -> bool {
         self.notifications.pop().is_some()
     }
 
-    pub fn start_alt_picker(&mut self, target_ref: Option<String>) {
+    pub(crate) fn start_alt_picker(&mut self, target_ref: Option<String>) {
         if self.alt_picker.is_some() {
             self.cancel_alt_picker();
         }
@@ -1613,7 +1613,7 @@ impl App {
         });
     }
 
-    pub fn populate_alt_picker(&mut self, msg_id: Option<String>, choices: Vec<AltChoice>) {
+    pub(crate) fn populate_alt_picker(&mut self, msg_id: Option<String>, choices: Vec<AltChoice>) {
         if choices.is_empty() {
             if let Some(picker) = self.alt_picker.take() {
                 self.entries = picker.original_entries;
@@ -1643,7 +1643,7 @@ impl App {
         self.preview_alt_selection();
     }
 
-    pub fn next_alt(&mut self) {
+    pub(crate) fn next_alt(&mut self) {
         let Some(picker) = self.alt_picker.as_mut() else {
             return;
         };
@@ -1654,7 +1654,7 @@ impl App {
         self.preview_alt_selection();
     }
 
-    pub fn prev_alt(&mut self) {
+    pub(crate) fn prev_alt(&mut self) {
         let Some(picker) = self.alt_picker.as_mut() else {
             return;
         };
@@ -1668,28 +1668,28 @@ impl App {
         self.preview_alt_selection();
     }
 
-    pub fn cancel_alt_picker(&mut self) {
+    pub(crate) fn cancel_alt_picker(&mut self) {
         if let Some(picker) = self.alt_picker.take() {
             self.entries = picker.original_entries;
             self.history_version = self.history_version.wrapping_add(1);
         }
     }
 
-    pub fn selected_alt_command_args(&self) -> Option<serde_json::Value> {
+    pub(crate) fn selected_alt_command_args(&self) -> Option<serde_json::Value> {
         let picker = self.alt_picker.as_ref()?;
         if picker.loading {
             return None;
         }
         let choice = picker.choices.get(picker.selected)?;
         let mut args = serde_json::Map::new();
-        args.insert("index".into(), serde_json::json!(choice.index));
+        let _ = args.insert("index".into(), serde_json::json!(choice.index));
         if let Some(msg_id) = picker.msg_id.as_deref().or(picker.target_ref.as_deref()) {
-            args.insert("ref".into(), serde_json::json!(msg_id));
+            let _ = args.insert("ref".into(), serde_json::json!(msg_id));
         }
         Some(serde_json::Value::Object(args))
     }
 
-    pub fn close_alt_picker_after_confirm(&mut self) {
+    pub(crate) fn close_alt_picker_after_confirm(&mut self) {
         self.alt_picker = None;
     }
 
@@ -1736,7 +1736,7 @@ impl App {
 
     /// Canonical parent name for commands whose arguments are picked
     /// via a submenu rather than typed inline.
-    pub fn canonical_submenu_parent(name: &str) -> Option<&'static str> {
+    pub(crate) fn canonical_submenu_parent(name: &str) -> Option<&'static str> {
         match name {
             "model" => Some("model"),
             "character" | "characters" => Some("character"),
@@ -1746,22 +1746,22 @@ impl App {
         }
     }
 
-    pub fn is_submenu_open(&self, parent: &str) -> bool {
+    pub(crate) fn is_submenu_open(&self, parent: &str) -> bool {
         matches!(&self.completion.mode, PaletteMode::Submenu(s) if s.parent == parent)
     }
 
-    pub fn is_setting_palette_open(&self) -> bool {
+    pub(crate) fn is_setting_palette_open(&self) -> bool {
         matches!(
             &self.completion.mode,
             PaletteMode::Submenu(s) if s.parent == "setting" || s.parent.starts_with("setting:")
         ) || matches!(&self.completion.mode, PaletteMode::ValueEditor(s) if Self::is_setting_key(&s.key))
     }
 
-    pub fn is_value_editor_open(&self) -> bool {
+    pub(crate) fn is_value_editor_open(&self) -> bool {
         matches!(self.completion.mode, PaletteMode::ValueEditor(_))
     }
 
-    pub fn set_active_model(&mut self, model: Option<&str>) {
+    pub(crate) fn set_active_model(&mut self, model: Option<&str>) {
         let next = model.filter(|m| !m.is_empty());
         let current = (!self.model.is_empty()).then_some(self.model.as_str());
         let equivalent = match (current, next) {
@@ -1801,7 +1801,7 @@ impl App {
         }
     }
 
-    pub fn sampler_snapshot_matches_active_model(
+    pub(crate) fn sampler_snapshot_matches_active_model(
         &self,
         snapshot: &EffectiveSamplerSnapshot,
     ) -> bool {
@@ -1835,7 +1835,7 @@ impl App {
     /// handed us). Lets later unsolicited pushes and the model-list marker
     /// recognise the active model even when the daemon labels it differently
     /// than the surface form we currently track.
-    pub fn note_active_model_from_snapshot(&mut self, snapshot: &EffectiveSamplerSnapshot) {
+    pub(crate) fn note_active_model_from_snapshot(&mut self, snapshot: &EffectiveSamplerSnapshot) {
         let mut keys = Vec::new();
         if let Some(model) = snapshot.model.as_deref() {
             keys.push(model.to_string());
@@ -1853,7 +1853,7 @@ impl App {
         }
     }
 
-    pub fn begin_sampler_settings_refresh(&mut self) -> String {
+    pub(crate) fn begin_sampler_settings_refresh(&mut self) -> String {
         self.sampler_settings_request_seq = self.sampler_settings_request_seq.wrapping_add(1);
         let rid = format!("tui_sampler_settings_{}", self.sampler_settings_request_seq);
         self.sampler_settings_loading = true;
@@ -1861,19 +1861,19 @@ impl App {
         rid
     }
 
-    pub fn sampler_settings_rid_matches(&self, rid: Option<&str>) -> bool {
+    pub(crate) fn sampler_settings_rid_matches(&self, rid: Option<&str>) -> bool {
         match (self.pending_sampler_settings_rid.as_deref(), rid) {
             (Some(pending), Some(rid)) => pending == rid,
             _ => false,
         }
     }
 
-    pub fn finish_sampler_settings_refresh(&mut self) {
+    pub(crate) fn finish_sampler_settings_refresh(&mut self) {
         self.sampler_settings_loading = false;
         self.pending_sampler_settings_rid = None;
     }
 
-    pub fn model_identifier_matches(active: &str, candidate: &str) -> bool {
+    pub(crate) fn model_identifier_matches(active: &str, candidate: &str) -> bool {
         if active == candidate {
             return true;
         }
@@ -1885,7 +1885,7 @@ impl App {
             || candidate.ends_with(&format!("/{active}"))
     }
 
-    pub fn is_active_model_candidate(&self, candidate: &str) -> bool {
+    pub(crate) fn is_active_model_candidate(&self, candidate: &str) -> bool {
         self.active_model_names
             .iter()
             .any(|active| Self::model_identifier_matches(active, candidate))
@@ -1911,7 +1911,7 @@ impl App {
 
     /// Look up the description for a top-level command. Returns `None`
     /// for argument candidates (e.g. `model gpt-4o`).
-    pub fn command_description(name: &str) -> Option<&'static str> {
+    pub(crate) fn command_description(name: &str) -> Option<&'static str> {
         Self::COMMANDS
             .iter()
             .find_map(|(n, d)| (*n == name).then_some(*d))
@@ -1967,11 +1967,11 @@ impl App {
         "budget",
     ];
 
-    pub fn is_view_key(key: &str) -> bool {
+    pub(crate) fn is_view_key(key: &str) -> bool {
         Self::VIEW_KEYS.contains(&key)
     }
 
-    pub fn view_enabled(&self, key: &str) -> Option<bool> {
+    pub(crate) fn view_enabled(&self, key: &str) -> Option<bool> {
         match key {
             "timestamps" => Some(self.show_timestamps),
             "thinking" => Some(self.show_thinking),
@@ -1990,13 +1990,13 @@ impl App {
     }
 
     /// Set the usage chip's visibility mode (`:view usage <mode>` / prefs).
-    pub fn set_usage_display(&mut self, mode: UsageDisplay) {
+    pub(crate) fn set_usage_display(&mut self, mode: UsageDisplay) {
         self.usage_display = mode;
     }
 
     /// Advance the usage chip mode through off → always → warn (submenu Enter
     /// and `:view usage toggle`), returning the new mode.
-    pub fn cycle_usage_display(&mut self) -> UsageDisplay {
+    pub(crate) fn cycle_usage_display(&mut self) -> UsageDisplay {
         self.usage_display = self.usage_display.cycled();
         self.usage_display
     }
@@ -2008,7 +2008,7 @@ impl App {
     /// A name that matches nothing (a typo, or a budget dropped from the
     /// config) yields no chip rather than silently falling back to another
     /// budget's numbers.
-    pub fn focused_budget(&self) -> Option<&UsageBudget> {
+    pub(crate) fn focused_budget(&self) -> Option<&UsageBudget> {
         if let Some(name) = &self.budget_focus.name {
             return self
                 .usage_budgets
@@ -2022,7 +2022,7 @@ impl App {
     }
 
     /// Pin the usage chip to a budget/limit (`:view budget <target>` / prefs).
-    pub fn set_budget_focus(&mut self, focus: BudgetFocus) {
+    pub(crate) fn set_budget_focus(&mut self, focus: BudgetFocus) {
         self.budget_focus = focus;
     }
 
@@ -2048,7 +2048,7 @@ impl App {
     /// Advance to the next focus target (submenu Enter and
     /// `:view budget toggle`), returning the new one. A focus pinned by name
     /// that has since dropped out of the cycle restarts it.
-    pub fn cycle_budget_focus(&mut self) -> BudgetFocus {
+    pub(crate) fn cycle_budget_focus(&mut self) -> BudgetFocus {
         let cycle = self.budget_focus_cycle();
         let next = cycle
             .iter()
@@ -2061,7 +2061,7 @@ impl App {
     /// Replace cached budget statuses from a `usage {budget:true}` reply's
     /// `budgets` array. Missing fields default sensibly so a partial reply
     /// never panics.
-    pub fn apply_usage_budgets(&mut self, data: &serde_json::Value) {
+    pub(crate) fn apply_usage_budgets(&mut self, data: &serde_json::Value) {
         let Some(arr) = data.get("budgets").and_then(|v| v.as_array()) else {
             return;
         };
@@ -2097,7 +2097,7 @@ impl App {
     ///
     /// Scoped, because a budget and its pace warn independently: a pace push
     /// must not clobber the cached cap figures, or vice versa.
-    pub fn apply_usage_warning(&mut self, name: &str, scope: UsageScope, level: UsageLevel) {
+    pub(crate) fn apply_usage_warning(&mut self, name: &str, scope: UsageScope, level: UsageLevel) {
         let existing = match self.usage_budgets.iter_mut().find(|b| b.name == name) {
             Some(existing) => existing,
             None => {
@@ -2123,7 +2123,7 @@ impl App {
         }
     }
 
-    pub fn set_view_option(&mut self, key: &str, enabled: bool) -> bool {
+    pub(crate) fn set_view_option(&mut self, key: &str, enabled: bool) -> bool {
         match key {
             "timestamps" => self.show_timestamps = enabled,
             "thinking" => self.show_thinking = enabled,
@@ -2145,7 +2145,7 @@ impl App {
         true
     }
 
-    pub fn toggle_view_option(&mut self, key: &str) -> Option<bool> {
+    pub(crate) fn toggle_view_option(&mut self, key: &str) -> Option<bool> {
         // Usage is value-typed: cycle through its three modes rather than
         // flipping a boolean (which would skip `warn`).
         if key == "usage" {
@@ -2156,7 +2156,7 @@ impl App {
             return Some(self.cycle_budget_focus() != BudgetFocus::default());
         }
         let next = !self.view_enabled(key)?;
-        self.set_view_option(key, next);
+        let _ = self.set_view_option(key, next);
         Some(next)
     }
 
@@ -2175,7 +2175,7 @@ impl App {
         format!("{key} = {state}")
     }
 
-    pub fn view_key_from_row(row: &str) -> &str {
+    pub(crate) fn view_key_from_row(row: &str) -> &str {
         row.split_once(" = ").map(|(key, _)| key).unwrap_or(row)
     }
 
@@ -2215,7 +2215,7 @@ impl App {
         self.setting_editor_blocked_row().is_none()
     }
 
-    pub fn is_effective_setting_candidate(&self, key: &str, candidate: &str) -> bool {
+    pub(crate) fn is_effective_setting_candidate(&self, key: &str, candidate: &str) -> bool {
         let Some(current) = self
             .effective_sampler
             .as_ref()
@@ -2291,10 +2291,10 @@ impl App {
         }
     }
 
-    pub fn format_slider_number(value: f64) -> String {
+    pub(crate) fn format_slider_number(value: f64) -> String {
         let mut text = format!("{value:.2}");
         while text.contains('.') && text.ends_with('0') {
-            text.pop();
+            let _ = text.pop();
         }
         if text.ends_with('.') {
             text.push('0');
@@ -2312,7 +2312,7 @@ impl App {
     }
 
     /// Update completion candidates based on current command input.
-    pub fn update_completions(&mut self) {
+    pub(crate) fn update_completions(&mut self) {
         self.completion.selected = None;
         self.completion.header = None;
 
@@ -2462,7 +2462,7 @@ impl App {
     /// Apply the currently selected completion to the command input.
     /// In submenu mode this is a no-op — candidates are bare names that
     /// shouldn't be spliced into the filter on Tab.
-    pub fn apply_completion(&mut self) {
+    pub(crate) fn apply_completion(&mut self) {
         if !matches!(self.completion.mode, PaletteMode::Top) {
             return;
         }
@@ -2706,7 +2706,7 @@ impl App {
     /// Enter a submenu picker for the given parent command. Saves the
     /// current `cmd_text`/cursor for restoration on Esc, clears the
     /// input so the filter starts empty, and rebuilds candidates.
-    pub fn enter_submenu(&mut self, parent: &str) {
+    pub(crate) fn enter_submenu(&mut self, parent: &str) {
         if parent == "setting" {
             self.sampler_settings_loading = true;
         }
@@ -2730,7 +2730,7 @@ impl App {
         }
     }
 
-    pub fn switch_submenu(&mut self, parent: &str) {
+    pub(crate) fn switch_submenu(&mut self, parent: &str) {
         let (saved_cmd_text, saved_cmd_cursor) = self.saved_palette_input();
         self.completion.mode = PaletteMode::Submenu(SubmenuState {
             parent: parent.to_string(),
@@ -2742,7 +2742,7 @@ impl App {
         self.update_completions();
     }
 
-    pub fn enter_value_editor(&mut self, key: &str, kind: ValueEditorKind) {
+    pub(crate) fn enter_value_editor(&mut self, key: &str, kind: ValueEditorKind) {
         let (saved_cmd_text, saved_cmd_cursor) = self.saved_palette_input();
         self.completion.mode = PaletteMode::ValueEditor(ValueEditorState {
             key: key.to_string(),
@@ -2757,7 +2757,7 @@ impl App {
 
     /// Pop a submenu picker back to the top-level command list,
     /// restoring the parent input text.
-    pub fn exit_submenu(&mut self) {
+    pub(crate) fn exit_submenu(&mut self) {
         if let PaletteMode::Submenu(s) = std::mem::take(&mut self.completion.mode) {
             self.input.cmd_text = s.saved_cmd_text;
             self.input.cmd_cursor = s.saved_cmd_cursor;
@@ -2765,7 +2765,7 @@ impl App {
         self.update_completions();
     }
 
-    pub fn exit_value_editor(&mut self) {
+    pub(crate) fn exit_value_editor(&mut self) {
         if let PaletteMode::ValueEditor(s) = std::mem::take(&mut self.completion.mode) {
             self.input.cmd_text = s.saved_cmd_text;
             self.input.cmd_cursor = s.saved_cmd_cursor;
@@ -2773,7 +2773,7 @@ impl App {
         self.update_completions();
     }
 
-    pub fn adjust_value_editor(&mut self, direction: f64) {
+    pub(crate) fn adjust_value_editor(&mut self, direction: f64) {
         let PaletteMode::ValueEditor(state) = &mut self.completion.mode else {
             return;
         };
@@ -2794,7 +2794,7 @@ impl App {
         }
     }
 
-    pub fn type_value_editor_char(&mut self, c: char) {
+    pub(crate) fn type_value_editor_char(&mut self, c: char) {
         let PaletteMode::ValueEditor(state) = &mut self.completion.mode else {
             return;
         };
@@ -2806,14 +2806,14 @@ impl App {
         }
     }
 
-    pub fn backspace_value_editor(&mut self) {
+    pub(crate) fn backspace_value_editor(&mut self) {
         let PaletteMode::ValueEditor(state) = &mut self.completion.mode else {
             return;
         };
         match &mut state.kind {
             ValueEditorKind::Slider { typed, dirty, .. } => {
                 if let Some(value) = typed {
-                    value.pop();
+                    let _ = value.pop();
                     if value.is_empty() {
                         *typed = None;
                     }
@@ -2823,7 +2823,7 @@ impl App {
         }
     }
 
-    pub fn apply_value_editor(&mut self) -> Option<String> {
+    pub(crate) fn apply_value_editor(&mut self) -> Option<String> {
         let state = match &self.completion.mode {
             PaletteMode::ValueEditor(state) => state.clone(),
             _ => return None,
@@ -2862,11 +2862,11 @@ impl App {
     /// instead apply in place and return `None`.
     /// True when the palette is in the `view` submenu, whose options
     /// toggle local prefs in-place via [`Self::apply_submenu`].
-    pub fn is_view_submenu(&self) -> bool {
+    pub(crate) fn is_view_submenu(&self) -> bool {
         matches!(&self.completion.mode, PaletteMode::Submenu(s) if s.parent == "view")
     }
 
-    pub fn apply_submenu(&mut self) -> Option<String> {
+    pub(crate) fn apply_submenu(&mut self) -> Option<String> {
         let parent = match &self.completion.mode {
             PaletteMode::Submenu(s) => s.parent.clone(),
             _ => return None,
@@ -2946,7 +2946,7 @@ impl App {
     }
 
     /// Cycle to the next completion candidate.
-    pub fn next_completion(&mut self) {
+    pub(crate) fn next_completion(&mut self) {
         if self.completion.candidates.is_empty() {
             return;
         }
@@ -2958,7 +2958,7 @@ impl App {
     }
 
     /// Cycle to the previous completion candidate.
-    pub fn prev_completion(&mut self) {
+    pub(crate) fn prev_completion(&mut self) {
         let len = self.completion.candidates.len();
         if len == 0 {
             return;
