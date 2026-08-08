@@ -13,8 +13,7 @@
  * cannot be trusted to agree. That function no longer exists — the replay
  * decision moved here wholesale — so there is one implementation now and
  * nothing left to hold parity with. The fixture stays because the cases are
- * worth keeping; it still lives under `crates/daemon/tests/fixtures/` only
- * because moving it is churn.
+ * worth keeping, at `tests/rust_fixtures/turn_boundary_parity.json`.
  */
 
 import { describe, expect, test } from "bun:test";

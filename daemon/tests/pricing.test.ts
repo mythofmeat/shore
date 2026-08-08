@@ -1,7 +1,8 @@
 /**
  * Ported from `crates/daemon/src/ledger/pricing.rs::tests`, with the same
- * numbers, so the two implementations can be compared directly while both
- * exist.
+ * numbers, while both implementations existed. The Rust is gone; these are now
+ * this implementation's own tests, and the numbers are kept because they are
+ * the published rates, not a copy of someone else's copy.
  */
 
 import { describe, expect, test } from "bun:test";

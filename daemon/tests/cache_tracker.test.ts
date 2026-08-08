@@ -1,6 +1,8 @@
 /**
  * Ported from `crates/daemon/src/ledger/cache_tracker.rs::tests`, test for
- * test, so the two implementations can be compared while both exist.
+ * test, while both implementations existed. The Rust is gone; these are now
+ * this implementation's own tests, and they are kept case for case because the
+ * cases are what was expensive to learn.
  *
  * Several of these encode things that cost real money to learn — why the
  * keepalive window anchors on foreground activity rather than the previous

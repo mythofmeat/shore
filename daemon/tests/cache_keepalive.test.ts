@@ -1,6 +1,7 @@
 /**
- * Ported from `crates/daemon/src/cache_keepalive.rs::tests`, test for test, so
- * the two implementations can be compared while both exist.
+ * Ported from `crates/daemon/src/cache_keepalive.rs::tests`, test for test,
+ * while both implementations existed. The Rust is gone; these are now this
+ * implementation's own tests, kept case for case.
  *
  * Every one of these is a receipt. The Rust comments naming what each cost —
  * a sonnet keepalive paying a 21k write after a model switch, twelve

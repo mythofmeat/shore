@@ -14,17 +14,21 @@
  * keepalive was off, so nothing ever pinged. The only symptom was a character
  * that quietly stopped warming its cache.
  *
- * The lock closes in both directions, as in `wire_parity.test.ts`:
+ * **Only the TypeScript direction of that lock is still live**, as in
+ * `wire_parity.test.ts`: `crates/daemon/src/ledger/client.rs` was deleted, so
+ * the fixture is frozen. Adding a key to a list here without adding it to the
+ * interface is still a `tsc` error, and the shape the Rust really sent is still
+ * asserted — but nothing can notice a change originating on a side that no
+ * longer exists.
  *
- *   - Rust renames a field → the fixture changes → the key assertions below
- *     fail, because the fixture carries a key this side never declared.
- *   - Someone adds that key here → `tsc` rejects it, because the lists are
- *     typed `Array<keyof T>` and the interface does not have it yet.
+ * The Rust CLI does still send `keepalive_ping_now`, as `json!({})`: no
+ * `character_scoped` body and no typed reply, so there is no live counterpart
+ * left for these bodies to be pinned against either.
  *
- * Requests are generated from the real Rust structs, because the daemon sends
+ * Requests were generated from the real Rust structs, because the daemon sent
  * them. Replies are literals in the same fixture, asserted on the Rust side to
  * deserialize (`keepalive_replies_parse`) and asserted here to match what this
- * side actually produces — the split mirrors `call_complete`.
+ * side produces — the split mirrors `call_complete`.
  */
 
 import { describe, expect, test } from "bun:test";

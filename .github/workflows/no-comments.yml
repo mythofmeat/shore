@@ -16,3 +16,5 @@ jobs:
         working-directory: daemon
       - run: bun run lint:comments
         working-directory: daemon
+      - run: bun run lint:citations
+        working-directory: daemon

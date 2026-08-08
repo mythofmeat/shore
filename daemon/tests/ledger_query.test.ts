@@ -1,6 +1,7 @@
 /**
- * Ported from `crates/daemon/src/ledger/query.rs::tests`, test for test, so the
- * two implementations can be compared while both exist.
+ * Ported from `crates/daemon/src/ledger/query.rs::tests`, test for test, while
+ * both implementations existed. The Rust is gone; these are now this
+ * implementation's own tests, kept case for case.
  *
  * The schema comes from the daemon binary (see `support/ledger_fixture.ts`),
  * not from a copy kept here — these queries are only meaningful against the
