@@ -19,7 +19,10 @@ import { existsSync, chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { defaultAppConfig, parseAppConfig } from "../src/config/app.ts";
 import { createDefaultConfig, DEFAULT_CONFIG_TOML, loadConfig } from "../src/config/loader.ts";
+import { serializeConfigValue } from "../src/config/serialize.ts";
+import { renderDefaultsToml, renderStarterConfig, UNSET } from "../src/config/starter.ts";
 import { resolveStartup } from "../src/daemon/startup.ts";
 
 const roots: string[] = [];
@@ -86,6 +89,35 @@ describe("createDefaultConfig", () => {
     expect(createDefaultConfig(root, (message) => warnings.push(message))).toBeUndefined();
     expect(warnings).toEqual(["Could not write default config.toml"]);
     expect(existsSync(join(root, "config.toml"))).toBe(false);
+  });
+});
+
+describe("renderStarterConfig", () => {
+  test("uncommenting the generated block yields exactly the defaults", () => {
+    const parsed = parseAppConfig(Bun.TOML.parse(renderDefaultsToml()));
+    if ("err" in parsed) throw new Error(parsed.err);
+
+    expect(serializeConfigValue(parsed.ok)).toEqual(serializeConfigValue(defaultAppConfig()));
+  });
+
+  test("every section of the schema reaches the file", () => {
+    const rendered = renderStarterConfig();
+    for (const section of Object.keys(serializeConfigValue(defaultAppConfig()) as object)) {
+      expect(rendered).toContain(`# [${section}]`);
+    }
+  });
+
+  test("options with no default are marked, not invented", () => {
+    const rendered = renderStarterConfig();
+    expect(rendered).toContain(`# model = ${UNSET}`);
+    expect(renderDefaultsToml()).not.toContain(UNSET);
+  });
+
+  test("it does not advertise the deprecated heartbeat alias", () => {
+    const defaults = renderStarterConfig().split("# [defaults]\n")[1]?.split("#\n")[0];
+    expect(defaults).toBeDefined();
+    expect(defaults).not.toContain("heartbeat");
+    expect(renderStarterConfig()).toContain("# [defaults.background]");
   });
 });
 

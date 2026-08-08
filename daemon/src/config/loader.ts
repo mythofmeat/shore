@@ -21,6 +21,7 @@ import { applyDotenv } from "./dotenv.ts";
 import { rustTrim } from "./duration.ts";
 import { catalogFromSections, findModel, CatalogError, type ModelCatalog } from "./models.ts";
 import { ProviderRegistry, ProviderRegistryError } from "./providers.ts";
+import { renderStarterConfig } from "./starter.ts";
 
 export type TomlTable = Record<string, unknown>;
 
@@ -226,33 +227,7 @@ export function loadCharacterConfigTable(
   return merged;
 }
 
-export const DEFAULT_CONFIG_TOML = `# Shore configuration
-# See examples/config.toml for all available options.
-#
-# Characters are discovered from the characters/ directory.
-# Create characters/<name>/workspace/SOUL.md to define a character.
-#
-# Models are referenced as \`provider:model_id\` against a [providers.*] entry.
-# You can also use \`include = ["extra.toml"]\` or conf.d/*.toml for modular config.
-
-# include = ["models.toml"]  # optional explicit includes
-
-# [defaults]
-# model = "anthropic:claude-sonnet-4-6"   # provider:model_id
-
-# [providers.anthropic]
-# api_key_env = "ANTHROPIC_API_KEY"
-#
-# [providers.anthropic.defaults]
-# cache_ttl = "1h"
-
-# [daemon]
-# addr = "127.0.0.1:7320"   # env override: SHORE_ADDR
-#
-# Every client authenticates with a shared token. The daemon writes one to
-# <config>/token on first start; SHORE_TOKEN overrides it, which is how a
-# client on another host or in another container is given the value.
-`;
+export const DEFAULT_CONFIG_TOML = renderStarterConfig();
 
 export function createDefaultConfig(
   configDirectory: string,
