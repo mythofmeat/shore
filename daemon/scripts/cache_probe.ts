@@ -1,8 +1,8 @@
 /**
- * Live cache-behavior probe for `replay_prior_thinking` (#191), Sonnet only.
+ * Live cache-behavior probe for `replay_prior_thinking`, Sonnet only.
  *
  * Drives multi-turn conversations against the real Anthropic API through the
- * production `buildAnthropicParams` (so the #191 trailing-marker placement is
+ * production `buildAnthropicParams` (so the trailing-marker placement is
  * the actual code under test), mirroring the daemon's upstream thinking-strip
  * for each replay mode. Records per-turn `cache_creation` / `cache_read` so we
  * can quantify the per-turn cache bust `last_turn` introduces and confirm the

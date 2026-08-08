@@ -27,7 +27,6 @@ Run from the repository root:
     python3 daemon/scripts/mutate_instances.py
 """
 import pathlib
-import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -144,47 +143,11 @@ MUTANTS = [
 ]
 
 
-def run_tests() -> bool:
-    """True when the suite passes."""
-    proc = subprocess.run(
-        ["bun", "test", *TESTS],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-    )
-    return proc.returncode == 0
+from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    if not run_tests():
-        print("baseline is red — fix the suite before mutating", file=sys.stderr)
-        return 2
-
-    survivors = []
-    for i, (label, rel, find, replace) in enumerate(MUTANTS, start=1):
-        path = ROOT / rel
-        original = path.read_text()
-        if find not in original:
-            print(f"{i:3}. ERROR mutant does not apply: {label}", file=sys.stderr)
-            survivors.append(label)
-            continue
-        if original.count(find) != 1:
-            print(f"{i:3}. ERROR mutant is ambiguous: {label}", file=sys.stderr)
-            survivors.append(label)
-            continue
-        path.write_text(original.replace(find, replace))
-        try:
-            killed = not run_tests()
-        finally:
-            path.write_text(original)
-        print(f"{i:3}. {'kill' if killed else 'LIVE'}  {label}")
-        if not killed:
-            survivors.append(label)
-
-    print(f"\n{len(MUTANTS) - len(survivors)}/{len(MUTANTS)} killed")
-    for label in survivors:
-        print(f"  SURVIVOR: {label}")
-    return 1 if survivors else 0
+    return _run_mutants(MUTANTS, TESTS)
 
 
 if __name__ == "__main__":

@@ -46,3 +46,4 @@ test_char
 .worktrees/
 sweep.timestamp
 nohup.out
+__pycache__/

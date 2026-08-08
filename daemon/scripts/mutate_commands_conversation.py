@@ -69,7 +69,6 @@ Run from the repository root:
     python3 daemon/scripts/mutate_commands_conversation.py
 """
 import pathlib
-import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -469,43 +468,12 @@ MUTANTS = [
 ]
 
 
-def run() -> bool:
-    r = subprocess.run(
-        ["bun", "test", "tests/conversation_parity.test.ts"],
-        cwd=ROOT, capture_output=True, text=True,
-    )
-    return r.returncode == 0
+from mutation import run as _run_mutants  # noqa: E402
 
 
-def main() -> None:
-    original = SRC.read_text()
-    if not run():
-        sys.exit("baseline is red; fix before mutating")
-
-    survivors = []
-    for i, mutant in enumerate(MUTANTS, 1):
-        label, rest = mutant[0], mutant[1:]
-        edits = rest[0] if len(rest) == 1 and isinstance(rest[0], list) else [tuple(rest)]
-        counts = [original.count(find) for find, _ in edits]
-        if any(c != 1 for c in counts):
-            survivors.append((label, f"NOT APPLIED (matches={counts})"))
-            print(f"{i:3d}. !! {label} — patterns matched {counts}")
-            continue
-        mutated = original
-        for find, replace in edits:
-            mutated = mutated.replace(find, replace, 1)
-        SRC.write_text(mutated)
-        killed = not run()
-        SRC.write_text(original)
-        print(f"{i:3d}. {'kill' if killed else 'LIVE'}  {label}")
-        if not killed:
-            survivors.append((label, "survived"))
-
-    SRC.write_text(original)
-    total = len(MUTANTS)
-    print(f"\n{total - len(survivors)}/{total} killed")
-    for label, why in survivors:
-        print(f"  SURVIVOR: {label} ({why})")
+def main() -> int:
+    return _run_mutants(MUTANTS, ["tests/conversation_parity.test.ts"], src=SRC)
 
 
-main()
+if __name__ == "__main__":
+    sys.exit(main())

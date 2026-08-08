@@ -18,7 +18,6 @@ Run from the repository root:
     python3 daemon/scripts/mutate_config_dirs.py
 """
 import pathlib
-import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -142,39 +141,12 @@ MUTANTS = [
 ]
 
 
-def run() -> bool:
-    r = subprocess.run(
-        ["bun", "test", "tests/dirs_parity.test.ts"],
-        cwd=ROOT, capture_output=True, text=True,
-    )
-    return r.returncode == 0
+from mutation import run as _run_mutants  # noqa: E402
 
 
-def main() -> None:
-    originals = {p: p.read_text() for p in {DIRS, LOAD}}
-    if not run():
-        sys.exit("baseline is red; fix before mutating")
-
-    survivors = []
-    for i, (path, label, find, replace) in enumerate(MUTANTS, 1):
-        src = originals[path]
-        if src.count(find) != 1:
-            survivors.append((label, f"NOT APPLIED (matches={src.count(find)})"))
-            print(f"{i:3d}. !! {label} — pattern matched {src.count(find)}x")
-            continue
-        path.write_text(src.replace(find, replace, 1))
-        killed = not run()
-        path.write_text(src)
-        print(f"{i:3d}. {'kill' if killed else 'LIVE'}  {label}")
-        if not killed:
-            survivors.append((label, "survived"))
-
-    for p, s in originals.items():
-        p.write_text(s)
-    total = len(MUTANTS)
-    print(f"\n{total - len(survivors)}/{total} killed")
-    for label, why in survivors:
-        print(f"  SURVIVOR: {label} ({why})")
+def main() -> int:
+    return _run_mutants(MUTANTS, ["tests/dirs_parity.test.ts"])
 
 
-main()
+if __name__ == "__main__":
+    sys.exit(main())

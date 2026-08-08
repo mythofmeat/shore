@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "lint:comments": "bun run scripts/check_no_comments.ts",
     "test": "bun test",
-    "lint:citations": "bun run scripts/check_live_citations.ts"
+    "lint:citations": "bun run scripts/check_live_citations.ts",
+    "mutate": "bun run scripts/mutate.ts"
   },
   "dependencies": {
     "@ai-sdk/deepseek": "^2.0.51",

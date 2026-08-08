@@ -52,7 +52,6 @@ Run from the repository root:
     python3 daemon/scripts/mutate_commands_usage.py
 """
 import pathlib
-import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -136,43 +135,13 @@ IMPORT = ('import { internalError } from "./errors.ts";',
           'import { internalError, invalidRequest } from "./errors.ts";')
 
 
-def run() -> bool:
-    r = subprocess.run(
-        ["bun", "test", "tests/commands_usage.test.ts", "tests/pricing.test.ts",
-         "tests/ledger_usage.test.ts"],
-        cwd=ROOT, capture_output=True, text=True,
-    )
-    return r.returncode == 0
+from mutation import run as _run_mutants  # noqa: E402
 
 
-def main() -> None:
-    originals = {p: (ROOT / p).read_text() for p in {COMMAND, ENGINE, STORE, REPORT}}
-    if not run():
-        sys.exit("baseline is red; fix before mutating")
-
-    survivors = []
-    for i, (label, path, find, replace) in enumerate(MUTANTS, 1):
-        original = originals[path]
-        if original.count(find) != 1:
-            survivors.append((label, f"NOT APPLIED (matches={original.count(find)})"))
-            print(f"{i:3d}. !! {label} — pattern matched {original.count(find)}x")
-            continue
-        mutated = original.replace(find, replace, 1)
-        if "invalidRequest(" in replace:
-            mutated = mutated.replace(*IMPORT, 1)
-        (ROOT / path).write_text(mutated)
-        killed = not run()
-        (ROOT / path).write_text(original)
-        print(f"{i:3d}. {'kill' if killed else 'LIVE'}  {label}")
-        if not killed:
-            survivors.append((label, "survived"))
-
-    for path, text in originals.items():
-        (ROOT / path).write_text(text)
-    total = len(MUTANTS)
-    print(f"\n{total - len(survivors)}/{total} killed")
-    for label, why in survivors:
-        print(f"  SURVIVOR: {label} ({why})")
+def main() -> int:
+    return _run_mutants(MUTANTS, ["tests/commands_usage.test.ts", "tests/pricing.test.ts",
+         "tests/ledger_usage.test.ts"])
 
 
-main()
+if __name__ == "__main__":
+    sys.exit(main())

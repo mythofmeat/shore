@@ -51,7 +51,6 @@ Run from the repository root:
     python3 daemon/scripts/mutate_command_path.py
 """
 import pathlib
-import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -125,37 +124,12 @@ MUTANTS = [
 ]
 
 
-def run() -> bool:
-    r = subprocess.run(
-        ["bun", "test", "tests/command_path_parity.test.ts"],
-        cwd=ROOT, capture_output=True, text=True,
-    )
-    return r.returncode == 0
+from mutation import run as _run_mutants  # noqa: E402
 
 
-def main() -> None:
-    original = (ROOT / P).read_text()
-    if not run():
-        sys.exit("baseline is red; fix before mutating")
-
-    survivors = []
-    for i, (label, find, replace) in enumerate(MUTANTS, 1):
-        if original.count(find) != 1:
-            survivors.append((label, f"NOT APPLIED (matches={original.count(find)})"))
-            print(f"{i:3d}. !! {label} — pattern matched {original.count(find)}x")
-            continue
-        (ROOT / P).write_text(original.replace(find, replace, 1))
-        killed = not run()
-        (ROOT / P).write_text(original)
-        print(f"{i:3d}. {'kill' if killed else 'LIVE'}  {label}")
-        if not killed:
-            survivors.append((label, "survived"))
-
-    (ROOT / P).write_text(original)
-    total = len(MUTANTS)
-    print(f"\n{total - len(survivors)}/{total} killed")
-    for label, why in survivors:
-        print(f"  SURVIVOR: {label} ({why})")
+def main() -> int:
+    return _run_mutants(MUTANTS, ["tests/command_path_parity.test.ts"])
 
 
-main()
+if __name__ == "__main__":
+    sys.exit(main())
