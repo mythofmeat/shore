@@ -1,6 +1,6 @@
 pkgbase=shore
 pkgname=('shore' 'shore-daemon' 'shore-tui')
-pkgver=4.3.1
+pkgver=4.3.3
 pkgrel=1
 pkgdesc="Persistent AI character engine"
 arch=('x86_64')
