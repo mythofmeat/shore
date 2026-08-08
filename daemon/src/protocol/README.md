@@ -40,9 +40,12 @@ The `u64` one is the one that would have bitten silently: the generated type wou
 `bigint` while every value arriving over the socket is a `number`, so any arithmetic on a revision
 or a token count would have been a type error against values that were fine at run time.
 
-## One inaccuracy worth knowing
+## The decode-only `Unknown` variant
 
-`ServerMessage` ends with `| { "type": "unknown" }`. That comes from `#[serde(other)] Unknown`,
-which exists so an older client can skip a frame from a newer daemon. ts-rs cannot express
-"any unrecognized tag", so it emits the literal variant instead. The daemon never produces it —
-`event_matches_session` returns `false` for it — so nothing should ever construct one.
+`ServerMessage` in Rust ends with `#[serde(other)] Unknown`, which exists so an older client can
+skip a frame from a newer daemon. It is a decode-side fallback and the daemon never produces one.
+
+ts-rs cannot express "any unrecognized tag", so it used to emit it as a literal
+`| { "type": "unknown" }` member — a frame TypeScript had to handle and could never receive.
+`5aab5715` took it back out with `#[ts(skip)]`. If it reappears in `ServerMessage.ts`, the skip
+was lost rather than the protocol having changed.

@@ -23,7 +23,7 @@ import {
   activePromptFile,
   normalizePromptVisiblePath,
 } from "../tools/workspace_path";
-import { localRfc3339 } from "../time.ts";
+import { localRfc3339 } from "../util/time.ts";
 
 const PROTECTED_PATHS = ["SOUL.md", "USER.md", "AGENTS.md", "TOOLS.md"] as const;
 

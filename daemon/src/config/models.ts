@@ -1,6 +1,6 @@
 import { applicability, defaultValue, type Field, type Sdk } from "../llm/capabilities.ts";
 import { ConfigDuration, type ParseResult } from "./duration.ts";
-import { compareByCodePoint, sortedKeys } from "../sort.ts";
+import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import type { ThinkingReplay } from "../llm/types.ts";
 import type { ResolvedModel as RequestResolvedModel } from "../llm/request.ts";
 

@@ -6,7 +6,7 @@ import {
   type ProviderRegistryEntry,
   type Sdk,
 } from "./models.ts";
-import { compareByCodePoint, sortedKeys } from "../sort.ts";
+import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import type { ProviderEntry as CredentialsProviderEntry } from "../llm/credentials.ts";
 
 export type ProviderRegistryErrorKind =

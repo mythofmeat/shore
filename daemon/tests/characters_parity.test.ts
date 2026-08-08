@@ -28,7 +28,7 @@ import { loadConfig, parseConfigTable, type LoadedConfig } from "../src/config/l
 import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
-import { compareByCodePoint } from "../src/sort.ts";
+import { compareByCodePoint } from "../src/util/sort.ts";
 
 // ── Fixture shape ───────────────────────────────────────────────────────
 

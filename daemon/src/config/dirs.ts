@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 
-import { compareByCodePoint } from "../sort.ts";
+import { compareByCodePoint } from "../util/sort.ts";
 
 export const CHARACTER_WORKSPACE_DIR = "workspace";
 export const SOUL_FILE = "SOUL.md";

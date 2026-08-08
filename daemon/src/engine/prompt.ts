@@ -1,3 +1,4 @@
+import builtinSystemTemplate from "../../prompts/engine/builtin_system.md" with { type: "text" };
 import { hostZone, naiveInZone, partsOf } from "../ledger/zoned";
 import type { ContentBlock, ImageRef, Message, Role } from "./types";
 
@@ -17,10 +18,7 @@ const THIRTY_SIX_HOURS_SECS = 129_600;
 const SECS_PER_HOUR = 3_600;
 const SECS_PER_DAY = 86_400;
 
-const BUILTIN_SYSTEM_TEMPLATE =
-  "You are {{char}}, in conversation with {{user}}.\n" +
-  "This is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\n" +
-  "Be consistent with established details and avoid fabricating memory.";
+const BUILTIN_SYSTEM_TEMPLATE = builtinSystemTemplate.trimEnd();
 
 export type UserTimestampMode = "never" | "always" | "auto";
 

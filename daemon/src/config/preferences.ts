@@ -17,7 +17,7 @@ import {
   type Sdk,
 } from "./models.ts";
 import { CatalogError, invalidType } from "./models.ts";
-import { compareByCodePoint, sortedKeys } from "../sort.ts";
+import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import type { ThinkingReplay } from "../llm/types.ts";
 import type { ProviderRegistry } from "./providers.ts";
 import { loadActiveModel } from "./runtime_state.ts";

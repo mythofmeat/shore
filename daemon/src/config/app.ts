@@ -1,4 +1,4 @@
-import { compareByCodePoint, sortedKeys } from "../sort.ts";
+import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import { ConfigDuration, type ParseResult } from "./duration.ts";
 import { invalidType } from "./models.ts";
 

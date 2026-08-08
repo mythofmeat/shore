@@ -1,6 +1,6 @@
 import { toolPatternMatches } from "./registry.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
-import { compareByCodePoint } from "../sort.ts";
+import { compareByCodePoint } from "../util/sort.ts";
 import type { ToolDefinition } from "../llm/types.ts";
 import { McpTransportError } from "../mcp/client.ts";
 import type { McpClient, McpServerSpec, Transport } from "../mcp/client.ts";

@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
-import { runtimeDir } from "./config/dirs.ts";
+import { runtimeDir } from "../config/dirs.ts";
 
 export interface InstanceInfo {
   id: string;

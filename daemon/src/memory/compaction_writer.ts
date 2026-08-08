@@ -5,7 +5,7 @@ import { atomicWrite } from "../engine/atomic";
 import type { CompactionManifest, SegmentEntry } from "../engine/segments";
 import { CompactionError } from "./compaction/types";
 import { rustLines, rustTrim } from "./lines";
-import { localRfc3339 } from "../time.ts";
+import { localRfc3339 } from "../util/time.ts";
 
 const ACTIVE_JSONL_FILE = "active.jsonl";
 const SEGMENTS_DIR = "segments";

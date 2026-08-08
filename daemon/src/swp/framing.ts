@@ -5,12 +5,10 @@ export const MAX_WIRE_MESSAGE_SIZE = 128 * 1024 * 1024;
 
 const NEWLINE = 0x0a;
 
-const RUST_WHITESPACE =
-  "\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000";
-const RUST_TRIM_RE = new RegExp(`^[${RUST_WHITESPACE}]+|[${RUST_WHITESPACE}]+$`, "gu");
+const WIRE_TRIM_RE = /^\p{White_Space}+|\p{White_Space}+$/gu;
 
 export function rustTrim(value: string): string {
-  return value.replace(RUST_TRIM_RE, "");
+  return value.replace(WIRE_TRIM_RE, "");
 }
 
 export class WireError extends Error {

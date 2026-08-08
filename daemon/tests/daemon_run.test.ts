@@ -37,7 +37,7 @@ import {
   type RunningDaemon,
 } from "../src/daemon/run.ts";
 import { StartupError } from "../src/daemon/startup.ts";
-import type { InstanceInfo } from "../src/instances.ts";
+import type { InstanceInfo } from "../src/daemon/instances.ts";
 import type { SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 
 /** Every daemon a test started, stopped after it whatever happened. */

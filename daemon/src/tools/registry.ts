@@ -1,5 +1,5 @@
 import { renderTemplate, stripOneTrailingNewline } from "../engine/prompt.ts";
-import { compareByCodePoint } from "../sort.ts";
+import { compareByCodePoint } from "../util/sort.ts";
 import type { ToolDefinition } from "../llm/types.ts";
 
 import activityHeatmapDesc from "../../prompts/tools/activity/activity_heatmap.md" with { type: "text" };

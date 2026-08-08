@@ -2,7 +2,7 @@ import { mergeToolLoopMessages } from "../engine/merge.ts";
 import type { ConversationEngine } from "../engine/conversation.ts";
 import type { ImageRef, Message, Role } from "../engine/types.ts";
 import { embedImageData, embedMessagesImageData } from "../engine/wire_images.ts";
-import { localRfc3339 } from "../time.ts";
+import { localRfc3339 } from "../util/time.ts";
 import { engineError, invalidRequest, notFound } from "./errors.ts";
 
 const DEFAULT_LOG_TURNS = 64;

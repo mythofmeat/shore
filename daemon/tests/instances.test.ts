@@ -30,7 +30,7 @@ import {
   shouldPrune,
   takeLock,
   type InstanceInfo,
-} from "../src/instances.ts";
+} from "../src/daemon/instances.ts";
 
 async function registryIn(prefix: string): Promise<{ root: string; instances: Instances }> {
   const root = await mkdtemp(join(tmpdir(), prefix));

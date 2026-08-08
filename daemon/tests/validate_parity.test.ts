@@ -25,7 +25,7 @@ import {
   type TomlTable,
 } from "../src/config/loader.ts";
 import type { ShoreDirs } from "../src/config/dirs.ts";
-import { compareByCodePoint } from "../src/sort.ts";
+import { compareByCodePoint } from "../src/util/sort.ts";
 import { defaultCompactionConfig } from "../src/config/app.ts";
 
 import { pathsSetBy } from "./config_delta.ts";

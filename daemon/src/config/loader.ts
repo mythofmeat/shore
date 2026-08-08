@@ -1,6 +1,6 @@
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 
-import { compareByCodePoint } from "../sort.ts";
+import { compareByCodePoint } from "../util/sort.ts";
 import {
   budgetPeriodRank,
   normalizeDeprecatedAliases,
