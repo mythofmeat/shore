@@ -3,11 +3,11 @@ RUN pacman --noconfirm -Syu --needed base-devel sudo
 RUN useradd -m builduser && \
     passwd -d builduser && \
     echo "builduser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-WORKDIR /src
-COPY . .
-WORKDIR /src/contrib/arch
 RUN mkdir /pkg
 RUN chown -R builduser /pkg
+WORKDIR /src
+COPY . .
+WORKDIR contrib/arch
 RUN chown -R builduser /src/contrib/arch
 RUN sudo -u builduser PKGDEST=/pkg makepkg -s --noconfirm
 FROM archlinux:latest AS entry
