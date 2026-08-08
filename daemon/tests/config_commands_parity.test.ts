@@ -12,15 +12,20 @@
  * reload that adopts a config it should have rejected, is invisible in the
  * response.
  *
- * # The four sections the recorded blob has and the schema does not
+ * # The four sections the recorded blob has and the schema does not match
  *
- * `memory.dreaming`, `tools.sandbox`, `connections.matrix` and
- * `defaults.dreaming` (with `defaults.background.dreaming`) were removed from
- * the config schema earlier in this rewrite — `config_fixtures/app_parity.json`
- * pins three of them as *rejected* unknown fields, so reintroducing them here
- * would contradict a fixture that is already frozen.
+ * `memory.dreaming`, `tools.sandbox` and `defaults.dreaming` (with
+ * `defaults.background.dreaming`) were removed from the config schema earlier
+ * in this rewrite — `config_fixtures/app_parity.json` pins them as *rejected*
+ * unknown fields, so reintroducing them here would contradict a fixture that is
+ * already frozen.
  *
- * They are stripped from the recorded side, and {@link REMOVED} is the entire
+ * `connections.matrix` is the odd one: #24 brought the section back, but in a
+ * narrower external-only shape with no `embedded` table and no `trusted_user`,
+ * so the recorded blob and this schema disagree about its contents rather than
+ * its existence.
+ *
+ * All of them are stripped from *both* sides, and {@link REMOVED} is the entire
  * list. Everything else is compared in full, and nothing was excused: a diff of
  * the whole default baseline showed these paths missing and **no** value
  * mismatch on any shared path.
@@ -55,8 +60,9 @@ import { findModel } from "../src/config/models.ts";
 // ── the deliberate divergence ───────────────────────────────────────────
 
 /**
- * Dotted paths the Rust at `9023b46d` serialised and the current schema does
- * not have. Stripped from the recorded side of every `config` comparison.
+ * Dotted paths the Rust at `9023b46d` serialised that the current schema either
+ * does not have or spells differently. Stripped from both sides of every
+ * `config` comparison.
  */
 const REMOVED = [
   "defaults.dreaming",
@@ -221,6 +227,7 @@ async function check(
   w: World,
   run: () => unknown | Promise<unknown>,
   normalize: (ok: any) => unknown = (v) => v,
+  normalizeResult: (actual: any) => unknown = normalize,
 ): Promise<void> {
   let result: unknown;
   let thrown: unknown;
@@ -237,7 +244,7 @@ async function check(
     expect(upToParser(actual), r.name).toBe(upToParser(r.err.message));
   } else {
     expect(thrown, r.name).toBeUndefined();
-    expect(scrub(result, w.root), r.name).toEqual(normalize(r.ok) as never);
+    expect(normalizeResult(scrub(result, w.root)), r.name).toEqual(normalize(r.ok) as never);
   }
   expect(stateOf(w), `${r.name} (state_after)`).toEqual(r.state_after as never);
 }

@@ -636,14 +636,44 @@ const MEMORY: StructSpec<MemoryConfig> = {
 
 export type ReservedConnectionConfig = Map<string, TomlValue>;
 
+export interface MatrixConfig {
+  enabled: boolean;
+  homeserver: string;
+  user_id: string;
+  room_id: string;
+  mirror_all: boolean;
+}
+
+export const defaultMatrixConfig = (): MatrixConfig => ({
+  enabled: false,
+  homeserver: "",
+  user_id: "",
+  room_id: "",
+  mirror_all: true,
+});
+
+const MATRIX: StructSpec<MatrixConfig> = {
+  name: "MatrixConfig",
+  make: defaultMatrixConfig,
+  fields: {
+    enabled: readBool,
+    homeserver: readString,
+    user_id: readString,
+    room_id: readString,
+    mirror_all: readBool,
+  },
+};
+
 export interface ConnectionsConfig {
   telegram: ReservedConnectionConfig | undefined;
   discord: ReservedConnectionConfig | undefined;
+  matrix: MatrixConfig | undefined;
 }
 
 export const defaultConnectionsConfig = (): ConnectionsConfig => ({
   telegram: undefined,
   discord: undefined,
+  matrix: undefined,
 });
 
 const CONNECTIONS: StructSpec<ConnectionsConfig> = {
@@ -652,6 +682,7 @@ const CONNECTIONS: StructSpec<ConnectionsConfig> = {
   fields: {
     telegram: (v) => readFlattenOnly("TelegramConfig", v),
     discord: (v) => readFlattenOnly("DiscordConfig", v),
+    matrix: (v) => readStruct(MATRIX, v),
   },
 };
 

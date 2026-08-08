@@ -209,9 +209,19 @@ function withRustMcpFieldCount(err: string): string {
   );
 }
 
+const CONNECTIONS_FIELDS_REINTRODUCED_SINCE = ["matrix"] as const;
+
+function withoutReintroducedConnectionsFields(value: unknown): unknown {
+  const connections = (value as { connections?: unknown } | null)?.connections;
+  if (typeof connections !== "object" || connections === null) return value;
+  const copy = { ...(connections as Record<string, unknown>) };
+  for (const key of CONNECTIONS_FIELDS_REINTRODUCED_SINCE) delete copy[key];
+  return { ...(value as object), connections: copy };
+}
+
 /** Every exemption above, applied in one pass. */
 const withoutAddedFields = (value: unknown): unknown =>
-  withoutAddedMcpFields(withoutAddedBudgetFields(value));
+  withoutReintroducedConnectionsFields(withoutAddedMcpFields(withoutAddedBudgetFields(value)));
 
 const withRustFieldCounts = (err: string): string =>
   withRustMcpFieldCount(withRustBudgetFieldCount(err));
@@ -233,7 +243,11 @@ const withRustFieldCounts = (err: string): string =>
  * a parse to an error, not just its contents. Skipped in the bulk replay and
  * asserted on its own below, where the new behaviour is the subject.
  */
-const DELIBERATELY_DIVERGENT = "the daemon section";
+const DELIBERATELY_DIVERGENT = new Set([
+  "the daemon section",
+  "the removed matrix connection is rejected",
+  "the removed embedded matrix connection is rejected",
+]);
 
 const BUN_CANNOT_SEE = new Set([
   // Datetime literals: rejected outright by Bun.
@@ -289,6 +303,13 @@ describe("the fixture is real", () => {
     expect(text).toContain(`McpServerConfig with ${RUST_MCP_FIELD_COUNT} elements`);
   });
 
+  test("the reintroduced connections fields really are ones it never had", () => {
+    const connections = (fixture.defaults as { connections: Record<string, unknown> }).connections;
+    for (const key of CONNECTIONS_FIELDS_REINTRODUCED_SINCE) {
+      expect(Object.keys(connections)).not.toContain(key);
+    }
+  });
+
   test("it records both parse paths, and they genuinely differ somewhere", () => {
     // A fixture whose two columns were identical everywhere would pass against
     // a port that walked the document instead of the table.
@@ -303,7 +324,9 @@ describe("the fixture is real", () => {
 
 describe("AppConfig::default", () => {
   test("every default matches the Rust's", () => {
-    expect(canonical(defaultAppConfig())).toEqual(withoutRemovedDaemonFields(fixture.defaults));
+    expect(withoutAddedFields(canonical(defaultAppConfig()))).toEqual(
+      withoutRemovedDaemonFields(fixture.defaults),
+    );
   });
 
   test("ToolsConfig::default matches on its own", () => {
@@ -321,7 +344,7 @@ describe("AppConfig::default", () => {
 
 describe("parsing config.toml", () => {
   for (const c of fixture.parse) {
-    if (BUN_CANNOT_SEE.has(c.name) || c.name === DELIBERATELY_DIVERGENT) continue;
+    if (BUN_CANNOT_SEE.has(c.name) || DELIBERATELY_DIVERGENT.has(c.name)) continue;
 
     test(c.name, () => {
       const parsed = parseAppConfig(parseToml(c.toml));
@@ -356,7 +379,7 @@ describe("parsing config.toml", () => {
     // old config does not silently keep an inert key: it fails at load, naming
     // the key, which is the only way someone learns their allowlist stopped
     // being consulted. `addr` is all that is left of the section.
-    const c = fixture.parse.find((x) => x.name === DELIBERATELY_DIVERGENT);
+    const c = fixture.parse.find((x) => x.name === "the daemon section");
     expect(c).toBeDefined();
 
     const parsed = parseAppConfig(parseToml(c!.toml));
@@ -369,6 +392,59 @@ describe("parsing config.toml", () => {
     const ok = parseAppConfig(parseToml(`[daemon]\naddr = "0.0.0.0:9999"\n`));
     if ("err" in ok) throw new Error(ok.err);
     expect(ok.ok.daemon).toEqual({ addr: "0.0.0.0:9999" });
+  });
+
+  test("the matrix connection the fixture rejects now parses, in its external-only shape", () => {
+    const c = fixture.parse.find((x) => x.name === "the removed matrix connection is rejected");
+    expect(c).toBeDefined();
+    expect(c!.table_err).toBe("unknown field `matrix`, expected `telegram` or `discord`");
+
+    const parsed = parseAppConfig(parseToml(c!.toml));
+    if ("err" in parsed) throw new Error(`expected a parse, got: ${parsed.err}`);
+    expect(parsed.ok.connections.matrix).toEqual({
+      enabled: true,
+      homeserver: "",
+      user_id: "",
+      room_id: "",
+      mirror_all: true,
+    });
+
+    const full = parseAppConfig(
+      parseToml(
+        "[connections.matrix]\nenabled = true\n" +
+          'homeserver = "https://matrix.example.com"\n' +
+          'user_id = "@shore:example.com"\n' +
+          'room_id = "!abc:example.com"\n' +
+          "mirror_all = false\n",
+      ),
+    );
+    if ("err" in full) throw new Error(full.err);
+    expect(full.ok.connections.matrix).toEqual({
+      enabled: true,
+      homeserver: "https://matrix.example.com",
+      user_id: "@shore:example.com",
+      room_id: "!abc:example.com",
+      mirror_all: false,
+    });
+  });
+
+  test("the embedded homeserver table stays rejected, now as an unknown matrix field", () => {
+    const c = fixture.parse.find(
+      (x) => x.name === "the removed embedded matrix connection is rejected",
+    );
+    expect(c).toBeDefined();
+
+    const parsed = parseAppConfig(parseToml(c!.toml));
+    expect("err" in parsed).toBe(true);
+    expect((parsed as { err: string }).err).toBe(
+      "unknown field `embedded`, expected one of `enabled`, `homeserver`, " +
+        "`user_id`, `room_id`, `mirror_all`",
+    );
+
+    for (const key of ["trusted_user", "embedded"]) {
+      const rejected = parseAppConfig(parseToml(`[connections.matrix]\n${key} = "x"\n`));
+      expect("err" in rejected, key).toBe(true);
+    }
   });
 
   test("map-valued sections are built in code point order, not document order", () => {

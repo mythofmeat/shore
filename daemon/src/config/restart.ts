@@ -7,6 +7,7 @@ export function restartRequiredChanges(old: LoadedConfig, fresh: LoadedConfig): 
   const changes: string[] = [];
   if (!same(a.daemon, b.daemon)) changes.push("[daemon]");
   if (!same(a.notifications, b.notifications)) changes.push("[notifications]");
+  if (!same(a.connections, b.connections)) changes.push("[connections]");
   if (a.advanced.api_payload_logging !== b.advanced.api_payload_logging) {
     changes.push("[advanced].api_payload_logging");
   }

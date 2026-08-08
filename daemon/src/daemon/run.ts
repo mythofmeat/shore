@@ -6,6 +6,7 @@ import { Diagnostics } from "../diagnostics.ts";
 import { emitNewMessageEvent } from "../handler/persistence.ts";
 import type { SessionTokens } from "../handler/persistence.ts";
 import { createDefaultConfig } from "../config/loader.ts";
+import { startMatrixBridge } from "../connections/matrix/start.ts";
 import { tokenMatches, TOKEN_ENV } from "../config/token.ts";
 import { buildMessageHandlerDeps, configReloader } from "../handler/deps.ts";
 import { MessageHandler } from "../handler/router.ts";
@@ -182,12 +183,22 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
           ...(log === undefined ? {} : { log }),
         });
 
+  const matrixBridge = await startMatrixBridge({
+    config: loaded,
+    server,
+    env,
+    ...(log === undefined ? {} : { log }),
+  });
+
   const served = server.serve();
 
   const done = (async () => {
     await served;
     watcher?.stop();
     discovery?.stop();
+    if (matrixBridge !== undefined) {
+      await bounded(matrixBridge.stop(), "matrix bridge", log);
+    }
     await bounded(handlerDone, "message handler", log);
     clocks.stop();
     await bounded(runtime.autonomy.shutdown(), "autonomy", log);
