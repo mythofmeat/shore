@@ -1,7 +1,7 @@
 import type { ActivityStats } from "./activity.ts";
 import { HeartbeatClock, type HeartbeatClockConfig } from "./heartbeat.ts";
 import { HeartbeatLog, type HeartbeatEvent } from "./heartbeat_log.ts";
-import { DEFAULT_KEEPALIVE_MAX_SECS, type KeepaliveService } from "./keepalive.ts";
+import { DEFAULT_KEEPALIVE_MAX_SECS, type KeepaliveService } from "../cache/keepalive.ts";
 import {
   CharacterAutonomy,
   type AutonomyExecutor,
@@ -9,7 +9,7 @@ import {
   type CompactionRunnerConfig,
 } from "./runner.ts";
 import { loadState, STATE_FILENAME, type PersistedKeepalive } from "./state_file.ts";
-import type { KeepaliveSnapshot } from "./cache_keepalive.ts";
+import type { KeepaliveSnapshot } from "../cache/schedule.ts";
 
 export const AUTONOMY_TICK_MS = 10_000;
 

@@ -12,7 +12,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { CacheKeepalive } from "../src/autonomy/cache_keepalive.ts";
+import { CacheKeepalive } from "../src/cache/schedule.ts";
 
 /** The model whose cache the keepalive maintains in these tests. */
 const MODEL = "opus";

@@ -1,7 +1,7 @@
 import type { LoadedConfig } from "../config/loader.ts";
-import type { LastRequestCache } from "../autonomy/last_request.ts";
-import type { KeepaliveService, PingNowOutcome } from "../autonomy/keepalive.ts";
-import type { RebuildDeps } from "../autonomy/rebuild.ts";
+import type { LastRequestCache } from "../cache/last_request.ts";
+import type { KeepaliveService, PingNowOutcome } from "../cache/keepalive.ts";
+import type { RebuildDeps } from "../cache/rebuild.ts";
 import { internalError } from "./errors.ts";
 
 export type KeepalivePing =

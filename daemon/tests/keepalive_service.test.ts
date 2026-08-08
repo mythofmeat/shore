@@ -19,7 +19,7 @@ import {
   pingLandedCold,
   type KeepaliveEvent,
   type KeepalivePrefix,
-} from "../src/autonomy/keepalive.ts";
+} from "../src/cache/keepalive.ts";
 import { closeLedgers, setCallObserver } from "../src/ledger/record.ts";
 import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
 

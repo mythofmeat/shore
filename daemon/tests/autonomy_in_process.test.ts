@@ -25,7 +25,7 @@ import {
   InProcessAutonomyExecutor,
   type InProcessExecutorDeps,
 } from "../src/autonomy/in_process.ts";
-import { LastRequestCache } from "../src/autonomy/last_request.ts";
+import { LastRequestCache } from "../src/cache/last_request.ts";
 import type { TickHooks } from "../src/autonomy/runner.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";

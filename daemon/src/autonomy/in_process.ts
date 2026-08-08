@@ -1,7 +1,7 @@
 import { runHeartbeatTick } from "./heartbeat_tick.ts";
 import { runIdleCompaction } from "./idle_compaction.ts";
 import { runDeepIdleArchive } from "./deep_archive.ts";
-import type { LastRequestCache } from "./last_request.ts";
+import type { LastRequestCache } from "../cache/last_request.ts";
 import type { PostArchiveEngine } from "./post_archive.ts";
 import type { AutonomyActionResult, AutonomyExecutor, TickHooks } from "./runner.ts";
 import type { CompactionReason } from "./tick.ts";

@@ -6,7 +6,7 @@ import {
   type Anomaly,
   type CacheState,
   type Observation,
-} from "./cache_tracker.ts";
+} from "../cache/tracker.ts";
 import { isAnthropicPricing, PricingEngine, type ModelPricing, type PricingStore } from "./pricing.ts";
 
 const SCHEMA = `

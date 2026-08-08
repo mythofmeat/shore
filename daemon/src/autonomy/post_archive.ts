@@ -3,8 +3,8 @@ import { join } from "node:path";
 import type { LoadedConfig } from "../config/loader.ts";
 import { beginCompaction } from "../memory/compaction/manager.ts";
 import { applyDeferredEdits } from "../memory/deferred_edits.ts";
-import type { InvalidationReason, LastRequestCache } from "./last_request.ts";
-import type { RebuildDeps } from "./rebuild.ts";
+import type { InvalidationReason, LastRequestCache } from "../cache/last_request.ts";
+import type { RebuildDeps } from "../cache/rebuild.ts";
 
 export interface PostArchiveEngine {
   reload(character: string): Promise<void>;

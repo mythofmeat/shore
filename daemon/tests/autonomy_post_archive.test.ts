@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { CharacterRegistry } from "../src/characters.ts";
-import { LastRequestCache } from "../src/autonomy/last_request.ts";
+import { LastRequestCache } from "../src/cache/last_request.ts";
 import { InProcessAutonomyExecutor } from "../src/autonomy/in_process.ts";
 import { reloadAndApplyDeferred } from "../src/autonomy/post_archive.ts";
 import { beginCompaction, tryBeginCompaction } from "../src/memory/compaction/manager.ts";

@@ -33,7 +33,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { buildKeepalivePing, type PingNowOutcome } from "../src/autonomy/keepalive.ts";
+import { buildKeepalivePing, type PingNowOutcome } from "../src/cache/keepalive.ts";
 
 /**
  * `restore` and `drain_reply` used to live here too. Both endpoints were

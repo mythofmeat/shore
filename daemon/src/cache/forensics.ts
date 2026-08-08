@@ -1,7 +1,7 @@
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 
-import type { CallContext } from "./types.ts";
+import type { CallContext } from "../llm/types.ts";
 
 export interface CachePlacement {
   msg_breakpoints: number[];

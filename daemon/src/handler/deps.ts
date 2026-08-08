@@ -1,5 +1,5 @@
 import { compactionGenerate } from "../autonomy/in_process.ts";
-import type { InvalidationReason, LastRequestCache } from "../autonomy/last_request.ts";
+import type { InvalidationReason, LastRequestCache } from "../cache/last_request.ts";
 import type { TurnAutonomyBridge } from "../autonomy/registration.ts";
 import { CharacterError, type CharacterRegistry } from "../characters.ts";
 import type { CommandDeps } from "../commands/dispatch.ts";

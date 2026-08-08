@@ -21,8 +21,8 @@ import {
 import { encodeState, STATE_FILENAME } from "../src/autonomy/state_file.ts";
 import type { AutonomyActionResult, AutonomyExecutor } from "../src/autonomy/runner.ts";
 import type { CompactionReason } from "../src/autonomy/tick.ts";
-import type { KeepaliveEvent, KeepaliveService } from "../src/autonomy/keepalive.ts";
-import type { KeepaliveSnapshot } from "../src/autonomy/cache_keepalive.ts";
+import type { KeepaliveEvent, KeepaliveService } from "../src/cache/keepalive.ts";
+import type { KeepaliveSnapshot } from "../src/cache/schedule.ts";
 
 const HOUR = 3_600_000;
 const START = 1_000_000_000_000;

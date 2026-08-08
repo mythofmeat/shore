@@ -27,7 +27,7 @@ import {
   CacheKeepalive,
   type CacheKeepaliveAction,
   type KeepaliveSnapshot,
-} from "../src/autonomy/cache_keepalive.ts";
+} from "../src/cache/schedule.ts";
 
 interface WireSnapshot {
   model: string;

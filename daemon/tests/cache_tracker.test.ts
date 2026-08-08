@@ -17,7 +17,7 @@ import {
   CacheTrackers,
   type Anomaly,
   type Observation,
-} from "../src/ledger/cache_tracker.ts";
+} from "../src/cache/tracker.ts";
 
 const MODEL = "claude-opus-4-6";
 

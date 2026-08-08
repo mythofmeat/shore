@@ -1,8 +1,8 @@
 import { mkdirSync } from "node:fs";
 
 import { InProcessAutonomyExecutor } from "./autonomy/in_process.ts";
-import { KeepaliveService, startKeepaliveTimer } from "./autonomy/keepalive.ts";
-import { LastRequestCache } from "./autonomy/last_request.ts";
+import { KeepaliveService, startKeepaliveTimer } from "./cache/keepalive.ts";
+import { LastRequestCache } from "./cache/last_request.ts";
 import { AutonomyService, startAutonomyTimer } from "./autonomy/service.ts";
 import { CallStore } from "./call_store.ts";
 import { CharacterRegistry } from "./characters.ts";

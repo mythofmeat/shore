@@ -26,7 +26,7 @@ import type {
   WireMessage,
 } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA, streamErrorEvent } from "../types.ts";
-import { recordCacheCall, type CachePlacement } from "../forensics.ts";
+import { recordCacheCall, type CachePlacement } from "../../cache/forensics.ts";
 import { replayableMessages } from "../replay.ts";
 
 export class AnthropicProvider implements SidecarProvider {

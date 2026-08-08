@@ -33,9 +33,9 @@ import {
   historyIsBetweenTurns,
   idleAnchorMessage,
   rebuildRequestFromDisk,
-} from "../src/autonomy/rebuild.ts";
-import { LastRequestCache, reprimeDecision } from "../src/autonomy/last_request.ts";
-import type { KeepalivePrefix, PingNowOutcome } from "../src/autonomy/keepalive.ts";
+} from "../src/cache/rebuild.ts";
+import { LastRequestCache, reprimeDecision } from "../src/cache/last_request.ts";
+import type { KeepalivePrefix, PingNowOutcome } from "../src/cache/keepalive.ts";
 import { classify, keepalivePingNowCommand } from "../src/commands/keepalive.ts";
 import { CommandError } from "../src/commands/errors.ts";
 import { testTmp } from "./support/tmp.ts";

@@ -27,7 +27,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { AnthropicProvider } from "../src/llm/providers/anthropic.ts";
 import { anthropicToolLoopEvents } from "../src/llm/providers/anthropic_loop.ts";
-import { buildKeepalivePing, type KeepalivePrefix } from "../src/autonomy/keepalive.ts";
+import { buildKeepalivePing, type KeepalivePrefix } from "../src/cache/keepalive.ts";
 import { completedResponseMessages, lastRequestWithResponse } from "../src/handler/persistence.ts";
 import { consumeStream } from "../src/llm/stream.ts";
 import { startMockAnthropic, type MockAnthropic } from "../src/testing/mock_anthropic.ts";

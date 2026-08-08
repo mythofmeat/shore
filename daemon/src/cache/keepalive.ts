@@ -1,4 +1,4 @@
-import { CacheKeepalive, type KeepaliveSnapshot } from "./cache_keepalive.ts";
+import { CacheKeepalive, type KeepaliveSnapshot } from "./schedule.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
 import { recordGenerate, recordGenerateError } from "../ledger/record.ts";
 import type { GenerateResponse, SidecarRequest, Usage, WireMessage } from "../llm/types.ts";

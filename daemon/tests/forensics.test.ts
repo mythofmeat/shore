@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { buildAnthropicPlan } from "../src/llm/providers/anthropic.ts";
-import { recordCacheCall, type CachePlacement } from "../src/llm/forensics.ts";
+import { recordCacheCall, type CachePlacement } from "../src/cache/forensics.ts";
 import type { CallContext, SidecarRequest } from "../src/llm/types.ts";
 
 let dir: string;

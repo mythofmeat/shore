@@ -30,7 +30,7 @@ import {
   type HeartbeatEngine,
   type HeartbeatTickDeps,
 } from "../src/autonomy/heartbeat_tick.ts";
-import { LastRequestCache } from "../src/autonomy/last_request.ts";
+import { LastRequestCache } from "../src/cache/last_request.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";

@@ -22,8 +22,8 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { KeepaliveService } from "../src/autonomy/keepalive.ts";
-import { LastRequestCache } from "../src/autonomy/last_request.ts";
+import { KeepaliveService } from "../src/cache/keepalive.ts";
+import { LastRequestCache } from "../src/cache/last_request.ts";
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
 import { catalogFromSections, toRequestModel } from "../src/config/models.ts";
 import { turnAutonomy } from "../src/handler/deps.ts";

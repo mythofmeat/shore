@@ -16,8 +16,8 @@ import { buildRequestWithProviderKeys, pushInlineSystem } from "../llm/request.t
 import type { SidecarRequest } from "../llm/types.ts";
 import { ensureActivePromptSnapshot } from "../memory/deferred_edits.ts";
 import { buildHeartbeatPrompt } from "./heartbeat_shape.ts";
-import type { LastRequestCache } from "./last_request.ts";
-import { rebuildRequestFromDisk, type RebuildDeps } from "./rebuild.ts";
+import type { LastRequestCache } from "../cache/last_request.ts";
+import { rebuildRequestFromDisk, type RebuildDeps } from "../cache/rebuild.ts";
 
 const SECONDS_PER_MINUTE = 60n;
 const SECONDS_PER_HOUR = 3600n;

@@ -26,7 +26,7 @@ import { mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { Message } from "../src/engine/types.ts";
-import { LastRequestCache } from "../src/autonomy/last_request.ts";
+import { LastRequestCache } from "../src/cache/last_request.ts";
 import { runIdleCompaction, type IdleCompactionDeps } from "../src/autonomy/idle_compaction.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
