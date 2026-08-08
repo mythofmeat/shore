@@ -45,6 +45,7 @@ import {
 } from "../src/handler/persistence.ts";
 import {
   NotificationService,
+  defaultNotificationEvents,
   defaultNotificationsConfig,
   ntfyUrl,
   readNotificationsConfig,
@@ -55,6 +56,8 @@ import {
   type NotificationSink,
   type NotificationsConfig,
 } from "../src/notifications.ts";
+
+import { pathsSetBy, replayOntoCurrentDefaults } from "./config_delta.ts";
 
 type Row = Record<string, unknown>;
 
@@ -161,7 +164,12 @@ describe("notification gating", () => {
   test("an enabled service dispatches through the configured backend", async () => {
     const sent: string[] = [];
     const svc = new NotificationService(
-      configWith({ enabled: true, backend: "ntfy", ntfy: { url: "u", topic: "t", token: "" } }),
+      configWith({
+        enabled: true,
+        backend: "ntfy",
+        ntfy: { url: "u", topic: "t", token: "" },
+        events: { ...defaultNotificationEvents(), error: true },
+      }),
       recordingSink(sent),
     );
     svc.notify("error", "title", "body");
@@ -249,12 +257,21 @@ describe("generation threshold", () => {
     expect(sent).toEqual(["notify_send:t:slow"]);
   });
 
-  test("message_complete is off by default even with notifications enabled", async () => {
+  test("an event that is off by default stays off even with notifications enabled", async () => {
+    const sent: string[] = [];
+    const svc = new NotificationService(configWith({ enabled: true }), recordingSink(sent));
+    expect(defaultNotificationEvents().cache_warning).toBe(false);
+    svc.notify("cache_warning", "t", "b");
+    await Promise.resolve();
+    expect(sent).toEqual([]);
+  });
+
+  test("message_complete rides the default event set", async () => {
     const sent: string[] = [];
     const svc = new NotificationService(configWith({ enabled: true }), recordingSink(sent));
     svc.notifyMessageComplete("t", "b", 10_000);
     await Promise.resolve();
-    expect(sent).toEqual([]);
+    expect(sent).toEqual(["notify_send:t:b"]);
   });
 });
 
@@ -272,6 +289,10 @@ function configToFixtureShape(config: NotificationsConfig): Row {
 }
 
 describe("[notifications] parsing", () => {
+  const recordedEventDefaults = ((f["config_parse"] as Row[]).find((c) => c["name"] === "empty")?.[
+    "ok"
+  ] as Row)["events"];
+
   for (const c of f["config_parse"] as Row[]) {
     test(c["name"] as string, () => {
       const table = Bun.TOML.parse(c["toml"] as string) as Record<string, unknown>;
@@ -285,6 +306,12 @@ describe("[notifications] parsing", () => {
       expect("err" in parsed ? parsed.err : "").toBe("");
       const expected = { ...(c["ok"] as Row) };
       expected["generation_threshold_ms"] = String(expected["generation_threshold_ms"]);
+      expected["events"] = replayOntoCurrentDefaults(
+        expected["events"],
+        recordedEventDefaults,
+        { ...defaultNotificationEvents() },
+        pathsSetBy((table["events"] ?? {}) as Record<string, unknown>),
+      );
       expect(configToFixtureShape((parsed as { ok: NotificationsConfig }).ok)).toEqual(expected);
     });
   }
@@ -333,6 +360,7 @@ describe("ntfy url", () => {
         enabled: true,
         backend: "ntfy",
         ntfy: { url: "https://ntfy.sh", topic: "", token: "" },
+        events: { ...defaultNotificationEvents(), error: true },
       }),
     );
     // The real sink throws; `notify` swallows it. Reach the sink directly so
@@ -954,7 +982,12 @@ function makeContext(): {
     notifier: new NotificationService(
       configWith({
         enabled: true,
-        events: { ...defaultNotificationsConfig().events, message_complete: true },
+        events: {
+          ...defaultNotificationEvents(),
+          message_complete: true,
+          usage_warning: true,
+          error: true,
+        },
       }),
       recordingSink(notified),
     ),

@@ -46,11 +46,11 @@ export function defaultNtfyConfig(): NtfyConfig {
 export function defaultNotificationEvents(): NotificationEventsConfig {
   return {
     autonomous_message: true,
-    cache_warning: true,
-    compaction_complete: true,
-    error: true,
-    message_complete: false,
-    usage_warning: true,
+    cache_warning: false,
+    compaction_complete: false,
+    error: false,
+    message_complete: true,
+    usage_warning: false,
   };
 }
 

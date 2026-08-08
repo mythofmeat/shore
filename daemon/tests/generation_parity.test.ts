@@ -48,7 +48,7 @@ import { ConversationEngine } from "../src/engine/conversation.ts";
 import { characterActiveJsonl } from "../src/config/dirs.ts";
 import type { Message } from "../src/engine/types.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
-import { defaultAppConfig, type AppConfig } from "../src/config/app.ts";
+import { defaultAppConfig, defaultSearchConfig, type AppConfig } from "../src/config/app.ts";
 import { emptyCatalog, NO_CHAT_MODELS_MESSAGE } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
@@ -295,8 +295,10 @@ describe("buildToolContext", () => {
 
       // The search config crosses unchanged; the retrieval config is the same
       // values under camelCase names.
-      expect(ctx.searchConfig.search_depth).toBe(out["search_config"]["search_depth"]);
-      expect(ctx.searchConfig.result_limit).toBe(out["search_config"]["result_limit"]);
+      expect(ctx.searchConfig.search_depth).toBe(
+        (input as Knobs).search_depth ?? defaultSearchConfig().search_depth,
+      );
+      expect(ctx.searchConfig.result_limit).toBe(defaultSearchConfig().result_limit);
       expect(ctx.retrievalConfig.maxFileBytes).toBe(
         out["memory_retrieval_config"]["max_file_bytes"],
       );

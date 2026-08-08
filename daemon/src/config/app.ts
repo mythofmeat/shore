@@ -362,8 +362,8 @@ export interface SearchConfig {
 
 export const defaultSearchConfig = (): SearchConfig => ({
   api_key_env: "TAVILY_API_KEY",
-  result_limit: 5,
-  search_depth: "basic",
+  result_limit: 10,
+  search_depth: "advanced",
   include_answer: true,
 });
 
@@ -404,7 +404,7 @@ export interface ToolsConfig {
 export const defaultToolsConfig = (): ToolsConfig => ({
   enabled_tools: [],
   enabled_subagents: [],
-  max_result_chars: 20_000,
+  max_result_chars: 50_000,
   timeout: ConfigDuration.fromSecs(300),
   web_search: defaultSearchConfig(),
   config: new Map(),
@@ -462,10 +462,10 @@ export interface CompactionConfig {
 
 export const defaultCompactionConfig = (): CompactionConfig => ({
   enabled: true,
-  idle_trigger: ConfigDuration.fromSecs(1800),
+  idle_trigger: ConfigDuration.fromSecs(7200),
   archive_after: ConfigDuration.fromSecs(0),
-  min_turns: 8,
-  max_turns: 16,
+  min_turns: 12,
+  max_turns: 30,
   max_context_tokens: 200_000,
   keep_recent_turns: 2,
 });
@@ -733,11 +733,11 @@ export interface NotificationEventsConfig {
 
 export const defaultNotificationEvents = (): NotificationEventsConfig => ({
   autonomous_message: true,
-  cache_warning: true,
-  compaction_complete: true,
-  error: true,
-  message_complete: false,
-  usage_warning: true,
+  cache_warning: false,
+  compaction_complete: false,
+  error: false,
+  message_complete: true,
+  usage_warning: false,
 });
 
 const NOTIFICATION_EVENTS: StructSpec<NotificationEventsConfig> = {

@@ -21,7 +21,7 @@ import fixture from "./memory_fixtures/compaction_assembly_parity.json" with { t
 import { archiveAndRetain } from "../src/memory/compaction/archive.ts";
 import { renderToolOutcome } from "../src/memory/compaction/run.ts";
 import { resolvePromptTemplate } from "../src/config/dirs.ts";
-import { defaultAppConfig, resolveDisplayName } from "../src/config/app.ts";
+import { defaultAppConfig, defaultCompactionConfig, resolveDisplayName } from "../src/config/app.ts";
 import { emptyCatalog, toRequestModel } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
@@ -231,12 +231,8 @@ describe("resolveCompactionDeps", () => {
       }
 
       expect(resolveDisplayName(config.app.defaults)).toBe(out["display_name"]);
-      expect(config.app.memory.compaction.min_turns).toBe(
-        out["compaction_settings"]["min_turns"] as number,
-      );
-      expect(config.app.memory.compaction.max_turns).toBe(
-        out["compaction_settings"]["max_turns"] as number,
-      );
+      expect(config.app.memory.compaction.min_turns).toBe(defaultCompactionConfig().min_turns);
+      expect(config.app.memory.compaction.max_turns).toBe(defaultCompactionConfig().max_turns);
     });
   }
 });

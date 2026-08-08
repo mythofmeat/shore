@@ -26,6 +26,9 @@ import {
 } from "../src/config/loader.ts";
 import type { ShoreDirs } from "../src/config/dirs.ts";
 import { compareByCodePoint } from "../src/sort.ts";
+import { defaultCompactionConfig } from "../src/config/app.ts";
+
+import { pathsSetBy } from "./config_delta.ts";
 
 interface Warning {
   message: string;
@@ -210,6 +213,16 @@ describe("the deleted [daemon] keys", () => {
   });
 });
 
+const RECORDED_DEFAULT_MAX_TURNS = 16;
+
+function withCurrentCompactionDefaults(message: string, toml: string): string {
+  if (pathsSetBy(Bun.TOML.parse(toml)).has("memory.compaction.max_turns")) return message;
+  return message.replace(
+    `max_turns (${RECORDED_DEFAULT_MAX_TURNS})`,
+    `max_turns (${defaultCompactionConfig().max_turns})`,
+  );
+}
+
 describe("parseConfigTable + validateConfig", () => {
   for (const c of replayable) {
     test(c.name, () => {
@@ -225,7 +238,9 @@ describe("parseConfigTable + validateConfig", () => {
         // Validation messages are reproduced exactly. A `toml` parse error's
         // is not — only its semantic half is recorded, and Bun's wording for
         // the same fault is its own. See the fixture header.
-        if (c.err.kind === "validation") expect(error?.message).toBe(c.err.message);
+        if (c.err.kind === "validation") {
+          expect(error?.message).toBe(withCurrentCompactionDefaults(c.err.message, c.toml));
+        }
       }
 
       expect(warnings).toEqual(c.warnings);

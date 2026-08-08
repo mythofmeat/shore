@@ -176,7 +176,7 @@ describe("restartRequiredChanges", () => {
   });
 
   test("a notification setting nested two levels down", () => {
-    expect(changes((c) => (c.app.notifications.events.error = false))).toEqual(["[notifications]"]);
+    expect(changes((c) => (c.app.notifications.events.error = true))).toEqual(["[notifications]"]);
   });
 
   test("a notification setting that is a duration", () => {
