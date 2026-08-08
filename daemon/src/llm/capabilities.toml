@@ -142,8 +142,8 @@ rejects_sampling = true
 # (not a graded enum), so OpenRouter maps a requested effort to a reasoning-token
 # BUDGET ratio (minimal≈0.1 … xhigh/max≈0.95) rather than a fixed level — every value
 # produces distinct behavior, so the full set is meaningful. This matches the
-# provider-doc audit in CONFIGURATION.md (issue #166), which lists e.g.
-# `kimi-k2.6` as "thinking on/off, no tiers (OR maps)". Only true enum-effort
+# provider documentation, which lists e.g. `kimi-k2.6` as "thinking on/off, no
+# tiers (OR maps)". Only true enum-effort
 # vendors (Gemini thinkingLevel, Grok reasoning_effort) get a narrowed override.
 
 # ── Claude version rules ─────────────────────────────────────────────────────

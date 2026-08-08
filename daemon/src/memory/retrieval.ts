@@ -35,7 +35,7 @@ function resolveTarget(
     "no embedding model configured; semantic search disabled. Set " +
       'defaults.embedding = "provider:model_id" pointing at an ' +
       "OpenAI-compatible embeddings endpoint and configure " +
-      "[providers.<provider>] (see CONFIGURATION.md).",
+      "[providers.<provider>].",
   );
 }
 

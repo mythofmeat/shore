@@ -35,6 +35,17 @@ type Json = Record<string, unknown>;
 const fx = fixture as unknown as Record<string, Json[] | string>;
 const section = (name: string): Json[] => fx[name] as Json[];
 
+/**
+ * The fixture's error text with the `CONFIGURATION.md` pointer dropped (#52).
+ *
+ * The Rust cited a file that has never existed in this repository. The fixture
+ * is frozen, so the citation cannot be taken out of it — it is cut out of the
+ * expectation instead, the way `app_parity` handles the deleted `[daemon]`
+ * keys. Every other character of the message stays compared literally.
+ */
+const withoutDeadCitation = (err: string): string =>
+  err.replace(" (see CONFIGURATION.md).", ".");
+
 // ── The provider base-url column ────────────────────────────────────────
 
 describe("hardcodedProviderBaseUrl", () => {
@@ -109,7 +120,7 @@ describe("resolveImageGenConfig", () => {
 
       const expected = rec.result as { ok?: Json; err?: string };
       if (expected.err !== undefined) {
-        expect(result).toEqual({ err: expected.err });
+        expect(result).toEqual({ err: withoutDeadCitation(expected.err) });
         return;
       }
       // The Rust struct writes every field; this port omits the absent ones,

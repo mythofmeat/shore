@@ -673,7 +673,10 @@ describe("resolveEmbedder", () => {
         });
 
       if (c.outcome.error !== undefined) {
-        expect(call).toThrow(c.outcome.error);
+        // The frozen text cites `CONFIGURATION.md`, a file that has never
+        // existed here; the message no longer does (#52). Cut out of the
+        // expectation rather than the fixture, so the rest stays literal.
+        expect(call).toThrow(String(c.outcome.error).replace(" (see CONFIGURATION.md).", "."));
         return;
       }
       const embedder = call();

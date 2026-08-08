@@ -120,8 +120,11 @@ impl SWPConnection {
     }
 
     /// Handshake step 1: receive the server hello, skipping any unknown
-    /// frames a newer daemon may emit ahead of the hello (forward-compat,
-    /// see PROTOCOL.md §3).
+    /// frames a newer daemon may emit ahead of the hello.
+    ///
+    /// Forward-compatibility rule: a frame this client does not recognise is
+    /// skipped, not an error, so a newer daemon can add message types without
+    /// breaking an older client mid-handshake.
     async fn recv_server_hello(&mut self) -> Result<ServerHello> {
         let server_hello = loop {
             match self.recv().await? {
@@ -173,8 +176,10 @@ impl SWPConnection {
         Ok(server_hello)
     }
 
-    /// Handshake step 3: receive the history, skipping any unknown frames
-    /// (forward-compat, see PROTOCOL.md §3).
+    /// Handshake step 3: receive the history, skipping any unknown frames.
+    ///
+    /// Same forward-compatibility rule as `recv_server_hello`: an unrecognised
+    /// frame is skipped rather than treated as a protocol error.
     async fn recv_history(&mut self) -> Result<History> {
         let history = loop {
             match self.recv().await? {

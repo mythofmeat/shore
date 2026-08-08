@@ -189,7 +189,7 @@ export function resolveImageGenConfig(
       return {
         err:
           "no image generation model configured; set defaults.image_generation = " +
-          '"provider:model_id" and configure [providers.<provider>] (see CONFIGURATION.md).',
+          '"provider:model_id" and configure [providers.<provider>].',
       };
     }
   }
