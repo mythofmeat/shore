@@ -1,5 +1,5 @@
 import { compactionGenerate } from "../autonomy/in_process.ts";
-import type { LastRequestCache } from "../autonomy/last_request.ts";
+import type { InvalidationReason, LastRequestCache } from "../autonomy/last_request.ts";
 import type { TurnAutonomyBridge } from "../autonomy/registration.ts";
 import { CharacterError, type CharacterRegistry } from "../characters.ts";
 import type { CommandDeps } from "../commands/dispatch.ts";
@@ -378,7 +378,29 @@ async function reconnectMcpIfChanged(a: CommandAssembly, config: LoadedConfig): 
   } catch (e) {
     console.warn(`shore: shutting down the previous MCP registry failed: ${String(e)}`);
   }
+  await repointCachedRequests(a, config, "mcp_reload");
   console.info("shore: [mcp] changed; reconnected servers and swapped the tool surface");
+}
+
+async function repointCachedRequests(
+  a: CommandAssembly,
+  config: LoadedConfig,
+  reason: InvalidationReason,
+): Promise<void> {
+  const { runtime } = a;
+  for (const character of runtime.cache.cachedCharacters()) {
+    runtime.cache.invalidate(character, reason);
+    try {
+      await runtime.cache.reprimeFromDisk(
+        character,
+        config.dirs.data,
+        runtime.registry.effectiveConfig(character),
+        { mcpRegistry: runtime.mcp.current },
+      );
+    } catch (e) {
+      console.warn(`shore: keepalive reprime failed for ${character}: ${String(e)}`);
+    }
+  }
 }
 
 export function configReloader(

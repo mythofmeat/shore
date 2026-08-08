@@ -8,7 +8,8 @@ export type InvalidationReason =
   | "compaction"
   | "idle_compaction"
   | "deep_idle_archive"
-  | "prompt_reload";
+  | "prompt_reload"
+  | "mcp_reload";
 
 export type KeepaliveReprime =
   | { kind: "push"; request: SidecarRequest; keepaliveIntervalMs: number | undefined }
@@ -34,6 +35,10 @@ export class LastRequestCache {
 
   get(character: string): SidecarRequest | undefined {
     return this.#bodies.get(character);
+  }
+
+  cachedCharacters(): string[] {
+    return [...this.#bodies.keys()];
   }
 
   set(character: string, request: SidecarRequest, keepaliveIntervalMs: number | undefined): void {

@@ -941,6 +941,67 @@ describe("reloading [mcp]", () => {
     }
   });
 
+  /**
+   * The cached body carries the tool definitions it was built with
+   * (`llm/request.ts`, `tools: inputs.tools`), and `prepareHeartbeatRequest`
+   * prefers the cache over a rebuild. So between an `[mcp]` reload and the next
+   * chat turn, heartbeats sent the old surface while chat turns sent the new
+   * one — two prefixes, and the heartbeat paid a cache write that bought the
+   * next chat turn nothing.
+   */
+  test("a changed [mcp] drops the cached request that still holds the old tool surface", async () => {
+    const server = fakeServer("set_light");
+    const { root, runtime } = await runtimeWithMcp(server);
+    try {
+      runtime.cache.set(
+        "ada",
+        {
+          sdk: "anthropic",
+          model: "claude-fixture",
+          messages: [],
+          tools: [{ name: "mcp__hue__set_light", description: "the old surface", input_schema: {} }],
+        } as never,
+        undefined,
+      );
+      expect(runtime.cache.get("ada")?.tools?.map((t) => t.name)).toEqual([
+        "mcp__hue__set_light",
+      ]);
+
+      const fresh = configFor(root, (app) => withServer(app, "hue", "hue-server-v2"));
+      await applyReloadedConfig(assemblyOf(runtime), fresh);
+
+      expect(runtime.cache.get("ada")?.tools).not.toEqual([
+        { name: "mcp__hue__set_light", description: "the old surface", input_schema: {} },
+      ]);
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("an unrelated reload leaves the cached request in place", async () => {
+    // The invalidation is a cache *write* on the next heartbeat, so it must
+    // follow the same comparison the reconnect does rather than fire on any
+    // config edit.
+    const server = fakeServer("set_light");
+    const { root, runtime } = await runtimeWithMcp(server);
+    try {
+      const body = { sdk: "anthropic", model: "claude-fixture", messages: [], tools: [] } as never;
+      runtime.cache.set("ada", body, undefined);
+
+      const fresh = configFor(root, (app) => {
+        withServer(app, "hue", "hue-server");
+        app.defaults.stream = !app.defaults.stream;
+      });
+      await applyReloadedConfig(assemblyOf(runtime), fresh);
+
+      expect(runtime.cache.get("ada")).toBe(body);
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("a reconnect that reaches nothing keeps the running servers", async () => {
     const server = fakeServer("set_light");
     const { root, runtime } = await runtimeWithMcp(server);
