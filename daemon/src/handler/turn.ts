@@ -6,6 +6,7 @@ import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { StreamResult } from "../llm/stream.ts";
 import { emitStreamEnd } from "../llm/stream.ts";
 import type { Usage } from "../llm/types.ts";
+import { beginCompaction } from "../memory/compaction/manager.ts";
 import { emitNewMessageEvent } from "./persistence.ts";
 import { ingestImages, type ImageUpload } from "./images.ts";
 
@@ -222,23 +223,28 @@ export async function runInlineCompaction(
     return;
   }
 
+  const guard = await beginCompaction(dataDir, charName);
   try {
-    await engine.reload();
-  } catch (e) {
-    console.warn(`shore: inline compaction engine reload failed for ${charName}: ${String(e)}`);
-    ctx.autonomy.onCompactionFailed(charName);
-    return;
-  }
+    try {
+      await engine.reload();
+    } catch (e) {
+      console.warn(`shore: inline compaction engine reload failed for ${charName}: ${String(e)}`);
+      ctx.autonomy.onCompactionFailed(charName);
+      return;
+    }
 
-  try {
-    await runner.applyDeferredEdits(
-      characterDataDir(dataDir, charName),
-      config.dirs.config,
-      charName,
-      config.dirs.workspace,
-    );
-  } catch (e) {
-    console.warn(`shore: failed to apply deferred edits after compaction: ${String(e)}`);
+    try {
+      await runner.applyDeferredEdits(
+        characterDataDir(dataDir, charName),
+        config.dirs.config,
+        charName,
+        config.dirs.workspace,
+      );
+    } catch (e) {
+      console.warn(`shore: failed to apply deferred edits after compaction: ${String(e)}`);
+    }
+  } finally {
+    guard.release();
   }
 
   ctx.autonomy.onCompactionComplete(charName, retained);

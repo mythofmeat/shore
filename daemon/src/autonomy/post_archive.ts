@@ -1,6 +1,7 @@
 import { join } from "node:path";
 
 import type { LoadedConfig } from "../config/loader.ts";
+import { beginCompaction } from "../memory/compaction/manager.ts";
 import { applyDeferredEdits } from "../memory/deferred_edits.ts";
 import type { InvalidationReason, LastRequestCache } from "./last_request.ts";
 import type { RebuildDeps } from "./rebuild.ts";
@@ -21,23 +22,30 @@ export async function reloadAndApplyDeferred(
   deps: PostArchiveDeps,
   context: string,
 ): Promise<void> {
-  if (deps.engine !== undefined) {
-    try {
-      await deps.engine.reload(character);
-    } catch (e) {
-      console.warn(`shore: ${context}: engine reload failed for ${character}: ${String(e)}`);
-    }
-  }
-
+  const guard = await beginCompaction(deps.config.dirs.data, character);
   try {
-    await applyDeferredEdits(
-      join(deps.config.dirs.data, character),
-      deps.config.dirs.config,
-      character,
-      deps.config.dirs.workspace,
-    );
-  } catch (e) {
-    console.warn(`shore: ${context}: failed to apply deferred edits for ${character}: ${String(e)}`);
+    if (deps.engine !== undefined) {
+      try {
+        await deps.engine.reload(character);
+      } catch (e) {
+        console.warn(`shore: ${context}: engine reload failed for ${character}: ${String(e)}`);
+      }
+    }
+
+    try {
+      await applyDeferredEdits(
+        join(deps.config.dirs.data, character),
+        deps.config.dirs.config,
+        character,
+        deps.config.dirs.workspace,
+      );
+    } catch (e) {
+      console.warn(
+        `shore: ${context}: failed to apply deferred edits for ${character}: ${String(e)}`,
+      );
+    }
+  } finally {
+    guard.release();
   }
 }
 

@@ -2,6 +2,7 @@ import { runHeartbeatTick } from "./heartbeat_tick.ts";
 import { runIdleCompaction } from "./idle_compaction.ts";
 import { runDeepIdleArchive } from "./deep_archive.ts";
 import type { LastRequestCache } from "./last_request.ts";
+import type { PostArchiveEngine } from "./post_archive.ts";
 import type { AutonomyActionResult, AutonomyExecutor, TickHooks } from "./runner.ts";
 import type { CompactionReason } from "./tick.ts";
 import type { CharacterRegistry } from "../characters.ts";
@@ -122,7 +123,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
       config,
       cache: this.#deps.cache,
       run: this.#compactionDeps(config),
-      engine: { reload: async (name: string) => void (await this.#deps.registry.getOrCreate(name)) },
+      engine: this.#engineReloader(),
     });
   }
 
@@ -135,11 +136,20 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
       config,
       cache: this.#deps.cache,
       run: this.#compactionDeps(config),
-      engine: { reload: async (name: string) => void (await this.#deps.registry.getOrCreate(name)) },
+      engine: this.#engineReloader(),
       ...(this.#deps.notifyCompactionComplete === undefined
         ? {}
         : { notify: this.#deps.notifyCompactionComplete }),
     }, coveredTurnCount);
+  }
+
+  #engineReloader(): PostArchiveEngine {
+    return {
+      reload: async (name: string) => {
+        const engine = await this.#deps.registry.getOrCreate(name);
+        await engine.reload();
+      },
+    };
   }
 
   #generateDeps(config: LoadedConfig): GenerateDeps {
