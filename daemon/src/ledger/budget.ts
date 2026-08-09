@@ -185,6 +185,7 @@ export interface PaceStatus {
   periods_remaining: number;
   status: string;
   action: UsageBudgetAction;
+  effective_action: UsageBudgetAction;
   warning_thresholds: number[];
   crossed_warn_at: number[];
   over_limit: boolean;
@@ -202,6 +203,7 @@ export interface BudgetStatus {
   percent_used: number;
   status: string;
   action: UsageBudgetAction;
+  effective_action: UsageBudgetAction;
   warning_thresholds: number[];
   crossed_warn_at: number[];
   over_limit: boolean;
@@ -572,6 +574,12 @@ function budgetStatus(
     percent_used: percentUsed,
     status: levelName(overLimit, crossedWarnAt),
     action: budgetLimit(budget),
+    effective_action: effectiveAction(
+      overLimit,
+      crossedWarnAt,
+      budgetLimit(budget),
+      budgetWarnAction(budget),
+    ),
     warning_thresholds: warningThresholds,
     crossed_warn_at: crossedWarnAt,
     over_limit: overLimit,
@@ -613,6 +621,12 @@ function paceStatus(
     periods_remaining: pace.periods_remaining,
     status: levelName(overLimit, crossedWarnAt),
     action: paceAction(budget),
+    effective_action: effectiveAction(
+      overLimit,
+      crossedWarnAt,
+      paceAction(budget),
+      paceWarnAction(budget),
+    ),
     warning_thresholds: warningThresholds,
     crossed_warn_at: crossedWarnAt,
     over_limit: overLimit,
@@ -632,6 +646,18 @@ function crossedThresholds(
     }
   }
   return [deduped, deduped.filter((t) => percentUsed >= t)];
+}
+
+function effectiveAction(
+  overLimit: boolean,
+  crossed: readonly number[],
+  limitAction: UsageBudgetAction,
+  warnAction: UsageBudgetAction,
+): UsageBudgetAction {
+  if (overLimit || crossed.length === 0) {
+    return limitAction;
+  }
+  return warnAction;
 }
 
 function levelName(overLimit: boolean, crossed: readonly number[]): string {

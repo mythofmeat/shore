@@ -1358,6 +1358,7 @@ fn render_config_value(v: &serde_json::Value) -> String {
         serde_json::Value::String(s) => s.clone(),
         serde_json::Value::Bool(b) => b.to_string(),
         serde_json::Value::Number(n) => n.to_string(),
+        serde_json::Value::Array(arr) if arr.is_empty() => "(none)".to_owned(),
         serde_json::Value::Array(arr) => arr
             .iter()
             .map(|i| i.as_str().map_or_else(|| i.to_string(), String::from))
@@ -1425,6 +1426,11 @@ fn print_config_section(
                     visible.push((k.as_str(), v, d, true, false));
                 }
             }
+            serde_json::Value::Array(items) if is_table_array(items) => {
+                if show_all || has_non_defaults(v, d) {
+                    visible.push((k.as_str(), v, d, true, false));
+                }
+            }
             serde_json::Value::Bool(_)
             | serde_json::Value::Number(_)
             | serde_json::Value::String(_)
@@ -1456,7 +1462,11 @@ fn print_config_section(
             if use_color() {
                 _ = crossterm::execute!(out, ResetColor);
             }
-            print_config_section(out, v, d, depth.saturating_add(1), show_all);
+            if let serde_json::Value::Array(items) = v {
+                print_config_table_array(out, items, depth.saturating_add(1), show_all);
+            } else {
+                print_config_section(out, v, d, depth.saturating_add(1), show_all);
+            }
         } else {
             // Default rows (only reachable with show_all): whole line dimmed.
             // Non-default rows: key dimmed, value in the default terminal color
@@ -1473,6 +1483,54 @@ fn print_config_section(
                 _ = crossterm::execute!(out, ResetColor);
             }
         }
+    }
+}
+
+/// True for a non-empty array whose every element is an object -- TOML's array
+/// of tables, e.g. `[[usage.budgets]]`.
+fn is_table_array(items: &[serde_json::Value]) -> bool {
+    !items.is_empty() && items.iter().all(serde_json::Value::is_object)
+}
+
+/// Render an array of tables as one labelled block per element.
+///
+/// Without this each element fell through `render_config_value`'s array arm,
+/// which stringifies a non-string element -- so a `[[usage.budgets]]` entry
+/// printed as a single line of raw JSON, every null field included, in a
+/// section where nothing else looks remotely like that.
+///
+/// The label is the element's `name` where it has one, since that is what the
+/// same budget is called everywhere else, and its index otherwise.
+fn print_config_table_array(
+    out: &mut impl Write,
+    items: &[serde_json::Value],
+    depth: usize,
+    show_all: bool,
+) {
+    let indent = "  ".repeat(depth);
+    for (i, item) in items.iter().enumerate() {
+        let label = item["name"]
+            .as_str()
+            .filter(|s| !s.trim().is_empty())
+            .map_or_else(|| format!("[{i}]"), String::from);
+        if use_color() {
+            let _ignored = crossterm::execute!(out, SetForegroundColor(Color::White));
+        }
+        _ = writeln!(out, "{indent}{label}:");
+        if use_color() {
+            _ = crossterm::execute!(out, ResetColor);
+        }
+        let named = item["name"].as_str().is_some_and(|s| s == label);
+        let body = if named {
+            let mut rest = item.clone();
+            if let Some(map) = rest.as_object_mut() {
+                _ = map.shift_remove("name");
+            }
+            rest
+        } else {
+            item.clone()
+        };
+        print_config_section(out, &body, None, depth.saturating_add(1), show_all);
     }
 }
 
@@ -1858,7 +1916,7 @@ fn print_budget_table(data: &serde_json::Value) {
                 limit,
                 percent,
                 budget["status"].as_str().unwrap_or("ok"),
-                budget["action"].as_str().unwrap_or("warn"),
+                acting_now(budget),
             );
             if let Some(row) = pace_row(budget) {
                 cli_out!("{row}");
@@ -1902,8 +1960,22 @@ fn pace_row(budget: &serde_json::Value) -> Option<String> {
         allowance,
         percent,
         pace["status"].as_str().unwrap_or("ok"),
-        pace["action"].as_str().unwrap_or("warn"),
+        acting_now(pace),
     ))
+}
+
+/// The action in force at the current spend, for the `Action` column.
+///
+/// `action` is what happens at the *limit*. A budget in `warning` has not
+/// reached its limit, so a row that printed `action` claimed `warn` while a
+/// configured `warn_action` or `pace_warn_action` was already pausing
+/// heartbeats. `effective_action` is the daemon resolving the two; the fallback
+/// keeps this readable against an older daemon that doesn't send it.
+fn acting_now(status: &serde_json::Value) -> &str {
+    status["effective_action"]
+        .as_str()
+        .or_else(|| status["action"].as_str())
+        .unwrap_or("warn")
 }
 
 fn print_spike_warnings(data: &serde_json::Value) {
@@ -3119,6 +3191,78 @@ mod tests {
             rendered.contains(&format!("max_embed_chars_per_file{:5}4000", "")),
             "mid-length key not padded to section column:\n{rendered}"
         );
+    }
+
+    #[test]
+    fn print_config_section_renders_budgets_as_blocks_not_json() {
+        // The reported shape: `[[usage.budgets]]` used to print as one line of
+        // raw JSON, nulls and all, inside a section of aligned key/value rows.
+        set_color_enabled(false);
+        let config = serde_json::json!({
+            "usage": {
+                "budgets": [{
+                    "name": "brainwife",
+                    "period": "week",
+                    "cost_usd": 15,
+                    "warn_at": [0.85, 1],
+                    "limit": "warn",
+                    "character": serde_json::Value::Null,
+                    "pace_period": "day",
+                    "pace_action": serde_json::Value::Null,
+                    "pace_warn_at": [0.5],
+                    "pace_warn_action": "pause_heartbeat",
+                }],
+            },
+        });
+        let mut buf: Vec<u8> = Vec::new();
+        print_config_section(&mut buf, &config, None, 0, true);
+        let rendered = String::from_utf8(buf).expect("utf8");
+        assert!(
+            !rendered.contains('{'),
+            "budget still rendered as raw JSON:\n{rendered}"
+        );
+        assert!(
+            rendered.contains("    brainwife:"),
+            "budget not labelled by its name:\n{rendered}"
+        );
+        assert!(
+            rendered.contains("pace_warn_action pause_heartbeat"),
+            "budget fields not rendered as rows:\n{rendered}"
+        );
+        assert!(
+            rendered.contains("warn_at          0.85, 1"),
+            "list-valued field should render like any other list:\n{rendered}"
+        );
+        assert!(
+            !rendered.contains("character"),
+            "null field should be skipped like any other null:\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn budget_action_column_reports_the_action_in_force() {
+        // A pace in `warning` with a `pace_warn_action` set: the column used to
+        // read `action` (the limit's) and print `warn` while the daemon was
+        // already pausing heartbeats.
+        let budget = serde_json::json!({
+            "status": "ok",
+            "action": "warn",
+            "effective_action": "warn",
+            "pace": {
+                "status": "warning",
+                "action": "warn",
+                "effective_action": "pause_heartbeat",
+            },
+        });
+        assert_eq!(acting_now(&budget), "warn");
+        assert_eq!(acting_now(&budget["pace"]), "pause_heartbeat");
+    }
+
+    #[test]
+    fn budget_action_column_falls_back_for_an_older_daemon() {
+        let budget = serde_json::json!({ "status": "ok", "action": "block" });
+        assert_eq!(acting_now(&budget), "block");
+        assert_eq!(acting_now(&serde_json::json!({})), "warn");
     }
 
     #[test]

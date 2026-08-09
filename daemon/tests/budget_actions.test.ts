@@ -17,7 +17,12 @@
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { enforceBudgetForCall, type BudgetCallContext, type UsageConfig } from "../src/ledger/budget.ts";
+import {
+  budgetStatuses,
+  enforceBudgetForCall,
+  type BudgetCallContext,
+  type UsageConfig,
+} from "../src/ledger/budget.ts";
 import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
 
 const cleanups: Array<() => void> = [];
@@ -217,5 +222,51 @@ describe("pace_warn_action", () => {
     });
     // The pace no longer acts; the month is nowhere near its own 80%.
     expect(blocked(config, db)).toEqual([]);
+  });
+});
+
+describe("effective_action", () => {
+  const statuses = (config: unknown, db: Database) =>
+    budgetStatuses(db, config as UsageConfig, NOW, opts);
+
+  test("under every threshold it names the limit's action", () => {
+    const db = ledgerSpending(4);
+    const [status] = statuses(budget({ warn_at: [0.8], warn_action: "block", limit: "pause_heartbeat" }), db);
+    expect(status?.status).toBe("ok");
+    expect(status?.effective_action).toBe("pause_heartbeat");
+  });
+
+  test("in warning it names the warn action, not the limit's", () => {
+    const db = ledgerSpending(8.5);
+    const [status] = statuses(budget({ warn_at: [0.8], warn_action: "pause_heartbeat", limit: "warn" }), db);
+    expect(status?.status).toBe("warning");
+    expect(status?.action).toBe("warn");
+    expect(status?.effective_action).toBe("pause_heartbeat");
+  });
+
+  test("over the limit the limit wins again", () => {
+    const db = ledgerSpending(12);
+    const [status] = statuses(budget({ warn_at: [0.8], warn_action: "pause_heartbeat", limit: "block" }), db);
+    expect(status?.status).toBe("over_limit");
+    expect(status?.effective_action).toBe("block");
+  });
+
+  test("a warning pace reports its own warn action while the budget stays ok", () => {
+    const db = ledgerSpending(0.2);
+    const config = budget({
+      period: "month",
+      pace_period: "day",
+      warn_at: [0.85, 1],
+      pace_warn_at: [0.5],
+      pace_warn_action: "pause_heartbeat",
+      limit: "warn",
+    });
+    const [status] = statuses(config, db);
+    expect(status?.status).toBe("ok");
+    expect(status?.effective_action).toBe("warn");
+    expect(status?.pace?.status).toBe("warning");
+    expect(status?.pace?.action).toBe("warn");
+    expect(status?.pace?.effective_action).toBe("pause_heartbeat");
+    expect(blocked(config, db)).toEqual(["heartbeat", "heartbeat_tool_loop"]);
   });
 });

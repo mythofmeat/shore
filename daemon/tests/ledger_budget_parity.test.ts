@@ -26,6 +26,7 @@ import { afterAll, expect, test } from "bun:test";
 import fixture from "./ledger_fixtures/ledger_budget_parity.json";
 import {
   budgetStatuses,
+  type BudgetStatus,
   enforceBudgetForCall,
   newlyCrossedBudgetWarnings,
   spikeWarnings,
@@ -247,6 +248,13 @@ function caseLedger(index: number): Database {
   return db;
 }
 
+function withoutEffectiveAction(status: BudgetStatus): unknown {
+  const { effective_action: _dropped, pace, ...rest } = status;
+  if (pace === undefined) return rest;
+  const { effective_action: _alsoDropped, ...pacedRest } = pace;
+  return { ...rest, pace: pacedRest };
+}
+
 test("cross-language budget parity", () => {
   expect(doc.cases.length).toBeGreaterThan(0);
 
@@ -257,9 +265,10 @@ test("cross-language budget parity", () => {
     const db = caseLedger(i);
     const at = (what: string) => `${c.config}/${c.now_name}: ${what}`;
 
-    expect(budgetStatuses(db, config!, now, opts), at("statuses")).toEqual(
-      c.statuses as never,
-    );
+    expect(
+      budgetStatuses(db, config!, now, opts).map(withoutEffectiveAction),
+      at("statuses"),
+    ).toEqual(c.statuses as never);
     expect(spikeWarnings(db, config!, now, opts), at("spike_warnings")).toEqual(
       c.spike_warnings as never,
     );

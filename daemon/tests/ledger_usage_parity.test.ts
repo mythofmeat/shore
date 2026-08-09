@@ -243,6 +243,19 @@ test("cross-language usage payload parity", async () => {
       expect(withoutToolSurface(c.mode, payload.data), where).toBe(expected.data);
       continue;
     }
-    expect(actual, where).toEqual(c.payload as never);
+    expect(withoutEffectiveAction(actual), where).toEqual(c.payload as never);
   }
 });
+
+function withoutEffectiveAction(payload: unknown): unknown {
+  if (payload === null || typeof payload !== "object") return payload;
+  const report = payload as { budgets?: Record<string, unknown>[] };
+  if (report.budgets === undefined) return payload;
+  const strip = (o: Record<string, unknown>): Record<string, unknown> => {
+    const { effective_action: _dropped, ...rest } = o;
+    const pace = rest["pace"];
+    if (pace === null || typeof pace !== "object") return rest;
+    return { ...rest, pace: strip(pace as Record<string, unknown>) };
+  };
+  return { ...report, budgets: report.budgets.map(strip) };
+}
