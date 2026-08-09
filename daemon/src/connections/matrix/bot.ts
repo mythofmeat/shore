@@ -23,6 +23,8 @@ const TYPING_TIMEOUT_MS = 20_000;
 
 export const SYNC_START_TIMEOUT_MS = 60_000;
 
+const TERMINAL_ERRCODES = new Set(["M_UNKNOWN_TOKEN", "M_MISSING_TOKEN", "M_FORBIDDEN"]);
+
 export interface BotConfig {
   readonly homeserver: string;
   readonly userId: string;
@@ -50,6 +52,8 @@ export class MatrixBot {
   readonly #userId: string;
   readonly #log: BotLogger | undefined;
   readonly #pending: MatrixEvent[] = [];
+  readonly #faulted: Promise<Error>;
+  #reportFault!: (fault: Error) => void;
   #wake: (() => void) | null = null;
   #stopped = false;
 
@@ -57,6 +61,9 @@ export class MatrixBot {
     this.#client = client;
     this.#userId = userId;
     this.#log = log;
+    this.#faulted = new Promise<Error>((resolve) => {
+      this.#reportFault = resolve;
+    });
   }
 
   static async login(config: BotConfig): Promise<MatrixBot> {
@@ -90,6 +97,10 @@ export class MatrixBot {
     return this.#userId;
   }
 
+  get faulted(): Promise<Error> {
+    return this.#faulted;
+  }
+
   async start(): Promise<void> {
     await this.#client.startClient({ initialSyncLimit: 0 });
     try {
@@ -98,7 +109,17 @@ export class MatrixBot {
       this.#client.stopClient();
       throw e;
     }
+    this.#watchSync();
     this.#log?.info?.("Matrix sync started");
+  }
+
+  #watchSync(): void {
+    watchForSyncDeath(this.#client, (fault) => {
+      if (this.#stopped) return;
+      this.#log?.warn?.("Matrix sync ended", { error: String(fault) });
+      this.#reportFault(fault);
+      this.stop();
+    });
   }
 
   stop(): void {
@@ -304,17 +325,41 @@ export function awaitInitialSync(
   });
 }
 
-function syncFailure(state: SyncState, data: SyncStateData | undefined): Error {
-  const error = data?.error;
-  if (errcodeOf(error) === "M_UNKNOWN_TOKEN") {
-    return new Error("the homeserver rejected the Matrix credential (M_UNKNOWN_TOKEN)");
-  }
-  const detail = error === undefined ? "" : `: ${String(error)}`;
-  return new Error(`the Matrix sync entered ${state}${detail}`);
+export function watchForSyncDeath(client: MatrixClient, onDeath: (fault: Error) => void): void {
+  client.on(
+    ClientEvent.Sync,
+    (state: SyncState, _previous: SyncState | null, data?: SyncStateData) => {
+      if (state !== SyncState.Stopped && !isTerminalMatrixError(data?.error)) return;
+      onDeath(syncFailure(state, data));
+    },
+  );
 }
 
-function errcodeOf(error: Error | undefined): string | undefined {
-  const code = (error as { errcode?: unknown } | undefined)?.errcode;
+export function isTerminalMatrixError(error: unknown): boolean {
+  const code = errcodeOf(error);
+  return code !== undefined && TERMINAL_ERRCODES.has(code);
+}
+
+function syncFailure(state: SyncState, data: SyncStateData | undefined): Error {
+  const error = data?.error;
+  const errcode = errcodeOf(error);
+  if (errcode === "M_UNKNOWN_TOKEN") {
+    return withErrcode(
+      new Error("the homeserver rejected the Matrix credential (M_UNKNOWN_TOKEN)"),
+      errcode,
+    );
+  }
+  const detail = error === undefined ? "" : `: ${String(error)}`;
+  const failure = new Error(`the Matrix sync entered ${state}${detail}`);
+  return errcode === undefined ? failure : withErrcode(failure, errcode);
+}
+
+function withErrcode(error: Error, errcode: string): Error {
+  return Object.assign(error, { errcode });
+}
+
+function errcodeOf(error: unknown): string | undefined {
+  const code = (error as { errcode?: unknown } | null | undefined)?.errcode;
   return typeof code === "string" ? code : undefined;
 }
 

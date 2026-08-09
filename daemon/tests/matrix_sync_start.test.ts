@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { ClientEvent, SyncState, type MatrixClient, type SyncStateData } from "matrix-js-sdk";
 
-import { awaitInitialSync } from "../src/connections/matrix/bot.ts";
+import {
+  awaitInitialSync,
+  isTerminalMatrixError,
+  watchForSyncDeath,
+} from "../src/connections/matrix/bot.ts";
 
 type SyncListener = (state: SyncState, previous: SyncState | null, data?: SyncStateData) => void;
 
@@ -72,5 +76,36 @@ describe("waiting for the first sync", () => {
     client.emit(SyncState.Catchup);
     client.emit(SyncState.Syncing);
     await waiting;
+  });
+});
+
+describe("watching a sync that already started", () => {
+  test("a sync that stops after starting is a fault, not silence", () => {
+    const client = new FakeClient();
+    const faults: Error[] = [];
+    watchForSyncDeath(client.asClient(), (fault) => faults.push(fault));
+    client.emit(SyncState.Stopped);
+    expect(faults).toHaveLength(1);
+    expect(faults[0]?.message).toContain("STOPPED");
+  });
+
+  test("a revoked token is a fault, and a terminal one", () => {
+    const client = new FakeClient();
+    const faults: Error[] = [];
+    watchForSyncDeath(client.asClient(), (fault) => faults.push(fault));
+    client.emit(SyncState.Error, unknownToken());
+    expect(faults).toHaveLength(1);
+    expect(isTerminalMatrixError(faults[0])).toBe(true);
+  });
+
+  test("the sdk's own reconnect is left alone, so a blip does not restart the bridge", () => {
+    const client = new FakeClient();
+    const faults: Error[] = [];
+    watchForSyncDeath(client.asClient(), (fault) => faults.push(fault));
+    client.emit(SyncState.Reconnecting);
+    client.emit(SyncState.Error, { error: new Error("connection reset") } as SyncStateData);
+    client.emit(SyncState.Catchup);
+    client.emit(SyncState.Syncing);
+    expect(faults).toHaveLength(0);
   });
 });

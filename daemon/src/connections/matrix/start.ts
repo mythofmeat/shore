@@ -26,8 +26,14 @@ export interface MatrixCredentials {
 
 export interface BridgeHandle {
   readonly done: Promise<void>;
+  readonly faulted: Promise<Error>;
   stop(): Promise<void>;
 }
+
+export type StartOutcome =
+  | { readonly kind: "started"; readonly handle: BridgeHandle }
+  | { readonly kind: "off"; readonly reason: string | undefined }
+  | { readonly kind: "failed"; readonly error: unknown };
 
 export function readCredentials(env: NodeJS.ProcessEnv): MatrixCredentials {
   return {
@@ -61,23 +67,24 @@ export interface StartOptions {
   readonly login?: typeof MatrixBot.login;
 }
 
-export async function startMatrixBridge(options: StartOptions): Promise<BridgeHandle | undefined> {
+export async function attemptMatrixBridge(options: StartOptions): Promise<StartOutcome> {
   const matrix = options.config.app.connections.matrix;
-  if (matrix === undefined || !matrix.enabled) return undefined;
+  if (matrix === undefined || !matrix.enabled) return { kind: "off", reason: undefined };
 
   const credentials = readCredentials(options.env);
   const unusable = unusableReason(matrix, credentials);
   if (unusable !== undefined) {
     options.log?.warn?.(`Matrix bridge not started: ${unusable}`);
-    return undefined;
+    return { kind: "off", reason: unusable };
   }
 
   const stateDir = rustJoin(options.config.dirs.data, STATE_DIR);
   try {
     mkdirSync(stateDir, { recursive: true });
   } catch (e) {
-    options.log?.warn?.(`Matrix bridge not started: cannot create ${stateDir}: ${String(e)}`);
-    return undefined;
+    const reason = `cannot create ${stateDir}: ${String(e)}`;
+    options.log?.warn?.(`Matrix bridge not started: ${reason}`);
+    return { kind: "off", reason };
   }
 
   const login = options.login ?? MatrixBot.login;
@@ -94,7 +101,7 @@ export async function startMatrixBridge(options: StartOptions): Promise<BridgeHa
     await bot.start();
   } catch (e) {
     options.log?.warn?.(`Matrix bridge not started: ${String(e)}`);
-    return undefined;
+    return { kind: "failed", error: e };
   }
 
   const initialRoomId =
@@ -126,11 +133,15 @@ export async function startMatrixBridge(options: StartOptions): Promise<BridgeHa
 
   const done = bridge.run();
   return {
-    done,
-    stop: async () => {
-      bot.stop();
-      await peer.detach();
-      await done;
+    kind: "started",
+    handle: {
+      done,
+      faulted: bot.faulted,
+      stop: async () => {
+        bot.stop();
+        await peer.detach();
+        await done;
+      },
     },
   };
 }
