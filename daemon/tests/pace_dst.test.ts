@@ -14,7 +14,6 @@
  * than a JSON diff.
  */
 
-import { Database } from "bun:sqlite";
 import { afterAll, expect, test } from "bun:test";
 
 import { budgetStatuses, type UsageConfig } from "../src/ledger/budget.ts";

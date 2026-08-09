@@ -18,7 +18,8 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "lib": ["ESNext"],
-    "noEmit": true
+    "noEmit": true,
+    "noUnusedLocals": true
   },
   "include": ["src/**/*.ts", "tests/**/*.ts"]
 }

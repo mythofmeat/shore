@@ -25,7 +25,6 @@
  * time because it was watching the door that still had one.
  */
 
-import { Database } from "bun:sqlite";
 import { mkdtemp, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -55,7 +54,6 @@ import {
   runGeneration,
   type GenerationDeps,
 } from "../src/handler/generation.ts";
-import type { TurnAutonomy } from "../src/handler/turn.ts";
 
 afterAll(restoreTestEnv);
 

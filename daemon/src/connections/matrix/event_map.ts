@@ -2,11 +2,6 @@ import { jsonSidecar, type Sidecar } from "./store.ts";
 
 export type EventOrigin = "assistant" | "mirrored_user" | "matrix_user";
 
-const BOT_EDITABLE: ReadonlySet<EventOrigin> = new Set<EventOrigin>([
-  "assistant",
-  "mirrored_user",
-]);
-
 export interface MappedEvent {
   msgId: string;
   roomId: string;

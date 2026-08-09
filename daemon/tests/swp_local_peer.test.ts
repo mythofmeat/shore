@@ -229,7 +229,7 @@ describe("all_clients_disconnected, which is where the shapes differ", () => {
   });
 
   test("without the bridge, the same disconnect fires it", async () => {
-    const { server, routed, addr } = await fixture(["ada"]);
+    const { routed, addr } = await fixture(["ada"]);
 
     const socket = await socketClient(addr);
     socket.destroy();

@@ -14,8 +14,6 @@ import {
   type PersistedKeepalive,
 } from "./state_file.ts";
 
-const TICK_INTERVAL_MS = 10_000;
-
 const MIN_WAKE_HOURS = 1;
 const MAX_WAKE_HOURS = 48;
 
@@ -261,7 +259,6 @@ export class CharacterAutonomy {
   inputs(now: number): TickInputs {
     const c = this.#config;
     const s = this.#state;
-    const lastUserAt = this.#clock.lastUserAt;
     return {
       autonomyEnabled: c.autonomyEnabled,
       paused: s.paused,

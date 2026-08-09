@@ -113,7 +113,6 @@ export function workspaceRoot(env: Env = process.env): string | undefined {
 }
 
 export const configDir = (env?: Env): string => resolveShoreDirs(env).config;
-const dataDir = (env?: Env): string => resolveShoreDirs(env).data;
 export const runtimeDir = (env?: Env): string => resolveShoreDirs(env).runtime;
 
 export function rustJoin(base: string, ...parts: string[]): string {

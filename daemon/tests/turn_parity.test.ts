@@ -21,7 +21,6 @@ import { tmpdir } from "node:os";
 
 import fixture from "./handler_fixtures/turn_parity.json" with { type: "json" };
 import { ConversationEngine } from "../src/engine/conversation.ts";
-import type { Message } from "../src/engine/types.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import type { StreamResult } from "../src/llm/stream.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";

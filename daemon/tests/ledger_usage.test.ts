@@ -18,10 +18,9 @@
  * wiring, including `ledgerFor`'s memoised handles, is what runs here.
  */
 
-import { Database } from "bun:sqlite";
 import { afterEach, expect, test } from "bun:test";
 
-import { closeLedgers, ledgerFor } from "../src/ledger/record.ts";
+import { closeLedgers } from "../src/ledger/record.ts";
 import type { UsageConfig } from "../src/ledger/budget.ts";
 import { budgetWarnings, modelHistory, usageReport } from "../src/ledger/usage.ts";
 import { freshLedger, openLedger } from "./support/ledger_fixture.ts";

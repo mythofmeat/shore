@@ -15,8 +15,7 @@ import type {
   ToolDefinition,
   TurnMessage,
   Usage,
-  WireMessage,
-} from "../types.ts";
+  } from "../types.ts";
 import { systemToText, toTurn } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 import { replayableMessages } from "../replay.ts";

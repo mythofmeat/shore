@@ -32,11 +32,6 @@ export function keepaliveToString(setting: CacheKeepaliveSetting): string {
   return setting.kind === "off" ? "off" : setting.interval.toString();
 }
 
-function keepaliveEquals(a: CacheKeepaliveSetting, b: CacheKeepaliveSetting): boolean {
-  if (a.kind === "off" || b.kind === "off") return a.kind === b.kind;
-  return a.interval.equals(b.interval);
-}
-
 function asciiLowercase(s: string): string {
   return s.replace(/[A-Z]/g, (c) => c.toLowerCase());
 }

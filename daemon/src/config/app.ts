@@ -115,9 +115,6 @@ const readU64 = readUint("u64");
 const readF64: Reader<number> = (v) =>
   typeof v === "number" ? { ok: v } : { err: invalidType(v, "f64") };
 
-const readPath: Reader<string> = (v) =>
-  typeof v === "string" ? { ok: v } : { err: invalidType(v, "path string") };
-
 const readDuration: Reader<ConfigDuration> = (v) => ConfigDuration.deserialize(v);
 
 function readSeq<T>(inner: Reader<T>): Reader<T[]> {

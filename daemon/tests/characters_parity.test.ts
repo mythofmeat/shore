@@ -24,7 +24,7 @@ import {
   CharacterRegistry,
   EngineCharacterNotFound,
 } from "../src/characters.ts";
-import { loadConfig, parseConfigTable, type LoadedConfig } from "../src/config/loader.ts";
+import { loadConfig, type LoadedConfig } from "../src/config/loader.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";

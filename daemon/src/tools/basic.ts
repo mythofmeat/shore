@@ -128,37 +128,3 @@ export function handleRollDice(input: Record<string, unknown>): unknown {
   return { notation, rolls, total };
 }
 
-function ordinalSuffix(n: number): string {
-  const last = n % 10;
-  const lastTwo = n % 100;
-  if ((last === 1 && lastTwo === 11) || (last === 2 && lastTwo === 12) ||
-      (last === 3 && lastTwo === 13)) {
-    return "th";
-  }
-  if (last === 1) return "st";
-  if (last === 2) return "nd";
-  if (last === 3) return "rd";
-  return "th";
-}
-
-const WEEKDAYS = [
-  "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
-];
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-
-function formatFriendlyDate(now: Date = new Date()): string {
-  const day = now.getDate();
-  const weekday = WEEKDAYS[now.getDay()] as string;
-  const month = MONTHS[now.getMonth()] as string;
-  return `${weekday}, ${month} ${day}${ordinalSuffix(day)}, ${now.getFullYear()}`;
-}
-
-function formatFriendlyTime(now: Date = new Date()): string {
-  const hours24 = now.getHours();
-  const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
-  const minutes = String(now.getMinutes()).padStart(2, "0");
-  return `${hours12}:${minutes} ${hours24 < 12 ? "AM" : "PM"}`;
-}

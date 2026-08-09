@@ -19,7 +19,6 @@
  * boundaries in UTC passes every `utc` case here and fails every `local` one.
  */
 
-import { Database } from "bun:sqlite";
 import { afterAll, expect, test } from "bun:test";
 
 import fixture from "./ledger_fixtures/ledger_usage_parity.json";

@@ -15,7 +15,6 @@ import {
   loadPreferences,
   modelPreference,
   preferenceKey,
-  resolveBackgroundModel,
   resolveChatModelForCharacter,
   resolveSamplerSettings,
   resolveSamplerScopes,

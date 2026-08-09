@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const RUNTIME_STATE_FILE = "runtime_state.json";
@@ -25,26 +25,10 @@ function loadCharacterRuntimeState(characterDataDir: string): CharacterRuntimeSt
   return typeof activeModel === "string" ? { activeModel } : {};
 }
 
-function saveCharacterRuntimeState(
-  characterDataDir: string,
-  state: CharacterRuntimeState,
-): void {
-  mkdirSync(characterDataDir, { recursive: true });
-  const body = state.activeModel === undefined ? {} : { active_model: state.activeModel };
-  writeFileSync(characterRuntimeStatePath(characterDataDir), `${JSON.stringify(body, null, 2)}`);
-}
-
 export function loadActiveModel(characterDataDir: string): string | undefined {
   try {
     return loadCharacterRuntimeState(characterDataDir).activeModel;
   } catch {
     return undefined;
   }
-}
-
-function saveActiveModel(characterDataDir: string, activeModel: string | undefined): void {
-  saveCharacterRuntimeState(
-    characterDataDir,
-    activeModel === undefined ? {} : { activeModel },
-  );
 }

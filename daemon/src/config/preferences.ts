@@ -200,17 +200,6 @@ export function setModelPreference(
   );
 }
 
-function clearModelPreference(
-  prefs: ModelPreferences,
-  provider: string,
-  modelId: string,
-): ModelPreference | undefined {
-  const key = preferenceKey(provider, modelId);
-  const previous = prefs.models.get(key);
-  prefs.models.delete(key);
-  return previous;
-}
-
 export function globalPreferencesPath(dataDir: string): string {
   return join(dataDir, PREFERENCES_DIR, PREFERENCES_FILE);
 }

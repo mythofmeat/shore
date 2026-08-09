@@ -17,8 +17,7 @@ import { join } from "node:path";
 import {
   MessageStore,
   normalizeMessage,
-  type AltSelection,
-} from "../src/engine/message_store";
+  } from "../src/engine/message_store";
 import type { Message, MessageAlternative } from "../src/engine/types";
 
 import fixture from "./engine_fixtures/messages_parity.json";

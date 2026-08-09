@@ -1,5 +1,4 @@
 import type { LoadedConfig } from "../config/loader.ts";
-import { characterDataDir } from "../config/dirs.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
 import { configView, resolveActiveModelAndOverlay } from "../config/preferences.ts";
 import type { ResolvedModel } from "../config/models.ts";

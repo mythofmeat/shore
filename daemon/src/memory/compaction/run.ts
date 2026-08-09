@@ -1,4 +1,3 @@
-import { join } from "node:path";
 
 import type { LoadedConfig } from "../../config/loader.ts";
 import { loadCharacterConfig } from "../../config/loader.ts";
@@ -226,10 +225,6 @@ async function resolveChatRequest(
     hasPriorContext,
   );
   return built.request;
-}
-
-function characterDir(dataDir: string, character: string): string {
-  return join(dataDir, character);
 }
 
 export function compactionRunner(

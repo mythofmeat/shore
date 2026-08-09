@@ -5,8 +5,6 @@ export interface RetryPolicy {
   max_retries: number;
 }
 
-const DEFAULT_RETRY_POLICY: RetryPolicy = { max_retries: 2 };
-
 export type RetryDecision = { decision: "retry" } | { decision: "fail" };
 
 const RETRY: RetryDecision = { decision: "retry" };
