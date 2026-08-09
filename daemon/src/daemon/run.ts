@@ -6,7 +6,7 @@ import { Diagnostics } from "../diagnostics.ts";
 import { emitNewMessageEvent } from "../handler/persistence.ts";
 import type { SessionTokens } from "../handler/persistence.ts";
 import { createDefaultConfig } from "../config/loader.ts";
-import { startMatrixBridge } from "../connections/matrix/start.ts";
+import { startMatrixBridge, type BridgeHandle } from "../connections/matrix/start.ts";
 import { tokenMatches, TOKEN_ENV } from "../config/token.ts";
 import { buildMessageHandlerDeps, configReloader } from "../handler/deps.ts";
 import { MessageHandler } from "../handler/router.ts";
@@ -183,11 +183,14 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
           ...(log === undefined ? {} : { log }),
         });
 
-  const matrixBridge = await startMatrixBridge({
+  const matrixBridge = startMatrixBridge({
     config: loaded,
     server,
     env,
     ...(log === undefined ? {} : { log }),
+  }).catch((e: unknown) => {
+    log?.warn?.("Matrix bridge not started", { error: String(e) });
+    return undefined;
   });
 
   const served = server.serve();
@@ -196,9 +199,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     await served;
     watcher?.stop();
     discovery?.stop();
-    if (matrixBridge !== undefined) {
-      await bounded(matrixBridge.stop(), "matrix bridge", log);
-    }
+    await bounded(stopMatrixBridge(matrixBridge), "matrix bridge", log);
     await bounded(handlerDone, "message handler", log);
     clocks.stop();
     await bounded(runtime.autonomy.shutdown(), "autonomy", log);
@@ -286,6 +287,10 @@ function format(level: string, msg: string, fields?: Record<string, unknown>): s
 
 export function formatAddr(host: string, port: number): string {
   return host.includes(":") ? `[${host}]:${port}` : `${host}:${port}`;
+}
+
+async function stopMatrixBridge(pending: Promise<BridgeHandle | undefined>): Promise<void> {
+  await (await pending)?.stop();
 }
 
 function newSessionTokens(): SessionTokens {
