@@ -72,7 +72,7 @@ export async function startMatrixBridge(options: StartOptions): Promise<BridgeHa
     return undefined;
   }
 
-  const stateDir = rustJoin(options.config.dirs.config, STATE_DIR);
+  const stateDir = rustJoin(options.config.dirs.data, STATE_DIR);
   try {
     mkdirSync(stateDir, { recursive: true });
   } catch (e) {

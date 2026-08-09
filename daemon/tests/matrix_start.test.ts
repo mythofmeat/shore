@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 
 import { defaultAppConfig, defaultMatrixConfig, type MatrixConfig } from "../src/config/app.ts";
@@ -75,11 +75,12 @@ describe("what makes the section unusable", () => {
 describe("starting", () => {
   const loaded = (
     matrix: MatrixConfig | undefined,
-    configDir = mkdtempSync(testTmp("shore-matrix-start-")),
+    dataDir = mkdtempSync(testTmp("shore-matrix-start-")),
+    configDir = mkdtempSync(testTmp("shore-matrix-config-")),
   ): LoadedConfig =>
     ({
       app: { ...defaultAppConfig(), connections: { telegram: undefined, discord: undefined, matrix } },
-      dirs: { config: configDir, data: configDir },
+      dirs: { config: configDir, data: dataDir },
     }) as LoadedConfig;
 
   const server = () =>
@@ -115,7 +116,7 @@ describe("starting", () => {
   test("an unwritable state directory warns rather than killing the daemon", async () => {
     const warnings: string[] = [];
     const handle = await startMatrixBridge({
-      config: loaded(usable(), "/nonexistent-shore-config"),
+      config: loaded(usable(), "/nonexistent-shore-data"),
       server: server(),
       env: { [ACCESS_TOKEN_ENV]: "t" },
       log: { warn: (message) => warnings.push(message) },
@@ -141,6 +142,19 @@ describe("starting", () => {
     expect(handle).toBeUndefined();
     expect(warnings.join("\n")).toContain("not started");
     expect(warnings.join("\n")).toContain(ACCESS_TOKEN_ENV);
+  });
+
+  test("bridge state is daemon-written, so it lives under the data dir, not the config dir", async () => {
+    const config = loaded({ ...usable(), enabled: true });
+    await startMatrixBridge({
+      config,
+      server: server(),
+      env: { [ACCESS_TOKEN_ENV]: "t" },
+      log: { warn: () => {} },
+      login: (() => Promise.reject(new Error("homeserver unreachable"))) as never,
+    });
+    expect(existsSync(join(config.dirs.data, "matrix"))).toBe(true);
+    expect(existsSync(join(config.dirs.config, "matrix"))).toBe(false);
   });
 
   test("a Matrix login failure warns and leaves the daemon running", async () => {
