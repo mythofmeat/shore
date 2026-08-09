@@ -1,5 +1,5 @@
 pkgbase=shore
-pkgname=('shore' 'shore-daemon' 'shore-tui')
+pkgname=('shore-cli' 'shore-daemon' 'shore-tui')
 pkgver=4.3.4
 pkgrel=1
 pkgdesc="Persistent AI character engine"
@@ -46,7 +46,7 @@ _install_licenses() {
         "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE-2.0"
 }
 
-package_shore() {
+package_shore-cli() {
     pkgdesc="Persistent AI character engine — CLI client"
     depends=('gcc-libs' 'glibc')
     optdepends=(
@@ -75,7 +75,7 @@ package_shore() {
 package_shore-daemon() {
     pkgdesc="Persistent AI character engine — daemon"
     depends=('gcc-libs' 'glibc' 'openssl' 'bun' 'git')
-    optdepends=('shore: CLI client'
+    optdepends=('shore-cli: CLI client'
                 'shore-tui: terminal chat client')
 
     install -Dm755 "$srcdir/../../../daemon/dist/shore-daemon" \
