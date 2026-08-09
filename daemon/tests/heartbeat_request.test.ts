@@ -347,7 +347,6 @@ describe("preparing a heartbeat body", () => {
     const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
 
     expect(prepared?.request.context?.rid).toBeUndefined();
-    expect(prepared?.request.context?.call_type).toBe("message");
     // The cached body keeps its own id — the copy is what was edited.
     expect(cached.context?.rid).toBe("r_1");
   });

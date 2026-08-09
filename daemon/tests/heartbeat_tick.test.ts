@@ -37,9 +37,17 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
 import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
+import { closeLedgers } from "../src/ledger/record.ts";
+import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
 import { testTmp } from "./support/tmp.ts";
 
-afterAll(restoreTestEnv);
+const cleanups: Array<() => void> = [];
+
+afterAll(() => {
+  restoreTestEnv();
+  closeLedgers();
+  for (const c of cleanups) c();
+});
 
 // ── harness ─────────────────────────────────────────────────────────────
 
@@ -407,6 +415,73 @@ describe("running a tick", () => {
       { kind: "budget_paused", detail: 'Tick skipped — usage budget "monthly"' },
     ]);
     expect(result.failed).toBeUndefined();
+  });
+
+  test("the real gate pauses the tick, because the body is tagged as a heartbeat", async () => {
+    const config = await world();
+    const f = freshLedger();
+    cleanups.push(f.cleanup);
+    const db = openLedger(f.path);
+    db.query(
+      `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type,
+         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+         total_ms, ttft_ms, finish_reason, thinking_enabled, cost_source, total_cost)
+       VALUES (?1, 'ada', 'anthropic', 'default', 'claude-fixture', 'message',
+         10, 5, 0, 0, 100, 10, 'end_turn', 1, 'pricing_catalog', 9.0)`,
+    ).run(new Date().toISOString());
+    db.close();
+
+    const cache = new LastRequestCache();
+    cache.set(
+      "ada",
+      {
+        sdk: "anthropic",
+        model: "claude-fixture",
+        api_key: "secret",
+        provider_key: "anthropic",
+        messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+        max_tokens: 128,
+        context: {
+          ledger: f.path,
+          character: "ada",
+          call_type: "message",
+          api_key_name: "default",
+          thinking_enabled: false,
+          usage: {
+            timezone: "utc",
+            budgets: [
+              {
+                name: "monthly",
+                period: "month",
+                cost_usd: 10,
+                warn_at: [0.8],
+                warn_action: "pause_heartbeat",
+                limit: "warn",
+              },
+            ],
+          },
+        },
+      } as never,
+      undefined,
+    );
+
+    let generated = 0;
+    const result = await runHeartbeatTick(
+      "ada",
+      config,
+      tickDeps({
+        cache,
+        generate: async () => {
+          generated += 1;
+          return response([{ type: "text", text: "HEARTBEAT_OK" }]);
+        },
+      }),
+    );
+
+    expect(generated).toBe(0);
+    expect(result.events).toEqual([
+      { kind: "budget_paused", detail: 'Tick skipped — usage budget "monthly"' },
+    ]);
   });
 
   test("collects the loop's tool lines into the tick's events", async () => {

@@ -26,7 +26,7 @@ function copyForTick(request: SidecarRequest): SidecarRequest {
   const copy: SidecarRequest = { ...request, messages: [...request.messages] };
   if (copy.context !== undefined) {
     const { rid: _rid, ...rest } = copy.context;
-    copy.context = rest;
+    copy.context = { ...rest, call_type: "heartbeat" };
   }
   return copy;
 }
