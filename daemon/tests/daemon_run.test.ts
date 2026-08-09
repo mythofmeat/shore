@@ -36,6 +36,7 @@ import {
   startDaemon,
   type RunningDaemon,
 } from "../src/daemon/run.ts";
+import { ACCESS_TOKEN_ENV } from "../src/connections/matrix/start.ts";
 import { StartupError } from "../src/daemon/startup.ts";
 import type { InstanceInfo } from "../src/daemon/instances.ts";
 import type { SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
@@ -576,6 +577,37 @@ describe("formatAddr", () => {
   test("an IPv6 host is bracketed, so the string splits back on its last colon", () => {
     expect(formatAddr("127.0.0.1", 7320)).toBe("127.0.0.1:7320");
     expect(formatAddr("::1", 7320)).toBe("[::1]:7320");
+  });
+});
+
+describe("a Matrix homeserver that never answers", () => {
+  test("does not keep the daemon from accepting clients", async () => {
+    const stalled: Socket[] = [];
+    const blackHole = createServer((socket) => stalled.push(socket));
+    await new Promise<void>((resolve) => blackHole.listen(0, "127.0.0.1", resolve));
+    const address = blackHole.address();
+    if (address === null || typeof address === "string") {
+      throw new Error(`expected a TCP address, got ${JSON.stringify(address)}`);
+    }
+
+    const place = await layout(
+      `[connections.matrix]\nenabled = true\n` +
+        `homeserver = "http://127.0.0.1:${address.port}"\nuser_id = "@shore:example.com"\n`,
+    );
+    place.env[ACCESS_TOKEN_ENV] = "not-a-real-token";
+
+    try {
+      const daemon = await start(place);
+      const client = await Client.open(daemon.port, null);
+      try {
+        expect(await client.awaitFrame("hello")).toHaveProperty("type", "hello");
+      } finally {
+        client.close();
+      }
+    } finally {
+      for (const socket of stalled) socket.destroy();
+      await new Promise<void>((resolve) => blackHole.close(() => resolve()));
+    }
   });
 });
 

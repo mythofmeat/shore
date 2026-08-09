@@ -14,11 +14,14 @@ import {
   type MatrixClient,
   type Room,
   type RoomMember,
+  type SyncStateData,
 } from "matrix-js-sdk";
 
 import { normalizeEvent, type MatrixEvent, type RawEvent } from "./events.ts";
 
 const TYPING_TIMEOUT_MS = 20_000;
+
+export const SYNC_START_TIMEOUT_MS = 60_000;
 
 export interface BotConfig {
   readonly homeserver: string;
@@ -89,14 +92,12 @@ export class MatrixBot {
 
   async start(): Promise<void> {
     await this.#client.startClient({ initialSyncLimit: 0 });
-    await new Promise<void>((resolve) => {
-      const onSync = (state: SyncState) => {
-        if (state !== SyncState.Prepared && state !== SyncState.Syncing) return;
-        this.#client.off(ClientEvent.Sync, onSync);
-        resolve();
-      };
-      this.#client.on(ClientEvent.Sync, onSync);
-    });
+    try {
+      await awaitInitialSync(this.#client);
+    } catch (e) {
+      this.#client.stopClient();
+      throw e;
+    }
     this.#log?.info?.("Matrix sync started");
   }
 
@@ -273,6 +274,48 @@ export class MatrixBot {
     this.#pending.push(normalized);
     this.#wake?.();
   }
+}
+
+export function awaitInitialSync(
+  client: MatrixClient,
+  timeoutMs: number = SYNC_START_TIMEOUT_MS,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onSync = (state: SyncState, _previous: SyncState | null, data?: SyncStateData) => {
+      if (state === SyncState.Prepared || state === SyncState.Syncing) {
+        detach();
+        resolve();
+        return;
+      }
+      if (state !== SyncState.Error && state !== SyncState.Stopped) return;
+      detach();
+      reject(syncFailure(state, data));
+    };
+    const detach = () => {
+      clearTimeout(timer);
+      client.off(ClientEvent.Sync, onSync);
+    };
+    timer = setTimeout(() => {
+      detach();
+      reject(new Error(`the Matrix sync did not start within ${timeoutMs}ms`));
+    }, timeoutMs);
+    client.on(ClientEvent.Sync, onSync);
+  });
+}
+
+function syncFailure(state: SyncState, data: SyncStateData | undefined): Error {
+  const error = data?.error;
+  if (errcodeOf(error) === "M_UNKNOWN_TOKEN") {
+    return new Error("the homeserver rejected the Matrix credential (M_UNKNOWN_TOKEN)");
+  }
+  const detail = error === undefined ? "" : `: ${String(error)}`;
+  return new Error(`the Matrix sync entered ${state}${detail}`);
+}
+
+function errcodeOf(error: Error | undefined): string | undefined {
+  const code = (error as { errcode?: unknown } | undefined)?.errcode;
+  return typeof code === "string" ? code : undefined;
 }
 
 function textContent(markdown: string): Record<string, unknown> & { body: string } {
