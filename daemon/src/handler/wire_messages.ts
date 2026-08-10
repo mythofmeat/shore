@@ -3,7 +3,7 @@ import { basename } from "node:path";
 import type { ImageRef, ContentBlock } from "../engine/types.ts";
 import type { AssembledPrompt, PromptMessage } from "../engine/prompt.ts";
 import type { Sdk, SystemBlock, WireMessage } from "../llm/types.ts";
-import { buildContent, encodeImageBlock, type CachedResize } from "./images.ts";
+import { buildContent, encodeImageBlock } from "./images.ts";
 
 export type AssistantImageMode = "tool_pair" | "text_standin";
 
@@ -40,16 +40,13 @@ function usableCaption(img: ImageRef): string | undefined {
 async function renderAssistantImages(
   images: readonly ImageRef[],
   mode: AssistantImageMode,
-  maxImageSize: number,
-  cacheDir: string,
-  resize: CachedResize | undefined,
 ): Promise<AssistantImageRender> {
   const render: AssistantImageRender = { assistantBlocks: [], toolResults: [] };
 
   for (const [index, img] of images.entries()) {
     const source =
       mode === "tool_pair"
-        ? await encodeImageBlock(img, maxImageSize, cacheDir, resize)
+        ? await encodeImageBlock(img)
         : undefined;
     const caption = usableCaption(img);
 
@@ -78,18 +75,13 @@ async function renderAssistantImages(
 
 async function renderMessageContent(
   m: PromptMessage,
-  maxImageSize: number,
-  cacheDir: string,
   mode: AssistantImageMode,
-  resize: CachedResize | undefined,
 ): Promise<{ content: ContentBlock[]; owedToolResults: ContentBlock[] } | undefined> {
   const reroute = m.role === "assistant" && m.images.length > 0;
-  const imageRender = reroute
-    ? await renderAssistantImages(m.images, mode, maxImageSize, cacheDir, resize)
-    : undefined;
+  const imageRender = reroute ? await renderAssistantImages(m.images, mode) : undefined;
   const turnImages = reroute ? [] : m.images;
 
-  const fallback = () => buildContent(m.content, turnImages, maxImageSize, cacheDir, resize);
+  const fallback = () => buildContent(m.content, turnImages);
 
   let content: ContentBlock[];
   if (m.content_blocks.length === 0) {
@@ -97,7 +89,7 @@ async function renderMessageContent(
   } else {
     const blocks: ContentBlock[] = [];
     for (const img of turnImages) {
-      const source = await encodeImageBlock(img, maxImageSize, cacheDir, resize);
+      const source = await encodeImageBlock(img);
       if (source !== undefined) blocks.push({ type: "image", source });
     }
     blocks.push(...m.content_blocks.filter((b) => !(b.type === "text" && b.text.trim() === "")));
@@ -113,16 +105,13 @@ async function renderMessageContent(
 
 export async function buildLlmMessages(
   prompt: AssembledPrompt,
-  maxImageSize: number,
-  cacheDir: string,
   mode: AssistantImageMode,
-  resize?: CachedResize,
 ): Promise<{ messages: WireMessage[]; system: SystemBlock[] }> {
   const messages: WireMessage[] = [];
   let pending: ContentBlock[] = [];
 
   for (const m of prompt.messages) {
-    const rendered = await renderMessageContent(m, maxImageSize, cacheDir, mode, resize);
+    const rendered = await renderMessageContent(m, mode);
     if (rendered === undefined) {
       continue;
     }

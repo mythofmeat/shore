@@ -48,7 +48,6 @@ import type { ResolvedModel } from "../src/config/models.ts";
 import type { AssembledPrompt, PromptMessage } from "../src/engine/prompt.ts";
 import type { ContentBlock, ImageRef, Message, Role } from "../src/engine/types.ts";
 import type { Sdk, ToolDefinition } from "../src/llm/types.ts";
-import type { CachedResize } from "../src/handler/images.ts";
 import { prepareChatContext } from "../src/handler/context.ts";
 import {
   assistantImageModeForRequest,
@@ -213,7 +212,7 @@ describe("buildLlmMessages", () => {
         system: c.prompt.system,
         messages: c.prompt.messages.map((m) => promptMessage(m, dir)),
       };
-      const got = await buildLlmMessages(prompt, c.max_image_size, dir, c.mode);
+      const got = await buildLlmMessages(prompt, c.mode);
       expectJson(got.messages, c.messages);
       expectJson(got.system, c.system);
     });
@@ -230,8 +229,6 @@ describe("buildLlmMessages", () => {
       const build = async () =>
         await buildLlmMessages(
           { system: c.prompt.system, messages: c.prompt.messages.map((m) => promptMessage(m, dir)) },
-          c.max_image_size,
-          dir,
           c.mode,
         );
       expect(await build()).toEqual(await build());
@@ -329,24 +326,10 @@ async function contextFixture(c: ContextCase): Promise<{
 }
 
 describe("prepareChatContext", () => {
-  let resizeCalls = 0;
-
   for (const c of contextCases) {
     test(c.name, async () => {
       const dir = await images();
       const { config, charDataDir, activeDir, resolved } = await contextFixture(c);
-
-      // A probe rather than the real ladder. The resize output is deliberately
-      // not pinned anywhere — `image`/`fast_image_resize` and libvips disagree
-      // on bytes, which `resize_parity.json` says outright — but *which
-      // directory the ladder is handed* is this module's decision and nothing
-      // else tests it. Returning `undefined` leaves every encode unresized, so
-      // the recorded blocks stay comparable.
-      const cacheDirsSeen: string[] = [];
-      const probe: CachedResize = async (_p, _b, _m, _max, cacheDir) => {
-        cacheDirsSeen.push(cacheDir);
-        return undefined;
-      };
 
       const got = await prepareChatContext({
         character: c.input.character,
@@ -359,7 +342,6 @@ describe("prepareChatContext", () => {
         })),
         hasPriorContext: c.input.has_prior_context,
         mcpToolDefs: c.input.mcp_tool_defs,
-        resize: probe,
         timeZone: ZONE,
       });
 
@@ -367,17 +349,7 @@ describe("prepareChatContext", () => {
       expectJson(got.llmMessages, c.llm_messages);
       expectJson(got.toolDefs ?? null, c.tool_defs);
 
-      // The prompt comes back for callers that need its own `messages` — image
-      // cache warming reads them — so it is part of the contract, not an
-      // implementation detail.
       expectJson(got.prompt.messages, c.prompt_messages.map((m) => promptMessage(m, dir)));
-
-      // Not every case with an image reaches the ladder: the stand-in never
-      // encodes one. So the claim is the conditional one — whenever the ladder
-      // *is* reached, it is handed the cache directory — plus the suite-level
-      // check below that some case reached it at all.
-      for (const seen of cacheDirsSeen) expect(seen).toBe(config.dirs.cache);
-      resizeCalls += cacheDirsSeen.length;
 
       // The snapshot the call was supposed to have materialized. Checking only
       // the return value would let a `prepare` that never seeded `active_prompt`
@@ -398,10 +370,4 @@ describe("prepareChatContext", () => {
     });
   }
 
-  // Without this the per-case assertion above is vacuously true, which is the
-  // exact failure mode #12 warns about: the case was present and nothing in it
-  // was load-bearing.
-  test("some case reached the resize ladder", () => {
-    expect(resizeCalls).toBeGreaterThan(0);
-  });
 });

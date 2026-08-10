@@ -18,7 +18,6 @@ import { buildRequestWithProviderKeys, type BuiltRequest } from "../llm/request.
 import type { SystemBlock, ToolDefinition, WireMessage } from "../llm/types.ts";
 import { toCredentialsEntry } from "../config/providers.ts";
 import { assembleToolSurface, renderToolDefs, subagentToolDefs } from "../tools/registry.ts";
-import type { CachedResize } from "./images.ts";
 import { assistantImageModeForRequest, buildLlmMessages } from "./wire_messages.ts";
 
 export interface PrepareChatContextParams {
@@ -29,7 +28,6 @@ export interface PrepareChatContextParams {
   messages: Message[];
   hasPriorContext: boolean;
   mcpToolDefs: readonly ToolDefinition[];
-  resize?: CachedResize;
   timeZone?: string;
 }
 
@@ -91,10 +89,7 @@ export async function prepareChatContext(
 
   const { messages: llmMessages, system } = await buildLlmMessages(
     prompt,
-    config.app.advanced.max_image_size,
-    config.dirs.cache,
     assistantImageModeForRequest(resolved.sdk, toolsAvailable),
-    params.resize,
   );
 
   const toolDefs = toolsAvailable
@@ -121,7 +116,6 @@ export async function buildChatShapeRequestFromDisk(
   messages: Message[],
   hasPriorContext: boolean,
   options: {
-    resize?: CachedResize;
     mcpToolDefs?: readonly ToolDefinition[];
     timeZone?: string;
   } = {},
@@ -134,7 +128,6 @@ export async function buildChatShapeRequestFromDisk(
     messages,
     hasPriorContext,
     mcpToolDefs: options.mcpToolDefs ?? [],
-    ...(options.resize === undefined ? {} : { resize: options.resize }),
     ...(options.timeZone === undefined ? {} : { timeZone: options.timeZone }),
   });
 

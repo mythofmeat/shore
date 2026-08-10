@@ -19,8 +19,6 @@ import type { Message } from "../engine/types.ts";
 import { buildRequestWithResolvedKey, type BuiltRequest } from "../llm/request.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 import { prepareChatContext } from "./context.ts";
-import type { CachedResize } from "./images.ts";
-import { warmImageCache } from "./resize.ts";
 
 export interface SetupEngine {
   messages(): readonly Message[];
@@ -74,7 +72,6 @@ export interface BuildGenerationRequestParams {
   regen: boolean;
   mcpRegistry: Pick<McpRegistry, "toolDefsFiltered">;
   overrides?: MessageOverrides;
-  resize?: CachedResize;
   timeZone?: string;
 }
 
@@ -98,15 +95,8 @@ export async function buildGenerationRequest(
     messages,
     hasPriorContext,
     mcpToolDefs,
-    ...(params.resize === undefined ? {} : { resize: params.resize }),
     ...(params.timeZone === undefined ? {} : { timeZone: params.timeZone }),
   });
-
-  await warmImageCache(
-    prepared.prompt.messages,
-    config.app.advanced.max_image_size,
-    config.dirs.cache,
-  );
 
   const built = buildRequestWithResolvedKey(toRequestModel(resolved), "", {
     messages: prepared.llmMessages,

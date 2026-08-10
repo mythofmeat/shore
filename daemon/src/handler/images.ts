@@ -10,14 +10,6 @@ export interface ImageUpload {
   data: string;
 }
 
-export type CachedResize = (
-  path: string,
-  bytes: Uint8Array,
-  mediaType: string,
-  maxBytes: number,
-  cacheDir: string,
-) => Promise<{ bytes: Uint8Array; mediaType: string } | undefined>;
-
 export function mediaTypeForPath(path: string): string | undefined {
   const ext = asciiLowercase(path.split(".").pop() ?? "");
   switch (ext) {
@@ -252,14 +244,11 @@ function decodeBase64(data: string): Uint8Array {
 export async function buildContent(
   text: string,
   images: readonly ImageRef[],
-  maxImageSize: number,
-  cacheDir: string,
-  resize?: CachedResize,
 ): Promise<ContentBlock[]> {
   const blocks: ContentBlock[] = [];
 
   for (const img of images) {
-    const source = await encodeImageBlock(img, maxImageSize, cacheDir, resize);
+    const source = await encodeImageBlock(img);
     if (source !== undefined) blocks.push({ type: "image", source });
   }
 
@@ -270,9 +259,6 @@ export async function buildContent(
 
 export async function encodeImageBlock(
   img: ImageRef,
-  maxImageSize: number,
-  cacheDir: string,
-  resize?: CachedResize,
 ): Promise<{ type: "base64"; media_type: string; data: string } | undefined> {
   const mediaType = mediaTypeForPath(img.path);
   if (mediaType === undefined) {
@@ -288,12 +274,9 @@ export async function encodeImageBlock(
     return undefined;
   }
 
-  const resized = await resize?.(img.path, bytes, mediaType, maxImageSize, cacheDir);
-  const final = resized ?? { bytes, mediaType };
-
   return {
     type: "base64",
-    media_type: final.mediaType,
-    data: Buffer.from(final.bytes).toString("base64"),
+    media_type: mediaType,
+    data: Buffer.from(bytes).toString("base64"),
   };
 }
