@@ -20,10 +20,12 @@
  * in that walk and nowhere else.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 
 import { KeepaliveService } from "../src/cache/keepalive.ts";
 import { LastRequestCache } from "../src/cache/last_request.ts";
+import { closeLedgers } from "../src/ledger/record.ts";
+import { freshLedger, rowsIn } from "./support/ledger_fixture.ts";
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
 import { catalogFromSections, toRequestModel } from "../src/config/models.ts";
 import { turnAutonomy } from "../src/handler/deps.ts";
@@ -127,12 +129,20 @@ function streamResult(): StreamResult {
  * and its cadence come out of the builder together, and only `persistAndNotify`
  * puts them into the cache. Everything between is production code.
  */
-async function turnPersisted(chatToml: string, clock: ReturnType<typeof fakeClock>) {
+async function turnPersisted(
+  chatToml: string,
+  clock: ReturnType<typeof fakeClock>,
+  opts: { ledgerPath?: string; maxIdleSecs?: () => number } = {},
+) {
   const sent: SidecarRequest[] = [];
-  const service = new KeepaliveService(async (req) => {
-    sent.push(req);
-    return response();
-  }, clock.now);
+  const service = new KeepaliveService(
+    async (req) => {
+      sent.push(req);
+      return response();
+    },
+    clock.now,
+    opts,
+  );
 
   const cache = new LastRequestCache(service);
   const bridge = new TurnAutonomyBridge({
@@ -189,6 +199,91 @@ const EXPLICIT_OFF = `
 model_id = "claude-opus-4-6"
 cache_keepalive = "off"
 `;
+
+describe("a ping is a call the ledger knows about", () => {
+  afterEach(() => {
+    closeLedgers();
+  });
+
+  test("the ping it sends leaves a keepalive row behind", async () => {
+    const ledger = freshLedger();
+    try {
+      const clock = fakeClock();
+      const { service, sent } = await turnPersisted(CONFIGURED, clock, { ledgerPath: ledger.path });
+
+      clock.advance(55 * MINUTE);
+      await service.tick();
+      expect(sent).toHaveLength(1);
+      expect(sent[0]?.context?.ledger, "the path the ping carries").toBe(ledger.path);
+
+      const rows = rowsIn(ledger.path);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.["call_type"]).toBe("keepalive");
+      expect(rows[0]?.["character"]).toBe(CHARACTER);
+      expect(rows[0]?.["cache_read_tokens"]).toBe(4096);
+    } finally {
+      ledger.cleanup();
+    }
+  });
+
+  test("cache health sees the ping, not just the turn that armed it", async () => {
+    const ledger = freshLedger();
+    try {
+      const clock = fakeClock();
+      const { service } = await turnPersisted(CONFIGURED, clock, { ledgerPath: ledger.path });
+
+      clock.advance(55 * MINUTE);
+      await service.tick();
+      clock.advance(55 * MINUTE);
+      await service.tick();
+
+      const rows = rowsIn(ledger.path);
+      expect(rows.map((r) => r["call_type"])).toEqual(["keepalive", "keepalive"]);
+    } finally {
+      ledger.cleanup();
+    }
+  });
+});
+
+describe("the configured idle ceiling reaches the schedule", () => {
+  const TWENTY_HOURS = 20 * 60 * 60;
+
+  async function armedWithCeiling(secs: number, clock: ReturnType<typeof fakeClock>) {
+    const armed = await turnPersisted(CONFIGURED, clock, { maxIdleSecs: () => secs });
+    armed.service.observe(CHARACTER, "claude-opus-4-6", "message", undefined);
+    return armed;
+  }
+
+  test("a 20h ceiling still pings at 13h idle, where the 12h default gave up", async () => {
+    const clock = fakeClock();
+    const { service, sent } = await armedWithCeiling(TWENTY_HOURS, clock);
+
+    clock.advance(13 * 60 * MINUTE);
+    await service.tick();
+
+    expect(sent).toHaveLength(1);
+  });
+
+  test("past the configured ceiling it stops, rather than pinging a dead prefix", async () => {
+    const clock = fakeClock();
+    const { service, sent } = await armedWithCeiling(TWENTY_HOURS, clock);
+
+    clock.advance(21 * 60 * MINUTE);
+    await service.tick();
+
+    expect(sent).toHaveLength(0);
+  });
+
+  test("the ping carries the ceiling it was judged against", async () => {
+    const clock = fakeClock();
+    const { service, sent } = await armedWithCeiling(TWENTY_HOURS, clock);
+
+    clock.advance(55 * MINUTE);
+    await service.tick();
+
+    expect(sent[0]?.context?.keepalive_max_secs).toBe(TWENTY_HOURS);
+  });
+});
 
 describe("the cadence reaches the schedule", () => {
   test("a model that asks for 55m pings at 55m", async () => {

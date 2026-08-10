@@ -62,7 +62,20 @@ export function pingLandedCold(usage: {
   return usage.cache_read_tokens === 0 && usage.cache_creation_tokens > 0;
 }
 
-export function buildKeepalivePing(prefix: KeepalivePrefix): SidecarRequest {
+export interface KeepaliveCallLabels {
+  ledgerPath?: string;
+  maxIdleSecs?: number;
+}
+
+export interface KeepaliveServiceOptions {
+  ledgerPath?: string;
+  maxIdleSecs?: () => number;
+}
+
+export function buildKeepalivePing(
+  prefix: KeepalivePrefix,
+  labels: KeepaliveCallLabels = {},
+): SidecarRequest {
   const trailingUserTurn: WireMessage = {
     role: "user",
     content: [{ type: "text", text: "." }],
@@ -75,7 +88,12 @@ export function buildKeepalivePing(prefix: KeepalivePrefix): SidecarRequest {
   };
   if (context !== undefined) {
     const { rid: _stale, ...carried } = context;
-    ping.context = { ...carried, call_type: "keepalive" };
+    ping.context = {
+      ...carried,
+      call_type: "keepalive",
+      ...(labels.ledgerPath === undefined ? {} : { ledger: labels.ledgerPath }),
+      ...(labels.maxIdleSecs === undefined ? {} : { keepalive_max_secs: labels.maxIdleSecs }),
+    };
   }
   return ping;
 }
@@ -84,11 +102,26 @@ export class KeepaliveService {
   readonly #entries = new Map<string, Entry>();
   readonly #send: PingSender;
   readonly #now: () => number;
+  readonly #ledgerPath: string | undefined;
+  readonly #configuredMaxIdleSecs: () => number;
   #sink: KeepaliveEventSink | undefined;
 
-  constructor(send: PingSender, now: () => number = () => Date.now()) {
+  constructor(
+    send: PingSender,
+    now: () => number = () => Date.now(),
+    opts: KeepaliveServiceOptions = {},
+  ) {
     this.#send = send;
     this.#now = now;
+    this.#ledgerPath = opts.ledgerPath;
+    this.#configuredMaxIdleSecs = opts.maxIdleSecs ?? (() => DEFAULT_MAX_IDLE_SECS);
+  }
+
+  #labels(): KeepaliveCallLabels {
+    return {
+      ...(this.#ledgerPath === undefined ? {} : { ledgerPath: this.#ledgerPath }),
+      maxIdleSecs: this.#configuredMaxIdleSecs(),
+    };
   }
 
   onEvent(sink: KeepaliveEventSink): void {
@@ -98,7 +131,7 @@ export class KeepaliveService {
   arm(prefix: KeepalivePrefix, warm = false): void {
     const character = prefix.context?.character;
     if (character === undefined) return;
-    const maxIdleSecs = prefix.context?.keepalive_max_secs ?? DEFAULT_MAX_IDLE_SECS;
+    const maxIdleSecs = prefix.context?.keepalive_max_secs ?? this.#configuredMaxIdleSecs();
     const entry = this.#entryFor(character, maxIdleSecs);
     entry.prefix = prefix;
     entry.keepalive.setInterval(prefix.keepalive_interval_ms, prefix.model, this.#now());
@@ -116,7 +149,7 @@ export class KeepaliveService {
     if (callType === "keepalive") return;
     const entry =
       this.#entries.get(character) ??
-      this.#entryFor(character, maxIdleSecs ?? DEFAULT_MAX_IDLE_SECS);
+      this.#entryFor(character, maxIdleSecs ?? this.#configuredMaxIdleSecs());
     entry.keepalive.onCacheWarmed(model, this.#now());
   }
 
@@ -125,7 +158,7 @@ export class KeepaliveService {
     if (prefix === undefined) {
       return { status: "skipped", cold: false, reason: "no_prefix", detail: "no cached request" };
     }
-    const ping = buildKeepalivePing(prefix);
+    const ping = buildKeepalivePing(prefix, this.#labels());
     const blocked = budgetBlockFor(ping, this.#now());
     if (blocked !== undefined) {
       return {
@@ -220,7 +253,7 @@ export class KeepaliveService {
       return;
     }
 
-    const ping = buildKeepalivePing(prefix);
+    const ping = buildKeepalivePing(prefix, this.#labels());
 
     const blocked = budgetBlockFor(ping, this.#now());
     if (blocked !== undefined) {

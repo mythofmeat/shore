@@ -68,25 +68,33 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
 
   const providers = captureProviders(options.providers, callStore);
 
-  const keepalive = new KeepaliveService((req, signal) => {
-    const provider = providers[req.sdk];
-    if (!provider) throw new Error(`unsupported sdk: ${req.sdk}`);
-    return provider.generate(
-      withResolvedCredential(req, config, options.env ?? process.env),
-      signal,
-    );
-  });
-  const cache = new LastRequestCache(keepalive);
-
-  const connectMcp = options.connectMcp ?? McpClient.connect;
-  const mcp = new McpHolder(await connectMcpRegistry(config, connectMcp));
-
   const registry = await CharacterRegistry.create(
     config.dirs.config,
     config.dirs.data,
     config,
     options.onHistory,
   );
+
+  const keepalive = new KeepaliveService(
+    (req, signal) => {
+      const provider = providers[req.sdk];
+      if (!provider) throw new Error(`unsupported sdk: ${req.sdk}`);
+      return provider.generate(
+        withResolvedCredential(req, config, options.env ?? process.env),
+        signal,
+      );
+    },
+    () => Date.now(),
+    {
+      ledgerPath: rustJoin(config.dirs.data, "ledger.db"),
+      maxIdleSecs: () =>
+        Number(registry.globalConfig().app.behavior.autonomy.cache_keepalive_max.asSecs()),
+    },
+  );
+  const cache = new LastRequestCache(keepalive);
+
+  const connectMcp = options.connectMcp ?? McpClient.connect;
+  const mcp = new McpHolder(await connectMcpRegistry(config, connectMcp));
 
   const autonomy = new AutonomyService(
     new InProcessAutonomyExecutor({
