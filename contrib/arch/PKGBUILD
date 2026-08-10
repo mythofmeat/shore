@@ -1,6 +1,6 @@
 pkgbase=shore
 pkgname=('shore-cli' 'shore-daemon' 'shore-tui')
-pkgver=4.4.0
+pkgver=0
 pkgrel=1
 pkgdesc="Persistent AI character engine"
 arch=('x86_64')
@@ -11,7 +11,11 @@ options=(!lto !debug strip)
 
 pkgver() {
     cd "$srcdir"
-    (git describe --tags --abbrev=0 || echo 0) | sed 's/^v//; s/-/_/'
+    if git rev-parse --git-dir > /dev/null 2>&1; then
+        git describe --tags --abbrev=0 | sed 's/^v//; s/-/_/'
+    else
+        echo 0
+    fi
 }
 
 build() {
