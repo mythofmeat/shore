@@ -16,7 +16,7 @@ WORKDIR /src
 COPY --chown=builder:builder . .
 
 RUN git config --system --add safe.directory /src && \
-    sed -i "s/^pkgver=.*/pkgver=$(git describe --tags --abbrev=0 | sed 's/^v//')/" \
+    sed -i "s/^pkgver=.*/pkgver=$(git describe --tags --abbrev=0 | sed 's/^v//; s/-/_/')/" \
         contrib/alpine/APKBUILD
 
 USER builder

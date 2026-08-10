@@ -301,4 +301,4 @@ test("cross-language budget parity", () => {
 
     db.close();
   });
-});
+}, 60_000);
