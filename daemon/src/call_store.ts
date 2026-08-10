@@ -864,6 +864,21 @@ function hexOf(hash: Uint8Array): string {
   return Buffer.from(hash).toString("hex");
 }
 
+export function storeBlob(db: Database, bytes: Uint8Array): string {
+  const hex = hexOf(chunkHash(bytes));
+  const packed = packBlob(bytes);
+  db.query("INSERT OR IGNORE INTO blobs (hash, size, compressed, data) VALUES (?1, ?2, ?3, ?4)")
+    .run(hex, bytes.byteLength, packed.compressed ? 1 : 0, packed.data);
+  return hex;
+}
+
+export function loadBlob(db: Database, hash: string): Uint8Array | null {
+  const row = db.query("SELECT size, compressed, data FROM blobs WHERE hash = ?1").get(hash) as
+    | Row
+    | null;
+  return row === null ? null : unpackBlob(row);
+}
+
 function packBlob(chunk: Uint8Array): { data: Uint8Array; compressed: boolean } {
   if (chunk.byteLength < BLOB_RAW_UNDER) return { data: chunk, compressed: false };
   const packed = zstdCompressBytes(chunk)!;
