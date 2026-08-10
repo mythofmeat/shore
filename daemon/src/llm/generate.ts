@@ -4,6 +4,7 @@ import type { LoadedConfig } from "../config/loader.ts";
 import type { ResolvedModel } from "../config/models.ts";
 import { credentialEntry } from "../handler/tool_context.ts";
 import { readCandidateEnv, resolveKeyCandidates } from "./credentials.ts";
+import { MissingApiKey } from "./request.ts";
 import {
   streamWithCredentialFallback,
   streamWithRetry,
@@ -42,6 +43,25 @@ export interface KeySource {
 export interface GenerateOutcome {
   response: GenerateResponse;
   fallbacks: FallbackEvent[];
+}
+
+export function withResolvedCredential(
+  request: SidecarRequest,
+  config: LoadedConfig,
+  env: NodeJS.ProcessEnv = process.env,
+): SidecarRequest {
+  const providerKey = request.provider_key ?? request.sdk;
+  const entry = config.providers.get(providerKey);
+  const candidates = resolveKeyCandidates(
+    providerKey,
+    entry === undefined ? undefined : credentialEntry(entry),
+  );
+  for (const candidate of candidates) {
+    const apiKey = readCandidateEnv(candidate, env);
+    if (apiKey !== undefined) return { ...request, api_key: apiKey };
+  }
+  if (request.api_key !== "") return request;
+  throw new MissingApiKey(candidates[0]?.env ?? providerKey);
 }
 
 export function resolveModelForRequest(

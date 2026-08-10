@@ -19,6 +19,7 @@ import { ledgerFor } from "./ledger/record.ts";
 import { setCallObserver } from "./ledger/record.ts";
 import { modelUsageSummary } from "./ledger/query.ts";
 import { captureProviders } from "./llm/capture.ts";
+import { withResolvedCredential } from "./llm/generate.ts";
 import { generateImage } from "./llm/image_generate.ts";
 import type { SidecarProvider, SidecarRequest } from "./llm/types.ts";
 import { McpClient, type McpServerSpec } from "./mcp/client.ts";
@@ -70,7 +71,10 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
   const keepalive = new KeepaliveService((req, signal) => {
     const provider = providers[req.sdk];
     if (!provider) throw new Error(`unsupported sdk: ${req.sdk}`);
-    return provider.generate(req, signal);
+    return provider.generate(
+      withResolvedCredential(req, config, options.env ?? process.env),
+      signal,
+    );
   });
   const cache = new LastRequestCache(keepalive);
 
