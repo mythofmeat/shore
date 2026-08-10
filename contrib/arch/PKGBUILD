@@ -11,7 +11,7 @@ options=(!lto !debug strip)
 
 pkgver() {
     cd "$srcdir"
-    git describe --tags --abbrev=0 | sed 's/^v//; s/-/_/'
+    git describe --tags --abbrev=0 | sed 's/^v//; s/-/_/' || echo 0
 }
 
 build() {
