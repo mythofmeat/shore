@@ -11,11 +11,22 @@ WORKDIR /src/contrib/arch
 RUN makepkg --noconfirm
 
 FROM archlinux:latest
+ARG PKGEXT="-0-1-x86_64.pkg.tar.zst"
+ARG SHORE_DAEMON_PKG="shore-daemon-${PKGEXT}"
+ARG SHORE_CLI_PKG="shore-cli-${PKGEXT}"
+ARG SHORE_TUI_PKG="shore-tui-${PKGEXT}"
+
 RUN pacman --noconfirm -Syu
-COPY --from=build /src/contrib/arch/*.pkg.tar.zst /tmp/pkg/
-RUN pacman --noconfirm --needed -U /tmp/pkg/shore-daemon-*
-RUN pacman --noconfirm --needed -U /tmp/pkg/shore-cli-*
-RUN pacman --noconfirm --needed -U /tmp/pkg/shore-tui-*
+
+WORKDIR /tmp/pkg
+COPY --from=build /src/contrib/arch/${SHORE_DAEMON_PKG} .
+RUN pacman --noconfirm --needed -U ${SHORE_DAEMON_PKG}
+
+COPY --from=build /src/contrib/arch/${SHORE_CLI_PKG} .
+RUN pacman --noconfirm --needed -U ${SHORE_CLI_PKG}
+
+COPY --from=build /src/contrib/arch/${SHORE_TUI_PKG} .
+RUN pacman --noconfirm --needed -U ${SHORE_TUI_PKG}
 RUN rm -rf /tmp/pkg
 
 RUN groupadd --gid 1000 shore
