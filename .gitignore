@@ -32,8 +32,10 @@ Thumbs.db
 
 **/pkg/
 *.pkg.tar.zst
+*.apk
 contrib/arch/src/
 contrib/arch/shore/
+out/
 
 # Environment / secrets
 .env

@@ -1,0 +1,8 @@
+client/target
+daemon/node_modules
+daemon/dist
+contrib/*/pkg
+contrib/*/src
+contrib/*/*.pkg.tar.zst
+contrib/*/*.apk
+out

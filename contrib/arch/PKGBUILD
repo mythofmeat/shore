@@ -74,7 +74,8 @@ package_shore-cli() {
 
 package_shore-daemon() {
     pkgdesc="Persistent AI character engine — daemon"
-    depends=('gcc-libs' 'glibc' 'openssl' 'bun' 'git')
+    depends=('gcc-libs' 'glibc' 'git')
+    options=(!strip)
     optdepends=('shore-cli: CLI client'
                 'shore-tui: terminal chat client')
 

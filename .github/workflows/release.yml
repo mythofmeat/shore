@@ -1,0 +1,48 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [arch, alpine]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - run: |
+          docker build \
+            --target artifacts \
+            --output type=local,dest=out \
+            -f contrib/${{ matrix.distro }}/Dockerfile \
+            .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ matrix.distro }}
+          path: out/*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: packages-*
+          merge-multiple: true
+          path: out
+
+      - run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --generate-notes out/*
+        env:
+          GH_TOKEN: ${{ github.token }}

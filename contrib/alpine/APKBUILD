@@ -1,0 +1,87 @@
+pkgname=shore
+pkgver=4.4.0
+pkgrel=0
+pkgdesc="Persistent AI character engine"
+url="https://github.com/mythofmeat/shore"
+arch="x86_64"
+license="MIT OR Apache-2.0"
+depends="$pkgname-cli=$pkgver-r$pkgrel $pkgname-daemon=$pkgver-r$pkgrel"
+makedepends="cargo"
+subpackages="$pkgname-cli:_cli $pkgname-daemon:_daemon $pkgname-tui:_tui"
+builddir="$startdir/../.."
+
+_cargo_packages="shore-cli shore-tui"
+
+build() {
+	local package
+	for package in $_cargo_packages; do
+		cd "$builddir/client/$package"
+		cargo build --release
+	done
+
+	cd "$builddir/daemon"
+	bun install
+	bun run build
+}
+
+check() {
+	local package
+	for package in $_cargo_packages; do
+		cd "$builddir/client/$package"
+		cargo test
+	done
+
+	cd "$builddir/daemon"
+	bun test
+}
+
+_install_licenses() {
+	install -Dm644 "$builddir/LICENSE-MIT" \
+		"$subpkgdir/usr/share/licenses/$subpkgname/LICENSE-MIT"
+	install -Dm644 "$builddir/LICENSE-APACHE-2.0" \
+		"$subpkgdir/usr/share/licenses/$subpkgname/LICENSE-APACHE-2.0"
+}
+
+package() {
+	mkdir -p "$pkgdir"
+}
+
+_cli() {
+	pkgdesc="Persistent AI character engine — CLI client"
+	depends=""
+
+	install -Dm755 "$builddir/client/target/release/shore" "$subpkgdir/usr/bin/shore"
+
+	install -dm755 "$subpkgdir/usr/share/fish/vendor_completions.d"
+	"$builddir/client/target/release/shore" completions fish \
+		> "$subpkgdir/usr/share/fish/vendor_completions.d/shore.fish"
+	install -dm755 "$subpkgdir/usr/share/bash-completion/completions"
+	"$builddir/client/target/release/shore" completions bash \
+		> "$subpkgdir/usr/share/bash-completion/completions/shore"
+	install -dm755 "$subpkgdir/usr/share/zsh/site-functions"
+	"$builddir/client/target/release/shore" completions zsh \
+		> "$subpkgdir/usr/share/zsh/site-functions/_shore"
+
+	_install_licenses
+}
+
+_daemon() {
+	pkgdesc="Persistent AI character engine — daemon"
+	depends="git"
+	options="!strip"
+
+	install -Dm755 "$builddir/daemon/dist/shore-daemon" \
+		"$subpkgdir/usr/bin/shore-daemon"
+
+	_install_licenses
+}
+
+_tui() {
+	pkgdesc="Persistent AI character engine — terminal client"
+	depends=""
+
+	install -Dm755 "$builddir/client/target/release/shore-tui" \
+		"$subpkgdir/usr/bin/shore-tui"
+
+	_install_licenses
+}
