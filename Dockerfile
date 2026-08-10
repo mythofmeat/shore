@@ -22,9 +22,6 @@ RUN groupadd --gid 1000 shore && \
     useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash shore && \
     chown -R 1000:1000 /home/shore
 
-# RUN pacman --noconfirm -S git
-# RUN pacman --noconfirm -S bun
-
 USER shore
 ENV EDITOR=nvim
 ENV SHORE_CONFIG_DIR=/config
