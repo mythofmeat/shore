@@ -27,6 +27,8 @@ mod images;
 mod output;
 mod run;
 mod state;
+#[cfg(test)]
+mod test_env;
 
 use std::process::ExitCode;
 
@@ -75,7 +77,8 @@ fn main() -> ExitCode {
         }
     };
 
-    match rt.block_on(run::execute(cli)) {
+    let outcome = rt.block_on(run::execute(cli));
+    match outcome {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             // A server error was printed where it happened, with its protocol

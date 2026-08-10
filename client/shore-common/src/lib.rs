@@ -11,3 +11,6 @@ pub mod dirs;
 pub mod protocol;
 pub mod swp_client;
 pub mod token;
+
+#[cfg(test)]
+mod test_env;

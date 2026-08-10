@@ -177,6 +177,7 @@ pub fn runtime_dir() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_env::{set_env, unset_env};
 
     #[test]
     fn xdg_dirs_resolve() {
@@ -194,14 +195,14 @@ mod tests {
         std::fs::create_dir_all(&custom).unwrap();
 
         // Set SHORE_CONFIG_DIR override — should be used as-is (no "/shore" suffix).
-        std::env::set_var("SHORE_CONFIG_DIR", &custom);
+        set_env("SHORE_CONFIG_DIR", &custom);
         let dir = resolve_xdg_dir(
             "SHORE_CONFIG_DIR",
             "XDG_CONFIG_HOME",
             dirs::config_dir,
             LastResort::Refuse,
         );
-        std::env::remove_var("SHORE_CONFIG_DIR");
+        unset_env("SHORE_CONFIG_DIR");
 
         assert_eq!(dir, custom, "SHORE_CONFIG_DIR should be used as-is");
     }
@@ -211,9 +212,6 @@ mod tests {
         // No override and no XDG var — the platform answer gets /shore.
         let unique = format!("SHORE_TEST_NO_OVERRIDE_{}", std::process::id());
         let xdg_unique = format!("SHORE_TEST_XDG_NO_{}", std::process::id());
-        std::env::remove_var(&unique);
-        std::env::remove_var(&xdg_unique);
-
         let dir = resolve_xdg_dir(
             &unique,
             &xdg_unique,
@@ -227,9 +225,6 @@ mod tests {
     fn runtime_falls_back_to_the_temp_dir() {
         let unique = format!("SHORE_TEST_EMPTY_{}", std::process::id());
         let xdg_unique = format!("SHORE_TEST_XDG_EMPTY_{}", std::process::id());
-        std::env::remove_var(&unique);
-        std::env::remove_var(&xdg_unique);
-
         let dir = resolve_xdg_dir(&unique, &xdg_unique, || None, LastResort::TempDir);
         assert!(dir.ends_with("shore"));
         assert!(dir.parent().unwrap().exists(), "parent should be temp_dir");
@@ -243,9 +238,6 @@ mod tests {
     fn no_home_anywhere_refuses_rather_than_inventing_a_tilde_directory() {
         let unique = format!("SHORE_TEST_NOHOME_{}", std::process::id());
         let xdg_unique = format!("SHORE_TEST_XDG_NOHOME_{}", std::process::id());
-        std::env::remove_var(&unique);
-        std::env::remove_var(&xdg_unique);
-
         let _ = resolve_xdg_dir(&unique, &xdg_unique, || None, LastResort::Refuse);
     }
 
@@ -255,11 +247,11 @@ mod tests {
     fn an_override_is_enough_on_its_own() {
         let unique = format!("SHORE_TEST_OVERRIDE_ONLY_{}", std::process::id());
         let xdg_unique = format!("SHORE_TEST_XDG_OVERRIDE_ONLY_{}", std::process::id());
-        std::env::set_var(&unique, "/srv/shore");
-        std::env::remove_var(&xdg_unique);
+        set_env(&unique, "/srv/shore");
+        unset_env(&xdg_unique);
 
         let dir = resolve_xdg_dir(&unique, &xdg_unique, || None, LastResort::Refuse);
-        std::env::remove_var(&unique);
+        unset_env(&unique);
 
         assert_eq!(dir, PathBuf::from("/srv/shore"));
     }
@@ -267,8 +259,8 @@ mod tests {
     /// `SHORE_WORKSPACE_DIR` is the one override where empty means unset.
     #[test]
     fn empty_workspace_root_counts_as_unset() {
-        std::env::set_var("SHORE_WORKSPACE_DIR", "");
+        set_env("SHORE_WORKSPACE_DIR", "");
         assert_eq!(workspace_root(), None);
-        std::env::remove_var("SHORE_WORKSPACE_DIR");
+        unset_env("SHORE_WORKSPACE_DIR");
     }
 }

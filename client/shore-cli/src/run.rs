@@ -1636,6 +1636,7 @@ async fn recv_command_data(
 
 #[cfg(test)]
 mod tests {
+    use crate::test_env::set_env;
     use tokio::io::duplex;
     use tokio::io::AsyncWriteExt;
 
@@ -1892,7 +1893,7 @@ mod tests {
     /// `mock_server`: that runs spawned, concurrently with the connect.
     fn with_token() {
         static ONCE: std::sync::Once = std::sync::Once::new();
-        ONCE.call_once(|| std::env::set_var(shore_common::token::TOKEN_ENV, "test-token"));
+        ONCE.call_once(|| set_env(shore_common::token::TOKEN_ENV, "test-token"));
     }
 
     /// Execute a command against a mock server and return what the server received.

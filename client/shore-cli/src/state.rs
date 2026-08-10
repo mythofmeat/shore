@@ -105,6 +105,7 @@ pub(crate) fn resolve_display_character(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_env::{set_env, unset_env};
 
     #[test]
     fn resolve_display_character_prefers_daemon_answer() {
@@ -169,7 +170,7 @@ mod tests {
         let tmp = tempfile::TempDir::new().unwrap();
         let runtime = tmp.path().join("shore");
 
-        std::env::set_var("SHORE_RUNTIME_DIR", &runtime);
+        set_env("SHORE_RUNTIME_DIR", &runtime);
         let result = std::panic::catch_unwind(|| {
             // ── character ─────────────────────────────────────────────
             // 1. Missing file → None.
@@ -229,7 +230,7 @@ mod tests {
             // 5. Clearing when missing is a no-op, not an error.
             clear_active_model().unwrap();
         });
-        std::env::remove_var("SHORE_RUNTIME_DIR");
+        unset_env("SHORE_RUNTIME_DIR");
         result.unwrap();
     }
 }

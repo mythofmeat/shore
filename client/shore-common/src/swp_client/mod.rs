@@ -12,6 +12,7 @@ pub use error::{ClientError, DiscoveryKind, Result};
 
 #[cfg(test)]
 mod tests {
+    use crate::test_env::{set_env, unset_env};
     use tokio::io::duplex;
 
     use crate::protocol::client_msg::ClientMessage;
@@ -59,7 +60,7 @@ mod tests {
     /// injectable `resolve_token_with` and never touch the global at all.
     fn with_token() {
         static ONCE: std::sync::Once = std::sync::Once::new();
-        ONCE.call_once(|| std::env::set_var(crate::token::TOKEN_ENV, "test-token"));
+        ONCE.call_once(|| set_env(crate::token::TOKEN_ENV, "test-token"));
     }
 
     // ── Handshake tests ──────────────────────────────────────────────
@@ -371,13 +372,13 @@ mod tests {
     fn discovery_instances_path_uses_xdg() {
         // Save and restore env
         let orig = std::env::var("XDG_RUNTIME_DIR").ok();
-        std::env::set_var("XDG_RUNTIME_DIR", "/tmp/test-xdg");
+        set_env("XDG_RUNTIME_DIR", "/tmp/test-xdg");
         let path = crate::swp_client::discovery::instances_path();
         assert_eq!(path.to_str().unwrap(), "/tmp/test-xdg/shore/instances.json");
         // Restore
         match orig {
-            Some(v) => std::env::set_var("XDG_RUNTIME_DIR", v),
-            None => std::env::remove_var("XDG_RUNTIME_DIR"),
+            Some(v) => set_env("XDG_RUNTIME_DIR", v),
+            None => unset_env("XDG_RUNTIME_DIR"),
         }
     }
 
