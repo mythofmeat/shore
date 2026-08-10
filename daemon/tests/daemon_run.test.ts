@@ -340,6 +340,28 @@ describe("what a client gets", () => {
     }
   });
 
+  test("a chat turn is recorded in the call store", async () => {
+    const place = await layout(MODEL_CONFIG);
+    const daemon = await start(place, [], { anthropic: scriptedProvider("hello back") });
+    const client = await Client.open(daemon.port, "ada");
+    try {
+      await client.awaitFrame("hello");
+      client.send({ type: "message", text: "hi", stream: true, images: [] });
+      await client.awaitFrame("stream_end");
+
+      // `run.ts` built the generation deps from its own `options.providers`
+      // while the runtime wrapped a *separate* copy for the call store. The
+      // conversation persisted either way; `calls.db` just stayed empty, which
+      // is invisible until the day a cache regression needs the payloads.
+      const store = daemon.runtime.callStore;
+      expect(store).toBeDefined();
+      expect(store!.callCount()).toBe(1);
+      expect(store!.queryCalls({ limit: 1 })[0]!.character).toBe("ada");
+    } finally {
+      client.close();
+    }
+  });
+
   test("a conversation change is pushed to everyone connected", async () => {
     const place = await layout();
     const daemon = await start(place);

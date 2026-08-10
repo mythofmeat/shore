@@ -1,4 +1,5 @@
 import { ZERO_USAGE, type CallRecord, type CallStore, type Usage as StoreUsage } from "../call_store.ts";
+import { newWireScope, withWireScope, wireScopedIteration } from "./wire_capture.ts";
 import type {
   GenerateResponse,
   SidecarProvider,
@@ -22,7 +23,7 @@ function nextCallId(ts: Date): string {
 function requestBody(req: SidecarRequest): string {
   const { context: _context, ...rest } = req;
   try {
-    return JSON.stringify({ ...rest, api_key: "[REDACTED]" });
+    return JSON.stringify(rest);
   } catch {
     return JSON.stringify({ error: "request not serializable", sdk: req.sdk, model: req.model });
   }
@@ -76,8 +77,14 @@ export function withCallCapture(
       let finishReason: string | undefined;
       let failure: string | undefined;
 
+      const scope = newWireScope(base.call_id, {
+        character: base.character,
+        call_type: base.call_type,
+        rid: base.rid,
+      });
+
       try {
-        for await (const event of provider.stream(req, signal)) {
+        for await (const event of wireScopedIteration(scope, () => provider.stream(req, signal))) {
           try {
             lines.push(JSON.stringify(event));
           } catch {
@@ -109,8 +116,13 @@ export function withCallCapture(
       const ts = new Date();
       const startedAt = now();
       const base = baseRecord(req, ts);
+      const scope = newWireScope(base.call_id, {
+        character: base.character,
+        call_type: base.call_type,
+        rid: base.rid,
+      });
       try {
-        const response = await provider.generate(req, signal);
+        const response = await withWireScope(scope, () => provider.generate(req, signal));
         write({
           ...base,
           finish_reason: response.finish_reason,

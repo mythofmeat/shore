@@ -22,6 +22,7 @@ import { captureProviders } from "./llm/capture.ts";
 import { withResolvedCredential } from "./llm/generate.ts";
 import { generateImage } from "./llm/image_generate.ts";
 import type { SidecarProvider, SidecarRequest } from "./llm/types.ts";
+import { installWireCapture } from "./llm/wire_capture.ts";
 import { McpClient, type McpServerSpec } from "./mcp/client.ts";
 import { NotificationService } from "./notifications.ts";
 import { McpRegistry, type McpServerConfigView } from "./tools/mcp_registry.ts";
@@ -49,6 +50,7 @@ export interface ShoreRuntime {
   readonly mcp: McpHolder;
   readonly connectMcp: (spec: McpServerSpec) => Promise<McpClient>;
   readonly callStore: CallStore | undefined;
+  readonly providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
   readonly notifier: NotificationService;
   readonly keepalive: KeepaliveService;
   readonly autonomy: AutonomyService;
@@ -67,6 +69,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
   ensureLedger(config);
 
   const providers = captureProviders(options.providers, callStore);
+  const uninstallWireCapture = installCallStoreWireCapture(callStore);
 
   const registry = await CharacterRegistry.create(
     config.dirs.config,
@@ -122,11 +125,13 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     mcp,
     connectMcp,
     callStore,
+    providers,
     notifier,
     keepalive,
     autonomy,
     async shutdown() {
       await mcp.current.shutdown();
+      uninstallWireCapture();
       callStore?.close();
     },
   };
@@ -182,6 +187,13 @@ function openCallStore(config: LoadedConfig): CallStore | undefined {
     console.warn(`shore: cannot open the call store at ${path}; capture disabled: ${String(e)}`);
     return undefined;
   }
+}
+
+function installCallStoreWireCapture(store: CallStore | undefined): () => void {
+  if (store === undefined) return () => {};
+  return installWireCapture((exchange) => {
+    store.recordHttpCall(exchange);
+  });
 }
 
 function ensureLedger(config: LoadedConfig): void {

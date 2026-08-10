@@ -131,7 +131,10 @@ function schemaShape(store: CallStore): SchemaShape {
   const columns = db.query("PRAGMA table_info(transcripts)").all() as { name: string }[];
   const indexes = db
     .query(
-      "SELECT name, sql FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+      `SELECT name, sql FROM sqlite_master
+       WHERE type = 'index' AND name NOT LIKE 'sqlite_%'
+         AND tbl_name IN ('calls', 'transcripts')
+       ORDER BY name`,
     )
     .all() as { name: string; sql: string | null }[];
   return { transcript_columns: columns.map((c) => c.name), indexes };

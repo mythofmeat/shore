@@ -148,7 +148,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
 
   const assembly = {
     runtime,
-    providers: options.providers,
+    providers: runtime.providers,
     autonomy: new TurnAutonomyBridge(runtime.autonomy),
     router: server.sessionRouter,
     handshake,

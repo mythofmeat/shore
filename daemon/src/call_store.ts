@@ -1,5 +1,9 @@
 import { Database } from "bun:sqlite";
+import { createHash } from "node:crypto";
+import { chmodSync } from "node:fs";
 import { constants as zlibConstants, zstdCompressSync, zstdDecompressSync } from "node:zlib";
+
+import { splitJsonPayload } from "./payload_split.ts";
 
 const ZSTD_LEVEL = 3;
 
@@ -45,7 +49,49 @@ CREATE TABLE IF NOT EXISTS transcripts (
 );
 CREATE INDEX IF NOT EXISTS idx_transcripts_ts ON transcripts (ts_unix);
 CREATE INDEX IF NOT EXISTS idx_transcripts_source ON transcripts (source, character, ts_unix);
+
+CREATE TABLE IF NOT EXISTS http_calls (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    call_id               TEXT NOT NULL,
+    seq                   INTEGER NOT NULL,
+    ts                    TEXT NOT NULL,
+    ts_unix               INTEGER NOT NULL,
+    character             TEXT,
+    call_type             TEXT,
+    rid                   TEXT,
+    method                TEXT NOT NULL,
+    url                   TEXT NOT NULL,
+    status                INTEGER,
+    status_text           TEXT,
+    duration_ms           INTEGER,
+    error                 TEXT,
+    request_headers_zstd  BLOB,
+    request_body_zstd     BLOB,
+    response_headers_zstd BLOB,
+    response_body_zstd    BLOB
+);
+CREATE INDEX IF NOT EXISTS idx_http_calls_call ON http_calls (call_id, seq);
+CREATE INDEX IF NOT EXISTS idx_http_calls_ts ON http_calls (ts_unix);
+
+CREATE TABLE IF NOT EXISTS blobs (
+    hash       TEXT PRIMARY KEY,
+    size       INTEGER NOT NULL,
+    compressed INTEGER NOT NULL,
+    data       BLOB NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS payloads (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    sha256   TEXT NOT NULL,
+    size     INTEGER NOT NULL,
+    stored   INTEGER NOT NULL,
+    chunks   INTEGER NOT NULL,
+    manifest BLOB NOT NULL
+);
 `;
+
+const HASH_BYTES = 16;
+const BLOB_RAW_UNDER = 256;
 
 export interface Usage {
   input_tokens: number;
@@ -120,6 +166,47 @@ export interface TranscriptRow {
   entry: unknown;
 }
 
+export interface HttpExchangeRecord {
+  call_id: string;
+  seq: number;
+  ts: Date;
+  character?: string | null;
+  call_type?: string | null;
+  rid?: string | null;
+  method: string;
+  url: string;
+  status?: number | null;
+  status_text?: string | null;
+  duration_ms?: number | null;
+  error?: string | null;
+  request_headers: [string, string][];
+  request_body: Uint8Array | null;
+  response_headers: [string, string][] | null;
+  response_body: Uint8Array | null;
+}
+
+export interface HttpExchangeRow {
+  id: number;
+  call_id: string;
+  seq: number;
+  ts: string;
+  character: string | null;
+  call_type: string | null;
+  rid: string | null;
+  method: string;
+  url: string;
+  status: number | null;
+  status_text: string | null;
+  duration_ms: number | null;
+  error: string | null;
+  request_headers: [string, string][];
+  request_body: string | null;
+  response_headers: [string, string][];
+  response_body: string | null;
+  request_bytes: number;
+  response_bytes: number;
+}
+
 export interface CallFilter {
   call_type?: string | null;
   character?: string | null;
@@ -144,7 +231,9 @@ export class CallStore {
   }
 
   static open(path: string): CallStore {
-    return new CallStore(new Database(path, { create: true, readwrite: true }));
+    const store = new CallStore(new Database(path, { create: true, readwrite: true }));
+    restrictToOwner(path);
+    return store;
   }
 
   static openInMemory(): CallStore {
@@ -159,18 +248,78 @@ export class CallStore {
     return this.#db;
   }
 
+  storePayload(data: Uint8Array | string): number {
+    const bytes = typeof data === "string" ? Buffer.from(data, "utf8") : data;
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const chunks = chunkPayload(bytes);
+    const manifest = new Uint8Array(chunks.length * HASH_BYTES);
+
+    const insertBlob = this.#db.query(
+      "INSERT OR IGNORE INTO blobs (hash, size, compressed, data) VALUES (?1, ?2, ?3, ?4)",
+    );
+    const counted = new Set<string>();
+    let stored = 0;
+    chunks.forEach((chunk, index) => {
+      const hash = chunkHash(chunk);
+      manifest.set(hash, index * HASH_BYTES);
+      const packed = packBlob(chunk);
+      const hex = hexOf(hash);
+      insertBlob.run(hex, chunk.byteLength, packed.compressed ? 1 : 0, packed.data);
+      if (counted.has(hex)) return;
+      counted.add(hex);
+      stored += packed.data.byteLength;
+    });
+
+    const manifestBlob = zstdCompressBytes(manifest)!;
+    this.#db
+      .query(
+        "INSERT INTO payloads (sha256, size, stored, chunks, manifest) VALUES (?1, ?2, ?3, ?4, ?5)",
+      )
+      .run(
+        sha256,
+        bytes.byteLength,
+        stored + manifestBlob.byteLength,
+        chunks.length,
+        manifestBlob,
+      );
+    return this.#lastInsertRowid();
+  }
+
+  loadPayload(id: number): Uint8Array | null {
+    const row = this.#db.query("SELECT manifest, size FROM payloads WHERE id = ?1").get(id) as
+      | Row
+      | null;
+    if (row === null) return null;
+    const manifest = row["manifest"];
+    if (!(manifest instanceof Uint8Array)) return null;
+
+    const hashes = unpackManifest(zstdDecompressSync(manifest));
+    const select = this.#db.query("SELECT size, compressed, data FROM blobs WHERE hash = ?1");
+    const out = new Uint8Array(count(row["size"]));
+    let offset = 0;
+    for (const hash of hashes) {
+      const blob = select.get(hash) as Row | null;
+      if (blob === null) return null;
+      const chunk = unpackBlob(blob);
+      if (chunk === null) return null;
+      out.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return offset === out.byteLength ? out : null;
+  }
+
   recordCall(call: CallRecord): number {
-    const requestBlob = zstdCompress(call.request_body);
-    const responseBlob =
+    const requestPayload = this.storePayload(call.request_body);
+    const responsePayload =
       call.response_body === undefined || call.response_body === null
         ? null
-        : zstdCompress(call.response_body);
+        : this.storePayload(call.response_body);
     this.#db
       .query(
         `INSERT INTO calls (
             call_id, ts, ts_unix, call_type, character, model, provider, sdk,
             rid, finish_reason, input_tokens, output_tokens, cache_read_tokens,
-            duration_ms, error, request_zstd, response_zstd
+            duration_ms, error, request_payload_id, response_payload_id
         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)`,
       )
       .run(
@@ -189,8 +338,8 @@ export class CallStore {
         call.usage.cache_read_tokens,
         call.duration_ms ?? null,
         opt(call.error),
-        requestBlob,
-        responseBlob,
+        requestPayload,
+        responsePayload,
       );
     return this.#lastInsertRowid();
   }
@@ -221,14 +370,96 @@ export class CallStore {
     return this.#lastInsertRowid();
   }
 
+  recordHttpCall(exchange: HttpExchangeRecord): number {
+    this.#db
+      .query(
+        `INSERT INTO http_calls (
+            call_id, seq, ts, ts_unix, character, call_type, rid, method, url,
+            status, status_text, duration_ms, error,
+            request_headers_zstd, request_payload_id,
+            response_headers_zstd, response_payload_id
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)`,
+      )
+      .run(
+        exchange.call_id,
+        exchange.seq,
+        rfc3339(exchange.ts),
+        unixSeconds(exchange.ts),
+        opt(exchange.character),
+        opt(exchange.call_type),
+        opt(exchange.rid),
+        exchange.method,
+        exchange.url,
+        exchange.status ?? null,
+        opt(exchange.status_text),
+        exchange.duration_ms ?? null,
+        opt(exchange.error),
+        zstdCompress(JSON.stringify(exchange.request_headers)),
+        exchange.request_body === null ? null : this.storePayload(exchange.request_body),
+        exchange.response_headers === null
+          ? null
+          : zstdCompress(JSON.stringify(exchange.response_headers)),
+        exchange.response_body === null ? null : this.storePayload(exchange.response_body),
+      );
+    return this.#lastInsertRowid();
+  }
+
+  httpCallsFor(call_id: string): HttpExchangeRow[] {
+    const rows = this.#db
+      .query(
+        `SELECT id, call_id, seq, ts, character, call_type, rid, method, url,
+                status, status_text, duration_ms, error,
+                request_headers_zstd, request_body_zstd, request_payload_id,
+                response_headers_zstd, response_body_zstd, response_payload_id,
+                COALESCE(
+                    (SELECT stored FROM payloads WHERE id = request_payload_id),
+                    LENGTH(request_body_zstd), 0) AS request_bytes,
+                COALESCE(
+                    (SELECT stored FROM payloads WHERE id = response_payload_id),
+                    LENGTH(response_body_zstd), 0) AS response_bytes
+         FROM http_calls WHERE call_id = ?1 ORDER BY seq`,
+      )
+      .all(call_id) as Row[];
+    return rows.map((row) => ({
+      id: int(row["id"]),
+      call_id: text(row["call_id"]),
+      seq: count(row["seq"]),
+      ts: text(row["ts"]),
+      character: optText(row["character"]),
+      call_type: optText(row["call_type"]),
+      rid: optText(row["rid"]),
+      method: text(row["method"]),
+      url: text(row["url"]),
+      status: optCount(row["status"]),
+      status_text: optText(row["status_text"]),
+      duration_ms: optCount(row["duration_ms"]),
+      error: optText(row["error"]),
+      request_headers: headersFrom(row["request_headers_zstd"]),
+      request_body: this.#bodyText(row["request_payload_id"], row["request_body_zstd"]),
+      response_headers: headersFrom(row["response_headers_zstd"]),
+      response_body: this.#bodyText(row["response_payload_id"], row["response_body_zstd"]),
+      request_bytes: count(row["request_bytes"]),
+      response_bytes: count(row["response_bytes"]),
+    }));
+  }
+
+  httpCallCount(): number {
+    const row = this.#db.query("SELECT COUNT(*) AS n FROM http_calls").get() as Row;
+    return count(row["n"]);
+  }
+
   queryCalls(filter: CallFilter): CallSummary[] {
     const rows = this.#db
       .query(
         `SELECT id, call_id, ts, call_type, character, model, provider,
                 finish_reason, input_tokens, output_tokens, cache_read_tokens,
                 duration_ms, error,
-                COALESCE(LENGTH(request_zstd), 0) AS request_bytes,
-                COALESCE(LENGTH(response_zstd), 0) AS response_bytes
+                COALESCE(
+                    (SELECT stored FROM payloads WHERE id = request_payload_id),
+                    LENGTH(request_zstd), 0) AS request_bytes,
+                COALESCE(
+                    (SELECT stored FROM payloads WHERE id = response_payload_id),
+                    LENGTH(response_zstd), 0) AS response_bytes
          FROM calls
          WHERE (?1 IS NULL OR call_type = ?1)
            AND (?2 IS NULL OR character = ?2)
@@ -245,18 +476,31 @@ export class CallStore {
         `SELECT id, call_id, ts, call_type, character, model, provider,
                 finish_reason, input_tokens, output_tokens, cache_read_tokens,
                 duration_ms, error,
-                COALESCE(LENGTH(request_zstd), 0) AS request_bytes,
-                COALESCE(LENGTH(response_zstd), 0) AS response_bytes,
-                request_zstd, response_zstd
+                COALESCE(
+                    (SELECT stored FROM payloads WHERE id = request_payload_id),
+                    LENGTH(request_zstd), 0) AS request_bytes,
+                COALESCE(
+                    (SELECT stored FROM payloads WHERE id = response_payload_id),
+                    LENGTH(response_zstd), 0) AS response_bytes,
+                request_zstd, response_zstd,
+                request_payload_id, response_payload_id
          FROM calls WHERE id = ?1`,
       )
       .get(id) as Row | null;
     if (row === null) return null;
     return {
       ...rowToSummary(row),
-      request: blobToText(row["request_zstd"]),
-      response: blobToText(row["response_zstd"]),
+      request: this.#bodyText(row["request_payload_id"], row["request_zstd"]),
+      response: this.#bodyText(row["response_payload_id"], row["response_zstd"]),
     };
+  }
+
+  #bodyText(payloadId: unknown, legacy: unknown): string | null {
+    if (typeof payloadId === "number") {
+      const bytes = this.loadPayload(payloadId);
+      if (bytes !== null) return new TextDecoder("utf-8").decode(bytes);
+    }
+    return blobToText(legacy);
   }
 
   queryTranscripts(source: string, character: string | null | undefined, limit: number): TranscriptRow[] {
@@ -298,14 +542,37 @@ export class CallStore {
       cutoffUnix,
     );
 
+    const agedHttp = this.#changes("DELETE FROM http_calls WHERE ts_unix < ?1", cutoffUnix);
+
     const sized = this.#changes(
       `DELETE FROM calls WHERE id IN (
            SELECT id FROM (
                SELECT id,
-                      SUM(COALESCE(LENGTH(request_zstd), 0) + COALESCE(LENGTH(response_zstd), 0))
+                      SUM(COALESCE(request_stored, LENGTH(request_zstd), 0)
+                          + COALESCE(response_stored, LENGTH(response_zstd), 0)
+                          + COALESCE(wire.bytes, 0))
                           OVER (ORDER BY ts_unix DESC, id DESC
                                 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running
-               FROM calls
+               FROM (
+                   SELECT calls.*,
+                          (SELECT stored FROM payloads WHERE id = request_payload_id)
+                              AS request_stored,
+                          (SELECT stored FROM payloads WHERE id = response_payload_id)
+                              AS response_stored
+                   FROM calls
+               ) AS calls
+               LEFT JOIN (
+                   SELECT call_id,
+                          SUM(COALESCE(LENGTH(request_headers_zstd), 0)
+                              + COALESCE(LENGTH(response_headers_zstd), 0)
+                              + COALESCE(
+                                  (SELECT stored FROM payloads WHERE id = request_payload_id),
+                                  LENGTH(request_body_zstd), 0)
+                              + COALESCE(
+                                  (SELECT stored FROM payloads WHERE id = response_payload_id),
+                                  LENGTH(response_body_zstd), 0)) AS bytes
+                   FROM http_calls GROUP BY call_id
+               ) AS wire ON wire.call_id = calls.call_id
            )
            WHERE running > ?1
              AND id != (SELECT id FROM calls ORDER BY ts_unix DESC, id DESC LIMIT 1)
@@ -313,12 +580,50 @@ export class CallStore {
       maxTotalBytes,
     );
 
-    this.#db.exec("PRAGMA incremental_vacuum;");
+    const orphaned = this.#changes(
+      "DELETE FROM http_calls WHERE call_id NOT IN (SELECT call_id FROM calls)",
+    );
+    this.#collectGarbage();
 
     return {
-      deleted_by_age: agedCalls + agedTranscripts,
-      deleted_by_size: sized,
+      deleted_by_age: agedCalls + agedTranscripts + agedHttp,
+      deleted_by_size: sized + orphaned,
     };
+  }
+
+  databaseBytes(): number {
+    const row = this.#db
+      .query("SELECT page_count * page_size AS bytes FROM pragma_page_count(), pragma_page_size()")
+      .get() as Row;
+    return count(row["bytes"]);
+  }
+
+  blobCount(): number {
+    const row = this.#db.query("SELECT COUNT(*) AS n FROM blobs").get() as Row;
+    return count(row["n"]);
+  }
+
+  #collectGarbage(): void {
+    this.#changes(
+      `DELETE FROM payloads WHERE id NOT IN (
+           SELECT request_payload_id FROM calls WHERE request_payload_id IS NOT NULL
+           UNION SELECT response_payload_id FROM calls WHERE response_payload_id IS NOT NULL
+           UNION SELECT request_payload_id FROM http_calls WHERE request_payload_id IS NOT NULL
+           UNION SELECT response_payload_id FROM http_calls WHERE response_payload_id IS NOT NULL
+       )`,
+    );
+
+    this.#db.exec("CREATE TEMP TABLE IF NOT EXISTS live_hashes (hash TEXT PRIMARY KEY)");
+    this.#db.exec("DELETE FROM live_hashes");
+    const remember = this.#db.query("INSERT OR IGNORE INTO live_hashes (hash) VALUES (?1)");
+    for (const row of this.#db.query("SELECT manifest FROM payloads").iterate() as Iterable<Row>) {
+      const manifest = row["manifest"];
+      if (!(manifest instanceof Uint8Array)) continue;
+      for (const hash of unpackManifest(zstdDecompressSync(manifest))) remember.run(hash);
+    }
+    this.#changes("DELETE FROM blobs WHERE hash NOT IN (SELECT hash FROM live_hashes)");
+    this.#db.exec("DELETE FROM live_hashes");
+    this.#db.exec("PRAGMA incremental_vacuum;");
   }
 
   #changes(sql: string, ...values: (string | number | null)[]): number {
@@ -376,6 +681,86 @@ function zstdCompress(data: string): Uint8Array {
   });
 }
 
+function chunkPayload(bytes: Uint8Array): Uint8Array[] {
+  const text = decodeUtf8(bytes);
+  if (text === null) return [bytes];
+  const parts = splitJsonPayload(text);
+  if (parts === null) return [bytes];
+
+  const chunks = parts.map((part) => Buffer.from(part, "utf8") as Uint8Array);
+  const rebuilt = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
+  if (rebuilt !== bytes.byteLength) return [bytes];
+  return chunks;
+}
+
+function decodeUtf8(bytes: Uint8Array): string | null {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
+function chunkHash(chunk: Uint8Array): Uint8Array {
+  return createHash("sha256").update(chunk).digest().subarray(0, HASH_BYTES);
+}
+
+function hexOf(hash: Uint8Array): string {
+  return Buffer.from(hash).toString("hex");
+}
+
+function packBlob(chunk: Uint8Array): { data: Uint8Array; compressed: boolean } {
+  if (chunk.byteLength < BLOB_RAW_UNDER) return { data: chunk, compressed: false };
+  const packed = zstdCompressBytes(chunk)!;
+  return packed.byteLength < chunk.byteLength
+    ? { data: packed, compressed: true }
+    : { data: chunk, compressed: false };
+}
+
+function unpackBlob(row: Row): Uint8Array | null {
+  const data = row["data"];
+  if (!(data instanceof Uint8Array)) return null;
+  return count(row["compressed"]) === 1 ? zstdDecompressSync(data) : data;
+}
+
+function unpackManifest(manifest: Uint8Array): string[] {
+  const hashes: string[] = [];
+  for (let offset = 0; offset + HASH_BYTES <= manifest.byteLength; offset += HASH_BYTES) {
+    hashes.push(hexOf(manifest.subarray(offset, offset + HASH_BYTES)));
+  }
+  return hashes;
+}
+
+function zstdCompressBytes(data: Uint8Array | null): Uint8Array | null {
+  if (data === null) return null;
+  return zstdCompressSync(data, {
+    params: {
+      [zlibConstants.ZSTD_c_compressionLevel]: ZSTD_LEVEL,
+      [zlibConstants.ZSTD_c_contentSizeFlag]: 0,
+    },
+  });
+}
+
+function headersFrom(blob: unknown): [string, string][] {
+  const json = blobToText(blob);
+  if (json === null) return [];
+  try {
+    const parsed: unknown = JSON.parse(json);
+    return Array.isArray(parsed) ? (parsed as [string, string][]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function restrictToOwner(path: string): void {
+  for (const file of [path, `${path}-wal`, `${path}-shm`]) {
+    try {
+      chmodSync(file, 0o600);
+    } catch {
+    }
+  }
+}
+
 function blobToText(blob: unknown): string | null {
   if (!(blob instanceof Uint8Array)) return null;
   return new TextDecoder("utf-8").decode(zstdDecompressSync(blob));
@@ -419,6 +804,17 @@ function optCount(v: unknown): number | null {
 }
 
 function migrate(db: Database): void {
+  for (const [table, column] of [
+    ["calls", "request_payload_id"],
+    ["calls", "response_payload_id"],
+    ["http_calls", "request_payload_id"],
+    ["http_calls", "response_payload_id"],
+  ] as const) {
+    if (!columnExists(db, table, column)) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} INTEGER`);
+    }
+  }
+
   if (!columnExists(db, "transcripts", "character")) {
     db.exec(
       `ALTER TABLE transcripts ADD COLUMN character TEXT;

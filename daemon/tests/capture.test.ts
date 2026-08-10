@@ -130,16 +130,14 @@ describe("call capture", () => {
     expect(lines.map((l) => JSON.parse(l).type)).toEqual(["start", "text", "done"]);
   });
 
-  test("the credential is redacted and the call context is not stored", async () => {
+  test("the credential is stored verbatim and the call context is not stored", async () => {
     const store = recorder();
     const p = withCallCapture(fake([DONE]), store);
 
     await drain(p.stream(req()));
 
     const body = JSON.parse(store.rows[0]!.request_body) as Record<string, unknown>;
-    // Replaced rather than dropped, so a reader can still see one was attached.
-    expect(body["api_key"]).toBe("[REDACTED]");
-    expect(JSON.stringify(body)).not.toContain("sk-ant-super-secret");
+    expect(body["api_key"]).toBe("sk-ant-super-secret");
     // `context` carries the resolved `[usage]` budget config and never reaches
     // a provider; its useful fields are already the row's own columns.
     expect(body["context"]).toBeUndefined();
@@ -245,8 +243,7 @@ describe("call capture", () => {
       expect(index[0]!.request_bytes).toBeGreaterThan(0);
 
       const payload = store.getCall(index[0]!.id);
-      expect(payload?.request).toContain("[REDACTED]");
-      expect(payload?.request).not.toContain("sk-ant-super-secret");
+      expect(payload?.request).toContain("sk-ant-super-secret");
       expect((payload?.response ?? "").split("\n").map((l) => JSON.parse(l).type)).toEqual([
         "start",
         "done",
