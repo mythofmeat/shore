@@ -2124,6 +2124,8 @@ mod tests {
             events: false,
             api: None,
             call_type: None,
+            diff: false,
+            against: None,
         });
         let received = execute_with_mock(cli, command_response("edit")).await;
 
@@ -2159,6 +2161,8 @@ mod tests {
             events: false,
             api: None,
             call_type: None,
+            diff: false,
+            against: None,
         });
         let received = execute_with_mock(cli, command_response("delete")).await;
 

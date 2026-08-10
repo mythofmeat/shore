@@ -124,6 +124,126 @@ describe("payload store", () => {
   });
 });
 
+describe("payload diffing", () => {
+  test("appending a turn changes nothing that came before it", () => {
+    const store = CallStore.openInMemory();
+    const base = [turn("user", "one"), turn("assistant", "two")];
+    const from = store.storePayload(body(base));
+    const to = store.storePayload(body([...base, turn("user", "three")]));
+
+    const diff = store.diffPayloads(from, to)!;
+    expect(diff.chunks.removed).toBe(0);
+    expect(diff.chunks.added).toBeGreaterThan(0);
+    expect(diff.chunks.equal).toBeGreaterThan(0);
+    expect(diff.entries.filter((e) => e.op === "added").map((e) => e.text).join("")).toContain(
+      "three",
+    );
+    store.close();
+  });
+
+  test("a changed system prompt shows up as a replacement, not a rewrite", () => {
+    const store = CallStore.openInMemory();
+    const messages = [turn("user", "one"), turn("assistant", "two")];
+    const from = store.storePayload(body(messages));
+    const to = store.storePayload(
+      JSON.stringify({
+        model: "claude-opus-4-8",
+        max_tokens: 8192,
+        system: [{ type: "text", text: "you are something else" }],
+        messages,
+      }),
+    );
+
+    const diff = store.diffPayloads(from, to)!;
+    expect(diff.chunks.equal).toBeGreaterThan(0);
+    expect(diff.entries.some((e) => e.op === "removed" && e.text?.includes("a test"))).toBe(true);
+    expect(diff.entries.some((e) => e.op === "added" && e.text?.includes("something else"))).toBe(
+      true,
+    );
+    store.close();
+  });
+
+  test("equal chunks carry no text, so a diff is not a second copy", () => {
+    const store = CallStore.openInMemory();
+    const base = [turn("user", "x".repeat(2000))];
+    const from = store.storePayload(body(base));
+    const to = store.storePayload(body([...base, turn("user", "new")]));
+
+    const diff = store.diffPayloads(from, to)!;
+    const equal = diff.entries.filter((e) => e.op === "equal");
+    expect(equal.length).toBeGreaterThan(0);
+    expect(equal.every((e) => e.text === null)).toBe(true);
+    expect(diff.bytes.equal).toBeGreaterThan(2000);
+    store.close();
+  });
+
+  test("the previous call is the one before it for the same character", () => {
+    const store = CallStore.openInMemory();
+    const at = (secs: number) => new Date(Date.parse("2026-08-10T12:00:00Z") + secs * 1000);
+    const record = (callId: string, character: string, ts: Date, messages: unknown[]) =>
+      store.recordCall({
+        call_id: callId,
+        ts,
+        character,
+        call_type: "message",
+        usage: ZERO_USAGE,
+        request_body: body(messages),
+      });
+
+    const first = record("a1", "poppy", at(0), [turn("user", "one")]);
+    record("b1", "nova", at(1), [turn("user", "elsewhere")]);
+    const third = record("a2", "poppy", at(2), [turn("user", "one"), turn("user", "two")]);
+
+    expect(store.previousCallId(third)).toBe(first);
+    const diff = store.diffCalls(first, third)!;
+    expect(diff.source).toBe("internal");
+    expect(diff.chunks.removed).toBe(0);
+    store.close();
+  });
+
+  test("the verbatim wire body is diffed when one was captured", () => {
+    const store = CallStore.openInMemory();
+    const wire = (callId: string, seq: number, text: string) =>
+      store.recordHttpCall({
+        call_id: callId,
+        seq,
+        ts: new Date("2026-08-10T12:00:00Z"),
+        method: "POST",
+        url: "https://api.anthropic.com/v1/messages",
+        status: 200,
+        request_headers: [["x-api-key", "sk-real"]],
+        request_body: enc.encode(text),
+        response_headers: [],
+        response_body: null,
+      });
+
+    const at = (secs: number) => new Date(Date.parse("2026-08-10T12:00:00Z") + secs * 1000);
+    const one = store.recordCall({
+      call_id: "w1",
+      ts: at(0),
+      character: "poppy",
+      usage: ZERO_USAGE,
+      request_body: "internal one",
+    });
+    wire("w1", 0, body([turn("user", "wire one")]));
+    const two = store.recordCall({
+      call_id: "w2",
+      ts: at(1),
+      character: "poppy",
+      usage: ZERO_USAGE,
+      request_body: "internal two",
+    });
+    wire("w2", 0, body([turn("user", "wire one"), turn("user", "wire two")]));
+
+    const diff = store.diffCalls(one, two)!;
+    expect(diff.source).toBe("wire");
+    expect(diff.entries.filter((e) => e.op === "added").map((e) => e.text).join("")).toContain(
+      "wire two",
+    );
+    store.close();
+  });
+});
+
 describe("payload garbage collection", () => {
   function record(store: CallStore, callId: string, ts: Date, messages: unknown[]): void {
     store.recordCall({

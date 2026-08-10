@@ -207,6 +207,35 @@ export interface HttpExchangeRow {
   response_bytes: number;
 }
 
+export interface PayloadChunk {
+  hash: string;
+  bytes: number;
+  text: string | null;
+}
+
+export type DiffOp = "equal" | "added" | "removed";
+
+export interface PayloadDiffEntry {
+  op: DiffOp;
+  hash: string;
+  bytes: number;
+  text: string | null;
+}
+
+export interface PayloadDiff {
+  from_payload: number;
+  to_payload: number;
+  chunks: Record<DiffOp, number>;
+  bytes: Record<DiffOp, number>;
+  entries: PayloadDiffEntry[];
+}
+
+export interface CallDiff extends PayloadDiff {
+  from_call: number;
+  to_call: number;
+  source: "wire" | "internal";
+}
+
 export interface CallFilter {
   call_type?: string | null;
   character?: string | null;
@@ -306,6 +335,90 @@ export class CallStore {
       offset += chunk.byteLength;
     }
     return offset === out.byteLength ? out : null;
+  }
+
+  payloadChunks(payloadId: number): PayloadChunk[] | null {
+    const hashes = this.#manifestOf(payloadId);
+    if (hashes === null) return null;
+    const select = this.#db.query("SELECT size, compressed, data FROM blobs WHERE hash = ?1");
+    return hashes.map((hash) => {
+      const blob = select.get(hash) as Row | null;
+      const bytes = blob === null ? null : unpackBlob(blob);
+      return {
+        hash,
+        bytes: bytes?.byteLength ?? 0,
+        text: bytes === null ? null : decodeLossy(bytes),
+      };
+    });
+  }
+
+  diffPayloads(fromPayload: number, toPayload: number): PayloadDiff | null {
+    const before = this.payloadChunks(fromPayload);
+    const after = this.payloadChunks(toPayload);
+    if (before === null || after === null) return null;
+
+    const entries = diffChunks(before, after);
+    const chunks: Record<DiffOp, number> = { equal: 0, added: 0, removed: 0 };
+    const bytes: Record<DiffOp, number> = { equal: 0, added: 0, removed: 0 };
+    for (const entry of entries) {
+      chunks[entry.op] += 1;
+      bytes[entry.op] += entry.bytes;
+    }
+    return { from_payload: fromPayload, to_payload: toPayload, chunks, bytes, entries };
+  }
+
+  previousCallId(id: number): number | null {
+    const row = this.#db
+      .query(
+        `SELECT id FROM calls
+         WHERE (ts_unix, id) < (SELECT ts_unix, id FROM calls WHERE id = ?1)
+           AND character IS (SELECT character FROM calls WHERE id = ?1)
+         ORDER BY ts_unix DESC, id DESC LIMIT 1`,
+      )
+      .get(id) as Row | null;
+    return row === null ? null : int(row["id"]);
+  }
+
+  diffCalls(fromCall: number, toCall: number): CallDiff | null {
+    const from = this.#requestPayloadOf(fromCall);
+    const to = this.#requestPayloadOf(toCall);
+    if (from === null || to === null) return null;
+    if (from.source !== to.source) return null;
+
+    const diff = this.diffPayloads(from.payload, to.payload);
+    if (diff === null) return null;
+    return { ...diff, from_call: fromCall, to_call: toCall, source: from.source };
+  }
+
+  #requestPayloadOf(callId: number): { payload: number; source: "wire" | "internal" } | null {
+    const row = this.#db.query("SELECT call_id, request_payload_id FROM calls WHERE id = ?1").get(
+      callId,
+    ) as Row | null;
+    if (row === null) return null;
+
+    const wire = this.#db
+      .query(
+        `SELECT request_payload_id FROM http_calls
+         WHERE call_id = ?1 AND request_payload_id IS NOT NULL
+         ORDER BY seq LIMIT 1`,
+      )
+      .get(text(row["call_id"])) as Row | null;
+    if (wire !== null && typeof wire["request_payload_id"] === "number") {
+      return { payload: wire["request_payload_id"], source: "wire" };
+    }
+
+    const internal = row["request_payload_id"];
+    return typeof internal === "number" ? { payload: internal, source: "internal" } : null;
+  }
+
+  #manifestOf(payloadId: number): string[] | null {
+    const row = this.#db.query("SELECT manifest FROM payloads WHERE id = ?1").get(payloadId) as
+      | Row
+      | null;
+    if (row === null) return null;
+    const manifest = row["manifest"];
+    if (!(manifest instanceof Uint8Array)) return null;
+    return unpackManifest(zstdDecompressSync(manifest));
   }
 
   recordCall(call: CallRecord): number {
@@ -679,6 +792,48 @@ function zstdCompress(data: string): Uint8Array {
       [zlibConstants.ZSTD_c_contentSizeFlag]: 0,
     },
   });
+}
+
+function diffChunks(before: PayloadChunk[], after: PayloadChunk[]): PayloadDiffEntry[] {
+  const rows = before.length;
+  const cols = after.length;
+  const lengths: number[][] = Array.from({ length: rows + 1 }, () => new Array<number>(cols + 1).fill(0));
+  for (let i = rows - 1; i >= 0; i--) {
+    for (let j = cols - 1; j >= 0; j--) {
+      lengths[i]![j] =
+        before[i]!.hash === after[j]!.hash
+          ? lengths[i + 1]![j + 1]! + 1
+          : Math.max(lengths[i + 1]![j]!, lengths[i]![j + 1]!);
+    }
+  }
+
+  const entries: PayloadDiffEntry[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < rows && j < cols) {
+    if (before[i]!.hash === after[j]!.hash) {
+      entries.push(entryOf("equal", after[j]!));
+      i++;
+      j++;
+    } else if (lengths[i + 1]![j]! >= lengths[i]![j + 1]!) {
+      entries.push(entryOf("removed", before[i]!));
+      i++;
+    } else {
+      entries.push(entryOf("added", after[j]!));
+      j++;
+    }
+  }
+  while (i < rows) entries.push(entryOf("removed", before[i++]!));
+  while (j < cols) entries.push(entryOf("added", after[j++]!));
+  return entries;
+}
+
+function entryOf(op: DiffOp, chunk: PayloadChunk): PayloadDiffEntry {
+  return { op, hash: chunk.hash, bytes: chunk.bytes, text: op === "equal" ? null : chunk.text };
+}
+
+function decodeLossy(bytes: Uint8Array): string {
+  return new TextDecoder("utf-8").decode(bytes);
 }
 
 function chunkPayload(bytes: Uint8Array): Uint8Array[] {

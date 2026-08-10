@@ -158,6 +158,15 @@ pub(crate) enum CliCommand {
         /// Filter `--api` by ledger call type (e.g. message, heartbeat, compaction)
         #[arg(long, requires = "api")]
         call_type: Option<String>,
+
+        /// With `--api <id>`, also show what changed since the previous call
+        #[arg(long, requires = "api")]
+        diff: bool,
+
+        /// With `--api <id> --diff`, compare against this call id instead of
+        /// the previous one
+        #[arg(long, requires = "diff", value_name = "ID")]
+        against: Option<i64>,
     },
 
     /// List or switch characters (no args = list, with name = switch)
@@ -813,6 +822,8 @@ fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         events,
         api,
         call_type,
+        diff,
+        against,
         count,
         ..
     } = cmd
@@ -855,6 +866,12 @@ fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         // `--api <id>` dumps one call; bare `--api` lists recent calls.
         if let Some(id) = api_arg {
             _ = args.insert("id".into(), json!(id));
+            if *diff {
+                _ = args.insert("diff".into(), json!(true));
+                if let Some(other) = against {
+                    _ = args.insert("against".into(), json!(other));
+                }
+            }
         } else {
             _ = args.insert("count".into(), json!(count));
             if let Some(ct) = call_type {
@@ -1244,9 +1261,13 @@ mod tests {
                 events,
                 api,
                 call_type,
+                diff,
+                against,
             } => {
                 assert!(subcommand.is_none());
                 assert!(msg_ref.is_none());
+                assert!(!diff);
+                assert!(against.is_none());
                 assert_eq!(*count, 64);
                 assert!(role.is_none());
                 assert!(!follow);
@@ -2456,6 +2477,8 @@ mod tests {
             events: false,
             api: None,
             call_type: None,
+            diff: false,
+            against: None,
         };
         let (name, args) = to_swp_command(&cmd).unwrap();
         assert_eq!(name, "edit");
@@ -2483,6 +2506,8 @@ mod tests {
             events: false,
             api: None,
             call_type: None,
+            diff: false,
+            against: None,
         };
         let (name, args) = to_swp_command(&cmd).unwrap();
         assert_eq!(name, "delete");
@@ -2532,6 +2557,8 @@ mod tests {
             events: false,
             api: None,
             call_type: None,
+            diff: false,
+            against: None,
         };
         let (name, args) = to_swp_command(&cmd).unwrap();
         assert_eq!(name, "get");
@@ -2557,11 +2584,37 @@ mod tests {
             events: false,
             api: None,
             call_type: None,
+            diff: false,
+            against: None,
         };
         let (name, args) = to_swp_command(&cmd).unwrap();
         assert_eq!(name, "log");
         assert_eq!(arg(&args, "turns"), 20);
         assert_eq!(arg(&args, "role"), "assistant");
+    }
+
+    #[test]
+    fn log_api_diff_asks_for_a_comparison() {
+        let cli = parse(&["log", "--api", "42", "--diff"]);
+        let (name, args) = to_swp_command(&cli.command).unwrap();
+        assert_eq!(name, "call_log");
+        assert_eq!(arg(&args, "id"), 42);
+        assert_eq!(arg(&args, "diff"), true);
+        assert!(args.get("against").is_none());
+    }
+
+    #[test]
+    fn log_api_diff_against_pins_the_other_side() {
+        let cli = parse(&["log", "--api", "42", "--diff", "--against", "40"]);
+        let (_, args) = to_swp_command(&cli.command).unwrap();
+        assert_eq!(arg(&args, "against"), 40);
+    }
+
+    #[test]
+    fn log_api_without_diff_asks_for_no_comparison() {
+        let cli = parse(&["log", "--api", "42"]);
+        let (_, args) = to_swp_command(&cli.command).unwrap();
+        assert!(args.get("diff").is_none());
     }
 
     #[test]
@@ -2620,6 +2673,8 @@ mod tests {
                 events: false,
                 api: None,
                 call_type: None,
+                diff: false,
+                against: None,
             },
             CliCommand::Log {
                 subcommand: Some(LogCommand::Edit {
@@ -2640,6 +2695,8 @@ mod tests {
                 events: false,
                 api: None,
                 call_type: None,
+                diff: false,
+                against: None,
             },
             CliCommand::Log {
                 subcommand: Some(LogCommand::Delete {
@@ -2659,6 +2716,8 @@ mod tests {
                 events: false,
                 api: None,
                 call_type: None,
+                diff: false,
+                against: None,
             },
             CliCommand::Log {
                 subcommand: None,
@@ -2676,6 +2735,8 @@ mod tests {
                 events: false,
                 api: None,
                 call_type: None,
+                diff: false,
+                against: None,
             },
             CliCommand::Status {
                 section: None,

@@ -309,7 +309,11 @@ fn print_call_log(data: &serde_json::Value) {
     }
 
     if let Some(call) = data.get("call").filter(|c| !c.is_null()) {
-        print_one_call(&mut out, call, width);
+        if let Some(diff) = data.get("diff").filter(|d| !d.is_null()) {
+            print_call_diff(&mut out, call, diff, width);
+        } else {
+            print_one_call(&mut out, call, width);
+        }
         return;
     }
 
@@ -402,6 +406,91 @@ fn print_one_call(out: &mut impl Write, call: &serde_json::Value, width: usize) 
         _ = writeln!(out);
     }
     print_dim_line(out, "(--json for the full, untruncated payload)");
+}
+
+/// Max characters of a single changed chunk shown in a diff.
+const DIFF_CHUNK_PREVIEW: usize = 1200;
+
+/// Render one call as what changed since an earlier call: the unchanged
+/// prefix collapsed to a count, every added or removed chunk shown in full.
+fn print_call_diff(
+    out: &mut impl Write,
+    call: &serde_json::Value,
+    diff: &serde_json::Value,
+    width: usize,
+) {
+    write_section_header(
+        out,
+        "call diff",
+        &format!(
+            "#{} -> #{}",
+            diff["from_call"].as_i64().unwrap_or(0),
+            diff["to_call"].as_i64().unwrap_or(0)
+        ),
+        width,
+    );
+
+    let chunks = &diff["chunks"];
+    let bytes = &diff["bytes"];
+    write_dim(
+        out,
+        &format!(
+            "  {}  {}  source={}\n",
+            call["ts"].as_str().unwrap_or("?"),
+            call["call_type"].as_str().unwrap_or("?"),
+            diff["source"].as_str().unwrap_or("?"),
+        ),
+    );
+    write_dim(
+        out,
+        &format!(
+            "  unchanged {} chunks / {}B   added {} / {}B   removed {} / {}B\n\n",
+            chunks["equal"].as_u64().unwrap_or(0),
+            bytes["equal"].as_u64().unwrap_or(0),
+            chunks["added"].as_u64().unwrap_or(0),
+            bytes["added"].as_u64().unwrap_or(0),
+            chunks["removed"].as_u64().unwrap_or(0),
+            bytes["removed"].as_u64().unwrap_or(0),
+        ),
+    );
+
+    let empty = Vec::new();
+    let entries = diff["entries"].as_array().unwrap_or(&empty);
+    let mut unchanged_run = 0_u64;
+    for entry in entries {
+        let op = entry["op"].as_str().unwrap_or("equal");
+        let body = entry["text"].as_str().unwrap_or("");
+        // A chunk that is only the punctuation between two array elements
+        // carries no information; `--json` still has it.
+        if op != "equal" && body.trim_matches([',', '[', ']', ' ', '\n']).is_empty() {
+            continue;
+        }
+        if op == "equal" {
+            unchanged_run = unchanged_run.saturating_add(1);
+            continue;
+        }
+        if unchanged_run > 0 {
+            write_dim(out, &format!("   … {unchanged_run} unchanged\n"));
+            unchanged_run = 0;
+        }
+        let (color, sign) = if op == "added" {
+            (Color::Green, '+')
+        } else {
+            (Color::Red, '-')
+        };
+        for line in truncate_display(body, DIFF_CHUNK_PREVIEW).lines() {
+            write_fg(out, color, &format!("  {sign} {line}\n"));
+        }
+    }
+    if unchanged_run > 0 {
+        write_dim(out, &format!("   … {unchanged_run} unchanged\n"));
+    }
+
+    _ = writeln!(out);
+    print_dim_line(
+        out,
+        "(shore log --api <id> for the call in full; --json for the raw diff)",
+    );
 }
 
 /// Render the curated heartbeat transcript: per call, the model/provider
