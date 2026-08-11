@@ -20,8 +20,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Derive release version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "PACKAGE_VERSION=${version//-/_}" >> "$GITHUB_ENV"
+
       - run: |
           docker build \
+            --build-arg VERSION="$VERSION" \
+            --build-arg PACKAGE_VERSION="$PACKAGE_VERSION" \
             --target artifacts \
             --output type=local,dest=out \
             -f contrib/${{ matrix.distro }}/Dockerfile \
@@ -56,7 +68,20 @@ jobs:
         with:
           bun-version: latest
 
-      - run: cargo build --release --locked --target ${{ matrix.rust-target }} --package shore-cli --package shore-tui
+      - name: Derive release version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Inject release version
+        run: sed -i.bak "s/^version = \"0.0.0\"/version = \"$VERSION\"/" Cargo.toml
+        working-directory: client
+
+      - run: cargo build --release --target ${{ matrix.rust-target }} --package shore-cli --package shore-tui
         working-directory: client
 
       - run: bun install

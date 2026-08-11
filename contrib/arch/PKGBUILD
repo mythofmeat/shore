@@ -1,6 +1,6 @@
 pkgbase=shore
 pkgname=('shore-cli' 'shore-daemon' 'shore-tui')
-pkgver=0
+pkgver=0.0.0
 pkgrel=1
 pkgdesc="Persistent AI character engine"
 arch=('x86_64')
@@ -8,15 +8,6 @@ url="https://github.com/mythofmeat/shore"
 license=('MIT' 'Apache-2.0')
 makedepends=('rust' 'bun' 'git')
 options=(!lto !debug strip)
-
-pkgver() {
-    cd "$srcdir"
-    if git rev-parse --git-dir > /dev/null 2>&1; then
-        git describe --tags --abbrev=0 | sed 's/^v//; s/-/_/'
-    else
-        echo 0
-    fi
-}
 
 build() {
     CARGO_PACKAGES=('shore-cli' 'shore-tui')
@@ -102,4 +93,3 @@ package_shore-tui() {
 
     _install_licenses
 }
-

@@ -1,5 +1,5 @@
 pkgname=shore
-pkgver=4.4.0
+pkgver=0.0.0
 pkgrel=0
 pkgdesc="Persistent AI character engine"
 url="https://github.com/mythofmeat/shore"
