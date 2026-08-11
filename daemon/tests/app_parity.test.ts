@@ -318,6 +318,8 @@ const DELIBERATELY_DIVERGENT = new Set([
   "the removed matrix connection is rejected",
   "the removed embedded matrix connection is rejected",
   "the advanced section",
+  "max_image_size = 0 disables resizing",
+  "negative u64",
   "seq: AdvancedConfig",
   "seq: AdvancedConfig, at its minimum",
   "seq: LlmSidecarConfig",
@@ -504,8 +506,22 @@ describe("parsing config.toml", () => {
     expect("err" in parsed).toBe(true);
     expect((parsed as { err: string }).err).toBe(
       "unknown field `api_payload_logging`, expected one of `editor`, " +
-        "`max_retries`, `retry_backoff`, `max_image_size`",
+        "`max_retries`, `retry_backoff`",
     );
+  });
+
+  test("`max_image_size` is rejected by name now that nothing resizes", () => {
+    for (const name of ["max_image_size = 0 disables resizing", "negative u64"]) {
+      const c = fixture.parse.find((x) => x.name === name);
+      if (c === undefined) throw new Error(`fixture case missing: ${name}`);
+
+      const parsed = parseAppConfig(parseToml(c.toml));
+      expect("err" in parsed).toBe(true);
+      expect((parsed as { err: string }).err).toBe(
+        "unknown field `max_image_size`, expected one of `editor`, " +
+          "`max_retries`, `retry_backoff`",
+      );
+    }
   });
 
   test("a config still setting the moved cache keys at the old paths is rejected", () => {
@@ -557,13 +573,13 @@ describe("parsing config.toml", () => {
   test("the surviving [advanced] keys still parse, positionally and by name", () => {
     const byName = parseAppConfig(
       parseToml(
-        `[advanced]\neditor = "hx"\nmax_retries = 5\n` +
-          `retry_backoff = "250ms"\nmax_image_size = 5000000\n`,
+        `[advanced]\neditor = "hx"\nmax_retries = 5\nretry_backoff = "250ms"\n`,
       ),
     );
     if ("err" in byName) throw new Error(byName.err);
     expect(byName.ok.advanced.editor).toBe("hx");
-    expect(byName.ok.advanced.max_image_size).toBe(5_000_000);
+    expect(byName.ok.advanced.max_retries).toBe(5);
+    expect(byName.ok.advanced.retry_backoff?.asMillisExact()).toBe(250n);
 
     const positional = parseAppConfig(parseToml(`advanced = ["hx", 3, "1s"]\n`));
     if ("err" in positional) throw new Error(positional.err);
@@ -578,7 +594,7 @@ describe("parsing config.toml", () => {
     const tooShort = parseAppConfig(parseToml(`advanced = []\n`));
     expect("err" in tooShort).toBe(true);
     expect((tooShort as { err: string }).err).toBe(
-      "invalid length 0, expected struct AdvancedConfig with 4 elements",
+      "invalid length 0, expected struct AdvancedConfig with 3 elements",
     );
   });
 
@@ -752,16 +768,26 @@ describe("distinctions Bun's TOML parser destroys", () => {
     ).not.toThrow();
   });
 
-  test("a u64 past 2^53 loses its last digit here and keeps it in Rust", () => {
+  test("the recorded u64 case set `max_image_size`, which is now rejected by name", () => {
     const c = fixture.parse.find((x) => x.name === "u64 fields hold values a double cannot");
     if (c === undefined) throw new Error("fixture case missing");
-    const rust = c.ok as { advanced: { max_image_size: number } } | undefined;
+    const rust = c.ok as { advanced: Record<string, unknown> } | undefined;
     if (rust === undefined) throw new Error("expected a recorded success");
-    expect(rust.advanced.max_image_size).toBe(9007199254740993);
+    expect(rust.advanced.max_image_size).toBe(9007199254740992);
 
     const parsed = parseAppConfig(parseToml(c.toml));
+    expect("err" in parsed).toBe(true);
+    expect((parsed as { err: string }).err).toBe(
+      "unknown field `max_image_size`, expected one of `editor`, `max_retries`, `retry_backoff`",
+    );
+  });
+
+  test("a u64 past 2^53 still loses its last digit on a surviving field", () => {
+    const parsed = parseAppConfig(
+      parseToml(`[memory.retrieval]\nmax_file_bytes = 9007199254740993\n`),
+    );
     if ("err" in parsed) throw new Error(parsed.err);
-    expect(parsed.ok.advanced.max_image_size).toBe(9007199254740992);
+    expect(parsed.ok.memory.retrieval.max_file_bytes).toBe(9007199254740992);
   });
 });
 

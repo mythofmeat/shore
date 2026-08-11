@@ -968,14 +968,12 @@ export interface AdvancedConfig {
   editor: string | undefined;
   max_retries: number | undefined;
   retry_backoff: ConfigDuration | undefined;
-  max_image_size: number;
 }
 
 const defaultAdvancedConfig = (): AdvancedConfig => ({
   editor: undefined,
   max_retries: undefined,
   retry_backoff: undefined,
-  max_image_size: 2_000_000,
 });
 
 const ADVANCED: StructSpec<AdvancedConfig> = {
@@ -986,7 +984,6 @@ const ADVANCED: StructSpec<AdvancedConfig> = {
     editor: optional(readString),
     max_retries: optional(readU32),
     retry_backoff: optional(readDuration),
-    max_image_size: readU64,
   },
 };
 

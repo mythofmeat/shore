@@ -71,7 +71,6 @@ interface BuildCase {
   name: string;
   note: string;
   mode: AssistantImageMode;
-  max_image_size: number;
   prompt: {
     system: { label: string; content: string }[];
     messages: FixturePromptMessage[];
@@ -99,7 +98,6 @@ interface ContextCase {
     sdk: Sdk;
     max_context_tokens: number;
     max_output_tokens: number;
-    max_image_size: number;
     messages: Message[];
   };
   llm_messages: unknown[];
@@ -282,7 +280,6 @@ async function contextFixture(c: ContextCase): Promise<{
   const app: AppConfig = defaultAppConfig();
   app.defaults.display_name = c.input.display_name;
   app.behavior.user_message_timestamps = c.input.timestamps;
-  app.advanced.max_image_size = c.input.max_image_size;
   app.tools.enabled_tools = c.input.enabled_tools;
   app.tools.enabled_subagents = c.input.enabled_subagents;
   for (const s of c.input.subagents) {
