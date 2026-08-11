@@ -81,7 +81,7 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
     ledgerPath,
     usageConfig: usage,
     keepaliveMaxSecs: () =>
-      Number(global().app.behavior.autonomy.cache_keepalive_max.asSecs()),
+      Number(global().app.cache.keepalive_max.asSecs()),
     tools: (charName, turn) => chatToolDeps(a, charName, turn),
     ...(a.env === undefined ? {} : { env: a.env }),
   };

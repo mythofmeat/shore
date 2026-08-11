@@ -458,7 +458,7 @@ function callContext(
 ): CallContext {
   const ceiling = deps.keepaliveMaxSecs?.();
   const usage = deps.usageConfig?.();
-  const forensics = config.app.advanced.cache_forensics ? config.dirs.cache : undefined;
+  const forensics = config.app.cache.forensics ? config.dirs.cache : undefined;
   const effort = resolvedReasoningEffort(call.options);
   return {
     ...(deps.ledgerPath === undefined ? {} : { ledger: deps.ledgerPath }),

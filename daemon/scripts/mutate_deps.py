@@ -110,14 +110,14 @@ MUTANTS = [
     ("live: the keepalive ceiling is captured at assembly and never moves again",
      D,
      "    keepaliveMaxSecs: () =>\n"
-     "      Number(global().app.behavior.autonomy.cache_keepalive_max.asSecs()),",
+     "      Number(global().app.cache.keepalive_max.asSecs()),",
      "    keepaliveMaxSecs: (() => {\n"
-     "      const secs = Number(global().app.behavior.autonomy.cache_keepalive_max.asSecs());\n"
+     "      const secs = Number(global().app.cache.keepalive_max.asSecs());\n"
      "      return () => secs;\n    })(),"),
     ("live: the ceiling is read in milliseconds, so it never expires",
      D,
-     "      Number(global().app.behavior.autonomy.cache_keepalive_max.asSecs()),",
-     "      Number(global().app.behavior.autonomy.cache_keepalive_max.asMillisExact()),"),
+     "      Number(global().app.cache.keepalive_max.asSecs()),",
+     "      Number(global().app.cache.keepalive_max.asMillisExact()),"),
     ("live: the config is read off the startup snapshot rather than the registry",
      D,
      "  const global = () => runtime.registry.globalConfig();",

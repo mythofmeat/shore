@@ -431,7 +431,7 @@ describe("what the assembly hands the driver", () => {
 
   test("the usage config and the keepalive ceiling are read live, not copied", async () => {
     const { root, config, runtime } = await runtimeUnder("shore-deps-live-", (app) => {
-      app.behavior.autonomy.cache_keepalive_max = ConfigDuration.fromSecs(3600);
+      app.cache.keepalive_max = ConfigDuration.fromSecs(3600);
     });
     try {
       const deps = buildGenerationDeps({
@@ -453,13 +453,7 @@ describe("what the assembly hands the driver", () => {
         ...config,
         app: {
           ...config.app,
-          behavior: {
-            ...config.app.behavior,
-            autonomy: {
-              ...config.app.behavior.autonomy,
-              cache_keepalive_max: ConfigDuration.fromSecs(60),
-            },
-          },
+          cache: { ...config.app.cache, keepalive_max: ConfigDuration.fromSecs(60) },
           usage: { ...config.app.usage, budgets: [{ cost_usd: 9 } as never] },
         },
       });

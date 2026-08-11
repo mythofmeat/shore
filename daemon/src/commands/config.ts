@@ -297,6 +297,6 @@ export function configReset(ctx: ConfigContext): unknown {
 function adopt(ctx: ConfigContext, fresh: LoadedConfig): void {
   ctx.runtime.reloadRuntimeConfig(fresh);
   ctx.runtime.setUsageConfig(fresh);
-  ctx.runtime.setCacheKeepaliveCeiling(fresh.app.behavior.autonomy.cache_keepalive_max);
+  ctx.runtime.setCacheKeepaliveCeiling(fresh.app.cache.keepalive_max);
   ctx.config = fresh;
 }

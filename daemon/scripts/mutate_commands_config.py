@@ -232,8 +232,8 @@ MUTANTS = [
      "  ctx.activeModel = undefined;\n  ctx.activeResolvedModel = undefined;\n  adopt(ctx, fresh);",
      "  ctx.activeModel = undefined;\n  ctx.activeResolvedModel = undefined;"),
     ("adopt: the keepalive ceiling is never handed over",
-     "  ctx.runtime.setCacheKeepaliveCeiling(fresh.app.behavior.autonomy.cache_keepalive_max);",
-     "  void fresh.app.behavior.autonomy.cache_keepalive_max;"),
+     "  ctx.runtime.setCacheKeepaliveCeiling(fresh.app.cache.keepalive_max);",
+     "  void fresh.app.cache.keepalive_max;"),
 ]
 
 

@@ -312,13 +312,11 @@ const HEARTBEAT: StructSpec<HeartbeatConfig> = {
 export interface AutonomyConfig {
   enabled: boolean;
   heartbeat: HeartbeatConfig;
-  cache_keepalive_max: ConfigDuration;
 }
 
 const defaultAutonomyConfig = (): AutonomyConfig => ({
   enabled: false,
   heartbeat: defaultHeartbeatConfig(),
-  cache_keepalive_max: ConfigDuration.fromSecs(43_200),
 });
 
 const AUTONOMY: StructSpec<AutonomyConfig> = {
@@ -327,7 +325,25 @@ const AUTONOMY: StructSpec<AutonomyConfig> = {
   fields: {
     enabled: readBool,
     heartbeat: (v) => readStruct(HEARTBEAT, v),
-    cache_keepalive_max: readDuration,
+  },
+};
+
+export interface CacheConfig {
+  keepalive_max: ConfigDuration;
+  forensics: boolean;
+}
+
+export const defaultCacheConfig = (): CacheConfig => ({
+  keepalive_max: ConfigDuration.fromSecs(43_200),
+  forensics: false,
+});
+
+const CACHE: StructSpec<CacheConfig> = {
+  name: "CacheConfig",
+  make: defaultCacheConfig,
+  fields: {
+    keepalive_max: readDuration,
+    forensics: readBool,
   },
 };
 
@@ -949,7 +965,6 @@ const USAGE: StructSpec<UsageConfig> = {
 };
 
 export interface AdvancedConfig {
-  cache_forensics: boolean;
   editor: string | undefined;
   max_retries: number | undefined;
   retry_backoff: ConfigDuration | undefined;
@@ -957,7 +972,6 @@ export interface AdvancedConfig {
 }
 
 const defaultAdvancedConfig = (): AdvancedConfig => ({
-  cache_forensics: false,
   editor: undefined,
   max_retries: undefined,
   retry_backoff: undefined,
@@ -969,7 +983,6 @@ const ADVANCED: StructSpec<AdvancedConfig> = {
   noDefault: ["editor", "max_retries", "retry_backoff"],
   make: defaultAdvancedConfig,
   fields: {
-    cache_forensics: readBool,
     editor: optional(readString),
     max_retries: optional(readU32),
     retry_backoff: optional(readDuration),
@@ -1041,6 +1054,7 @@ export interface AppConfig {
   behavior: BehaviorConfig;
   tools: ToolsConfig;
   memory: MemoryConfig;
+  cache: CacheConfig;
   connections: ConnectionsConfig;
   notifications: NotificationsConfig;
   usage: UsageConfig;
@@ -1055,6 +1069,7 @@ export const defaultAppConfig = (): AppConfig => ({
   behavior: defaultBehaviorConfig(),
   tools: defaultToolsConfig(),
   memory: defaultMemoryConfig(),
+  cache: defaultCacheConfig(),
   connections: defaultConnectionsConfig(),
   notifications: defaultNotificationsConfig(),
   usage: defaultUsageConfig(),
@@ -1072,6 +1087,7 @@ const APP: StructSpec<AppConfig> = {
     behavior: (v) => readStruct(BEHAVIOR, v),
     tools: (v) => readStruct(TOOLS, v),
     memory: (v) => readStruct(MEMORY, v),
+    cache: (v) => readStruct(CACHE, v),
     connections: (v) => readStruct(CONNECTIONS, v),
     notifications: (v) => readStruct(NOTIFICATIONS, v),
     usage: (v) => readStruct(USAGE, v),

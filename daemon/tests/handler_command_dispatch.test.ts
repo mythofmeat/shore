@@ -194,8 +194,8 @@ describe("restartRequiredChanges", () => {
   });
 
   test("the advanced switch that has a reader, named individually", () => {
-    expect(changes((c) => (c.app.advanced.cache_forensics = true))).toEqual([
-      "[advanced].cache_forensics",
+    expect(changes((c) => (c.app.cache.forensics = true))).toEqual([
+      "[cache].forensics",
     ]);
   });
 
@@ -204,9 +204,9 @@ describe("restartRequiredChanges", () => {
       changes((c) => {
         c.app.daemon.addr = "0.0.0.0:1";
         c.app.notifications.enabled = true;
-        c.app.advanced.cache_forensics = true;
+        c.app.cache.forensics = true;
       }),
-    ).toEqual(["[daemon]", "[notifications]", "[advanced].cache_forensics"]);
+    ).toEqual(["[daemon]", "[notifications]", "[cache].forensics"]);
   });
 });
 
@@ -365,12 +365,12 @@ describe("a config_reload", () => {
   test("restart_required is computed before the adoption, not after", async () => {
     // Afterwards the daemon's config *is* the fresh one, so every comparison
     // comes back empty and the client is never told what it will not see move.
-    const f = fakes({ config: config((c) => (c.app.advanced.cache_forensics = true)) });
+    const f = fakes({ config: config((c) => (c.app.cache.forensics = true)) });
 
     const out = await afterCommand("config_reload", { apply: true }, apply, f.ctx);
 
     expect((out as { restart_required: string[] }).restart_required).toEqual([
-      "[advanced].cache_forensics",
+      "[cache].forensics",
     ]);
   });
 

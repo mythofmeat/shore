@@ -91,7 +91,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     {
       ledgerPath: rustJoin(config.dirs.data, "ledger.db"),
       maxIdleSecs: () =>
-        Number(registry.globalConfig().app.behavior.autonomy.cache_keepalive_max.asSecs()),
+        Number(registry.globalConfig().app.cache.keepalive_max.asSecs()),
     },
   );
   const cache = new LastRequestCache(keepalive);

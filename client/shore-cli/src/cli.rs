@@ -406,16 +406,7 @@ pub(crate) enum CliCommand {
         shell: Shell,
     },
 
-    /// Emit plain names for shell completion helpers (internal).
-    ///
-    /// Used by the dynamic completions appended to `shore completions fish`.
-    /// Any failure (daemon down, parse error) results in empty output and
-    /// a zero exit code so completions silently fall back to nothing.
-    ///
-    /// Name kept short (`complete`) rather than something like `__complete`
-    /// because clap_complete 4.6.0 panics with
-    /// `find_subcommand_with_path` when generating bash completions for
-    /// subcommands renamed via `#[command(name = …)]`.
+    /// Emit plain names for shell completion helpers (internal)
     #[command(hide = true)]
     Complete {
         /// What to enumerate
