@@ -2113,7 +2113,7 @@ fn pace_row(budget: &serde_json::Value) -> Option<String> {
         .map(format_local_ampm)
         .map_or_else(|| "?".into(), |s| ellipsize(&s, TIME_W));
 
-    Some(format!(
+    let row = format!(
         "  \u{2514} {:<PACE_LABEL_W$} {:>5.2}/{:<5.2} {:>6.0}%  {:<15} {:<16} {started:<TIME_W$} {resets:<TIME_W$}",
         format!("{} pace", pace["period"].as_str().unwrap_or("day")),
         current,
@@ -2121,6 +2121,14 @@ fn pace_row(budget: &serde_json::Value) -> Option<String> {
         percent,
         pace["status"].as_str().unwrap_or("ok"),
         acting_now(pace),
+    );
+    let Some(base) = pace["base_allowance"].as_f64() else {
+        return Some(row);
+    };
+    let rollover = pace["rollover"].as_f64().unwrap_or(0.0);
+    let debt = pace["debt_adjustment"].as_f64().unwrap_or(0.0);
+    Some(format!(
+        "{row}\n      base ${base:.2}  + rollover ${rollover:.2}  - debt adjustment ${debt:.2}"
     ))
 }
 
@@ -3140,6 +3148,9 @@ mod tests {
                 "window_start": "2026-05-21T06:00:00+00:00",
                 "window_end": "2026-05-22T06:00:00+00:00",
                 "allowance": 2.166_666_666_666_666_5,
+                "base_allowance": 2.0,
+                "rollover": 0.25,
+                "debt_adjustment": 0.083_333_333_333_333_33,
                 "current_cost": 1.0,
                 "remaining": 1.166_666_666_666_666_5,
                 "percent_used": 0.461_538_461_538_461_56,
@@ -3158,6 +3169,10 @@ mod tests {
             "row shows spend against allowance: {row}"
         );
         assert!(row.contains("46%"), "row shows the used share: {row}");
+        assert!(
+            row.contains("base $2.00  + rollover $0.25  - debt adjustment $0.08"),
+            "row explains how the allowance was formed: {row}"
+        );
         assert!(
             row.contains("2026-05-22"),
             "row shows the pace sub-window bounds: {row}"

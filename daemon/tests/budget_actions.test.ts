@@ -202,7 +202,13 @@ describe("warn_action", () => {
 
 describe("pace_warn_action", () => {
   const paced = (fields: Record<string, unknown>): unknown =>
-    budget({ period: "month", pace_period: "day", ...fields });
+    budget({
+      period: "month",
+      pace_period: "day",
+      reset_day_of_month: 5,
+      reset_hour: 0,
+      ...fields,
+    });
 
   test("falls back to warn_action so one key covers both windows", () => {
     // $0.50 spent against a daily pace allowance of ~$10/31 ≈ $0.32 — over the
@@ -256,6 +262,8 @@ describe("effective_action", () => {
     const config = budget({
       period: "month",
       pace_period: "day",
+      reset_day_of_month: 5,
+      reset_hour: 0,
       warn_at: [0.85, 1],
       pace_warn_at: [0.5],
       pace_warn_action: "pause_heartbeat",

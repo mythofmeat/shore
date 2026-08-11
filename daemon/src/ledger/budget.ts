@@ -3,7 +3,7 @@ import type { Database } from "bun:sqlite";
 import type { UsageConfig as AppUsageConfig } from "../config/app.ts";
 
 import { isSubscriptionProvider } from "./store.ts";
-import { usageTotals, type QueryFilter } from "./query.ts";
+import { usageCostEntries, usageTotals, type QueryFilter } from "./query.ts";
 import {
   atHour,
   daysFromMonday,
@@ -179,6 +179,9 @@ export interface PaceStatus {
   window_start: string;
   window_end: string;
   allowance: number;
+  base_allowance: number;
+  rollover: number;
+  debt_adjustment: number;
   current_cost: number;
   remaining: number;
   percent_used: number;
@@ -439,6 +442,13 @@ interface PaceWindow {
   periods_remaining: number;
 }
 
+interface PaceSlice {
+  start: number;
+  end: number;
+  weight: number;
+  periods_remaining: number;
+}
+
 function paceStep(pace: UsageBudgetPeriod): number | undefined {
   switch (pace) {
     case "hour":
@@ -471,6 +481,39 @@ function paceWindow(
     end: resolveInZone(bounds.end, window.zone),
     periods_remaining: bounds.periods_remaining,
   };
+}
+
+function paceSlices(
+  window: PeriodWindow,
+  now: number,
+  pace: UsageBudgetPeriod,
+): PaceSlice[] {
+  const step = paceStep(pace);
+  if (step === undefined) return [];
+  const stepSecs = Math.trunc(step / SECOND_MS);
+  if (stepSecs <= 0) return [];
+
+  const nowNaive = naiveInZone(now, window.zone);
+  const slices: PaceSlice[] = [];
+  for (
+    let start = window.start_naive;
+    start < window.end_naive;
+    start = asNaive(start + stepSecs * SECOND_MS)
+  ) {
+    const end = asNaive(Math.min(start + stepSecs * SECOND_MS, window.end_naive));
+    const remainingSecs = Math.max(
+      Math.trunc((window.end_naive - start) / SECOND_MS),
+      0,
+    );
+    slices.push({
+      start: resolveInZone(start, window.zone),
+      end: resolveInZone(end, window.zone),
+      weight: Math.max(Math.trunc((end - start) / SECOND_MS), 0) / stepSecs,
+      periods_remaining: remainingSecs / stepSecs,
+    });
+    if (nowNaive < end) break;
+  }
+  return slices;
 }
 
 interface PaceBounds {
@@ -559,7 +602,15 @@ function budgetStatus(
   const overLimit = currentCost >= costLimit;
   const pace =
     sub !== undefined && paceCost !== undefined && pacePeriod !== undefined
-      ? paceStatus(budget, pacePeriod, sub, currentCost, paceCost)
+      ? paceStatus(
+          db,
+          budget,
+          pacePeriod,
+          sub,
+          window,
+          now,
+          paceCost,
+        )
       : undefined;
 
   const status: BudgetStatus = {
@@ -593,15 +644,74 @@ function budgetStatus(
 }
 
 function paceStatus(
+  db: Database,
   budget: UsageBudgetConfig,
   pacePeriod: UsageBudgetPeriod,
   pace: PaceWindow,
-  periodCost: number,
+  window: PeriodWindow,
+  now: number,
   currentCost: number,
 ): PaceStatus {
-  const spendBefore = Math.max(periodCost - currentCost, 0);
-  const remainingBudget = Math.max(budget.cost_usd - spendBefore, 0);
-  const allowance = remainingBudget / Math.max(pace.periods_remaining, 1);
+  const slices = paceSlices(window, now, pacePeriod);
+  const currentIndex = Math.max(slices.length - 1, 0);
+  const totalPeriods = slices[0]?.periods_remaining ?? pace.periods_remaining;
+  const nominal = budget.cost_usd / Math.max(totalPeriods, 1);
+  const entries = usageCostEntries(db, filterForBudget(budget, window.start));
+  const completedSpend = new Array<number>(currentIndex).fill(0);
+  let sliceIndex = 0;
+  for (const entry of entries) {
+    const ts = Date.parse(entry.ts);
+    while (
+      sliceIndex < currentIndex &&
+      ts >= (slices[sliceIndex]?.end ?? Number.POSITIVE_INFINITY)
+    ) {
+      sliceIndex += 1;
+    }
+    if (sliceIndex >= currentIndex) break;
+    const slice = slices[sliceIndex];
+    if (slice !== undefined && ts >= slice.start && ts < slice.end) {
+      completedSpend[sliceIndex] =
+        (completedSpend[sliceIndex] ?? 0) + entry.total_cost;
+    }
+  }
+
+  let rollover = 0;
+  let debt = 0;
+  for (let i = 0; i < currentIndex; i += 1) {
+    const slice = slices[i];
+    if (slice === undefined) continue;
+    const nominalBase = nominal * slice.weight;
+    const debtPayment = Math.min(
+      nominalBase,
+      debt * (slice.weight / Math.max(slice.periods_remaining, slice.weight)),
+    );
+    const adjustedBase = Math.max(nominalBase - debtPayment, 0);
+    debt = Math.max(debt - debtPayment, 0);
+    const spend = completedSpend[i] ?? 0;
+    if (spend <= adjustedBase) {
+      let slack = adjustedBase - spend;
+      const repaid = Math.min(slack, debt);
+      debt -= repaid;
+      slack -= repaid;
+      rollover += slack;
+    } else {
+      let excess = spend - adjustedBase;
+      const fromRollover = Math.min(excess, rollover);
+      rollover -= fromRollover;
+      excess -= fromRollover;
+      debt += excess;
+    }
+  }
+
+  const currentSlice = slices[currentIndex];
+  const currentWeight = currentSlice?.weight ?? 1;
+  const nominalBase = nominal * currentWeight;
+  const debtAdjustment = Math.min(
+    nominalBase,
+    debt * (currentWeight / Math.max(pace.periods_remaining, currentWeight)),
+  );
+  const baseAllowance = Math.max(nominalBase - debtAdjustment, 0);
+  const allowance = baseAllowance + rollover;
 
   const percentUsed = allowance > 0 ? currentCost / allowance : 1;
   const [warningThresholds, crossedWarnAt] = crossedThresholds(
@@ -615,6 +725,9 @@ function paceStatus(
     window_start: toRfc3339(pace.start),
     window_end: toRfc3339(pace.end),
     allowance,
+    base_allowance: baseAllowance,
+    rollover,
+    debt_adjustment: debtAdjustment,
     current_cost: currentCost,
     remaining: allowance - currentCost,
     percent_used: percentUsed,
