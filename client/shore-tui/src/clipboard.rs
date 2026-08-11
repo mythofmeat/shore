@@ -1,13 +1,13 @@
 //! System clipboard image paste support.
 //!
-//! Shells out to `wl-paste --type image/png` to retrieve a PNG image from
-//! the Wayland clipboard, then writes the bytes to a temp file. The
+//! Uses the platform clipboard command to retrieve a PNG image, then writes
+//! the bytes to a temp file. The
 //! resulting path is fed into shore-tui's existing pending-image flow.
 //!
-//! Requires `wl-clipboard` installed and a Wayland session. The earlier
-//! arboard-based implementation was dropped because its Wayland backend
-//! fails to negotiate `image/png` on compositors that advertise
-//! Qt-flavored MIME types first (notably KDE/KWin).
+//! On Linux this requires `wl-clipboard` and a Wayland session; macOS uses
+//! the built-in `osascript`. The earlier arboard-based implementation was
+//! dropped because its Wayland backend fails to negotiate `image/png` on
+//! compositors that advertise Qt-flavored MIME types first (notably KDE/KWin).
 
 use std::io;
 use std::path::PathBuf;
@@ -60,28 +60,69 @@ fn fresh_temp_path() -> PathBuf {
 /// `tokio::task::spawn_blocking`. The caller is expected to wrap this in
 /// a timeout in case `wl-paste` stalls on a wedged compositor.
 pub(crate) fn read_image_to_temp() -> Result<PathBuf, ClipboardError> {
-    if std::env::var_os("WAYLAND_DISPLAY").is_none() {
-        return Err(ClipboardError::ClipboardUnavailable(
-            "not a Wayland session".into(),
-        ));
+    #[cfg(target_os = "macos")]
+    {
+        let path = fresh_temp_path();
+        let script = r#"on run argv
+set outputFile to POSIX file (item 1 of argv)
+try
+    set imageData to the clipboard as «class PNGf»
+on error
+    error "clipboard has no PNG image"
+end try
+set fileRef to open for access outputFile with write permission
+try
+    set eof fileRef to 0
+    write imageData to fileRef
+    close access fileRef
+on error errorMessage
+    try
+        close access fileRef
+    end try
+    error errorMessage
+end try
+end run"#;
+        let status = Command::new("osascript")
+            .args(["-e", script, "--"])
+            .arg(&path)
+            .status()
+            .map_err(|e| ClipboardError::ClipboardUnavailable(format!("osascript failed: {e}")))?;
+        if !status.success() {
+            let _ignored = std::fs::remove_file(&path);
+            return Err(ClipboardError::NoImage);
+        }
+        if std::fs::metadata(&path).map_or(true, |metadata| metadata.len() == 0) {
+            let _ignored = std::fs::remove_file(&path);
+            return Err(ClipboardError::NoImage);
+        }
+        return Ok(path);
     }
 
-    let output = Command::new("wl-paste")
-        .args(["--type", "image/png", "--no-newline"])
-        .output()
-        .map_err(|e| {
-            ClipboardError::ClipboardUnavailable(format!(
-                "wl-paste failed: {e} (install wl-clipboard)"
-            ))
-        })?;
+    #[cfg(not(target_os = "macos"))]
+    {
+        if std::env::var_os("WAYLAND_DISPLAY").is_none() {
+            return Err(ClipboardError::ClipboardUnavailable(
+                "not a Wayland session".into(),
+            ));
+        }
 
-    if !output.status.success() || output.stdout.is_empty() {
-        return Err(ClipboardError::NoImage);
+        let output = Command::new("wl-paste")
+            .args(["--type", "image/png", "--no-newline"])
+            .output()
+            .map_err(|e| {
+                ClipboardError::ClipboardUnavailable(format!(
+                    "wl-paste failed: {e} (install wl-clipboard)"
+                ))
+            })?;
+
+        if !output.status.success() || output.stdout.is_empty() {
+            return Err(ClipboardError::NoImage);
+        }
+
+        let path = fresh_temp_path();
+        std::fs::write(&path, &output.stdout).map_err(ClipboardError::WriteFailed)?;
+        Ok(path)
     }
-
-    let path = fresh_temp_path();
-    std::fs::write(&path, &output.stdout).map_err(ClipboardError::WriteFailed)?;
-    Ok(path)
 }
 
 #[cfg(test)]

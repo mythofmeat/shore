@@ -11,6 +11,38 @@
 
 use std::path::PathBuf;
 
+/// XDG defaults used on macOS so the client agrees with the daemon and keeps
+/// config and data in separate directories.
+#[cfg(target_os = "macos")]
+fn platform_config_dir() -> Option<PathBuf> {
+    dirs::home_dir().map(|home| home.join(".config"))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn platform_config_dir() -> Option<PathBuf> {
+    dirs::config_dir()
+}
+
+#[cfg(target_os = "macos")]
+fn platform_data_dir() -> Option<PathBuf> {
+    dirs::home_dir().map(|home| home.join(".local/share"))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn platform_data_dir() -> Option<PathBuf> {
+    dirs::data_dir()
+}
+
+#[cfg(target_os = "macos")]
+fn platform_cache_dir() -> Option<PathBuf> {
+    dirs::home_dir().map(|home| home.join(".cache"))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn platform_cache_dir() -> Option<PathBuf> {
+    dirs::cache_dir()
+}
+
 /// Resolved XDG directory paths for Shore.
 ///
 /// Mirrors `ShoreDirs` in `daemon/src/config/dirs.ts`. Fields are kept even
@@ -124,13 +156,13 @@ impl ShoreDirs {
             config: resolve_xdg_dir(
                 "SHORE_CONFIG_DIR",
                 "XDG_CONFIG_HOME",
-                dirs::config_dir,
+                platform_config_dir,
                 LastResort::Refuse,
             ),
             data: resolve_xdg_dir(
                 "SHORE_DATA_DIR",
                 "XDG_DATA_HOME",
-                dirs::data_dir,
+                platform_data_dir,
                 LastResort::Refuse,
             ),
             runtime: resolve_xdg_dir(
@@ -142,7 +174,7 @@ impl ShoreDirs {
             cache: resolve_xdg_dir(
                 "SHORE_CACHE_DIR",
                 "XDG_CACHE_HOME",
-                dirs::cache_dir,
+                platform_cache_dir,
                 LastResort::Refuse,
             ),
             workspace: workspace_root(),

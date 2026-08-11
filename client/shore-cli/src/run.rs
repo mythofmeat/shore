@@ -1183,16 +1183,44 @@ fn send_desktop_notification(
     body: &str,
     icon: Option<&Path>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = std::process::Command::new("notify-send");
-    let _ignored = cmd.arg("--app-name=shore");
-    if let Some(icon_path) = icon {
-        _ = cmd.arg("--icon").arg(icon_path);
+    #[cfg(target_os = "macos")]
+    {
+        // Pass user-controlled text as argv so AppleScript never parses it as
+        // source. macOS notifications do not support the Linux icon option.
+        let _ignored = icon;
+        let status = std::process::Command::new("osascript")
+            .args([
+                "-e",
+                "on run argv",
+                "-e",
+                "display notification (item 2 of argv) with title (item 1 of argv)",
+                "-e",
+                "end run",
+                "--",
+                title,
+                body,
+            ])
+            .status()?;
+        return if status.success() {
+            Ok(())
+        } else {
+            Err(format!("osascript exited with status {status}").into())
+        };
     }
-    let status = cmd.arg(title).arg(body).status()?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("notify-send exited with status {status}").into())
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let mut cmd = std::process::Command::new("notify-send");
+        let _ignored = cmd.arg("--app-name=shore");
+        if let Some(icon_path) = icon {
+            _ = cmd.arg("--icon").arg(icon_path);
+        }
+        let status = cmd.arg(title).arg(body).status()?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(format!("notify-send exited with status {status}").into())
+        }
     }
 }
 
