@@ -179,11 +179,6 @@ pub(crate) enum CliCommand {
         info: bool,
 
         /// Create a new character scaffold directory
-        ///
-        /// `requires`, because `--new` with no NAME otherwise falls past the
-        /// local handler in `run.rs` and out the bottom of `to_swp_command` as
-        /// "non-send/regen/local command must map to SWP command" — a routing
-        /// invariant reported to someone who just forgot an argument.
         #[arg(long, requires = "name")]
         new: bool,
 
@@ -617,6 +612,11 @@ pub(crate) enum DebugCommand {
     /// Send a cache-keepalive ping now and report whether it read the cache
     #[command(name = "keepalive_ping_now")]
     KeepalivePingNow,
+    /// Start this character's heartbeat and keepalive without sending a
+    /// message. If the prefix is cold this pays one cache write to recreate
+    /// it, which is what starts the keepalive cadence.
+    #[command(name = "session_activate")]
+    SessionActivate,
 }
 
 /// Generate and print shell completions to stdout.
@@ -788,6 +788,7 @@ pub(crate) fn to_swp_command(cmd: &CliCommand) -> Option<(&'static str, serde_js
             DebugCommand::StatusDormant => Some(("heartbeat_set_dormant", json!({}))),
             DebugCommand::StatusActive => Some(("heartbeat_set_active", json!({}))),
             DebugCommand::KeepalivePingNow => Some(("keepalive_ping_now", json!({}))),
+            DebugCommand::SessionActivate => Some(("session_activate", json!({}))),
         },
 
         CliCommand::Model { .. } => model_to_swp(cmd),
@@ -2041,6 +2042,27 @@ mod tests {
             cli.command,
             CliCommand::Debug {
                 subcommand: DebugCommand::KeepalivePingNow
+            }
+        ));
+    }
+
+    #[test]
+    fn debug_session_activate_maps_to_command() {
+        let cmd = CliCommand::Debug {
+            subcommand: DebugCommand::SessionActivate,
+        };
+        let (name, args) = to_swp_command(&cmd).unwrap();
+        assert_eq!(name, "session_activate");
+        assert_eq!(args, serde_json::json!({}));
+    }
+
+    #[test]
+    fn parse_debug_session_activate() {
+        let cli = parse(&["debug", "session_activate"]);
+        assert!(matches!(
+            cli.command,
+            CliCommand::Debug {
+                subcommand: DebugCommand::SessionActivate
             }
         ));
     }

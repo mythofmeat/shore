@@ -153,6 +153,25 @@ export class KeepaliveService {
     entry.keepalive.onCacheWarmed(model, this.#now());
   }
 
+  nextPingAt(character: string): number | undefined {
+    return this.#entries.get(character)?.keepalive.nextPingAt;
+  }
+
+  intervalFor(character: string): number | undefined {
+    return this.#entries.get(character)?.keepalive.interval;
+  }
+
+  async primeNow(character: string): Promise<PingNowOutcome> {
+    const outcome = await this.pingNow(character);
+    if (outcome.status !== "sent") return outcome;
+    const entry = this.#entries.get(character);
+    const model = entry?.prefix?.model;
+    if (entry !== undefined && model !== undefined) {
+      entry.keepalive.onCacheWarmed(model, this.#now());
+    }
+    return outcome;
+  }
+
   async pingNow(character: string): Promise<PingNowOutcome> {
     const prefix = this.#entries.get(character)?.prefix;
     if (prefix === undefined) {

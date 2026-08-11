@@ -288,6 +288,7 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "heartbeat_tick_now" => print_heartbeat_tick_now(data),
         "heartbeat_set_dormant" => print_heartbeat_status_change(data, "dormant"),
         "heartbeat_set_active" => print_heartbeat_status_change(data, "active"),
+        "session_activate" => print_session_activate(data),
         _ => print_command_output_fallback(name, data),
     }
 }
@@ -646,6 +647,76 @@ fn print_heartbeat_tick_now(data: &serde_json::Value) {
 fn print_heartbeat_status_change(data: &serde_json::Value, status: &str) {
     let character = data["character"].as_str().unwrap_or("?");
     cli_out!("Heartbeat forced {status} for {character}.");
+}
+
+/// One line per clock: what the keepalive did, and where the heartbeat stands.
+/// The `primed` case names the cache write it just paid for, because that
+/// spend is the whole reason activation is a deliberate command.
+fn print_session_activate(data: &serde_json::Value) {
+    let character = data["character"].as_str().unwrap_or("?");
+    if data["registered"].as_bool().unwrap_or(false) {
+        cli_out!("Activated {character}.");
+    } else {
+        cli_out!("{character} was already active.");
+    }
+    cli_out!(
+        "  Keepalive: {}",
+        session_activate_keepalive(&data["keepalive"])
+    );
+    cli_out!(
+        "  Heartbeat: {}",
+        session_activate_heartbeat(&data["heartbeat"])
+    );
+}
+
+fn session_activate_keepalive(k: &serde_json::Value) -> String {
+    let until = |v: &serde_json::Value| {
+        format_duration_compact(v["seconds_until_ping"].as_i64().unwrap_or(0))
+    };
+    match k["status"].as_str().unwrap_or("?") {
+        "primed" => {
+            let written = k["cache_creation_tokens"].as_u64().unwrap_or(0);
+            let read = k["cache_read_tokens"].as_u64().unwrap_or(0);
+            let paid = if written > 0 {
+                format!("wrote {written} cache tokens")
+            } else {
+                format!("read {read} cache tokens, no write")
+            };
+            format!("primed — {paid}; next ping in {}", until(k))
+        }
+        "resumed" => format!("already warm; next ping in {}", until(k)),
+        "off" => "off — this character's model sets cache_keepalive = off".to_owned(),
+        "unavailable" => format!(
+            "not armed — {}",
+            k["detail"]
+                .as_str()
+                .unwrap_or("no cached or rebuildable request")
+        ),
+        "skipped" => format!("not armed — {}", k["detail"].as_str().unwrap_or("skipped")),
+        "failed" => format!(
+            "priming call failed — {}",
+            k["detail"].as_str().unwrap_or("")
+        ),
+        other => other.to_owned(),
+    }
+}
+
+fn session_activate_heartbeat(h: &serde_json::Value) -> String {
+    let Some(state) = h["state"].as_str() else {
+        return "no state (registration failed)".to_owned();
+    };
+    let paused = if h["paused"].as_bool().unwrap_or(false) {
+        ", paused"
+    } else {
+        ""
+    };
+    match h["seconds_until_wake"].as_i64() {
+        Some(secs) => format!(
+            "{state}{paused}, next wake in {}",
+            format_duration_compact(secs)
+        ),
+        None => format!("{state}{paused}, no wake scheduled"),
+    }
 }
 
 /// Print edit confirmation.
@@ -3345,6 +3416,51 @@ mod tests {
         });
         assert_eq!(acting_now(&budget), "warn");
         assert_eq!(acting_now(&budget["pace"]), "pause_heartbeat");
+    }
+
+    #[test]
+    fn session_activate_names_the_cache_write_it_paid_for() {
+        let primed = serde_json::json!({
+            "status": "primed",
+            "cache_creation_tokens": 5000,
+            "cache_read_tokens": 0,
+            "seconds_until_ping": 3300,
+        });
+        assert_eq!(
+            session_activate_keepalive(&primed),
+            "primed — wrote 5000 cache tokens; next ping in 55m"
+        );
+    }
+
+    #[test]
+    fn session_activate_distinguishes_resumed_from_off() {
+        let resumed = serde_json::json!({ "status": "resumed", "seconds_until_ping": 1800 });
+        assert_eq!(
+            session_activate_keepalive(&resumed),
+            "already warm; next ping in 30m"
+        );
+
+        let off = serde_json::json!({ "status": "off" });
+        assert_eq!(
+            session_activate_keepalive(&off),
+            "off — this character's model sets cache_keepalive = off"
+        );
+    }
+
+    #[test]
+    fn session_activate_heartbeat_reports_the_wake_it_has() {
+        let scheduled =
+            serde_json::json!({ "state": "Active", "paused": false, "seconds_until_wake": 7200 });
+        assert_eq!(
+            session_activate_heartbeat(&scheduled),
+            "Active, next wake in 2h 0m"
+        );
+
+        let unscheduled = serde_json::json!({ "state": "Dormant", "paused": false });
+        assert_eq!(
+            session_activate_heartbeat(&unscheduled),
+            "Dormant, no wake scheduled"
+        );
     }
 
     #[test]

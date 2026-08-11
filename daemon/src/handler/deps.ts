@@ -481,5 +481,12 @@ function commandDeps(a: CommandAssembly): CommandDeps {
       lastRequest: runtime.cache,
       rebuild: { mcpRegistry: runtime.mcp.current },
     },
+    activate: {
+      register: async (character, config) => {
+        const created = a.autonomy.ensureState(character, config);
+        await a.autonomy.settled(character);
+        return created;
+      },
+    },
   };
 }

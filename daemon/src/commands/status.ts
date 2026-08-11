@@ -31,12 +31,12 @@ function countArg(args: Args, fallback: number): number {
 
 const asSecs = (ms: number): number => Math.floor(ms / 1000);
 
-function rfc3339(ms: number): string {
+export function rfc3339(ms: number): string {
   const iso = new Date(ms).toISOString();
   return `${iso.replace(/\.000Z$/, "").replace(/Z$/, "")}+00:00`;
 }
 
-const untilSecs = (at: number, now: number): number => Math.trunc((at - now) / 1000);
+export const untilSecs = (at: number, now: number): number => Math.trunc((at - now) / 1000);
 
 const sinceSecs = (at: number, now: number): number => Math.max(0, Math.trunc((now - at) / 1000));
 
