@@ -1089,6 +1089,7 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
             selected_character,
             ..
         } => {
+            let has_selected_character = selected_character.is_some();
             app.connection_status = ConnectionStatus::Connected;
             app.effective_sampler = None;
             app.sampler_settings_loading = false;
@@ -1100,8 +1101,8 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
 
             if let Some(selected) = selected_character {
                 app.character_name = selected;
-            } else if let Some(ch) = characters.first() {
-                app.character_name = ch.name.clone();
+            } else {
+                app.character_name.clear();
             }
 
             // Check private flag from config
@@ -1117,7 +1118,11 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
 
             app.set_status("connected");
             UiEffect {
-                cmds: vec![usage_budget_conn_command()],
+                cmds: if has_selected_character {
+                    vec![usage_budget_conn_command()]
+                } else {
+                    vec![]
+                },
                 redraw: RedrawEffect::Immediate,
             }
         }

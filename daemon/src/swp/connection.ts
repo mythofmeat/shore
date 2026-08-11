@@ -5,7 +5,12 @@ import type { Message } from "../protocol/Message";
 import type { ServerMessage } from "../protocol/ServerMessage";
 import type { RecvResult, Subscription } from "./broadcast";
 import { WireReader, writeMessage, type ByteSink } from "./framing";
-import { eventMatchesSession, msgTypeName, resolveHandshakeCharacter, routeClientMessage } from "./routing";
+import {
+  eventMatchesSession,
+  msgTypeName,
+  resolveHandshakeCharacter,
+  routeClientMessage,
+} from "./routing";
 import { sessionMetaOf, type ClientInfo, type RoutedMessage, type SessionMeta, type SessionRouter } from "./session";
 
 export const SWP_V1 = 1;
@@ -125,7 +130,7 @@ export async function performHandshake(
   const requested = first.character ?? null;
   const selected = resolveHandshakeCharacter(requested, hello.characters);
   if (requested !== null && selected === null) {
-    ctx.log?.warn?.("Ignoring unknown connect-time character selection", { requested });
+    ctx.log?.warn?.("Connect-time character selection is not available", { requested });
   }
 
   const history = await ctx.handshake.history(selected);
@@ -249,7 +254,13 @@ export async function messageLoop(
           break;
         }
         consecutiveLags = 0;
-        if (eventMatchesSession(result.msg, ctx.router.has(session.sessionId))) {
+        if (
+          eventMatchesSession(
+            result.msg,
+            ctx.router.characterFor(session.sessionId),
+            ctx.router.has(session.sessionId),
+          )
+        ) {
           await writeMessage(sink, result.msg);
         }
         break;

@@ -320,6 +320,42 @@ test("a character whose engine will not open is an internal error", async () => 
   }
 });
 
+test("switch_character establishes an ambiguous unpinned session", async () => {
+  const h = await harness(["Yuna", "poppy"]);
+  const selected: Array<[number, string | null]> = [];
+  const sent: unknown[] = [];
+  h.deps.router = {
+    setSelectedCharacter: (sessionId: number, character: string | null) => {
+      selected.push([sessionId, character]);
+      return true;
+    },
+    sendToSession: async (_sessionId: number, frame: unknown) => {
+      sent.push(frame);
+    },
+  } as never;
+  h.deps.handshake = {
+    hello: async () => ({ characters: [{ name: "Yuna" }, { name: "poppy" }] }),
+    history: async (character: string | null) => ({
+      messages: [],
+      activeStart: 0,
+      config: {},
+      selectedCharacter: character,
+      revision: 0,
+    }),
+  };
+
+  const frame = await dispatchCommand(
+    h.deps,
+    { rid: null, name: "switch_character", args: { name: "poppy" } },
+    meta(null, "r-switch"),
+  );
+
+  expect(frame.type).toBe("command_output");
+  expect(selected).toEqual([[1, "poppy"]]);
+  expect(sent).toHaveLength(1);
+  expect(sent[0]).toMatchObject({ type: "history", selected_character: "poppy" });
+});
+
 /**
  * The character path reads the character-*effective* config, not the global.
  *

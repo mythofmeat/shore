@@ -55,19 +55,19 @@ export function routeClientMessage(
   }
 }
 
-const UNCONDITIONAL_EVENTS = new Set([
-  "hello",
-  "new_message",
-  "history",
-  "shutdown",
-  "ping",
-  "cache_warning",
-]);
+const UNCONDITIONAL_EVENTS = new Set(["hello", "shutdown", "ping", "cache_warning"]);
 
 const UNROUTABLE_EVENTS = new Set(["unknown"]);
 
-export function eventMatchesSession(msg: ServerMessage, sessionRegistered: boolean): boolean {
+export function eventMatchesSession(
+  msg: ServerMessage,
+  selectedCharacter: string | null,
+  sessionRegistered: boolean,
+): boolean {
   if (UNROUTABLE_EVENTS.has(msg.type)) return false;
   if (UNCONDITIONAL_EVENTS.has(msg.type)) return true;
+  if (!sessionRegistered || selectedCharacter === null) return false;
+  if (msg.type === "history") return msg.selected_character === selectedCharacter;
+  if (msg.type === "new_message") return msg.character === selectedCharacter;
   return sessionRegistered;
 }

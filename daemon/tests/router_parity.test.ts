@@ -15,6 +15,7 @@
 import { describe, expect, test } from "bun:test";
 
 import fixture from "./handler_fixtures/router_parity.json" with { type: "json" };
+import { CharacterConfigError } from "../src/characters.ts";
 import {
   MessageHandler,
   sanitiseRid,
@@ -511,6 +512,21 @@ describe("a generation that throws", () => {
       type: "error",
       code: "invalid_request",
       message: NO_CHAT_MODELS_MESSAGE,
+    });
+  });
+
+  test("reports an invalid character overlay as invalid_request", async () => {
+    const frame = await failWith(
+      new CharacterConfigError(
+        "Alice",
+        new Error("unknown field `bogus`, expected `enabled` or `heartbeat`"),
+      ),
+    );
+    expect(frame).toMatchObject({
+      type: "error",
+      code: "invalid_request",
+      message:
+        'invalid config for character "Alice": unknown field `bogus`, expected `enabled` or `heartbeat`',
     });
   });
 

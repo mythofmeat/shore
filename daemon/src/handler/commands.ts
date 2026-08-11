@@ -15,7 +15,7 @@ import {
 } from "../commands/dispatch.ts";
 import { internalError, invalidRequest } from "../commands/errors.ts";
 import type { ConfigRuntime } from "../commands/config.ts";
-import type { Args } from "../commands/navigation.ts";
+import { switchCharacter, type Args } from "../commands/navigation.ts";
 import { afterCommand, type DispatchRuntime, type ReloadSummary } from "./command_dispatch.ts";
 import type { HandshakeProvider } from "../swp/connection.ts";
 import type { SessionRouter } from "../swp/session.ts";
@@ -67,6 +67,9 @@ export async function dispatchCommand(
   if (cmd.name === "refresh_provider_models") {
     return characterlessCommand(deps, cmd, sessionId, rid);
   }
+  if (cmd.name === "switch_character") {
+    return await switchCharacterCommand(deps, cmd, sessionId, rid, selected);
+  }
 
   let character: string;
   try {
@@ -105,6 +108,40 @@ export async function dispatchCommand(
   }
 
   deps.sessions.setActiveModel(sessionId, session.activeModel);
+  return frameWithRid(frame, rid);
+}
+
+async function switchCharacterCommand(
+  deps: CommandPathDeps,
+  cmd: Command,
+  sessionId: number,
+  rid: string | undefined,
+  pinned: string | undefined,
+): Promise<ServerMessage> {
+  const globalConfig = deps.globalConfig();
+
+  let frame: ServerMessage;
+  try {
+    const data = switchCharacter(
+      globalConfig.dirs.config,
+      pinned,
+      (cmd.args ?? {}) as Args,
+      globalConfig.dirs.workspace,
+    );
+    const annotated = await afterCommand(cmd.name, cmd.args, data, {
+      character: data.character,
+      config: deps.registry.effectiveConfig(data.character),
+      sessionId,
+      rid,
+      runtime: deps.dispatchRuntime,
+      router: deps.router,
+      handshake: deps.handshake,
+    });
+    frame = commandFrame(cmd.name, { ok: annotated });
+  } catch (e) {
+    frame = commandFrame(cmd.name, { err: e });
+  }
+
   return frameWithRid(frame, rid);
 }
 

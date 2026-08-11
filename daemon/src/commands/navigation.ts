@@ -161,12 +161,17 @@ export function createCharacter(
   };
 }
 
+export interface CharacterSwitch {
+  character: string;
+  changed: boolean;
+}
+
 export function switchCharacter(
   configDir: string,
-  active: string,
+  active: string | undefined,
   args: Args,
   workspaceRoot?: string | undefined,
-): unknown {
+): CharacterSwitch {
   const name = asStr(args["name"]);
   if (name === undefined) throw invalidRequest("Missing required argument: name");
 

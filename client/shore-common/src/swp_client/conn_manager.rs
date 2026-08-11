@@ -120,7 +120,8 @@ async fn connection_loop(
                     "connected to daemon"
                 );
                 backoff = Duration::from_millis(500);
-                let mut sync_state = SyncState::new(history.revision);
+                let mut sync_state =
+                    SyncState::new(history.revision, history.selected_character.as_deref());
 
                 let _connected_sent = event_tx
                     .send(ConnEvent::Connected {

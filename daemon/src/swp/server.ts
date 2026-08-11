@@ -12,7 +12,11 @@ import {
   type HistorySnapshot,
   type Logger,
 } from "./connection";
-import { eventMatchesSession, resolveHandshakeCharacter, routeClientMessage } from "./routing";
+import {
+  eventMatchesSession,
+  resolveHandshakeCharacter,
+  routeClientMessage,
+} from "./routing";
 import { sessionMetaOf, SessionRouter, type ClientInfo, type RoutedMessage, type SessionMeta } from "./session";
 
 export interface ServerConfig {
@@ -180,7 +184,15 @@ export class Server {
           });
           continue;
         }
-        if (eventMatchesSession(result.msg, this.#router.has(clientId))) inbox.push(result.msg);
+        if (
+          eventMatchesSession(
+            result.msg,
+            this.#router.characterFor(clientId),
+            this.#router.has(clientId),
+          )
+        ) {
+          inbox.push(result.msg);
+        }
       }
       inbox.close();
     })();
