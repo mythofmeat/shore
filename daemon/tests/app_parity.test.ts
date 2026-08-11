@@ -381,7 +381,7 @@ describe("the fixture is real", () => {
   });
 
   test("the moved cache keys really are ones it had, where it had them", () => {
-    const defaults = fixture.defaults as Record<string, Record<string, Record<string, unknown>>>;
+    const defaults = fixture.defaults as object;
     for (const path of Object.values(CACHE_KEYS_MOVED_SINCE)) {
       let here: unknown = defaults;
       for (const key of path) {
@@ -390,6 +390,19 @@ describe("the fixture is real", () => {
       }
     }
     expect(Object.keys(defaults)).not.toContain("cache");
+  });
+
+  test("the moved keys kept the values the Rust defaulted them to", () => {
+    // The replay compares an unset default against itself, so a section the
+    // fixture never had would otherwise pin nothing. These two are read
+    // straight off the recorded defaults instead.
+    const recorded = fixture.defaults as {
+      behavior: { autonomy: { cache_keepalive_max: string } };
+      advanced: { cache_forensics: boolean };
+    };
+    const cache = defaultAppConfig().cache;
+    expect(cache.keepalive_max.toString()).toBe(recorded.behavior.autonomy.cache_keepalive_max);
+    expect(cache.forensics).toBe(recorded.advanced.cache_forensics);
   });
 
   test("the reintroduced connections fields really are ones it never had", () => {

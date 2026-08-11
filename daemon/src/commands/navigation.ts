@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 import {
   AGENTS_FILE,
@@ -15,6 +15,7 @@ import {
   readOrUndefined,
   rustJoin,
 } from "../config/dirs.ts";
+import { builtinSystemPrompt } from "../engine/prompt.ts";
 import { pendingDeferredEditPaths } from "../memory/deferred_edits.ts";
 import type { CharacterInfo } from "../protocol/CharacterInfo.ts";
 import { invalidRequest, notFound } from "./errors.ts";
@@ -108,6 +109,55 @@ export async function characterInfo(ctx: CharacterInfoContext, args: Args): Prom
     pending_deferred_edits: pending,
     data_dir: dataDir,
     has_data: pathExists(dataDir),
+  };
+}
+
+const LEGACY_CHARACTER_FILE = "character.md";
+
+const soulTemplate = (name: string): string => `You are ${name}.\n`;
+
+export const scaffoldedFiles = (
+  name: string,
+): readonly (readonly [file: string, content: string])[] => [
+  [SOUL_FILE, soulTemplate(name)],
+  [USER_FILE, ""],
+  [AGENTS_FILE, builtinSystemPrompt()],
+  [TOOLS_FILE, ""],
+];
+
+export function createCharacter(
+  configDir: string,
+  args: Args,
+  workspaceRoot?: string | undefined,
+): unknown {
+  const name = asStr(args["name"]);
+  if (name === undefined || name === "") {
+    throw invalidRequest("Missing required argument: name");
+  }
+  if (name.includes("/") || name === "." || name === "..") {
+    throw invalidRequest(`Not a usable character name: ${name}`);
+  }
+
+  const workspaceDir = characterWorkspaceDir(configDir, name, workspaceRoot);
+  const legacy = rustJoin(characterConfigDir(configDir, name), LEGACY_CHARACTER_FILE);
+  if (pathExists(rustJoin(workspaceDir, SOUL_FILE)) || pathExists(legacy)) {
+    throw invalidRequest(`Character '${name}' already exists at ${workspaceDir}`);
+  }
+
+  mkdirSync(workspaceDir, { recursive: true });
+  const created: string[] = [];
+  for (const [file, content] of scaffoldedFiles(name)) {
+    const path = rustJoin(workspaceDir, file);
+    if (pathExists(path)) continue;
+    writeFileSync(path, content);
+    created.push(file);
+  }
+
+  return {
+    character: name,
+    workspace_dir: workspaceDir,
+    config_dir: characterConfigDir(configDir, name),
+    created_files: created,
   };
 }
 

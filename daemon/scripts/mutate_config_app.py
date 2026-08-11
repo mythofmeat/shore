@@ -299,7 +299,13 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/app_parity.test.ts"])
+    routed = [
+        (label, MODELS, find, replace)
+        if label.startswith("models:")
+        else (label, find, replace)
+        for label, find, replace in MUTANTS
+    ]
+    return _run_mutants(routed, ["tests/app_parity.test.ts"], src=APP)
 
 
 if __name__ == "__main__":

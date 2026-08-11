@@ -33,7 +33,13 @@ import {
   setModelSetting,
   switchModel,
 } from "./models.ts";
-import { characterInfo, listCharacters, switchCharacter, type Args } from "./navigation.ts";
+import {
+  characterInfo,
+  createCharacter,
+  listCharacters,
+  switchCharacter,
+  type Args,
+} from "./navigation.ts";
 import {
   listProviderModels,
   listProviders,
@@ -79,6 +85,7 @@ export interface CommandDeps {
 
 const CHARACTERLESS = new Set([
   "list_characters",
+  "create_character",
   "list_models",
   "background_models",
   "list_providers",
@@ -99,6 +106,8 @@ export async function runCommand(
   switch (cmd.name) {
     case "list_characters":
       return listCharacters(configDir, character, workspaceRoot);
+    case "create_character":
+      return createCharacter(configDir, args, workspaceRoot);
     case "switch_character":
       return switchCharacter(configDir, character, args, workspaceRoot);
     case "character_info":
@@ -222,6 +231,8 @@ export function runCharacterlessCommand(
         undefined,
         session.config.dirs.workspace,
       );
+    case "create_character":
+      return createCharacter(session.config.dirs.config, args, session.config.dirs.workspace);
     case "list_models":
       return listModels(session, args);
     case "background_models":
