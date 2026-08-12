@@ -1,0 +1,8 @@
+#!/bin/bash
+
+SHORE_REPO_DIR="$HOME/.local/src/shore"
+
+git -C "$SHORE_REPO_DIR" pull >/dev/null
+cargo run --manifest-path "$SHORE_REPO_DIR/client/Cargo.toml" \
+    --release \
+    --bin shore-tui "$@"
