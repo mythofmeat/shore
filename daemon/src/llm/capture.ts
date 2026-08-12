@@ -1,4 +1,5 @@
 import { ZERO_USAGE, type CallRecord, type CallStore, type Usage as StoreUsage } from "../call_store.ts";
+import { redactRequest } from "./redact.ts";
 import { newWireScope, withWireScope, wireScopedIteration } from "./wire_capture.ts";
 import type {
   GenerateResponse,
@@ -21,7 +22,7 @@ function nextCallId(ts: Date): string {
 }
 
 function requestBody(req: SidecarRequest): string {
-  const { context: _context, ...rest } = req;
+  const { context: _context, ...rest } = redactRequest(req);
   try {
     return JSON.stringify(rest);
   } catch {

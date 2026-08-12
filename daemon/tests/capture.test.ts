@@ -12,6 +12,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { captureProviders, withCallCapture, type CallRecorder } from "../src/llm/capture.ts";
+import { REDACTED } from "../src/llm/redact.ts";
 import { CallStore, type CallRecord } from "../src/call_store.ts";
 import type {
   GenerateResponse,
@@ -130,14 +131,18 @@ describe("call capture", () => {
     expect(lines.map((l) => JSON.parse(l).type)).toEqual(["start", "text", "done"]);
   });
 
-  test("the credential is stored verbatim and the call context is not stored", async () => {
+  test("the credential is masked and the call context is not stored", async () => {
     const store = recorder();
     const p = withCallCapture(fake([DONE]), store);
 
     await drain(p.stream(req()));
 
     const body = JSON.parse(store.rows[0]!.request_body) as Record<string, unknown>;
-    expect(body["api_key"]).toBe("sk-ant-super-secret");
+    // `calls.db` outlives the key and gets read by `shore log`, `shore diff`
+    // and anyone the file is handed to. The field stays, so the row's shape
+    // does not move and two calls made under different keys do not diff.
+    expect(body["api_key"]).toBe(REDACTED);
+    expect(store.rows[0]!.request_body).not.toContain("sk-ant-super-secret");
     // `context` carries the resolved `[usage]` budget config and never reaches
     // a provider; its useful fields are already the row's own columns.
     expect(body["context"]).toBeUndefined();
@@ -243,7 +248,8 @@ describe("call capture", () => {
       expect(index[0]!.request_bytes).toBeGreaterThan(0);
 
       const payload = store.getCall(index[0]!.id);
-      expect(payload?.request).toContain("sk-ant-super-secret");
+      expect(payload?.request).not.toContain("sk-ant-super-secret");
+      expect(payload?.request).toContain(REDACTED);
       expect((payload?.response ?? "").split("\n").map((l) => JSON.parse(l).type)).toEqual([
         "start",
         "done",
