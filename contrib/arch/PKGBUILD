@@ -85,7 +85,7 @@ package_shore-daemon() {
     install -Dm755 "./daemon/dist/shore-daemon" \
         "$pkgdir/usr/bin/shore-daemon"
 
-    install -dm755 "./contrib/systemd/shore-daemon.service" \
+    install -Dm755 "./contrib/systemd/shore-daemon.service" \
         "$pkgdir/usr/lib/systemd/user/shore-daemon.service"
     chmod 644 "$pkgdir/usr/lib/systemd/user/shore-daemon.service"
 
