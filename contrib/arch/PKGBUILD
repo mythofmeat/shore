@@ -34,7 +34,7 @@ check() {
         cargo test --workspace
     )
     (
-        cd "$./daemon"
+        cd "./daemon"
         bun test
     )
 }
