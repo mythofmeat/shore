@@ -7,6 +7,7 @@ import type { StreamResult } from "../llm/stream.ts";
 import { emitStreamEnd } from "../llm/stream.ts";
 import type { Usage } from "../llm/types.ts";
 import { beginCompaction } from "../memory/compaction/manager.ts";
+import { CompactionPaused } from "../memory/compaction/types.ts";
 import { emitNewMessageEvent } from "./persistence.ts";
 import { ingestImages, type ImageUpload } from "./images.ts";
 
@@ -26,7 +27,7 @@ export interface TurnAutonomy {
   onUserMessage(character: string, turnCount: number): void;
   shouldCompactNow(character: string, turnCount: number, contextTokens: number): boolean;
   onCompactionComplete(character: string, retained: number): void;
-  onCompactionFailed(character: string): void;
+  onCompactionFailed(character: string, retryAt?: number): void;
 }
 
 export interface TurnContext {
@@ -178,6 +179,7 @@ export interface CompactionRunner {
     charName: string,
     workspaceRoot?: string | undefined,
   ): Promise<void>;
+  repoint?(charName: string, config: LoadedConfig): Promise<void>;
 }
 
 export async function maybeCompact(
@@ -219,7 +221,12 @@ async function runInlineCompaction(
     retained = await runner.run(charName, config);
   } catch (e) {
     console.warn(`shore: inline compaction failed for ${charName}: ${String(e)}`);
-    ctx.autonomy.onCompactionFailed(charName);
+    ctx.autonomy.onCompactionFailed(
+      charName,
+      e instanceof CompactionPaused && e.resumeAt !== undefined
+        ? Date.parse(e.resumeAt)
+        : undefined,
+    );
     return;
   }
 
@@ -242,6 +249,11 @@ async function runInlineCompaction(
       );
     } catch (e) {
       console.warn(`shore: failed to apply deferred edits after compaction: ${String(e)}`);
+    }
+    try {
+      await runner.repoint?.(charName, config);
+    } catch (e) {
+      console.warn(`shore: failed to repoint cached request after compaction: ${String(e)}`);
     }
   } finally {
     guard.release();

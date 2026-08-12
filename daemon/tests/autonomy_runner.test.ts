@@ -528,6 +528,27 @@ describe("the compaction the handler runs", () => {
       expect(executor.calls).toEqual(["compaction:idle"]);
     });
   });
+
+  test("a budget-paused compaction becomes due at its provider reset", async () => {
+    await inTempDir(async (dir) => {
+      const { runner, executor, time } = build({
+        dir,
+        config: { ...COMPACTION_ONLY, maxTurns: 0, maxContextTokens: 100 },
+      });
+      runner.onUserMessage(50, time.now);
+      expect(runner.shouldCompactNow(50, 100)).toBe(true);
+
+      const resetAt = time.now + 2 * HOUR;
+      runner.onCompactionFailed(time.now, resetAt);
+      time.now = resetAt - 1;
+      await runner.tick();
+      expect(executor.calls).toEqual([]);
+
+      time.now = resetAt;
+      await runner.tick();
+      expect(executor.calls).toEqual(["compaction:idle"]);
+    });
+  });
 });
 
 describe("forcing the heartbeat's hand", () => {

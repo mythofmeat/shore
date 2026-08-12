@@ -948,7 +948,7 @@ export interface UsageConfig {
 
 const defaultUsageConfig = (): UsageConfig => ({
   timezone: "local",
-  allow_compaction_over_budget: true,
+  allow_compaction_over_budget: false,
   budgets: [],
   spike_warnings: defaultSpikeWarnings(),
 });

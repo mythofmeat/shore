@@ -11,6 +11,7 @@ export interface SegmentEntry {
   file: string;
   message_count: number;
   compacted_at: string;
+  compaction_id?: string;
 }
 
 export interface CompactionManifest {

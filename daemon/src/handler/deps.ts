@@ -111,8 +111,8 @@ export function turnAutonomy(
     onCompactionComplete: (character, retained) => {
       bridge.onCompactionComplete(character, retained);
     },
-    onCompactionFailed: (character) => {
-      bridge.onCompactionFailed(character);
+    onCompactionFailed: (character, retryAt) => {
+      bridge.onCompactionFailed(character, retryAt);
     },
     notifyAssistantMessage: (character, turnCount) => {
       bridge.onAssistantMessage(character, turnCount);
@@ -166,7 +166,8 @@ export function chatCompactionRunner(a: GenerationAssembly): GenerationDeps["com
       config: runtime.config,
       ...(a.env === undefined ? {} : { env: a.env }),
     }),
-    cachedRequest: (character) => runtime.cache.get(character),
+    cache: runtime.cache,
+    rebuild: { mcpRegistry: runtime.mcp.current },
     tools: sharedToolDeps(runtime.config, runtime.mcp),
   });
 }
@@ -474,7 +475,12 @@ function commandDeps(a: CommandAssembly): CommandDeps {
         }),
         tools: sharedToolDeps(runtime.config, runtime.mcp),
       },
-      cachedRequest: (character) => runtime.cache.get(character),
+      repoint: async (character, config) => {
+        runtime.cache.invalidate(character, "compaction");
+        await runtime.cache.reprimeFromDisk(character, config.dirs.data, config, {
+          mcpRegistry: runtime.mcp.current,
+        });
+      },
     },
     keepalive: {
       keepalive: runtime.keepalive,

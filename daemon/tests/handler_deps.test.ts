@@ -56,6 +56,7 @@ import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { closeLedgers } from "../src/ledger/record.ts";
+import { Ledger } from "../src/ledger/store.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
 
 const NO_MCP = () => Promise.reject(new Error("no MCP server should be connected"));
@@ -315,7 +316,7 @@ describe("the autonomy surface a turn drives", () => {
 });
 
 describe("the compaction a long turn runs inline", () => {
-  test("the body it extends is this character's, looked up per pass", async () => {
+  test("the source is rebuilt from disk without consulting the stale request cache", async () => {
     const { root, runtime } = await runtimeUnder("shore-deps-compact-");
     try {
       const asked: string[] = [];
@@ -338,11 +339,8 @@ describe("the compaction a long turn runs inline", () => {
         diagnostics: { api_calls: { push: () => {} } } as never,
       });
 
-      // The pass itself has nothing to compact here; the lookup happens before
-      // it either way, and it is the lookup that has to name the right
-      // character.
       await runner.run("nova", runtime.config).catch(() => undefined);
-      expect(asked).toEqual(["nova"]);
+      expect(asked).toEqual([]);
     } finally {
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });
@@ -388,13 +386,16 @@ describe("the budget check", () => {
           () => ({ budgets: [{ cost_usd: 5 }] }),
           undefined,
         );
-        // A ledger that will not open reports nothing rather than failing a
-        // turn that has already been persisted and answered.
         expect(await warnings()).toEqual([]);
       } finally {
         console.error = real;
       }
-      expect(errors.join(" ")).toContain("cannot open ledger");
+      expect(errors).toEqual([]);
+      const ledger = Ledger.open(join(root, "absent.db"));
+      expect(ledger.database.query(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='calls'",
+      ).get()).toEqual({ name: "calls" });
+      ledger.close();
     } finally {
       closeLedgers();
       await rm(root, { recursive: true, force: true });
@@ -756,17 +757,13 @@ describe("the command path", () => {
     }
   });
 
-  test("the compaction a command runs extends this character's body", async () => {
+  test("the compaction command can repoint the live request cache", async () => {
     const { root, runtime } = await runtimeUnder("shore-deps-cmd-compact-");
     try {
       runtime.cache.set("ada", { model: "m", messages: [] } as never, undefined);
       const deps = buildCommandPathDeps(commandAssembly(runtime));
 
-      // `shore compact` and an inline pass must not disagree about what was in
-      // context: a manual pass that rebuilt from disk would carry a colder
-      // prefix than the automatic one.
-      expect(deps.commands.compaction?.cachedRequest?.("ada")).toBeDefined();
-      expect(deps.commands.compaction?.cachedRequest?.("nova")).toBeUndefined();
+      expect(deps.commands.compaction?.repoint).toBeFunction();
       expect(deps.commands.keepalive?.lastRequest).toBe(runtime.cache);
       expect(deps.commands.keepalive?.keepalive).toBe(runtime.keepalive);
       expect(deps.commands.callStore).toBe(runtime.callStore);

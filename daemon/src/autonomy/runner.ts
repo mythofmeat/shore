@@ -36,6 +36,7 @@ export interface AutonomyActionResult {
   readonly events: readonly { kind: HeartbeatEventKind; detail: string }[];
   readonly failed?: string | undefined;
   readonly deepArchiveDone?: boolean | undefined;
+  readonly retryAt?: number | undefined;
 }
 
 export interface TickHooks {
@@ -164,9 +165,11 @@ export class CharacterAutonomy {
     this.#state.dirty = true;
   }
 
-  onCompactionFailed(now: number): void {
+  onCompactionFailed(now: number, retryAt?: number): void {
     this.#state.compactionTriggered = false;
-    this.#state.lastActivityAt = now;
+    this.#state.lastActivityAt = retryAt === undefined
+      ? now
+      : retryAt - this.#config.idleTriggerSecs * 1000;
     this.#state.dirty = true;
   }
 
@@ -348,7 +351,7 @@ export class CharacterAutonomy {
       this.onCompactionComplete(result.turnCount, now);
       return;
     }
-    this.onCompactionFailed(now);
+    this.onCompactionFailed(now, result.retryAt);
   }
 
   #stillIdleEnoughToArchive(): boolean {

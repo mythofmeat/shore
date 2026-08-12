@@ -584,14 +584,16 @@ function budgetStatus(
   const sub =
     pacePeriod === undefined ? undefined : paceWindow(window, now, pacePeriod);
 
+  const filter = filterForBudget(budget, window.start);
   const currentCost = usageTotals(
     db,
-    filterForBudget(budget, window.start),
-  ).total_cost;
+    filter,
+  ).total_cost + pendingAttemptCost(db, budget, window.start);
   const paceCost =
     sub === undefined
       ? undefined
-      : usageTotals(db, filterForBudget(budget, sub.start)).total_cost;
+      : usageTotals(db, filterForBudget(budget, sub.start)).total_cost +
+        pendingAttemptCost(db, budget, sub.start);
 
   const costLimit = budget.cost_usd;
   const percentUsed = currentCost / costLimit;
@@ -641,6 +643,51 @@ function budgetStatus(
     status.pace = pace;
   }
   return status;
+}
+
+function pendingAttemptCost(
+  db: Database,
+  budget: UsageBudgetConfig,
+  since: number,
+): number {
+  const clauses = ["status IN ('pending', 'unresolved')", "started_at >= $since"];
+  const bindings: Record<string, string> = { $since: toRfc3339(since) };
+  const add = (column: string, key: string, value: string | null | undefined) => {
+    if (value == null) return;
+    clauses.push(`${column} = $${key}`);
+    bindings[`$${key}`] = value;
+  };
+  add("character", "character", budget.character);
+  add("provider", "provider", budget.provider);
+  add("api_key_name", "api_key", budget.api_key);
+  add("model", "model", budget.model);
+  add("call_type", "call_type", budget.call_type);
+  const kinds = budgetUsageKind(budget);
+  if (kinds.length > 0) {
+    const accepted = [
+      "message",
+      "tool_loop",
+      "heartbeat",
+      "heartbeat_tool_loop",
+      "keepalive",
+      "compaction",
+      "dreaming",
+      "memory_query",
+      "subagent",
+    ].filter((callType) => kinds.some((kind) => callTypeMatchesUsageKind(callType, kind)));
+    if (accepted.length === 0) return 0;
+    const placeholders = accepted.map((callType, index) => {
+      const key = `$kind_${index}`;
+      bindings[key] = callType;
+      return key;
+    });
+    clauses.push(`call_type IN (${placeholders.join(", ")})`);
+  }
+  const row = db.query(
+    `SELECT COALESCE(SUM(estimated_cost), 0) AS total
+       FROM call_attempts WHERE ${clauses.join(" AND ")}`,
+  ).get(bindings) as { total?: unknown } | null;
+  return typeof row?.total === "number" && Number.isFinite(row.total) ? row.total : 0;
 }
 
 function paceStatus(
@@ -1037,7 +1084,7 @@ function compactionAllowed(
   return (
     budget.allow_compaction_over_budget ??
     config.allow_compaction_over_budget ??
-    true
+    false
   );
 }
 

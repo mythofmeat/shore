@@ -48,10 +48,22 @@ export interface NoMemoryWritesResult {
   maxRoundsHit: boolean;
 }
 
+export interface PausedCompactionResult {
+  conversationId: string;
+  checkpointId: string;
+  messageCount: number;
+  compactedTurns: number;
+  toolRounds: number;
+  toolsCalled: string[];
+  reason: string;
+  resumeAt?: string;
+}
+
 export type CompactionOutcome =
   | ({ kind: "compacted" } & CompactionResult)
   | ({ kind: "dry_run" } & DryRunResult)
-  | ({ kind: "no_memory_writes" } & NoMemoryWritesResult);
+  | ({ kind: "no_memory_writes" } & NoMemoryWritesResult)
+  | ({ kind: "paused" } & PausedCompactionResult);
 
 export type CompactionErrorKind =
   | "llm"
@@ -63,14 +75,14 @@ export type CompactionErrorKind =
 export class CompactionError extends Error {
   readonly kind: CompactionErrorKind;
 
-  constructor(kind: CompactionErrorKind, message: string) {
-    super(message);
+  constructor(kind: CompactionErrorKind, message: string, options?: ErrorOptions) {
+    super(message, options);
     this.kind = kind;
     this.name = "CompactionError";
   }
 
-  static llm(detail: string): CompactionError {
-    return new CompactionError("llm", `llm: ${detail}`);
+  static llm(detail: string, cause?: unknown): CompactionError {
+    return new CompactionError("llm", `llm: ${detail}`, { cause });
   }
 
   static insufficientMessages(): CompactionError {
@@ -90,6 +102,20 @@ export class CompactionError extends Error {
   }
 }
 
+export class CompactionPaused extends Error {
+  readonly checkpointId: string;
+  readonly reason: string;
+  readonly resumeAt: string | undefined;
+
+  constructor(checkpointId: string, reason: string, resumeAt?: string) {
+    super(`compaction paused (${reason}, checkpoint=${checkpointId})`);
+    this.name = "CompactionPaused";
+    this.checkpointId = checkpointId;
+    this.reason = reason;
+    this.resumeAt = resumeAt;
+  }
+}
+
 export interface CompactionLlm {
   buildInitialRequest(
     system: string,
@@ -103,7 +129,7 @@ export interface CompactionLlm {
 export interface ConversationManager {
   archiveAndRetain(
     conversationId: string,
-    params: { keepLastN: number; activeContent: string },
+    params: { keepLastN: number; activeContent: string; operationId?: string },
   ): Promise<string>;
 }
 
@@ -127,5 +153,6 @@ export interface AppliedCompactionWrite {
   displayPath: string;
   resolvedPath: string;
   previousContent?: string;
+  resultingContent?: string;
   memoryIndexTarget: boolean;
 }

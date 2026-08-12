@@ -8,7 +8,10 @@ import type { Message } from "../engine/types.ts";
 import { credentialEntry } from "../handler/tool_context.ts";
 import { anthropicToolLoopEvents } from "../llm/providers/anthropic_loop.ts";
 import { genericToolLoopEvents } from "../llm/providers/generic_loop.ts";
-import { recordingStream } from "../ledger/record.ts";
+import { beginCallAttempt, recordingStream } from "../ledger/record.ts";
+import { budgetBlockFor } from "../ledger/gate.ts";
+import { usageConfigView } from "../ledger/budget.ts";
+import { BudgetBlocked } from "../llm/generate.ts";
 import { buildRequestWithProviderKeys } from "../llm/request.ts";
 import { consumeStream } from "../llm/stream.ts";
 import type {
@@ -157,6 +160,7 @@ export async function runSubagent(
       call_type: "subagent",
       ...(built.api_key_name === undefined ? {} : { api_key_name: built.api_key_name }),
       thinking_enabled: built.request.provider_options?.thinking_enabled === true,
+      usage: usageConfigView(config.app.usage),
       ...(deps.rid === undefined ? {} : { rid: deps.rid }),
     },
   };
@@ -177,7 +181,21 @@ export async function runSubagent(
       ? anthropicToolLoopEvents(request, phase, signal)
       : genericToolLoopEvents(provider, request, phase, signal);
 
-  const outcome = await consumeStream(recordingStream(request.context, request, events), {
+  const blocked = budgetBlockFor(request);
+  if (blocked) throw new BudgetBlocked(blocked.message, blocked.scope, blocked.reset_at);
+  const initialAttempt = beginCallAttempt(request.context, request);
+  const outcome = await consumeStream(recordingStream(
+    request.context,
+    request,
+    events,
+    initialAttempt,
+    (continued, callType) => {
+      const next = { ...continued, context: { ...continued.context!, call_type: callType } };
+      const nextBlock = budgetBlockFor(next);
+      if (nextBlock) throw new BudgetBlocked(nextBlock.message, nextBlock.scope, nextBlock.reset_at);
+      return beginCallAttempt(next.context, next);
+    },
+  ), {
     regen: false,
     sink: send,
   });

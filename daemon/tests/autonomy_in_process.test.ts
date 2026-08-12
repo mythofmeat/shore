@@ -22,6 +22,7 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
+  compactionGenerate,
   InProcessAutonomyExecutor,
   type InProcessExecutorDeps,
 } from "../src/autonomy/in_process.ts";
@@ -33,6 +34,7 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
+import { Ledger } from "../src/ledger/store.ts";
 import { testTmp } from "./support/tmp.ts";
 
 afterAll(restoreTestEnv);
@@ -346,6 +348,8 @@ describe("running a heartbeat", () => {
     const config = await world();
     const cache = new LastRequestCache();
     const seen: SidecarRequest[] = [];
+    const ledgerPath = join(config.dirs.data, "ledger.db");
+    Ledger.create(ledgerPath).close();
     cache.set("ada", {
       sdk: "anthropic",
       model: "claude-fixture",
@@ -355,7 +359,7 @@ describe("running a heartbeat", () => {
       max_tokens: 1024,
       replay_prior_thinking: "off",
       context: {
-        ledger: "/tmp/does-not-exist/ledger.db",
+        ledger: ledgerPath,
         character: "ada",
         call_type: "message",
         thinking_enabled: false,
@@ -375,7 +379,7 @@ describe("running a heartbeat", () => {
     // The call type is rewritten per round; everything else the chat turn put
     // there — the ledger path above all — has to come through, or the tick
     // records nothing at all.
-    expect(seen[0]?.context?.ledger).toBe("/tmp/does-not-exist/ledger.db");
+    expect(seen[0]?.context?.ledger).toBe(ledgerPath);
     expect(seen[0]?.context?.call_type).toBe("heartbeat");
   });
 
@@ -406,6 +410,46 @@ describe("running a heartbeat", () => {
 // ── compaction and the archive ──────────────────────────────────────────
 
 describe("the other two actions", () => {
+  test("a compaction call cannot shed its ledger and budget labels", async () => {
+    const config = await world();
+    config.app.usage.budgets.push({
+      name: "monthly",
+      period: "month",
+      cost_usd: 100,
+      limit: "block",
+    } as never);
+    Ledger.create(join(config.dirs.data, "ledger.db")).close();
+    const seen: SidecarRequest[] = [];
+    const send = compactionGenerate({
+      config,
+      providers: {
+        anthropic: scriptedProvider([response([{ type: "text", text: "done" }])], seen),
+      },
+    });
+    const request: SidecarRequest = {
+      sdk: "anthropic",
+      provider_key: "anthropic",
+      model: "claude-fixture",
+      api_key: "",
+      messages: [{ role: "user", content: [{ type: "text", text: "compact" }] }],
+      max_tokens: 100,
+      replay_prior_thinking: "all",
+      provider_options: { thinking_enabled: true, cache_ttl: "1h" },
+    };
+
+    await send(request, { provider_key: "anthropic", api_key_env: KEY_ENV }, "ada");
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.context).toMatchObject({
+      ledger: join(config.dirs.data, "ledger.db"),
+      character: "ada",
+      call_type: "compaction",
+      thinking_enabled: true,
+      cache_ttl: "1h",
+    });
+    expect(seen[0]?.context?.usage?.budgets?.[0]?.name).toBe("monthly");
+  });
+
   function executorFor(
     config: LoadedConfig,
     notifications: {

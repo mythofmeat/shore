@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { randomUUID } from "node:crypto";
 
 import {
   CacheTracker,
@@ -39,6 +40,22 @@ CREATE TABLE IF NOT EXISTS calls (
     total_cost          REAL
 );
 
+CREATE TABLE IF NOT EXISTS call_attempts (
+    id                  TEXT PRIMARY KEY,
+    started_at          TEXT NOT NULL,
+    finished_at         TEXT,
+    status              TEXT NOT NULL,
+    character           TEXT NOT NULL,
+    provider            TEXT NOT NULL,
+    api_key_name        TEXT,
+    model               TEXT NOT NULL,
+    call_type           TEXT NOT NULL,
+    estimated_cost      REAL,
+    call_id             INTEGER,
+    error               TEXT,
+    FOREIGN KEY (call_id) REFERENCES calls(id)
+);
+
 CREATE TABLE IF NOT EXISTS pricing (
     model_id              TEXT PRIMARY KEY,
     input_per_token       REAL NOT NULL,
@@ -61,6 +78,7 @@ CREATE INDEX IF NOT EXISTS idx_calls_ts        ON calls (ts);
 CREATE INDEX IF NOT EXISTS idx_calls_character ON calls (character);
 CREATE INDEX IF NOT EXISTS idx_calls_provider  ON calls (provider);
 CREATE INDEX IF NOT EXISTS idx_calls_anomaly   ON calls (cache_anomaly) WHERE cache_anomaly IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_call_attempts_status ON call_attempts (status, started_at);
 CREATE INDEX IF NOT EXISTS idx_usage_budget_warnings_window
     ON usage_budget_warnings (budget_name, period_start);
 `;
@@ -89,6 +107,22 @@ const MIGRATIONS: readonly string[] = [
       ON usage_budget_warnings (budget_name, period_start)`,
   "ALTER TABLE calls ADD COLUMN reasoning_effort TEXT",
   "ALTER TABLE calls ADD COLUMN tool_surface TEXT",
+  `CREATE TABLE IF NOT EXISTS call_attempts (
+      id TEXT PRIMARY KEY,
+      started_at TEXT NOT NULL,
+      finished_at TEXT,
+      status TEXT NOT NULL,
+      character TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      api_key_name TEXT,
+      model TEXT NOT NULL,
+      call_type TEXT NOT NULL,
+      estimated_cost REAL,
+      call_id INTEGER,
+      error TEXT,
+      FOREIGN KEY (call_id) REFERENCES calls(id)
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_call_attempts_status ON call_attempts (status, started_at)",
 ];
 
 function migrate(db: Database): void {
@@ -99,6 +133,25 @@ function migrate(db: Database): void {
       if (!String(e).includes("duplicate column")) throw e;
     }
   }
+}
+
+function migrateCallAttempts(db: Database): void {
+  db.exec(`CREATE TABLE IF NOT EXISTS call_attempts (
+    id TEXT PRIMARY KEY,
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    status TEXT NOT NULL,
+    character TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    api_key_name TEXT,
+    model TEXT NOT NULL,
+    call_type TEXT NOT NULL,
+    estimated_cost REAL,
+    call_id INTEGER,
+    error TEXT,
+    FOREIGN KEY (call_id) REFERENCES calls(id)
+  )`);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_call_attempts_status ON call_attempts (status, started_at)");
 }
 
 const SUBSCRIPTION_PROVIDERS = new Set(["opencode-go"]);
@@ -135,6 +188,7 @@ export interface RecordCall {
 }
 
 export interface CallRow {
+  id?: number;
   ts: string;
   character: string;
   provider: string;
@@ -211,6 +265,7 @@ export class Ledger {
     db.exec("PRAGMA journal_mode = WAL;");
     db.exec(SCHEMA);
     migrate(db);
+    db.query("UPDATE call_attempts SET status = 'unresolved' WHERE status = 'pending'").run();
     return new Ledger(db, pricing);
   }
 
@@ -224,6 +279,7 @@ export class Ledger {
       db.close();
       throw new Error(`${path} has no 'calls' table — the daemon owns the schema and creates it`);
     }
+    migrateCallAttempts(db);
     return new Ledger(db, pricing);
   }
 
@@ -255,11 +311,35 @@ export class Ledger {
     this.#db.close();
   }
 
-  record(record: RecordCall, now: () => Date = () => new Date()): CallRow {
+  beginAttempt(
+    record: Pick<RecordCall, "provider" | "api_key_name" | "model" | "call_type" | "character">,
+    estimatedCost?: number,
+    now: () => Date = () => new Date(),
+  ): string {
+    const id = randomUUID();
+    this.#db.query(
+      `INSERT INTO call_attempts (
+         id, started_at, status, character, provider, api_key_name, model, call_type, estimated_cost
+       ) VALUES ($id, $started_at, 'pending', $character, $provider, $api_key_name,
+                 $model, $call_type, $estimated_cost)`,
+    ).run({
+      $id: id,
+      $started_at: now().toISOString(),
+      $character: record.character,
+      $provider: record.provider,
+      $api_key_name: record.api_key_name ?? null,
+      $model: record.model,
+      $call_type: record.call_type,
+      $estimated_cost: estimatedCost ?? null,
+    });
+    return id;
+  }
+
+  record(record: RecordCall, now: () => Date = () => new Date(), attemptId?: string): CallRow {
     const ts = now().toISOString();
     const [cache_state, cache_anomaly] = this.#trackCacheState(record, ts);
     const row = this.#buildRow(record, ts, cache_state, cache_anomaly);
-    this.#db.query(INSERT_SQL).run({
+    const insert = () => this.#db.query(INSERT_SQL).run({
       $ts: row.ts,
       $character: row.character,
       $provider: row.provider,
@@ -286,6 +366,28 @@ export class Ledger {
       $cost_source: row.cost_source,
       $total_cost: row.total_cost,
     });
+    if (attemptId === undefined) {
+      const result = insert();
+      row.id = Number(result.lastInsertRowid);
+      return row;
+    }
+    this.#db.transaction(() => {
+      const result = insert();
+      row.id = Number(result.lastInsertRowid);
+      this.#db.query(
+        `UPDATE call_attempts
+            SET status = $status, finished_at = $finished_at, call_id = $call_id,
+                error = $error
+          WHERE id = $id AND status = 'pending'`,
+      ).run({
+        $status: record.finish_reason === "error" ? "error" :
+          record.finish_reason === "cancelled" ? "cancelled" : "completed",
+        $finished_at: row.ts,
+        $call_id: row.id,
+        $error: record.finish_reason === "error" ? "provider call failed" : null,
+        $id: attemptId,
+      });
+    })();
     return row;
   }
 

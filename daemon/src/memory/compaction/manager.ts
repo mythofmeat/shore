@@ -7,7 +7,8 @@ import { runToolLoop, type ToolLoopDriver, type ToolUseEvent } from "../../engin
 import type { ContentBlock } from "../../engine/types";
 import type { MarkdownMemoryStore } from "../markdown_store";
 import { MEMORY_INDEX_FILE, noteMemoryIndexDeferred } from "../deferred_edits";
-import { rustTrim } from "../lines";
+import { rustLines, rustTrim } from "../lines";
+import { hasCompactionOperation } from "./archive.ts";
 import {
   normalizePromptVisiblePath,
   pathComponents,
@@ -24,6 +25,16 @@ import {
   type ConversationMessage,
   type MemoryFileOp,
 } from "./types";
+import {
+  checkpointSourceIsCompatible,
+  loadCompactionCheckpoint,
+  newCompactionCheckpoint,
+  removeCompactionCheckpoint,
+  saveCompactionCheckpoint,
+  type CheckpointLoopState,
+  type CompactionCheckpoint,
+  type CompactionPauseReason,
+} from "./checkpoint.ts";
 
 const inFlight = new Set<string>();
 const waiting = new Map<string, (() => void)[]>();
@@ -175,14 +186,13 @@ export function writeAllowedPath(path: string): boolean {
   );
 }
 
-interface ToolLoopState {
+interface ToolLoopState extends CheckpointLoopState {
   writesApplied: AppliedCompactionWrite[];
   rejectedPaths: string[];
   toolsCalled: string[];
   dryRunPreviews: MemoryFileOp[];
   toolRounds: number;
   maxRoundsHit: boolean;
-  dryRun: boolean;
 }
 
 function extractMemoryWriteIntent(
@@ -273,10 +283,17 @@ async function dispatchCompactionTool(
 
     const result = await tools.dispatch(name, input);
     if (!result.isError) {
+      let resultingContent: string | undefined;
+      try {
+        resultingContent = await readFile(resolved, "utf8");
+      } catch {
+        resultingContent = intent.content;
+      }
       state.writesApplied.push({
         displayPath,
         resolvedPath: resolved,
         ...(previousContent === undefined ? {} : { previousContent }),
+        ...(resultingContent === undefined ? {} : { resultingContent }),
         memoryIndexTarget: normalizePromptVisiblePath(displayPath) === MEMORY_INDEX_FILE,
       });
     }
@@ -296,8 +313,10 @@ class CompactionDriver implements ToolLoopDriver<GenerateResponse> {
     private readonly tools: CompactionTools,
     private readonly workspaceDir: string,
     dryRun: boolean,
+    restored: ToolLoopState | undefined,
+    private readonly persist: (state: ToolLoopState, request: SidecarRequest) => Promise<void>,
   ) {
-    this.state = {
+    this.state = restored ?? {
       writesApplied: [],
       rejectedPaths: [],
       toolsCalled: [],
@@ -305,6 +324,8 @@ class CompactionDriver implements ToolLoopDriver<GenerateResponse> {
       toolRounds: 0,
       maxRoundsHit: false,
       dryRun,
+      pendingResults: [],
+      pendingUseCount: 0,
     };
   }
 
@@ -321,32 +342,50 @@ class CompactionDriver implements ToolLoopDriver<GenerateResponse> {
   async callModel(): Promise<GenerateResponse> {
     const resp = await this.llm.generate(this.request);
     pushAssistantTurn(this.request, resp);
+    this.state.pendingTurn = resp;
+    this.state.pendingResults = [];
+    this.state.pendingUseCount = 0;
+    await this.persist(this.state, this.request);
     return resp;
   }
 
   async dispatch(_turn: GenerateResponse, uses: ToolUseEvent[]): Promise<void> {
-    this.state.toolRounds += 1;
-    this.#pending = [];
-    for (const use of uses) {
+    this.#pending = this.state.pendingResults.map((result, index) => ({
+      type: "tool_result" as const,
+      tool_use_id: uses[index]!.id,
+      content: result.output,
+      is_error: result.isError,
+    }));
+    for (let i = this.state.pendingUseCount; i < uses.length; i += 1) {
+      const use = uses[i]!;
       this.state.toolsCalled.push(use.name);
-      const { output, isError } = await dispatchCompactionTool(
+      const result = await dispatchCompactionTool(
         use.name,
         use.input,
         this.tools,
         this.workspaceDir,
         this.state,
       );
+      const { output, isError } = result;
+      this.state.pendingResults.push(result);
+      this.state.pendingUseCount = i + 1;
       this.#pending.push({
         type: "tool_result",
         tool_use_id: use.id,
         content: output,
         is_error: isError,
       });
+      await this.persist(this.state, this.request);
     }
+    this.request.messages.push({ role: "user", content: this.#pending });
+    this.state.toolRounds += 1;
+    delete this.state.pendingTurn;
+    this.state.pendingResults = [];
+    this.state.pendingUseCount = 0;
+    await this.persist(this.state, this.request);
   }
 
   appendToolResults(): void {
-    this.request.messages.push({ role: "user", content: this.#pending });
   }
 }
 
@@ -357,9 +396,16 @@ async function runCompactionToolLoop(
   workspaceDir: string,
   maxToolIterations: number | undefined,
   dryRun: boolean,
+  restored: ToolLoopState | undefined,
+  persist: (state: ToolLoopState, request: SidecarRequest) => Promise<void>,
 ): Promise<ToolLoopState> {
-  const driver = new CompactionDriver(llm, request, tools, workspaceDir, dryRun);
-  const outcome = await runToolLoop(driver, undefined, maxToolIterations, "stop_after_dispatch");
+  const driver = new CompactionDriver(llm, request, tools, workspaceDir, dryRun, restored, persist);
+  const outcome = await runToolLoop(
+    driver,
+    driver.state.pendingTurn,
+    maxToolIterations,
+    "stop_after_dispatch",
+  );
   driver.state.maxRoundsHit = outcome.stop === "cap_reached";
   return driver.state;
 }
@@ -421,6 +467,7 @@ export interface CompactOptions {
   dataDir?: string;
   tools: CompactionTools;
   maxToolIterations?: number;
+  resumable?: boolean;
 }
 
 async function preparePassWorkspace(
@@ -478,7 +525,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
     throw CompactionError.markdownStore("markdown memory store not available");
   }
 
-  const request = buildCompactLlmRequest(opts);
+  const initialRequest = buildCompactLlmRequest(opts);
   const workspaceDir = await preparePassWorkspace(
     opts.markdownStore,
     tools,
@@ -487,34 +534,107 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   );
 
   const compactedTurns = countTurns(messages.slice(0, splitAt));
-  const retainedTurns = countTurns(messages.slice(splitAt));
-  const retained = messages.length - splitAt;
+  const originalRetained = messages.length - splitAt;
+  const originalRetainedTurns = countTurns(messages.slice(splitAt));
+  const checkpoint = await resolveCheckpoint(opts, splitAt, compactedTurns, initialRequest);
+  checkpoint.request.api_key = initialRequest.api_key;
+  const alreadyArchived = opts.resumable === true && opts.dataDir !== undefined
+    ? await hasCompactionOperation(join(opts.dataDir, opts.charName), checkpoint.id)
+    : false;
+  if (alreadyArchived && !checkpointSourceIsCompatible(checkpoint, await currentActiveContent(opts))) {
+    const liveContent = await currentActiveContent(opts);
+    const liveLines = rustLines(liveContent).filter((line) => rustTrim(line) !== "");
+    const markdownPaths = checkpoint.loop.writesApplied.map((write) => write.displayPath);
+    await queueMemoryIndexRefresh(
+      checkpoint.loop.writesApplied.some((write) => write.memoryIndexTarget),
+      tools,
+      opts.dataDir,
+      opts.charName,
+    );
+    await clearCheckpoint(opts);
+    return {
+      kind: "compacted",
+      memoryFilesWritten: markdownPaths,
+      conversationId: opts.conversationId,
+      newConversationId: checkpoint.id,
+      messageCount: checkpoint.splitAt,
+      compactedTurns: checkpoint.compactedTurns,
+      retainedCount: liveLines.length,
+      retainedTurns: countRetainedTurns(liveLines),
+      markdownPaths,
+      toolRounds: checkpoint.loop.toolRounds,
+      toolsCalled: checkpoint.loop.toolsCalled,
+    };
+  }
+  if (checkpoint.state === "paused" && checkpoint.resumeAt !== undefined) {
+    if (Date.parse(checkpoint.resumeAt) > Date.now()) return pausedOutcome(opts, checkpoint);
+  }
+  const conflict = await checkpointConflict(checkpoint, opts.activeContent);
+  if (conflict !== undefined) {
+    checkpoint.state = "paused";
+    checkpoint.pauseReason = conflict;
+    await persistCheckpoint(opts, checkpoint);
+    return pausedOutcome(opts, checkpoint);
+  }
+  checkpoint.state = "running";
+  delete checkpoint.pauseReason;
+  delete checkpoint.resumeAt;
+  await persistCheckpoint(opts, checkpoint);
 
-  const state = await runCompactionToolLoop(
-    opts.llm,
-    request,
-    tools,
-    workspaceDir,
-    opts.maxToolIterations,
-    opts.dryRun,
-  );
+  const request = checkpoint.request;
+  let state: ToolLoopState;
+  try {
+    state = await runCompactionToolLoop(
+      opts.llm,
+      request,
+      tools,
+      workspaceDir,
+      opts.maxToolIterations,
+      opts.dryRun,
+      checkpoint.loop,
+      async (nextState, nextRequest) => {
+        checkpoint.loop = nextState;
+        checkpoint.request = nextRequest;
+        await persistCheckpoint(opts, checkpoint);
+      },
+    );
+  } catch (e) {
+    if (opts.resumable !== true) throw e;
+    checkpoint.state = "paused";
+    checkpoint.pauseReason = pauseReason(e);
+    const resetAt = budgetResetAt(e);
+    if (resetAt === undefined) delete checkpoint.resumeAt;
+    else checkpoint.resumeAt = resetAt;
+    await persistCheckpoint(opts, checkpoint);
+    return pausedOutcome(opts, checkpoint, e instanceof Error ? e.message : String(e));
+  }
+  checkpoint.loop = state;
 
   if (opts.dryRun) {
+    await clearCheckpoint(opts);
     return {
       kind: "dry_run",
       wouldWriteFiles: state.dryRunPreviews.length,
       fileOpsPreview: state.dryRunPreviews,
       messageCount: splitAt,
       compactedTurns,
-      retainedCount: retained,
-      retainedTurns,
+      retainedCount: originalRetained,
+      retainedTurns: originalRetainedTurns,
       markdownPreview: state.dryRunPreviews.map((op) => op.path),
       toolRounds: state.toolRounds,
       toolsCalled: state.toolsCalled,
     };
   }
 
+  if (state.maxRoundsHit && opts.resumable === true) {
+    checkpoint.state = "paused";
+    checkpoint.pauseReason = "iteration_limit";
+    await persistCheckpoint(opts, checkpoint);
+    return pausedOutcome(opts, checkpoint);
+  }
+
   if (state.writesApplied.length === 0) {
+    await clearCheckpoint(opts);
     console.warn(
       `shore: compaction wrote no memory for ${opts.conversationId}; active conversation NOT ` +
         `archived (rounds=${state.toolRounds}, rejected=${state.rejectedPaths.length}, ` +
@@ -532,16 +652,33 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
     };
   }
 
+  const liveContent = await currentActiveContent(opts);
+  if (!checkpointSourceIsCompatible(checkpoint, liveContent)) {
+    checkpoint.state = "paused";
+    checkpoint.pauseReason = "source_conflict";
+    await persistCheckpoint(opts, checkpoint);
+    return pausedOutcome(opts, checkpoint);
+  }
+  const liveLines = rustLines(liveContent).filter((line) => rustTrim(line) !== "");
+  const retained = opts.resumable === true
+    ? Math.max(liveLines.length - checkpoint.splitAt, 0)
+    : originalRetained;
+  const retainedTurns = opts.resumable === true
+    ? countRetainedTurns(liveLines.slice(checkpoint.splitAt))
+    : originalRetainedTurns;
+
   const newConversationId = await archiveCompactPrefix(
     opts.conversationMgr,
     opts.conversationId,
     retained,
-    opts.activeContent,
+    liveContent,
     state.writesApplied,
     workspaceDir,
     opts.charName,
     tools,
+    checkpoint.id,
   );
+  await clearCheckpoint(opts);
 
   const markdownPaths = state.writesApplied.map((w) => w.displayPath);
   const memoryIndexUpdated = state.writesApplied.some((w) => w.memoryIndexTarget);
@@ -581,11 +718,13 @@ async function archiveCompactPrefix(
   workspaceDir: string,
   charName: string,
   tools: CompactionTools,
+  operationId?: string,
 ): Promise<string> {
   try {
     return await conversationMgr.archiveAndRetain(conversationId, {
       keepLastN: retained,
       activeContent,
+      ...(operationId === undefined ? {} : { operationId }),
     });
   } catch (e) {
     await rollbackCompaction(writesApplied);
@@ -606,6 +745,125 @@ async function archiveCompactPrefix(
     }
     throw e;
   }
+}
+
+async function resolveCheckpoint(
+  opts: CompactOptions,
+  splitAt: number,
+  compactedTurns: number,
+  request: SidecarRequest,
+): Promise<CompactionCheckpoint> {
+  if (opts.resumable === true && opts.dataDir !== undefined) {
+    const existing = await loadCompactionCheckpoint(opts.dataDir, opts.charName);
+    if (existing !== undefined) return existing;
+  }
+  return newCompactionCheckpoint(
+    opts.charName,
+    opts.activeContent,
+    splitAt,
+    compactedTurns,
+    request,
+    opts.dryRun,
+  );
+}
+
+async function persistCheckpoint(opts: CompactOptions, checkpoint: CompactionCheckpoint): Promise<void> {
+  if (opts.resumable === true && opts.dataDir !== undefined) {
+    await saveCompactionCheckpoint(opts.dataDir, checkpoint);
+  }
+}
+
+async function clearCheckpoint(opts: CompactOptions): Promise<void> {
+  if (opts.resumable === true && opts.dataDir !== undefined) {
+    await removeCompactionCheckpoint(opts.dataDir, opts.charName);
+  }
+}
+
+async function checkpointConflict(
+  checkpoint: CompactionCheckpoint,
+  activeContent: string,
+): Promise<CompactionPauseReason | undefined> {
+  if (!checkpointSourceIsCompatible(checkpoint, activeContent)) return "source_conflict";
+  const latest = new Map<string, AppliedCompactionWrite>();
+  for (const write of checkpoint.loop.writesApplied) latest.set(write.resolvedPath, write);
+  for (const write of latest.values()) {
+    if (write.resultingContent === undefined) continue;
+    try {
+      if ((await readFile(write.resolvedPath, "utf8")) !== write.resultingContent) {
+        return "workspace_conflict";
+      }
+    } catch {
+      return "workspace_conflict";
+    }
+  }
+  return undefined;
+}
+
+function pausedOutcome(
+  opts: CompactOptions,
+  checkpoint: CompactionCheckpoint,
+  detail?: string,
+): CompactionOutcome {
+  return {
+    kind: "paused",
+    conversationId: opts.conversationId,
+    checkpointId: checkpoint.id,
+    messageCount: checkpoint.splitAt,
+    compactedTurns: checkpoint.compactedTurns,
+    toolRounds: checkpoint.loop.toolRounds,
+    toolsCalled: checkpoint.loop.toolsCalled,
+    reason: detail ?? checkpoint.pauseReason ?? "provider",
+    ...(checkpoint.resumeAt === undefined ? {} : { resumeAt: checkpoint.resumeAt }),
+  };
+}
+
+function pauseReason(e: unknown): CompactionPauseReason {
+  return errorChain(e).some((part) => part.name === "BudgetBlocked") ? "budget" : "provider";
+}
+
+function budgetResetAt(e: unknown): string | undefined {
+  for (const part of errorChain(e)) {
+    const resetAt = (part as Error & { resetAt?: unknown }).resetAt;
+    if (typeof resetAt === "string") return resetAt;
+  }
+  return undefined;
+}
+
+function errorChain(e: unknown): Error[] {
+  const out: Error[] = [];
+  let current = e;
+  while (current instanceof Error) {
+    out.push(current);
+    current = current.cause;
+  }
+  return out;
+}
+
+async function currentActiveContent(opts: CompactOptions): Promise<string> {
+  if (opts.resumable !== true || opts.dataDir === undefined) return opts.activeContent;
+  try {
+    return await readFile(join(opts.dataDir, opts.charName, "active.jsonl"), "utf8");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return opts.activeContent;
+    throw e;
+  }
+}
+
+function countRetainedTurns(lines: readonly string[]): number {
+  let count = 0;
+  for (const line of lines) {
+    try {
+      const message = JSON.parse(line) as { role?: unknown; content_blocks?: unknown };
+      if (message.role !== "user") continue;
+      const blocks = Array.isArray(message.content_blocks) ? message.content_blocks : [];
+      if (blocks.length > 0 && blocks.every((block) => {
+        return typeof block === "object" && block !== null &&
+          (block as { type?: unknown }).type === "tool_result";
+      })) continue;
+      count += 1;
+    } catch {}
+  }
+  return count;
 }
 
 async function queueMemoryIndexRefresh(

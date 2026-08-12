@@ -66,7 +66,7 @@ export class RealCompactionLlm implements CompactionLlm {
     try {
       return await this.#opts.generate(request, this.#opts.model, this.#opts.character);
     } catch (e) {
-      throw CompactionError.llm((e as Error).message);
+      throw CompactionError.llm((e as Error).message, e);
     }
   }
 }

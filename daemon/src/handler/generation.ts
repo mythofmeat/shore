@@ -21,7 +21,7 @@ import { genericToolLoopEvents } from "../llm/providers/generic_loop.ts";
 import { BudgetBlocked } from "../llm/generate.ts";
 import { consumeStream, type StreamResult } from "../llm/stream.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
-import { recordingStream } from "../ledger/record.ts";
+import { beginCallAttempt, recordingStream } from "../ledger/record.ts";
 import type {
   CallContext,
   ProviderOptions,
@@ -338,7 +338,10 @@ async function streamTurn(
     };
 
     const blocked = budgetBlockFor(call);
-    if (blocked) throw new BudgetBlocked(blocked.message, blocked.scope);
+    if (blocked) throw new BudgetBlocked(blocked.message, blocked.scope, blocked.reset_at);
+    const initialAttempt = call.context?.ledger === undefined
+      ? undefined
+      : beginCallAttempt(call.context, call);
 
     const phase: ToolPhase | undefined =
       toolCtx === undefined
@@ -365,7 +368,23 @@ async function streamTurn(
             ? anthropicToolLoopEvents(call, phase, params.signal)
             : genericToolLoopEvents(provider, call, phase, params.signal);
 
-    const outcome = await consumeStream(recordingStream(call.context, call, events), {
+    const outcome = await consumeStream(recordingStream(
+      call.context,
+      call,
+      events,
+      initialAttempt,
+      (request, callType) => {
+        const continued = {
+          ...request,
+          context: { ...request.context!, call_type: callType },
+        };
+        const nextBlock = budgetBlockFor(continued);
+        if (nextBlock) {
+          throw new BudgetBlocked(nextBlock.message, nextBlock.scope, nextBlock.reset_at);
+        }
+        return beginCallAttempt(continued.context, continued);
+      },
+    ), {
       regen: params.regen,
       sink: params.send,
       ...(params.rid === undefined ? {} : { rid: params.rid }),

@@ -1,6 +1,11 @@
 import { CacheKeepalive, type KeepaliveSnapshot } from "./schedule.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
-import { recordGenerate, recordGenerateError } from "../ledger/record.ts";
+import {
+  beginCallAttempt,
+  recordGenerate,
+  recordGenerateError,
+  type CallAttempt,
+} from "../ledger/record.ts";
 import type { GenerateResponse, SidecarRequest, Usage, WireMessage } from "../llm/types.ts";
 
 const KEEPALIVE_TICK_MS = 10_000;
@@ -188,16 +193,18 @@ export class KeepaliveService {
       };
     }
     const startedAt = this.#now();
+    let attempt: CallAttempt | undefined;
     try {
+      attempt = ping.context?.ledger === undefined ? undefined : beginCallAttempt(ping.context, ping);
       const response = await this.#send(ping);
-      recordGenerate(ping.context, ping, response);
+      recordGenerate(ping.context, ping, response, attempt);
       return {
         status: "sent",
         cold: pingLandedCold(response.usage),
         usage: response.usage,
       };
     } catch (e) {
-      recordGenerateError(ping.context, ping, startedAt, this.#now);
+      recordGenerateError(ping.context, ping, startedAt, this.#now, attempt);
       return { status: "failed", cold: false, detail: truncate(String(e), 160) };
     }
   }
@@ -281,11 +288,13 @@ export class KeepaliveService {
     }
 
     const startedAt = this.#now();
+    let attempt: CallAttempt | undefined;
     let response: GenerateResponse;
     try {
+      attempt = ping.context?.ledger === undefined ? undefined : beginCallAttempt(ping.context, ping);
       response = await this.#send(ping);
     } catch (e) {
-      recordGenerateError(ping.context, ping, startedAt, this.#now);
+      recordGenerateError(ping.context, ping, startedAt, this.#now, attempt);
       entry.keepalive.onPingFailed(this.#now());
       this.#push({
         character,
@@ -296,7 +305,7 @@ export class KeepaliveService {
       return;
     }
 
-    recordGenerate(ping.context, ping, response);
+    recordGenerate(ping.context, ping, response, attempt);
 
     const usage = response.usage;
     if (pingLandedCold(usage)) {
