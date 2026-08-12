@@ -36,6 +36,7 @@ import {
   buildMessageHandlerDeps,
   chatCompactionRunner,
   chatToolDeps,
+  configReloader,
   generationRegistry,
   handlerNotifier,
   handlerRegistry,
@@ -44,6 +45,7 @@ import {
   type CommandAssembly,
   type HandlerAssembly,
 } from "../src/handler/deps.ts";
+import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { SessionRouter } from "../src/swp/session.ts";
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
 import { CharacterError } from "../src/characters.ts";
@@ -647,6 +649,71 @@ describe("the command path", () => {
     }
   });
 
+  test("a hot reload the daemon refuses is told to the clients, not just the log", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-cmd-warn-");
+    try {
+      await mkdir(join(root, "config"), { recursive: true });
+      await writeFile(join(root, "config", "config.toml"), "definitely = not [ toml", "utf8");
+
+      const emitted: ServerMessage[] = [];
+      const reload = configReloader({
+        ...commandAssembly(runtime),
+        emitEvent: (message) => emitted.push(message),
+      });
+
+      const real = console.warn;
+      console.warn = () => {};
+      try {
+        await reload([join(root, "config", "config.toml")]);
+      } finally {
+        console.warn = real;
+      }
+
+      // The daemon is still on the config it started with; without this frame
+      // the only sign the saved file is not in effect is a log line nobody is
+      // reading.
+      expect(emitted).toHaveLength(1);
+      const warning = emitted[0] as Extract<ServerMessage, { type: "config_warning" }>;
+      expect(warning.type).toBe("config_warning");
+      expect(warning.path).toBe(join(root, "config", "config.toml"));
+      expect(warning.character).toBeUndefined();
+      expect(warning.message.length).toBeGreaterThan(0);
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a broken character overlay names the character and its own file", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-cmd-warn-char-", () => {}, ["ada"]);
+    try {
+      const overlay = join(root, "config", "characters", "ada", "config.toml");
+      await writeFile(overlay, "definitely = not [ toml", "utf8");
+
+      const emitted: ServerMessage[] = [];
+      const reload = configReloader({
+        ...commandAssembly(runtime),
+        emitEvent: (message) => emitted.push(message),
+      });
+
+      const real = console.warn;
+      console.warn = () => {};
+      try {
+        await reload([overlay]);
+      } finally {
+        console.warn = real;
+      }
+
+      expect(emitted).toHaveLength(1);
+      const warning = emitted[0] as Extract<ServerMessage, { type: "config_warning" }>;
+      expect(warning.character).toBe("ada");
+      expect(warning.path).toBe(overlay);
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("adopting a reloaded config re-scans, and tells every registered character", async () => {
     const { root, config, runtime } = await runtimeUnder(
       "shore-deps-cmd-adopt-",
@@ -678,16 +745,33 @@ describe("the command path", () => {
     const { root, runtime } = await runtimeUnder("shore-deps-cmd-reset-");
     try {
       const deps = buildCommandPathDeps(commandAssembly(runtime));
-      deps.sessions.setActiveModel(1, "anthropic:a");
-      deps.sessions.setActiveModel(2, "openai:b");
+      deps.sessions.setActiveModel(1, "ada", "anthropic:a");
+      deps.sessions.setActiveModel(2, "nova", "openai:b");
 
       deps.dispatchRuntime.clearActiveModel();
 
       // The Rust kept one active model on the handler's single command context,
       // so `config_reset` cleared it for everyone. Per session here, and the
       // reset still has to reach all of them.
-      expect(deps.sessions.activeModel(1)).toBeUndefined();
-      expect(deps.sessions.activeModel(2)).toBeUndefined();
+      expect(deps.sessions.activeModel(1, "ada")).toBeUndefined();
+      expect(deps.sessions.activeModel(2, "nova")).toBeUndefined();
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("one session's active model is remembered per character, not per session", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-cmd-switch-");
+    try {
+      const deps = buildCommandPathDeps(commandAssembly(runtime));
+      deps.sessions.setActiveModel(1, "ada", "anthropic:a");
+
+      // Same session, after a switch to nova. Keyed by session alone this
+      // answered "anthropic:a" — ada's model, reported as nova's, to every
+      // status/model/config command until nova's own ran.
+      expect(deps.sessions.activeModel(1, "nova")).toBeUndefined();
+      expect(deps.sessions.activeModel(1, "ada")).toBe("anthropic:a");
     } finally {
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });

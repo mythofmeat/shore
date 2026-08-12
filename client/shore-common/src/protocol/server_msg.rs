@@ -317,6 +317,27 @@ pub struct UsageWarning {
     pub scope: Option<String>,
 }
 
+/// A config file on disk was saved in a state the daemon could not adopt.
+///
+/// The daemon keeps running on the last config that loaded, so this is a
+/// warning and not an [`Error`]: nothing failed for the client, but what it is
+/// looking at on disk is not what the daemon is using. Without it the only
+/// record is a daemon log line, and a user who saved a broken character
+/// override goes on getting the old behaviour with no idea why.
+#[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct ConfigWarning {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rid: Option<String>,
+    /// The file the daemon was reading when it gave up.
+    pub path: String,
+    /// The character whose overlay failed, when the failure was in one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub character: Option<String>,
+    /// What went wrong, as the daemon would have logged it.
+    pub message: String,
+}
+
 /// All server → client message types, tagged by "type".
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
@@ -339,6 +360,7 @@ pub enum ServerMessage {
     CacheWarning(CacheWarning),
     ProviderFallbackWarning(ProviderFallbackWarning),
     UsageWarning(UsageWarning),
+    ConfigWarning(ConfigWarning),
     /// A frame whose `type` tag matches no known variant. Produced only by
     /// deserialization (never constructed or sent by the server), so a client
     /// built against an older protocol skips message types added by a newer
@@ -373,6 +395,7 @@ impl ServerMessage {
             | ServerMessage::CacheWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
+            | ServerMessage::ConfigWarning(_)
             | ServerMessage::Unknown => None,
         }
     }
@@ -402,6 +425,7 @@ impl ServerMessage {
             | ServerMessage::CacheWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
+            | ServerMessage::ConfigWarning(_)
             | ServerMessage::Unknown => {}
         }
     }

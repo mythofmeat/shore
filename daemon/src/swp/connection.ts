@@ -133,7 +133,18 @@ export async function performHandshake(
     ctx.log?.warn?.("Connect-time character selection is not available", { requested });
   }
 
-  const history = await ctx.handshake.history(selected);
+  let history: HistorySnapshot;
+  try {
+    history = await ctx.handshake.history(selected);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    ctx.log?.warn?.("Could not build the connect-time history snapshot", {
+      requested: selected ?? "",
+      error: message,
+    });
+    await writeMessage(sink, { type: "error", code: "internal_error", message });
+    throw new HandshakeError(message);
+  }
 
   const client: ClientInfo = {
     id: ctx.clientId,

@@ -55,7 +55,13 @@ export function routeClientMessage(
   }
 }
 
-const UNCONDITIONAL_EVENTS = new Set(["hello", "shutdown", "ping", "cache_warning"]);
+const UNCONDITIONAL_EVENTS = new Set([
+  "hello",
+  "shutdown",
+  "ping",
+  "cache_warning",
+  "config_warning",
+]);
 
 const UNROUTABLE_EVENTS = new Set(["unknown"]);
 

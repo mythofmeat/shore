@@ -5,9 +5,14 @@
 //! `$XDG_RUNTIME_DIR/shore/active_model`). This is ephemeral state — cleared
 //! on reboot — which matches the intent: these selections are session-level,
 //! not permanent config.
+//!
+//! The character half lives in `shore_common::active_character` because the
+//! TUI writes it too; these are the names the rest of the CLI already calls it
+//! by.
 
 use std::path::PathBuf;
 
+pub(crate) use shore_common::active_character::{read_active_character, write_active_character};
 use tracing::debug;
 
 /// Return the directory used for Shore runtime state.
@@ -15,41 +20,9 @@ fn runtime_dir() -> PathBuf {
     shore_common::dirs::runtime_dir()
 }
 
-/// Return the path to the active character state file.
-pub(crate) fn state_file_path() -> PathBuf {
-    runtime_dir().join("active_character")
-}
-
 /// Return the path to the active model state file.
 pub(crate) fn model_state_file_path() -> PathBuf {
     runtime_dir().join("active_model")
-}
-
-/// Read the active character from the state file.
-///
-/// Returns `None` if the file doesn't exist, is empty, or is unreadable.
-pub(crate) fn read_active_character() -> Option<String> {
-    let content = std::fs::read_to_string(state_file_path()).ok()?;
-    let trimmed = content.trim();
-    if trimmed.is_empty() {
-        debug!("No active character in state file");
-        None
-    } else {
-        debug!(character = trimmed, "Read active character from state file");
-        Some(trimmed.to_owned())
-    }
-}
-
-/// Write the active character to the state file.
-///
-/// Creates parent directories if needed.
-pub(crate) fn write_active_character(name: &str) -> std::io::Result<()> {
-    let path = state_file_path();
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    debug!(character = name, "Writing active character to state file");
-    std::fs::write(&path, name)
 }
 
 /// Read the active model name from the state file.
@@ -146,15 +119,6 @@ mod tests {
     }
 
     #[test]
-    fn state_file_path_ends_with_active_character() {
-        let path = state_file_path();
-        assert!(
-            path.ends_with("active_character"),
-            "state_file_path should end with 'active_character', got: {path:?}"
-        );
-    }
-
-    #[test]
     fn model_state_file_path_ends_with_active_model() {
         let path = model_state_file_path();
         assert!(
@@ -165,6 +129,10 @@ mod tests {
 
     /// All env-var-dependent state tests are in one test to avoid
     /// `SHORE_RUNTIME_DIR` races across parallel test threads.
+    ///
+    /// The character half of this moved to
+    /// `shore_common::active_character`, which the TUI writes too; its
+    /// round-trip is tested there.
     #[test]
     fn read_write_state_lifecycle() {
         let tmp = tempfile::TempDir::new().unwrap();
@@ -172,31 +140,10 @@ mod tests {
 
         set_env("SHORE_RUNTIME_DIR", &runtime);
         let result = std::panic::catch_unwind(|| {
-            // ── character ─────────────────────────────────────────────
-            // 1. Missing file → None.
-            assert!(
-                read_active_character().is_none(),
-                "missing file should return None"
-            );
-
-            // 2. Write and read back.
+            // The CLI still writes the character file after a validated
+            // switch, so the names it calls it by have to keep working.
             write_active_character("alice").unwrap();
             assert_eq!(read_active_character().as_deref(), Some("alice"));
-
-            // 3. Overwrite.
-            write_active_character("bob").unwrap();
-            assert_eq!(read_active_character().as_deref(), Some("bob"));
-
-            // 4. Empty file → None.
-            std::fs::write(state_file_path(), "").unwrap();
-            assert!(
-                read_active_character().is_none(),
-                "empty file should return None"
-            );
-
-            // 5. Whitespace trimming.
-            std::fs::write(state_file_path(), "  carol  \n").unwrap();
-            assert_eq!(read_active_character().as_deref(), Some("carol"));
 
             // ── model ─────────────────────────────────────────────────
             // Phase 3+: CLI no longer writes the model mirror. The

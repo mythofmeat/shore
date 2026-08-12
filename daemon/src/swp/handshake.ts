@@ -1,4 +1,5 @@
 import type { CharacterInfo } from "../protocol/CharacterInfo";
+import { EngineCharacterNotFound } from "../characters.ts";
 import { characterMetadata } from "../commands/navigation.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
 import type { LoadedConfig } from "../config/loader.ts";
@@ -12,6 +13,19 @@ export interface HandshakeRegistry {
   globalConfig(): LoadedConfig;
   effectiveConfig(name: string): LoadedConfig;
   getOrCreate(name: string): Promise<ConversationEngine>;
+}
+
+export class HistorySnapshotError extends Error {
+  readonly code = "internal_error" as const;
+
+  constructor(
+    readonly character: string,
+    override readonly cause: unknown,
+  ) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    super(`could not load ${JSON.stringify(character)}'s conversation: ${detail}`);
+    this.name = "HistorySnapshotError";
+  }
 }
 
 export function buildHandshakeProvider(registry: HandshakeRegistry): HandshakeProvider {
@@ -42,7 +56,8 @@ export async function buildSessionHistorySnapshot(
   const resolvedModel = snapshotActiveModel(config, selectedCharacter, activeModel);
   const configBlock = historyConfigSnapshot(config, resolvedModel);
 
-  const engine = selectedCharacter === null ? undefined : await engineOrUndefined(registry, selectedCharacter);
+  const engine =
+    selectedCharacter === null ? undefined : await engineIfCharacterExists(registry, selectedCharacter);
   if (engine === undefined) {
     return {
       messages: [],
@@ -63,14 +78,15 @@ export async function buildSessionHistorySnapshot(
   };
 }
 
-async function engineOrUndefined(
+async function engineIfCharacterExists(
   registry: HandshakeRegistry,
   character: string,
 ): Promise<ConversationEngine | undefined> {
   try {
     return await registry.getOrCreate(character);
-  } catch {
-    return undefined;
+  } catch (e) {
+    if (e instanceof EngineCharacterNotFound) return undefined;
+    throw new HistorySnapshotError(character, e);
   }
 }
 

@@ -11,7 +11,10 @@
  * - **A character that is not there** answers the same way. The Rust used
  *   `.ok()` on `get_or_create` — a client naming a character that has been
  *   deleted gets an empty conversation rather than a refused handshake, which
- *   would lock it out of the daemon entirely.
+ *   would lock it out of the daemon entirely. That leniency is scoped to
+ *   `EngineCharacterNotFound` and nothing else: a character that exists but
+ *   whose transcript will not load is an error, because an empty history there
+ *   is a lie the next turn gets written on top of.
  *
  * And one that is an error nowhere and wrong everywhere: which *config* the
  * snapshot reads. A selected character reads its effective config, so a
@@ -27,8 +30,10 @@ import {
   buildHandshakeProvider,
   buildSessionHistorySnapshot,
   helloSnapshot,
+  HistorySnapshotError,
   type HandshakeRegistry,
 } from "../src/swp/handshake.ts";
+import { EngineCharacterNotFound } from "../src/characters.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
@@ -148,7 +153,7 @@ describe("the history snapshot", () => {
     const snapshot = await buildSessionHistorySnapshot(
       registry({
         globalConfig: () => config,
-        getOrCreate: () => Promise.reject(new Error("character not found: ghost")),
+        getOrCreate: () => Promise.reject(new EngineCharacterNotFound("ghost")),
       }),
       "ghost",
     );
@@ -157,6 +162,24 @@ describe("the history snapshot", () => {
     // merely remembered from last time.
     expect(snapshot.messages).toEqual([]);
     expect(snapshot.selectedCharacter).toBeNull();
+  });
+
+  test("a character that fails to load is an error, not an empty conversation", async () => {
+    const root = await mkdtemp(testTmp("shore-handshake-broken-"));
+    const config = configFor(root, { model: "chat.fixture" });
+
+    const attempt = buildSessionHistorySnapshot(
+      registry({
+        globalConfig: () => config,
+        getOrCreate: () => Promise.reject(new Error("transcript.jsonl: unexpected end of JSON input")),
+      }),
+      "yuna",
+    );
+
+    // An empty history here would read as "yuna said nothing yet" and the next
+    // turn would be written on top of a conversation that was never loaded.
+    await expect(attempt).rejects.toThrow(HistorySnapshotError);
+    await expect(attempt).rejects.toThrow(/unexpected end of JSON input/);
   });
 
   test("a live character carries its conversation, revision and resolved name", async () => {

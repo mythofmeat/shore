@@ -28,8 +28,8 @@ export interface CommandRegistry {
 }
 
 export interface SessionCache {
-  activeModel(sessionId: number): string | undefined;
-  setActiveModel(sessionId: number, model: string | undefined): void;
+  activeModel(sessionId: number, character: string | undefined): string | undefined;
+  setActiveModel(sessionId: number, character: string | undefined, model: string | undefined): void;
 }
 
 export interface CommandPathDeps {
@@ -62,10 +62,10 @@ export async function dispatchCommand(
   const rid = meta.rid ?? undefined;
 
   if (isCharacterless(cmd.name) && !(cmd.name === "list_models" && selected !== undefined)) {
-    return characterlessCommand(deps, cmd, sessionId, rid);
+    return characterlessCommand(deps, cmd, sessionId, selected, rid);
   }
   if (cmd.name === "refresh_provider_models") {
-    return characterlessCommand(deps, cmd, sessionId, rid);
+    return characterlessCommand(deps, cmd, sessionId, selected, rid);
   }
   if (cmd.name === "switch_character") {
     return await switchCharacterCommand(deps, cmd, sessionId, rid, selected);
@@ -107,7 +107,7 @@ export async function dispatchCommand(
     frame = commandFrame(cmd.name, { err: e });
   }
 
-  deps.sessions.setActiveModel(sessionId, session.activeModel);
+  deps.sessions.setActiveModel(sessionId, selected, session.activeModel);
   return frameWithRid(frame, rid);
 }
 
@@ -149,6 +149,7 @@ async function characterlessCommand(
   deps: CommandPathDeps,
   cmd: Command,
   sessionId: number,
+  selected: string | undefined,
   rid: string | undefined,
 ): Promise<ServerMessage> {
   const session: CommandSession = {
@@ -156,7 +157,7 @@ async function characterlessCommand(
     configPath: deps.configPath,
     dataDir: deps.dataDir,
     characterName: undefined,
-    activeModel: deps.sessions.activeModel(sessionId),
+    activeModel: deps.sessions.activeModel(sessionId, selected),
     activeResolvedModel: undefined,
     runtime: deps.runtime,
     ...(deps.env === undefined ? {} : { env: deps.env }),

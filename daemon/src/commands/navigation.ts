@@ -11,6 +11,7 @@ import {
   characterWorkspaceFile,
   discoverCharacters,
   isFile,
+  isUsableCharacterName,
   pathExists,
   readOrUndefined,
   rustJoin,
@@ -23,6 +24,11 @@ import { invalidRequest, notFound } from "./errors.ts";
 export type Args = Record<string, unknown>;
 
 const asStr = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
+
+function requireUsableCharacterName(name: string): void {
+  if (isUsableCharacterName(name)) return;
+  throw invalidRequest(`Not a usable character name: ${name}`);
+}
 
 const AVATARS: readonly (readonly [file: string, mimeType: string])[] = [
   ["avatar.png", "image/png"],
@@ -76,6 +82,7 @@ export interface CharacterInfoContext {
 export async function characterInfo(ctx: CharacterInfoContext, args: Args): Promise<unknown> {
   const requested = asStr(args["name"]);
   const name = requested === undefined || requested === "" ? ctx.active : requested;
+  requireUsableCharacterName(name);
 
   const charDir = characterConfigDir(ctx.configDir, name);
   const workspaceDir = characterWorkspaceDir(ctx.configDir, name, ctx.workspaceRoot);
@@ -134,9 +141,7 @@ export function createCharacter(
   if (name === undefined || name === "") {
     throw invalidRequest("Missing required argument: name");
   }
-  if (name.includes("/") || name === "." || name === "..") {
-    throw invalidRequest(`Not a usable character name: ${name}`);
-  }
+  requireUsableCharacterName(name);
 
   const workspaceDir = characterWorkspaceDir(configDir, name, workspaceRoot);
   const legacy = rustJoin(characterConfigDir(configDir, name), LEGACY_CHARACTER_FILE);
@@ -174,13 +179,11 @@ export function switchCharacter(
 ): CharacterSwitch {
   const name = asStr(args["name"]);
   if (name === undefined) throw invalidRequest("Missing required argument: name");
+  requireUsableCharacterName(name);
 
   if (name === active) return { character: name, changed: false };
 
-  if (
-    !pathExists(characterConfigDir(configDir, name)) &&
-    !pathExists(characterWorkspaceDir(configDir, name, workspaceRoot))
-  ) {
+  if (!discoverCharacters(configDir, workspaceRoot).includes(name)) {
     throw notFound(`Character not found: ${name}`);
   }
   return { character: name, changed: true };

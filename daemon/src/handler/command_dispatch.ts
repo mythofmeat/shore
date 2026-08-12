@@ -1,6 +1,6 @@
 import type { LoadedConfig } from "../config/loader.ts";
 import { restartRequiredChanges } from "../config/restart.ts";
-import { historyMessage, type HandshakeProvider } from "../swp/connection.ts";
+import { historyMessage, type HandshakeProvider, type HistorySnapshot } from "../swp/connection.ts";
 import type { SessionRouter } from "../swp/session.ts";
 
 export interface ReloadSummary {
@@ -116,8 +116,17 @@ async function afterSwitchCharacter(
   const selected = isRecord(data) ? data["character"] : undefined;
   if (typeof selected !== "string") return undefined;
 
+  const previous = ctx.router.characterFor(ctx.sessionId);
   ctx.router.setSelectedCharacter(ctx.sessionId, selected);
-  const snapshot = await ctx.handshake.history(selected);
+
+  let snapshot: HistorySnapshot;
+  try {
+    snapshot = await ctx.handshake.history(selected);
+  } catch (e) {
+    ctx.router.setSelectedCharacter(ctx.sessionId, previous);
+    throw e;
+  }
+
   await ctx.router.sendToSession(ctx.sessionId, historyMessage(snapshot, ctx.rid));
 
   const config = snapshot.config;

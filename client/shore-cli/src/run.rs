@@ -573,6 +573,7 @@ async fn follow_log_stream(
             | ServerMessage::CacheWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
+            | ServerMessage::ConfigWarning(_)
             | ServerMessage::Unknown => {}
         }
     }
@@ -993,6 +994,7 @@ async fn handle_notify(
             | ServerMessage::CacheWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
+            | ServerMessage::ConfigWarning(_)
             | ServerMessage::Unknown) => {
                 debug!(?other, "ignoring non-notification event");
             }
@@ -1563,13 +1565,11 @@ async fn recv_streaming_response(
                     output::print_phase(phase);
                 }
             }
-            ServerMessage::ProviderFallbackWarning(w) => {
+            ServerMessage::ProviderFallbackWarning(_)
+            | ServerMessage::UsageWarning(_)
+            | ServerMessage::ConfigWarning(_) => {
                 spinner.clear().await;
-                output::print_provider_fallback_warning(w);
-            }
-            ServerMessage::UsageWarning(w) => {
-                spinner.clear().await;
-                output::print_usage_warning(w);
+                output::print_warning_frame(&msg);
             }
             ServerMessage::Hello(_)
             | ServerMessage::History(_)
@@ -1611,6 +1611,11 @@ async fn recv_command_data(
                         .as_deref()
                         .unwrap_or_else(|| session_display_character()),
                 );
+            }
+            // A `shore config` that saved a file the daemon then refused is
+            // exactly where this has to land, not only in the daemon's log.
+            ServerMessage::ConfigWarning(w) => {
+                output::print_config_warning(w);
             }
             ServerMessage::Hello(_)
             | ServerMessage::History(_)

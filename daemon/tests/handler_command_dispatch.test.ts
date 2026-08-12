@@ -82,6 +82,8 @@ function fakes(
     onDisk?: LoadedConfig | undefined;
     summary?: ReloadSummary;
     snapshot?: Partial<HistorySnapshot>;
+    /** What the snapshot throws instead of answering. */
+    historyFails?: Error;
     rid?: string;
   } = {},
 ): Fakes {
@@ -128,6 +130,7 @@ function fakes(
     // whether the move happened before the snapshot was taken.
     history: (selectedCharacter) => {
       log.order.push(`history@${router.characterFor(SESSION)}`);
+      if (opts.historyFails !== undefined) return Promise.reject(opts.historyFails);
       return Promise.resolve({
         messages: [],
         activeStart: 0,
@@ -410,6 +413,24 @@ describe("a switch_character", () => {
     // The session is moved before the snapshot is taken — otherwise a frame
     // routed by selected character in between would go to the old one.
     expect(f.log.order).toEqual(["history@bob", "send"]);
+  });
+
+  test("a snapshot that will not load leaves the session where it was", async () => {
+    const f = fakes({ historyFails: new Error("transcript.jsonl: unexpected end of JSON input") });
+
+    const attempt = afterCommand(
+      "switch_character",
+      { name: "bob" },
+      { character: "bob" },
+      f.ctx,
+    );
+
+    await expect(attempt).rejects.toThrow(/unexpected end of JSON input/);
+    // Moved for the snapshot and moved back when it failed. Left on bob, the
+    // daemon would route bob's frames to a client still showing ashe — the
+    // cross-character leak this ordering exists to prevent, in reverse.
+    expect(f.ctx.router.characterFor(SESSION)).toBe(CHARACTER);
+    expect(f.log.sent).toEqual([]);
   });
 
   test("the pushed history carries no rid when the command had none", async () => {

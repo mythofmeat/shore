@@ -41,6 +41,15 @@ impl SyncState {
         }
     }
 
+    /// The character the daemon last said this connection is on.
+    ///
+    /// Authoritative because every switch arrives as a `History` snapshot
+    /// carrying the new name, whoever asked for it — so this is what a
+    /// reconnect has to ask for, not whatever the process started with.
+    pub(crate) fn selected_character(&self) -> Option<&str> {
+        self.selected_character.as_deref()
+    }
+
     /// Highest revision observed on either stream — for diagnostics only.
     pub(crate) fn latest_revision(&self) -> u64 {
         self.message_revision.max(self.snapshot_revision)
@@ -88,6 +97,7 @@ impl SyncState {
             | ServerMessage::CacheWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
+            | ServerMessage::ConfigWarning(_)
             | ServerMessage::Unknown => SyncDecision::Deliver,
         }
     }

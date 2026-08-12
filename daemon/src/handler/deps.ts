@@ -4,7 +4,12 @@ import type { TurnAutonomyBridge } from "../autonomy/registration.ts";
 import { CharacterError, type CharacterRegistry } from "../characters.ts";
 import type { CommandDeps } from "../commands/dispatch.ts";
 import type { ConfigRuntime } from "../commands/config.ts";
-import { characterDataDir, discoverCharacters, rustJoin } from "../config/dirs.ts";
+import {
+  characterConfigDir,
+  characterDataDir,
+  discoverCharacters,
+  rustJoin,
+} from "../config/dirs.ts";
 import { loadCharacterConfig, loadConfig, type LoadedConfig } from "../config/loader.ts";
 import { restartRequiredChanges } from "../config/restart.ts";
 import type { Diagnostics } from "../diagnostics.ts";
@@ -263,15 +268,20 @@ export function buildCommandPathDeps(a: CommandAssembly): CommandPathDeps {
 }
 
 class ProcessSessionCache implements SessionCache {
-  readonly #models = new Map<number, string>();
+  readonly #models = new Map<string, string>();
 
-  activeModel(sessionId: number): string | undefined {
-    return this.#models.get(sessionId);
+  static #key(sessionId: number, character: string | undefined): string {
+    return `${sessionId} ${character ?? ""}`;
   }
 
-  setActiveModel(sessionId: number, model: string | undefined): void {
-    if (model === undefined) this.#models.delete(sessionId);
-    else this.#models.set(sessionId, model);
+  activeModel(sessionId: number, character: string | undefined): string | undefined {
+    return this.#models.get(ProcessSessionCache.#key(sessionId, character));
+  }
+
+  setActiveModel(sessionId: number, character: string | undefined, model: string | undefined): void {
+    const key = ProcessSessionCache.#key(sessionId, character);
+    if (model === undefined) this.#models.delete(key);
+    else this.#models.set(key, model);
   }
 
   clear(): void {
@@ -404,8 +414,25 @@ async function repointCachedRequests(
   }
 }
 
+export interface ConfigReloadAssembly extends CommandAssembly {
+  emitEvent: (message: ServerMessage) => void;
+}
+
+export function configWarning(
+  path: string,
+  character: string | undefined,
+  cause: unknown,
+): ServerMessage {
+  return {
+    type: "config_warning",
+    path,
+    ...(character === undefined ? {} : { character }),
+    message: cause instanceof Error ? cause.message : String(cause),
+  };
+}
+
 export function configReloader(
-  a: CommandAssembly,
+  a: ConfigReloadAssembly,
 ): (changedPaths: readonly string[]) => Promise<void> {
   return async (changedPaths) => {
     const where = `${a.runtime.configPath} (changed: ${changedPaths.join(", ")})`;
@@ -417,6 +444,7 @@ export function configReloader(
       console.warn(
         `shore: config hot reload failed, keeping the running config — ${where}: ${String(e)}`,
       );
+      a.emitEvent(configWarning(a.runtime.configPath, undefined, e));
       return;
     }
 
@@ -427,6 +455,9 @@ export function configReloader(
         console.warn(
           `shore: config hot reload failed on ${name}'s overlay, keeping the running config — ` +
             `${where}: ${String(e)}`,
+        );
+        a.emitEvent(
+          configWarning(rustJoin(characterConfigDir(config.dirs.config, name), "config.toml"), name, e),
         );
         return;
       }
