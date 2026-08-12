@@ -1,5 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
+import { redactHeaders } from "./redact.ts";
+
 export interface WireScope {
   call_id: string;
   character: string | null;
@@ -170,7 +172,7 @@ function bodyAllowed(status: number): boolean {
 }
 
 function headerPairs(headers: Headers): [string, string][] {
-  return [...headers.entries()].map(([name, value]) => [name, value]);
+  return redactHeaders([...headers.entries()].map(([name, value]) => [name, value]));
 }
 
 async function readRequestBody(request: Request): Promise<Uint8Array | null> {
