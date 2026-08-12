@@ -4,15 +4,11 @@ StartLimitBurst= 10
 
 [Service]
 Type= exec
-ExecSearchPath= /usr/bin:/usr/local/bin
+ExecSearchPath= /usr/bin
 ExecStart= shore-daemon
 Restart= on-failure
 RestartMaxDelaySec= 1min
 RestartSteps= 10
-# The daemon is TypeScript; `RUST_LOG` is still read by the CLI and TUI.
-Environment= RUST_LOG=warn
-
-Environment= SHORE_MATRIX_BIN=/usr/local/lib/shore/shore-matrix
 
 [Install]
 WantedBy= default.target
