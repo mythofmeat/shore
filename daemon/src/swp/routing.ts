@@ -63,11 +63,14 @@ export function eventMatchesSession(
   msg: ServerMessage,
   selectedCharacter: string | null,
   sessionRegistered: boolean,
+  receivesAllCharacters = false,
 ): boolean {
   if (UNROUTABLE_EVENTS.has(msg.type)) return false;
   if (UNCONDITIONAL_EVENTS.has(msg.type)) return true;
-  if (!sessionRegistered || selectedCharacter === null) return false;
+  if (!sessionRegistered) return false;
+  if (receivesAllCharacters) return true;
+  if (selectedCharacter === null) return false;
   if (msg.type === "history") return msg.selected_character === selectedCharacter;
   if (msg.type === "new_message") return msg.character === selectedCharacter;
-  return sessionRegistered;
+  return true;
 }

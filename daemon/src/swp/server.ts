@@ -189,6 +189,7 @@ export class Server {
             result.msg,
             this.#router.characterFor(clientId),
             this.#router.has(clientId),
+            this.#router.receivesAllCharacters(clientId),
           )
         ) {
           inbox.push(result.msg);

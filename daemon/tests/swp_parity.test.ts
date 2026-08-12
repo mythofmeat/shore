@@ -287,6 +287,18 @@ describe("event_matches_session", () => {
     expect(eventMatchesSession(message, "Yuna", true)).toBe(false);
     expect(eventMatchesSession(message, null, true)).toBe(false);
   });
+
+  test("an all-characters subscriber gets conversation events for every character", () => {
+    const message = {
+      type: "new_message",
+      character: "poppy",
+      revision: 1,
+    } as ServerMessage;
+
+    expect(eventMatchesSession(message, null, true, true)).toBe(true);
+    expect(eventMatchesSession(message, "Yuna", true, true)).toBe(true);
+    expect(eventMatchesSession(message, null, false, true)).toBe(false);
+  });
 });
 
 describe("msg_type_name", () => {

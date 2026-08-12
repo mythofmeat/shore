@@ -259,6 +259,7 @@ export async function messageLoop(
             result.msg,
             ctx.router.characterFor(session.sessionId),
             ctx.router.has(session.sessionId),
+            ctx.router.receivesAllCharacters(session.sessionId),
           )
         ) {
           await writeMessage(sink, result.msg);
