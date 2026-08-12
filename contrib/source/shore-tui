@@ -1,8 +1,19 @@
 #!/bin/bash
 
 SHORE_REPO_DIR="$HOME/.local/src/shore"
+UPDATE_AFTER_SECS=3600
 
-git -C "$SHORE_REPO_DIR" pull >/dev/null
+time_since_pull() {
+    echo $((\
+    $(date +%s) - \
+    $(date -r "$SHORE_REPO_DIR/.git/FETCH_HEAD" +%s)))
+}
+
+if [ "$(time_since_pull)" -gt $UPDATE_AFTER_SECS ]; then
+    git -C "$SHORE_REPO_DIR" pull >/dev/null
+
+fi
+
 cargo run --manifest-path "$SHORE_REPO_DIR/client/Cargo.toml" \
     --release \
     --bin shore-tui "$@"
