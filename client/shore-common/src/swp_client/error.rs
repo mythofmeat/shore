@@ -12,6 +12,10 @@ pub enum DiscoveryKind {
     /// The registry has live entries, but none match the requested
     /// instance id or config_dir selector.
     NoMatch,
+    /// Several daemons are live and nothing said which one to talk to.
+    /// Distinct from [`DiscoveryKind::NoMatch`]: the caller has too many
+    /// answers rather than none, so the fix is to name one.
+    Ambiguous,
     /// The registry file is unreadable or not valid JSON.
     RegistryCorrupt,
     /// Unexpected I/O error reading the registry.

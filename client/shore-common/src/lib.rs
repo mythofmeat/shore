@@ -6,6 +6,7 @@
 //! duplicated deliberately (`dirs`, whose whole job is finding the socket
 //! before there is anyone to ask).
 
+pub mod active_character;
 pub mod image_protocol;
 pub mod dirs;
 pub mod protocol;

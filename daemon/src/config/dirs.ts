@@ -131,6 +131,11 @@ export function rustJoin(base: string, ...parts: string[]): string {
 
 export const pluginsDir = (data: string): string => rustJoin(data, PLUGINS_DIR);
 
+export function isUsableCharacterName(name: string): boolean {
+  if (name === "" || name === "." || name === "..") return false;
+  return !/[/\\\0]/.test(name);
+}
+
 export const characterConfigDir = (config: string, name: string): string =>
   rustJoin(config, "characters", name);
 
@@ -205,6 +210,7 @@ export function discoverCharacters(config: string, workspaceRoot?: string | unde
 
   const charsDir = rustJoin(config, "characters");
   for (const name of readdirOrEmpty(charsDir)) {
+    if (!isUsableCharacterName(name)) continue;
     const dir = join(charsDir, name);
     if (!isDir(dir)) continue;
     if (
@@ -218,6 +224,7 @@ export function discoverCharacters(config: string, workspaceRoot?: string | unde
 
   if (workspaceRoot !== undefined) {
     for (const name of readdirOrEmpty(workspaceRoot)) {
+      if (!isUsableCharacterName(name)) continue;
       const dir = join(workspaceRoot, name);
       if (!isDir(dir)) continue;
       if (pathExists(join(dir, SOUL_FILE))) names.add(name);

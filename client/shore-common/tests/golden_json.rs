@@ -594,6 +594,48 @@ fn usage_warning_pace_golden() {
     );
 }
 
+// ── ConfigWarning ────────────────────────────────────────────────────────
+
+const CONFIG_WARNING_FIXTURE: &str = r#"{
+    "type": "config_warning",
+    "path": "/home/u/.config/shore/characters/poppy/config.toml",
+    "character": "poppy",
+    "message": "invalid config for character \"poppy\": [chat].model: unknown model \"claud-opus\""
+}"#;
+
+#[test]
+fn config_warning_golden() {
+    let msg: ServerMessage = assert_golden(CONFIG_WARNING_FIXTURE);
+    assert_variant!(
+    msg,
+    ServerMessage::ConfigWarning(w) => {
+        assert_eq!(w.rid, None);
+        assert_eq!(w.character.as_deref(), Some("poppy"));
+        assert!(w.message.contains("unknown model"));
+    }
+    );
+}
+
+// A failure in the global file names no character, and the field is absent
+// rather than null — a client that keys off its presence must see nothing.
+const CONFIG_WARNING_GLOBAL_FIXTURE: &str = r#"{
+    "type": "config_warning",
+    "path": "/home/u/.config/shore/config.toml",
+    "message": "TOML parse error at line 12"
+}"#;
+
+#[test]
+fn config_warning_without_a_character_golden() {
+    let msg: ServerMessage = assert_golden(CONFIG_WARNING_GLOBAL_FIXTURE);
+    assert_variant!(
+    msg,
+    ServerMessage::ConfigWarning(w) => {
+        assert_eq!(w.character, None);
+        assert_eq!(w.path, "/home/u/.config/shore/config.toml");
+    }
+    );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Client Messages — Golden Fixtures
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1070,6 +1112,7 @@ fn request_scoped_server_messages_missing_rid_default_to_none() {
             | ServerMessage::CacheWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
+            | ServerMessage::ConfigWarning(_)
             | ServerMessage::Unknown => {
                 panic!("unexpected message for missing rid test");
             }

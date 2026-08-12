@@ -76,6 +76,19 @@ fn resolve_addr(addr: Option<&str>, config: Option<&str>) -> crate::swp_client::
     discover_or_default(config)
 }
 
+/// The character the next connect attempt should ask for.
+///
+/// An in-session `switch_character` is only visible to the connection task as
+/// the `History` snapshot the daemon pushes back, which is what [`SyncState`]
+/// tracks. Reconnecting with the startup argument instead would silently put a
+/// user who switched Yuna → poppy back on Yuna.
+fn reconnect_target(sync_state: &SyncState, previous: Option<String>) -> Option<String> {
+    sync_state
+        .selected_character()
+        .map(str::to_owned)
+        .or(previous)
+}
+
 /// Whether a connected session ended for good or should trigger a reconnect.
 enum SessionOutcome {
     Exit,
@@ -93,6 +106,7 @@ async fn connection_loop(
 ) {
     let mut backoff = Duration::from_millis(500);
     let max_backoff = Duration::from_secs(15);
+    let mut target_character = character;
 
     loop {
         let resolved = match resolve_addr(addr.as_deref(), config.as_deref()) {
@@ -111,7 +125,9 @@ async fn connection_loop(
         };
         info!(addr = ?resolved, client = %app_name, "attempting connection");
 
-        match SWPConnection::connect(&resolved, &client_id, &app_name, character.clone()).await {
+        match SWPConnection::connect(&resolved, &client_id, &app_name, target_character.clone())
+            .await
+        {
             Ok((mut conn, hello, history)) => {
                 info!(
                     server = %hello.server_name,
@@ -135,9 +151,12 @@ async fn connection_loop(
                     .await;
 
                 // Main receive/send loop
-                match run_connected_session(&mut conn, &event_tx, &mut cmd_rx, &mut sync_state)
-                    .await
-                {
+                let outcome =
+                    run_connected_session(&mut conn, &event_tx, &mut cmd_rx, &mut sync_state).await;
+
+                target_character = reconnect_target(&sync_state, target_character);
+
+                match outcome {
                     SessionOutcome::Exit => return,
                     SessionOutcome::Reconnect => {}
                 }
@@ -276,5 +295,27 @@ mod tests {
     fn test_resolve_addr_explicit_tcp() {
         let addr = resolve_addr(Some("127.0.0.1:9090"), None).unwrap();
         assert_eq!(addr.0, "127.0.0.1:9090");
+    }
+
+    /// A switch that happened mid-session is what the next connect asks for.
+    #[test]
+    fn reconnect_target_follows_the_session() {
+        let sync = SyncState::new(3, Some("poppy"));
+        assert_eq!(
+            reconnect_target(&sync, Some("Yuna".into())),
+            Some("poppy".into())
+        );
+    }
+
+    /// Nothing selected on this connection leaves the startup argument alone —
+    /// dropping it would turn a `--character` launch into an unpinned one.
+    #[test]
+    fn reconnect_target_keeps_the_startup_character_when_none_was_selected() {
+        let sync = SyncState::new(0, None);
+        assert_eq!(
+            reconnect_target(&sync, Some("Yuna".into())),
+            Some("Yuna".into())
+        );
+        assert_eq!(reconnect_target(&sync, None), None);
     }
 }
