@@ -39,7 +39,14 @@ export interface ToolContext {
 
   deferEdit?: (path: string) => Promise<void> | void;
 
-  runSubagent?: (name: string, query: string, signal?: AbortSignal) => Promise<unknown>;
+  runSubagent?: (
+    name: string,
+    query: string,
+    signal?: AbortSignal,
+    toolUseId?: string,
+  ) => Promise<unknown>;
+
+  toolUseId?: string;
 
   mcpCall?: (name: string, input: unknown, signal?: AbortSignal) => Promise<unknown>;
 
@@ -194,7 +201,7 @@ export async function dispatchTool(
           throw new InvalidArgs(`${name} requires a string \`query\``);
         }
         if (ctx.runSubagent === undefined) throw new NotImplemented(`ask_${agent}`);
-        return await ctx.runSubagent(agent, query, ctx.signal);
+        return await ctx.runSubagent(agent, query, ctx.signal, ctx.toolUseId);
       }
       if (name.startsWith("mcp__")) {
         if (ctx.mcpCall === undefined) throw new NotImplemented(name);

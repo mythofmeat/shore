@@ -18,10 +18,12 @@
  * - **The budget check.** It must not open the ledger when no budget is
  *   configured, because that is the common case and the answer is always the
  *   same.
- * - **What is read live.** `[usage]` and the keepalive ceiling come off the
- *   registry's global config per call, so a reload reaches them. Copied into
- *   the deps at assembly they would be frozen at whatever the daemon started
- *   with, and nothing would say so.
+ * - **What is read live, and off whose config.** The keepalive ceiling comes
+ *   off the registry's global config per call, so a reload reaches it; copied
+ *   into the deps at assembly it would be frozen at whatever the daemon
+ *   started with, and nothing would say so. `[usage]` comes off the *speaking
+ *   character's* effective config, so a budget written into one character's
+ *   overlay governs that character's turns and no one else's.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -363,7 +365,7 @@ describe("the budget check", () => {
           () => ({ budgets: [] }),
           undefined,
         );
-        expect(await warnings()).toEqual([]);
+        expect(await warnings("aria")).toEqual([]);
       } finally {
         console.error = real;
       }
@@ -388,7 +390,7 @@ describe("the budget check", () => {
           () => ({ budgets: [{ cost_usd: 5 }] }),
           undefined,
         );
-        expect(await warnings()).toEqual([]);
+        expect(await warnings("aria")).toEqual([]);
       } finally {
         console.error = real;
       }
@@ -432,7 +434,7 @@ describe("what the assembly hands the driver", () => {
     }
   });
 
-  test("the usage config and the keepalive ceiling are read live, not copied", async () => {
+  test("the keepalive ceiling is read live, not copied", async () => {
     const { root, config, runtime } = await runtimeUnder("shore-deps-live-", (app) => {
       app.cache.keepalive_max = ConfigDuration.fromSecs(3600);
     });
@@ -447,23 +449,85 @@ describe("what the assembly hands the driver", () => {
       });
 
       expect(deps.keepaliveMaxSecs?.()).toBe(3600);
-      expect(deps.usageConfig?.()?.budgets).toEqual([]);
 
       // A reload replaces the registry's global config. Copied at assembly,
-      // both of these would still be answering with what the daemon started
-      // with and nothing would say so.
+      // this would still be answering with what the daemon started with and
+      // nothing would say so.
       runtime.registry.setGlobalConfig({
         ...config,
         app: {
           ...config.app,
           cache: { ...config.app.cache, keepalive_max: ConfigDuration.fromSecs(60) },
-          usage: { ...config.app.usage, budgets: [{ cost_usd: 9 } as never] },
         },
       });
 
       expect(deps.keepaliveMaxSecs?.()).toBe(60);
-      expect(deps.usageConfig?.()?.budgets?.[0]?.cost_usd).toBe(9);
     } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("budget warnings come from the character's config, not the global one", async () => {
+    const { root, config, runtime } = await runtimeUnder(
+      "shore-deps-charbudget-",
+      () => {},
+      ["ada", "nova"],
+    );
+    try {
+      const deps = buildGenerationDeps({
+        runtime,
+        providers: {},
+        autonomy: new TurnAutonomyBridge(recordingService()),
+        emitEvent: () => {},
+        sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
+        diagnostics: { api_calls: { push: () => {} } } as never,
+      });
+
+      await mkdir(join(root, "data"), { recursive: true });
+      const ledger = Ledger.open(join(root, "data", "ledger.db"));
+      for (const character of ["ada", "nova"]) {
+        ledger.database.query(
+          `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type,
+             input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+             total_ms, ttft_ms, finish_reason, thinking_enabled, cost_source, total_cost)
+           VALUES (?1, ?2, 'anthropic', 'default', 'claude-opus-4-6', 'message',
+             10, 5, 0, 0, 100, 10, 'end_turn', 1, 'pricing_catalog', 5.0)`,
+        ).run(new Date().toISOString(), character);
+      }
+      ledger.close();
+
+      runtime.registry.setRuntimeEffectiveConfig("ada", {
+        ...config,
+        app: {
+          ...config.app,
+          usage: {
+            ...config.app.usage,
+            budgets: [
+              {
+                name: "ada-only",
+                period: "month",
+                cost_usd: 1.0,
+                warn_at: [1.0],
+                limit: "block",
+                character: "ada",
+                usage_kind: [],
+              } as never,
+            ],
+          },
+        },
+      });
+
+      expect(
+        (await deps.newlyCrossedUsageBudgetWarnings("ada")).map((w) => w.budget),
+      ).toEqual(["ada-only"]);
+
+      // Nova's config has no budgets. Read off the global config, ada's would
+      // apply to every character's turn — and nova would be told about a
+      // budget that is none of hers.
+      expect(await deps.newlyCrossedUsageBudgetWarnings("nova")).toEqual([]);
+    } finally {
+      closeLedgers();
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });
     }

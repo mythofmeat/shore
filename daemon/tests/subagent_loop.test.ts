@@ -21,11 +21,12 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { nestedContext, runSubagent, taggedSink } from "../src/tools/subagent_loop.ts";
+import { readSubagentTraces } from "../src/tools/subagent_trace.ts";
 import { NotImplemented, InvalidArgs, type ToolContext } from "../src/tools/dispatch.ts";
 import { defaultAppConfig, type SubagentConfig } from "../src/config/app.ts";
 import { emptyCatalog, type ModelCatalog } from "../src/config/models.ts";
@@ -152,6 +153,7 @@ async function run(
   name: string,
   provider: SidecarProvider,
   frames: ServerMessage[] = [],
+  toolUseId?: string,
 ): Promise<string> {
   await mkdir(join(root, "data", "ada"), { recursive: true });
   return await runSubagent(
@@ -168,7 +170,75 @@ async function run(
     },
     name,
     "what is the answer?",
+    undefined,
+    toolUseId,
   );
+}
+
+function dicerollingProvider(): SidecarProvider {
+  let call = 0;
+  return {
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async *stream(req: SidecarRequest): AsyncGenerator<StreamEvent> {
+      call += 1;
+      yield { type: "start", model: req.model };
+      if (call === 1) {
+        yield { type: "tool_use", id: "toolu_dice", name: "roll_dice", input: { notation: "1d6" } };
+        yield {
+          type: "done",
+          content: "",
+          finish_reason: "tool_use",
+          usage: {
+            input_tokens: 1,
+            output_tokens: 1,
+            cache_read_tokens: 0,
+            cache_creation_tokens: 0,
+          },
+          timing: { total_ms: 1, time_to_first_token_ms: 1 },
+        };
+        return;
+      }
+      yield { type: "text", text: "rolled" };
+      yield {
+        type: "done",
+        content: "rolled",
+        finish_reason: "end_turn",
+        usage: {
+          input_tokens: 1,
+          output_tokens: 1,
+          cache_read_tokens: 0,
+          cache_creation_tokens: 0,
+        },
+        timing: { total_ms: 1, time_to_first_token_ms: 1 },
+      };
+    },
+    generate: () => {
+      throw new Error("a sub-agent streams");
+    },
+  } as unknown as SidecarProvider;
+}
+
+function failingProvider(message: string): SidecarProvider {
+  return {
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async *stream(req: SidecarRequest): AsyncGenerator<StreamEvent> {
+      yield { type: "start", model: req.model };
+      yield {
+        type: "error",
+        message,
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_read_tokens: 0,
+          cache_creation_tokens: 0,
+        },
+        timing: { total_ms: 1, time_to_first_token_ms: 1 },
+      };
+    },
+    generate: () => {
+      throw new Error("a sub-agent streams");
+    },
+  } as unknown as SidecarProvider;
 }
 
 describe("resolution", () => {
@@ -287,6 +357,69 @@ describe("what comes back", () => {
     for (const frame of frames) {
       expect((frame as { subagent?: string }).subagent).toBe("researcher");
     }
+  });
+});
+
+describe("the trace", () => {
+  test("a run's tool calls and answer are written under the parent tool_use id", async () => {
+    const { config, root } = await configWith({
+      researcher: spec({ tools: ["roll_dice"] }),
+    });
+
+    const answer = await run(
+      config,
+      root,
+      "researcher",
+      dicerollingProvider(),
+      [],
+      "toolu_parent",
+    );
+    expect(answer).toBe("rolled");
+
+    const traces = await readSubagentTraces(join(root, "data", "ada"));
+    expect(traces).toHaveLength(1);
+    const trace = traces[0];
+    expect(trace?.parent_tool_use_id).toBe("toolu_parent");
+    expect(trace?.subagent).toBe("researcher");
+    expect(trace?.result).toBe("rolled");
+
+    const blocks = (trace?.messages ?? []).flatMap((m) => m.content_blocks);
+    expect(blocks.some((b) => b.type === "tool_use" && b.name === "roll_dice")).toBe(true);
+    expect(blocks.some((b) => b.type === "tool_result")).toBe(true);
+  });
+
+  test("nothing is written into the conversation's own message store", async () => {
+    const { config, root } = await configWith({
+      researcher: spec({ tools: ["roll_dice"] }),
+    });
+
+    await run(config, root, "researcher", dicerollingProvider(), [], "toolu_parent");
+
+    const active = await readFile(join(root, "data", "ada", "active.jsonl"), "utf8").catch(
+      () => undefined,
+    );
+    expect(active).toBeUndefined();
+  });
+
+  test("a failed run is recorded with the error, which is the case worth reading", async () => {
+    const { config, root } = await configWith({ researcher: spec() });
+
+    await expect(
+      run(config, root, "researcher", failingProvider("upstream exploded"), [], "toolu_parent"),
+    ).rejects.toBeInstanceOf(InvalidArgs);
+
+    const traces = await readSubagentTraces(join(root, "data", "ada"));
+    expect(traces).toHaveLength(1);
+    expect(traces[0]?.error).toContain("upstream exploded");
+    expect(traces[0]?.result).toBeUndefined();
+  });
+
+  test("a caller that supplies no parent id writes nothing, having nothing to splice onto", async () => {
+    const { config, root } = await configWith({ researcher: spec() });
+
+    await run(config, root, "researcher", scriptedProvider("42"));
+
+    expect(await readSubagentTraces(join(root, "data", "ada"))).toEqual([]);
   });
 });
 

@@ -345,7 +345,25 @@ export function loadCharacterConfig(
   const overlay = parseToml(readFileOrThrow(path), "parse_include", path);
   const merged = structuredClone(global.rawTable ?? {});
   deepMerge(merged, overlay);
-  return parseConfigTable(merged, global.dirs, onWarn);
+  const loaded = parseConfigTable(merged, global.dirs, onWarn);
+  scopeOverlayBudgetsToCharacter(loaded.app.usage, overlay, characterName);
+  return loaded;
+}
+
+function overlayDeclaresBudgets(overlay: TomlTable): boolean {
+  const usage = overlay["usage"];
+  return isTable(usage) && Array.isArray(usage["budgets"]);
+}
+
+function scopeOverlayBudgetsToCharacter(
+  usage: UsageConfig,
+  overlay: TomlTable,
+  characterName: string,
+): void {
+  if (!overlayDeclaresBudgets(overlay)) return;
+  for (const budget of usage.budgets) {
+    budget.character ??= characterName;
+  }
 }
 
 function validationError(message: string): ConfigError {

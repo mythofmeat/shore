@@ -30,7 +30,7 @@ import type {
   StreamEvent,
   WireMessage,
 } from "../llm/types.ts";
-import type { UsageConfig } from "../ledger/budget.ts";
+import { usageConfigView } from "../ledger/budget.ts";
 import { anyEnabled } from "../tools/registry.ts";
 import { toolPhase, type ToolPhase } from "../tools/execute.ts";
 import type { ToolLimitsView } from "../tools/dispatch.ts";
@@ -114,7 +114,6 @@ export interface GenerationDeps {
   compaction: CompactionRunner;
   newlyCrossedUsageBudgetWarnings: PersistContext["newlyCrossedUsageBudgetWarnings"];
   ledgerPath?: string;
-  usageConfig?: () => UsageConfig | undefined;
   keepaliveMaxSecs?: () => number | undefined;
   tools?: (charName: string, turn: SubagentTurn) => ToolContextDeps;
   now?: () => string;
@@ -476,7 +475,7 @@ function callContext(
   call: { options?: ProviderOptions },
 ): CallContext {
   const ceiling = deps.keepaliveMaxSecs?.();
-  const usage = deps.usageConfig?.();
+  const usage = usageConfigView(config.app.usage);
   const forensics = config.app.cache.forensics ? config.dirs.cache : undefined;
   const effort = resolvedReasoningEffort(call.options);
   return {
@@ -489,7 +488,7 @@ function callContext(
     ...(ceiling === undefined || ceiling === 0 ? {} : { keepalive_max_secs: ceiling }),
     ...(forensics === undefined ? {} : { forensics_dir: forensics }),
     ...(rid === null ? {} : { rid }),
-    ...(usage === undefined ? {} : { usage }),
+    usage,
   };
 }
 

@@ -9,6 +9,7 @@ import type { Diagnostics } from "../diagnostics.ts";
 import type { AutonomyService } from "../autonomy/service.ts";
 import { CommandError, internalError, invalidRequest } from "./errors.ts";
 import { callLog, transcript } from "./call_log.ts";
+import { subagentTrace } from "./subagent_trace.ts";
 import { config, configCheck, configReload, configReset, tools, type ConfigRuntime } from "./config.ts";
 import {
   alt,
@@ -176,6 +177,8 @@ export async function runCommand(
       return callLog({ characterName: character, callStore: deps.callStore }, args);
     case "transcript":
       return transcript({ characterName: character, callStore: deps.callStore }, args);
+    case "subagent_trace":
+      return await subagentTrace({ dataDir: session.dataDir, characterName: character }, args);
     case "heartbeat_tick_now":
       return heartbeatTickNow(statusContext(engine, session, deps));
     case "session_activate":

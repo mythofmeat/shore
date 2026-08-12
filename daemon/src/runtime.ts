@@ -40,6 +40,7 @@ export interface RuntimeOptions {
   onHistory?: HistoryListener | undefined;
   emit?: ((character: string, revision: number, msg: Message) => void) | undefined;
   connectMcp?: ((spec: McpServerSpec) => Promise<McpClient>) | undefined;
+  diagnostics?: Diagnostics | undefined;
 }
 
 export interface ShoreRuntime {
@@ -107,6 +108,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       tools: sharedToolDeps(config, mcp, {
         providers,
         ...(options.env === undefined ? {} : { env: options.env }),
+        ...(options.diagnostics === undefined ? {} : { diagnostics: options.diagnostics }),
       }),
       ...(callStore === undefined ? {} : { callStore }),
       ...(options.emit === undefined ? {} : { emit: options.emit }),
@@ -232,6 +234,7 @@ export function sharedToolDeps(
   subagent?: {
     providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
     env?: NodeJS.ProcessEnv | undefined;
+    diagnostics?: Diagnostics | undefined;
   },
 ): ToolContextDeps {
   return {
@@ -245,7 +248,7 @@ export function sharedToolDeps(
               ctx: parent,
               providers: subagent.providers,
               mcpRegistry: mcp.current,
-              diagnostics: new Diagnostics().tool_calls,
+              diagnostics: (subagent.diagnostics ?? new Diagnostics()).tool_calls,
               ...(subagent.env === undefined ? {} : { env: subagent.env }),
             }),
         }),

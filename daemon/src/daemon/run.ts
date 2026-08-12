@@ -125,11 +125,14 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     }
   }
 
+  const diagnostics = new Diagnostics();
+
   const runtime = await createRuntime({
     config: loaded,
     configPath: startup.configPath,
     providers: options.providers,
     env,
+    diagnostics,
     onHistory: (history) => server.broadcast({ type: "history", ...history } as ServerMessage),
     emit: (character, revision, msg) =>
       emitNewMessageEvent(
@@ -154,7 +157,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     handshake,
     emitEvent: (message: ServerMessage) => server.broadcast(message),
     sessionTokens: newSessionTokens(),
-    diagnostics: new Diagnostics(),
+    diagnostics,
     env,
     ...(log === undefined ? {} : { log }),
   };
