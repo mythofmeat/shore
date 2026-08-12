@@ -3,7 +3,6 @@ import type { Database } from "bun:sqlite";
 import {
   budgetStatuses,
   newlyCrossedBudgetWarnings,
-  spikeWarnings,
   type BudgetOptions,
   type UsageConfig,
 } from "./budget.ts";
@@ -231,7 +230,6 @@ function budgetPayload(
     allow_compaction_over_budget: config.allow_compaction_over_budget ?? false,
     budgets: budgetStatuses(db, config, now, opts),
     call_attempts: callAttemptStatus(db),
-    spike_warnings: spikeWarnings(db, config, now, opts),
   };
 }
 
@@ -308,7 +306,6 @@ function summaryPayload(
     anomaly_count_7d: queryAnomalies(db, anomalyFilter).length,
     call_attempts: callAttemptStatus(db),
     budgets: budgetStatuses(db, config, now, opts),
-    spike_warnings: spikeWarnings(db, config, now, opts),
   };
 }
 

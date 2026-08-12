@@ -118,6 +118,17 @@ function withoutRemovedDaemonFields(value: unknown): unknown {
   return { ...(value as object), daemon: copy };
 }
 
+/** Drop `[usage]` fields that no longer exist from the frozen Rust value. */
+function withoutRemovedUsageFields(value: unknown): unknown {
+  const usage = (value as { usage?: unknown } | null)?.usage;
+  if (typeof usage !== "object" || usage === null) return value;
+  const { spike_warnings: _removed, ...current } = usage as Record<string, unknown>;
+  return { ...(value as object), usage: current };
+}
+
+const withoutRemovedFields = (value: unknown): unknown =>
+  withoutRemovedUsageFields(withoutRemovedDaemonFields(value));
+
 /**
  * `[[usage.budgets]]` keys added after the fixture was frozen (#35).
  *
@@ -326,6 +337,7 @@ const DELIBERATELY_DIVERGENT = new Set([
   "seq: LlmSidecarConfig, at its minimum",
   "integer where a path is expected",
   "a full positional sequence",
+  "usage budgets and spike warnings",
 ]);
 
 const BUN_CANNOT_SEE = new Set([
@@ -361,6 +373,11 @@ describe("the fixture is real", () => {
     for (const key of DAEMON_FIELDS_REMOVED_SINCE) {
       expect(Object.keys(daemon)).toContain(key);
     }
+  });
+
+  test("the trimmed usage field really is one it had", () => {
+    const usage = (fixture.defaults as { usage: Record<string, unknown> }).usage;
+    expect(Object.keys(usage)).toContain("spike_warnings");
   });
 
   test("the exempted budget fields really are ones it never had", () => {
@@ -438,8 +455,8 @@ describe("AppConfig::default", () => {
 
 function expectationFor(want: unknown, toml: string): unknown {
   return replayOntoCurrentDefaults(
-    withCacheSectionMoved(withoutRemovedDaemonFields(want)),
-    withCacheSectionMoved(withoutRemovedDaemonFields(fixture.defaults)),
+    withCacheSectionMoved(withoutRemovedFields(want)),
+    withCacheSectionMoved(withoutRemovedFields(fixture.defaults)),
     withoutAddedFields(canonical(defaultAppConfig())),
     pathsSetBy(parseToml(toml)),
   );
@@ -496,6 +513,18 @@ describe("parsing config.toml", () => {
     const ok = parseAppConfig(parseToml(`[daemon]\naddr = "0.0.0.0:9999"\n`));
     if ("err" in ok) throw new Error(ok.err);
     expect(ok.ok.daemon).toEqual({ addr: "0.0.0.0:9999" });
+  });
+
+  test("a config still setting usage spike warnings is now rejected", () => {
+    const c = fixture.parse.find((x) => x.name === "usage budgets and spike warnings");
+    expect(c).toBeDefined();
+
+    const parsed = parseAppConfig(parseToml(c!.toml));
+    expect("err" in parsed).toBe(true);
+    expect((parsed as { err: string }).err).toBe(
+      "unknown field `spike_warnings`, expected one of `timezone`, " +
+        "`allow_compaction_over_budget`, `budgets`",
+    );
   });
 
   test("a config still setting the deleted [advanced] keys is now rejected", () => {

@@ -29,7 +29,6 @@ import {
   type BudgetStatus,
   enforceBudgetForCall,
   newlyCrossedBudgetWarnings,
-  spikeWarnings,
   type BudgetCallContext,
   type UsageBudgetConfig,
   type UsageBudgetPeriod,
@@ -42,7 +41,6 @@ interface Case {
   now_name: string;
   now: string;
   statuses: unknown[];
-  spike_warnings: unknown[];
   warnings_first: unknown[];
   warnings_second: unknown[];
   enforce: Record<string, { allowed: boolean } & Record<string, unknown>>;
@@ -121,31 +119,21 @@ const clampedMonth: UsageBudgetConfig = {
   pace_period: "week",
 };
 
-const SPIKE = {
-  enabled: true,
-  period: "day" as const,
-  multiplier: 1.5,
-  min_cost_usd: 0.5,
-};
-
 const CONFIGS: Record<string, UsageConfig> = {
   local_paced_weekly: {
     timezone: "local",
     allow_compaction_over_budget: true,
     budgets: [pacedWeekly],
-    spike_warnings: SPIKE,
   },
   utc_paced_weekly: {
     timezone: "utc",
     allow_compaction_over_budget: true,
     budgets: [pacedWeekly],
-    spike_warnings: SPIKE,
   },
   local_mixed: {
     timezone: "local",
     allow_compaction_over_budget: true,
     budgets: [blockingDay, filtered, clampedMonth],
-    spike_warnings: SPIKE,
   },
   local_edges: {
     timezone: "local",
@@ -282,10 +270,6 @@ test("legacy cross-language budget parity outside the changed pace policy", () =
       budgetStatuses(db, config!, now, opts).map(withoutChangedPolicy),
       at("statuses"),
     ).toEqual(c.statuses.map(fixtureWithoutPace) as never);
-    expect(spikeWarnings(db, config!, now, opts), at("spike_warnings")).toEqual(
-      c.spike_warnings as never,
-    );
-
     // Enforcement before the warning calls, matching the generator: the
     // warnings write rows, and enforcement reads none of them, but ordering is
     // kept identical so any hidden coupling shows up as a diff rather than as

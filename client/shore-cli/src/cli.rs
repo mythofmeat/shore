@@ -367,7 +367,7 @@ pub(crate) enum CliCommand {
         #[arg(long)]
         by_api_key: bool,
 
-        /// Show configured budgets, limit state, and spike warnings
+        /// Show configured budgets and limit state
         #[arg(long)]
         budget: bool,
 

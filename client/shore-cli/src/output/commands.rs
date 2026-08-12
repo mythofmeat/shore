@@ -2146,24 +2146,6 @@ fn acting_now(status: &serde_json::Value) -> &str {
         .unwrap_or("warn")
 }
 
-fn print_spike_warnings(data: &serde_json::Value) {
-    let warnings = data["spike_warnings"].as_array();
-    if warnings.is_none_or(Vec::is_empty) {
-        return;
-    }
-    cli_out!("\nSpike Warnings:");
-    if let Some(rows) = warnings {
-        for warning in rows {
-            cli_out!(
-                "  {}",
-                warning["message"]
-                    .as_str()
-                    .unwrap_or("Usage spike detected.")
-            );
-        }
-    }
-}
-
 fn usage_display_date(data: &serde_json::Value) -> String {
     if data["timezone"].as_str() == Some("utc") {
         chrono::Utc::now().format("%Y-%m-%d").to_string()
@@ -2272,7 +2254,6 @@ pub(crate) fn print_usage(data: &serde_json::Value) {
             let timezone = data["timezone"].as_str().unwrap_or("local");
             cli_out!("Shore Usage Budgets - {today} (timezone: {timezone})\n");
             print_budget_table(data);
-            print_spike_warnings(data);
         }
         "anomalies" => print_usage_anomalies(data),
         "refresh_pricing" => {
@@ -2475,7 +2456,7 @@ fn print_usage_recalculate(data: &serde_json::Value) {
     }
 }
 
-/// Render the default usage summary (table + cache health + budgets + spikes).
+/// Render the default usage summary (table + cache health + budgets).
 fn print_usage_summary(data: &serde_json::Value) {
     let mut stdout = io::stdout().lock();
     let _ignored = write_usage_summary_table(&mut stdout, data);
@@ -2504,8 +2485,6 @@ fn print_usage_summary(data: &serde_json::Value) {
             print_budget_table(data);
         }
     }
-    print_spike_warnings(data);
-
     let anomaly_count = data["anomaly_count_7d"].as_u64().unwrap_or(0);
     cli_out!("\nAnomalies (last 7d): {anomaly_count}");
 }

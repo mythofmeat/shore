@@ -914,43 +914,16 @@ export function budgetPaceWarnAt(budget: UsageBudgetConfig): readonly number[] {
   return budget.pace_warn_at ?? budget.warn_at;
 }
 
-export interface UsageSpikeWarningsConfig {
-  enabled: boolean;
-  period: UsageBudgetPeriod;
-  multiplier: number;
-  min_cost_usd: number;
-}
-
-const defaultSpikeWarnings = (): UsageSpikeWarningsConfig => ({
-  enabled: false,
-  period: "hour",
-  multiplier: 3.0,
-  min_cost_usd: 1.0,
-});
-
-const SPIKE_WARNINGS: StructSpec<UsageSpikeWarningsConfig> = {
-  name: "UsageSpikeWarningsConfig",
-  make: defaultSpikeWarnings,
-  fields: {
-    enabled: readBool,
-    period: readEnum(BUDGET_PERIODS),
-    multiplier: readF64,
-    min_cost_usd: readF64,
-  },
-};
-
 export interface UsageConfig {
   timezone: string;
   allow_compaction_over_budget: boolean;
   budgets: UsageBudgetConfig[];
-  spike_warnings: UsageSpikeWarningsConfig;
 }
 
 const defaultUsageConfig = (): UsageConfig => ({
   timezone: "local",
   allow_compaction_over_budget: false,
   budgets: [],
-  spike_warnings: defaultSpikeWarnings(),
 });
 
 const USAGE: StructSpec<UsageConfig> = {
@@ -960,7 +933,6 @@ const USAGE: StructSpec<UsageConfig> = {
     timezone: readString,
     allow_compaction_over_budget: readBool,
     budgets: readSeq((v) => readStruct(BUDGET, v)),
-    spike_warnings: (v) => readStruct(SPIKE_WARNINGS, v),
   },
 };
 

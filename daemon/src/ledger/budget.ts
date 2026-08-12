@@ -56,18 +56,10 @@ export interface UsageBudgetConfig {
   pace_warn_action?: UsageBudgetAction | null;
 }
 
-export interface UsageSpikeWarningsConfig {
-  enabled?: boolean;
-  period?: UsageBudgetPeriod;
-  multiplier?: number;
-  min_cost_usd?: number;
-}
-
 export interface UsageConfig {
   timezone?: string;
   allow_compaction_over_budget?: boolean;
   budgets?: UsageBudgetConfig[];
-  spike_warnings?: UsageSpikeWarningsConfig;
 }
 
 export function usageConfigView(cfg: AppUsageConfig): UsageConfig {
@@ -77,7 +69,6 @@ export function usageConfigView(cfg: AppUsageConfig): UsageConfig {
     budgets: cfg.budgets.map(
       (b) => defined(b as unknown as Record<string, unknown>) as unknown as UsageBudgetConfig,
     ),
-    spike_warnings: cfg.spike_warnings,
   };
 }
 
@@ -87,8 +78,6 @@ function defined(v: Record<string, unknown>): Record<string, unknown> {
 
 const DEFAULT_WARN_AT: readonly number[] = [0.8, 1.0];
 const DEFAULT_TIMEZONE = "local";
-const DEFAULT_SPIKE_MULTIPLIER = 3;
-const DEFAULT_SPIKE_MIN_COST = 1;
 
 const budgetPeriod = (b: UsageBudgetConfig): UsageBudgetPeriod =>
   b.period ?? "day";
@@ -213,19 +202,6 @@ export interface BudgetStatus {
   compaction_allowed_over_budget: boolean;
   filters: Record<string, unknown>;
   pace?: PaceStatus;
-}
-
-export interface SpikeWarning {
-  period: UsageBudgetPeriod;
-  period_start: string;
-  previous_period_start: string;
-  timezone: string;
-  current_cost: number;
-  previous_cost: number;
-  multiplier: number | null;
-  threshold_multiplier: number;
-  min_cost_usd: number;
-  message: string;
 }
 
 export interface UsageBudgetWarningEvent {
@@ -1100,72 +1076,6 @@ function isBackgroundCall(callType: string): boolean {
 
 function isHeartbeatCall(callType: string): boolean {
   return callType === "heartbeat" || callType === "heartbeat_tool_loop";
-}
-
-export function spikeWarnings(
-  db: Database,
-  config: UsageConfig,
-  now: number,
-  opts: BudgetOptions = {},
-): SpikeWarning[] {
-  const spike = config.spike_warnings ?? {};
-  if (spike.enabled !== true) {
-    return [];
-  }
-  const period = spike.period ?? "hour";
-  const multiplierThreshold = spike.multiplier ?? DEFAULT_SPIKE_MULTIPLIER;
-  const minCost = spike.min_cost_usd ?? DEFAULT_SPIKE_MIN_COST;
-  const timezone = config.timezone ?? DEFAULT_TIMEZONE;
-
-  const current = periodWindow(now, period, timezone, undefined, opts);
-  const previousAnchor = current.start - SECOND_MS;
-  const previous = periodWindow(
-    previousAnchor,
-    period,
-    timezone,
-    undefined,
-    opts,
-  );
-
-  const currentCost = usageTotals(db, {
-    since: toRfc3339(current.start),
-  }).total_cost;
-  const previousCost = usageTotals(db, {
-    since: toRfc3339(previous.start),
-    until: toRfc3339(current.start),
-  }).total_cost;
-
-  if (currentCost < minCost) {
-    return [];
-  }
-
-  const multiplier = previousCost > 0 ? currentCost / previousCost : null;
-  const isSpike =
-    multiplier === null ? previousCost === 0 : multiplier >= multiplierThreshold;
-  if (!isSpike) {
-    return [];
-  }
-
-  const debug = periodDebug(period);
-  const message =
-    multiplier === null
-      ? `Current ${debug} spend is $${formatFixed(currentCost, 2)}; the previous ${debug} had no recorded cost.`
-      : `Current ${debug} spend is ${formatFixed(multiplier, 1)}x the previous ${debug} ($${formatFixed(currentCost, 2)} vs $${formatFixed(previousCost, 2)}).`;
-
-  return [
-    {
-      period,
-      period_start: toRfc3339(current.start),
-      previous_period_start: toRfc3339(previous.start),
-      timezone: current.timezone,
-      current_cost: currentCost,
-      previous_cost: previousCost,
-      multiplier,
-      threshold_multiplier: multiplierThreshold,
-      min_cost_usd: minCost,
-      message,
-    },
-  ];
 }
 
 export function newlyCrossedBudgetWarnings(

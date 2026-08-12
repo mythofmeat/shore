@@ -472,13 +472,6 @@ function validateUsageConfig(config: UsageConfig): void {
     );
   }
 
-  if (config.spike_warnings.multiplier <= 1.0) {
-    throw validationError("usage.spike_warnings.multiplier must be greater than 1.0");
-  }
-  if (config.spike_warnings.min_cost_usd < 0.0) {
-    throw validationError("usage.spike_warnings.min_cost_usd must be non-negative");
-  }
-
   const names = new Set<string>();
   for (const [idx, budget] of config.budgets.entries()) {
     if (budget.cost_usd <= 0.0) {

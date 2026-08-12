@@ -78,6 +78,7 @@ const REMOVED = [
   // having the risk. `[daemon]` is `addr` alone now.
   "daemon.unsafe_allow_remote_access",
   "daemon.allowed_hosts",
+  "usage.spike_warnings",
 ] as const;
 
 /** Drop `REMOVED` from a serialized `AppConfig` blob. */
