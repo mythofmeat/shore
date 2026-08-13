@@ -335,9 +335,16 @@ pub(crate) fn write_section_header(out: &mut impl Write, title: &str, suffix: &s
     _ = writeln!(out);
 }
 
+const ROW_LABEL_WIDTH: usize = 13;
+
 /// Write a label-value row, optionally coloring the value.
 pub(crate) fn write_row_with(out: &mut impl Write, label: &str, value: &str, color: Option<Color>) {
-    write_dim(out, &format!("  {label:<13}"));
+    let gap = if label.chars().count() >= ROW_LABEL_WIDTH {
+        " "
+    } else {
+        ""
+    };
+    write_dim(out, &format!("  {label:<ROW_LABEL_WIDTH$}{gap}"));
     match color {
         Some(c) => write_fg(out, c, value),
         None => {

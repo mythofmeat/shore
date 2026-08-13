@@ -318,6 +318,7 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "heartbeat_set_dormant" => print_heartbeat_status_change(data, "dormant"),
         "heartbeat_set_active" => print_heartbeat_status_change(data, "active"),
         "session_activate" => print_session_activate(data),
+        "keepalive_ping_now" => print_keepalive_ping(data),
         _ => print_command_output_fallback(name, data),
     }
 }
@@ -782,12 +783,22 @@ fn print_subagent_trace(data: &serde_json::Value) {
     write_section_header(&mut out, "sub-agent runs", char_name, width);
 
     let Some(entries) = data["entries"].as_array().filter(|e| !e.is_empty()) else {
-        print_dim_line(&mut out, "(no sub-agent runs recorded yet)");
+        print_dim_line(&mut out, &subagent_trace_empty_message(data));
         return;
     };
     let mut prev_date: Option<String> = None;
     for entry in entries {
         print_subagent_run(&mut out, entry, &mut prev_date);
+    }
+}
+
+fn subagent_trace_empty_message(data: &serde_json::Value) -> String {
+    match data["requested_ids"].as_array().and_then(|ids| ids.first()) {
+        Some(id) => format!(
+            "(no sub-agent run with id {} — `shore log --subagent` lists what is stored)",
+            id.as_str().unwrap_or("?")
+        ),
+        None => "(no sub-agent runs recorded yet)".to_owned(),
     }
 }
 
@@ -970,6 +981,30 @@ fn print_session_activate(data: &serde_json::Value) {
         "  Heartbeat: {}",
         session_activate_heartbeat(&data["heartbeat"])
     );
+}
+
+fn print_keepalive_ping(data: &serde_json::Value) {
+    let character = data["character"].as_str().unwrap_or("?");
+    let status = data["status"].as_str().unwrap_or("?");
+    let read = data["cache_read_tokens"].as_u64().unwrap_or(0);
+    let written = data["cache_creation_tokens"].as_u64().unwrap_or(0);
+
+    match status {
+        "warm" => cli_out!("Ping for {character}: warm — read {read} cached tokens."),
+        "cold" => {
+            cli_out!("Ping for {character}: COLD — read nothing, wrote {written} cache tokens.")
+        }
+        other => cli_out!("Ping for {character}: {other}."),
+    }
+    if let Some(source) = data["source"].as_str() {
+        cli_out!("  Sent from: {source}");
+    }
+    if let Some(note) = data["note"].as_str() {
+        cli_out!("  {note}");
+    }
+    if let Some(err) = data["error"].as_str() {
+        cli_out!("  {err}");
+    }
 }
 
 fn session_activate_keepalive(k: &serde_json::Value) -> String {
@@ -2229,6 +2264,9 @@ pub(crate) fn print_diagnostics(data: &serde_json::Value) {
 
             _ = write!(w, "{name:<24}");
             write_dim(w, &format!("{dur}ms  "));
+            if let Some(sub) = call["subagent"].as_str() {
+                write_dim(w, &format!("via {sub}  "));
+            }
             let (marker_color, marker_text) = if ok {
                 (Color::Green, "ok")
             } else {
@@ -3214,6 +3252,32 @@ mod tests {
 
         assert!(rendered.contains("failed: budget exhausted"));
         assert!(!rendered.contains("answer:"));
+    }
+
+    #[test]
+    fn an_id_that_matched_nothing_does_not_claim_the_store_is_empty() {
+        let asked = serde_json::json!({
+            "character": "ada",
+            "requested_ids": ["toolu_absent"],
+            "entries": [],
+        });
+        let bare = serde_json::json!({ "character": "ada", "entries": [] });
+
+        assert!(subagent_trace_empty_message(&asked).contains("toolu_absent"));
+        assert_eq!(
+            subagent_trace_empty_message(&bare),
+            "(no sub-agent runs recorded yet)",
+        );
+    }
+
+    #[test]
+    fn a_label_wider_than_the_column_keeps_a_space_before_its_value() {
+        set_color_enabled(false);
+        let mut buf = Vec::new();
+        write_row(&mut buf, "Max output tokens", "8192");
+        let rendered = String::from_utf8(buf).expect("utf8");
+
+        assert_eq!(rendered, "  Max output tokens 8192\n");
     }
 
     /// Visual preview of `shore log --subagent` rendering. Run with:

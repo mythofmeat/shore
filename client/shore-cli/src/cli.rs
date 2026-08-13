@@ -235,7 +235,7 @@ pub(crate) enum CliCommand {
     /// `shore model --reset`              clear active model selection
     /// `shore model --all`                include hidden discovered models
     /// `shore model setting [...]`        manage saved sampler settings
-    #[command(args_conflicts_with_subcommands = true)]
+    #[command(args_conflicts_with_subcommands = true, verbatim_doc_comment)]
     Model {
         #[command(subcommand)]
         subcommand: Option<ModelCommand>,
@@ -272,7 +272,7 @@ pub(crate) enum CliCommand {
     /// `shore provider refresh [name]`   re-fetch one provider's catalog,
     ///                                   or every discovery-enabled
     ///                                   provider when no name is given
-    #[command(args_conflicts_with_subcommands = true)]
+    #[command(args_conflicts_with_subcommands = true, verbatim_doc_comment)]
     Provider {
         #[command(subcommand)]
         subcommand: Option<ProviderCommand>,
