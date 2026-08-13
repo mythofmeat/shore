@@ -28,6 +28,7 @@ import type {
 import { EMPTY_TOOL_SCHEMA, streamErrorEvent } from "../types.ts";
 import { recordCacheCall, type CachePlacement } from "../../cache/forensics.ts";
 import { replayableMessages } from "../replay.ts";
+import { parseToolArgs } from "../tool_args.ts";
 
 export class AnthropicProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
@@ -144,7 +145,12 @@ export async function* anthropicContentEvents(
         if (state?.kind === "thinking" && state.signature) {
           yield { type: "thinking_signature", signature: state.signature };
         } else if (state?.kind === "tool_use") {
-          yield { type: "tool_use", id: state.id, name: state.name, input: parseArgs(state.partialJson) };
+          yield {
+            type: "tool_use",
+            id: state.id,
+            name: state.name,
+            ...parseToolArgs(state.partialJson),
+          };
         }
         break;
       }
@@ -625,13 +631,5 @@ function mergeAnthropicUsage(
   };
 }
 
-function parseArgs(argsJson: string): unknown {
-  if (argsJson.trim() === "") return {};
-  try {
-    return JSON.parse(argsJson);
-  } catch {
-    return {};
-  }
-}
 
 export { imagesToAnthropicBlocks };

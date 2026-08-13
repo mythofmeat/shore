@@ -13,6 +13,7 @@ import {
   type ToolContext,
   type ToolLimitsView,
 } from "./dispatch.ts";
+import { schemaViolation, type ToolSchemas } from "./validate.ts";
 
 const SUMMARY_CHARS = 200;
 
@@ -25,6 +26,7 @@ export interface ToolExecution {
   now: () => string;
   newMessageId: () => string;
   monotonicMs?: () => number;
+  schemas?: ToolSchemas;
 }
 
 export async function executeToolUse(
@@ -42,6 +44,15 @@ export async function executeToolUse(
 
   const clock = exec.monotonicMs ?? Date.now;
   const startedAt = clock();
+
+  const rejection = argumentRejection(toolUse, exec.schemas);
+  if (rejection !== undefined) {
+    console.warn(`shore: rejected a ${toolUse.name} call — ${rejection}`);
+    recordToolDiagnostics(exec, toolUse, clock() - startedAt, rejection, true);
+    emitToolResult(exec, toolUse, rejection, true);
+    return { type: "tool_result", tool_use_id: toolUse.id, content: rejection, is_error: true };
+  }
+
   let rawOutput: string;
   let isError: boolean;
   let okValue: unknown;
@@ -71,6 +82,20 @@ export async function executeToolUse(
   emitToolResult(exec, toolUse, output, isError);
 
   return { type: "tool_result", tool_use_id: toolUse.id, content: output, is_error: isError };
+}
+
+export function argumentRejection(
+  toolUse: ToolUseEvent,
+  schemas: ToolSchemas | undefined,
+): string | undefined {
+  const reason =
+    toolUse.input_error ?? schemaViolation(schemas?.get(toolUse.name), toolUse.input);
+  if (reason === undefined) return undefined;
+  return (
+    `The call to ${toolUse.name} was not run because ${reason}. ` +
+    `Nothing was executed and no state changed. Issue the call again with complete, ` +
+    `well-formed arguments.`
+  );
 }
 
 export function attachGeneratedImage(

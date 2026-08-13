@@ -23,6 +23,7 @@ import type {
 import { systemToText, toolResultText, toTurn } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
+import { parseToolArgs } from "../tool_args.ts";
 
 export class OpenAIProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
@@ -70,7 +71,7 @@ export class OpenAIProvider implements SidecarProvider {
           type: "tool_use",
           id: tool.id ?? `tc_${index}`,
           name: tool.function?.name ?? "",
-          input: parseArgs(tool.function?.arguments ?? ""),
+          ...parseToolArgs(tool.function?.arguments ?? ""),
         });
       }
     }
@@ -148,7 +149,12 @@ export async function* openAIStreamEvents(
   }
 
   for (const tc of [...toolCalls.entries()].sort((a, b) => a[0] - b[0])) {
-    yield { type: "tool_use", id: tc[1].id, name: tc[1].name, input: parseArgs(tc[1].argsJson) };
+    yield {
+      type: "tool_use",
+      id: tc[1].id,
+      name: tc[1].name,
+      ...parseToolArgs(tc[1].argsJson),
+    };
   }
 
   const total = now() - startedAt;
@@ -322,14 +328,6 @@ function extractUsage(u: RawUsage | undefined): Usage {
   return usage;
 }
 
-function parseArgs(argsJson: string): unknown {
-  if (argsJson.trim() === "") return {};
-  try {
-    return JSON.parse(argsJson);
-  } catch {
-    return {};
-  }
-}
 
 function mapStopReason(finish: string): string {
   switch (finish) {

@@ -113,7 +113,7 @@ export type StreamEvent =
   | { type: "reasoning_details"; details: unknown[] }
   | { type: "reasoning_content"; reasoning: string }
   | { type: "redacted_thinking"; data: string }
-  | { type: "tool_use"; id: string; name: string; input: unknown }
+  | { type: "tool_use"; id: string; name: string; input: unknown; input_error?: string }
   | {
       type: "done";
       content: string;

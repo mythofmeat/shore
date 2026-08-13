@@ -25,6 +25,7 @@ import type {
 import { systemToText, toolResultText, toTurn } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
+import { parseToolArgs } from "../tool_args.ts";
 
 export class OpenRouterProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
@@ -60,7 +61,7 @@ export class OpenRouterProvider implements SidecarProvider {
         type: "tool_use",
         id: tc.id ?? "tc_0",
         name: tc.function?.name ?? "",
-        input: parseArgs(tc.function?.arguments ?? ""),
+        ...parseToolArgs(tc.function?.arguments ?? ""),
       });
     }
 
@@ -147,7 +148,12 @@ export async function* openRouterStreamEvents(
 
   for (const tc of [...toolCalls.entries()].sort((a, b) => a[0] - b[0])) {
     markFirst();
-    yield { type: "tool_use", id: tc[1].id, name: tc[1].name, input: parseArgs(tc[1].argsJson) };
+    yield {
+      type: "tool_use",
+      id: tc[1].id,
+      name: tc[1].name,
+      ...parseToolArgs(tc[1].argsJson),
+    };
   }
 
   const total = now() - startedAt;
@@ -323,14 +329,6 @@ function extractUsage(u: ChatUsage | undefined): Usage {
   return usage;
 }
 
-function parseArgs(argsJson: string): unknown {
-  if (argsJson.trim() === "") return {};
-  try {
-    return JSON.parse(argsJson);
-  } catch {
-    return {};
-  }
-}
 
 function mapFinishReason(finish: string): string {
   switch (finish) {

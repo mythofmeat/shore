@@ -60,6 +60,7 @@ import {
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import { MAX_HISTORY_MESSAGES } from "../tools/subagent.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
+import { schemasFrom } from "../tools/validate.ts";
 
 export interface GenerationEngine extends TurnEngine, PersistEngine, SetupEngine {}
 
@@ -374,6 +375,7 @@ async function streamTurn(
               ...(params.rid === undefined ? {} : { rid: params.rid }),
               now: params.now,
               newMessageId: params.newMessageId,
+              schemas: schemasFrom(call.tools),
             },
             messages,
           );

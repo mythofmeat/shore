@@ -41,6 +41,7 @@ import {
   subagentToolSubset,
   templateVars,
 } from "./subagent.ts";
+import { schemasFrom } from "./validate.ts";
 
 const TAGGED_FRAMES = new Set([
   "stream_start",
@@ -176,6 +177,7 @@ export async function runSubagent(
     ...(deps.rid === undefined ? {} : { rid: deps.rid }),
     now: deps.now ?? (() => new Date().toISOString()),
     newMessageId: deps.newMessageId ?? (() => `m_${crypto.randomUUID()}`),
+    schemas: schemasFrom(request.tools),
   });
 
   const events: AsyncIterable<StreamEvent> =
