@@ -1589,10 +1589,11 @@ mod tests {
 
         let action = parse_command(&mut app, "provider refresh openai");
         assert!(matches!(action, Action::Redraw));
-        assert!(app
-            .notifications
-            .iter()
-            .any(|n| n.content == "unknown command: provider"));
+        assert!(
+            app.notifications
+                .iter()
+                .any(|n| n.content == "unknown command: provider")
+        );
     }
 
     #[test]

@@ -140,7 +140,7 @@ fn discover_from_path(path: &Path, selector: Option<&str>) -> Result<ServerAddr>
                 return Err(ClientError::Discovery {
                     kind: DiscoveryKind::RegistryEmpty,
                     message: "instances registry has no live entries".into(),
-                })
+                });
             }
             [only] => only,
             several => {
@@ -152,7 +152,7 @@ fn discover_from_path(path: &Path, selector: Option<&str>) -> Result<ServerAddr>
                         several.len(),
                         describe_instances(several)
                     ),
-                })
+                });
             }
         },
     };
@@ -307,7 +307,10 @@ mod tests {
     /// what every client did before there were tokens.
     #[test]
     fn config_dir_of_is_none_when_it_cannot_tell() {
-        let entries = [entry("127.0.0.1:7320", Some("/a")), entry("[::1]:7320", None)];
+        let entries = [
+            entry("127.0.0.1:7320", Some("/a")),
+            entry("[::1]:7320", None),
+        ];
         assert_eq!(config_dir_of(&entries, "127.0.0.1:1234"), None);
         assert_eq!(config_dir_of(&entries, "[::1]:7320"), None);
         assert_eq!(config_dir_of(&[], "127.0.0.1:7320"), None);

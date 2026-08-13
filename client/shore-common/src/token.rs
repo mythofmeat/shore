@@ -66,7 +66,9 @@ impl std::error::Error for TokenError {}
 /// an unrelated client would look. Passing the daemon's own directory is what
 /// makes `shore-daemon --config /elsewhere/shore.toml` work with a local client
 /// and no `SHORE_TOKEN`.
-pub(crate) fn resolve_client_token(daemon_config_dir: Option<PathBuf>) -> Result<String, TokenError> {
+pub(crate) fn resolve_client_token(
+    daemon_config_dir: Option<PathBuf>,
+) -> Result<String, TokenError> {
     resolve_token(&daemon_config_dir.unwrap_or_else(crate::dirs::config_dir))
 }
 
@@ -78,7 +80,7 @@ pub(crate) fn resolve_client_token(daemon_config_dir: Option<PathBuf>) -> Result
 /// secret would send an empty token and produce a confusing rejection instead
 /// of a clear "you have not set this".
 pub(crate) fn resolve_token(config_dir: &Path) -> Result<String, TokenError> {
-    resolve_token_with(std::env::var(TOKEN_ENV).ok(), config_dir)
+    resolve_token_with(std::env::var(TOKEN_ENV).ok().as_deref(), config_dir)
 }
 
 /// [`resolve_token`] with the environment supplied rather than read.
@@ -88,10 +90,10 @@ pub(crate) fn resolve_token(config_dir: &Path) -> Result<String, TokenError> {
 /// parallel, so a test that sets `SHORE_TOKEN` to exercise one branch would
 /// otherwise decide the answer for every test running beside it.
 pub(crate) fn resolve_token_with(
-    env_token: Option<String>,
+    env_token: Option<&str>,
     config_dir: &Path,
 ) -> Result<String, TokenError> {
-    if let Some(from_env) = env_token.as_deref().and_then(non_blank) {
+    if let Some(from_env) = env_token.and_then(non_blank) {
         return Ok(from_env);
     }
     let path = config_dir.join(TOKEN_FILE);
@@ -126,7 +128,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::write(tmp.path().join(TOKEN_FILE), "from-file\n").unwrap();
 
-        let from_env = resolve_token_with(Some("from-env".into()), tmp.path());
+        let from_env = resolve_token_with(Some("from-env"), tmp.path());
         assert_eq!(from_env.unwrap(), "from-env");
 
         let from_file = resolve_token_with(None, tmp.path());
@@ -150,11 +152,11 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::write(tmp.path().join(TOKEN_FILE), "from-file").unwrap();
         assert_eq!(
-            resolve_token_with(Some(String::new()), tmp.path()).unwrap(),
+            resolve_token_with(Some(""), tmp.path()).unwrap(),
             "from-file"
         );
         assert_eq!(
-            resolve_token_with(Some("   ".into()), tmp.path()).unwrap(),
+            resolve_token_with(Some("   "), tmp.path()).unwrap(),
             "from-file"
         );
     }

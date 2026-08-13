@@ -475,7 +475,12 @@ fn display_payload_body(body: &serde_json::Value) -> String {
     match body {
         serde_json::Value::Null => String::new(),
         serde_json::Value::String(text) => text.clone(),
-        value => serde_json::to_string_pretty(value).unwrap_or_default(),
+        value @ serde_json::Value::Bool(_)
+        | value @ serde_json::Value::Number(_)
+        | value @ serde_json::Value::Array(_)
+        | value @ serde_json::Value::Object(_) => {
+            serde_json::to_string_pretty(value).unwrap_or_default()
+        }
     }
 }
 
@@ -2584,11 +2589,7 @@ fn format_duration_compact(secs: i64) -> String {
     } else {
         format!("{seconds}s")
     };
-    if neg {
-        format!("-{body}")
-    } else {
-        body
-    }
+    if neg { format!("-{body}") } else { body }
 }
 
 /// Format a duration in seconds for "threshold" rows like "100m" or "48h".
@@ -3493,7 +3494,7 @@ mod tests {
             },
         });
         assert_eq!(acting_now(&budget), "warn");
-        assert_eq!(acting_now(&budget["pace"]), "pause_heartbeat");
+        assert_eq!(budget.get("pace").map(acting_now), Some("pause_heartbeat"));
     }
 
     #[test]

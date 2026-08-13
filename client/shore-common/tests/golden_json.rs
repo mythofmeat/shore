@@ -15,12 +15,12 @@
     reason = "golden fixture helpers intentionally fail fast when checked-in protocol JSON is malformed"
 )]
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
+use shore_common::protocol::SWP_V1;
 use shore_common::protocol::client_msg::*;
 use shore_common::protocol::error::*;
 use shore_common::protocol::server_msg::*;
 use shore_common::protocol::types::*;
-use shore_common::protocol::SWP_V1;
 
 macro_rules! assert_variant {
     ($value:expr, $pattern:pat => $body:expr $(,)?) => {{

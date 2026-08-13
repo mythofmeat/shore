@@ -1,9 +1,9 @@
 use chrono::{DateTime, Local};
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
-use ratatui::Frame;
 use shore_common::protocol::tool_display::{format_tool_input, format_tool_output};
 use shore_common::protocol::types::Role;
 
@@ -162,7 +162,7 @@ fn draw_notifications(frame: &mut Frame, app: &App, area: Rect) {
             .collect();
 
         let box_h = lines.len() as u16 + 2; // borders
-                                            // Stop stacking once we'd overflow the bottom of the conversation area.
+        // Stop stacking once we'd overflow the bottom of the conversation area.
         if next_top + box_h > area.y + area.height {
             break;
         }
@@ -1659,7 +1659,7 @@ mod scenario_tests {
         let mut w = "古池や".to_string(); // each char is 2 display cells
         truncate_to_width(&mut w, 3);
         assert_eq!(w, "古"); // second char would overflow 3 cells
-                             // Already short enough: untouched.
+        // Already short enough: untouched.
         let mut short = "hi".to_string();
         truncate_to_width(&mut short, 10);
         assert_eq!(short, "hi");
@@ -1667,8 +1667,8 @@ mod scenario_tests {
     use crate::connection::ConnCommand;
     use crate::input;
     use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
-    use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
     use shore_common::protocol::client_msg::ClientMessage;
     use shore_common::protocol::server_msg::{CommandOutput, ServerMessage};
     use shore_common::protocol::types::{
@@ -1733,7 +1733,8 @@ mod scenario_tests {
 
         /// Render current app state and return the frame as text.
         fn render(&mut self, label: &str) -> String {
-            let _ = self.terminal
+            let _ = self
+                .terminal
                 .draw(|frame| draw(frame, &mut self.app))
                 .unwrap();
             let buf = self.terminal.backend().buffer();
@@ -1756,7 +1757,8 @@ mod scenario_tests {
 
         /// Render current app state and preserve empty rows in the frame text.
         fn render_with_blank_rows(&mut self, label: &str) -> String {
-            let _ = self.terminal
+            let _ = self
+                .terminal
                 .draw(|frame| draw(frame, &mut self.app))
                 .unwrap();
             let buf = self.terminal.backend().buffer();
@@ -2772,7 +2774,9 @@ mod scenario_tests {
             .map(|s| s.as_str())
             .collect();
         assert!(
-            names.iter().all(|n| n.starts_with("alpha") || *n == "reset"),
+            names
+                .iter()
+                .all(|n| n.starts_with("alpha") || *n == "reset"),
             "filter should keep only alpha-prefixed model names (+synthetic reset if matching); got {names:?}"
         );
         assert!(
