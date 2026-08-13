@@ -2564,6 +2564,18 @@ fn print_anomaly_breakdown(data: &serde_json::Value) {
         let calls = row["calls"].as_u64().unwrap_or(0);
         let writes = row["cache_write_tokens"].as_u64().unwrap_or(0);
         cli_out!("  {kind:<24} {calls:>6}  cache write {writes}");
+        // Two pings missing in a row means the first one's write never landed.
+        // No amount of re-arming fixes that, so it is called out rather than
+        // left as one row among several.
+        if kind == "keepalive_double_miss" {
+            cli_out!(
+                "    ^ two pings missed in a row with nothing between them. The first wrote the"
+            );
+            cli_out!(
+                "      entry the second should have read. The cache is not holding what shore"
+            );
+            cli_out!("      writes; keepalives halt when this happens.");
+        }
     }
 }
 

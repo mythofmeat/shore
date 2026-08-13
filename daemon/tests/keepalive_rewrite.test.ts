@@ -285,3 +285,147 @@ describe("the tracker gives read-and-write its own name", () => {
     expect(result.anomaly).toBeUndefined();
   });
 });
+
+/**
+ * Two misses in a row with nothing between them is not a moved prefix — it is
+ * the cache not holding what shore writes.
+ *
+ * The first miss *writes*. That write should leave an entry the second ping
+ * reads. If the second also misses, no amount of re-arming will help and every
+ * further ping pays full price for nothing.
+ *
+ * This is live, not hypothetical. The ledger at
+ * /opt/docker/silvershore/data/shore-data/ledger.db has 13 such pairs, every
+ * one at a ~55 minute gap — inside the 1h TTL, so expiry does not explain them
+ * — and each pair wrote an identical token count both times (14144/14144), which
+ * is the same bytes going out twice and reading nothing. One run for `poppy`
+ * hits four in a row. Across the whole ledger, 120 pure-miss pings cost $18.72.
+ */
+describe("two misses in a row halt everything", () => {
+  test("one miss alone does not halt", async () => {
+    const h = harness(0, 14_144);
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+
+    expect(h.events.map((e) => e.outcome)).toEqual(["cold"]);
+    expect(h.service.halted).toBeUndefined();
+  });
+
+  test("a second miss with nothing between stops all keepalives", async () => {
+    const h = harness(0, 14_144);
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+
+    expect(h.service.halted?.character).toBe("Rhia");
+    expect(h.service.halted?.reason).toContain("two keepalive pings in a row missed");
+    expect(h.events.at(-1)?.outcome).toBe("halted");
+  });
+
+  test("once halted it sends nothing, for any character", async () => {
+    const h = harness(0, 14_144);
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+    const sentWhenHalted = h.sends();
+
+    for (let i = 0; i < 5; i += 1) {
+      h.service.arm(prefix(), true);
+      h.advance(10_000);
+      await h.service.tick();
+    }
+    expect(h.sends()).toBe(sentWhenHalted);
+  });
+
+  test("a real call between the two misses is not a double miss", async () => {
+    const h = harness(0, 14_144);
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+
+    h.service.observe("Rhia", "claude-opus-5", "message", undefined, prefixFingerprint(prefix()));
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+
+    expect(h.service.halted).toBeUndefined();
+  });
+
+  test("a ping that read resets the count", async () => {
+    const events: KeepaliveEvent[] = [];
+    let at = 0;
+    let call = 0;
+    const service = new KeepaliveService(
+      async () => response(call++ === 1 ? 12_000 : 0, 14_144),
+      () => at,
+    );
+    service.onEvent((e) => events.push(e));
+
+    for (let i = 0; i < 3; i += 1) {
+      service.arm(prefix(), true);
+      at += 10_000;
+      await service.tick();
+    }
+
+    expect(service.halted).toBeUndefined();
+  });
+
+  test("clearing the halt lets pings resume", async () => {
+    const h = harness(0, 14_144);
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+    expect(h.service.halted).toBeDefined();
+
+    h.service.clearHalt();
+    h.service.arm(prefix(), true);
+    h.advance(10_000);
+    await h.service.tick();
+
+    expect(h.service.halted).toBeUndefined();
+  });
+});
+
+describe("the tracker names the double miss", () => {
+  function miss(tracker: CacheTracker, ts: string) {
+    return tracker.observe({
+      ts,
+      model: "claude-opus-5",
+      thinking_enabled: false,
+      cache_read_tokens: 0,
+      cache_write_tokens: 14_144,
+      call_type: "keepalive",
+    });
+  }
+
+  test("the first is a cold keepalive, the second is the louder finding", () => {
+    const tracker = new CacheTracker(3600);
+    expect(miss(tracker, "2026-08-12T10:00:00Z").anomaly).toBe("cold_keepalive");
+    expect(miss(tracker, "2026-08-12T10:55:00Z").anomaly).toBe("keepalive_double_miss");
+  });
+
+  test("a real call between them breaks the run", () => {
+    const tracker = new CacheTracker(3600);
+    miss(tracker, "2026-08-12T10:00:00Z");
+    tracker.observe({
+      ts: "2026-08-12T10:30:00Z",
+      model: "claude-opus-5",
+      thinking_enabled: false,
+      cache_read_tokens: 40_000,
+      cache_write_tokens: 0,
+      call_type: "message",
+    });
+    expect(miss(tracker, "2026-08-12T10:55:00Z").anomaly).toBe("cold_keepalive");
+  });
+});

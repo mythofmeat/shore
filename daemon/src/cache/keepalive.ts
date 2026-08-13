@@ -28,7 +28,7 @@ export interface KeepalivePrefix extends SidecarRequest {
 
 export interface KeepaliveEvent {
   character: string;
-  outcome: "sent" | "cold" | "rewrote" | "failed" | "skipped";
+  outcome: "sent" | "cold" | "rewrote" | "failed" | "skipped" | "halted";
   detail: string;
   at: number;
 }
@@ -69,6 +69,13 @@ interface Entry {
   inFlight: boolean;
   armedFingerprint: string | undefined;
   lastCallFingerprint: string | undefined;
+  consecutiveMisses: number;
+}
+
+export interface KeepaliveHalt {
+  character: string;
+  reason: string;
+  at: number;
 }
 
 export function prefixFingerprint(req: {
@@ -149,6 +156,7 @@ export class KeepaliveService {
   readonly #ledgerPath: string | undefined;
   readonly #configuredMaxIdleSecs: () => number;
   #sink: KeepaliveEventSink | undefined;
+  #halt: KeepaliveHalt | undefined;
 
   constructor(
     send: PingSender,
@@ -170,6 +178,32 @@ export class KeepaliveService {
 
   onEvent(sink: KeepaliveEventSink): void {
     this.#sink = sink;
+  }
+
+  get halted(): KeepaliveHalt | undefined {
+    return this.#halt;
+  }
+
+  clearHalt(): void {
+    this.#halt = undefined;
+    for (const entry of this.#entries.values()) entry.consecutiveMisses = 0;
+  }
+
+  #haltAll(character: string, wroteTokens: number): void {
+    const reason =
+      `two keepalive pings in a row missed with nothing in between. The first wrote ` +
+      `${String(wroteTokens)} tokens, which should have left an entry the second one read — ` +
+      `it did not. The cache is not holding what shore writes to it, so every further ping ` +
+      `would pay full price for nothing. All keepalives are stopped until this is looked at`;
+    this.#halt = { character, reason, at: this.#now() };
+    console.error(`shore: KEEPALIVE HALTED (${character}) — ${reason}`);
+    this.#push({
+      character,
+      outcome: "halted",
+      detail: `Cache keepalive HALTED: ${reason}`,
+      at: this.#now(),
+    });
+    for (const [, other] of this.#entries) other.keepalive.onCacheInvalidated();
   }
 
   arm(prefix: KeepalivePrefix, warm = false): void {
@@ -205,6 +239,7 @@ export class KeepaliveService {
     if (fingerprint !== undefined && entry.prefix?.model === model) {
       entry.lastCallFingerprint = fingerprint;
     }
+    entry.consecutiveMisses = 0;
     entry.keepalive.onCacheWarmed(model, this.#now());
   }
 
@@ -260,6 +295,7 @@ export class KeepaliveService {
   }
 
   async tick(): Promise<void> {
+    if (this.#halt !== undefined) return;
     const due: string[] = [];
     for (const [character, entry] of this.#entries) {
       if (entry.inFlight) continue;
@@ -305,6 +341,7 @@ export class KeepaliveService {
       inFlight: false,
       armedFingerprint: undefined,
       lastCallFingerprint: undefined,
+      consecutiveMisses: 0,
     };
     this.#entries.set(character, entry);
     return entry;
@@ -371,6 +408,11 @@ export class KeepaliveService {
 
     const usage = response.usage;
     if (pingLandedCold(usage)) {
+      entry.consecutiveMisses += 1;
+      if (entry.consecutiveMisses >= 2) {
+        this.#haltAll(character, usage.cache_creation_tokens);
+        return;
+      }
       entry.keepalive.onCacheInvalidated();
       this.#push({
         character,
@@ -382,6 +424,7 @@ export class KeepaliveService {
       });
       return;
     }
+    entry.consecutiveMisses = 0;
 
     if (pingRewrotePrefix(usage)) {
       entry.keepalive.onPingSucceeded(this.#now());
