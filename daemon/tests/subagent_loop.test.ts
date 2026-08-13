@@ -39,6 +39,7 @@ import type {
   SidecarRequest,
   StreamEvent,
 } from "../src/llm/types.ts";
+import type { ApiCallEntry } from "../src/diagnostics.ts";
 
 const KEY_ENV = "SHORE_SUBAGENT_TEST_KEY";
 
@@ -155,6 +156,7 @@ async function run(
   provider: SidecarProvider,
   frames: ServerMessage[] = [],
   toolUseId?: string,
+  apiCalls: ApiCallEntry[] = [],
 ): Promise<string> {
   await mkdir(join(root, "data", "ada"), { recursive: true });
   return await runSubagent(
@@ -164,6 +166,7 @@ async function run(
       providers: { openrouter: provider },
       sendDirect: (m) => frames.push(m),
       diagnostics: { push: () => {} },
+      apiDiagnostics: { push: (entry) => apiCalls.push(entry) },
       conversation: [],
       env: { [KEY_ENV]: "sk-test" },
       now: () => "2026-01-01T00:00:00+00:00",
@@ -358,6 +361,60 @@ describe("what comes back", () => {
     for (const frame of frames) {
       expect((frame as { subagent?: string }).subagent).toBe("researcher");
     }
+  });
+
+  test("diagnostics count the delegated model call and name its sub-agent", async () => {
+    const apiCalls: ApiCallEntry[] = [];
+    const { config, root } = await configWith({ researcher: spec() });
+
+    await run(config, root, "researcher", scriptedProvider("42"), [], undefined, apiCalls);
+
+    expect(apiCalls).toHaveLength(1);
+    expect(apiCalls[0]).toMatchObject({
+      subagent: "researcher",
+      model: "cheap",
+      provider: "openrouter",
+      input_tokens: 1,
+      output_tokens: 1,
+      finish_reason: "end_turn",
+    });
+  });
+
+  test("a failed delegated model call is visible in diagnostics", async () => {
+    const apiCalls: ApiCallEntry[] = [];
+    const { config, root } = await configWith({ researcher: spec() });
+
+    await expect(
+      run(
+        config,
+        root,
+        "researcher",
+        failingProvider("upstream exploded"),
+        [],
+        undefined,
+        apiCalls,
+      ),
+    ).rejects.toBeInstanceOf(InvalidArgs);
+
+    expect(apiCalls).toHaveLength(1);
+    expect(apiCalls[0]).toMatchObject({
+      subagent: "researcher",
+      finish_reason: "error",
+      error: "upstream exploded",
+    });
+  });
+
+  test("each model call in a delegated tool loop gets its own diagnostic row", async () => {
+    const apiCalls: ApiCallEntry[] = [];
+    const { config, root } = await configWith({
+      researcher: spec({ tools: ["roll_dice"] }),
+    });
+
+    await run(config, root, "researcher", dicerollingProvider(), [], undefined, apiCalls);
+
+    expect(apiCalls).toHaveLength(2);
+    expect(apiCalls.map((call) => call.finish_reason)).toEqual(["tool_use", "end_turn"]);
+    expect(apiCalls.map((call) => call.subagent)).toEqual(["researcher", "researcher"]);
   });
 });
 

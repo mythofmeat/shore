@@ -41,6 +41,7 @@ export interface ApiCallEntry {
   finish_reason: string;
   total_cost_usd?: number | undefined;
   error?: string | null | undefined;
+  subagent?: string | undefined;
 }
 
 export interface ToolCallEntry {

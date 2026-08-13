@@ -146,6 +146,7 @@ export function chatToolDeps(
       mcpRegistry: runtime.mcp.current,
       sendDirect: turn.send,
       diagnostics: a.diagnostics.tool_calls,
+      apiDiagnostics: a.diagnostics.api_calls,
       conversation: turn.conversation,
       ...(a.env === undefined ? {} : { env: a.env }),
       ...(turn.rid === undefined ? {} : { rid: turn.rid }),
