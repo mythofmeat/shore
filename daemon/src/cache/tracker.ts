@@ -3,7 +3,10 @@ export type CacheState = "cold" | "warm";
 export type Anomaly =
   | "unexpected_write"
   | "keepalive_miss"
-  | "cold_keepalive";
+  | "cold_keepalive"
+  | "keepalive_rewrote";
+
+export const KEEPALIVE_REWRITE_TOKENS = 1000;
 
 export interface Observation {
   ts: string;
@@ -181,13 +184,12 @@ export class CacheTracker {
       }
     }
 
-    if (
-      anomaly === undefined &&
-      obs.call_type === "keepalive" &&
-      obs.cache_read_tokens === 0 &&
-      obs.cache_write_tokens > 0
-    ) {
-      anomaly = "cold_keepalive";
+    if (anomaly === undefined && obs.call_type === "keepalive") {
+      if (obs.cache_read_tokens === 0 && obs.cache_write_tokens > 0) {
+        anomaly = "cold_keepalive";
+      } else if (obs.cache_write_tokens >= KEEPALIVE_REWRITE_TOKENS) {
+        anomaly = "keepalive_rewrote";
+      }
     }
 
     if (loopKind !== undefined) {

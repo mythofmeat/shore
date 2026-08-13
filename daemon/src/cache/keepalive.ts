@@ -1,4 +1,5 @@
 import { CacheKeepalive, type KeepaliveSnapshot } from "./schedule.ts";
+import { KEEPALIVE_REWRITE_TOKENS } from "./tracker.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
 import {
   beginCallAttempt,
@@ -19,7 +20,7 @@ export interface KeepalivePrefix extends SidecarRequest {
 
 export interface KeepaliveEvent {
   character: string;
-  outcome: "sent" | "cold" | "failed" | "skipped";
+  outcome: "sent" | "cold" | "rewrote" | "failed" | "skipped";
   detail: string;
   at: number;
 }
@@ -65,6 +66,14 @@ export function pingLandedCold(usage: {
   cache_creation_tokens: number;
 }): boolean {
   return usage.cache_read_tokens === 0 && usage.cache_creation_tokens > 0;
+}
+
+export function pingRewrotePrefix(usage: {
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+}): boolean {
+  if (pingLandedCold(usage)) return false;
+  return usage.cache_creation_tokens >= KEEPALIVE_REWRITE_TOKENS;
 }
 
 export interface KeepaliveCallLabels {
@@ -316,6 +325,20 @@ export class KeepaliveService {
         detail:
           `Cache refresh ping (COLD — wrote cache, disarmed; ` +
           `cache_read: ${usage.cache_read_tokens}, input: ${usage.input_tokens})`,
+        at: this.#now(),
+      });
+      return;
+    }
+
+    if (pingRewrotePrefix(usage)) {
+      entry.keepalive.onCacheInvalidated();
+      this.#push({
+        character,
+        outcome: "rewrote",
+        detail:
+          `Cache refresh ping REWROTE the prefix and was disarmed — it moved under the ping ` +
+          `(cache_read: ${usage.cache_read_tokens}, cache_write: ${usage.cache_creation_tokens}); ` +
+          `the next real turn re-arms it`,
         at: this.#now(),
       });
       return;
