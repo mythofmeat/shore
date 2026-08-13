@@ -2,6 +2,11 @@ import { rename, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { rustTrim } from "../memory/lines.ts";
+import {
+  auditAlternatives,
+  describeAlternativeDefects,
+  type AlternativeDefect,
+} from "./alt_audit.ts";
 import { backupBeforeWrite, quarantineLines } from "./backup.ts";
 import { mergeToolLoopMessages } from "./merge";
 import type { ContentBlock, ImageRef, Message, MessageAlternative, Role } from "./types";
@@ -148,13 +153,17 @@ export function isToolResultOnly(m: Message): boolean {
 
 const isRealUserTurn = (m: Message): boolean => m.role === "user" && !isToolResultOnly(m);
 
+export function cannotTravelInAlternative(b: ContentBlock): boolean {
+  if (b.type === "tool_use" || b.type === "tool_result") return true;
+  return b.type === "text" && b.text.trim() === "";
+}
+
 function keptInAlternative(b: ContentBlock): boolean {
-  if (b.type === "thinking" || b.type === "redacted_thinking") return true;
-  return b.type === "text" && b.text.trim() !== "";
+  return !cannotTravelInAlternative(b);
 }
 
 function alternativeFromMessage(msg: Message): MessageAlternative {
-  let blocks: ContentBlock[] = msg.content_blocks.filter(keptInAlternative);
+  let blocks: ContentBlock[] = structuredClone(msg.content_blocks).filter(keptInAlternative);
   let content = deriveContentFromBlocks(blocks, false);
   if (content === "" && msg.content.trim() !== "") {
     content = msg.content;
@@ -195,6 +204,7 @@ export class MessageStore {
   #messages: Message[];
   readonly #path: string;
   #quarantined = 0;
+  #altDefects: readonly AlternativeDefect[] = [];
 
   private constructor(path: string, messages: Message[]) {
     this.#path = path;
@@ -243,8 +253,13 @@ export class MessageStore {
       );
     }
 
+    const defects = auditAlternatives(messages);
+    const report = describeAlternativeDefects(path, defects);
+    if (report !== undefined) console.warn(report);
+
     const store = new MessageStore(path, messages);
     store.#quarantined = unreadable.length;
+    store.#altDefects = defects;
     return { store, raw };
   }
 
@@ -254,6 +269,10 @@ export class MessageStore {
 
   get quarantinedLines(): number {
     return this.#quarantined;
+  }
+
+  get alternativeDefects(): readonly AlternativeDefect[] {
+    return this.#altDefects;
   }
 
   messages(): readonly Message[] {
