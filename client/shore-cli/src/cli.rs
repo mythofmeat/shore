@@ -320,48 +320,27 @@ pub(crate) enum CliCommand {
         subcommand: Option<UsageCommand>,
 
         /// Time period: "today", "4h", "7d", "30d", "all" (default: today)
-        #[arg(long, default_value = "today")]
+        #[arg(long, default_value = "today", global = true)]
         last: String,
 
         /// Filter by provider
-        #[arg(long)]
+        #[arg(long, global = true)]
         provider: Option<String>,
 
         /// Filter by configured API key name ("unknown" matches older rows)
-        #[arg(long)]
+        #[arg(long, global = true)]
         api_key: Option<String>,
 
         /// Filter by model
-        #[arg(long)]
+        #[arg(long, global = true)]
         model: Option<String>,
 
-        /// Filter by call type. Pass without a value to see a breakdown
-        /// grouped by call type (useful for discovering what types exist).
-        #[expect(
-            clippy::option_option,
-            reason = "clap needs absent, present-without-value, and present-with-value states"
-        )]
-        #[arg(long, num_args = 0..=1)]
-        call_type: Option<Option<String>>,
-
-        /// Group by higher-level usage kind, e.g. message_with_tools
-        #[arg(long)]
-        by_kind: bool,
-
-        /// Group by provider and configured API key name
-        #[arg(long)]
-        by_api_key: bool,
-
-        /// Show configured budgets and limit state
-        #[arg(long)]
-        budget: bool,
-
-        /// Show only cache anomalies
-        #[arg(long)]
-        anomalies: bool,
+        /// Filter by ledger call type, e.g. message, heartbeat, or subagent
+        #[arg(long, global = true)]
+        call_type: Option<String>,
 
         /// Output raw JSON
-        #[arg(long)]
+        #[arg(long, global = true)]
         json: bool,
     },
 
@@ -451,6 +430,15 @@ pub(crate) enum LogCommand {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum UsageCommand {
+    #[command(about = "Group totals by call type, usage kind, or API key")]
+    Breakdown { dimension: UsageDimension },
+
+    #[command(about = "Show configured budgets and their current limit state")]
+    Budgets,
+
+    #[command(about = "Show cache anomalies for the selected period")]
+    Anomalies,
+
     /// Write the full ledger to stdout as CSV (or TSV with --tsv)
     Export {
         /// Use tab separators instead of commas
@@ -467,6 +455,13 @@ pub(crate) enum UsageCommand {
 
     /// Drop cached provider pricing so the next call re-fetches it
     RefreshPricing,
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum UsageDimension {
+    CallType,
+    Kind,
+    ApiKey,
 }
 
 #[derive(Subcommand, Debug)]
@@ -1094,29 +1089,30 @@ fn usage_to_swp(
         api_key,
         model,
         call_type,
-        by_kind,
-        by_api_key,
-        budget,
-        anomalies,
         json: _,
     } = cmd
     else {
         return None;
     };
-    // Three-state flag:
-    //   absent         → None,             no grouping, no filter
-    //   --call-type    → Some(None),       breakdown mode
-    //   --call-type X  → Some(Some("X")),  filter by X
-    let (by_call_type, call_type_filter) = match call_type {
-        None => (false, None),
-        Some(None) => (true, None),
-        Some(Some(v)) => (false, Some(v.clone())),
+    let (by_call_type, by_kind, by_api_key, budget, anomalies) = match subcommand {
+        Some(UsageCommand::Breakdown {
+            dimension: UsageDimension::CallType,
+        }) => (true, false, false, false, false),
+        Some(UsageCommand::Breakdown {
+            dimension: UsageDimension::Kind,
+        }) => (false, true, false, false, false),
+        Some(UsageCommand::Breakdown {
+            dimension: UsageDimension::ApiKey,
+        }) => (false, false, true, false, false),
+        Some(UsageCommand::Budgets) => (false, false, false, true, false),
+        Some(UsageCommand::Anomalies) => (false, false, false, false, true),
+        _ => (false, false, false, false, false),
     };
     let (export_csv, export_tsv, recalculate, force, refresh_pricing) = match subcommand {
-        None => (false, false, false, false, false),
         Some(UsageCommand::Export { tsv }) => (!tsv, *tsv, false, false, false),
         Some(UsageCommand::Recalculate { all }) => (false, false, true, *all, false),
         Some(UsageCommand::RefreshPricing) => (false, false, false, false, true),
+        _ => (false, false, false, false, false),
     };
     Some((
         "usage",
@@ -1126,7 +1122,7 @@ fn usage_to_swp(
             "provider": provider,
             "api_key": api_key,
             "model": model,
-            "call_type": call_type_filter,
+            "call_type": call_type,
             "by_call_type": by_call_type,
             "by_kind": by_kind,
             "by_api_key": by_api_key,
@@ -3010,17 +3006,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_usage_bare_call_type_flag() {
-        // Regression: `shore usage --call-type` previously errored because
-        // clap required a value. The bare flag should mean "break down by
-        // call type" (Some(None)).
-        let cli = parse(&["usage", "--call-type"]);
-        assert_variant!(
-            &cli.command,
-            CliCommand::Usage { call_type, .. } => {
-                assert_eq!(*call_type, Some(None), "bare flag → Some(None)");
-            }
-        );
+    fn usage_call_type_filter_requires_a_value() {
+        assert!(Cli::try_parse_from(["shore", "usage", "--call-type"]).is_err());
     }
 
     #[test]
@@ -3029,7 +3016,7 @@ mod tests {
         assert_variant!(
             &cli.command,
             CliCommand::Usage { call_type, .. } => {
-                assert_eq!(*call_type, Some(Some("message".into())));
+                assert_eq!(*call_type, Some("message".into()));
             }
         );
     }
@@ -3043,14 +3030,14 @@ mod tests {
     }
 
     #[test]
-    fn usage_bare_call_type_sets_by_call_type_flag() {
-        // Wire-level: daemon should see `by_call_type: true` and no
-        // `call_type` filter when the user passed the bare flag.
-        let cli = parse(&["usage", "--call-type"]);
+    fn usage_breakdown_call_type_sets_only_its_grouping() {
+        let cli = parse(&["usage", "breakdown", "call-type"]);
         let (cmd, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(cmd, "usage");
         assert_eq!(arg(&args, "by_call_type").as_bool(), Some(true));
         assert!(arg(&args, "call_type").is_null());
+        assert_eq!(arg(&args, "by_kind").as_bool(), Some(false));
+        assert_eq!(arg(&args, "by_api_key").as_bool(), Some(false));
     }
 
     #[test]
@@ -3066,25 +3053,29 @@ mod tests {
     }
 
     #[test]
-    fn usage_kind_and_api_key_flags_forwarded() {
-        let cli = parse(&[
-            "usage",
-            "--by-kind",
-            "--by-api-key",
-            "--api-key",
-            "overflow",
-        ]);
-        let (_cmd, args) = to_swp_command(&cli.command, None).unwrap();
-        assert_eq!(arg(&args, "by_kind").as_bool(), Some(true));
-        assert_eq!(arg(&args, "by_api_key").as_bool(), Some(true));
-        assert_eq!(arg(&args, "api_key"), "overflow");
+    fn usage_breakdown_dimensions_are_mutually_exclusive() {
+        let (_, kind) =
+            to_swp_command(&parse(&["usage", "breakdown", "kind"]).command, None).unwrap();
+        assert_eq!(arg(&kind, "by_kind").as_bool(), Some(true));
+        assert_eq!(arg(&kind, "by_api_key").as_bool(), Some(false));
+
+        let (_, key) = to_swp_command(
+            &parse(&["usage", "breakdown", "api-key", "--api-key", "overflow"]).command,
+            None,
+        )
+        .unwrap();
+        assert_eq!(arg(&key, "by_kind").as_bool(), Some(false));
+        assert_eq!(arg(&key, "by_api_key").as_bool(), Some(true));
+        assert_eq!(arg(&key, "api_key"), "overflow");
     }
 
     #[test]
-    fn usage_budget_flag_forwarded() {
-        let cli = parse(&["usage", "--budget"]);
-        let (_cmd, args) = to_swp_command(&cli.command, None).unwrap();
-        assert_eq!(arg(&args, "budget").as_bool(), Some(true));
+    fn usage_views_are_subcommands() {
+        let (_, budgets) = to_swp_command(&parse(&["usage", "budgets"]).command, None).unwrap();
+        assert_eq!(arg(&budgets, "budget").as_bool(), Some(true));
+
+        let (_, anomalies) = to_swp_command(&parse(&["usage", "anomalies"]).command, None).unwrap();
+        assert_eq!(arg(&anomalies, "anomalies").as_bool(), Some(true));
     }
 
     #[test]
