@@ -184,17 +184,13 @@ export class KeepaliveService {
     return this.#halt;
   }
 
-  clearHalt(): void {
-    this.#halt = undefined;
-    for (const entry of this.#entries.values()) entry.consecutiveMisses = 0;
-  }
-
   #haltAll(character: string, wroteTokens: number): void {
     const reason =
       `two keepalive pings in a row missed with nothing in between. The first wrote ` +
       `${String(wroteTokens)} tokens, which should have left an entry the second one read — ` +
       `it did not. The cache is not holding what shore writes to it, so every further ping ` +
-      `would pay full price for nothing. All keepalives are stopped until this is looked at`;
+      `would pay full price for nothing. All keepalives are stopped for the life of this ` +
+      `daemon; nothing resumes them, because nothing that causes this is fixable at runtime`;
     this.#halt = { character, reason, at: this.#now() };
     console.error(`shore: KEEPALIVE HALTED (${character}) — ${reason}`);
     this.#push({

@@ -173,6 +173,32 @@ fn write_activity_section(out: &mut impl Write, activity: &serde_json::Value, wi
     _ = writeln!(out);
 }
 
+/// Report a halted cache keepalive, loudly.
+///
+/// The halt fires when two pings in a row miss with nothing between them, which
+/// means the cache is not holding what shore writes to it. Nothing clears it:
+/// there is no runtime cause worth resuming from, so the only exit is a fix in
+/// the source. Without this row the halt reaches only the daemon log, where it
+/// would sit unread while every call paid full price.
+fn print_keepalive_halt(out: &mut impl Write, data: &serde_json::Value) {
+    let Some(halt) = data.get("keepalive_halted").filter(|h| !h.is_null()) else {
+        return;
+    };
+    let at = halt["at"].as_str().unwrap_or("?");
+    let reason = halt["reason"].as_str().unwrap_or("no reason recorded");
+    let character = halt["character"].as_str().unwrap_or("?");
+
+    _ = writeln!(out);
+    write_fg(out, Color::Red, "  KEEPALIVE HALTED");
+    _ = writeln!(out, " \u{00b7} {character} \u{00b7} {at}");
+    _ = writeln!(out, "  {reason}.");
+    _ = writeln!(
+        out,
+        "  This does not clear on its own and restarting only hides it. Read the wire in"
+    );
+    _ = writeln!(out, "  calls.db and fix the cause.");
+}
+
 /// Print the status dashboard.
 pub(crate) fn print_status(data: &serde_json::Value, character_name: &str) {
     let stdout = io::stdout();
@@ -214,6 +240,8 @@ pub(crate) fn print_status(data: &serde_json::Value, character_name: &str) {
         };
         write_row(&mut out, "Prompt Edits", &detail);
     }
+
+    print_keepalive_halt(&mut out, data);
 
     _ = writeln!(out);
 
@@ -2941,6 +2969,55 @@ mod tests {
             "active_model": null,
         });
         print_status(&data, "Sable");
+    }
+
+    #[test]
+    fn keepalive_halt_prints_nothing_when_healthy() {
+        set_color_enabled(false);
+        let mut out: Vec<u8> = Vec::new();
+        print_keepalive_halt(&mut out, &serde_json::json!({ "keepalive_halted": null }));
+        assert!(out.is_empty());
+
+        let mut missing: Vec<u8> = Vec::new();
+        print_keepalive_halt(&mut missing, &serde_json::json!({ "character": "Sable" }));
+        assert!(missing.is_empty());
+    }
+
+    #[test]
+    fn keepalive_halt_names_the_character_the_reason_and_the_fix() {
+        set_color_enabled(false);
+        let mut out: Vec<u8> = Vec::new();
+        print_keepalive_halt(
+            &mut out,
+            &serde_json::json!({
+                "keepalive_halted": {
+                    "character": "poppy",
+                    "reason": "two keepalive pings in a row missed with nothing in between",
+                    "at": "2026-08-13T07:36:41+00:00",
+                }
+            }),
+        );
+        let text = String::from_utf8(out).expect("utf8");
+        assert!(text.contains("KEEPALIVE HALTED"), "{text}");
+        assert!(text.contains("poppy"), "{text}");
+        assert!(text.contains("2026-08-13T07:36:41+00:00"), "{text}");
+        assert!(text.contains("two keepalive pings in a row missed"), "{text}");
+        // The halt has no runtime exit, so the banner must not read as
+        // something a restart clears.
+        assert!(text.contains("does not clear on its own"), "{text}");
+    }
+
+    #[test]
+    fn keepalive_halt_survives_a_missing_reason() {
+        set_color_enabled(false);
+        let mut out: Vec<u8> = Vec::new();
+        print_keepalive_halt(
+            &mut out,
+            &serde_json::json!({ "keepalive_halted": { "character": "poppy" } }),
+        );
+        let text = String::from_utf8(out).expect("utf8");
+        assert!(text.contains("KEEPALIVE HALTED"), "{text}");
+        assert!(text.contains("no reason recorded"), "{text}");
     }
 
     #[test]

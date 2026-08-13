@@ -378,22 +378,39 @@ describe("two misses in a row halt everything", () => {
     expect(service.halted).toBeUndefined();
   });
 
-  test("clearing the halt lets pings resume", async () => {
+  // A double miss means the cache is not holding what shore writes to it.
+  // Nothing at runtime causes that and nothing at runtime fixes it, so the halt
+  // has no clearing path at all: re-arming, a fresh prefix, and further ticks
+  // all leave it halted. The exit is a source fix and a new daemon.
+  test("the halt has no runtime exit", async () => {
     const h = harness(0, 14_144);
-    h.service.arm(prefix(), true);
-    h.advance(10_000);
-    await h.service.tick();
-    h.service.arm(prefix(), true);
-    h.advance(10_000);
-    await h.service.tick();
+    for (let i = 0; i < 2; i += 1) {
+      h.service.arm(prefix(), true);
+      h.advance(10_000);
+      await h.service.tick();
+    }
     expect(h.service.halted).toBeDefined();
+    const halted = h.service.halted;
 
-    h.service.clearHalt();
-    h.service.arm(prefix(), true);
-    h.advance(10_000);
-    await h.service.tick();
+    for (let i = 0; i < 5; i += 1) {
+      h.service.arm(prefix(), true);
+      h.service.observe("Rhia", "claude-opus-4-6", "message", undefined, "fresh-fingerprint");
+      h.advance(10_000);
+      await h.service.tick();
+    }
 
-    expect(h.service.halted).toBeUndefined();
+    expect(h.service.halted).toBe(halted);
+    expect(h.sends()).toBe(2);
+  });
+
+  test("no public method clears the halt", () => {
+    const service = new KeepaliveService(async () => response(0, 0), () => 0);
+    const surface = new Set<string>();
+    for (const name of Object.getOwnPropertyNames(Object.getPrototypeOf(service))) {
+      surface.add(name);
+    }
+    expect(surface.has("clearHalt")).toBe(false);
+    expect([...surface].filter((n) => /clear|reset|resume|unhalt/i.test(n))).toEqual([]);
   });
 });
 
