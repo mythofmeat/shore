@@ -32,6 +32,7 @@ import {
   type CachePlacement,
 } from "../../cache/forensics.ts";
 import { replayableMessages } from "../replay.ts";
+import { cacheBoundaryIndex } from "../system_boundary.ts";
 import { parseToolArgs } from "../tool_args.ts";
 
 export class AnthropicProvider implements SidecarProvider {
@@ -330,12 +331,7 @@ function normalizeMessages(messages: WireMessage[]): MessageParam[] {
   });
 }
 
-function lastStableSystemIndex(system: SystemContent): number {
-  for (let i = system.length - 1; i >= 0; i--) {
-    if (system[i]?.label !== "memory_index") return i;
-  }
-  return -1;
-}
+
 
 function isToolResultOnlyUser(msg: MessageParam): boolean {
   const content = msg.content;
@@ -381,7 +377,7 @@ function tsDefaultPlacement(
   messages: MessageParam[],
   system: SystemContent,
 ): { msgBp: number[]; sysBp: number[] } {
-  const sysIdx = lastStableSystemIndex(system);
+  const sysIdx = cacheBoundaryIndex(system);
   return {
     sysBp: sysIdx >= 0 ? [sysIdx] : [],
     msgBp: tsMessageBreakpoints(messages),

@@ -2,6 +2,7 @@ import builtinSystemTemplate from "../../prompts/engine/builtin_system.md" with 
 import { hostZone, naiveInZone, partsOf } from "../ledger/zoned";
 import type { ContentBlock, ImageRef, Message, Role } from "./types";
 import { estimateTokens, withSafetyMargin } from "./tokens.ts";
+import { withDynamicBlocksLast } from "../llm/system_boundary.ts";
 
 const DEFAULT_MAX_CONTEXT_TOKENS = 200_000;
 
@@ -133,7 +134,7 @@ function buildSystemBlocks(params: PromptParams): SystemBlock[] {
     });
   }
 
-  return system;
+  return withDynamicBlocksLast(system);
 }
 
 function availableMessageTokens(
