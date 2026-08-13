@@ -359,6 +359,7 @@ async fn handle_log_command(
         subagent_tools,
         heartbeat,
         events,
+        subagent,
         api,
         count,
         follow,
@@ -395,7 +396,7 @@ async fn handle_log_command(
 
     // Background observability views (the heartbeat transcript, the event
     // ring, raw call payloads) map to their own SWP commands via `to_swp_command`.
-    if *heartbeat || *events || api.is_some() {
+    if *heartbeat || *events || subagent.is_some() || api.is_some() {
         let Some((name, swp_args)) = crate::cli::to_swp_command(cmd) else {
             return Ok(());
         };
