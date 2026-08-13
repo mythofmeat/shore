@@ -24,7 +24,7 @@ Four things the mutants attack:
   last message, that the bytes go on the frame and not on the stored ref, and
   that an unreadable path costs the bytes rather than the frame.
 
-A mutant is KILLED if `bun test tests/execute_parity.test.ts` fails with it
+A mutant is KILLED if `bun test tests/execute.test.ts` fails with it
 applied.
 
 This is **36/39**, from 33/39 on the first pass.
@@ -224,7 +224,7 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/execute_parity.test.ts"])
+    return _run_mutants(MUTANTS, ["tests/execute.test.ts"], src=ROOT / EXECUTE)
 
 
 if __name__ == "__main__":
