@@ -2548,8 +2548,23 @@ fn print_usage_summary(data: &serde_json::Value) {
     }
     let anomaly_count = data["anomaly_count_7d"].as_u64().unwrap_or(0);
     cli_out!("\nAnomalies (last 7d): {anomaly_count}");
+    print_anomaly_breakdown(data);
     print_cache_coverage(data);
     print_rate_limits(data);
+}
+
+/// Break the anomaly total down by kind. A bare count says something is wrong;
+/// which kind says what, and a keepalive that misses is pure waste.
+fn print_anomaly_breakdown(data: &serde_json::Value) {
+    let Some(rows) = data["anomaly_counts_7d"].as_array() else {
+        return;
+    };
+    for row in rows {
+        let kind = row["anomaly"].as_str().unwrap_or("?");
+        let calls = row["calls"].as_u64().unwrap_or(0);
+        let writes = row["cache_write_tokens"].as_u64().unwrap_or(0);
+        cli_out!("  {kind:<24} {calls:>6}  cache write {writes}");
+    }
 }
 
 /// Render how many calls the cache tracker could classify, and why the rest

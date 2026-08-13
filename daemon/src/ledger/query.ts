@@ -223,6 +223,26 @@ export function usageSummary(
   }));
 }
 
+export interface AnomalyCount {
+  anomaly: string;
+  calls: number;
+  cache_write_tokens: number;
+}
+
+export function anomalyCounts(db: Database, filter: QueryFilter): AnomalyCount[] {
+  const { where, values } = buildWhere(filter);
+  const sql = `SELECT cache_anomaly AS anomaly, COUNT(*) AS calls,
+                      COALESCE(SUM(cache_write_tokens), 0) AS writes
+                 FROM calls${andWhere(where, "cache_anomaly IS NOT NULL")}
+                GROUP BY cache_anomaly
+                ORDER BY calls DESC`;
+  return rows(db, sql, values).map((r) => ({
+    anomaly: text(r["anomaly"]),
+    calls: count(r["calls"]),
+    cache_write_tokens: count(r["writes"]),
+  }));
+}
+
 export interface CacheCoverage {
   state: string;
   reason: string | null;
