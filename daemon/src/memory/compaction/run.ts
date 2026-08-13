@@ -112,7 +112,10 @@ export async function runCompactionPass(
           ? {}
           : { maxToolIterations: resolved.maxToolIterations }),
       },
-      { keepRecentTurns: resolved.effective.app.memory.compaction.keep_recent_turns },
+      {
+        keepRecentTurns: resolved.effective.app.memory.compaction.keep_recent_turns,
+        maxContextTokens: resolved.effective.app.memory.compaction.max_context_tokens,
+      },
     );
 
     await pushAfterCompaction(resolved.effective.app.memory.git_push, outcome, async () => {

@@ -5,6 +5,7 @@ import { pushAssistantTurn } from "../../llm/request";
 import type { GenerateResponse, SidecarRequest, WireMessage } from "../../llm/types";
 import { runToolLoop, type ToolLoopDriver, type ToolUseEvent } from "../../engine/tool_loop";
 import { hitTokenCeiling } from "../../llm/finish_reason.ts";
+import { retainedTurns as retentionForBudget } from "./retention.ts";
 import type { ContentBlock } from "../../engine/types";
 import type { MarkdownMemoryStore } from "../markdown_store";
 import { MEMORY_INDEX_FILE, noteMemoryIndexDeferred } from "../deferred_edits";
@@ -452,6 +453,7 @@ async function rollbackCompaction(writes: AppliedCompactionWrite[]): Promise<voi
 
 export interface CompactionSettings {
   keepRecentTurns: number;
+  maxContextTokens?: number;
 }
 
 export interface CompactOptions {
@@ -522,7 +524,9 @@ async function tryRealpath(p: string): Promise<string | undefined> {
 export async function compact(opts: CompactOptions, settings: CompactionSettings): Promise<CompactionOutcome> {
   const { messages, tools } = opts;
 
-  const keepTurns = opts.keepTurnsOverride ?? settings.keepRecentTurns;
+  const keepTurns =
+    opts.keepTurnsOverride ??
+    retentionForBudget(messages, settings.keepRecentTurns, settings.maxContextTokens ?? 0);
   const splitAt = archiveSplitIndex(messages, keepTurns, opts.retainTrailingAutonomous);
   if (splitAt === 0) throw CompactionError.insufficientMessages();
 
