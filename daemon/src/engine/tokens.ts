@@ -1,4 +1,4 @@
-export const BYTES_PER_TOKEN = 3;
+export const BYTES_PER_TOKEN = 3.2;
 
 export const CONTEXT_SAFETY_FRACTION = 0.1;
 
