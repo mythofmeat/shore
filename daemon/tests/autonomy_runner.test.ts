@@ -8,7 +8,7 @@
  * character from archiving a conversation the user has just rejoined.
  *
  * Mirrors `tick_character` and its `execute_*_if_still_*` helpers in
- * `crates/daemon/src/autonomy/manager.rs`.
+ * `the deleted port`.
  */
 
 import { describe, expect, test } from "bun:test";

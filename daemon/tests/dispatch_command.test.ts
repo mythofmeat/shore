@@ -62,31 +62,6 @@ const DIVERGENT: Record<string, string> = {
 };
 
 /**
- * Keys this side answers with that the Rust had no counterpart for.
- *
- * `keepalive_halted` reports the double-miss tripwire, which did not exist in
- * the Rust at all. The halt stops every keepalive for the life of the daemon
- * and has no clearing path, so it has to appear on a surface someone reads
- * rather than only in the daemon log.
- */
-const ADDED_KEYS: Record<string, readonly string[]> = {
-  status: ["keepalive_halted"],
-};
-
-function withoutAddedKeys(name: string, keys: readonly string[]): string[] {
-  const added = new Set(ADDED_KEYS[name] ?? []);
-  return keys.filter((key) => !added.has(key));
-}
-
-function withoutAddedShape(name: string, shape: unknown): unknown {
-  const added = ADDED_KEYS[name];
-  if (added === undefined || typeof shape !== "object" || shape === null) return shape;
-  const rest = { ...(shape as Record<string, unknown>) };
-  for (const key of added) delete rest[key];
-  return rest;
-}
-
-/**
  * Names whose *outcome* changed, not just its wording.
  *
  * `config` is the only one. The recorded case reads `behavior.autonomy.enabled`
@@ -384,10 +359,13 @@ describe("runCommand", () => {
         }
       } else {
         expect(got["name"]).toBe(want["name"] as string);
-        expect(withoutAddedKeys(c.name, got["data_keys"] as string[])).toEqual(
-          want["data_keys"] as string[],
-        );
-        expect(withoutAddedShape(c.name, got["data_shape"])).toEqual(want["data_shape"]);
+        // This file pins routing: that the name reached the handler that owns
+        // it. The recorded keys have to still be there, because a handler
+        // answering with someone else's payload is the failure it exists to
+        // catch — but a field added since is not that failure, and each
+        // handler's own test owns its payload in full.
+        expect(got["data_keys"]).toEqual(expect.arrayContaining(want["data_keys"] as string[]));
+        expect(got["data_shape"]).toMatchObject(want["data_shape"] as object);
       }
 
       // The four arms that write the active model back through the context.
@@ -418,8 +396,8 @@ describe("runCharacterlessCommand", () => {
         });
         expect(want["kind"]).toBe("ok");
         const record = (data ?? {}) as Record<string, unknown>;
-        expect(withoutAddedKeys(c.name, Object.keys(record).sort())).toEqual(
-          want["data_keys"] as string[],
+        expect(Object.keys(record).sort()).toEqual(
+          expect.arrayContaining(want["data_keys"] as string[]),
         );
         expect(
           Object.fromEntries(Object.entries(record).map(([k, v]) => [k, typeName(v, k)])),

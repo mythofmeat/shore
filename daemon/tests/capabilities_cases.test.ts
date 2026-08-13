@@ -28,7 +28,7 @@ interface Case {
 // both reimplementations of the parser + rule evaluator must agree with these.
 const cases = (fixture as { case: Case[] }).case;
 
-test("cross-language capability parity", () => {
+test("every recorded model resolves to the same claude shape", () => {
   expect(cases.length).toBeGreaterThan(0);
   for (const c of cases) {
     expect(parseClaudeModel(c.model) !== undefined, `is_claude: ${c.model}`).toBe(c.is_claude);

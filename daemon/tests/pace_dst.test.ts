@@ -1,7 +1,7 @@
 /**
  * Pace sub-windows across a DST transition, in the budget's *local* timezone.
  *
- * Migrated from `crates/daemon/tests/pace_dst.rs` when the budget arithmetic
+ * Migrated from `the deleted port` when the budget arithmetic
  * moved here. It kept its own file there because it had to set `TZ`, which is
  * process-global; that constraint is gone — `BudgetOptions.localZone` pins the
  * zone per call — but the test is worth keeping standalone for what it is: the

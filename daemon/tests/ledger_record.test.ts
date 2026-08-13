@@ -406,7 +406,7 @@ describe("what a non-streaming call records", () => {
 
 /**
  * Pinned against `CallType::continuation` in
- * `crates/daemon/src/ledger/client.rs`, which has the same table as a test.
+ * `the deleted port`, which has the same table as a test.
  * The two must agree or a delegated loop's rows stop matching the shape the
  * cache tracker expects.
  */

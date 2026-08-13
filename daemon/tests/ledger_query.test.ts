@@ -1,5 +1,5 @@
 /**
- * Ported from `crates/daemon/src/ledger/query.rs::tests`, test for test, while
+ * Ported from `the deleted port::tests`, test for test, while
  * both implementations existed. The Rust is gone; these are now this
  * implementation's own tests, kept case for case.
  *

@@ -1,5 +1,5 @@
 /**
- * Ported from `crates/daemon/src/ledger/cache_tracker.rs::tests`, test for
+ * Ported from `the deleted port::tests`, test for
  * test, while both implementations existed. The Rust is gone; these are now
  * this implementation's own tests, and they are kept case for case because the
  * cases are what was expensive to learn.

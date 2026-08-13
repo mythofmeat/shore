@@ -3,7 +3,7 @@
  * sampler overlay kept beside it rather than folded in.
  *
  * Ported from `resolve_active_model_and_overlay` in
- * `crates/daemon/src/handler/mod.rs`, which had no Rust test of its own — it
+ * `the deleted port`, which had no Rust test of its own — it
  * was only ever reached through a live `MessageHandler`.
  *
  * **Not fixture-derived, and it does not need to be.** Every step of the chain

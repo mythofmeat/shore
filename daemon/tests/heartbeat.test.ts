@@ -6,7 +6,7 @@
  * randomised walk cannot: exact boundaries, and the two `force*` calls that read
  * the clock rather than taking a `now`, so they could not be recorded.
  *
- * Each test here mirrors one in `crates/daemon/src/autonomy/heartbeat.rs`.
+ * Each test here mirrors one in `the deleted port`.
  */
 
 import { describe, expect, test } from "bun:test";

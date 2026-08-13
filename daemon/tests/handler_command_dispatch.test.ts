@@ -3,7 +3,7 @@
  * the command itself has returned, and what the client is told to forget.
  *
  * Ported alongside the four `post_process_*` methods in
- * `crates/daemon/src/handler/command_dispatch.rs` and
+ * `the deleted port` and
  * `restart_required_changes` in `handler/mod.rs`.
  *
  * **Not fixture-derived.** The Rust has real tests for three of the four — they

@@ -3,7 +3,7 @@
  *
  * **These are not fixture-derived.** `swp_parity.test.ts` replays values the
  * Rust actually produced; everything here is a policy read out of
- * `crates/daemon/src/swp_server/mod.rs` and asserted directly, because the
+ * `the deleted port` and asserted directly, because the
  * behaviour is a property of a *loop over channels and time* rather than a
  * value some function returned. Driving the Rust to emit "and then it hung up
  * after the third lag" as fixture data would mean building the same harness in

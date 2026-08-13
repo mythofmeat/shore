@@ -245,7 +245,7 @@ function nonPaceWarnings(events: unknown[]): unknown[] {
   );
 }
 
-test("legacy cross-language budget parity outside the changed pace policy", () => {
+test("the recorded budget cases still hold outside the changed pace policy", () => {
   expect(doc.cases.length).toBeGreaterThan(0);
 
   doc.cases.forEach((c, i) => {

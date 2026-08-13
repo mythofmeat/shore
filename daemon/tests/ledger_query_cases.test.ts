@@ -148,7 +148,7 @@ function seededLedger(): Database {
   return db;
 }
 
-test("cross-language ledger query parity", () => {
+test("every recorded filter answers the same ten queries", () => {
   const db = seededLedger();
   expect(doc.cases.length).toBeGreaterThan(0);
 

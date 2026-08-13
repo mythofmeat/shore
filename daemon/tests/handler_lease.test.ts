@@ -1,7 +1,7 @@
 /**
  * The stream lease: which sessions a generation's output reaches.
  *
- * Ported from the lease block of `crates/daemon/src/handler/tests.rs`
+ * Ported from the lease block of `the deleted port`
  * (`lease_set_on_user_message` through `all_clients_disconnected_clears_leases`),
  * which is the whole of the Rust's coverage for it.
  *

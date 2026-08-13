@@ -2,7 +2,7 @@
  * The body a heartbeat runs and the model it runs on.
  *
  * The four `heartbeat_override_*` tests in
- * `crates/daemon/src/autonomy/manager.rs` are carried across whole — they are
+ * `the deleted port` are carried across whole — they are
  * the specification for the override, and each one is a regression with a
  * commit behind it. Two more sit beside them for the paths the Rust asserted
  * about in prose but never drove: a pin that does not resolve, and a model with

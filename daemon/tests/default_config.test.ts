@@ -3,7 +3,7 @@
  *
  * Ports `create_default_config_creates_file` and
  * `create_default_config_via_load_when_missing` from
- * `crates/common/src/config/mod.rs`. Neither could become a replay fixture —
+ * `the deleted port`. Neither could become a replay fixture —
  * both assert on the filesystem rather than on a return value — so both were
  * dropped in the port, and the effect went with them: `DEFAULT_CONFIG_TOML`
  * sat in `config/loader.ts` with no caller, and a fresh install got no config

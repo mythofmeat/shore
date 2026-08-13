@@ -181,7 +181,7 @@ function seededLedgerPath(): string {
   return f.path;
 }
 
-test("cross-language `--last` window parity", () => {
+test("every recorded `--last` window resolves the same instant", () => {
   expect(doc.periods.length).toBeGreaterThan(0);
 
   for (const c of doc.periods) {
@@ -192,7 +192,7 @@ test("cross-language `--last` window parity", () => {
   }
 });
 
-test("cross-language usage payload parity", async () => {
+test("every recorded usage payload comes back the same", async () => {
   expect(doc.payloads.length).toBeGreaterThan(0);
   const ledger = seededLedgerPath();
 

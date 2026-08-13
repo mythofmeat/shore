@@ -3,7 +3,7 @@
  *
  * The Rust delegated this to `dotenvy` and pinned only the two ends —
  * `dotenv_file_loaded_into_env` and `no_dotenv_file_is_fine` in
- * `crates/common/src/config/mod.rs`. Both are reproduced at the bottom. The
+ * `the deleted port`. Both are reproduced at the bottom. The
  * grammar cases above them have no Rust counterpart to replay against, because
  * on that side they were the dependency's own tests; here the parser is ours,
  * so they are pinned here.

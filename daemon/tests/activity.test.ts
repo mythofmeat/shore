@@ -8,7 +8,7 @@
  * what the tracker refuses to do; and exact values for the free functions,
  * where the fixture only ever pins whatever the streams happened to produce.
  *
- * Each test here mirrors one in `crates/daemon/src/autonomy/activity.rs`.
+ * Each test here mirrors one in `the deleted port`.
  */
 
 import { describe, expect, test } from "bun:test";

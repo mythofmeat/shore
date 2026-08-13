@@ -418,13 +418,10 @@ describe("status", () => {
         );
       }
 
-      // `keepalive_halted` has no counterpart in the frozen Rust, which had no
-      // double-miss tripwire to report. Every fixture case is a healthy daemon,
-      // so the field is pinned null here and exercised on its own below.
-      expect(result["keepalive_halted"]).toBeNull();
-      const { keepalive_halted: _halt, ...envelope } = result;
-
-      expect(withoutVolatile(envelope)).toEqual(withoutVolatile(row.ok));
+      // The whole envelope, on purpose. This is the one file that owns its
+      // shape, so a field added or dropped shows up here rather than in three
+      // routing tests that never cared about the payload.
+      expect(withoutVolatile(result)).toEqual(withoutVolatile(row.ok));
     });
   }
 });

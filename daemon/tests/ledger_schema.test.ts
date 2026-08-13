@@ -52,7 +52,8 @@ function tables(path: string): Set<string> {
   return new Set(rows.map((r) => r.name));
 }
 
-/** The v1 schema, as `crates/daemon/src/ledger/store.rs` last shipped it. */
+/** The v1 schema, as the deleted Rust port last shipped it. Ledgers on disk
+ * still have it, so the migration off it is live code, not history. */
 const V1 = `
 CREATE TABLE calls (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,

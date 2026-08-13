@@ -1,5 +1,5 @@
 /**
- * The `shore usage` paths the cross-language fixture cannot reach.
+ * The `shore usage` paths the recorded cases in `ledger_usage_cases` do not reach.
  *
  * `ledger_usage_parity.test.ts` pins every mode that is answerable from a
  * ledger alone. Two are not, and they are here:

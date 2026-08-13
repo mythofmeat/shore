@@ -104,7 +104,7 @@ function toSnapshot(w: WireSnapshot): KeepaliveSnapshot {
   };
 }
 
-test("cross-language keepalive decision parity", () => {
+test("every recorded walk decides the same at each step", () => {
   expect(cases.length).toBeGreaterThan(0);
 
   for (const c of cases) {
