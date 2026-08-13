@@ -276,6 +276,60 @@ pub(crate) fn print_status(data: &serde_json::Value, character_name: &str) {
     }
 }
 
+/// Render one named slice of the status payload. Returns false when the
+/// payload has no such section, so the caller can report an unknown name.
+pub(crate) fn print_status_section(data: &serde_json::Value, section: &str) -> bool {
+    let Some(value) = data.get(section) else {
+        return false;
+    };
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    let width = term_width();
+
+    match section {
+        "autonomy" if !value.is_null() => write_autonomy_section(&mut out, value, width),
+        "activity" if !value.is_null() => write_activity_section(&mut out, value, width),
+        _ => {
+            write_section_header(&mut out, section, "", width);
+            write_value_rows(&mut out, value);
+        }
+    }
+    true
+}
+
+fn write_value_rows(out: &mut impl Write, value: &serde_json::Value) {
+    match value {
+        serde_json::Value::Null => print_dim_line(out, "(not set)"),
+        serde_json::Value::Object(fields) if fields.is_empty() => print_dim_line(out, "(empty)"),
+        serde_json::Value::Object(fields) => {
+            for (key, field) in fields {
+                write_row(out, key, &scalar_display(field));
+            }
+        }
+        serde_json::Value::Array(items) if items.is_empty() => print_dim_line(out, "(none)"),
+        serde_json::Value::Array(items) => {
+            for item in items {
+                _ = writeln!(out, "  {}", scalar_display(item));
+            }
+        }
+        scalar @ (serde_json::Value::Bool(_)
+        | serde_json::Value::Number(_)
+        | serde_json::Value::String(_)) => {
+            _ = writeln!(out, "  {}", scalar_display(scalar));
+        }
+    }
+}
+
+fn scalar_display(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Null => "(unset)".to_owned(),
+        serde_json::Value::String(text) => text.clone(),
+        serde_json::Value::Bool(flag) => flag.to_string(),
+        serde_json::Value::Number(number) => number.to_string(),
+        nested @ (serde_json::Value::Array(_) | serde_json::Value::Object(_)) => nested.to_string(),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Command-specific formatters
 // ---------------------------------------------------------------------------
@@ -3252,6 +3306,26 @@ mod tests {
 
         assert!(rendered.contains("failed: budget exhausted"));
         assert!(!rendered.contains("answer:"));
+    }
+
+    #[test]
+    fn a_status_section_renders_as_rows_rather_than_json() {
+        set_color_enabled(false);
+        let data = serde_json::json!({
+            "tokens": { "input": 12, "output": 3 },
+            "autonomy": serde_json::Value::Null,
+        });
+
+        assert!(print_status_section(&data, "tokens"));
+        assert!(print_status_section(&data, "autonomy"));
+        assert!(!print_status_section(&data, "no_such_section"));
+    }
+
+    #[test]
+    fn a_missing_value_reads_as_unset_not_as_the_word_null() {
+        assert_eq!(scalar_display(&serde_json::Value::Null), "(unset)");
+        assert_eq!(scalar_display(&serde_json::json!("ada")), "ada");
+        assert_eq!(scalar_display(&serde_json::json!(7)), "7");
     }
 
     #[test]

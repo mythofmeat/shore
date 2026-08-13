@@ -666,10 +666,13 @@ async fn handle_status_command(
     let data = recv_command_data(conn).await?;
     match section {
         Some(s) => {
-            if let Some(val) = data.get(s.as_str()) {
+            let Some(val) = data.get(s.as_str()) else {
+                return Err(format!("Unknown status section: {s}").into());
+            };
+            if *json {
                 cli_out!("{}", serde_json::to_string_pretty(val)?);
             } else {
-                return Err(format!("Unknown status section: {s}").into());
+                _ = output::print_status_section(&data, s);
             }
         }
         None if *json => {
