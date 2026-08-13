@@ -26,7 +26,7 @@ import { join } from "node:path";
 import {
   excerptFor,
   filtersFrom,
-  handleSearchHistory,
+  handleLegacySearchHistory,
   matchesTimeRange,
   excerptCharsFrom,
   maxResultsFrom,
@@ -109,7 +109,7 @@ async function corpusDir(): Promise<string> {
 
 async function run(input: Json, dir: string): Promise<{ ok: Json } | { error: string }> {
   try {
-    return { ok: (await handleSearchHistory(input, dir)) as unknown as Json };
+    return { ok: (await handleLegacySearchHistory(input, dir)) as unknown as Json };
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -280,7 +280,7 @@ describe("excerptFor", () => {
 
 describe("numeric clamping", () => {
   test("uses deliberately small search defaults", () => {
-    expect(maxResultsFrom({})).toBe(8);
+    expect(maxResultsFrom({})).toBe(3);
     expect(excerptCharsFrom({})).toBe(240);
   });
 
@@ -292,7 +292,7 @@ describe("numeric clamping", () => {
   });
 
   test("invalid numeric arguments fall back instead of widening the search", () => {
-    expect(maxResultsFrom({ max_results: "50" })).toBe(8);
+    expect(maxResultsFrom({ max_results: "50" })).toBe(3);
     expect(excerptCharsFrom({ excerpt_chars: 5.5 })).toBe(240);
   });
 });

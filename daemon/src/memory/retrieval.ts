@@ -92,6 +92,6 @@ export function resolveEmbedder(options: ResolveEmbedderOptions): Embedder {
 
   return cacheOrBuild(
     cacheKey,
-    () => new OpenAIEmbedder(modelId, apiKey, baseUrl, dimensions, fetchImpl),
+    () => new OpenAIEmbedder(modelId, apiKey, baseUrl, dimensions, fetchImpl, cacheKey),
   );
 }

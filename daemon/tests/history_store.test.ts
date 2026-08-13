@@ -112,6 +112,16 @@ test("a compaction remains readable after its JSONL recovery copy is removed", a
       timestamp: "2026-08-13T10:00:00+10:00",
       model: null,
       text: "hello",
+      before: [],
+      after: [
+        {
+          msg_id: "a1",
+          role: "assistant",
+          timestamp: "2026-08-13T10:00:00+10:00",
+          model: null,
+          text: "hi",
+        },
+      ],
     },
   ]);
 });

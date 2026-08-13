@@ -29,6 +29,7 @@ export interface InProcessExecutorDeps {
   callStore?: Pick<CallStore, "recordTranscript">;
   tools?: ToolContextDeps;
   env?: NodeJS.ProcessEnv;
+  beginForeground?: () => () => void;
 }
 
 export class InProcessAutonomyExecutor implements AutonomyExecutor {
@@ -39,17 +40,18 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
   }
 
   async runHeartbeatTick(character: string, hooks: TickHooks): Promise<AutonomyActionResult> {
-    const config = this.#deps.registry.effectiveConfig(character);
-    const toolCtx = await buildToolContext(
-      config,
-      config.dirs.data,
-      character,
-      this.#deps.tools ?? {},
-    );
+    return await this.#withForeground(async () => {
+      const config = this.#deps.registry.effectiveConfig(character);
+      const toolCtx = await buildToolContext(
+        config,
+        config.dirs.data,
+        character,
+        this.#deps.tools ?? {},
+      );
 
-    return await runHeartbeatTick(character, config, {
-      cache: this.#deps.cache,
-      ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
+      return await runHeartbeatTick(character, config, {
+        cache: this.#deps.cache,
+        ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
 
       generate: async (request, iteration, callType) => {
         labelAccountedCall(request, config, character, callType);
@@ -110,22 +112,25 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
       ...(this.#deps.notifyAutonomousMessage === undefined
         ? {}
         : { notify: this.#deps.notifyAutonomousMessage }),
+      });
     });
   }
 
   async runCompaction(character: string, reason: CompactionReason): Promise<AutonomyActionResult> {
-    if (reason !== "idle") {
-      return {
-        events: [],
-        failed: `compaction reason ${reason} is not the autonomy loop's to run`,
-      };
-    }
-    const config = this.#deps.registry.effectiveConfig(character);
-    return await runIdleCompaction(character, {
-      config,
-      cache: this.#deps.cache,
-      run: this.#compactionDeps(config),
-      engine: this.#engineReloader(),
+    return await this.#withForeground(async () => {
+      if (reason !== "idle") {
+        return {
+          events: [],
+          failed: `compaction reason ${reason} is not the autonomy loop's to run`,
+        };
+      }
+      const config = this.#deps.registry.effectiveConfig(character);
+      return await runIdleCompaction(character, {
+        config,
+        cache: this.#deps.cache,
+        run: this.#compactionDeps(config),
+        engine: this.#engineReloader(),
+      });
     });
   }
 
@@ -133,16 +138,27 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
     character: string,
     coveredTurnCount: number,
   ): Promise<AutonomyActionResult> {
-    const config = this.#deps.registry.effectiveConfig(character);
-    return await runDeepIdleArchive(character, {
-      config,
-      cache: this.#deps.cache,
-      run: this.#compactionDeps(config),
-      engine: this.#engineReloader(),
-      ...(this.#deps.notifyCompactionComplete === undefined
-        ? {}
-        : { notify: this.#deps.notifyCompactionComplete }),
-    }, coveredTurnCount);
+    return await this.#withForeground(async () => {
+      const config = this.#deps.registry.effectiveConfig(character);
+      return await runDeepIdleArchive(character, {
+        config,
+        cache: this.#deps.cache,
+        run: this.#compactionDeps(config),
+        engine: this.#engineReloader(),
+        ...(this.#deps.notifyCompactionComplete === undefined
+          ? {}
+          : { notify: this.#deps.notifyCompactionComplete }),
+      }, coveredTurnCount);
+    });
+  }
+
+  async #withForeground<T>(run: () => Promise<T>): Promise<T> {
+    const end = this.#deps.beginForeground?.();
+    try {
+      return await run();
+    } finally {
+      end?.();
+    }
   }
 
   #engineReloader(): PostArchiveEngine {
