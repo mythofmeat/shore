@@ -33,6 +33,7 @@ import {
 } from "../../cache/forensics.ts";
 import { replayableMessages } from "../replay.ts";
 import { cacheBoundaryIndex } from "../system_boundary.ts";
+import { effectiveCacheTtl } from "../cache_capability.ts";
 import { parseToolArgs } from "../tool_args.ts";
 
 export class AnthropicProvider implements SidecarProvider {
@@ -229,8 +230,12 @@ export function buildAnthropicPlan(req: SidecarRequest): {
   placement: CachePlacement;
 } {
   const opts = req.provider_options ?? {};
-  const cacheTtl = opts.cache_ttl ?? "";
+  const cacheTtl = effectiveCacheTtl(req.sdk, req.base_url, opts.cache_ttl ?? "");
   const cacheEnabled = cacheTtl !== "";
+  if (req.context !== undefined && cacheTtl !== (opts.cache_ttl ?? "")) {
+    if (cacheTtl === "") delete req.context.cache_ttl;
+    else req.context.cache_ttl = cacheTtl;
+  }
 
   const converted = convertInlineSystemMessages(replayableMessages(req), req.model);
   const hasExistingMarkers = messagesHaveCacheControl(converted);

@@ -7,6 +7,7 @@ import type {
 
 import { runnableTools } from "./anthropic_tools.ts";
 import { isAbortError } from "../abort.ts";
+import { effectiveCacheTtl } from "../cache_capability.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
 import type { ContentBlock } from "../../engine/types.ts";
 import type { SidecarRequest, StreamEvent, SystemContent, Usage } from "../types.ts";
@@ -60,7 +61,7 @@ export async function* anthropicToolLoopEvents(
 
   const { params } = buildAnthropicPlan(req);
   const labelled: SystemContent = req.system ?? [];
-  const cacheTtl = req.provider_options?.cache_ttl ?? "";
+  const cacheTtl = effectiveCacheTtl(req.sdk, req.base_url, req.provider_options?.cache_ttl ?? "");
 
   const abort = new AbortController();
   if (signal?.aborted) abort.abort();
