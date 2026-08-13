@@ -22,6 +22,7 @@ pub(crate) enum Action {
     Redraw,
     /// Redraw and persist view preferences to disk (a pref was toggled).
     SavePrefs,
+    SendAndSavePrefs(Vec<ConnCommand>),
     OpenInEditor,
     /// Open external file picker to select an image.
     PickImage(Option<String>),
@@ -205,7 +206,7 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
         // Toggle nested sub-agent sections
         (KeyModifiers::NONE, KeyCode::Char('s')) => {
             app.show_subagent = !app.show_subagent;
-            Action::SavePrefs
+            Action::SendAndSavePrefs(crate::subagent_trace_fetch(app))
         }
 
         // Toggle inline images in history

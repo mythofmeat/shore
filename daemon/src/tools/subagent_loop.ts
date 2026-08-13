@@ -8,6 +8,7 @@ import type { Message } from "../engine/types.ts";
 import { credentialEntry } from "../handler/tool_context.ts";
 import { anthropicToolLoopEvents } from "../llm/providers/anthropic_loop.ts";
 import { genericToolLoopEvents } from "../llm/providers/generic_loop.ts";
+import { capturedEvents, type CallRecorder } from "../llm/capture.ts";
 import { beginCallAttempt, recordingStream } from "../ledger/record.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
 import { usageConfigView } from "../ledger/budget.ts";
@@ -55,6 +56,7 @@ export interface SubagentDeps {
   config: LoadedConfig;
   ctx: ToolContext;
   providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
+  callStore?: CallRecorder | undefined;
   mcpRegistry?: Pick<McpRegistry, "namesMatching"> | undefined;
   sendDirect?: ((message: ServerMessage) => void) | undefined;
   diagnostics: { push: (entry: ToolCallEntry) => void };
@@ -199,7 +201,9 @@ export async function runSubagent(
 
   const events: AsyncIterable<StreamEvent> =
     request.sdk === "anthropic" || provider === undefined
-      ? anthropicToolLoopEvents(request, phase, signal)
+      ? capturedEvents(deps.callStore, request, () =>
+          anthropicToolLoopEvents(request, phase, signal),
+        )
       : genericToolLoopEvents(provider, request, phase, signal);
 
   const blocked = budgetBlockFor(request);

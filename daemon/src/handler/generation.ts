@@ -17,6 +17,7 @@ import {
   type KeyCandidate,
 } from "../llm/credentials.ts";
 import { anthropicToolLoopEvents } from "../llm/providers/anthropic_loop.ts";
+import { capturedEvents, type CallRecorder } from "../llm/capture.ts";
 import { genericToolLoopEvents } from "../llm/providers/generic_loop.ts";
 import { BudgetBlocked } from "../llm/generate.ts";
 import { consumeStream, type StreamResult } from "../llm/stream.ts";
@@ -105,6 +106,7 @@ export interface GenerationDeps {
   registry: GenerationRegistry;
   dataDir: string;
   providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
+  callStore?: CallRecorder | undefined;
   autonomy: TurnAutonomy & PersistContext["autonomy"];
   notifier: PersistContext["notifier"];
   sessionTokens: SessionTokens;
@@ -287,6 +289,23 @@ interface StreamTurnParams {
   newMessageId: () => string;
 }
 
+export function turnEvents(
+  deps: Pick<GenerationDeps, "callStore" | "loopEvents">,
+  provider: SidecarProvider,
+  call: SidecarRequest,
+  phase: ToolPhase | undefined,
+  signal: AbortSignal,
+): AsyncIterable<StreamEvent> {
+  if (phase === undefined) return provider.stream(call, signal);
+  if (deps.loopEvents !== undefined) return deps.loopEvents(provider, call, phase, signal);
+  if (call.sdk === "anthropic") {
+    return capturedEvents(deps.callStore, call, () =>
+      anthropicToolLoopEvents(call, phase, signal),
+    );
+  }
+  return genericToolLoopEvents(provider, call, phase, signal);
+}
+
 async function streamTurn(
   deps: GenerationDeps,
   params: StreamTurnParams,
@@ -358,14 +377,7 @@ async function streamTurn(
             messages,
           );
 
-    const events: AsyncIterable<StreamEvent> =
-      phase === undefined
-        ? provider.stream(call, params.signal)
-        : deps.loopEvents !== undefined
-          ? deps.loopEvents(provider, call, phase, params.signal)
-          : call.sdk === "anthropic"
-            ? anthropicToolLoopEvents(call, phase, params.signal)
-            : genericToolLoopEvents(provider, call, phase, params.signal);
+    const events = turnEvents(deps, provider, call, phase, params.signal);
 
     const outcome = await consumeStream(recordingStream(
       call.context,

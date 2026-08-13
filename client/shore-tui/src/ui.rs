@@ -326,6 +326,12 @@ fn render_blocks(
                             .fg(SUBAGENT_COLOR)
                             .add_modifier(Modifier::BOLD),
                     )));
+                } else {
+                    let tools = section_tool_count(&blocks[i + 1..]);
+                    lines.push(Line::from(Span::styled(
+                        format!("  » {name} · {tools} tool{} (press s)", plural(tools)),
+                        Style::default().fg(Color::DarkGray),
+                    )));
                 }
                 i += 1;
             }
@@ -388,6 +394,21 @@ fn render_blocks(
                 i += 1;
             }
         }
+    }
+}
+
+fn section_tool_count(rest: &[TurnBlock]) -> usize {
+    rest.iter()
+        .take_while(|b| !matches!(b, TurnBlock::SubagentEnd(_)))
+        .filter(|b| matches!(b, TurnBlock::ToolUse { .. }))
+        .count()
+}
+
+fn plural(n: usize) -> &'static str {
+    if n == 1 {
+        ""
+    } else {
+        "s"
     }
 }
 
@@ -3383,11 +3404,6 @@ mod scenario_tests {
         assert!(f.contains("primary answer"), "primary text missing:\n{f}");
     }
 
-    // ── Scenario: hiding the sub-agent collapses the whole nested section ────
-    //
-    // With `show_subagent` off, the headers and every nested frame disappear —
-    // even though `show_thinking`/`show_tools` are on — while the primary
-    // model's own text is untouched.
     #[test]
     fn scenario_subagent_section_hidden() {
         let mut h = Harness::new();
@@ -3407,7 +3423,8 @@ mod scenario_tests {
         ]));
 
         let f = h.render("subagent hidden");
-        assert!(!f.contains("sub-agent"), "header must be hidden:\n{f}");
+        assert!(!f.contains("(sub-agent)"), "open header must be hidden:\n{f}");
+        assert!(!f.contains("research done"), "close header must be hidden:\n{f}");
         assert!(
             !f.contains("nested thought"),
             "nested thinking must hide despite show_thinking:\n{f}"
@@ -3417,8 +3434,39 @@ mod scenario_tests {
             "nested tool must hide despite show_tools:\n{f}"
         );
         assert!(
+            f.contains("research · 1 tool (press s)"),
+            "collapsed marker must name the sub-agent and its tool count:\n{f}"
+        );
+        assert!(
             f.contains("primary answer"),
             "primary text must remain:\n{f}"
+        );
+    }
+
+    #[test]
+    fn collapsed_marker_counts_one_section() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.character_name = "Alice".into();
+        h.app.show_subagent = false;
+        h.app.show_tools = true;
+
+        h.app.entries.push(assistant_turn(vec![
+            tool_use("p1", "ask_research", serde_json::json!({"query": "x"})),
+            Block::SubagentBegin("research".into()),
+            tool_use("s1", "web_search", serde_json::json!({"q": "x"})),
+            tool_result("s1", "web_search", "a", false),
+            tool_use("s2", "read", serde_json::json!({"path": "b"})),
+            tool_result("s2", "read", "b", false),
+            Block::SubagentEnd("research".into()),
+            tool_result("p1", "ask_research", "answer", false),
+            tool_use("p2", "roll_dice", serde_json::json!({"notation": "1d6"})),
+        ]));
+
+        let f = h.render("collapsed marker count");
+        assert!(
+            f.contains("research · 2 tools (press s)"),
+            "marker must count the section's tools, not the turn's:\n{f}"
         );
     }
 
