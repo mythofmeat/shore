@@ -157,7 +157,7 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
         | CliCommand::Usage { .. }
         | CliCommand::Completions { .. }
         | CliCommand::Complete { .. }) => {
-            handle_generic_swp_command(&mut conn, other).await?;
+            handle_generic_swp_command(&mut conn, other, cli.character.as_deref()).await?;
         }
     }
 
@@ -169,6 +169,7 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
 async fn handle_generic_swp_command(
     conn: &mut SWPConnection,
     other: &CliCommand,
+    character: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // `config reload` is a two-round-trip interactive flow, not a single
     // mapped command.
@@ -238,7 +239,7 @@ async fn handle_generic_swp_command(
         }
     );
     let show_all = matches!(other, CliCommand::Config { all: true, .. });
-    let Some((name, args)) = crate::cli::to_swp_command(other) else {
+    let Some((name, args)) = crate::cli::to_swp_command(other, character) else {
         return Err("non-send/regen/local command must map to SWP command".into());
     };
     _ = conn.send_command(name, args).await?;
@@ -1483,7 +1484,7 @@ mod tests {
             | CliCommand::Usage { .. }
             | CliCommand::Completions { .. }
             | CliCommand::Complete { .. }) => {
-                let (name, args) = crate::cli::to_swp_command(other).unwrap();
+                let (name, args) = crate::cli::to_swp_command(other, None).unwrap();
                 let _ignored = conn.send_command(name, args).await.unwrap();
                 let _data = super::recv_command_data(&mut conn).await.unwrap();
             }

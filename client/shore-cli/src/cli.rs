@@ -294,13 +294,12 @@ pub(crate) enum CliCommand {
 
     /// Show token usage statistics and costs
     Usage {
+        #[command(subcommand)]
+        subcommand: Option<UsageCommand>,
+
         /// Time period: "today", "4h", "7d", "30d", "all" (default: today)
         #[arg(long, default_value = "today")]
         last: String,
-
-        /// Filter by character name
-        #[arg(long)]
-        character: Option<String>,
 
         /// Filter by provider
         #[arg(long)]
@@ -338,26 +337,6 @@ pub(crate) enum CliCommand {
         /// Show only cache anomalies
         #[arg(long)]
         anomalies: bool,
-
-        /// Export full ledger as CSV to stdout
-        #[arg(long)]
-        export_csv: bool,
-
-        /// Export full ledger as TSV to stdout
-        #[arg(long)]
-        export_tsv: bool,
-
-        /// Clear cached pricing data
-        #[arg(long)]
-        refresh_pricing: bool,
-
-        /// Recalculate costs using current pricing
-        #[arg(long)]
-        recalculate: bool,
-
-        /// Force recalculation of ALL rows (use with --recalculate)
-        #[arg(long)]
-        force: bool,
 
         /// Output raw JSON
         #[arg(long)]
@@ -445,6 +424,26 @@ pub(crate) enum LogCommand {
         #[arg(allow_hyphen_values = true)]
         msg_ref: String,
     },
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum UsageCommand {
+    /// Write the full ledger to stdout as CSV (or TSV with --tsv)
+    Export {
+        /// Use tab separators instead of commas
+        #[arg(long)]
+        tsv: bool,
+    },
+
+    /// Recalculate stored costs against current pricing
+    Recalculate {
+        /// Redo every row, not just the ones with no cost recorded
+        #[arg(long)]
+        all: bool,
+    },
+
+    /// Drop cached provider pricing so the next call re-fetches it
+    RefreshPricing,
 }
 
 #[derive(Subcommand, Debug)]
@@ -754,7 +753,10 @@ pub(crate) fn alt_command_to_swp(
 ///
 /// Returns `None` for `Send` and `Regen` which use dedicated SWP message types
 /// rather than the generic `command` type.
-pub(crate) fn to_swp_command(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
+pub(crate) fn to_swp_command(
+    cmd: &CliCommand,
+    character: Option<&str>,
+) -> Option<(&'static str, serde_json::Value)> {
     use serde_json::json;
     match cmd {
         // These use dedicated SWP message types or are handled locally.
@@ -829,7 +831,7 @@ pub(crate) fn to_swp_command(cmd: &CliCommand) -> Option<(&'static str, serde_js
 
         CliCommand::Tools { .. } => Some(("tools", json!({}))),
 
-        CliCommand::Usage { .. } => usage_to_swp(cmd),
+        CliCommand::Usage { .. } => usage_to_swp(cmd, character),
     }
 }
 
@@ -1057,11 +1059,14 @@ fn memory_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> 
 }
 
 /// `usage` query with grouping / filter / export flags.
-fn usage_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
+fn usage_to_swp(
+    cmd: &CliCommand,
+    selected: Option<&str>,
+) -> Option<(&'static str, serde_json::Value)> {
     use serde_json::json;
     let CliCommand::Usage {
+        subcommand,
         last,
-        character,
         provider,
         api_key,
         model,
@@ -1070,11 +1075,6 @@ fn usage_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         by_api_key,
         budget,
         anomalies,
-        export_csv,
-        export_tsv,
-        refresh_pricing,
-        recalculate,
-        force,
         json: _,
     } = cmd
     else {
@@ -1089,11 +1089,17 @@ fn usage_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         Some(None) => (true, None),
         Some(Some(v)) => (false, Some(v.clone())),
     };
+    let (export_csv, export_tsv, recalculate, force, refresh_pricing) = match subcommand {
+        None => (false, false, false, false, false),
+        Some(UsageCommand::Export { tsv }) => (!tsv, *tsv, false, false, false),
+        Some(UsageCommand::Recalculate { all }) => (false, false, true, *all, false),
+        Some(UsageCommand::RefreshPricing) => (false, false, false, false, true),
+    };
     Some((
         "usage",
         json!({
             "last": last,
-            "character": character,
+            "character": selected,
             "provider": provider,
             "api_key": api_key,
             "model": model,
@@ -1926,7 +1932,7 @@ mod tests {
             toml: false,
             all: false,
         };
-        assert!(to_swp_command(&cmd).is_none());
+        assert!(to_swp_command(&cmd, None).is_none());
     }
 
     #[test]
@@ -1968,19 +1974,19 @@ mod tests {
             thinking: None,
             system: false,
         };
-        assert!(to_swp_command(&cmd).is_none());
+        assert!(to_swp_command(&cmd, None).is_none());
     }
 
     #[test]
     fn regen_maps_to_none() {
         let cmd = CliCommand::Regen { guidance: None };
-        assert!(to_swp_command(&cmd).is_none());
+        assert!(to_swp_command(&cmd, None).is_none());
     }
 
     #[test]
     fn completions_maps_to_none() {
         let cmd = CliCommand::Completions { shell: Shell::Fish };
-        assert!(to_swp_command(&cmd).is_none());
+        assert!(to_swp_command(&cmd, None).is_none());
     }
 
     #[test]
@@ -1991,7 +1997,7 @@ mod tests {
             count: 10,
             json: false,
         };
-        let (name, args) = to_swp_command(&cmd).unwrap();
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "status");
         assert_eq!(args, serde_json::json!({}));
     }
@@ -2004,7 +2010,7 @@ mod tests {
             count: 15,
             json: false,
         };
-        let (name, args) = to_swp_command(&cmd).unwrap();
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "diagnostics");
         assert_eq!(arg(&args, "count"), 15);
     }
@@ -2014,7 +2020,7 @@ mod tests {
         let cmd = CliCommand::Debug {
             subcommand: DebugCommand::KeepalivePingNow,
         };
-        let (name, args) = to_swp_command(&cmd).unwrap();
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "keepalive_ping_now");
         assert_eq!(args, serde_json::json!({}));
     }
@@ -2035,7 +2041,7 @@ mod tests {
         let cmd = CliCommand::Debug {
             subcommand: DebugCommand::SessionActivate,
         };
-        let (name, args) = to_swp_command(&cmd).unwrap();
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "session_activate");
         assert_eq!(args, serde_json::json!({}));
     }
@@ -2056,7 +2062,7 @@ mod tests {
         let cmd = CliCommand::Debug {
             subcommand: DebugCommand::TickNow,
         };
-        let (name, args) = to_swp_command(&cmd).unwrap();
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "heartbeat_tick_now");
         assert_eq!(args, serde_json::json!({}));
     }
@@ -2066,7 +2072,7 @@ mod tests {
         let cmd = CliCommand::Debug {
             subcommand: DebugCommand::StatusDormant,
         };
-        let (name, args) = to_swp_command(&cmd).unwrap();
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "heartbeat_set_dormant");
         assert_eq!(args, serde_json::json!({}));
     }
@@ -2076,7 +2082,7 @@ mod tests {
         let cmd = CliCommand::Debug {
             subcommand: DebugCommand::StatusActive,
         };
-        let (name, args) = to_swp_command(&cmd).unwrap();
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "heartbeat_set_active");
         assert_eq!(args, serde_json::json!({}));
     }
@@ -2089,14 +2095,14 @@ mod tests {
             new: false,
             json: false,
         };
-        assert!(to_swp_command(&cmd_none).is_none());
+        assert!(to_swp_command(&cmd_none, None).is_none());
         let cmd_named = CliCommand::Character {
             name: Some("alice".into()),
             info: false,
             new: false,
             json: false,
         };
-        assert!(to_swp_command(&cmd_named).is_none());
+        assert!(to_swp_command(&cmd_named, None).is_none());
     }
 
     #[test]
@@ -2107,7 +2113,7 @@ mod tests {
             new: false,
             json: false,
         };
-        let (name, args) = to_swp_command(&cmd).unwrap();
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "character_info");
         assert_eq!(arg(&args, "name"), "alice");
     }
@@ -2123,7 +2129,7 @@ mod tests {
             background: false,
             json: false,
         };
-        let (name, args) = to_swp_command(&cmd).unwrap();
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "model_info");
         assert_eq!(arg(&args, "name"), "opus");
     }
@@ -2139,7 +2145,7 @@ mod tests {
             background: false,
             json: false,
         };
-        let (cmd_name, args) = to_swp_command(&cmd).unwrap();
+        let (cmd_name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(cmd_name, "list_models");
         assert_eq!(arg(&args, "include_hidden"), true);
     }
@@ -2162,7 +2168,7 @@ mod tests {
             background: false,
             json: false,
         };
-        let (name, _) = to_swp_command(&cmd).unwrap();
+        let (name, _) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "model_settings");
     }
 
@@ -2184,7 +2190,7 @@ mod tests {
             background: false,
             json: false,
         };
-        let (name, args) = to_swp_command(&cmd).unwrap();
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "set_model_setting");
         assert_eq!(arg(&args, "key"), "temperature");
         assert_eq!(arg(&args, "value"), 0.8);
@@ -2209,7 +2215,7 @@ mod tests {
             background: false,
             json: false,
         };
-        let (name, args) = to_swp_command(&cmd).unwrap();
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "set_model_setting");
         assert!(arg(&args, "value").is_null());
     }
@@ -2232,14 +2238,14 @@ mod tests {
             background: false,
             json: false,
         };
-        let (_, args) = to_swp_command(&cmd).unwrap();
+        let (_, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(arg(&args, "scope"), "global");
     }
 
     #[test]
     fn model_background_flag_maps_to_background_models() {
         let cli = parse(&["model", "--background"]);
-        let (name, _) = to_swp_command(&cli.command).unwrap();
+        let (name, _) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(name, "background_models");
     }
 
@@ -2258,7 +2264,7 @@ mod tests {
     #[test]
     fn model_setting_background_show_threads_task() {
         let cli = parse(&["model", "setting", "--background", "compaction"]);
-        let (name, args) = to_swp_command(&cli.command).unwrap();
+        let (name, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(name, "model_settings");
         assert_eq!(arg(&args, "background_task"), "compaction");
     }
@@ -2273,7 +2279,7 @@ mod tests {
             "temperature",
             "0.5",
         ]);
-        let (name, args) = to_swp_command(&cli.command).unwrap();
+        let (name, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(name, "set_model_setting");
         assert_eq!(arg(&args, "key"), "temperature");
         assert_eq!(arg(&args, "value"), 0.5);
@@ -2291,7 +2297,7 @@ mod tests {
             "--reset",
             "reasoning_effort",
         ]);
-        let (name, args) = to_swp_command(&cli.command).unwrap();
+        let (name, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(name, "set_model_setting");
         assert!(arg(&args, "value").is_null());
         assert_eq!(arg(&args, "background_task"), "heartbeat");
@@ -2300,7 +2306,7 @@ mod tests {
     #[test]
     fn model_setting_without_background_omits_task() {
         let cli = parse(&["model", "setting", "temperature", "0.7"]);
-        let (name, args) = to_swp_command(&cli.command).unwrap();
+        let (name, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(name, "set_model_setting");
         assert!(args.get("background_task").is_none());
     }
@@ -2328,7 +2334,7 @@ mod tests {
             background: false,
             json: false,
         };
-        let (_, args) = to_swp_command(&cmd).unwrap();
+        let (_, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(arg(&args, "value"), "off");
     }
 
@@ -2351,7 +2357,7 @@ mod tests {
                 background: false,
                 json: false,
             };
-            let (_, args) = to_swp_command(&cmd).unwrap();
+            let (_, args) = to_swp_command(&cmd, None).unwrap();
             assert_eq!(arg(&args, "value"), "off", "synonym {synonym:?}");
         }
     }
@@ -2385,7 +2391,7 @@ mod tests {
             subcommand: None,
             json: false,
         };
-        let (name, _) = to_swp_command(&cmd).unwrap();
+        let (name, _) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "list_providers");
     }
 
@@ -2399,7 +2405,7 @@ mod tests {
             }),
             json: false,
         };
-        let (name, args) = to_swp_command(&cmd).unwrap();
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "list_provider_models");
         assert_eq!(arg(&args, "provider"), "openrouter");
         assert_eq!(arg(&args, "include_hidden"), true);
@@ -2414,7 +2420,7 @@ mod tests {
             }),
             json: false,
         };
-        let (name, args) = to_swp_command(&cmd).unwrap();
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "refresh_provider_models");
         assert_eq!(arg(&args, "provider"), "openrouter");
     }
@@ -2428,7 +2434,7 @@ mod tests {
             }),
             json: false,
         };
-        let (name, args) = to_swp_command(&cmd).unwrap();
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "refresh_all_provider_models");
         assert!(args.as_object().unwrap().is_empty());
     }
@@ -2459,7 +2465,7 @@ mod tests {
             toml: false,
             all: false,
         };
-        assert!(to_swp_command(&cmd).is_none());
+        assert!(to_swp_command(&cmd, None).is_none());
     }
 
     #[test]
@@ -2480,7 +2486,7 @@ mod tests {
             tools: false,
             subagent_tools: false,
         };
-        let (name, args) = to_swp_command(&cmd).unwrap();
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "edit");
         assert_eq!(arg(&args, "ref"), "m1");
         assert_eq!(arg(&args, "content"), "new text");
@@ -2503,7 +2509,7 @@ mod tests {
             tools: false,
             subagent_tools: false,
         };
-        let (name, args) = to_swp_command(&cmd).unwrap();
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "delete");
         assert_eq!(arg(&args, "refs"), "m1");
     }
@@ -2515,7 +2521,7 @@ mod tests {
             msg_ref: Some("last".into()),
             json: false,
         };
-        let (name, args) = to_swp_command(&cmd).unwrap();
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "alt");
         assert_eq!(arg(&args, "position"), 2);
         assert_eq!(arg(&args, "ref"), "last");
@@ -2528,7 +2534,7 @@ mod tests {
             msg_ref: None,
             json: false,
         };
-        let (name, args) = to_swp_command(&cmd).unwrap();
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "list_alternatives");
         assert!(args.as_object().unwrap().is_empty());
     }
@@ -2548,7 +2554,7 @@ mod tests {
             tools: false,
             subagent_tools: false,
         };
-        let (name, args) = to_swp_command(&cmd).unwrap();
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "get");
         assert_eq!(arg(&args, "ref"), "last");
         assert_eq!(arg(&args, "role"), "user");
@@ -2569,7 +2575,7 @@ mod tests {
             tools: false,
             subagent_tools: false,
         };
-        let (name, args) = to_swp_command(&cmd).unwrap();
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "log");
         assert_eq!(arg(&args, "turns"), 20);
         assert_eq!(arg(&args, "role"), "assistant");
@@ -2578,7 +2584,7 @@ mod tests {
     #[test]
     fn trace_subagent_bare_lists_recent_runs() {
         let cli = parse(&["trace", "subagent", "-n", "5"]);
-        let (name, args) = to_swp_command(&cli.command).unwrap();
+        let (name, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(name, "subagent_trace");
         assert_eq!(arg(&args, "count"), 5);
         assert!(args.get("ids").is_none());
@@ -2587,7 +2593,7 @@ mod tests {
     #[test]
     fn trace_subagent_with_id_asks_for_one_run() {
         let cli = parse(&["trace", "subagent", "toolu_01A"]);
-        let (name, args) = to_swp_command(&cli.command).unwrap();
+        let (name, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(name, "subagent_trace");
         assert_eq!(arg(&args, "ids"), &serde_json::json!(["toolu_01A"]));
         assert!(args.get("count").is_none());
@@ -2596,14 +2602,14 @@ mod tests {
     #[test]
     fn log_subagent_tools_stays_on_the_conversation() {
         let cli = parse(&["log", "--subagent-tools"]);
-        let (name, _) = to_swp_command(&cli.command).unwrap();
+        let (name, _) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(name, "log");
     }
 
     #[test]
     fn trace_calls_diff_asks_for_a_comparison() {
         let cli = parse(&["trace", "calls", "42", "--diff"]);
-        let (name, args) = to_swp_command(&cli.command).unwrap();
+        let (name, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(name, "call_log");
         assert_eq!(arg(&args, "id"), 42);
         assert_eq!(arg(&args, "diff"), true);
@@ -2613,21 +2619,21 @@ mod tests {
     #[test]
     fn trace_calls_diff_against_pins_the_other_side() {
         let cli = parse(&["trace", "calls", "42", "--diff", "--against", "40"]);
-        let (_, args) = to_swp_command(&cli.command).unwrap();
+        let (_, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(arg(&args, "against"), 40);
     }
 
     #[test]
     fn trace_calls_without_diff_asks_for_no_comparison() {
         let cli = parse(&["trace", "calls", "42"]);
-        let (_, args) = to_swp_command(&cli.command).unwrap();
+        let (_, args) = to_swp_command(&cli.command, None).unwrap();
         assert!(args.get("diff").is_none());
     }
 
     #[test]
     fn trace_calls_bare_lists_and_can_filter_by_type() {
         let cli = parse(&["trace", "calls", "-n", "5", "--call-type", "heartbeat"]);
-        let (name, args) = to_swp_command(&cli.command).unwrap();
+        let (name, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(name, "call_log");
         assert_eq!(arg(&args, "count"), 5);
         assert_eq!(arg(&args, "call_type"), "heartbeat");
@@ -2635,11 +2641,12 @@ mod tests {
 
     #[test]
     fn trace_heartbeat_and_events_are_separate_views() {
-        let (heartbeat, hb_args) = to_swp_command(&parse(&["trace", "heartbeat"]).command).unwrap();
+        let (heartbeat, hb_args) =
+            to_swp_command(&parse(&["trace", "heartbeat"]).command, None).unwrap();
         assert_eq!(heartbeat, "transcript");
         assert_eq!(arg(&hb_args, "source"), "heartbeat");
 
-        let (events, _) = to_swp_command(&parse(&["trace", "events"]).command).unwrap();
+        let (events, _) = to_swp_command(&parse(&["trace", "events"]).command, None).unwrap();
         assert_eq!(events, "heartbeat_log");
     }
 
@@ -2650,7 +2657,7 @@ mod tests {
             query: None,
             json: false,
         };
-        let (name, args) = to_swp_command(&cmd).unwrap();
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "compact");
         assert!(args.get("keep_turns").is_none());
     }
@@ -2664,7 +2671,7 @@ mod tests {
             query: None,
             json: false,
         };
-        let (name, args) = to_swp_command(&cmd).unwrap();
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "compact");
         assert_eq!(arg(&args, "keep_turns"), 0);
     }
@@ -2677,7 +2684,10 @@ mod tests {
         commands.extend(model_samples());
         commands.extend(provider_memory_config_samples());
         for cmd in &commands {
-            assert!(to_swp_command(cmd).is_some(), "expected Some for {cmd:?}");
+            assert!(
+                to_swp_command(cmd, None).is_some(),
+                "expected Some for {cmd:?}"
+            );
         }
     }
 
@@ -2910,6 +2920,59 @@ mod tests {
     // ── Usage ────────────────────────────────────────────────────────
 
     #[test]
+    fn usage_export_defaults_to_csv_and_switches_on_tsv() {
+        let (_, csv) = to_swp_command(&parse(&["usage", "export"]).command, None).unwrap();
+        assert_eq!(arg(&csv, "export_csv"), true);
+        assert_eq!(arg(&csv, "export_tsv"), false);
+
+        let (_, tsv) = to_swp_command(&parse(&["usage", "export", "--tsv"]).command, None).unwrap();
+        assert_eq!(arg(&tsv, "export_csv"), false);
+        assert_eq!(arg(&tsv, "export_tsv"), true);
+    }
+
+    #[test]
+    fn usage_recalculate_forces_every_row_only_when_asked() {
+        let (_, some) = to_swp_command(&parse(&["usage", "recalculate"]).command, None).unwrap();
+        assert_eq!(arg(&some, "recalculate"), true);
+        assert_eq!(arg(&some, "force"), false);
+
+        let (_, all) =
+            to_swp_command(&parse(&["usage", "recalculate", "--all"]).command, None).unwrap();
+        assert_eq!(arg(&all, "force"), true);
+    }
+
+    #[test]
+    fn usage_refresh_pricing_is_its_own_action() {
+        let (_, args) =
+            to_swp_command(&parse(&["usage", "refresh-pricing"]).command, None).unwrap();
+        assert_eq!(arg(&args, "refresh_pricing"), true);
+        assert_eq!(arg(&args, "recalculate"), false);
+    }
+
+    #[test]
+    fn a_bare_usage_view_asks_for_no_action() {
+        let (_, args) = to_swp_command(&parse(&["usage"]).command, None).unwrap();
+        for action in [
+            "export_csv",
+            "export_tsv",
+            "recalculate",
+            "force",
+            "refresh_pricing",
+        ] {
+            assert_eq!(arg(&args, action), false, "{action} should be off");
+        }
+    }
+
+    #[test]
+    fn the_character_filter_is_the_one_the_user_selected() {
+        let (_, none) = to_swp_command(&parse(&["usage"]).command, None).unwrap();
+        assert!(none.get("character").is_some_and(serde_json::Value::is_null));
+
+        let (_, ada) = to_swp_command(&parse(&["usage"]).command, Some("ada")).unwrap();
+        assert_eq!(arg(&ada, "character"), "ada");
+    }
+
+    #[test]
     fn parse_usage_no_call_type_flag() {
         let cli = parse(&["usage"]);
         assert_variant!(
@@ -2948,7 +3011,7 @@ mod tests {
     #[test]
     fn usage_last_hours_forwarded() {
         let cli = parse(&["usage", "--last", "4h"]);
-        let (cmd, args) = to_swp_command(&cli.command).unwrap();
+        let (cmd, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(cmd, "usage");
         assert_eq!(arg(&args, "last"), "4h");
     }
@@ -2958,7 +3021,7 @@ mod tests {
         // Wire-level: daemon should see `by_call_type: true` and no
         // `call_type` filter when the user passed the bare flag.
         let cli = parse(&["usage", "--call-type"]);
-        let (cmd, args) = to_swp_command(&cli.command).unwrap();
+        let (cmd, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(cmd, "usage");
         assert_eq!(arg(&args, "by_call_type").as_bool(), Some(true));
         assert!(arg(&args, "call_type").is_null());
@@ -2967,7 +3030,7 @@ mod tests {
     #[test]
     fn usage_call_type_value_sets_filter_not_flag() {
         let cli = parse(&["usage", "--call-type", "message"]);
-        let (_cmd, args) = to_swp_command(&cli.command).unwrap();
+        let (_cmd, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(arg(&args, "call_type"), "message");
         assert!(
             arg(&args, "by_call_type").is_null()
@@ -2985,7 +3048,7 @@ mod tests {
             "--api-key",
             "overflow",
         ]);
-        let (_cmd, args) = to_swp_command(&cli.command).unwrap();
+        let (_cmd, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(arg(&args, "by_kind").as_bool(), Some(true));
         assert_eq!(arg(&args, "by_api_key").as_bool(), Some(true));
         assert_eq!(arg(&args, "api_key"), "overflow");
@@ -2994,7 +3057,7 @@ mod tests {
     #[test]
     fn usage_budget_flag_forwarded() {
         let cli = parse(&["usage", "--budget"]);
-        let (_cmd, args) = to_swp_command(&cli.command).unwrap();
+        let (_cmd, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(arg(&args, "budget").as_bool(), Some(true));
     }
 
@@ -3081,7 +3144,7 @@ mod tests {
             kind: CompleteKind::Models,
         };
         assert!(
-            to_swp_command(&cmd).is_none(),
+            to_swp_command(&cmd, None).is_none(),
             "complete is a client-side helper, not an SWP command",
         );
     }
