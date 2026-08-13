@@ -68,7 +68,7 @@ use tracing_subscriber::EnvFilter;
 use app::UsageBudget;
 use app::{
     AltChoice, App, Block, ConnectionStatus, ConversationEntry, EffectiveSamplerSnapshot,
-    InputState, Turn, TurnState, UsageDisplay, UsageLevel, UsageScope,
+    InputState, SubagentSection, Turn, TurnState, UsageDisplay, UsageLevel, UsageScope,
 };
 use connection::{ConnCommand, ConnEvent};
 use input::Action;
@@ -709,6 +709,111 @@ fn model_settings_conn_command(_app: &App, rid: Option<String>) -> ConnCommand {
     }))
 }
 
+/// Ask the daemon for the stored runs behind a batch of `ask_<name>` calls.
+fn subagent_trace_conn_command(ids: Vec<String>) -> ConnCommand {
+    ConnCommand::Send(ClientMessage::Command(Command {
+        rid: None,
+        name: "subagent_trace".into(),
+        args: serde_json::json!({ "ids": ids }),
+    }))
+}
+
+/// `ask_<name>` calls in the loaded window whose run has not been asked for yet.
+///
+/// Ids already answered — including answered with nothing — are skipped, so a
+/// conversation with no delegations, or one whose runs predate trace capture,
+/// settles at zero requests rather than re-asking on every rebuild.
+fn missing_subagent_trace_ids(app: &App) -> Vec<String> {
+    let mut ids = Vec::new();
+    for entry in &app.entries {
+        let Some(turn) = entry.as_turn() else {
+            continue;
+        };
+        for block in &turn.blocks {
+            let Block::ToolUse {
+                tool_id, tool_name, ..
+            } = block
+            else {
+                continue;
+            };
+            if tool_name.starts_with("ask_")
+                && !app.subagent_traces.contains_key(tool_id)
+                && !ids.contains(tool_id)
+            {
+                ids.push(tool_id.clone());
+            }
+        }
+    }
+    ids
+}
+
+/// The fetch command for any unfetched runs on screen, or nothing to send.
+///
+/// Remembers what it asked for: the reply says which runs exist, not which were
+/// requested, and only the difference tells us an id has no stored run.
+pub(crate) fn subagent_trace_fetch(app: &mut App) -> Vec<ConnCommand> {
+    if !app.show_subagent {
+        return vec![];
+    }
+    let ids = missing_subagent_trace_ids(app);
+    if ids.is_empty() {
+        return vec![];
+    }
+    app.pending_subagent_trace_ids
+        .extend(ids.iter().cloned());
+    vec![subagent_trace_conn_command(ids)]
+}
+
+/// Absorb a `subagent_trace` reply: expand each run into display blocks, file
+/// it under the parent call's id, and mark the ids that came back empty so
+/// they are not asked for again.
+fn absorb_subagent_traces(app: &mut App, data: &serde_json::Value) {
+    if let Some(entries) = data.get("entries").and_then(|v| v.as_array()) {
+        for entry in entries {
+            let (Some(parent), Some(name)) = (
+                entry.get("parent_tool_use_id").and_then(|v| v.as_str()),
+                entry.get("subagent").and_then(|v| v.as_str()),
+            ) else {
+                continue;
+            };
+            let messages: Vec<Message> = entry
+                .get("messages")
+                .and_then(|v| v.as_array())
+                .map(|msgs| {
+                    msgs.iter()
+                        .filter_map(|m| serde_json::from_value::<Message>(m.clone()).ok())
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            // The run's calls and their results live in separate messages, so
+            // the name map has to span all of them for results to be labelled.
+            let content: Vec<ContentBlock> = messages
+                .into_iter()
+                .flat_map(|m| m.content_blocks)
+                .collect();
+            let names = tool_name_map(&content);
+            let blocks = blocks_from_content(&content, &names);
+            drop(app.subagent_traces.insert(
+                parent.to_owned(),
+                Some(SubagentSection {
+                    name: name.to_owned(),
+                    blocks,
+                }),
+            ));
+        }
+    }
+
+    for id in std::mem::take(&mut app.pending_subagent_trace_ids) {
+        if !app.subagent_traces.contains_key(&id) {
+            drop(app.subagent_traces.insert(id, None));
+        }
+    }
+
+    splice_subagent_sections(&mut app.entries, &app.subagent_traces);
+    app.history_version = app.history_version.wrapping_add(1);
+}
+
 /// Query the daemon for current usage-budget statuses. Cheap to fire on each
 /// connect and after every completed generation, keeping the on-screen usage
 /// chip fresh without waiting for a `UsageWarning` push.
@@ -871,6 +976,13 @@ async fn handle_action(
         }
         Action::SavePrefs => {
             save_prefs(app);
+            Ok(true)
+        }
+        Action::SendAndSavePrefs(cmds) => {
+            save_prefs(app);
+            if send_enabled {
+                send_conn_commands(cmd_tx, cmds).await;
+            }
             Ok(true)
         }
         Action::Redraw => Ok(true),
@@ -1114,17 +1226,19 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
             app.set_active_model(config.get("active_model").and_then(|v| v.as_str()));
 
             // Load any history from the handshake
-            rebuild_entries_from_history(history, active_start, &mut app.entries);
+            rebuild_entries_from_history(app, history, active_start);
             reset_history_paging(app);
             transmit_entry_images(app);
 
             app.set_status("connected");
+            let mut cmds = if has_selected_character {
+                vec![usage_budget_conn_command()]
+            } else {
+                vec![]
+            };
+            cmds.extend(subagent_trace_fetch(app));
             UiEffect {
-                cmds: if has_selected_character {
-                    vec![usage_budget_conn_command()]
-                } else {
-                    vec![]
-                },
+                cmds,
                 redraw: RedrawEffect::Immediate,
             }
         }
@@ -1173,12 +1287,9 @@ fn build_history_entries(messages: Vec<Message>, active_start: usize) -> Vec<Con
 
 /// Replace the display log wholesale from a history snapshot. Used when no
 /// stream is in flight (handshake, `:log`).
-fn rebuild_entries_from_history(
-    messages: Vec<Message>,
-    active_start: usize,
-    entries: &mut Vec<ConversationEntry>,
-) {
-    *entries = build_history_entries(messages, active_start);
+fn rebuild_entries_from_history(app: &mut App, messages: Vec<Message>, active_start: usize) {
+    app.entries = build_history_entries(messages, active_start);
+    splice_subagent_sections(&mut app.entries, &app.subagent_traces);
 }
 
 /// Apply a History snapshot while reconciling the in-flight turn by `msg_id`.
@@ -1235,6 +1346,8 @@ fn reconcile_streaming_turn(app: &mut App, messages: Vec<Message>, active_start:
             turn.metadata = prev_metadata;
         }
     }
+
+    splice_subagent_sections(&mut app.entries, &app.subagent_traces);
 }
 
 /// Sum a stream phase's metadata onto an accumulating slot. Tokens and total
@@ -1317,7 +1430,128 @@ fn prepend_history_page(app: &mut App, data: &serde_json::Value) {
         drop(app.entries.splice(0..0, page_entries));
     }
 
+    splice_subagent_sections(&mut app.entries, &app.subagent_traces);
     app.history_version = app.history_version.wrapping_add(1);
+}
+
+/// Re-insert stored sub-agent sections into rebuilt turns.
+///
+/// A History rebuild yields the persisted turn, where an `ask_<name>` call is
+/// just a tool call and its result — the nested run was never part of the
+/// payload. This puts it back, in the same block order the live path produces:
+/// `ToolUse(ask_x)`, `SubagentBegin`, nested frames, `SubagentEnd`,
+/// `ToolResult(ask_x)`.
+///
+/// Idempotent, and deliberately so: it runs after every rebuild, and the
+/// in-flight turn already carries a live section that must not be doubled.
+fn splice_subagent_sections(
+    entries: &mut [ConversationEntry],
+    traces: &std::collections::HashMap<String, Option<SubagentSection>>,
+) {
+    if traces.is_empty() {
+        return;
+    }
+    for entry in entries {
+        let ConversationEntry::Turn(turn) = entry else {
+            continue;
+        };
+        if turn.is_streaming() {
+            continue;
+        }
+        let mut i = 0;
+        while i < turn.blocks.len() {
+            let Block::ToolUse {
+                tool_id, tool_name, ..
+            } = &turn.blocks[i]
+            else {
+                i += 1;
+                continue;
+            };
+            if !tool_name.starts_with("ask_") {
+                i += 1;
+                continue;
+            }
+            if matches!(turn.blocks.get(i + 1), Some(Block::SubagentBegin(_))) {
+                i += 1;
+                continue;
+            }
+            let Some(Some(section)) = traces.get(tool_id.as_str()) else {
+                i += 1;
+                continue;
+            };
+
+            let mut nested = Vec::with_capacity(section.blocks.len() + 2);
+            nested.push(Block::SubagentBegin(section.name.clone()));
+            nested.extend(section.blocks.iter().cloned());
+            nested.push(Block::SubagentEnd(section.name.clone()));
+            let inserted = nested.len();
+            drop(turn.blocks.splice(i + 1..i + 1, nested));
+            i += inserted + 1;
+        }
+    }
+}
+
+/// Map tool_use_id → tool_name so `ToolResult` blocks can be labelled.
+///
+/// Scoped by the caller, not by the message: a conversation turn carries a call
+/// and its result in one merged message, but a stored sub-agent run keeps them
+/// in separate messages, and a per-message map there would label every nested
+/// result `"tool"`.
+fn tool_name_map(blocks: &[ContentBlock]) -> std::collections::HashMap<&str, &str> {
+    blocks
+        .iter()
+        .filter_map(|b| match b {
+            ContentBlock::ToolUse { id, name, .. } => Some((id.as_str(), name.as_str())),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Convert wire `content_blocks` into display blocks, preserving order.
+fn blocks_from_content(
+    content_blocks: &[ContentBlock],
+    tool_names: &std::collections::HashMap<&str, &str>,
+) -> Vec<Block> {
+    let mut blocks: Vec<Block> = Vec::new();
+    for block in content_blocks {
+        match block {
+            ContentBlock::Thinking { thinking, .. } => {
+                if !thinking.is_empty() {
+                    blocks.push(Block::Thinking(thinking.clone()));
+                }
+            }
+            ContentBlock::RedactedThinking { .. } => {
+                // Carries no readable content; skip rather than render a
+                // useless "[redacted thinking]" placeholder.
+            }
+            ContentBlock::ToolUse { id, name, input } => {
+                blocks.push(Block::ToolUse {
+                    tool_id: id.clone(),
+                    tool_name: name.clone(),
+                    input: input.clone(),
+                });
+            }
+            ContentBlock::ToolResult {
+                tool_use_id,
+                content,
+                is_error,
+            } => {
+                let name = tool_names.get(tool_use_id.as_str()).unwrap_or(&"tool");
+                blocks.push(Block::ToolResult {
+                    tool_id: tool_use_id.clone(),
+                    tool_name: (*name).to_owned(),
+                    output: content.clone(),
+                    is_error: *is_error,
+                });
+            }
+            ContentBlock::Text { text } => {
+                if !text.trim().is_empty() {
+                    blocks.push(Block::Text(text.clone()));
+                }
+            }
+        }
+    }
+    blocks
 }
 
 /// Expand a protocol Message into one `ConversationEntry`.
@@ -1351,55 +1585,8 @@ fn expand_msg(msg: Message, entries: &mut Vec<ConversationEntry>) {
         return;
     }
 
-    // Build tool_use_id → tool_name map for ToolResult labels.
-    let tool_names: std::collections::HashMap<&str, &str> = msg
-        .content_blocks
-        .iter()
-        .filter_map(|b| match b {
-            ContentBlock::ToolUse { id, name, .. } => Some((id.as_str(), name.as_str())),
-            _ => None,
-        })
-        .collect();
-
-    let mut blocks: Vec<Block> = Vec::new();
-    for block in &msg.content_blocks {
-        match block {
-            ContentBlock::Thinking { thinking, .. } => {
-                if !thinking.is_empty() {
-                    blocks.push(Block::Thinking(thinking.clone()));
-                }
-            }
-            ContentBlock::RedactedThinking { .. } => {
-                // Carries no readable content; skip rather than render a
-                // useless "[redacted thinking]" placeholder.
-            }
-            ContentBlock::ToolUse { id, name, input } => {
-                blocks.push(Block::ToolUse {
-                    tool_id: id.clone(),
-                    tool_name: name.clone(),
-                    input: input.clone(),
-                });
-            }
-            ContentBlock::ToolResult {
-                tool_use_id,
-                content,
-                is_error,
-            } => {
-                let name = tool_names.get(tool_use_id.as_str()).unwrap_or(&"tool");
-                blocks.push(Block::ToolResult {
-                    tool_id: tool_use_id.clone(),
-                    tool_name: name.to_string(),
-                    output: content.clone(),
-                    is_error: *is_error,
-                });
-            }
-            ContentBlock::Text { text } => {
-                if !text.trim().is_empty() {
-                    blocks.push(Block::Text(text.clone()));
-                }
-            }
-        }
-    }
+    let tool_names = tool_name_map(&msg.content_blocks);
+    let blocks = blocks_from_content(&msg.content_blocks, &tool_names);
 
     entries.push(ConversationEntry::Turn(Turn {
         role: msg.role,
@@ -1725,7 +1912,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                             .get("active_start")
                             .and_then(|v| v.as_u64())
                             .unwrap_or(0) as usize;
-                        rebuild_entries_from_history(history, active_start, &mut app.entries);
+                        rebuild_entries_from_history(app, history, active_start);
                         app.history_next_before = co
                             .data
                             .get("next_before")
@@ -1741,10 +1928,21 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         if app.auto_scroll {
                             app.scroll_to_bottom();
                         }
+                        return UiEffect {
+                            cmds: subagent_trace_fetch(app),
+                            redraw: RedrawEffect::Immediate,
+                        };
                     }
                 }
                 "history_page" => {
                     prepend_history_page(app, &co.data);
+                    return UiEffect {
+                        cmds: subagent_trace_fetch(app),
+                        redraw: RedrawEffect::Immediate,
+                    };
+                }
+                "subagent_trace" => {
+                    absorb_subagent_traces(app, &co.data);
                     return UiEffect::redraw(RedrawEffect::Immediate);
                 }
                 "list_characters" => {
@@ -1788,6 +1986,9 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         app.character_name = name.to_string();
                         persist_active_character(name);
                     }
+                    // Traces are per character, and the incoming history is
+                    // someone else's conversation.
+                    app.subagent_traces.clear();
                     app.effective_sampler = None;
                     if co.data.get("active_model").is_some_and(|v| v.is_null()) {
                         app.set_active_model(None);
@@ -2160,7 +2361,10 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             // value (e.g. :edit on an earlier message).
             app.history_version = app.history_version.wrapping_add(1);
             transmit_entry_images(app);
-            RedrawEffect::Immediate
+            return UiEffect {
+                cmds: subagent_trace_fetch(app),
+                redraw: RedrawEffect::Immediate,
+            };
         }
 
         // Ignore unexpected messages
@@ -2405,6 +2609,197 @@ mod redraw_tests {
             .iter()
             .filter(|e| matches!(e, ConversationEntry::System { .. }))
             .count()
+    }
+
+    /// A persisted assistant turn that delegated: the `ask_` call and its
+    /// result, adjacent, exactly as a History rebuild delivers them.
+    fn delegating_turn(parent_id: &str) -> ConversationEntry {
+        ConversationEntry::Turn(Turn {
+            role: Role::Assistant,
+            msg_id: Some("m_1".into()),
+            blocks: vec![
+                Block::ToolUse {
+                    tool_id: parent_id.into(),
+                    tool_name: "ask_research".into(),
+                    input: serde_json::json!({ "query": "when did Sam leave?" }),
+                },
+                Block::ToolResult {
+                    tool_id: parent_id.into(),
+                    tool_name: "ask_research".into(),
+                    output: "June".into(),
+                    is_error: false,
+                },
+            ],
+            images: vec![],
+            timestamp: "2026-08-13T10:00:00+10:00".into(),
+            state: TurnState::Complete,
+            metadata: None,
+        })
+    }
+
+    fn trace_output(parent_id: &str) -> ServerMessage {
+        ServerMessage::CommandOutput(CommandOutput {
+            rid: None,
+            name: "subagent_trace".into(),
+            data: serde_json::json!({
+                "character": "Rhia",
+                "entries": [{
+                    "ts": "2026-08-13T10:00:00+10:00",
+                    "subagent": "research",
+                    "parent_tool_use_id": parent_id,
+                    "model": "cheap",
+                    "messages": [
+                        {
+                            "msg_id": "s_1",
+                            "role": "assistant",
+                            "content": "",
+                            "images": [],
+                            "content_blocks": [
+                                { "type": "thinking", "thinking": "memory first" },
+                                { "type": "tool_use", "id": "s1", "name": "search_memory",
+                                  "input": { "query": "Sam" } }
+                            ],
+                            "timestamp": "2026-08-13T10:00:00+10:00"
+                        },
+                        {
+                            "msg_id": "s_2",
+                            "role": "user",
+                            "content": "",
+                            "images": [],
+                            "content_blocks": [
+                                { "type": "tool_result", "tool_use_id": "s1",
+                                  "content": "June — Sam took the small room", "is_error": false }
+                            ],
+                            "timestamp": "2026-08-13T10:00:01+10:00"
+                        }
+                    ],
+                    "result": "June"
+                }]
+            }),
+        })
+    }
+
+    fn turn_blocks(app: &App) -> &[Block] {
+        &app.entries
+            .first()
+            .and_then(ConversationEntry::as_turn)
+            .expect("a turn")
+            .blocks
+    }
+
+    #[test]
+    fn a_stored_run_is_spliced_between_the_ask_call_and_its_result() {
+        let mut app = App::default();
+        app.entries.push(delegating_turn("toolu_p1"));
+        app.pending_subagent_trace_ids.push("toolu_p1".into());
+
+        let _ = handle_server_message(&mut app, trace_output("toolu_p1"));
+
+        let kinds: Vec<&str> = turn_blocks(&app)
+            .iter()
+            .map(|b| match b {
+                Block::ToolUse { .. } => "use",
+                Block::ToolResult { .. } => "result",
+                Block::SubagentBegin(_) => "begin",
+                Block::SubagentEnd(_) => "end",
+                Block::Thinking(_) => "thinking",
+                Block::Text(_) => "text",
+            })
+            .collect();
+        // The live path's order, rebuilt from storage.
+        assert_eq!(
+            kinds,
+            vec!["use", "begin", "thinking", "use", "result", "end", "result"]
+        );
+    }
+
+    #[test]
+    fn a_nested_result_is_labelled_from_a_call_in_another_message() {
+        let mut app = App::default();
+        app.entries.push(delegating_turn("toolu_p1"));
+
+        let _ = handle_server_message(&mut app, trace_output("toolu_p1"));
+
+        // The sub-agent's call and its result arrive in separate messages, so a
+        // per-message name map would render this as the anonymous "tool".
+        let labelled = turn_blocks(&app).iter().any(|b| {
+            matches!(b, Block::ToolResult { tool_name, .. } if tool_name == "search_memory")
+        });
+        assert!(labelled, "nested result must carry its call's name");
+    }
+
+    #[test]
+    fn splicing_twice_does_not_duplicate_the_section() {
+        let mut app = App::default();
+        app.entries.push(delegating_turn("toolu_p1"));
+
+        let _ = handle_server_message(&mut app, trace_output("toolu_p1"));
+        let after_first = turn_blocks(&app).len();
+        splice_subagent_sections(&mut app.entries, &app.subagent_traces);
+
+        assert_eq!(
+            turn_blocks(&app).len(),
+            after_first,
+            "the splice runs after every rebuild; it must be idempotent"
+        );
+    }
+
+    #[test]
+    fn an_id_with_no_stored_run_is_not_requested_again() {
+        let mut app = App::default();
+        app.entries.push(delegating_turn("toolu_p1"));
+        assert_eq!(
+            missing_subagent_trace_ids(&app),
+            vec!["toolu_p1".to_owned()],
+            "an unfetched ask_ call is worth one request"
+        );
+        app.pending_subagent_trace_ids.push("toolu_p1".into());
+
+        // A run that predates trace capture: the daemon has nothing for it.
+        let _ = handle_server_message(
+            &mut app,
+            ServerMessage::CommandOutput(CommandOutput {
+                rid: None,
+                name: "subagent_trace".into(),
+                data: serde_json::json!({ "character": "Rhia", "entries": [] }),
+            }),
+        );
+
+        assert!(
+            missing_subagent_trace_ids(&app).is_empty(),
+            "an empty answer must be remembered, or every rebuild re-asks forever"
+        );
+    }
+
+    #[test]
+    fn nothing_is_fetched_while_the_section_is_toggled_off() {
+        let mut app = App {
+            show_subagent: false,
+            ..Default::default()
+        };
+        app.entries.push(delegating_turn("toolu_p1"));
+
+        assert!(subagent_trace_fetch(&mut app).is_empty());
+        assert!(app.pending_subagent_trace_ids.is_empty());
+
+        app.show_subagent = true;
+        assert_eq!(subagent_trace_fetch(&mut app).len(), 1);
+    }
+
+    #[test]
+    fn a_turn_without_delegation_costs_no_request() {
+        let mut app = App::default();
+        app.entries.push(ConversationEntry::Turn(Turn {
+            role: Role::Assistant,
+            msg_id: Some("m_1".into()),
+            blocks: vec![Block::Text("no tools here".into())],
+            images: vec![],
+            timestamp: "2026-08-13T10:00:00+10:00".into(),
+            state: TurnState::Complete,
+            metadata: None,
+        }));
+
+        assert!(subagent_trace_fetch(&mut app).is_empty());
     }
 
     #[test]

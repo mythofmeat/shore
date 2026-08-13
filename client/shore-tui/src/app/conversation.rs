@@ -12,7 +12,8 @@ pub(crate) enum Block {
     Text(String),
     Thinking(String),
     ToolUse {
-        #[expect(dead_code, reason = "stored for protocol fidelity; TUI renders by tool_name")]
+        /// Also the key a stored sub-agent run is spliced in under: the trace
+        /// the daemon keeps for an `ask_<name>` call is filed by this id.
         tool_id: String,
         tool_name: String,
         input: serde_json::Value,
@@ -27,12 +28,20 @@ pub(crate) enum Block {
     /// Opens a nested sub-agent section: the daemon delegated to an
     /// `ask_<name>` loop and the blocks that follow (until the matching
     /// [`Block::SubagentEnd`]) are that sub-agent's thinking/text/tool frames.
-    /// Streamed live for transparency and gated by `show_subagent`; not part of
-    /// the persisted transcript, so a History rebuild collapses the section back
-    /// to the primary `ask_<name>` tool call/result.
+    /// Gated by `show_subagent`. Two origins, one shape: streamed live during
+    /// the run, then spliced back in from the daemon's stored trace after a
+    /// History rebuild, which is what keeps the section in scrollback.
     SubagentBegin(String),
     /// Closes the section opened by [`Block::SubagentBegin`].
     SubagentEnd(String),
+}
+
+/// A sub-agent run recovered from the daemon's stored trace, ready to splice
+/// under the `ask_<name>` call that produced it.
+#[derive(Clone, Debug)]
+pub(crate) struct SubagentSection {
+    pub name: String,
+    pub blocks: Vec<Block>,
 }
 
 /// Whether a turn is finalized or still receiving streamed deltas.

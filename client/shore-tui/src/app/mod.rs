@@ -304,6 +304,15 @@ pub(crate) struct App {
     pub show_thinking: bool,
     pub show_tools: bool,
     pub show_subagent: bool,
+    /// Stored sub-agent runs for the loaded window, keyed by the parent
+    /// `ask_<name>` tool_use id. `None` records "asked, the daemon had
+    /// nothing" — a run that predates trace capture would otherwise be
+    /// re-requested on every history rebuild forever.
+    pub subagent_traces: std::collections::HashMap<String, Option<SubagentSection>>,
+    /// Ids sent in a `subagent_trace` request that has not been answered yet.
+    /// The reply lists the runs that exist, so this is the only record of which
+    /// ids were asked about and came back with nothing.
+    pub pending_subagent_trace_ids: Vec<String>,
     pub show_images: bool,
     pub show_timestamps: bool,
     pub show_metadata: bool,
@@ -382,6 +391,8 @@ impl Default for App {
             show_thinking: true,
             show_tools: true,
             show_subagent: true,
+            subagent_traces: std::collections::HashMap::new(),
+            pending_subagent_trace_ids: Vec::new(),
             show_images: true,
             show_timestamps: false,
             show_metadata: true,
