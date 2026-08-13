@@ -74,7 +74,12 @@ export interface CallAttempt {
   id: string;
 }
 
-type CallObserver = (ctx: CallContext, model: string, callType: string) => void;
+type CallObserver = (
+  ctx: CallContext,
+  model: string,
+  callType: string,
+  req: SidecarRequest,
+) => void;
 
 let observer: CallObserver | undefined;
 
@@ -135,7 +140,7 @@ function tryRecord(
   const finishReason = call.finish_reason;
   if (observer === undefined || !callLanded(finishReason)) return;
   try {
-    observer(ctx, req.model, call.call_type ?? ctx.call_type);
+    observer(ctx, req.model, call.call_type ?? ctx.call_type, req);
   } catch (e) {
     console.error(`shore: call observer failed: ${String(e)}`);
   }

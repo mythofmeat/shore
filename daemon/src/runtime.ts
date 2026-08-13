@@ -23,6 +23,7 @@ import { withResolvedCredential } from "./llm/generate.ts";
 import { generateImage } from "./llm/image_generate.ts";
 import type { SidecarProvider, SidecarRequest } from "./llm/types.ts";
 import { installWireCapture } from "./llm/wire_capture.ts";
+import { prefixFingerprint } from "./cache/keepalive.ts";
 import { McpClient, type McpServerSpec } from "./mcp/client.ts";
 import { NotificationService } from "./notifications.ts";
 import { McpRegistry, type McpServerConfigView } from "./tools/mcp_registry.ts";
@@ -139,8 +140,14 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
 }
 
 export function startRuntimeClocks(runtime: ShoreRuntime): { stop: () => void } {
-  setCallObserver((ctx, model, callType) => {
-    runtime.keepalive.observe(ctx.character, model, callType, ctx.keepalive_max_secs);
+  setCallObserver((ctx, model, callType, req) => {
+    runtime.keepalive.observe(
+      ctx.character,
+      model,
+      callType,
+      ctx.keepalive_max_secs,
+      prefixFingerprint(req),
+    );
   });
   const keepaliveTimer = startKeepaliveTimer(runtime.keepalive);
   const autonomyTimer = startAutonomyTimer(runtime.autonomy);
