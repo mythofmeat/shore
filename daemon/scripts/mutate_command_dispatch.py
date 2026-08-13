@@ -64,8 +64,8 @@ MUTANTS = [
      "  }",
      "  void 0;"),
     ("restart: the forensics switch is not reported", RESTART,
-     "  if (a.advanced.cache_forensics !== b.advanced.cache_forensics) {\n"
-     '    changes.push("[advanced].cache_forensics");\n'
+     "  if (a.cache.forensics !== b.cache.forensics) {\n"
+     '    changes.push("[cache].forensics");\n'
      "  }",
      "  void 0;"),
     ("restart: the sidecar is not reported", RESTART,

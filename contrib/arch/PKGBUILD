@@ -1,6 +1,6 @@
 pkgbase=shore
 pkgname=('shore-cli' 'shore-daemon' 'shore-tui')
-pkgver=0
+pkgver=0.0.0
 pkgrel=1
 pkgdesc="Persistent AI character engine"
 arch=('x86_64')
@@ -9,44 +9,41 @@ license=('MIT' 'Apache-2.0')
 makedepends=('rust' 'bun' 'git')
 options=(!lto !debug strip)
 
-pkgver() {
-    cd "$srcdir"
-    if git rev-parse --git-dir > /dev/null 2>&1; then
-        git describe --tags --abbrev=0 | sed 's/^v//; s/-/_/'
-    else
-        echo 0
-    fi
+setup() {
+    cd "$srcdir/../../.."
 }
 
 build() {
-    CARGO_PACKAGES=('shore-cli' 'shore-tui')
-
-    for package in "${CARGO_PACKAGES[@]}"; do
-        cd "$srcdir/../../../client/$package"
-        cargo build --release
-    done
-
-    cd "$srcdir/../../../daemon"
-    bun install
-    bun run build
+    setup 
+    ( 
+        cd "./client/"
+        cargo build --release --bin shore
+        cargo build --release --bin shore-tui
+    )
+    (
+        cd "./daemon"
+        bun install
+        bun run build
+    )
 }
 
 check() {
-    CARGO_PACKAGES=('shore-cli' 'shore-tui')
-
-    for package in "${CARGO_PACKAGES[@]}"; do
-        cd "$srcdir/../../../client/$package"
-        cargo test
-    done
-
-    cd "$srcdir/../../../daemon"
-    bun test
+    setup 
+    (
+        cd "./client"
+        cargo test --workspace
+    )
+    (
+        cd "./daemon"
+        bun test
+    )
 }
 
 _install_licenses() {
-    install -Dm644 "$srcdir/../../../LICENSE-MIT" \
+    setup
+    install -Dm644 "./LICENSE-MIT" \
         "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
-    install -Dm644 "$srcdir/../../../LICENSE-APACHE-2.0" \
+    install -Dm644 "./LICENSE-APACHE-2.0" \
         "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE-2.0"
 }
 
@@ -58,19 +55,20 @@ package_shore-cli() {
         'libnotify: desktop notifications via `shore notify`'
     )
 
-    install -Dm755 "$srcdir/../../../client/target/release/shore" "$pkgdir/usr/bin/shore"
+    setup
+    install -Dm755 "./client/target/release/shore" "$pkgdir/usr/bin/shore"
 
-    install -Dm644 "$srcdir/../../../contrib/systemd/shore-notify.service" \
+    install -Dm644 "./contrib/systemd/shore-notify.service" \
         "$pkgdir/usr/lib/systemd/user/shore-notify.service"
 
     install -dm755 "$pkgdir/usr/share/fish/vendor_completions.d"
-    "$srcdir/../../../client/target/release/shore" completions fish \
+    "./client/target/release/shore" completions fish \
         > "$pkgdir/usr/share/fish/vendor_completions.d/shore.fish"
     install -dm755 "$pkgdir/usr/share/bash-completion/completions"
-    "$srcdir/../../../client/target/release/shore" completions bash \
+    "./client/target/release/shore" completions bash \
         > "$pkgdir/usr/share/bash-completion/completions/shore"
     install -dm755 "$pkgdir/usr/share/zsh/site-functions"
-    "$srcdir/../../../client/target/release/shore" completions zsh \
+    "./client/target/release/shore" completions zsh \
         > "$pkgdir/usr/share/zsh/site-functions/_shore"
 
     _install_licenses
@@ -83,10 +81,11 @@ package_shore-daemon() {
     optdepends=('shore-cli: CLI client'
                 'shore-tui: terminal chat client')
 
-    install -Dm755 "$srcdir/../../../daemon/dist/shore-daemon" \
+    setup
+    install -Dm755 "./daemon/dist/shore-daemon" \
         "$pkgdir/usr/bin/shore-daemon"
 
-    install -dm755 "$pkgdir/usr/lib/systemd/user" \
+    install -Dm755 "./contrib/systemd/shore-daemon.service" \
         "$pkgdir/usr/lib/systemd/user/shore-daemon.service"
     chmod 644 "$pkgdir/usr/lib/systemd/user/shore-daemon.service"
 
@@ -98,8 +97,9 @@ package_shore-tui() {
     depends=('gcc-libs' 'glibc')
     optdepends=('wl-clipboard: ctrl+v image paste from clipboard (Wayland)')
 
-    install -Dm755 "$srcdir/../../../client/target/release/shore-tui" "$pkgdir/usr/bin/shore-tui"
+    setup
+
+    install -Dm755 "./client/target/release/shore-tui" "$pkgdir/usr/bin/shore-tui"
 
     _install_licenses
 }
-

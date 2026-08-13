@@ -41,6 +41,14 @@ export class CacheKeepalive {
     this.#maxIdle = maxIdleMs;
   }
 
+  get nextPingAt(): number | undefined {
+    return this.#nextPingAt;
+  }
+
+  get interval(): number | undefined {
+    return this.#interval;
+  }
+
   #deadline(now: number): number | undefined {
     if (this.#interval === undefined) return undefined;
     const byCadence = now + this.#interval;

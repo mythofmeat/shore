@@ -126,6 +126,11 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
         }
         CliCommand::Alt { .. } => handle_alt_command(&mut conn, &cli.command).await?,
         CliCommand::Character {
+            name: Some(name),
+            new: true,
+            ..
+        } => handle_create_character(&mut conn, name).await?,
+        CliCommand::Character {
             name,
             info: false,
             new: false,
@@ -568,6 +573,7 @@ async fn follow_log_stream(
             | ServerMessage::CacheWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
+            | ServerMessage::ConfigWarning(_)
             | ServerMessage::Unknown => {}
         }
     }
@@ -758,14 +764,6 @@ async fn try_handle_local_only(cli: &Cli) -> Option<Result<(), Box<dyn std::erro
     if matches!(&cli.command, CliCommand::Config { path: true, .. }) {
         return Some(print_config_path(cli).await);
     }
-    if let CliCommand::Character {
-        name: Some(name),
-        new: true,
-        ..
-    } = &cli.command
-    {
-        return Some(handle_create_character(name));
-    }
     if let CliCommand::Complete { kind } = &cli.command {
         // Any failure (daemon down, parse error) ends with empty stdout
         // and a zero exit code so fish falls back to no suggestions.
@@ -834,6 +832,44 @@ async fn handle_switch_character(
     Ok(())
 }
 
+/// Handle `character --new`: the daemon scaffolds, because the daemon owns the
+/// config directory the character has to land in.
+async fn handle_create_character(
+    conn: &mut SWPConnection,
+    name: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let _ignored = conn
+        .send_command("create_character", serde_json::json!({ "name": name }))
+        .await?;
+    let data = recv_command_data(conn).await?;
+
+    let workspace = data
+        .get("workspace_dir")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    cli_out!("Created character scaffold: {workspace}");
+
+    for (file, purpose) in SCAFFOLD_GUIDE {
+        let created = data
+            .get("created_files")
+            .and_then(serde_json::Value::as_array)
+            .is_some_and(|files| files.iter().any(|f| f.as_str() == Some(file)));
+        if created {
+            cli_out!("  {file:<10} {purpose}");
+        }
+    }
+    cli_out!("Switch to it with: shore character {name}");
+    Ok(())
+}
+
+/// What each scaffolded file is for, in the order the prompt assembles them.
+const SCAFFOLD_GUIDE: &[(&str, &str)] = &[
+    ("SOUL.md", "who the character is"),
+    ("USER.md", "who you are, to them"),
+    ("AGENTS.md", "the system prompt (a copy of the built-in one)"),
+    ("TOOLS.md", "extra guidance on using tools"),
+];
+
 /// Handle `list-characters`: query daemon, annotate active character.
 async fn handle_list_characters(
     conn: &mut SWPConnection,
@@ -891,71 +927,6 @@ async fn handle_complete_query(
         }
     }
     Ok(())
-}
-
-/// The directory under a character's config dir holding its workspace, in the
-/// default layout.
-const CHARACTER_WORKSPACE_DIR: &str = "workspace";
-/// The file that defines a character. Its presence is what makes a directory
-/// under `characters/` a character rather than a stray folder.
-const SOUL_FILE: &str = "SOUL.md";
-
-/// Return `{workspace_root}/{name}/`, or `characters/{name}/workspace/` under
-/// `config_dir` when there is no root.
-fn character_workspace_dir_in(
-    workspace_root: Option<&Path>,
-    config_dir: &Path,
-    character_name: &str,
-) -> PathBuf {
-    match workspace_root {
-        Some(root) => root.join(character_name),
-        None => config_dir
-            .join("characters")
-            .join(character_name)
-            .join(CHARACTER_WORKSPACE_DIR),
-    }
-}
-
-/// Create a new character scaffold directory.
-fn handle_create_character(name: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let workspace_root = shore_common::dirs::workspace_root();
-    let workspace_dir = create_character_scaffold(workspace_root.as_deref(), &config_dir(), name)?;
-    cli_out!("Created character scaffold: {}", workspace_dir.display());
-    Ok(())
-}
-
-/// Scaffold `SOUL.md` in the character's workspace — `characters/<name>/workspace/`
-/// under `config_dir`, or `<workspace_root>/<name>/` when one is set.
-///
-/// Errors if the character already exists in either the canonical
-/// (`workspace/SOUL.md`) or legacy (`character.md`) layout, matching what the
-/// daemon counts as a character. Returns the workspace directory, which is
-/// where the file a person is about to edit actually is — with a workspace root
-/// that is no longer under the character's config directory.
-fn create_character_scaffold(
-    workspace_root: Option<&Path>,
-    config_dir: &Path,
-    name: &str,
-) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let char_dir = config_dir.join("characters").join(name);
-    let workspace_dir = character_workspace_dir_in(workspace_root, config_dir, name);
-    let soul_md = workspace_dir.join(SOUL_FILE);
-
-    if soul_md.exists() || char_dir.join("character.md").exists() {
-        return Err(format!(
-            "Character '{}' already exists at {}",
-            name,
-            workspace_dir.display()
-        )
-        .into());
-    }
-
-    std::fs::create_dir_all(&workspace_dir)?;
-    std::fs::write(
-        &soul_md,
-        format!("You are {name}.\n\n<!-- Edit this file to define {name}'s personality and behavior. -->\n"),
-    )?;
-    Ok(workspace_dir)
 }
 
 /// Resolve the Shore config directory.
@@ -1023,6 +994,7 @@ async fn handle_notify(
             | ServerMessage::CacheWarning(_)
             | ServerMessage::ProviderFallbackWarning(_)
             | ServerMessage::UsageWarning(_)
+            | ServerMessage::ConfigWarning(_)
             | ServerMessage::Unknown) => {
                 debug!(?other, "ignoring non-notification event");
             }
@@ -1213,16 +1185,44 @@ fn send_desktop_notification(
     body: &str,
     icon: Option<&Path>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = std::process::Command::new("notify-send");
-    let _ignored = cmd.arg("--app-name=shore");
-    if let Some(icon_path) = icon {
-        _ = cmd.arg("--icon").arg(icon_path);
+    #[cfg(target_os = "macos")]
+    {
+        // Pass user-controlled text as argv so AppleScript never parses it as
+        // source. macOS notifications do not support the Linux icon option.
+        let _ignored = icon;
+        let status = std::process::Command::new("osascript")
+            .args([
+                "-e",
+                "on run argv",
+                "-e",
+                "display notification (item 2 of argv) with title (item 1 of argv)",
+                "-e",
+                "end run",
+                "--",
+                title,
+                body,
+            ])
+            .status()?;
+        return if status.success() {
+            Ok(())
+        } else {
+            Err(format!("osascript exited with status {status}").into())
+        };
     }
-    let status = cmd.arg(title).arg(body).status()?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("notify-send exited with status {status}").into())
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let mut cmd = std::process::Command::new("notify-send");
+        let _ignored = cmd.arg("--app-name=shore");
+        if let Some(icon_path) = icon {
+            _ = cmd.arg("--icon").arg(icon_path);
+        }
+        let status = cmd.arg(title).arg(body).status()?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(format!("notify-send exited with status {status}").into())
+        }
     }
 }
 
@@ -1565,13 +1565,11 @@ async fn recv_streaming_response(
                     output::print_phase(phase);
                 }
             }
-            ServerMessage::ProviderFallbackWarning(w) => {
+            ServerMessage::ProviderFallbackWarning(_)
+            | ServerMessage::UsageWarning(_)
+            | ServerMessage::ConfigWarning(_) => {
                 spinner.clear().await;
-                output::print_provider_fallback_warning(w);
-            }
-            ServerMessage::UsageWarning(w) => {
-                spinner.clear().await;
-                output::print_usage_warning(w);
+                output::print_warning_frame(&msg);
             }
             ServerMessage::Hello(_)
             | ServerMessage::History(_)
@@ -1613,6 +1611,11 @@ async fn recv_command_data(
                         .as_deref()
                         .unwrap_or_else(|| session_display_character()),
                 );
+            }
+            // A `shore config` that saved a file the daemon then refused is
+            // exactly where this has to land, not only in the daemon's log.
+            ServerMessage::ConfigWarning(w) => {
+                output::print_config_warning(w);
             }
             ServerMessage::Hello(_)
             | ServerMessage::History(_)
@@ -2357,49 +2360,6 @@ mod tests {
         assert!(!t.contains_key("set"), "null entries should be dropped");
     }
 
-    #[test]
-    fn create_character_scaffolds_workspace_layout() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let workspace_dir = super::create_character_scaffold(None, dir.path(), "ada")
-            .expect("scaffold should succeed");
-        let char_dir = dir.path().join("characters").join("ada");
-        assert_eq!(workspace_dir, char_dir.join(super::CHARACTER_WORKSPACE_DIR));
-        let content = std::fs::read_to_string(workspace_dir.join(super::SOUL_FILE))
-            .expect("SOUL.md should exist");
-        assert!(content.starts_with("You are ada."));
-        assert!(
-            !char_dir.join("character.md").exists(),
-            "legacy character.md should not be written"
-        );
-    }
-
-    #[test]
-    fn create_character_scaffolds_into_the_workspace_root() {
-        // The whole point of `SHORE_WORKSPACE_DIR`: nothing is written under
-        // the config directory, so a character's files can live on a disk the
-        // config tree knows nothing about.
-        let config = tempfile::tempdir().expect("tempdir");
-        let workspace = tempfile::tempdir().expect("tempdir");
-        let workspace_dir =
-            super::create_character_scaffold(Some(workspace.path()), config.path(), "ada")
-                .expect("scaffold should succeed");
-        assert_eq!(workspace_dir, workspace.path().join("ada"));
-        assert!(workspace_dir.join(super::SOUL_FILE).exists());
-        assert!(
-            !config.path().join("characters").exists(),
-            "the config tree should be untouched"
-        );
-    }
-
-    #[test]
-    fn create_character_rejects_existing_workspace_character() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let _ = super::create_character_scaffold(None, dir.path(), "ada").expect("first create");
-        let err = super::create_character_scaffold(None, dir.path(), "ada")
-            .expect_err("re-create should fail");
-        assert!(err.to_string().contains("already exists"));
-    }
-
     // ── the failure is reported once ────────────────────────────────
 
     /// Drive one command against a mock server that answers with an error.
@@ -2487,16 +2447,5 @@ mod tests {
             "nano"
         );
         assert_eq!(super::resolve_editor(Some(String::new()), None, None), "vi");
-    }
-
-    #[test]
-    fn create_character_rejects_existing_legacy_character() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let char_dir = dir.path().join("characters").join("ada");
-        std::fs::create_dir_all(&char_dir).expect("mkdir");
-        std::fs::write(char_dir.join("character.md"), "You are ada.\n").expect("write");
-        let err = super::create_character_scaffold(None, dir.path(), "ada")
-            .expect_err("create over legacy layout should fail");
-        assert!(err.to_string().contains("already exists"));
     }
 }

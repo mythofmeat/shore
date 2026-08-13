@@ -1,5 +1,8 @@
 FROM alpine:edge AS build
 
+ARG VERSION
+ARG PACKAGE_VERSION
+
 RUN apk add --no-cache alpine-sdk cargo git libstdc++ libgcc unzip curl doas && \
     curl -fsSL https://github.com/oven-sh/bun/releases/latest/download/bun-linux-x64-musl.zip -o /tmp/bun.zip && \
     unzip -q -j /tmp/bun.zip -d /usr/local/bin && \
@@ -15,9 +18,10 @@ RUN adduser -D builder && \
 WORKDIR /src
 COPY --chown=builder:builder . .
 
-RUN git config --system --add safe.directory /src && \
-    sed -i "s/^pkgver=.*/pkgver=$(git describe --tags --abbrev=0 | sed 's/^v//; s/-/_/')/" \
-        contrib/alpine/APKBUILD
+RUN test -n "$VERSION" && \
+    test -n "$PACKAGE_VERSION" && \
+    sed -i "s/^version = \"0.0.0\"/version = \"$VERSION\"/" client/Cargo.toml && \
+    sed -i "s/^pkgver=.*/pkgver=$PACKAGE_VERSION/" contrib/alpine/APKBUILD
 
 USER builder
 WORKDIR /src/contrib/alpine

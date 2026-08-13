@@ -117,9 +117,9 @@ export class TurnAutonomyBridge {
     });
   }
 
-  onCompactionFailed(character: string): void {
+  onCompactionFailed(character: string, retryAt?: number): void {
     this.#after(character, () => {
-      this.#service.onCompactionFailed(character);
+      this.#service.onCompactionFailed(character, retryAt);
     });
   }
 

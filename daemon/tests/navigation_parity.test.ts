@@ -11,6 +11,16 @@
  * generator laid down; the temporary root is masked as `<root>` on both sides,
  * because four of `character_info`'s fields are absolute paths and dropping
  * them would stop pinning which directory each one names.
+ *
+ * # Where `switchCharacter` no longer answers what the Rust did
+ *
+ * Two of the recorded `switch_character` rows are warts the fixture's own notes
+ * call out — an empty name that `join("")` resolves to the characters directory,
+ * and a bare directory that `exists()` accepts but discovery does not. Issue #72
+ * is what they cost: the empty one and `../something` both let a name that is
+ * not a character move the session, and the daemon then wedges on it. Both rows,
+ * plus the traversal the fixture never recorded, are asserted as refusals below
+ * rather than replayed. The recorded rows stay in the JSON as the Rust's answer.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -371,18 +381,6 @@ describe("switchCharacter", () => {
     ["a character that does not exist", "mid", { name: "ghost" }, threeCharacters()],
     ["no name argument", "mid", {}, threeCharacters()],
     ["a non-string name argument is a missing one", "mid", { name: 7 }, threeCharacters()],
-    [
-      "an empty name resolves to the characters directory itself",
-      "mid",
-      { name: "" },
-      threeCharacters(),
-    ],
-    [
-      "an existing directory that is not a discoverable character",
-      "mid",
-      { name: "undiscoverable" },
-      [["config/characters/undiscoverable/"]],
-    ],
   ];
 
   for (const [name, active, args, entries] of cases) {
@@ -391,6 +389,50 @@ describe("switchCharacter", () => {
       await check(row("switch_character", name), world.root, () =>
         switchCharacter(world.config, active, args),
       );
+    });
+  }
+
+  // ── the two rows this side deliberately answers differently ───────────
+
+  const REFUSED: [name: string, args: Record<string, unknown>, entries: Entry[], err: {
+    code: string;
+    message: string;
+  }][] = [
+    [
+      "an empty name resolves to the characters directory itself",
+      { name: "" },
+      threeCharacters(),
+      { code: "invalid_request", message: "Not a usable character name: " },
+    ],
+    [
+      "an existing directory that is not a discoverable character",
+      { name: "undiscoverable" },
+      [["config/characters/undiscoverable/"]],
+      { code: "not_found", message: "Character not found: undiscoverable" },
+    ],
+    [
+      "a name that climbs out of the characters directory",
+      { name: "../prompts" },
+      [...threeCharacters(), ["config/prompts/"]],
+      { code: "invalid_request", message: "Not a usable character name: ../prompts" },
+    ],
+  ];
+
+  for (const [name, args, entries, err] of REFUSED) {
+    test(`refused where the Rust allowed it: ${name}`, async () => {
+      const world = await build(entries);
+      const thrown = (() => {
+        try {
+          switchCharacter(world.config, "mid", args);
+          return undefined;
+        } catch (e) {
+          return e;
+        }
+      })();
+
+      expect(thrown).toBeInstanceOf(CommandError);
+      expect((thrown as CommandError).code).toBe(err.code as never);
+      expect((thrown as CommandError).message).toBe(err.message);
     });
   }
 });

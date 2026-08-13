@@ -68,9 +68,6 @@ const cases = fixture.cases as unknown as Case[];
  * forever.
  */
 const BUN_TOML_NONFINITE = new Set([
-  "NaN spike multiplier passes every guard",
-  "infinite spike multiplier passes",
-  "negative infinite min_cost_usd is rejected",
   "NaN budget cost_usd passes",
 ]);
 
@@ -85,8 +82,21 @@ const BUN_TOML_NONFINITE = new Set([
  */
 const USES_DELETED_DAEMON_KEYS = new Set(["unified config"]);
 
+const USES_DELETED_SPIKE_WARNINGS = new Set([
+  "spike multiplier equal to one is rejected",
+  "spike multiplier just above one passes",
+  "spike min_cost_usd negative is rejected",
+  "spike min_cost_usd zero passes",
+  "NaN spike multiplier passes every guard",
+  "infinite spike multiplier passes",
+  "negative infinite min_cost_usd is rejected",
+]);
+
 const replayable = cases.filter(
-  (c) => !BUN_TOML_NONFINITE.has(c.name) && !USES_DELETED_DAEMON_KEYS.has(c.name),
+  (c) =>
+    !BUN_TOML_NONFINITE.has(c.name) &&
+    !USES_DELETED_DAEMON_KEYS.has(c.name) &&
+    !USES_DELETED_SPIKE_WARNINGS.has(c.name),
 );
 
 /**
@@ -213,6 +223,18 @@ describe("the deleted [daemon] keys", () => {
   });
 });
 
+describe("the deleted [usage.spike_warnings] field", () => {
+  test("old configs are rejected by name", () => {
+    for (const name of USES_DELETED_SPIKE_WARNINGS) {
+      const c = cases.find((x) => x.name === name);
+      expect(c, name).toBeDefined();
+      const { error } = run(c!.toml);
+      expect(error?.kind, name).toBe("parse_app");
+      expect(error?.message, name).toContain("spike_warnings");
+    }
+  });
+});
+
 const RECORDED_DEFAULT_MAX_TURNS = 16;
 
 function withCurrentCompactionDefaults(message: string, toml: string): string {
@@ -261,8 +283,9 @@ describe("parseConfigTable + validateConfig", () => {
  * Nothing in a plausible config writes any of these, and the sidecar has no
  * way to repair a value it never received. It is asserted rather than merely
  * noted because a silent wrong number is exactly the failure that goes
- * unnoticed, and because {@link BUN_TOML_NONFINITE} above should stop excluding
- * cases the moment this changes.
+ * unnoticed. The remaining budget case is excluded through
+ * {@link BUN_TOML_NONFINITE}; deleted spike-warning fields now fail before
+ * their nested values are decoded.
  */
 describe("Bun.TOML.parse non-finite floats", () => {
   test("decodes them wrongly, in these specific ways", () => {

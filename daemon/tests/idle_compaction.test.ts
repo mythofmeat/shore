@@ -225,7 +225,7 @@ describe("runIdleCompaction: the pass", () => {
     expect(await activeIds(characterDir)).toEqual([]);
   });
 
-  test("hands the pass the cached body, so the prefix is the warm one", async () => {
+  test("rebuilds the pass from disk instead of compacting a stale cached body", async () => {
     const { config } = await world();
     const cache = new LastRequestCache();
     cache.set("ada", {
@@ -238,10 +238,9 @@ describe("runIdleCompaction: the pass", () => {
       runIdleCompaction("ada", deps(config, { cache, run: { generate: writingModel(seen) as never } })),
     );
 
-    // The pass prepends the chat request's messages, so the cached body's
-    // marker is visible in what the model was asked. Without it the pass
-    // rebuilds a colder prefix from disk and this message never appears.
-    expect(JSON.stringify(seen[0]?.messages)).toContain("a body only the cache has");
+    const sent = JSON.stringify(seen[0]?.messages);
+    expect(sent).not.toContain("a body only the cache has");
+    expect(sent).toContain("morning");
   });
 });
 

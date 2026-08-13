@@ -182,6 +182,26 @@ export function usageTotals(db: Database, filter: QueryFilter): UsageTotals {
     : totalsFrom(row);
 }
 
+export interface UsageCostEntry {
+  ts: string;
+  total_cost: number;
+}
+
+export function usageCostEntries(
+  db: Database,
+  filter: QueryFilter,
+): UsageCostEntry[] {
+  const { where, values } = buildWhere(filter);
+  const sql = `SELECT ts, COALESCE(total_cost, 0) AS total_cost
+                 FROM calls
+                 ${where}
+                ORDER BY ts ASC`;
+  return rows(db, sql, values).map((r) => ({
+    ts: text(r["ts"]),
+    total_cost: cost(r["total_cost"]) ?? 0,
+  }));
+}
+
 export function usageSummary(
   db: Database,
   filter: QueryFilter,

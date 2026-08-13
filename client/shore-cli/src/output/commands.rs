@@ -288,6 +288,7 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "heartbeat_tick_now" => print_heartbeat_tick_now(data),
         "heartbeat_set_dormant" => print_heartbeat_status_change(data, "dormant"),
         "heartbeat_set_active" => print_heartbeat_status_change(data, "active"),
+        "session_activate" => print_session_activate(data),
         _ => print_command_output_fallback(name, data),
     }
 }
@@ -314,6 +315,7 @@ fn print_call_log(data: &serde_json::Value) {
         } else {
             print_one_call(&mut out, call, width);
         }
+        print_wire_exchanges(&mut out, data.get("wire"), width);
         return;
     }
 
@@ -406,6 +408,66 @@ fn print_one_call(out: &mut impl Write, call: &serde_json::Value, width: usize) 
         _ = writeln!(out);
     }
     print_dim_line(out, "(--json for the full, untruncated payload)");
+}
+
+fn print_wire_exchanges(out: &mut impl Write, wire: Option<&serde_json::Value>, width: usize) {
+    let Some(exchanges) = wire.and_then(serde_json::Value::as_array) else {
+        return;
+    };
+    if exchanges.is_empty() {
+        print_dim_line(out, "(no raw HTTP exchange recorded for this call)");
+        return;
+    }
+
+    write_section_header(
+        out,
+        "wire",
+        &format!("{} HTTP exchange(s)", exchanges.len()),
+        width,
+    );
+    for exchange in exchanges {
+        let status = exchange["status"]
+            .as_u64()
+            .map_or_else(|| "-".to_owned(), |s| s.to_string());
+        write_fg(
+            out,
+            Color::Magenta,
+            &format!(
+                "  #{} {} {}",
+                exchange["seq"].as_u64().unwrap_or(0),
+                exchange["method"].as_str().unwrap_or("?"),
+                exchange["url"].as_str().unwrap_or("?"),
+            ),
+        );
+        _ = writeln!(out);
+        let err = exchange["error"]
+            .as_str()
+            .map_or_else(String::new, |e| format!("  ERROR: {e}"));
+        write_dim(
+            out,
+            &format!(
+                "     -> {} {}  {}ms  {}B up / {}B down{}\n",
+                status,
+                exchange["status_text"].as_str().unwrap_or(""),
+                exchange["duration_ms"].as_u64().unwrap_or(0),
+                exchange["request_bytes"].as_u64().unwrap_or(0),
+                exchange["response_bytes"].as_u64().unwrap_or(0),
+                err,
+            ),
+        );
+        for (label, key) in [
+            ("wire request", "request_body"),
+            ("wire response", "response_body"),
+        ] {
+            let Some(body) = exchange[key].as_str().filter(|b| !b.is_empty()) else {
+                continue;
+            };
+            write_fg(out, Color::Cyan, &format!("  {label}:\n"));
+            _ = writeln!(out, "{}", truncate_display(body, CALL_BODY_PREVIEW));
+        }
+        _ = writeln!(out);
+    }
+    print_dim_line(out, "(--json for the untruncated wire bytes and headers)");
 }
 
 /// Max characters of a single changed chunk shown in a diff.
@@ -646,6 +708,76 @@ fn print_heartbeat_tick_now(data: &serde_json::Value) {
 fn print_heartbeat_status_change(data: &serde_json::Value, status: &str) {
     let character = data["character"].as_str().unwrap_or("?");
     cli_out!("Heartbeat forced {status} for {character}.");
+}
+
+/// One line per clock: what the keepalive did, and where the heartbeat stands.
+/// The `primed` case names the cache write it just paid for, because that
+/// spend is the whole reason activation is a deliberate command.
+fn print_session_activate(data: &serde_json::Value) {
+    let character = data["character"].as_str().unwrap_or("?");
+    if data["registered"].as_bool().unwrap_or(false) {
+        cli_out!("Activated {character}.");
+    } else {
+        cli_out!("{character} was already active.");
+    }
+    cli_out!(
+        "  Keepalive: {}",
+        session_activate_keepalive(&data["keepalive"])
+    );
+    cli_out!(
+        "  Heartbeat: {}",
+        session_activate_heartbeat(&data["heartbeat"])
+    );
+}
+
+fn session_activate_keepalive(k: &serde_json::Value) -> String {
+    let until = |v: &serde_json::Value| {
+        format_duration_compact(v["seconds_until_ping"].as_i64().unwrap_or(0))
+    };
+    match k["status"].as_str().unwrap_or("?") {
+        "primed" => {
+            let written = k["cache_creation_tokens"].as_u64().unwrap_or(0);
+            let read = k["cache_read_tokens"].as_u64().unwrap_or(0);
+            let paid = if written > 0 {
+                format!("wrote {written} cache tokens")
+            } else {
+                format!("read {read} cache tokens, no write")
+            };
+            format!("primed — {paid}; next ping in {}", until(k))
+        }
+        "resumed" => format!("already warm; next ping in {}", until(k)),
+        "off" => "off — this character's model sets cache_keepalive = off".to_owned(),
+        "unavailable" => format!(
+            "not armed — {}",
+            k["detail"]
+                .as_str()
+                .unwrap_or("no cached or rebuildable request")
+        ),
+        "skipped" => format!("not armed — {}", k["detail"].as_str().unwrap_or("skipped")),
+        "failed" => format!(
+            "priming call failed — {}",
+            k["detail"].as_str().unwrap_or("")
+        ),
+        other => other.to_owned(),
+    }
+}
+
+fn session_activate_heartbeat(h: &serde_json::Value) -> String {
+    let Some(state) = h["state"].as_str() else {
+        return "no state (registration failed)".to_owned();
+    };
+    let paused = if h["paused"].as_bool().unwrap_or(false) {
+        ", paused"
+    } else {
+        ""
+    };
+    match h["seconds_until_wake"].as_i64() {
+        Some(secs) => format!(
+            "{state}{paused}, next wake in {}",
+            format_duration_compact(secs)
+        ),
+        None => format!("{state}{paused}, no wake scheduled"),
+    }
 }
 
 /// Print edit confirmation.
@@ -2042,7 +2174,7 @@ fn pace_row(budget: &serde_json::Value) -> Option<String> {
         .map(format_local_ampm)
         .map_or_else(|| "?".into(), |s| ellipsize(&s, TIME_W));
 
-    Some(format!(
+    let row = format!(
         "  \u{2514} {:<PACE_LABEL_W$} {:>5.2}/{:<5.2} {:>6.0}%  {:<15} {:<16} {started:<TIME_W$} {resets:<TIME_W$}",
         format!("{} pace", pace["period"].as_str().unwrap_or("day")),
         current,
@@ -2050,6 +2182,14 @@ fn pace_row(budget: &serde_json::Value) -> Option<String> {
         percent,
         pace["status"].as_str().unwrap_or("ok"),
         acting_now(pace),
+    );
+    let Some(base) = pace["base_allowance"].as_f64() else {
+        return Some(row);
+    };
+    let rollover = pace["rollover"].as_f64().unwrap_or(0.0);
+    let debt = pace["debt_adjustment"].as_f64().unwrap_or(0.0);
+    Some(format!(
+        "{row}\n      base ${base:.2}  + rollover ${rollover:.2}  - debt adjustment ${debt:.2}"
     ))
 }
 
@@ -2065,24 +2205,6 @@ fn acting_now(status: &serde_json::Value) -> &str {
         .as_str()
         .or_else(|| status["action"].as_str())
         .unwrap_or("warn")
-}
-
-fn print_spike_warnings(data: &serde_json::Value) {
-    let warnings = data["spike_warnings"].as_array();
-    if warnings.is_none_or(Vec::is_empty) {
-        return;
-    }
-    cli_out!("\nSpike Warnings:");
-    if let Some(rows) = warnings {
-        for warning in rows {
-            cli_out!(
-                "  {}",
-                warning["message"]
-                    .as_str()
-                    .unwrap_or("Usage spike detected.")
-            );
-        }
-    }
 }
 
 fn usage_display_date(data: &serde_json::Value) -> String {
@@ -2193,7 +2315,6 @@ pub(crate) fn print_usage(data: &serde_json::Value) {
             let timezone = data["timezone"].as_str().unwrap_or("local");
             cli_out!("Shore Usage Budgets - {today} (timezone: {timezone})\n");
             print_budget_table(data);
-            print_spike_warnings(data);
         }
         "anomalies" => print_usage_anomalies(data),
         "refresh_pricing" => {
@@ -2396,7 +2517,7 @@ fn print_usage_recalculate(data: &serde_json::Value) {
     }
 }
 
-/// Render the default usage summary (table + cache health + budgets + spikes).
+/// Render the default usage summary (table + cache health + budgets).
 fn print_usage_summary(data: &serde_json::Value) {
     let mut stdout = io::stdout().lock();
     let _ignored = write_usage_summary_table(&mut stdout, data);
@@ -2425,8 +2546,6 @@ fn print_usage_summary(data: &serde_json::Value) {
             print_budget_table(data);
         }
     }
-    print_spike_warnings(data);
-
     let anomaly_count = data["anomaly_count_7d"].as_u64().unwrap_or(0);
     cli_out!("\nAnomalies (last 7d): {anomaly_count}");
 }
@@ -3069,6 +3188,9 @@ mod tests {
                 "window_start": "2026-05-21T06:00:00+00:00",
                 "window_end": "2026-05-22T06:00:00+00:00",
                 "allowance": 2.166_666_666_666_666_5,
+                "base_allowance": 2.0,
+                "rollover": 0.25,
+                "debt_adjustment": 0.083_333_333_333_333_33,
                 "current_cost": 1.0,
                 "remaining": 1.166_666_666_666_666_5,
                 "percent_used": 0.461_538_461_538_461_56,
@@ -3087,6 +3209,10 @@ mod tests {
             "row shows spend against allowance: {row}"
         );
         assert!(row.contains("46%"), "row shows the used share: {row}");
+        assert!(
+            row.contains("base $2.00  + rollover $0.25  - debt adjustment $0.08"),
+            "row explains how the allowance was formed: {row}"
+        );
         assert!(
             row.contains("2026-05-22"),
             "row shows the pace sub-window bounds: {row}"
@@ -3345,6 +3471,51 @@ mod tests {
         });
         assert_eq!(acting_now(&budget), "warn");
         assert_eq!(acting_now(&budget["pace"]), "pause_heartbeat");
+    }
+
+    #[test]
+    fn session_activate_names_the_cache_write_it_paid_for() {
+        let primed = serde_json::json!({
+            "status": "primed",
+            "cache_creation_tokens": 5000,
+            "cache_read_tokens": 0,
+            "seconds_until_ping": 3300,
+        });
+        assert_eq!(
+            session_activate_keepalive(&primed),
+            "primed — wrote 5000 cache tokens; next ping in 55m"
+        );
+    }
+
+    #[test]
+    fn session_activate_distinguishes_resumed_from_off() {
+        let resumed = serde_json::json!({ "status": "resumed", "seconds_until_ping": 1800 });
+        assert_eq!(
+            session_activate_keepalive(&resumed),
+            "already warm; next ping in 30m"
+        );
+
+        let off = serde_json::json!({ "status": "off" });
+        assert_eq!(
+            session_activate_keepalive(&off),
+            "off — this character's model sets cache_keepalive = off"
+        );
+    }
+
+    #[test]
+    fn session_activate_heartbeat_reports_the_wake_it_has() {
+        let scheduled =
+            serde_json::json!({ "state": "Active", "paused": false, "seconds_until_wake": 7200 });
+        assert_eq!(
+            session_activate_heartbeat(&scheduled),
+            "Active, next wake in 2h 0m"
+        );
+
+        let unscheduled = serde_json::json!({ "state": "Dormant", "paused": false });
+        assert_eq!(
+            session_activate_heartbeat(&unscheduled),
+            "Dormant, no wake scheduled"
+        );
     }
 
     #[test]

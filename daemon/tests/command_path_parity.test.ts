@@ -7,7 +7,7 @@
  * regenerates it; a diff here is a defect in `src/handler/commands.ts`, not a
  * fixture to refresh.
  *
- * # The one divergence, asserted rather than smoothed over
+ * # Two divergences, asserted rather than smoothed over
  *
  * The Rust's characterless path returned its frame without attaching the
  * request's rid, while the other two paths attached it. This side attaches it
@@ -15,6 +15,13 @@
  * see {@link RID_DROPPED}. Making that an explicit assertion rather than a
  * loosened comparison is the point: if the port ever stops attaching it, this
  * fails.
+ *
+ * The Rust kept one active model per handler context, so it survived a change
+ * of character; issue #72 is what that leaks. This side keys the session model
+ * cache by session *and* selected character, so a case whose prior command ran
+ * under a different character finds nothing — and the recorded value is still
+ * there under the character that set it, which is the assertion made below.
+ * Partitioned, not dropped.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -40,6 +47,12 @@ import { testTmp } from "./support/tmp.ts";
  */
 const RID_DROPPED = new Set(["list_characters", "list_models", "list_providers"]);
 
+/** The one session every fixture case runs on — see {@link meta}. */
+const SESSION_ID = 1;
+
+/** What `defaults.model` resolves to when nothing is cached for the asker. */
+const DEFAULT_MODEL = "chat.fixture";
+
 /** The one model in the catalog, named as `defaults.model`. */
 const FIXTURE_MODEL = {
   name: "fixture",
@@ -58,7 +71,7 @@ const FIXTURE_MODEL = {
 
 interface Harness {
   deps: CommandPathDeps;
-  activeModel(): string | undefined;
+  activeModel(character: string | undefined): string | undefined;
   /** Needed to rebuild the `none_available` message — see {@link RUST_NONE_AVAILABLE}. */
   configDir: string;
 }
@@ -97,7 +110,8 @@ async function harness(characters: readonly string[]): Promise<Harness> {
   };
 
   const engines = new Map<string, ConversationEngine>();
-  let activeModel: string | undefined;
+  const activeModels = new Map<string, string>();
+  const modelKey = (id: number, character: string | undefined) => `${id} ${character ?? ""}`;
 
   const deps: CommandPathDeps = {
     registry: {
@@ -119,9 +133,10 @@ async function harness(characters: readonly string[]): Promise<Harness> {
     configPath: join(dirs.config, "config.toml"),
     dataDir: dirs.data,
     sessions: {
-      activeModel: () => activeModel,
-      setActiveModel: (_id, m) => {
-        activeModel = m;
+      activeModel: (id, character) => activeModels.get(modelKey(id, character)),
+      setActiveModel: (id, character, model) => {
+        if (model === undefined) activeModels.delete(modelKey(id, character));
+        else activeModels.set(modelKey(id, character), model);
       },
     },
     commands: {
@@ -151,14 +166,22 @@ async function harness(characters: readonly string[]): Promise<Harness> {
         droppedEngines: 0,
       }),
       clearActiveModel: () => {
-        activeModel = undefined;
+        activeModels.clear();
       },
     },
-    router: { setSelectedCharacter: () => {}, sendToSession: async () => {} } as never,
+    router: {
+      characterFor: () => null,
+      setSelectedCharacter: () => {},
+      sendToSession: async () => {},
+    } as never,
     handshake: { history: async () => ({ messages: [], config: {} }) } as never,
   };
 
-  return { deps, activeModel: () => activeModel, configDir: dirs.config };
+  return {
+    deps,
+    activeModel: (character) => activeModels.get(modelKey(SESSION_ID, character)),
+    configDir: dirs.config,
+  };
 }
 
 /**
@@ -244,15 +267,16 @@ describe("dispatchCommand", () => {
       const out = c.output as Record<string, any>;
       const h = await harness(input["characters_on_disk"] as string[]);
       const selected = (input["selected_character"] as string | null) ?? null;
+      const prior = (input["prior_selected"] as string | null) ?? selected;
 
       if (input["prior_command"] !== null) {
         await dispatchCommand(
           h.deps,
           { rid: null, name: input["prior_command"] as string, args: input["prior_args"] },
-          meta((input["prior_selected"] as string | null) ?? selected, null),
+          meta(prior, null),
         );
       }
-      const activeModelBefore = h.activeModel();
+      const activeModelBefore = h.activeModel(selected ?? undefined);
 
       const frame = await dispatchCommand(
         h.deps,
@@ -274,17 +298,34 @@ describe("dispatchCommand", () => {
         expect(got["rid"]).toBe(want["rid"] as string | null);
       }
 
+      const crossCharacter = prior !== selected;
+
       if (want["kind"] === "error") {
         expect(got["code"]).toBe(want["code"] as never);
         expect(got["message"]).toBe(expectedMessage(want["message"] as string, h.configDir));
       } else {
         expect(got["name"]).toBe(want["name"] as string);
         expect(got["data_keys"]).toEqual(want["data_keys"] as string[]);
-        expect(got["data_active"]).toEqual(want["data_active"] ?? null);
+        // The character that set it is not the character asking, so the answer
+        // is the configured default rather than the other character's pick.
+        expect(got["data_active"]).toEqual(
+          crossCharacter ? DEFAULT_MODEL : (want["data_active"] ?? null),
+        );
+      }
+
+      if (crossCharacter) {
+        expect(activeModelBefore).toBeUndefined();
+        expect(h.activeModel(selected ?? undefined)).toBeUndefined();
+        expect(h.activeModel(prior ?? undefined) ?? null).toEqual(
+          out["active_model_after"] ?? null,
+        );
+        return;
       }
 
       expect(activeModelBefore ?? null).toEqual(out["active_model_before"] ?? null);
-      expect(h.activeModel() ?? null).toEqual(out["active_model_after"] ?? null);
+      expect(h.activeModel(selected ?? undefined) ?? null).toEqual(
+        out["active_model_after"] ?? null,
+      );
     });
   }
 });
@@ -318,6 +359,43 @@ test("a character whose engine will not open is an internal error", async () => 
     expect(frame.message).toBe("active.jsonl is a directory");
     expect(frame.rid).toBe("r-engine");
   }
+});
+
+test("switch_character establishes an ambiguous unpinned session", async () => {
+  const h = await harness(["Yuna", "poppy"]);
+  const selected: Array<[number, string | null]> = [];
+  const sent: unknown[] = [];
+  h.deps.router = {
+    characterFor: () => null,
+    setSelectedCharacter: (sessionId: number, character: string | null) => {
+      selected.push([sessionId, character]);
+      return true;
+    },
+    sendToSession: async (_sessionId: number, frame: unknown) => {
+      sent.push(frame);
+    },
+  } as never;
+  h.deps.handshake = {
+    hello: async () => ({ characters: [{ name: "Yuna" }, { name: "poppy" }] }),
+    history: async (character: string | null) => ({
+      messages: [],
+      activeStart: 0,
+      config: {},
+      selectedCharacter: character,
+      revision: 0,
+    }),
+  };
+
+  const frame = await dispatchCommand(
+    h.deps,
+    { rid: null, name: "switch_character", args: { name: "poppy" } },
+    meta(null, "r-switch"),
+  );
+
+  expect(frame.type).toBe("command_output");
+  expect(selected).toEqual([[1, "poppy"]]);
+  expect(sent).toHaveLength(1);
+  expect(sent[0]).toMatchObject({ type: "history", selected_character: "poppy" });
 });
 
 /**

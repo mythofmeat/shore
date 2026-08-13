@@ -3,7 +3,7 @@ import type { Database } from "bun:sqlite";
 import type { UsageConfig as AppUsageConfig } from "../config/app.ts";
 
 import { isSubscriptionProvider } from "./store.ts";
-import { usageTotals, type QueryFilter } from "./query.ts";
+import { usageCostEntries, usageTotals, type QueryFilter } from "./query.ts";
 import {
   atHour,
   daysFromMonday,
@@ -56,18 +56,10 @@ export interface UsageBudgetConfig {
   pace_warn_action?: UsageBudgetAction | null;
 }
 
-export interface UsageSpikeWarningsConfig {
-  enabled?: boolean;
-  period?: UsageBudgetPeriod;
-  multiplier?: number;
-  min_cost_usd?: number;
-}
-
 export interface UsageConfig {
   timezone?: string;
   allow_compaction_over_budget?: boolean;
   budgets?: UsageBudgetConfig[];
-  spike_warnings?: UsageSpikeWarningsConfig;
 }
 
 export function usageConfigView(cfg: AppUsageConfig): UsageConfig {
@@ -77,7 +69,6 @@ export function usageConfigView(cfg: AppUsageConfig): UsageConfig {
     budgets: cfg.budgets.map(
       (b) => defined(b as unknown as Record<string, unknown>) as unknown as UsageBudgetConfig,
     ),
-    spike_warnings: cfg.spike_warnings,
   };
 }
 
@@ -87,8 +78,6 @@ function defined(v: Record<string, unknown>): Record<string, unknown> {
 
 const DEFAULT_WARN_AT: readonly number[] = [0.8, 1.0];
 const DEFAULT_TIMEZONE = "local";
-const DEFAULT_SPIKE_MULTIPLIER = 3;
-const DEFAULT_SPIKE_MIN_COST = 1;
 
 const budgetPeriod = (b: UsageBudgetConfig): UsageBudgetPeriod =>
   b.period ?? "day";
@@ -179,6 +168,9 @@ export interface PaceStatus {
   window_start: string;
   window_end: string;
   allowance: number;
+  base_allowance: number;
+  rollover: number;
+  debt_adjustment: number;
   current_cost: number;
   remaining: number;
   percent_used: number;
@@ -210,19 +202,6 @@ export interface BudgetStatus {
   compaction_allowed_over_budget: boolean;
   filters: Record<string, unknown>;
   pace?: PaceStatus;
-}
-
-export interface SpikeWarning {
-  period: UsageBudgetPeriod;
-  period_start: string;
-  previous_period_start: string;
-  timezone: string;
-  current_cost: number;
-  previous_cost: number;
-  multiplier: number | null;
-  threshold_multiplier: number;
-  min_cost_usd: number;
-  message: string;
 }
 
 export interface UsageBudgetWarningEvent {
@@ -439,6 +418,13 @@ interface PaceWindow {
   periods_remaining: number;
 }
 
+interface PaceSlice {
+  start: number;
+  end: number;
+  weight: number;
+  periods_remaining: number;
+}
+
 function paceStep(pace: UsageBudgetPeriod): number | undefined {
   switch (pace) {
     case "hour":
@@ -471,6 +457,39 @@ function paceWindow(
     end: resolveInZone(bounds.end, window.zone),
     periods_remaining: bounds.periods_remaining,
   };
+}
+
+function paceSlices(
+  window: PeriodWindow,
+  now: number,
+  pace: UsageBudgetPeriod,
+): PaceSlice[] {
+  const step = paceStep(pace);
+  if (step === undefined) return [];
+  const stepSecs = Math.trunc(step / SECOND_MS);
+  if (stepSecs <= 0) return [];
+
+  const nowNaive = naiveInZone(now, window.zone);
+  const slices: PaceSlice[] = [];
+  for (
+    let start = window.start_naive;
+    start < window.end_naive;
+    start = asNaive(start + stepSecs * SECOND_MS)
+  ) {
+    const end = asNaive(Math.min(start + stepSecs * SECOND_MS, window.end_naive));
+    const remainingSecs = Math.max(
+      Math.trunc((window.end_naive - start) / SECOND_MS),
+      0,
+    );
+    slices.push({
+      start: resolveInZone(start, window.zone),
+      end: resolveInZone(end, window.zone),
+      weight: Math.max(Math.trunc((end - start) / SECOND_MS), 0) / stepSecs,
+      periods_remaining: remainingSecs / stepSecs,
+    });
+    if (nowNaive < end) break;
+  }
+  return slices;
 }
 
 interface PaceBounds {
@@ -541,14 +560,16 @@ function budgetStatus(
   const sub =
     pacePeriod === undefined ? undefined : paceWindow(window, now, pacePeriod);
 
+  const filter = filterForBudget(budget, window.start);
   const currentCost = usageTotals(
     db,
-    filterForBudget(budget, window.start),
-  ).total_cost;
+    filter,
+  ).total_cost + pendingAttemptCost(db, budget, window.start);
   const paceCost =
     sub === undefined
       ? undefined
-      : usageTotals(db, filterForBudget(budget, sub.start)).total_cost;
+      : usageTotals(db, filterForBudget(budget, sub.start)).total_cost +
+        pendingAttemptCost(db, budget, sub.start);
 
   const costLimit = budget.cost_usd;
   const percentUsed = currentCost / costLimit;
@@ -559,7 +580,15 @@ function budgetStatus(
   const overLimit = currentCost >= costLimit;
   const pace =
     sub !== undefined && paceCost !== undefined && pacePeriod !== undefined
-      ? paceStatus(budget, pacePeriod, sub, currentCost, paceCost)
+      ? paceStatus(
+          db,
+          budget,
+          pacePeriod,
+          sub,
+          window,
+          now,
+          paceCost,
+        )
       : undefined;
 
   const status: BudgetStatus = {
@@ -592,16 +621,120 @@ function budgetStatus(
   return status;
 }
 
+function pendingAttemptCost(
+  db: Database,
+  budget: UsageBudgetConfig,
+  since: number,
+): number {
+  const clauses = ["status IN ('pending', 'unresolved')", "started_at >= $since"];
+  const bindings: Record<string, string> = { $since: toRfc3339(since) };
+  const add = (column: string, key: string, value: string | null | undefined) => {
+    if (value == null) return;
+    clauses.push(`${column} = $${key}`);
+    bindings[`$${key}`] = value;
+  };
+  add("character", "character", budget.character);
+  add("provider", "provider", budget.provider);
+  add("api_key_name", "api_key", budget.api_key);
+  add("model", "model", budget.model);
+  add("call_type", "call_type", budget.call_type);
+  const kinds = budgetUsageKind(budget);
+  if (kinds.length > 0) {
+    const accepted = [
+      "message",
+      "tool_loop",
+      "heartbeat",
+      "heartbeat_tool_loop",
+      "keepalive",
+      "compaction",
+      "dreaming",
+      "memory_query",
+      "subagent",
+    ].filter((callType) => kinds.some((kind) => callTypeMatchesUsageKind(callType, kind)));
+    if (accepted.length === 0) return 0;
+    const placeholders = accepted.map((callType, index) => {
+      const key = `$kind_${index}`;
+      bindings[key] = callType;
+      return key;
+    });
+    clauses.push(`call_type IN (${placeholders.join(", ")})`);
+  }
+  const row = db.query(
+    `SELECT COALESCE(SUM(estimated_cost), 0) AS total
+       FROM call_attempts WHERE ${clauses.join(" AND ")}`,
+  ).get(bindings) as { total?: unknown } | null;
+  return typeof row?.total === "number" && Number.isFinite(row.total) ? row.total : 0;
+}
+
 function paceStatus(
+  db: Database,
   budget: UsageBudgetConfig,
   pacePeriod: UsageBudgetPeriod,
   pace: PaceWindow,
-  periodCost: number,
+  window: PeriodWindow,
+  now: number,
   currentCost: number,
 ): PaceStatus {
-  const spendBefore = Math.max(periodCost - currentCost, 0);
-  const remainingBudget = Math.max(budget.cost_usd - spendBefore, 0);
-  const allowance = remainingBudget / Math.max(pace.periods_remaining, 1);
+  const slices = paceSlices(window, now, pacePeriod);
+  const currentIndex = Math.max(slices.length - 1, 0);
+  const totalPeriods = slices[0]?.periods_remaining ?? pace.periods_remaining;
+  const nominal = budget.cost_usd / Math.max(totalPeriods, 1);
+  const entries = usageCostEntries(db, filterForBudget(budget, window.start));
+  const completedSpend = new Array<number>(currentIndex).fill(0);
+  let sliceIndex = 0;
+  for (const entry of entries) {
+    const ts = Date.parse(entry.ts);
+    while (
+      sliceIndex < currentIndex &&
+      ts >= (slices[sliceIndex]?.end ?? Number.POSITIVE_INFINITY)
+    ) {
+      sliceIndex += 1;
+    }
+    if (sliceIndex >= currentIndex) break;
+    const slice = slices[sliceIndex];
+    if (slice !== undefined && ts >= slice.start && ts < slice.end) {
+      completedSpend[sliceIndex] =
+        (completedSpend[sliceIndex] ?? 0) + entry.total_cost;
+    }
+  }
+
+  let rollover = 0;
+  let debt = 0;
+  for (let i = 0; i < currentIndex; i += 1) {
+    const slice = slices[i];
+    if (slice === undefined) continue;
+    const nominalBase = nominal * slice.weight;
+    const debtPayment = Math.min(
+      nominalBase,
+      debt * (slice.weight / Math.max(slice.periods_remaining, slice.weight)),
+    );
+    const adjustedBase = Math.max(nominalBase - debtPayment, 0);
+    debt = Math.max(debt - debtPayment, 0);
+    const spend = completedSpend[i] ?? 0;
+    if (spend <= adjustedBase) {
+      let slack = adjustedBase - spend;
+      const repaid = Math.min(slack, debt);
+      debt -= repaid;
+      slack -= repaid;
+      rollover += slack;
+    } else {
+      let excess = spend - adjustedBase;
+      const fromRollover = Math.min(excess, rollover);
+      rollover -= fromRollover;
+      excess -= fromRollover;
+      debt += excess;
+    }
+  }
+
+  const currentSlice = slices[currentIndex];
+  const currentWeight = currentSlice?.weight ?? 1;
+  const nominalBase = nominal * currentWeight;
+  const debtAdjustment = Math.min(
+    nominalBase,
+    debt * (currentWeight / Math.max(pace.periods_remaining, currentWeight)),
+  );
+  const baseAllowance = Math.max(nominalBase - debtAdjustment, 0);
+  const allowance = baseAllowance + rollover;
 
   const percentUsed = allowance > 0 ? currentCost / allowance : 1;
   const [warningThresholds, crossedWarnAt] = crossedThresholds(
@@ -615,6 +748,9 @@ function paceStatus(
     window_start: toRfc3339(pace.start),
     window_end: toRfc3339(pace.end),
     allowance,
+    base_allowance: baseAllowance,
+    rollover,
+    debt_adjustment: debtAdjustment,
     current_cost: currentCost,
     remaining: allowance - currentCost,
     percent_used: percentUsed,
@@ -924,7 +1060,7 @@ function compactionAllowed(
   return (
     budget.allow_compaction_over_budget ??
     config.allow_compaction_over_budget ??
-    true
+    false
   );
 }
 
@@ -940,72 +1076,6 @@ function isBackgroundCall(callType: string): boolean {
 
 function isHeartbeatCall(callType: string): boolean {
   return callType === "heartbeat" || callType === "heartbeat_tool_loop";
-}
-
-export function spikeWarnings(
-  db: Database,
-  config: UsageConfig,
-  now: number,
-  opts: BudgetOptions = {},
-): SpikeWarning[] {
-  const spike = config.spike_warnings ?? {};
-  if (spike.enabled !== true) {
-    return [];
-  }
-  const period = spike.period ?? "hour";
-  const multiplierThreshold = spike.multiplier ?? DEFAULT_SPIKE_MULTIPLIER;
-  const minCost = spike.min_cost_usd ?? DEFAULT_SPIKE_MIN_COST;
-  const timezone = config.timezone ?? DEFAULT_TIMEZONE;
-
-  const current = periodWindow(now, period, timezone, undefined, opts);
-  const previousAnchor = current.start - SECOND_MS;
-  const previous = periodWindow(
-    previousAnchor,
-    period,
-    timezone,
-    undefined,
-    opts,
-  );
-
-  const currentCost = usageTotals(db, {
-    since: toRfc3339(current.start),
-  }).total_cost;
-  const previousCost = usageTotals(db, {
-    since: toRfc3339(previous.start),
-    until: toRfc3339(current.start),
-  }).total_cost;
-
-  if (currentCost < minCost) {
-    return [];
-  }
-
-  const multiplier = previousCost > 0 ? currentCost / previousCost : null;
-  const isSpike =
-    multiplier === null ? previousCost === 0 : multiplier >= multiplierThreshold;
-  if (!isSpike) {
-    return [];
-  }
-
-  const debug = periodDebug(period);
-  const message =
-    multiplier === null
-      ? `Current ${debug} spend is $${formatFixed(currentCost, 2)}; the previous ${debug} had no recorded cost.`
-      : `Current ${debug} spend is ${formatFixed(multiplier, 1)}x the previous ${debug} ($${formatFixed(currentCost, 2)} vs $${formatFixed(previousCost, 2)}).`;
-
-  return [
-    {
-      period,
-      period_start: toRfc3339(current.start),
-      previous_period_start: toRfc3339(previous.start),
-      timezone: current.timezone,
-      current_cost: currentCost,
-      previous_cost: previousCost,
-      multiplier,
-      threshold_multiplier: multiplierThreshold,
-      min_cost_usd: minCost,
-      message,
-    },
-  ];
 }
 
 export function newlyCrossedBudgetWarnings(

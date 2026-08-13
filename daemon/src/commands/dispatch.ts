@@ -21,6 +21,7 @@ import {
   log,
 } from "./conversation.ts";
 import { compact, type CompactContext } from "./compact.ts";
+import { sessionActivateCommand, type SessionActivateContext } from "./activate.ts";
 import { keepalivePingNowCommand, type KeepalivePingContext } from "./keepalive.ts";
 import { memory } from "./memory.ts";
 import {
@@ -32,7 +33,13 @@ import {
   setModelSetting,
   switchModel,
 } from "./models.ts";
-import { characterInfo, listCharacters, switchCharacter, type Args } from "./navigation.ts";
+import {
+  characterInfo,
+  createCharacter,
+  listCharacters,
+  switchCharacter,
+  type Args,
+} from "./navigation.ts";
 import {
   listProviderModels,
   listProviders,
@@ -73,10 +80,12 @@ export interface CommandDeps {
   fetchImpl?: typeof fetch;
   compaction?: Omit<CompactContext, "config" | "autonomy">;
   keepalive?: Omit<KeepalivePingContext, "config" | "dataDir">;
+  activate?: Pick<SessionActivateContext, "register">;
 }
 
 const CHARACTERLESS = new Set([
   "list_characters",
+  "create_character",
   "list_models",
   "background_models",
   "list_providers",
@@ -97,6 +106,8 @@ export async function runCommand(
   switch (cmd.name) {
     case "list_characters":
       return listCharacters(configDir, character, workspaceRoot);
+    case "create_character":
+      return createCharacter(configDir, args, workspaceRoot);
     case "switch_character":
       return switchCharacter(configDir, character, args, workspaceRoot);
     case "character_info":
@@ -167,6 +178,18 @@ export async function runCommand(
       return transcript({ characterName: character, callStore: deps.callStore }, args);
     case "heartbeat_tick_now":
       return heartbeatTickNow(statusContext(engine, session, deps));
+    case "session_activate":
+      if (deps.keepalive === undefined || deps.activate === undefined) {
+        throw unwired("session_activate");
+      }
+      return await sessionActivateCommand(character, {
+        ...deps.keepalive,
+        ...deps.activate,
+        autonomy: deps.autonomy,
+        config: session.config,
+        dataDir: session.dataDir,
+        ...(deps.now === undefined ? {} : { now: deps.now }),
+      });
     case "keepalive_ping_now":
       if (deps.keepalive === undefined) throw unwired("keepalive_ping_now");
       return await keepalivePingNowCommand(character, {
@@ -208,6 +231,8 @@ export function runCharacterlessCommand(
         undefined,
         session.config.dirs.workspace,
       );
+    case "create_character":
+      return createCharacter(session.config.dirs.config, args, session.config.dirs.workspace);
     case "list_models":
       return listModels(session, args);
     case "background_models":

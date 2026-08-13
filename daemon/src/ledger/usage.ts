@@ -3,7 +3,6 @@ import type { Database } from "bun:sqlite";
 import {
   budgetStatuses,
   newlyCrossedBudgetWarnings,
-  spikeWarnings,
   type BudgetOptions,
   type UsageConfig,
 } from "./budget.ts";
@@ -228,9 +227,9 @@ function budgetPayload(
   return {
     mode: "budget",
     timezone: config.timezone ?? "local",
-    allow_compaction_over_budget: config.allow_compaction_over_budget ?? true,
+    allow_compaction_over_budget: config.allow_compaction_over_budget ?? false,
     budgets: budgetStatuses(db, config, now, opts),
-    spike_warnings: spikeWarnings(db, config, now, opts),
+    call_attempts: callAttemptStatus(db),
   };
 }
 
@@ -305,9 +304,31 @@ function summaryPayload(
     summary: usageSummary(db, filter),
     cache_health: cacheHealth,
     anomaly_count_7d: queryAnomalies(db, anomalyFilter).length,
+    call_attempts: callAttemptStatus(db),
     budgets: budgetStatuses(db, config, now, opts),
-    spike_warnings: spikeWarnings(db, config, now, opts),
   };
+}
+
+function callAttemptStatus(db: Database): {
+  pending: number;
+  unresolved: number;
+  estimated_cost_at_risk: number;
+} {
+  const rows = db.query(
+    `SELECT status, COUNT(*) AS count, COALESCE(SUM(estimated_cost), 0) AS estimated
+       FROM call_attempts
+      WHERE status IN ('pending', 'unresolved')
+      GROUP BY status`,
+  ).all() as Array<{ status: string; count: number; estimated: number }>;
+  let pending = 0;
+  let unresolved = 0;
+  let estimated = 0;
+  for (const row of rows) {
+    if (row.status === "pending") pending += row.count;
+    if (row.status === "unresolved") unresolved += row.count;
+    estimated += row.estimated;
+  }
+  return { pending, unresolved, estimated_cost_at_risk: estimated };
 }
 
 async function recalculate(

@@ -20,6 +20,8 @@ const SECS_PER_DAY = 86_400;
 
 const BUILTIN_SYSTEM_TEMPLATE = builtinSystemTemplate.trimEnd();
 
+export const builtinSystemPrompt = (): string => `${BUILTIN_SYSTEM_TEMPLATE}\n`;
+
 export type UserTimestampMode = "never" | "always" | "auto";
 
 export interface SystemBlock {

@@ -24,5 +24,8 @@ unicode-width = "0.2"
 libc = "0.2"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [lints]
 workspace = true

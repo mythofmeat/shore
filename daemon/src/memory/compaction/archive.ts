@@ -18,7 +18,14 @@ export function conversationManager(
 ): ConversationManager {
   return {
     archiveAndRetain: (_conversationId, params) =>
-      archiveAndRetain(characterDir, params.keepLastN, params.activeContent, now, newId),
+      archiveAndRetain(
+        characterDir,
+        params.keepLastN,
+        params.activeContent,
+        now,
+        newId,
+        params.operationId,
+      ),
   };
 }
 
@@ -28,6 +35,7 @@ export async function archiveAndRetain(
   activeContent: string,
   now: () => string = () => new Date().toISOString(),
   newId: () => string = () => crypto.randomUUID(),
+  operationId?: string,
 ): Promise<string> {
   const lines = rustLines(activeContent).filter((l) => rustTrim(l) !== "");
   const keep = Math.min(keepLastN, lines.length);
@@ -36,7 +44,7 @@ export async function archiveAndRetain(
   const retained = lines.slice(splitAt);
 
   if (archived.length > 0) {
-    await writeSegment(characterDir, archived, now);
+    await writeSegment(characterDir, archived, now, operationId);
   }
 
   const retainedContent = retained.length === 0 ? "" : retained.join("\n") + "\n";
@@ -53,9 +61,16 @@ async function writeSegment(
   characterDir: string,
   archived: readonly string[],
   now: () => string,
+  operationId?: string,
 ): Promise<void> {
   const manifestPath = join(characterDir, COMPACTION_MANIFEST_FILE);
   const manifest = await readManifest(manifestPath);
+  if (
+    operationId !== undefined &&
+    manifest.segments.some((segment) => segment.compaction_id === operationId)
+  ) {
+    return;
+  }
 
   const segmentIndex = manifest.segments.length + 1;
   const segmentFile = `${String(segmentIndex).padStart(4, "0")}.jsonl`;
@@ -76,11 +91,12 @@ async function writeSegment(
     file: segmentFile,
     message_count: archived.length,
     compacted_at: now(),
+    ...(operationId === undefined ? {} : { compaction_id: operationId }),
   });
   manifest.total_compacted_messages += archived.length;
 
   try {
-    await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
+    await atomicWrite(manifestPath, JSON.stringify(manifest, null, 2));
   } catch (e) {
     throw CompactionError.conversationManager(`failed to write compaction.json: ${message(e)}`);
   }
@@ -115,6 +131,18 @@ export async function segmentCount(characterDir: string): Promise<number> {
     return (await readManifest(join(characterDir, COMPACTION_MANIFEST_FILE))).segments.length;
   } catch {
     return 0;
+  }
+}
+
+export async function hasCompactionOperation(
+  characterDir: string,
+  operationId: string,
+): Promise<boolean> {
+  try {
+    const manifest = await readManifest(join(characterDir, COMPACTION_MANIFEST_FILE));
+    return manifest.segments.some((segment) => segment.compaction_id === operationId);
+  } catch {
+    return false;
   }
 }
 

@@ -9,6 +9,8 @@ import { configView } from "../../config/preferences.ts";
 import { findEffectiveModel } from "../../config/effective_catalog.ts";
 import { toRequestModel } from "../../config/models.ts";
 import type { SidecarRequest } from "../../llm/types.ts";
+import type { LastRequestCache } from "../../cache/last_request.ts";
+import type { RebuildDeps } from "../../cache/rebuild.ts";
 import { buildChatShapeRequestFromDisk } from "../../handler/context.ts";
 import { buildToolContext, credentialEntry, type ToolContextDeps } from "../../handler/tool_context.ts";
 import { dispatchTool } from "../../tools/dispatch.ts";
@@ -25,12 +27,16 @@ import { handleCompactionOutcome, loadMessagesForCompaction, pushAfterCompaction
 import { RealCompactionLlm, type RealCompactionLlmOptions } from "./llm.ts";
 import { compact, tryBeginCompaction } from "./manager.ts";
 import { DEFAULT_COMPACT_PROMPT, DEFAULT_COMPACT_SYSTEM } from "./prompts.ts";
-import { CompactionError, type CompactionOutcome, type CompactionTools } from "./types.ts";
+import {
+  CompactionError,
+  CompactionPaused,
+  type CompactionOutcome,
+  type CompactionTools,
+} from "./types.ts";
 
 export interface CompactionRunDeps {
   config: LoadedConfig;
   generate: RealCompactionLlmOptions["generate"];
-  cachedRequest?: SidecarRequest;
   notify?: (title: string, body: string) => void;
   tools?: Omit<ToolContextDeps, "runSubagent">;
   now?: () => string;
@@ -50,6 +56,13 @@ export async function runCompaction(
 ): Promise<number> {
   const outcome = await runCompactionPass(character, deps, options);
   if (outcome === undefined) return 0;
+  if (outcome.kind === "paused") {
+    deps.notify?.(
+      `Shore — ${character}`,
+      `Compaction paused after ${outcome.toolRounds} rounds (${outcome.reason}); conversation kept`,
+    );
+    throw new CompactionPaused(outcome.checkpointId, outcome.reason, outcome.resumeAt);
+  }
   return handleCompactionOutcome(character, deps.notify ?? (() => {}), outcome);
 }
 
@@ -68,7 +81,7 @@ export async function runCompactionPass(
     if (loaded.messages.length === 0) return undefined;
 
     const resolved = await resolveDeps(character, deps);
-    const chatRequest = await resolveChatRequest(character, deps, loaded, resolved.effective);
+    const chatRequest = await resolveChatRequest(character, loaded, resolved.effective);
 
     const outcome = await compact(
       {
@@ -93,6 +106,7 @@ export async function runCompactionPass(
         retainTrailingAutonomous: options.retainTrailingAutonomous ?? false,
         chatRequest,
         dataDir,
+        resumable: true,
         tools: resolved.tools,
         ...(resolved.maxToolIterations === undefined
           ? {}
@@ -202,12 +216,9 @@ export async function renderToolOutcome(
 
 async function resolveChatRequest(
   character: string,
-  deps: CompactionRunDeps,
   loaded: Awaited<ReturnType<typeof loadMessagesForCompaction>>,
   effective: LoadedConfig,
 ): Promise<SidecarRequest> {
-  if (deps.cachedRequest !== undefined) return deps.cachedRequest;
-
   const chatModel = resolveChatModelForCharacter(configView(effective), character, (v, c, n, h) =>
     findEffectiveModel(v, c, n, h),
   );
@@ -228,21 +239,33 @@ async function resolveChatRequest(
 }
 
 export function compactionRunner(
-  deps: Omit<CompactionRunDeps, "config" | "cachedRequest"> & {
-    cachedRequest?: (character: string) => SidecarRequest | undefined;
+  deps: Omit<CompactionRunDeps, "config"> & {
+    cache?: LastRequestCache;
+    rebuild?: RebuildDeps;
   },
 ): CompactionRunner {
   return {
     run: (character, config) => {
-      const { cachedRequest, ...rest } = deps;
-      const cached = cachedRequest?.(character);
+      const { cache: _cache, rebuild: _rebuild, ...rest } = deps;
       return runCompaction(character, {
         ...rest,
         config,
-        ...(cached === undefined ? {} : { cachedRequest: cached }),
       });
     },
     applyDeferredEdits: (charDataDir, configDir, charName, workspaceRoot) =>
       applyDeferredEdits(charDataDir, configDir, charName, workspaceRoot),
+    ...(deps.cache === undefined
+      ? {}
+      : {
+          repoint: async (character: string, config: LoadedConfig) => {
+            deps.cache!.invalidate(character, "compaction");
+            await deps.cache!.reprimeFromDisk(
+              character,
+              config.dirs.data,
+              config,
+              deps.rebuild ?? {},
+            );
+          },
+        }),
   };
 }

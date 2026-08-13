@@ -36,6 +36,7 @@ import {
   buildMessageHandlerDeps,
   chatCompactionRunner,
   chatToolDeps,
+  configReloader,
   generationRegistry,
   handlerNotifier,
   handlerRegistry,
@@ -44,6 +45,7 @@ import {
   type CommandAssembly,
   type HandlerAssembly,
 } from "../src/handler/deps.ts";
+import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { SessionRouter } from "../src/swp/session.ts";
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
 import { CharacterError } from "../src/characters.ts";
@@ -56,6 +58,7 @@ import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { closeLedgers } from "../src/ledger/record.ts";
+import { Ledger } from "../src/ledger/store.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
 
 const NO_MCP = () => Promise.reject(new Error("no MCP server should be connected"));
@@ -315,7 +318,7 @@ describe("the autonomy surface a turn drives", () => {
 });
 
 describe("the compaction a long turn runs inline", () => {
-  test("the body it extends is this character's, looked up per pass", async () => {
+  test("the source is rebuilt from disk without consulting the stale request cache", async () => {
     const { root, runtime } = await runtimeUnder("shore-deps-compact-");
     try {
       const asked: string[] = [];
@@ -338,11 +341,8 @@ describe("the compaction a long turn runs inline", () => {
         diagnostics: { api_calls: { push: () => {} } } as never,
       });
 
-      // The pass itself has nothing to compact here; the lookup happens before
-      // it either way, and it is the lookup that has to name the right
-      // character.
       await runner.run("nova", runtime.config).catch(() => undefined);
-      expect(asked).toEqual(["nova"]);
+      expect(asked).toEqual([]);
     } finally {
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });
@@ -388,13 +388,16 @@ describe("the budget check", () => {
           () => ({ budgets: [{ cost_usd: 5 }] }),
           undefined,
         );
-        // A ledger that will not open reports nothing rather than failing a
-        // turn that has already been persisted and answered.
         expect(await warnings()).toEqual([]);
       } finally {
         console.error = real;
       }
-      expect(errors.join(" ")).toContain("cannot open ledger");
+      expect(errors).toEqual([]);
+      const ledger = Ledger.open(join(root, "absent.db"));
+      expect(ledger.database.query(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='calls'",
+      ).get()).toEqual({ name: "calls" });
+      ledger.close();
     } finally {
       closeLedgers();
       await rm(root, { recursive: true, force: true });
@@ -431,7 +434,7 @@ describe("what the assembly hands the driver", () => {
 
   test("the usage config and the keepalive ceiling are read live, not copied", async () => {
     const { root, config, runtime } = await runtimeUnder("shore-deps-live-", (app) => {
-      app.behavior.autonomy.cache_keepalive_max = ConfigDuration.fromSecs(3600);
+      app.cache.keepalive_max = ConfigDuration.fromSecs(3600);
     });
     try {
       const deps = buildGenerationDeps({
@@ -453,13 +456,7 @@ describe("what the assembly hands the driver", () => {
         ...config,
         app: {
           ...config.app,
-          behavior: {
-            ...config.app.behavior,
-            autonomy: {
-              ...config.app.behavior.autonomy,
-              cache_keepalive_max: ConfigDuration.fromSecs(60),
-            },
-          },
+          cache: { ...config.app.cache, keepalive_max: ConfigDuration.fromSecs(60) },
           usage: { ...config.app.usage, budgets: [{ cost_usd: 9 } as never] },
         },
       });
@@ -652,6 +649,71 @@ describe("the command path", () => {
     }
   });
 
+  test("a hot reload the daemon refuses is told to the clients, not just the log", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-cmd-warn-");
+    try {
+      await mkdir(join(root, "config"), { recursive: true });
+      await writeFile(join(root, "config", "config.toml"), "definitely = not [ toml", "utf8");
+
+      const emitted: ServerMessage[] = [];
+      const reload = configReloader({
+        ...commandAssembly(runtime),
+        emitEvent: (message) => emitted.push(message),
+      });
+
+      const real = console.warn;
+      console.warn = () => {};
+      try {
+        await reload([join(root, "config", "config.toml")]);
+      } finally {
+        console.warn = real;
+      }
+
+      // The daemon is still on the config it started with; without this frame
+      // the only sign the saved file is not in effect is a log line nobody is
+      // reading.
+      expect(emitted).toHaveLength(1);
+      const warning = emitted[0] as Extract<ServerMessage, { type: "config_warning" }>;
+      expect(warning.type).toBe("config_warning");
+      expect(warning.path).toBe(join(root, "config", "config.toml"));
+      expect(warning.character).toBeUndefined();
+      expect(warning.message.length).toBeGreaterThan(0);
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a broken character overlay names the character and its own file", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-cmd-warn-char-", () => {}, ["ada"]);
+    try {
+      const overlay = join(root, "config", "characters", "ada", "config.toml");
+      await writeFile(overlay, "definitely = not [ toml", "utf8");
+
+      const emitted: ServerMessage[] = [];
+      const reload = configReloader({
+        ...commandAssembly(runtime),
+        emitEvent: (message) => emitted.push(message),
+      });
+
+      const real = console.warn;
+      console.warn = () => {};
+      try {
+        await reload([overlay]);
+      } finally {
+        console.warn = real;
+      }
+
+      expect(emitted).toHaveLength(1);
+      const warning = emitted[0] as Extract<ServerMessage, { type: "config_warning" }>;
+      expect(warning.character).toBe("ada");
+      expect(warning.path).toBe(overlay);
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("adopting a reloaded config re-scans, and tells every registered character", async () => {
     const { root, config, runtime } = await runtimeUnder(
       "shore-deps-cmd-adopt-",
@@ -683,16 +745,33 @@ describe("the command path", () => {
     const { root, runtime } = await runtimeUnder("shore-deps-cmd-reset-");
     try {
       const deps = buildCommandPathDeps(commandAssembly(runtime));
-      deps.sessions.setActiveModel(1, "anthropic:a");
-      deps.sessions.setActiveModel(2, "openai:b");
+      deps.sessions.setActiveModel(1, "ada", "anthropic:a");
+      deps.sessions.setActiveModel(2, "nova", "openai:b");
 
       deps.dispatchRuntime.clearActiveModel();
 
       // The Rust kept one active model on the handler's single command context,
       // so `config_reset` cleared it for everyone. Per session here, and the
       // reset still has to reach all of them.
-      expect(deps.sessions.activeModel(1)).toBeUndefined();
-      expect(deps.sessions.activeModel(2)).toBeUndefined();
+      expect(deps.sessions.activeModel(1, "ada")).toBeUndefined();
+      expect(deps.sessions.activeModel(2, "nova")).toBeUndefined();
+    } finally {
+      await runtime.shutdown();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("one session's active model is remembered per character, not per session", async () => {
+    const { root, runtime } = await runtimeUnder("shore-deps-cmd-switch-");
+    try {
+      const deps = buildCommandPathDeps(commandAssembly(runtime));
+      deps.sessions.setActiveModel(1, "ada", "anthropic:a");
+
+      // Same session, after a switch to nova. Keyed by session alone this
+      // answered "anthropic:a" — ada's model, reported as nova's, to every
+      // status/model/config command until nova's own ran.
+      expect(deps.sessions.activeModel(1, "nova")).toBeUndefined();
+      expect(deps.sessions.activeModel(1, "ada")).toBe("anthropic:a");
     } finally {
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });
@@ -762,17 +841,13 @@ describe("the command path", () => {
     }
   });
 
-  test("the compaction a command runs extends this character's body", async () => {
+  test("the compaction command can repoint the live request cache", async () => {
     const { root, runtime } = await runtimeUnder("shore-deps-cmd-compact-");
     try {
       runtime.cache.set("ada", { model: "m", messages: [] } as never, undefined);
       const deps = buildCommandPathDeps(commandAssembly(runtime));
 
-      // `shore compact` and an inline pass must not disagree about what was in
-      // context: a manual pass that rebuilt from disk would carry a colder
-      // prefix than the automatic one.
-      expect(deps.commands.compaction?.cachedRequest?.("ada")).toBeDefined();
-      expect(deps.commands.compaction?.cachedRequest?.("nova")).toBeUndefined();
+      expect(deps.commands.compaction?.repoint).toBeFunction();
       expect(deps.commands.keepalive?.lastRequest).toBe(runtime.cache);
       expect(deps.commands.keepalive?.keepalive).toBe(runtime.keepalive);
       expect(deps.commands.callStore).toBe(runtime.callStore);

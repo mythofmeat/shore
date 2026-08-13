@@ -441,17 +441,19 @@ fn resolve_character(cli_character: Option<String>) -> Option<String> {
             return Some(val);
         }
     }
-    // Try the CLI's active_character state file. This must resolve the runtime
-    // directory exactly the way `shore` does when it writes the file
-    // (client/shore-cli/src/state.rs), or the handoff silently reads nothing.
-    let state_path = shore_common::dirs::runtime_dir().join("active_character");
-    if let Ok(name) = std::fs::read_to_string(state_path) {
-        let name = name.trim().to_string();
-        if !name.is_empty() {
-            return Some(name);
-        }
+    shore_common::active_character::read_active_character()
+}
+
+/// Persist a switch the way the CLI does, so the next client to start — either
+/// one — comes up on the character this session ended on.
+///
+/// Only an in-session switch is written. A `--character` or `SHORE_CHARACTER`
+/// launch pins this terminal and nothing else, which is why [`resolve_character`]
+/// reads those first and this never writes them back.
+fn persist_active_character(name: &str) {
+    if let Err(e) = shore_common::active_character::write_active_character(name) {
+        tracing::warn!(character = name, error = %e, "could not persist the active character");
     }
-    None
 }
 
 fn prefs_path() -> std::path::PathBuf {
@@ -1089,6 +1091,7 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
             selected_character,
             ..
         } => {
+            let has_selected_character = selected_character.is_some();
             app.connection_status = ConnectionStatus::Connected;
             app.effective_sampler = None;
             app.sampler_settings_loading = false;
@@ -1100,8 +1103,8 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
 
             if let Some(selected) = selected_character {
                 app.character_name = selected;
-            } else if let Some(ch) = characters.first() {
-                app.character_name = ch.name.clone();
+            } else {
+                app.character_name.clear();
             }
 
             // Check private flag from config
@@ -1117,7 +1120,11 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
 
             app.set_status("connected");
             UiEffect {
-                cmds: vec![usage_budget_conn_command()],
+                cmds: if has_selected_character {
+                    vec![usage_budget_conn_command()]
+                } else {
+                    vec![]
+                },
                 redraw: RedrawEffect::Immediate,
             }
         }
@@ -1779,6 +1786,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 "switch_character" => {
                     if let Some(name) = co.data.get("character").and_then(|v| v.as_str()) {
                         app.character_name = name.to_string();
+                        persist_active_character(name);
                     }
                     app.effective_sampler = None;
                     if co.data.get("active_model").is_some_and(|v| v.is_null()) {
@@ -2094,6 +2102,14 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             RedrawEffect::Immediate
         }
 
+        ServerMessage::ConfigWarning(cw) => {
+            // The daemon is still running the last config that loaded, so this
+            // is the only sign the file on screen is not the one in effect.
+            let what = cw.character.as_deref().unwrap_or("config");
+            app.set_warning(format!("{what}: {} not applied — {}", cw.path, cw.message));
+            RedrawEffect::Immediate
+        }
+
         ServerMessage::ProviderFallbackWarning(w) => {
             app.set_warning(w.message.clone());
             RedrawEffect::Immediate
@@ -2161,6 +2177,61 @@ mod redraw_tests {
         CommandOutput, Error as CommandError, StreamChunk, StreamEnd,
     };
     use shore_common::protocol::types::{StreamMetadata, TimingInfo, TokenCounts};
+
+    #[expect(unsafe_code, reason = "env::set_var is unsafe as of edition 2024")]
+    fn set_env(key: &str, value: &std::path::Path) {
+        // SAFETY: the one test that touches env holds it for its whole body.
+        unsafe { std::env::set_var(key, value) }
+    }
+
+    #[expect(unsafe_code, reason = "env::remove_var is unsafe as of edition 2024")]
+    fn unset_env(key: &str) {
+        // SAFETY: as above.
+        unsafe { std::env::remove_var(key) }
+    }
+
+    /// A switch made here has to outlive the process, the way the CLI's does.
+    /// Issue #72: the TUI moved `character_name` and nothing else, so quitting
+    /// and restarting came back on whatever the CLI last wrote.
+    #[test]
+    fn a_switch_is_persisted_for_the_next_client() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        set_env("SHORE_RUNTIME_DIR", &tmp.path().join("shore"));
+        unset_env("SHORE_CHARACTER");
+        let result = std::panic::catch_unwind(|| {
+            let mut app = App::default();
+
+            let _ = handle_server_message(
+                &mut app,
+                ServerMessage::CommandOutput(CommandOutput {
+                    rid: None,
+                    name: "switch_character".into(),
+                    data: serde_json::json!({ "character": "poppy", "active_model": null }),
+                }),
+            );
+
+            assert_eq!(app.character_name, "poppy");
+            assert_eq!(
+                shore_common::active_character::read_active_character().as_deref(),
+                Some("poppy"),
+                "the switch has to reach the file the next client reads",
+            );
+            assert_eq!(resolve_character(None).as_deref(), Some("poppy"));
+
+            // An explicit --character stays terminal-local: it wins here and
+            // is never written back over the shared selection.
+            assert_eq!(
+                resolve_character(Some("Yuna".into())).as_deref(),
+                Some("Yuna")
+            );
+            assert_eq!(
+                shore_common::active_character::read_active_character().as_deref(),
+                Some("poppy"),
+            );
+        });
+        unset_env("SHORE_RUNTIME_DIR");
+        result.unwrap();
+    }
 
     #[test]
     fn sanitize_terminal_text_strips_escapes_and_flattens_lines() {

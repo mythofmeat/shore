@@ -6,7 +6,9 @@ import type { PostArchiveEngine } from "./post_archive.ts";
 import type { AutonomyActionResult, AutonomyExecutor, TickHooks } from "./runner.ts";
 import type { CompactionReason } from "./tick.ts";
 import type { CharacterRegistry } from "../characters.ts";
+import { rustJoin } from "../config/dirs.ts";
 import type { LoadedConfig } from "../config/loader.ts";
+import { usageConfigView } from "../ledger/budget.ts";
 import type { Message } from "../engine/types.ts";
 import { generate, generateWithCredentialFallback } from "../llm/generate.ts";
 import type { GenerateDeps } from "../llm/generate.ts";
@@ -50,7 +52,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
       ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
 
       generate: async (request, iteration, callType) => {
-        request.context = { ...request.context, character, call_type: callType } as never;
+        labelAccountedCall(request, config, character, callType);
         try {
           const { response, fallbacks } = await generate(request, this.#generateDeps(config));
           for (const event of fallbacks) {
@@ -179,7 +181,7 @@ export type CompactionGenerate = (
 
 export function compactionGenerate(deps: GenerateDeps): CompactionGenerate {
   return async (request, model, character) => {
-    request.context = { ...request.context, character } as never;
+    labelAccountedCall(request, deps.config, character, "compaction");
     const { response, fallbacks } = await generateWithCredentialFallback(
       request,
       { providerKey: model.provider_key, apiKeyEnv: model.api_key_env },
@@ -192,6 +194,27 @@ export function compactionGenerate(deps: GenerateDeps): CompactionGenerate {
       );
     }
     return response;
+  };
+}
+
+function labelAccountedCall(
+  request: SidecarRequest,
+  config: LoadedConfig,
+  character: string,
+  callType: string,
+): void {
+  const options = request.provider_options;
+  request.context = {
+    ...request.context,
+    ledger: request.context?.ledger ?? rustJoin(config.dirs.data, "ledger.db"),
+    character,
+    call_type: callType,
+    thinking_enabled: options?.thinking_enabled === true,
+    ...(options?.cache_ttl === undefined ? {} : { cache_ttl: options.cache_ttl }),
+    ...(options?.reasoning_effort === undefined
+      ? {}
+      : { reasoning_effort: options.reasoning_effort }),
+    usage: usageConfigView(config.app.usage),
   };
 }
 

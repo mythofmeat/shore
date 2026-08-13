@@ -3,8 +3,8 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crossterm::style::{Color, ResetColor, SetForegroundColor};
 use shore_common::protocol::server_msg::{
-    Phase, ProviderFallbackWarning, SendImage, StreamChunk, StreamEnd, ToolCall, ToolResult,
-    UsageWarning,
+    ConfigWarning, Phase, ProviderFallbackWarning, SendImage, ServerMessage, StreamChunk, StreamEnd,
+    ToolCall, ToolResult, UsageWarning,
 };
 use shore_common::protocol::tool_display::{
     format_tool_input_with_limit, format_tool_output_with_limit,
@@ -307,6 +307,59 @@ pub(crate) fn print_usage_warning(w: &UsageWarning) {
         _ = crossterm::execute!(out, ResetColor);
     }
     _ = writeln!(out, ": {}", w.message);
+}
+
+/// Print a config file the daemon read but would not adopt.
+///
+/// Named separately from [`print_usage_warning`] because the path matters as
+/// much as the message: the point is to say *which* file on disk is not the one
+/// the daemon is running on.
+pub(crate) fn print_config_warning(w: &ConfigWarning) {
+    let stderr = io::stderr();
+    let mut out = stderr.lock();
+
+    if use_color() {
+        let _ignored = crossterm::execute!(out, SetForegroundColor(Color::Yellow));
+    }
+    let _ignored = write!(out, "config not applied");
+    if use_color() {
+        _ = crossterm::execute!(out, ResetColor);
+    }
+    match w.character.as_deref() {
+        Some(character) => _ = writeln!(out, " ({character}) {}: {}", w.path, w.message),
+        None => _ = writeln!(out, " {}: {}", w.path, w.message),
+    }
+    _ = writeln!(out, "the daemon is still running the last config that loaded");
+}
+
+/// Print whichever warning frame this is.
+///
+/// The three of them are handled together because the caller treats them the
+/// same way — stop the spinner, say the thing, carry on with the turn — and
+/// spelling that out three times is what pushed `recv_streaming_response` past
+/// its line budget.
+pub(crate) fn print_warning_frame(msg: &ServerMessage) {
+    match msg {
+        ServerMessage::ProviderFallbackWarning(w) => print_provider_fallback_warning(w),
+        ServerMessage::UsageWarning(w) => print_usage_warning(w),
+        ServerMessage::ConfigWarning(w) => print_config_warning(w),
+        ServerMessage::Hello(_)
+        | ServerMessage::History(_)
+        | ServerMessage::Shutdown(_)
+        | ServerMessage::Ping(_)
+        | ServerMessage::CommandOutput(_)
+        | ServerMessage::Error(_)
+        | ServerMessage::StreamStart(_)
+        | ServerMessage::StreamChunk(_)
+        | ServerMessage::StreamEnd(_)
+        | ServerMessage::Phase(_)
+        | ServerMessage::NewMessage(_)
+        | ServerMessage::ToolCall(_)
+        | ServerMessage::ToolResult(_)
+        | ServerMessage::SendImage(_)
+        | ServerMessage::CacheWarning(_)
+        | ServerMessage::Unknown => {}
+    }
 }
 
 /// Print a server protocol error.

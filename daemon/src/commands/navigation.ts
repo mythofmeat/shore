@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 import {
   AGENTS_FILE,
@@ -11,10 +11,12 @@ import {
   characterWorkspaceFile,
   discoverCharacters,
   isFile,
+  isUsableCharacterName,
   pathExists,
   readOrUndefined,
   rustJoin,
 } from "../config/dirs.ts";
+import { builtinSystemPrompt } from "../engine/prompt.ts";
 import { pendingDeferredEditPaths } from "../memory/deferred_edits.ts";
 import type { CharacterInfo } from "../protocol/CharacterInfo.ts";
 import { invalidRequest, notFound } from "./errors.ts";
@@ -22,6 +24,11 @@ import { invalidRequest, notFound } from "./errors.ts";
 export type Args = Record<string, unknown>;
 
 const asStr = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
+
+function requireUsableCharacterName(name: string): void {
+  if (isUsableCharacterName(name)) return;
+  throw invalidRequest(`Not a usable character name: ${name}`);
+}
 
 const AVATARS: readonly (readonly [file: string, mimeType: string])[] = [
   ["avatar.png", "image/png"],
@@ -75,6 +82,7 @@ export interface CharacterInfoContext {
 export async function characterInfo(ctx: CharacterInfoContext, args: Args): Promise<unknown> {
   const requested = asStr(args["name"]);
   const name = requested === undefined || requested === "" ? ctx.active : requested;
+  requireUsableCharacterName(name);
 
   const charDir = characterConfigDir(ctx.configDir, name);
   const workspaceDir = characterWorkspaceDir(ctx.configDir, name, ctx.workspaceRoot);
@@ -111,21 +119,71 @@ export async function characterInfo(ctx: CharacterInfoContext, args: Args): Prom
   };
 }
 
-export function switchCharacter(
+const LEGACY_CHARACTER_FILE = "character.md";
+
+const soulTemplate = (name: string): string => `You are ${name}.\n`;
+
+export const scaffoldedFiles = (
+  name: string,
+): readonly (readonly [file: string, content: string])[] => [
+  [SOUL_FILE, soulTemplate(name)],
+  [USER_FILE, ""],
+  [AGENTS_FILE, builtinSystemPrompt()],
+  [TOOLS_FILE, ""],
+];
+
+export function createCharacter(
   configDir: string,
-  active: string,
   args: Args,
   workspaceRoot?: string | undefined,
 ): unknown {
   const name = asStr(args["name"]);
+  if (name === undefined || name === "") {
+    throw invalidRequest("Missing required argument: name");
+  }
+  requireUsableCharacterName(name);
+
+  const workspaceDir = characterWorkspaceDir(configDir, name, workspaceRoot);
+  const legacy = rustJoin(characterConfigDir(configDir, name), LEGACY_CHARACTER_FILE);
+  if (pathExists(rustJoin(workspaceDir, SOUL_FILE)) || pathExists(legacy)) {
+    throw invalidRequest(`Character '${name}' already exists at ${workspaceDir}`);
+  }
+
+  mkdirSync(workspaceDir, { recursive: true });
+  const created: string[] = [];
+  for (const [file, content] of scaffoldedFiles(name)) {
+    const path = rustJoin(workspaceDir, file);
+    if (pathExists(path)) continue;
+    writeFileSync(path, content);
+    created.push(file);
+  }
+
+  return {
+    character: name,
+    workspace_dir: workspaceDir,
+    config_dir: characterConfigDir(configDir, name),
+    created_files: created,
+  };
+}
+
+export interface CharacterSwitch {
+  character: string;
+  changed: boolean;
+}
+
+export function switchCharacter(
+  configDir: string,
+  active: string | undefined,
+  args: Args,
+  workspaceRoot?: string | undefined,
+): CharacterSwitch {
+  const name = asStr(args["name"]);
   if (name === undefined) throw invalidRequest("Missing required argument: name");
+  requireUsableCharacterName(name);
 
   if (name === active) return { character: name, changed: false };
 
-  if (
-    !pathExists(characterConfigDir(configDir, name)) &&
-    !pathExists(characterWorkspaceDir(configDir, name, workspaceRoot))
-  ) {
+  if (!discoverCharacters(configDir, workspaceRoot).includes(name)) {
     throw notFound(`Character not found: ${name}`);
   }
   return { character: name, changed: true };

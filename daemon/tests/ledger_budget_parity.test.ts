@@ -29,7 +29,6 @@ import {
   type BudgetStatus,
   enforceBudgetForCall,
   newlyCrossedBudgetWarnings,
-  spikeWarnings,
   type BudgetCallContext,
   type UsageBudgetConfig,
   type UsageBudgetPeriod,
@@ -42,7 +41,6 @@ interface Case {
   now_name: string;
   now: string;
   statuses: unknown[];
-  spike_warnings: unknown[];
   warnings_first: unknown[];
   warnings_second: unknown[];
   enforce: Record<string, { allowed: boolean } & Record<string, unknown>>;
@@ -121,31 +119,21 @@ const clampedMonth: UsageBudgetConfig = {
   pace_period: "week",
 };
 
-const SPIKE = {
-  enabled: true,
-  period: "day" as const,
-  multiplier: 1.5,
-  min_cost_usd: 0.5,
-};
-
 const CONFIGS: Record<string, UsageConfig> = {
   local_paced_weekly: {
     timezone: "local",
     allow_compaction_over_budget: true,
     budgets: [pacedWeekly],
-    spike_warnings: SPIKE,
   },
   utc_paced_weekly: {
     timezone: "utc",
     allow_compaction_over_budget: true,
     budgets: [pacedWeekly],
-    spike_warnings: SPIKE,
   },
   local_mixed: {
     timezone: "local",
     allow_compaction_over_budget: true,
     budgets: [blockingDay, filtered, clampedMonth],
-    spike_warnings: SPIKE,
   },
   local_edges: {
     timezone: "local",
@@ -248,14 +236,27 @@ function caseLedger(index: number): Database {
   return db;
 }
 
-function withoutEffectiveAction(status: BudgetStatus): unknown {
-  const { effective_action: _dropped, pace, ...rest } = status;
-  if (pace === undefined) return rest;
-  const { effective_action: _alsoDropped, ...pacedRest } = pace;
-  return { ...rest, pace: pacedRest };
+function withoutChangedPolicy(status: BudgetStatus): unknown {
+  const { effective_action: _dropped, pace: _changed, ...rest } = status;
+  return rest;
 }
 
-test("cross-language budget parity", () => {
+function fixtureWithoutPace(status: unknown): unknown {
+  if (status === null || typeof status !== "object") return status;
+  const { pace: _changed, ...rest } = status as Record<string, unknown>;
+  return rest;
+}
+
+function nonPaceWarnings(events: unknown[]): unknown[] {
+  return events.filter(
+    (event) =>
+      event === null ||
+      typeof event !== "object" ||
+      (event as Record<string, unknown>)["scope"] !== "pace",
+  );
+}
+
+test("legacy cross-language budget parity outside the changed pace policy", () => {
   expect(doc.cases.length).toBeGreaterThan(0);
 
   doc.cases.forEach((c, i) => {
@@ -266,13 +267,9 @@ test("cross-language budget parity", () => {
     const at = (what: string) => `${c.config}/${c.now_name}: ${what}`;
 
     expect(
-      budgetStatuses(db, config!, now, opts).map(withoutEffectiveAction),
+      budgetStatuses(db, config!, now, opts).map(withoutChangedPolicy),
       at("statuses"),
-    ).toEqual(c.statuses as never);
-    expect(spikeWarnings(db, config!, now, opts), at("spike_warnings")).toEqual(
-      c.spike_warnings as never,
-    );
-
+    ).toEqual(c.statuses.map(fixtureWithoutPace) as never);
     // Enforcement before the warning calls, matching the generator: the
     // warnings write rows, and enforcement reads none of them, but ordering is
     // kept identical so any hidden coupling shows up as a diff rather than as
@@ -280,6 +277,9 @@ test("cross-language budget parity", () => {
     for (const [name, call] of Object.entries(CALLS)) {
       const block = enforceBudgetForCall(db, config!, call, now, opts);
       const expected = c.enforce[name]!;
+      // Pace decisions intentionally changed from the frozen Rust fixture.
+      // Direct rollover tests below this suite now own those decisions.
+      if (expected.scope === "pace" || block?.scope === "pace") continue;
       if (expected.allowed) {
         expect(block, at(`enforce ${name} (expected allow)`)).toBeUndefined();
       } else {
@@ -291,13 +291,13 @@ test("cross-language budget parity", () => {
     }
 
     expect(
-      newlyCrossedBudgetWarnings(db, config!, now, opts),
+      nonPaceWarnings(newlyCrossedBudgetWarnings(db, config!, now, opts)),
       at("warnings_first"),
-    ).toEqual(c.warnings_first as never);
+    ).toEqual(nonPaceWarnings(c.warnings_first) as never);
     expect(
-      newlyCrossedBudgetWarnings(db, config!, now, opts),
+      nonPaceWarnings(newlyCrossedBudgetWarnings(db, config!, now, opts)),
       at("warnings_second"),
-    ).toEqual(c.warnings_second as never);
+    ).toEqual(nonPaceWarnings(c.warnings_second) as never);
 
     db.close();
   });

@@ -1,3 +1,4 @@
+import { CharacterConfigError } from "../characters.ts";
 import { describeError } from "../llm/errors.ts";
 import type { ClientMessage } from "../protocol/ClientMessage.ts";
 import type { Command } from "../protocol/Command.ts";
@@ -28,7 +29,9 @@ const RID_BEARING: ReadonlySet<string> = new Set([
 ]);
 
 function generationErrorCode(error: unknown): ErrorCode {
-  if (error instanceof NoModelError) return error.code;
+  if (error instanceof NoModelError || error instanceof CharacterConfigError) {
+    return error.code;
+  }
   return "internal_error";
 }
 

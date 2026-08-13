@@ -7,6 +7,7 @@ import { tryBeginCompaction } from "../memory/compaction/manager.ts";
 import { runCompaction, type CompactionRunDeps } from "../memory/compaction/run.ts";
 import { reloadAndApplyDeferred, repoint, type PostArchiveDeps } from "./post_archive.ts";
 import type { AutonomyActionResult } from "./runner.ts";
+import { CompactionPaused } from "../memory/compaction/types.ts";
 
 const ACTIVE_JSONL_FILE = "active.jsonl";
 
@@ -46,7 +47,7 @@ export function deepArchiveNotification(
 }
 
 export interface DeepArchiveDeps extends PostArchiveDeps {
-  run?: Omit<CompactionRunDeps, "config" | "cachedRequest">;
+  run?: Omit<CompactionRunDeps, "config">;
   notify?: (title: string, body: string) => void;
   now?: () => string;
   newId?: () => string;
@@ -67,7 +68,11 @@ export async function runDeepIdleArchive(
     console.warn(
       `shore: deep-idle archive for ${character} failed to read the active conversation: ${String(e)}`,
     );
-    return { events: [], failed: message(e), deepArchiveDone: false };
+    return {
+      events: [],
+      failed: message(e),
+      deepArchiveDone: false,
+    };
   }
 
   const plan = deepArchivePlan(loaded.store.messages(), coveredTurnCount);
@@ -116,7 +121,14 @@ async function pureArchive(
       `shore: deep-idle archive for ${character} failed, will retry after the next ` +
         `archive_after window: ${String(e)}`,
     );
-    return { events: [], failed: message(e), deepArchiveDone: false };
+    return {
+      events: [],
+      failed: message(e),
+      deepArchiveDone: false,
+      ...(e instanceof CompactionPaused && e.resumeAt !== undefined
+        ? { retryAt: Date.parse(e.resumeAt) }
+        : {}),
+    };
   } finally {
     guard.release();
   }
@@ -151,7 +163,6 @@ async function compactionArchive(
     `shore: deep-idle archive for ${character} — running a keep-0 compaction over uncovered turns`,
   );
 
-  const cached = deps.cache.get(character);
   let retained: number;
   try {
     retained = await runCompaction(
@@ -159,7 +170,6 @@ async function compactionArchive(
       {
         ...deps.run,
         config: deps.config,
-        ...(cached === undefined ? {} : { cachedRequest: cached }),
       },
       { keepTurnsOverride: 0, retainTrailingAutonomous: true },
     );
@@ -168,7 +178,14 @@ async function compactionArchive(
       `shore: deep-idle archive compaction for ${character} failed, will retry after the next ` +
         `archive_after window: ${String(e)}`,
     );
-    return { events: [], failed: message(e), deepArchiveDone: false };
+    return {
+      events: [],
+      failed: message(e),
+      deepArchiveDone: false,
+      ...(e instanceof CompactionPaused && e.resumeAt !== undefined
+        ? { retryAt: Date.parse(e.resumeAt) }
+        : {}),
+    };
   }
 
   await reloadAndApplyDeferred(character, deps, "Deep-idle archive");

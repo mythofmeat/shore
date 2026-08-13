@@ -36,6 +36,7 @@ import { closeLedgers } from "../src/ledger/record.ts";
 import { generate } from "../src/llm/generate.ts";
 import { budgetBlockFor } from "../src/ledger/gate.ts";
 import { RECENT_COST_SAMPLE } from "../src/ledger/query.ts";
+import { Ledger } from "../src/ledger/store.ts";
 import type {
   GenerateResponse,
   SidecarProvider,
@@ -171,6 +172,23 @@ function req(ledger: string, usage?: unknown): SidecarRequest {
 // The endpoints answered 402 for a refusal. There is no status any more, so
 // these assert on the thrown `BudgetBlocked` — which is what `ff7426ae` gave a
 // `kind` so the retry layer would stop treating it as rotatable.
+
+test("a generate with missing labels is attached to the daemon ledger before sending", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shore-budget-unaccounted-"));
+  cleanups.push(() => rmSync(root, { recursive: true, force: true }));
+  const config = await chatConfig(root, false);
+  const counting = countingProvider();
+  const request = req(spentLedger(), undefined);
+  delete request.context;
+
+  await generate(request, { providers: { openai: counting.provider }, config });
+  expect(counting.calls).toBe(1);
+  const labeled = (request as SidecarRequest).context;
+  expect(labeled?.ledger).toBe(join(config.dirs.data, "ledger.db"));
+  const ledger = Ledger.open(labeled!.ledger!);
+  expect(ledger.database.query("SELECT COUNT(*) AS n FROM call_attempts").get()).toEqual({ n: 1 });
+  ledger.close();
+});
 
 async function generateOnce(
   usage: unknown,

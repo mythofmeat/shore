@@ -365,7 +365,6 @@ describe("buildGenerationRequest", () => {
       const app = defaultAppConfig();
       app.defaults.display_name = "Ash";
       app.behavior.user_message_timestamps = c.input.timestamps;
-      app.advanced.max_image_size = 1024;
       app.tools.enabled_tools = c.input.enabled_tools;
 
       const resolved: ResolvedModel = {

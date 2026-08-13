@@ -101,14 +101,13 @@ describe("pause_heartbeat", () => {
     expect(blocked(paused, db)).not.toContain("keepalive");
   });
 
-  test("pause_background is unchanged, so nobody's config moves", () => {
+  test("pause_background also pauses compaction under the safe default", () => {
     const db = ledgerSpending(12);
-    // `compaction` is absent because `allow_compaction_over_budget` defaults to
-    // true — the carve-out that set the precedent for this whole split.
     expect(blocked(budget({ limit: "pause_background", warn_at: [] }), db)).toEqual([
       "heartbeat",
       "heartbeat_tool_loop",
       "keepalive",
+      "compaction",
       "dreaming",
       "memory_query",
     ]);
@@ -144,14 +143,13 @@ describe("warn_action", () => {
     // non-blocking limit falls through to the threshold check.
     const db = ledgerSpending(8.5);
     const config = budget({ warn_at: [0.8], warn_action: "block", limit: "warn" });
-    // `compaction` stays out even under `block`: `allow_compaction_over_budget`
-    // defaults to true and is checked ahead of the action.
     expect(blocked(config, db)).toEqual([
       "message",
       "tool_loop",
       "heartbeat",
       "heartbeat_tool_loop",
       "keepalive",
+      "compaction",
       "dreaming",
       "memory_query",
     ]);
@@ -202,7 +200,13 @@ describe("warn_action", () => {
 
 describe("pace_warn_action", () => {
   const paced = (fields: Record<string, unknown>): unknown =>
-    budget({ period: "month", pace_period: "day", ...fields });
+    budget({
+      period: "month",
+      pace_period: "day",
+      reset_day_of_month: 5,
+      reset_hour: 0,
+      ...fields,
+    });
 
   test("falls back to warn_action so one key covers both windows", () => {
     // $0.50 spent against a daily pace allowance of ~$10/31 ≈ $0.32 — over the
@@ -256,6 +260,8 @@ describe("effective_action", () => {
     const config = budget({
       period: "month",
       pace_period: "day",
+      reset_day_of_month: 5,
+      reset_hour: 0,
       warn_at: [0.85, 1],
       pace_warn_at: [0.5],
       pace_warn_action: "pause_heartbeat",

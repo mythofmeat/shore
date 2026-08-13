@@ -5,6 +5,7 @@ import type { NewMessage } from "../src/protocol/NewMessage";
 import type { ServerMessage } from "../src/protocol/ServerMessage";
 
 import { Server } from "../src/swp/server.ts";
+import { ALL_CHARACTERS_CAPABILITY } from "../src/swp/session.ts";
 import { Bridge, type BridgeBot } from "../src/connections/matrix/bridge.ts";
 import { EventMap } from "../src/connections/matrix/event_map.ts";
 import type { MatrixEvent } from "../src/connections/matrix/events.ts";
@@ -155,7 +156,7 @@ async function harness(
   const peer = await server.attachLocal({
     clientType: "bridge",
     clientName: "shore-matrix",
-    capabilities: ["streaming"],
+    capabilities: ["streaming", ALL_CHARACTERS_CAPABILITY],
   });
   const sessionId = peer.session.sessionId;
 

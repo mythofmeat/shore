@@ -1,7 +1,6 @@
 import { join } from "node:path";
 
 import type { LoadedConfig } from "../config/loader.ts";
-import type { SidecarRequest } from "../llm/types.ts";
 import { applyDeferredEdits } from "../memory/deferred_edits.ts";
 import { runCompactionPass, type CompactionRunDeps } from "../memory/compaction/run.ts";
 import {
@@ -26,8 +25,8 @@ export interface CompactAutonomy {
 export interface CompactContext {
   config: LoadedConfig;
   autonomy: CompactAutonomy;
-  run: Omit<CompactionRunDeps, "config" | "cachedRequest">;
-  cachedRequest?: (character: string) => SidecarRequest | undefined;
+  run: Omit<CompactionRunDeps, "config">;
+  repoint?: (character: string, config: LoadedConfig) => Promise<void>;
 }
 
 export function parseCompactArgs(args: Args): {
@@ -58,7 +57,6 @@ export async function compact(
       {
         ...ctx.run,
         config: ctx.config,
-        ...cachedRequestFor(ctx, character),
       },
       {
         dryRun,
@@ -72,14 +70,6 @@ export async function compact(
   if (outcome === undefined) throw invalidRequest("No messages to compact");
 
   return await buildCompactionResponse(engine, ctx, character, outcome);
-}
-
-function cachedRequestFor(
-  ctx: CompactContext,
-  character: string,
-): { cachedRequest?: SidecarRequest } {
-  const cached = ctx.cachedRequest?.(character);
-  return cached === undefined ? {} : { cachedRequest: cached };
 }
 
 export function compactionError(e: unknown): CommandError {
@@ -139,6 +129,20 @@ export async function buildCompactionResponse(
     };
   }
 
+  if (outcome.kind === "paused") {
+    return {
+      status: "paused",
+      character,
+      checkpoint_id: outcome.checkpointId,
+      message_count: outcome.messageCount,
+      compacted_turns: outcome.compactedTurns,
+      tool_rounds: outcome.toolRounds,
+      tools_called: outcome.toolsCalled,
+      reason: outcome.reason,
+      resume_at: outcome.resumeAt ?? null,
+    };
+  }
+
   return {
     status: "dry_run",
     character,
@@ -182,6 +186,12 @@ async function completeCompaction(
     );
   } catch (e) {
     console.warn(`shore: failed to apply deferred edits after compaction: ${String(e)}`);
+  }
+
+  try {
+    await ctx.repoint?.(character, ctx.config);
+  } catch (e) {
+    throw internalError(e instanceof Error ? e.message : String(e));
   }
 
   ctx.autonomy.onCompactionComplete(character, retainedTurns);

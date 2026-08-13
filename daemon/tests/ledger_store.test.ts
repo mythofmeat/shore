@@ -67,6 +67,23 @@ describe("writing rows the daemon's schema accepts", () => {
     }
   });
 
+  test("a pending attempt survives a crash and is marked unresolved on daemon startup", () => {
+    const { path, cleanup } = freshLedger();
+    try {
+      const ledger = Ledger.open(path);
+      ledger.beginAttempt(call(), 0.25);
+      ledger.close();
+
+      const reopened = Ledger.create(path);
+      expect(reopened.database.query(
+        "SELECT status, estimated_cost FROM call_attempts",
+      ).get()).toEqual({ status: "unresolved", estimated_cost: 0.25 });
+      reopened.close();
+    } finally {
+      cleanup();
+    }
+  });
+
   test("cost comes from the catalog when the provider reports none", () => {
     const { path, cleanup } = freshLedger();
     try {

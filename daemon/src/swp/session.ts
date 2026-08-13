@@ -4,6 +4,8 @@ import type { ServerMessage } from "../protocol/ServerMessage";
 
 export type RequestKind = "message" | "regen" | "command" | "cancel";
 
+export const ALL_CHARACTERS_CAPABILITY = "all_characters";
+
 export interface ClientInfo {
   readonly id: number;
   readonly clientType: string;
@@ -77,6 +79,10 @@ export class SessionRouter {
 
   characterFor(sessionId: number): string | null {
     return this.#clients.get(sessionId)?.character ?? null;
+  }
+
+  receivesAllCharacters(sessionId: number): boolean {
+    return this.#clients.get(sessionId)?.capabilities.includes(ALL_CHARACTERS_CAPABILITY) ?? false;
   }
 
   senderFor(sessionId: number): DirectSender | undefined {

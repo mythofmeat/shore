@@ -11,7 +11,13 @@ export function ledgerFor(path: string): Ledger | null {
   try {
     opened = Ledger.open(path);
   } catch (e) {
-    console.error(`shore: cannot open ledger at ${path}: ${String(e)}`);
+    try {
+      opened = Ledger.create(path);
+    } catch (createError) {
+      console.error(
+        `shore: cannot open or create ledger at ${path}: ${String(e)}; ${String(createError)}`,
+      );
+    }
   }
   ledgers.set(path, opened);
   return opened;
@@ -61,6 +67,11 @@ interface Recorded {
   call_type?: string;
 }
 
+export interface CallAttempt {
+  ledger: Ledger;
+  id: string;
+}
+
 type CallObserver = (ctx: CallContext, model: string, callType: string) => void;
 
 let observer: CallObserver | undefined;
@@ -73,9 +84,14 @@ function callLanded(finishReason: string): boolean {
   return finishReason !== "error" && finishReason !== "cancelled";
 }
 
-function record(ctx: CallContext, req: SidecarRequest, call: Recorded): void {
+function record(
+  ctx: CallContext,
+  req: SidecarRequest,
+  call: Recorded,
+  attempt?: CallAttempt,
+): void {
   if (ctx.ledger === undefined) return;
-  const ledger = ledgerFor(ctx.ledger);
+  const ledger = attempt?.ledger ?? ledgerFor(ctx.ledger);
   if (ledger === null) return;
   if (ctx.keepalive_max_secs !== undefined) ledger.setMaxIdleSecs(ctx.keepalive_max_secs);
   const ttl = cacheTtlSeconds(ctx.cache_ttl);
@@ -95,15 +111,20 @@ function record(ctx: CallContext, req: SidecarRequest, call: Recorded): void {
     reasoning_effort: ctx.reasoning_effort,
     tool_surface: toolSurfaceFingerprint(req.tools),
   };
-  const row = ledger.record(entry);
+  const row = ledger.record(entry, () => new Date(), attempt?.id);
   if (row.cache_anomaly !== null) {
     notifyAnomaly(ctx, entry, row.cache_anomaly);
   }
 }
 
-function tryRecord(ctx: CallContext, req: SidecarRequest, call: Recorded): void {
+function tryRecord(
+  ctx: CallContext,
+  req: SidecarRequest,
+  call: Recorded,
+  attempt?: CallAttempt,
+): void {
   try {
-    record(ctx, req, call);
+    record(ctx, req, call, attempt);
   } catch (e) {
     console.error(`shore: failed to record ledger row: ${String(e)}`);
   }
@@ -114,6 +135,78 @@ function tryRecord(ctx: CallContext, req: SidecarRequest, call: Recorded): void 
   } catch (e) {
     console.error(`shore: call observer failed: ${String(e)}`);
   }
+}
+
+export function beginCallAttempt(
+  ctx: CallContext | undefined,
+  req: SidecarRequest,
+  callType?: string,
+): CallAttempt {
+  if (ctx?.ledger === undefined) {
+    throw new Error(
+      `refusing unaccounted LLM call for ${req.provider_key ?? req.sdk}/${req.model}: ` +
+        "request context has no ledger",
+    );
+  }
+  const ledger = ledgerFor(ctx.ledger);
+  if (ledger === null) {
+    throw new Error(`refusing LLM call because the usage ledger is unavailable: ${ctx.ledger}`);
+  }
+  const provider = req.provider_key ?? req.sdk;
+  const effectiveCallType = callType ?? ctx.call_type;
+  const estimate = recentAttemptEstimate(ledger, provider, req.model, effectiveCallType);
+  return {
+    ledger,
+    id: ledger.beginAttempt(
+      {
+        provider,
+        api_key_name: ctx.api_key_name,
+        model: req.model,
+        call_type: effectiveCallType,
+        character: ctx.character,
+      },
+      estimate,
+    ),
+  };
+}
+
+function recentAttemptEstimate(
+  ledger: Ledger,
+  provider: string,
+  model: string,
+  callType: string,
+): number | undefined {
+  const row = ledger.database.query(
+    `SELECT AVG(total_cost) AS estimate FROM (
+       SELECT total_cost FROM calls
+        WHERE provider = $provider AND model = $model AND call_type = $call_type
+          AND total_cost IS NOT NULL AND total_cost > 0
+        ORDER BY id DESC LIMIT 20
+     )`,
+  ).get({ $provider: provider, $model: model, $call_type: callType }) as
+    | { estimate?: unknown }
+    | null;
+  return typeof row?.estimate === "number" && Number.isFinite(row.estimate)
+    ? row.estimate
+    : recentModelEstimate(ledger, provider, model);
+}
+
+function recentModelEstimate(
+  ledger: Ledger,
+  provider: string,
+  model: string,
+): number | undefined {
+  const row = ledger.database.query(
+    `SELECT AVG(total_cost) AS estimate FROM (
+       SELECT total_cost FROM calls
+        WHERE provider = $provider AND model = $model
+          AND total_cost IS NOT NULL AND total_cost > 0
+        ORDER BY id DESC LIMIT 20
+     )`,
+  ).get({ $provider: provider, $model: model }) as { estimate?: unknown } | null;
+  return typeof row?.estimate === "number" && Number.isFinite(row.estimate)
+    ? row.estimate
+    : undefined;
 }
 
 function notifyAnomaly(ctx: CallContext, call: RecordCall, anomaly: string): void {
@@ -135,12 +228,17 @@ export async function* recordingStream(
   ctx: CallContext | undefined,
   req: SidecarRequest,
   source: AsyncIterable<StreamEvent>,
+  initialAttempt?: CallAttempt,
+  beforeContinuation: (request: SidecarRequest, callType: string) => CallAttempt =
+    (request, callType) => beginCallAttempt(request.context, request, callType),
 ): AsyncIterable<StreamEvent> {
   if (ctx === undefined) {
     yield* source;
     return;
   }
   let recorded = 0;
+  let attempt = initialAttempt;
+  const trackAttempts = initialAttempt !== undefined;
   try {
     for await (const event of source) {
       if (event.type === "call_complete") {
@@ -149,15 +247,20 @@ export async function* recordingStream(
           timing: event.timing,
           finish_reason: event.finish_reason,
           call_type: event.continuation ? continuationOf(ctx.call_type) : ctx.call_type,
-        });
+        }, attempt);
+        attempt = undefined;
         recorded += 1;
+        if (trackAttempts && event.finish_reason === "tool_use") {
+          attempt = beforeContinuation(req, continuationOf(ctx.call_type));
+        }
       } else if (event.type === "done") {
         if (recorded === 0) {
           tryRecord(ctx, req, {
             usage: event.usage,
             timing: event.timing,
             finish_reason: event.finish_reason,
-          });
+          }, attempt);
+          attempt = undefined;
           recorded += 1;
         }
       } else if (event.type === "error") {
@@ -165,7 +268,8 @@ export async function* recordingStream(
           usage: recorded === 0 ? event.usage : NO_USAGE,
           timing: event.timing,
           finish_reason: "error",
-        });
+        }, attempt);
+        attempt = undefined;
         recorded += 1;
       }
       yield event;
@@ -176,7 +280,7 @@ export async function* recordingStream(
         usage: NO_USAGE,
         timing: { total_ms: 0, time_to_first_token_ms: 0 },
         finish_reason: "cancelled",
-      });
+      }, attempt);
     }
   }
 }
@@ -185,13 +289,14 @@ export function recordGenerate(
   ctx: CallContext | undefined,
   req: SidecarRequest,
   resp: GenerateResponse,
+  attempt?: CallAttempt,
 ): void {
   if (ctx === undefined) return;
   tryRecord(ctx, req, {
     usage: resp.usage,
     timing: resp.timing,
     finish_reason: resp.finish_reason,
-  });
+  }, attempt);
 }
 
 export function recordGenerateError(
@@ -199,11 +304,12 @@ export function recordGenerateError(
   req: SidecarRequest,
   startedAt: number,
   now: () => number = () => Date.now(),
+  attempt?: CallAttempt,
 ): void {
   if (ctx === undefined) return;
   tryRecord(ctx, req, {
     usage: NO_USAGE,
     timing: { total_ms: now() - startedAt, time_to_first_token_ms: 0 },
     finish_reason: "error",
-  });
+  }, attempt);
 }

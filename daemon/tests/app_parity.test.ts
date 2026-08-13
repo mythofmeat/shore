@@ -118,6 +118,17 @@ function withoutRemovedDaemonFields(value: unknown): unknown {
   return { ...(value as object), daemon: copy };
 }
 
+/** Drop `[usage]` fields that no longer exist from the frozen Rust value. */
+function withoutRemovedUsageFields(value: unknown): unknown {
+  const usage = (value as { usage?: unknown } | null)?.usage;
+  if (typeof usage !== "object" || usage === null) return value;
+  const { spike_warnings: _removed, ...current } = usage as Record<string, unknown>;
+  return { ...(value as object), usage: current };
+}
+
+const withoutRemovedFields = (value: unknown): unknown =>
+  withoutRemovedUsageFields(withoutRemovedDaemonFields(value));
+
 /**
  * `[[usage.budgets]]` keys added after the fixture was frozen (#35).
  *
@@ -211,6 +222,57 @@ function withRustMcpFieldCount(err: string): string {
   );
 }
 
+/**
+ * The two cache keys this schema moved out of `[behavior.autonomy]` and
+ * `[advanced]` into a `[cache]` section of their own.
+ *
+ * Neither is autonomy: the keepalive ceiling bounds what shore spends holding a
+ * prompt cache warm, and it applied whether or not autonomy was ever switched
+ * on. The fixture is a frozen capture of a Rust that filed them elsewhere, so
+ * the *expectation* is rewritten into the new shape here — the same key, the
+ * same reader, the same value, reached by a different path. Both sides of the
+ * replay get this, so the delta a case's TOML sets is still computed against a
+ * matching default.
+ *
+ * Asserted below to really be present in the fixture.
+ */
+const CACHE_KEYS_MOVED_SINCE = {
+  keepalive_max: ["behavior", "autonomy", "cache_keepalive_max"],
+  forensics: ["advanced", "cache_forensics"],
+} as const;
+
+function withCacheSectionMoved(value: unknown): unknown {
+  const v = value as Record<string, Record<string, Record<string, unknown>>> | null;
+  const autonomy = v?.behavior?.autonomy;
+  const advanced = v?.advanced;
+  if (autonomy === undefined || advanced === undefined) return value;
+  if (!("cache_keepalive_max" in autonomy) || !("cache_forensics" in advanced)) return value;
+
+  const trimmedAutonomy = { ...autonomy };
+  delete trimmedAutonomy.cache_keepalive_max;
+  const trimmedAdvanced = { ...advanced };
+  delete trimmedAdvanced.cache_forensics;
+
+  return {
+    ...(value as object),
+    behavior: { ...v!.behavior, autonomy: trimmedAutonomy },
+    advanced: trimmedAdvanced,
+    cache: {
+      keepalive_max: autonomy.cache_keepalive_max,
+      forensics: advanced.cache_forensics,
+    },
+  };
+}
+
+/** A case's TOML with the keepalive ceiling written at its new path. */
+function tomlWithCacheSectionMoved(src: string): string {
+  const assignment = /^cache_keepalive_max = (.+)$/m;
+  const match = assignment.exec(src);
+  if (match === null) return src;
+  const without = src.replace(assignment, "").replace(/\n{3,}/g, "\n\n");
+  return `${without}\n[cache]\nkeepalive_max = ${match[1]}\n`;
+}
+
 const CONNECTIONS_FIELDS_REINTRODUCED_SINCE = ["matrix"] as const;
 
 function withoutReintroducedConnectionsFields(value: unknown): unknown {
@@ -225,8 +287,25 @@ function withoutReintroducedConnectionsFields(value: unknown): unknown {
 const withoutAddedFields = (value: unknown): unknown =>
   withoutReintroducedConnectionsFields(withoutAddedMcpFields(withoutAddedBudgetFields(value)));
 
+/**
+ * The Rust's accepted-field lists that the `[cache]` move changed, anchored on
+ * their neighbours for the same reason {@link withRustMcpFields} is: a list
+ * that reorders should fail here, not keep matching a floating replace.
+ *
+ * `AutonomyConfig` is down to two fields, and serde spells a two-field list
+ * `` `a` or `b` `` rather than `one of`.
+ */
+function withRustCacheFields(err: string): string {
+  return err
+    .replace("`memory`, `cache`, `connections`", "`memory`, `connections`")
+    .replace(
+      "expected `enabled` or `heartbeat`",
+      "expected one of `enabled`, `heartbeat`, `cache_keepalive_max`",
+    );
+}
+
 const withRustFieldCounts = (err: string): string =>
-  withRustMcpFieldCount(withRustBudgetFieldCount(err));
+  withRustCacheFields(withRustMcpFieldCount(withRustBudgetFieldCount(err)));
 
 // ── Cases the TypeScript deliberately cannot match ──────────────────────
 
@@ -250,11 +329,15 @@ const DELIBERATELY_DIVERGENT = new Set([
   "the removed matrix connection is rejected",
   "the removed embedded matrix connection is rejected",
   "the advanced section",
+  "max_image_size = 0 disables resizing",
+  "negative u64",
   "seq: AdvancedConfig",
   "seq: AdvancedConfig, at its minimum",
   "seq: LlmSidecarConfig",
   "seq: LlmSidecarConfig, at its minimum",
   "integer where a path is expected",
+  "a full positional sequence",
+  "usage budgets and spike warnings",
 ]);
 
 const BUN_CANNOT_SEE = new Set([
@@ -292,6 +375,11 @@ describe("the fixture is real", () => {
     }
   });
 
+  test("the trimmed usage field really is one it had", () => {
+    const usage = (fixture.defaults as { usage: Record<string, unknown> }).usage;
+    expect(Object.keys(usage)).toContain("spike_warnings");
+  });
+
   test("the exempted budget fields really are ones it never had", () => {
     // The exemption above is only honest if these keys are absent from every
     // budget the Rust recorded. If one ever appears, the replay is hiding a
@@ -309,6 +397,31 @@ describe("the fixture is real", () => {
       expect(text).not.toContain(`"${key}"`);
     }
     expect(text).toContain(`McpServerConfig with ${RUST_MCP_FIELD_COUNT} elements`);
+  });
+
+  test("the moved cache keys really are ones it had, where it had them", () => {
+    const defaults = fixture.defaults as object;
+    for (const path of Object.values(CACHE_KEYS_MOVED_SINCE)) {
+      let here: unknown = defaults;
+      for (const key of path) {
+        expect(Object.keys(here as object)).toContain(key);
+        here = (here as Record<string, unknown>)[key];
+      }
+    }
+    expect(Object.keys(defaults)).not.toContain("cache");
+  });
+
+  test("the moved keys kept the values the Rust defaulted them to", () => {
+    // The replay compares an unset default against itself, so a section the
+    // fixture never had would otherwise pin nothing. These two are read
+    // straight off the recorded defaults instead.
+    const recorded = fixture.defaults as {
+      behavior: { autonomy: { cache_keepalive_max: string } };
+      advanced: { cache_forensics: boolean };
+    };
+    const cache = defaultAppConfig().cache;
+    expect(cache.keepalive_max.toString()).toBe(recorded.behavior.autonomy.cache_keepalive_max);
+    expect(cache.forensics).toBe(recorded.advanced.cache_forensics);
   });
 
   test("the reintroduced connections fields really are ones it never had", () => {
@@ -342,8 +455,8 @@ describe("AppConfig::default", () => {
 
 function expectationFor(want: unknown, toml: string): unknown {
   return replayOntoCurrentDefaults(
-    withoutRemovedDaemonFields(want),
-    withoutRemovedDaemonFields(fixture.defaults),
+    withCacheSectionMoved(withoutRemovedFields(want)),
+    withCacheSectionMoved(withoutRemovedFields(fixture.defaults)),
     withoutAddedFields(canonical(defaultAppConfig())),
     pathsSetBy(parseToml(toml)),
   );
@@ -354,7 +467,8 @@ describe("parsing config.toml", () => {
     if (BUN_CANNOT_SEE.has(c.name) || DELIBERATELY_DIVERGENT.has(c.name)) continue;
 
     test(c.name, () => {
-      const parsed = parseAppConfig(parseToml(c.toml));
+      const toml = tomlWithCacheSectionMoved(c.toml);
+      const parsed = parseAppConfig(parseToml(toml));
 
       // Three fixture shapes, all reduced to "what does the table path say":
       // `ok` (both paths agreed), `doc_err`/`table_err` (both failed, possibly
@@ -375,7 +489,7 @@ describe("parsing config.toml", () => {
         // are for: keys the fixture never had come off *our* answer, keys it
         // had and the schema dropped come off *its* expectation.
         expect(withoutAddedFields(canonical(parsed.ok))).toEqual(
-          expectationFor(want.ok, c.toml),
+          expectationFor(want.ok, toml),
         );
       }
     });
@@ -401,6 +515,18 @@ describe("parsing config.toml", () => {
     expect(ok.ok.daemon).toEqual({ addr: "0.0.0.0:9999" });
   });
 
+  test("a config still setting usage spike warnings is now rejected", () => {
+    const c = fixture.parse.find((x) => x.name === "usage budgets and spike warnings");
+    expect(c).toBeDefined();
+
+    const parsed = parseAppConfig(parseToml(c!.toml));
+    expect("err" in parsed).toBe(true);
+    expect((parsed as { err: string }).err).toBe(
+      "unknown field `spike_warnings`, expected one of `timezone`, " +
+        "`allow_compaction_over_budget`, `budgets`",
+    );
+  });
+
   test("a config still setting the deleted [advanced] keys is now rejected", () => {
     const c = fixture.parse.find((x) => x.name === "the advanced section");
     expect(c).toBeDefined();
@@ -408,9 +534,61 @@ describe("parsing config.toml", () => {
     const parsed = parseAppConfig(parseToml(c!.toml));
     expect("err" in parsed).toBe(true);
     expect((parsed as { err: string }).err).toBe(
-      "unknown field `api_payload_logging`, expected one of `cache_forensics`, `editor`, " +
-        "`max_retries`, `retry_backoff`, `max_image_size`",
+      "unknown field `api_payload_logging`, expected one of `editor`, " +
+        "`max_retries`, `retry_backoff`",
     );
+  });
+
+  test("`max_image_size` is rejected by name now that nothing resizes", () => {
+    for (const name of ["max_image_size = 0 disables resizing", "negative u64"]) {
+      const c = fixture.parse.find((x) => x.name === name);
+      if (c === undefined) throw new Error(`fixture case missing: ${name}`);
+
+      const parsed = parseAppConfig(parseToml(c.toml));
+      expect("err" in parsed).toBe(true);
+      expect((parsed as { err: string }).err).toBe(
+        "unknown field `max_image_size`, expected one of `editor`, " +
+          "`max_retries`, `retry_backoff`",
+      );
+    }
+  });
+
+  test("a config still setting the moved cache keys at the old paths is rejected", () => {
+    // Both moved to `[cache]`, and an old config is told so by name rather than
+    // keeping a key nothing reads. The keepalive ceiling is a spend limit, not
+    // an autonomy switch — it bounded what the pings cost whether or not
+    // autonomy was ever enabled.
+    const stale = parseAppConfig(parseToml(`[behavior.autonomy]\ncache_keepalive_max = "6h"\n`));
+    expect("err" in stale).toBe(true);
+    expect((stale as { err: string }).err).toBe(
+      "unknown field `cache_keepalive_max`, expected `enabled` or `heartbeat`",
+    );
+
+    const staleForensics = parseAppConfig(parseToml(`[advanced]\ncache_forensics = true\n`));
+    expect("err" in staleForensics).toBe(true);
+    expect((staleForensics as { err: string }).err).toContain("unknown field `cache_forensics`");
+
+    const moved = parseAppConfig(parseToml(`[cache]\nkeepalive_max = "6h"\nforensics = true\n`));
+    if ("err" in moved) throw new Error(moved.err);
+    expect(moved.ok.cache.keepalive_max.asSecs()).toBe(21_600n);
+    expect(moved.ok.cache.forensics).toBe(true);
+  });
+
+  test("[behavior.autonomy] lost a positional slot when the ceiling moved out", () => {
+    // The fixture's `a full positional sequence` case: three elements were the
+    // whole struct, and the third was the ceiling.
+    const tooLong = parseAppConfig(
+      parseToml(`[behavior]\nautonomy = [true, { enabled = false }, "6h"]\n`),
+    );
+    expect("err" in tooLong).toBe(true);
+    expect((tooLong as { err: string }).err).toBe(
+      "invalid length 3, expected fewer elements in array",
+    );
+
+    const nowFull = parseAppConfig(parseToml(`[behavior]\nautonomy = [true, { enabled = false }]\n`));
+    if ("err" in nowFull) throw new Error(nowFull.err);
+    expect(nowFull.ok.behavior.autonomy.enabled).toBe(true);
+    expect(nowFull.ok.behavior.autonomy.heartbeat.enabled).toBe(false);
   });
 
   test("[advanced.llm_sidecar] is rejected as a section, not just as a key", () => {
@@ -424,29 +602,28 @@ describe("parsing config.toml", () => {
   test("the surviving [advanced] keys still parse, positionally and by name", () => {
     const byName = parseAppConfig(
       parseToml(
-        `[advanced]\ncache_forensics = true\neditor = "hx"\nmax_retries = 5\n` +
-          `retry_backoff = "250ms"\nmax_image_size = 5000000\n`,
+        `[advanced]\neditor = "hx"\nmax_retries = 5\nretry_backoff = "250ms"\n`,
       ),
     );
     if ("err" in byName) throw new Error(byName.err);
-    expect(byName.ok.advanced.cache_forensics).toBe(true);
     expect(byName.ok.advanced.editor).toBe("hx");
-    expect(byName.ok.advanced.max_image_size).toBe(5_000_000);
+    expect(byName.ok.advanced.max_retries).toBe(5);
+    expect(byName.ok.advanced.retry_backoff?.asMillisExact()).toBe(250n);
 
-    const positional = parseAppConfig(parseToml(`advanced = [true, "hx", 3, "1s"]\n`));
+    const positional = parseAppConfig(parseToml(`advanced = ["hx", 3, "1s"]\n`));
     if ("err" in positional) throw new Error(positional.err);
     expect(positional.ok.advanced.editor).toBe("hx");
 
-    const tooLong = parseAppConfig(parseToml(`advanced = [true, "hx", 3, "1s", 1, 2]\n`));
+    const tooLong = parseAppConfig(parseToml(`advanced = ["hx", 3, "1s", 1, 2]\n`));
     expect("err" in tooLong).toBe(true);
     expect((tooLong as { err: string }).err).toBe(
-      "invalid length 6, expected fewer elements in array",
+      "invalid length 5, expected fewer elements in array",
     );
 
     const tooShort = parseAppConfig(parseToml(`advanced = []\n`));
     expect("err" in tooShort).toBe(true);
     expect((tooShort as { err: string }).err).toBe(
-      "invalid length 1, expected struct AdvancedConfig with 5 elements",
+      "invalid length 0, expected struct AdvancedConfig with 3 elements",
     );
   });
 
@@ -562,8 +739,8 @@ describe("the two parse paths, where they disagree", () => {
     if ("ok" in parsed) throw new Error("expected a parse error");
     expect(parsed.err).toContain("`aaa_unknown`");
     expect(parsed.err).not.toContain("`zzz_unknown`");
-    expect(parsed.err).toBe(c.table_err);
-    expect(parsed.err).not.toBe(c.doc_err);
+    expect(withRustFieldCounts(parsed.err)).toBe(c.table_err);
+    expect(withRustFieldCounts(parsed.err)).not.toBe(c.doc_err);
   });
 
   test("a bad type sorting before an unknown key wins the race", () => {
@@ -620,16 +797,26 @@ describe("distinctions Bun's TOML parser destroys", () => {
     ).not.toThrow();
   });
 
-  test("a u64 past 2^53 loses its last digit here and keeps it in Rust", () => {
+  test("the recorded u64 case set `max_image_size`, which is now rejected by name", () => {
     const c = fixture.parse.find((x) => x.name === "u64 fields hold values a double cannot");
     if (c === undefined) throw new Error("fixture case missing");
-    const rust = c.ok as { advanced: { max_image_size: number } } | undefined;
+    const rust = c.ok as { advanced: Record<string, unknown> } | undefined;
     if (rust === undefined) throw new Error("expected a recorded success");
-    expect(rust.advanced.max_image_size).toBe(9007199254740993);
+    expect(rust.advanced.max_image_size).toBe(9007199254740992);
 
     const parsed = parseAppConfig(parseToml(c.toml));
+    expect("err" in parsed).toBe(true);
+    expect((parsed as { err: string }).err).toBe(
+      "unknown field `max_image_size`, expected one of `editor`, `max_retries`, `retry_backoff`",
+    );
+  });
+
+  test("a u64 past 2^53 still loses its last digit on a surviving field", () => {
+    const parsed = parseAppConfig(
+      parseToml(`[memory.retrieval]\nmax_file_bytes = 9007199254740993\n`),
+    );
     if ("err" in parsed) throw new Error(parsed.err);
-    expect(parsed.ok.advanced.max_image_size).toBe(9007199254740992);
+    expect(parsed.ok.memory.retrieval.max_file_bytes).toBe(9007199254740992);
   });
 });
 

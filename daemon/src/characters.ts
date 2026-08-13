@@ -6,7 +6,7 @@ import {
   resolveUserDefinition,
   SOUL_FILE,
 } from "./config/dirs.ts";
-import { loadCharacterConfig, type LoadedConfig } from "./config/loader.ts";
+import { ConfigError, loadCharacterConfig, type LoadedConfig } from "./config/loader.ts";
 import { ConversationEngine, type HistoryListener } from "./engine/conversation.ts";
 import { ensureActivePromptSnapshot } from "./memory/deferred_edits.ts";
 
@@ -61,6 +61,21 @@ export class EngineCharacterNotFound extends Error {
   constructor(readonly character: string) {
     super(`character not found: ${character}`);
     this.name = "EngineCharacterNotFound";
+  }
+}
+
+export class CharacterConfigError extends Error {
+  readonly code = "invalid_request" as const;
+
+  constructor(readonly character: string, cause: unknown) {
+    const detail =
+      cause instanceof ConfigError
+        ? cause.display
+        : cause instanceof Error
+          ? cause.message
+          : String(cause);
+    super(`invalid config for character ${JSON.stringify(character)}: ${detail}`);
+    this.name = "CharacterConfigError";
   }
 }
 
@@ -155,10 +170,7 @@ export class CharacterRegistry {
       try {
         this.#charConfigs.set(name, loadCharacterConfig(this.#globalConfig, name));
       } catch (e) {
-        console.warn(
-          `shore: failed to load config for character ${name}, using global: ${String(e)}`,
-        );
-        this.#charConfigs.set(name, undefined);
+        throw new CharacterConfigError(name, e);
       }
     }
     return this.#charConfigs.get(name) ?? this.#globalConfig;

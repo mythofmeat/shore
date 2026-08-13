@@ -1,9 +1,10 @@
 import { runCompaction, type CompactionRunDeps } from "../memory/compaction/run.ts";
 import { reloadAndApplyDeferred, repoint, type PostArchiveDeps } from "./post_archive.ts";
 import type { AutonomyActionResult } from "./runner.ts";
+import { CompactionPaused } from "../memory/compaction/types.ts";
 
 export interface IdleCompactionDeps extends PostArchiveDeps {
-  run?: Omit<CompactionRunDeps, "config" | "cachedRequest">;
+  run?: Omit<CompactionRunDeps, "config">;
 }
 
 export async function runIdleCompaction(
@@ -16,21 +17,24 @@ export async function runIdleCompaction(
 
   console.info(`shore: autonomy tick: running idle-triggered compaction for ${character}`);
 
-  const cached = deps.cache.get(character);
-
   let retained: number;
   try {
     retained = await runCompaction(character, {
       ...deps.run,
       config: deps.config,
-      ...(cached === undefined ? {} : { cachedRequest: cached }),
     });
   } catch (e) {
     console.warn(
       `shore: idle compaction for ${character} failed, will retry on the next idle tick: ` +
         String(e),
     );
-    return { events: [], failed: e instanceof Error ? e.message : String(e) };
+    return {
+      events: [],
+      failed: e instanceof Error ? e.message : String(e),
+      ...(e instanceof CompactionPaused && e.resumeAt !== undefined
+        ? { retryAt: Date.parse(e.resumeAt) }
+        : {}),
+    };
   }
 
   await reloadAndApplyDeferred(character, deps, "Idle compaction");

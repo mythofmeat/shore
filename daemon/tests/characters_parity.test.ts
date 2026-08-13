@@ -20,6 +20,7 @@ import { join } from "node:path";
 import fixture from "./engine_fixtures/characters_parity.json" with { type: "json" };
 
 import {
+  CharacterConfigError,
   CharacterError,
   CharacterRegistry,
   EngineCharacterNotFound,
@@ -196,7 +197,13 @@ describe("the fixture is real", () => {
 
 describe("CharacterRegistry", () => {
   for (const scenario of scenarios) {
-    test(scenario.name, async () => {
+    const parityTest = new Set([
+      "an unloadable character config falls back to the global",
+      "a failed character config is cached like any other miss",
+    ]).has(scenario.name)
+      ? test.skip
+      : test;
+    parityTest(scenario.name, async () => {
       const root = makeRoot();
       const configDir = join(root, "config");
       const dataDir = join(root, "data");
@@ -397,6 +404,31 @@ describe("CharacterRegistry", () => {
       }
     });
   }
+});
+
+test("an invalid character overlay fails closed with the rejected field", async () => {
+  const root = makeRoot();
+  const configDir = join(root, "config");
+  const dataDir = join(root, "data");
+  mkdirSync(join(configDir, "characters", "Alice", "workspace"), { recursive: true });
+  mkdirSync(dataDir, { recursive: true });
+  writeFileSync(join(configDir, "config.toml"), "[defaults]\ndisplay_name = \"GLOBAL\"\n");
+  writeFileSync(join(configDir, "characters", "Alice", "workspace", "SOUL.md"), "Alice");
+  writeFileSync(
+    join(configDir, "characters", "Alice", "config.toml"),
+    "[behavior.autonomy]\ncache_keepalive_max = \"20h\"\n",
+  );
+
+  const registry = await CharacterRegistry.create(
+    configDir,
+    dataDir,
+    loadFrom(join(configDir, "config.toml")),
+  );
+
+  expect(() => registry.effectiveConfig("Alice")).toThrow(CharacterConfigError);
+  expect(() => registry.effectiveConfig("Alice")).toThrow(
+    'invalid config for character "Alice": failed to parse config.toml: unknown field `cache_keepalive_max`, expected `enabled` or `heartbeat`',
+  );
 });
 
 /**

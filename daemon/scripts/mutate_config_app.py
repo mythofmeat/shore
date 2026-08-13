@@ -266,8 +266,8 @@ MUTANTS = [
      "  timeout: ConfigDuration.fromSecs(300),",
      "  timeout: ConfigDuration.fromSecs(0),"),
     ("defaults: keepalive max is an hour, not twelve",
-     "  cache_keepalive_max: ConfigDuration.fromSecs(43_200),",
-     "  cache_keepalive_max: ConfigDuration.fromSecs(3600),"),
+     "  keepalive_max: ConfigDuration.fromSecs(43_200),",
+     "  keepalive_max: ConfigDuration.fromSecs(3600),"),
     ("defaults: archive_after is on",
      "  archive_after: ConfigDuration.fromSecs(0),",
      "  archive_after: ConfigDuration.fromSecs(86_400),"),
@@ -299,7 +299,13 @@ from mutation import run as _run_mutants  # noqa: E402
 
 
 def main() -> int:
-    return _run_mutants(MUTANTS, ["tests/app_parity.test.ts"])
+    routed = [
+        (label, MODELS, find, replace)
+        if label.startswith("models:")
+        else (label, find, replace)
+        for label, find, replace in MUTANTS
+    ]
+    return _run_mutants(routed, ["tests/app_parity.test.ts"], src=APP)
 
 
 if __name__ == "__main__":

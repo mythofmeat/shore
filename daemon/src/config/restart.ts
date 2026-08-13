@@ -8,8 +8,8 @@ export function restartRequiredChanges(old: LoadedConfig, fresh: LoadedConfig): 
   if (!same(a.daemon, b.daemon)) changes.push("[daemon]");
   if (!same(a.notifications, b.notifications)) changes.push("[notifications]");
   if (!same(a.connections, b.connections)) changes.push("[connections]");
-  if (a.advanced.cache_forensics !== b.advanced.cache_forensics) {
-    changes.push("[advanced].cache_forensics");
+  if (a.cache.forensics !== b.cache.forensics) {
+    changes.push("[cache].forensics");
   }
   return changes;
 }

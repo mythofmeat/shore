@@ -20,8 +20,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Derive release version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "PACKAGE_VERSION=${version//-/_}" >> "$GITHUB_ENV"
+
       - run: |
           docker build \
+            --build-arg VERSION="$VERSION" \
+            --build-arg PACKAGE_VERSION="$PACKAGE_VERSION" \
             --target artifacts \
             --output type=local,dest=out \
             -f contrib/${{ matrix.distro }}/Dockerfile \
@@ -33,8 +45,72 @@ jobs:
           path: out/*
           if-no-files-found: error
 
+  macos:
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            rust-target: aarch64-apple-darwin
+            bun-target: bun-darwin-arm64
+          - arch: x86_64
+            rust-target: x86_64-apple-darwin
+            bun-target: bun-darwin-x64
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Derive release version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Inject release version
+        run: sed -i.bak "s/^version = \"0.0.0\"/version = \"$VERSION\"/" Cargo.toml
+        working-directory: client
+
+      - run: cargo build --release --target ${{ matrix.rust-target }} --package shore-cli --package shore-tui
+        working-directory: client
+
+      - run: bun install
+        working-directory: daemon
+
+      - run: bun build src/daemon/run.ts --compile --target=${{ matrix.bun-target }} --outfile dist/shore-daemon
+        working-directory: daemon
+
+      - run: |
+          set -euo pipefail
+          name="shore-${GITHUB_REF_NAME#v}-${{ matrix.arch }}-apple-darwin"
+          mkdir -p "out/$name"
+          cp client/target/${{ matrix.rust-target }}/release/shore \
+             client/target/${{ matrix.rust-target }}/release/shore-tui \
+             daemon/dist/shore-daemon \
+             LICENSE-MIT \
+             LICENSE-APACHE-2.0 \
+             "out/$name/"
+          tar -czf "out/$name.tar.gz" -C out "$name"
+          shasum -a 256 "out/$name.tar.gz" | tee "out/$name.tar.gz.sha256"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packages-macos-${{ matrix.arch }}
+          path: out/*.tar.gz*
+          if-no-files-found: error
+
   release:
-    needs: build
+    needs: [build, macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v8

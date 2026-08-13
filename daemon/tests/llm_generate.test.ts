@@ -15,8 +15,9 @@
  *   the effective catalog exists to support.
  */
 
-import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
@@ -40,6 +41,9 @@ import { testTmp } from "./support/tmp.ts";
 afterEach(() => {
   closeLedgers();
 });
+
+const ACCOUNTING_ROOT = mkdtempSync(join(tmpdir(), "shore-llm-generate-"));
+afterAll(() => rmSync(ACCOUNTING_ROOT, { recursive: true, force: true }));
 
 // ── harness ─────────────────────────────────────────────────────────────
 
@@ -77,7 +81,12 @@ function config(twoKeys = true): LoadedConfig {
     app: defaultAppConfig(),
     models: catalog(),
     providers,
-    dirs: { config: "/c", data: "/d", cache: "/ca", runtime: "/r" },
+    dirs: {
+      config: ACCOUNTING_ROOT,
+      data: ACCOUNTING_ROOT,
+      cache: ACCOUNTING_ROOT,
+      runtime: ACCOUNTING_ROOT,
+    },
     rawTable: undefined,
   };
 }
@@ -375,6 +384,11 @@ describe("the ledger row", () => {
       api_key_name: "primary",
       finish_reason: "end_turn",
     });
+    const ledger = Ledger.open(path);
+    expect(ledger.database.query(
+      "SELECT status, call_id FROM call_attempts",
+    ).get()).toMatchObject({ status: "completed", call_id: rows[0]!.id });
+    ledger.close();
   });
 
   test("a failed call still leaves a row", async () => {
@@ -388,6 +402,11 @@ describe("the ledger row", () => {
     // provider that is refusing every request.
     expect(rows.length).toBe(1);
     expect(rows[0]).toMatchObject({ finish_reason: "error", input_tokens: 0 });
+    const ledger = Ledger.open(path);
+    expect(ledger.database.query("SELECT status FROM call_attempts").get()).toEqual({
+      status: "error",
+    });
+    ledger.close();
   });
 
   test("a rotation leaves one row per attempt, each naming its own key", async () => {

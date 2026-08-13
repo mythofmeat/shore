@@ -252,10 +252,53 @@ describe("event_matches_session", () => {
     test(c.name, () => {
       const msg = byName.get(c.name);
       expect(msg).toBeDefined();
-      expect(eventMatchesSession(msg as ServerMessage, true)).toBe(c.registered);
-      expect(eventMatchesSession(msg as ServerMessage, false)).toBe(c.unregistered);
+      const wire = msg as ServerMessage;
+      const character =
+        wire.type === "history"
+          ? (wire.selected_character ?? null)
+          : wire.type === "new_message"
+            ? (wire.character ?? null)
+            : "selected";
+      expect(eventMatchesSession(wire, character, true)).toBe(c.registered);
+      const unregistered =
+        wire.type === "history" || wire.type === "new_message" ? false : c.unregistered;
+      expect(eventMatchesSession(wire, character, false)).toBe(unregistered);
     });
   }
+
+  test("conversation events only reach the selected character", () => {
+    const history = {
+      type: "history",
+      messages: [],
+      active_start: 0,
+      config: {},
+      selected_character: "poppy",
+      revision: 1,
+    } as ServerMessage;
+    const message = {
+      type: "new_message",
+      character: "poppy",
+      revision: 1,
+    } as ServerMessage;
+
+    expect(eventMatchesSession(history, "poppy", true)).toBe(true);
+    expect(eventMatchesSession(history, "Yuna", true)).toBe(false);
+    expect(eventMatchesSession(message, "poppy", true)).toBe(true);
+    expect(eventMatchesSession(message, "Yuna", true)).toBe(false);
+    expect(eventMatchesSession(message, null, true)).toBe(false);
+  });
+
+  test("an all-characters subscriber gets conversation events for every character", () => {
+    const message = {
+      type: "new_message",
+      character: "poppy",
+      revision: 1,
+    } as ServerMessage;
+
+    expect(eventMatchesSession(message, null, true, true)).toBe(true);
+    expect(eventMatchesSession(message, "Yuna", true, true)).toBe(true);
+    expect(eventMatchesSession(message, null, false, true)).toBe(false);
+  });
 });
 
 describe("msg_type_name", () => {

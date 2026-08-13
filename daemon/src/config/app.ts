@@ -312,13 +312,11 @@ const HEARTBEAT: StructSpec<HeartbeatConfig> = {
 export interface AutonomyConfig {
   enabled: boolean;
   heartbeat: HeartbeatConfig;
-  cache_keepalive_max: ConfigDuration;
 }
 
 const defaultAutonomyConfig = (): AutonomyConfig => ({
   enabled: false,
   heartbeat: defaultHeartbeatConfig(),
-  cache_keepalive_max: ConfigDuration.fromSecs(43_200),
 });
 
 const AUTONOMY: StructSpec<AutonomyConfig> = {
@@ -327,7 +325,25 @@ const AUTONOMY: StructSpec<AutonomyConfig> = {
   fields: {
     enabled: readBool,
     heartbeat: (v) => readStruct(HEARTBEAT, v),
-    cache_keepalive_max: readDuration,
+  },
+};
+
+export interface CacheConfig {
+  keepalive_max: ConfigDuration;
+  forensics: boolean;
+}
+
+export const defaultCacheConfig = (): CacheConfig => ({
+  keepalive_max: ConfigDuration.fromSecs(43_200),
+  forensics: false,
+});
+
+const CACHE: StructSpec<CacheConfig> = {
+  name: "CacheConfig",
+  make: defaultCacheConfig,
+  fields: {
+    keepalive_max: readDuration,
+    forensics: readBool,
   },
 };
 
@@ -898,43 +914,16 @@ export function budgetPaceWarnAt(budget: UsageBudgetConfig): readonly number[] {
   return budget.pace_warn_at ?? budget.warn_at;
 }
 
-export interface UsageSpikeWarningsConfig {
-  enabled: boolean;
-  period: UsageBudgetPeriod;
-  multiplier: number;
-  min_cost_usd: number;
-}
-
-const defaultSpikeWarnings = (): UsageSpikeWarningsConfig => ({
-  enabled: false,
-  period: "hour",
-  multiplier: 3.0,
-  min_cost_usd: 1.0,
-});
-
-const SPIKE_WARNINGS: StructSpec<UsageSpikeWarningsConfig> = {
-  name: "UsageSpikeWarningsConfig",
-  make: defaultSpikeWarnings,
-  fields: {
-    enabled: readBool,
-    period: readEnum(BUDGET_PERIODS),
-    multiplier: readF64,
-    min_cost_usd: readF64,
-  },
-};
-
 export interface UsageConfig {
   timezone: string;
   allow_compaction_over_budget: boolean;
   budgets: UsageBudgetConfig[];
-  spike_warnings: UsageSpikeWarningsConfig;
 }
 
 const defaultUsageConfig = (): UsageConfig => ({
   timezone: "local",
-  allow_compaction_over_budget: true,
+  allow_compaction_over_budget: false,
   budgets: [],
-  spike_warnings: defaultSpikeWarnings(),
 });
 
 const USAGE: StructSpec<UsageConfig> = {
@@ -944,24 +933,19 @@ const USAGE: StructSpec<UsageConfig> = {
     timezone: readString,
     allow_compaction_over_budget: readBool,
     budgets: readSeq((v) => readStruct(BUDGET, v)),
-    spike_warnings: (v) => readStruct(SPIKE_WARNINGS, v),
   },
 };
 
 export interface AdvancedConfig {
-  cache_forensics: boolean;
   editor: string | undefined;
   max_retries: number | undefined;
   retry_backoff: ConfigDuration | undefined;
-  max_image_size: number;
 }
 
 const defaultAdvancedConfig = (): AdvancedConfig => ({
-  cache_forensics: false,
   editor: undefined,
   max_retries: undefined,
   retry_backoff: undefined,
-  max_image_size: 2_000_000,
 });
 
 const ADVANCED: StructSpec<AdvancedConfig> = {
@@ -969,11 +953,9 @@ const ADVANCED: StructSpec<AdvancedConfig> = {
   noDefault: ["editor", "max_retries", "retry_backoff"],
   make: defaultAdvancedConfig,
   fields: {
-    cache_forensics: readBool,
     editor: optional(readString),
     max_retries: optional(readU32),
     retry_backoff: optional(readDuration),
-    max_image_size: readU64,
   },
 };
 
@@ -1041,6 +1023,7 @@ export interface AppConfig {
   behavior: BehaviorConfig;
   tools: ToolsConfig;
   memory: MemoryConfig;
+  cache: CacheConfig;
   connections: ConnectionsConfig;
   notifications: NotificationsConfig;
   usage: UsageConfig;
@@ -1055,6 +1038,7 @@ export const defaultAppConfig = (): AppConfig => ({
   behavior: defaultBehaviorConfig(),
   tools: defaultToolsConfig(),
   memory: defaultMemoryConfig(),
+  cache: defaultCacheConfig(),
   connections: defaultConnectionsConfig(),
   notifications: defaultNotificationsConfig(),
   usage: defaultUsageConfig(),
@@ -1072,6 +1056,7 @@ const APP: StructSpec<AppConfig> = {
     behavior: (v) => readStruct(BEHAVIOR, v),
     tools: (v) => readStruct(TOOLS, v),
     memory: (v) => readStruct(MEMORY, v),
+    cache: (v) => readStruct(CACHE, v),
     connections: (v) => readStruct(CONNECTIONS, v),
     notifications: (v) => readStruct(NOTIFICATIONS, v),
     usage: (v) => readStruct(USAGE, v),

@@ -72,6 +72,14 @@ export function handleCompactionOutcome(
     return 0;
   }
 
+  if (outcome.kind === "paused") {
+    console.warn(
+      `shore: background compaction paused for ${character} ` +
+        `(checkpoint=${outcome.checkpointId}, rounds=${outcome.toolRounds}, reason=${outcome.reason})`,
+    );
+    return 0;
+  }
+
   return 0;
 }
 

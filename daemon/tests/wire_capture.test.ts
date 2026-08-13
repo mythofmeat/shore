@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { CallStore } from "../src/call_store.ts";
 import { captureProviders } from "../src/llm/capture.ts";
 import { AnthropicProvider } from "../src/llm/providers/anthropic.ts";
+import { REDACTED } from "../src/llm/redact.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
 import {
   installWireCapture,
@@ -37,7 +38,7 @@ function scope(callId = "call-1") {
 }
 
 describe("wire capture", () => {
-  test("records the exact request bytes and every header, unredacted", async () => {
+  test("records the exact request bytes and every header, with the credential masked", async () => {
     const server = Bun.serve({ port: 0, fetch: () => new Response(`{"ok":true}`) });
     const { sink, seen } = collector();
     uninstall = installWireCapture(sink);
@@ -64,8 +65,11 @@ describe("wire capture", () => {
     expect(exchange.status).toBe(200);
     expect(textOf(exchange.response_body)).toBe(`{"ok":true}`);
 
+    // The header is still recorded as *sent* — which one, and that it was
+    // there at all, is what a cache investigation needs. Only the value goes,
+    // because `calls.db` outlives the key and gets read and shared.
     const headers = new Map(exchange.request_headers);
-    expect(headers.get("x-api-key")).toBe("sk-ant-super-secret");
+    expect(headers.get("x-api-key")).toBe(REDACTED);
     expect(headers.get("anthropic-beta")).toBe("prompt-caching-2024-07-31");
   });
 
@@ -195,7 +199,7 @@ describe("wire capture", () => {
     expect(seen.map((e) => e.seq)).toEqual([0, 1]);
   });
 
-  test("the real Anthropic provider lands verbatim bytes in the store", async () => {
+  test("the real Anthropic provider lands verbatim body bytes in the store", async () => {
     const sse = [
       `event: message_start\ndata: ${JSON.stringify({
         type: "message_start",
@@ -277,7 +281,13 @@ describe("wire capture", () => {
     expect(wire[0]!.call_type).toBe("message");
 
     const headers = new Map(wire[0]!.request_headers);
-    expect(headers.get("x-api-key")).toBe("sk-ant-super-secret");
+    expect(headers.get("x-api-key")).toBe(REDACTED);
+
+    // End to end, through the real provider and the real store: neither the
+    // internal request row nor the wire row carries the key.
+    const internal = store.getCall(calls[0]!.id);
+    expect(internal?.request).not.toContain("sk-ant-super-secret");
+    expect(wire[0]!.request_body).not.toContain("sk-ant-super-secret");
 
     const sent = JSON.parse(wire[0]!.request_body ?? "{}") as Record<string, unknown>;
     expect(sent["model"]).toBe("claude-opus-4-6");

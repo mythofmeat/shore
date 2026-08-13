@@ -68,12 +68,6 @@ function config(timezone: string): UsageConfig {
         reset_hour: 6,
       },
     ],
-    spike_warnings: {
-      enabled: true,
-      period: "day",
-      multiplier: 1.5,
-      min_cost_usd: 0.001,
-    },
   };
 }
 
@@ -243,19 +237,31 @@ test("cross-language usage payload parity", async () => {
       expect(withoutToolSurface(c.mode, payload.data), where).toBe(expected.data);
       continue;
     }
-    expect(withoutEffectiveAction(actual), where).toEqual(c.payload as never);
+    expect(withoutEffectiveAction(actual), where).toEqual(
+      withoutRemovedSpikeWarnings(c.payload) as never,
+    );
   }
 });
 
+function withoutRemovedSpikeWarnings(payload: unknown): unknown {
+  if (payload === null || typeof payload !== "object") return payload;
+  const { spike_warnings: _removed, ...rest } = payload as Record<string, unknown>;
+  return rest;
+}
+
 function withoutEffectiveAction(payload: unknown): unknown {
   if (payload === null || typeof payload !== "object") return payload;
-  const report = payload as { budgets?: Record<string, unknown>[] };
-  if (report.budgets === undefined) return payload;
+  const report = payload as {
+    budgets?: Record<string, unknown>[];
+    call_attempts?: unknown;
+  };
+  const { call_attempts: _attempts, ...withoutAttempts } = report;
+  if (report.budgets === undefined) return withoutAttempts;
   const strip = (o: Record<string, unknown>): Record<string, unknown> => {
     const { effective_action: _dropped, ...rest } = o;
     const pace = rest["pace"];
     if (pace === null || typeof pace !== "object") return rest;
     return { ...rest, pace: strip(pace as Record<string, unknown>) };
   };
-  return { ...report, budgets: report.budgets.map(strip) };
+  return { ...withoutAttempts, budgets: report.budgets.map(strip) };
 }

@@ -4,6 +4,7 @@ import type { MatrixConfig } from "../../config/app.ts";
 import { rustJoin } from "../../config/dirs.ts";
 import type { LoadedConfig } from "../../config/loader.ts";
 import type { Server } from "../../swp/server.ts";
+import { ALL_CHARACTERS_CAPABILITY } from "../../swp/session.ts";
 import { MatrixBot } from "./bot.ts";
 import { Bridge, type BridgeLogger } from "./bridge.ts";
 import { EventMap } from "./event_map.ts";
@@ -110,7 +111,7 @@ export async function attemptMatrixBridge(options: StartOptions): Promise<StartO
   const peer = await options.server.attachLocal({
     clientType: "bridge",
     clientName: "shore-matrix",
-    capabilities: ["streaming"],
+    capabilities: ["streaming", ALL_CHARACTERS_CAPABILITY],
     onLag: (skipped) => options.log?.warn?.("Matrix bridge fell behind", { skipped }),
   });
 

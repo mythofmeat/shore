@@ -208,8 +208,8 @@ export class AutonomyService {
       ?.runner.scheduleNextWake(hoursFromNow, reason, this.#now());
   }
 
-  onCompactionFailed(character: string): void {
-    this.#entries.get(character)?.runner.onCompactionFailed(this.#now());
+  onCompactionFailed(character: string, retryAt?: number): void {
+    this.#entries.get(character)?.runner.onCompactionFailed(this.#now(), retryAt);
   }
 
   shouldCompactNow(

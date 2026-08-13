@@ -1,5 +1,5 @@
 import { budgetBlockFor } from "../ledger/gate.ts";
-import { recordGenerate, recordGenerateError } from "../ledger/record.ts";
+import { beginCallAttempt, recordGenerate, recordGenerateError } from "../ledger/record.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import type { ResolvedModel } from "../config/models.ts";
 import { credentialEntry } from "../handler/tool_context.ts";
@@ -14,15 +14,19 @@ import {
   type Sleep,
 } from "./fallback.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "./types.ts";
+import { rustJoin } from "../config/dirs.ts";
+import { usageConfigView } from "../ledger/budget.ts";
 
 export class BudgetBlocked extends Error {
   readonly kind = "budget_blocked" as const;
   readonly scope: string | undefined;
+  readonly resetAt: string | undefined;
 
-  constructor(message: string, scope?: string) {
+  constructor(message: string, scope?: string, resetAt?: string) {
     super(message);
     this.name = "BudgetBlocked";
     this.scope = scope;
+    this.resetAt = resetAt;
   }
 }
 
@@ -84,18 +88,28 @@ async function callProvider(
 ): Promise<GenerateResponse> {
   const provider = deps.providers[request.sdk];
   if (provider === undefined) throw new Error(`unsupported sdk: ${request.sdk}`);
+  request.context ??= {
+    ledger: rustJoin(deps.config.dirs.data, "ledger.db"),
+    character: "unknown",
+    call_type: "message",
+    thinking_enabled: request.provider_options?.thinking_enabled === true,
+    usage: usageConfigView(deps.config.app.usage),
+  };
+  request.context.ledger ??= rustJoin(deps.config.dirs.data, "ledger.db");
+  request.context.usage ??= usageConfigView(deps.config.app.usage);
 
   const blocked = budgetBlockFor(request);
-  if (blocked) throw new BudgetBlocked(blocked.message, blocked.scope);
+  if (blocked) throw new BudgetBlocked(blocked.message, blocked.scope, blocked.reset_at);
+  const attempt = beginCallAttempt(request.context, request);
 
   const clock = deps.now ?? Date.now;
   const startedAt = clock();
   try {
     const response = await provider.generate(request, signal);
-    recordGenerate(request.context, request, response);
+    recordGenerate(request.context, request, response, attempt);
     return response;
   } catch (e) {
-    recordGenerateError(request.context, request, startedAt, clock);
+    recordGenerateError(request.context, request, startedAt, clock, attempt);
     throw e;
   }
 }

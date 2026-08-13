@@ -1,8 +1,10 @@
 The conversation above is now complete and will be archived once you finish writing memory. Review it, then call your `edit` tool to persist anything important.
 
-Your `MEMORY.md` index (already in your system prompt) maps your existing memory files. Use `read` and `search` to check what's already there before writing, so you edit in place instead of creating near-duplicates.
+Your workspace contains your existing memory files. Use `read` and `search` to check what's already there before writing, so you edit in place  where appropriate instead of creating near-duplicates.
 
 Reminder:
-- Prefer changing existing files (`edit` with `edits`) over creating new ones (`edit` with `content`), unless the file is somewhat long (over 100 lines). If the file is long, then it should be split into focused files instead.
+- Prefer changing existing files (`edit` with `edits`) over creating new ones (`edit` with `content`), unless the file is over ~100 lines in length; if the file is ~100 lines, it should be split into smaller focused files instead.
+- Batch your work: send several `edit` calls in one turn rather than one file per turn, and make all of a file's changes in a single `edit`. Don't re-open a file you already read this pass.
+- Commit once at the very end, with `add` and `commit` in the same turn.
 - End with a brief plain-text summary (no tool call) when you're done.
 - If you produce zero writes, the conversation will NOT be archived and the next compaction trigger will retry.

@@ -30,7 +30,10 @@ export function callLog(ctx: CallLogContext, args: Args): Json {
   if (id !== undefined) {
     const payload = query(CALL_STORE_FAILED, () => store.getCall(id));
     if (payload === null) throw invalidRequest(`no call with id ${id}`);
-    if (args["diff"] !== true) return { enabled: true, call: payload };
+    const wire = query(CALL_STORE_FAILED, () => store.httpCallsFor(payload.call_id));
+    if (args["diff"] !== true) {
+      return { enabled: true, call: payload, wire: wire as unknown as Json };
+    }
 
     const against = asI64(args["against"]) ?? query(CALL_STORE_FAILED, () => store.previousCallId(id));
     if (against === null) {
@@ -40,7 +43,12 @@ export function callLog(ctx: CallLogContext, args: Args): Json {
     if (diff === null) {
       throw invalidRequest(`calls ${against} and ${id} cannot be compared`);
     }
-    return { enabled: true, call: payload, diff: diff as unknown as Json };
+    return {
+      enabled: true,
+      call: payload,
+      wire: wire as unknown as Json,
+      diff: diff as unknown as Json,
+    };
   }
 
   const filter: CallFilter = {

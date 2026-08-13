@@ -135,26 +135,57 @@ fn discover_from_path(path: &Path, selector: Option<&str>) -> Result<ServerAddr>
                     message: format!("no daemon found matching id or config_dir: {wanted}"),
                 })?
         }
-        None => entries.first().ok_or_else(|| ClientError::Discovery {
-            kind: DiscoveryKind::RegistryEmpty,
-            message: "instances registry has no live entries".into(),
-        })?,
+        None => match entries.as_slice() {
+            [] => {
+                return Err(ClientError::Discovery {
+                    kind: DiscoveryKind::RegistryEmpty,
+                    message: "instances registry has no live entries".into(),
+                })
+            }
+            [only] => only,
+            several => {
+                return Err(ClientError::Discovery {
+                    kind: DiscoveryKind::Ambiguous,
+                    message: format!(
+                        "{} daemons are running ({}) — name one with --addr or --config, \
+                         or set default_address in client.toml",
+                        several.len(),
+                        describe_instances(several)
+                    ),
+                })
+            }
+        },
     };
 
     Ok(ServerAddr(entry.addr.clone()))
 }
 
-/// Discover the config directory from the first live daemon instance.
+/// How the ambiguity error names the daemons the caller has to choose between.
+fn describe_instances(entries: &[InstanceEntry]) -> String {
+    entries
+        .iter()
+        .map(|e| match e.id.as_deref() {
+            Some(id) => format!("{id} at {}", e.addr),
+            None => e.addr.clone(),
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Discover the config directory from the one live daemon instance.
 ///
 /// Lets clients read the same `config.toml` the daemon is using without
 /// requiring the caller to set `SHORE_CONFIG_DIR` in their environment.
-/// Returns `Ok(None)` if no instance is registered or the entry lacks
+/// Returns `Ok(None)` if no instance is registered, if several are and none
+/// was named — guessing between them is how a client ends up reading one
+/// daemon's config while talking to another — or if the entry lacks
 /// `config_dir` (older daemons that predate the field).
 pub fn discover_config_dir() -> Result<Option<PathBuf>> {
-    Ok(read_instances()?
-        .first()
-        .and_then(|e| e.config_dir.as_deref())
-        .map(PathBuf::from))
+    let entries = read_instances()?;
+    let [only] = entries.as_slice() else {
+        return Ok(None);
+    };
+    Ok(only.config_dir.as_deref().map(PathBuf::from))
 }
 
 /// The config directory of the daemon listening on `addr`, when one is
@@ -367,6 +398,66 @@ mod tests {
         let addr = discover_or_default_from_path(&tmp.path().join("missing.json"), None, None)
             .expect("missing registry should fall back to the default address");
         assert_eq!(addr.0, DEFAULT_ADDR);
+    }
+
+    /// Two live daemons and nothing said which: the command has to stop, not
+    /// pick. Taking `.first()` here is how `shore send` lands in the wrong
+    /// character's conversation on a machine running a second instance.
+    #[test]
+    fn discovery_refuses_to_choose_between_live_daemons() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("instances.json");
+        std::fs::write(
+            &path,
+            r#"[{"id":"work","addr":"127.0.0.1:7320"},{"id":"play","addr":"127.0.0.1:7321"}]"#,
+        )
+        .unwrap();
+
+        let err = discover_from_path(&path, None).expect_err("two daemons should not resolve");
+        let ClientError::Discovery { kind, message } = err else {
+            panic!("expected a discovery error");
+        };
+        assert_eq!(kind, DiscoveryKind::Ambiguous);
+        assert!(message.contains("work at 127.0.0.1:7320"), "{message}");
+        assert!(message.contains("play at 127.0.0.1:7321"), "{message}");
+    }
+
+    /// The ambiguity is not the missing-registry case, so it must not be
+    /// flattened into the default address the way an absent registry is.
+    #[test]
+    fn ambiguity_is_not_flattened_to_the_default_address() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("instances.json");
+        std::fs::write(
+            &path,
+            r#"[{"addr":"127.0.0.1:7320"},{"addr":"127.0.0.1:7321"}]"#,
+        )
+        .unwrap();
+
+        let err = discover_or_default_from_path(&path, None, None)
+            .expect_err("two daemons should not fall back to the default address");
+        assert!(matches!(
+            err,
+            ClientError::Discovery {
+                kind: DiscoveryKind::Ambiguous,
+                ..
+            }
+        ));
+    }
+
+    /// Naming one still works, which is the escape hatch the message points at.
+    #[test]
+    fn an_explicit_selector_resolves_among_several() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("instances.json");
+        std::fs::write(
+            &path,
+            r#"[{"id":"work","addr":"127.0.0.1:7320"},{"id":"play","addr":"127.0.0.1:7321"}]"#,
+        )
+        .unwrap();
+
+        let addr = discover_from_path(&path, Some("play")).expect("the named daemon resolves");
+        assert_eq!(addr.0, "127.0.0.1:7321");
     }
 
     #[test]
