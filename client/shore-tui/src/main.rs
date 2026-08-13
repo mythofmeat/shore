@@ -1647,6 +1647,9 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
 
             if final_phase {
                 app.stream.reset();
+                if matches!(end.finish_reason.as_str(), "max_tokens" | "length") {
+                    app.set_status("reply truncated at the max_tokens ceiling");
+                }
                 if keep_bottom {
                     app.scroll_to_bottom();
                 }

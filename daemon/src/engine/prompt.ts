@@ -1,12 +1,12 @@
 import builtinSystemTemplate from "../../prompts/engine/builtin_system.md" with { type: "text" };
 import { hostZone, naiveInZone, partsOf } from "../ledger/zoned";
 import type { ContentBlock, ImageRef, Message, Role } from "./types";
+import { estimateTokens } from "./tokens.ts";
 
 const DEFAULT_MAX_CONTEXT_TOKENS = 200_000;
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
 
-const CHARS_PER_TOKEN = 4;
 
 const TIME_GAP_THRESHOLD_SECS = 1_800;
 
@@ -186,14 +186,6 @@ export function xmlTagFromName(name: string, fallback: string): string {
 
 export function stripOneTrailingNewline(raw: string): string {
   return raw.endsWith("\n") ? raw.slice(0, -1) : raw;
-}
-
-function byteLength(text: string): number {
-  return Buffer.byteLength(text, "utf8");
-}
-
-function estimateTokens(text: string): number {
-  return Math.ceil(byteLength(text) / CHARS_PER_TOKEN);
 }
 
 function estimateMessageTokens(msg: Message): number {

@@ -64,8 +64,15 @@ interface Case {
  * fresh row is pinned in `cache_tracker.test.ts` and in the tool-surface tests;
  * that it survives the round trip at all is asserted below.
  */
-function withoutToolSurface<T extends { tool_surface: unknown }>(rows: T[]): Omit<T, "tool_surface">[] {
-  return rows.map(({ tool_surface: _dropped, ...rest }) => rest);
+function withoutToolSurface<T extends { tool_surface: unknown }>(rows: T[]): Record<string, unknown>[] {
+  return rows.map((row) => {
+    const {
+      tool_surface: _dropped,
+      output_tokens_estimated: _alsoPostRust,
+      ...rest
+    } = row as T & { output_tokens_estimated?: unknown };
+    return rest as Record<string, unknown>;
+  });
 }
 
 /**

@@ -259,6 +259,23 @@ pub(crate) fn print_stream_end(end: &StreamEnd) {
         _ = crossterm::execute!(out, ResetColor);
     }
     _ = writeln!(out);
+
+    // A reply that stopped at the token ceiling is cut off mid-sentence.
+    // Without this the truncation is indistinguishable from a short answer.
+    if matches!(end.finish_reason.as_str(), "max_tokens" | "length") {
+        if use_color() {
+            _ = crossterm::execute!(out, SetForegroundColor(Color::Yellow));
+        }
+        _ = write!(
+            out,
+            "[reply truncated: it reached the max_tokens ceiling and stops mid-sentence]"
+        );
+        if use_color() {
+            _ = crossterm::execute!(out, ResetColor);
+        }
+        _ = writeln!(out);
+    }
+
     _ = writeln!(out); // blank line after metadata
 }
 

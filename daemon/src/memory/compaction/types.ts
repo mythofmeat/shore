@@ -59,10 +59,21 @@ export interface PausedCompactionResult {
   resumeAt?: string;
 }
 
+export interface TruncatedCompactionResult {
+  conversationId: string;
+  messageCount: number;
+  compactedTurns: number;
+  toolRounds: number;
+  toolsCalled: string[];
+  truncatedTurns: number;
+  partialWrites: string[];
+}
+
 export type CompactionOutcome =
   | ({ kind: "compacted" } & CompactionResult)
   | ({ kind: "dry_run" } & DryRunResult)
   | ({ kind: "no_memory_writes" } & NoMemoryWritesResult)
+  | ({ kind: "truncated" } & TruncatedCompactionResult)
   | ({ kind: "paused" } & PausedCompactionResult);
 
 export type CompactionErrorKind =

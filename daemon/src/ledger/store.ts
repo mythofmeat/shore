@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS calls (
     cache_read_cost     REAL,
     cache_write_cost    REAL,
     cost_source         TEXT    DEFAULT 'pricing_catalog',
-    total_cost          REAL
+    total_cost          REAL,
+    output_tokens_estimated INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS call_attempts (
@@ -123,6 +124,7 @@ const MIGRATIONS: readonly string[] = [
       FOREIGN KEY (call_id) REFERENCES calls(id)
   )`,
   "CREATE INDEX IF NOT EXISTS idx_call_attempts_status ON call_attempts (status, started_at)",
+  "ALTER TABLE calls ADD COLUMN output_tokens_estimated INTEGER NOT NULL DEFAULT 0",
 ];
 
 function migrate(db: Database): void {
@@ -185,6 +187,7 @@ export interface RecordCall {
   cache_ttl?: string | undefined;
   reasoning_effort?: string | undefined;
   tool_surface?: string | undefined;
+  output_tokens_estimated?: boolean | undefined;
 }
 
 export interface CallRow {
@@ -214,6 +217,7 @@ export interface CallRow {
   cache_write_cost: number | null;
   cost_source: string | null;
   total_cost: number | null;
+  output_tokens_estimated: number;
 }
 
 const INSERT_SQL = `INSERT INTO calls (
@@ -222,14 +226,14 @@ const INSERT_SQL = `INSERT INTO calls (
   cache_ttl, reasoning_effort, tool_surface, total_ms, ttft_ms, finish_reason,
   thinking_enabled, cache_state, cache_anomaly,
   input_cost, output_cost, cache_read_cost, cache_write_cost,
-  cost_source, total_cost
+  cost_source, total_cost, output_tokens_estimated
 ) VALUES (
   $ts, $character, $provider, $api_key_name, $model, $call_type,
   $input_tokens, $output_tokens, $cache_read_tokens, $cache_write_tokens,
   $cache_ttl, $reasoning_effort, $tool_surface, $total_ms, $ttft_ms, $finish_reason,
   $thinking_enabled, $cache_state, $cache_anomaly,
   $input_cost, $output_cost, $cache_read_cost, $cache_write_cost,
-  $cost_source, $total_cost
+  $cost_source, $total_cost, $output_tokens_estimated
 )`;
 
 const LAST_ANTHROPIC_CALL_SQL = `SELECT ts, model, thinking_enabled, cache_read_tokens, tool_surface
@@ -365,6 +369,7 @@ export class Ledger {
       $cache_write_cost: row.cache_write_cost,
       $cost_source: row.cost_source,
       $total_cost: row.total_cost,
+      $output_tokens_estimated: row.output_tokens_estimated,
     });
     if (attemptId === undefined) {
       const result = insert();
@@ -517,6 +522,7 @@ export class Ledger {
       cache_write_cost: breakdown?.cache_write ?? null,
       cost_source,
       total_cost: providerTotal ?? priced?.total ?? (subscription ? 0 : null),
+      output_tokens_estimated: record.output_tokens_estimated === true ? 1 : 0,
     };
   }
 }

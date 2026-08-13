@@ -42,6 +42,7 @@ afterAll(() => {
 });
 
 const BASE: CallRow = {
+  output_tokens_estimated: 0,
   ts: "2026-04-05T10:00:00Z",
   character: "aria",
   provider: "anthropic",
