@@ -416,8 +416,6 @@ fn print_one_call(out: &mut impl Write, call: &serde_json::Value, width: usize) 
     print_dim_line(out, "(--json for the full, untruncated payload)");
 }
 
-/// Pretty-print a JSON payload when possible, retaining the original body for
-/// malformed or non-JSON captures.
 fn format_json_payload(body: &str) -> String {
     serde_json::from_str::<serde_json::Value>(body).map_or_else(
         |_| body.to_owned(),
@@ -425,9 +423,6 @@ fn format_json_payload(body: &str) -> String {
     )
 }
 
-/// Render an NDJSON stream as readable JSON events. Providers emit text and
-/// thinking in tiny deltas, so adjacent deltas of the same kind are joined for
-/// the human view. The stored payload and `--json` output remain untouched.
 fn format_stream_payload(body: &str) -> String {
     let mut events = Vec::new();
     for parsed in serde_json::Deserializer::from_str(body).into_iter::<serde_json::Value>() {
@@ -472,7 +467,6 @@ fn merge_stream_delta(previous: &mut serde_json::Value, next: &serde_json::Value
     true
 }
 
-/// Truncate a formatted payload without destroying its line structure.
 fn truncate_payload(s: &str, max: usize) -> String {
     let count = s.chars().count();
     if count <= max {
@@ -738,8 +732,6 @@ fn print_transcript_entry(
     _ = writeln!(out);
 }
 
-/// Render stored sub-agent runs: one header per run, then the tool calls it
-/// made in order, then what it handed back to the character.
 fn print_subagent_trace(data: &serde_json::Value) {
     let stdout = io::stdout();
     let mut out = stdout.lock();

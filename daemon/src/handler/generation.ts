@@ -500,7 +500,7 @@ function callContext(
     ...(ceiling === undefined || ceiling === 0 ? {} : { keepalive_max_secs: ceiling }),
     ...(forensics === undefined ? {} : { forensics_dir: forensics }),
     ...(rid === null ? {} : { rid }),
-    usage,
+    ...((usage.budgets ?? []).length === 0 ? {} : { usage }),
   };
 }
 
