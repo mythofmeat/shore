@@ -276,6 +276,37 @@ pub(crate) fn print_status(data: &serde_json::Value, character_name: &str) {
     }
 }
 
+pub(crate) fn print_character_list(data: &serde_json::Value, active: Option<&str>) {
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    let width = term_width();
+    write_section_header(&mut out, "Characters", "", width);
+
+    let names: Vec<&str> = data["characters"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|c| c["name"].as_str())
+        .collect();
+    if names.is_empty() {
+        print_dim_line(
+            &mut out,
+            "(none — `shore character --new <name>` creates one)",
+        );
+        return;
+    }
+    for name in names {
+        if active == Some(name) {
+            _ = write!(out, "  * ");
+            write_fg(&mut out, character_color(name), name);
+            write_dim(&mut out, " (active)");
+            _ = writeln!(out);
+        } else {
+            _ = writeln!(out, "    {name}");
+        }
+    }
+}
+
 /// Render one named slice of the status payload. Returns false when the
 /// payload has no such section, so the caller can report an unknown name.
 pub(crate) fn print_status_section(data: &serde_json::Value, section: &str) -> bool {
@@ -407,12 +438,9 @@ fn print_call_log(data: &serde_json::Value) {
         print_dim_line(&mut out, "(no calls recorded)");
         return;
     };
-    write_section_header(
-        &mut out,
-        "call log",
-        &format!("{} calls", entries.len()),
-        width,
-    );
+    let count = entries.len();
+    let plural = if count == 1 { "call" } else { "calls" };
+    write_section_header(&mut out, "call log", &format!("{count} {plural}"), width);
     for entry in entries {
         let usage = &entry["usage"];
         write_fg(

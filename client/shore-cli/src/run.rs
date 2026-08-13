@@ -873,19 +873,7 @@ async fn handle_list_characters(
     let data = recv_command_data(conn).await?;
 
     let active = state::read_active_character();
-
-    if let Some(chars) = data.get("characters").and_then(serde_json::Value::as_array) {
-        debug!(count = chars.len(), "Listed characters from daemon");
-        for ch in chars {
-            if let Some(name) = ch["name"].as_str() {
-                if active.as_deref() == Some(name) {
-                    cli_out!("  * {name} (active)");
-                } else {
-                    cli_out!("    {name}");
-                }
-            }
-        }
-    }
+    output::print_character_list(&data, active.as_deref());
     Ok(())
 }
 
