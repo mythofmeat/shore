@@ -21,6 +21,7 @@ export const MAX_CONSECUTIVE_LAGS = 3;
 
 export interface HelloSnapshot {
   readonly characters: readonly CharacterInfo[];
+  readonly selected?: string | undefined;
 }
 
 export interface HistorySnapshot {
@@ -128,7 +129,7 @@ export async function performHandshake(
   }
 
   const requested = first.character ?? null;
-  const selected = resolveHandshakeCharacter(requested, hello.characters);
+  const selected = resolveHandshakeCharacter(requested, hello.characters, hello.selected ?? null);
   if (requested !== null && selected === null) {
     ctx.log?.warn?.("Connect-time character selection is not available", { requested });
   }

@@ -86,6 +86,7 @@ export class CharacterRegistry {
   readonly #engines = new Map<string, ConversationEngine>();
   readonly #charConfigs = new Map<string, LoadedConfig | undefined>();
   #available: string[] = [];
+  #selected: string | undefined;
   #globalConfig: LoadedConfig;
 
   private constructor(
@@ -218,15 +219,29 @@ export class CharacterRegistry {
     };
   }
 
+  selectedCharacter(): string | undefined {
+    return this.#selected !== undefined && this.hasCharacter(this.#selected)
+      ? this.#selected
+      : undefined;
+  }
+
   resolveCharacter(requested: string | undefined): string {
     if (requested !== undefined) {
-      if (this.hasCharacter(requested)) return requested;
-      throw CharacterError.notFound(requested, this.#available);
+      if (!this.hasCharacter(requested)) {
+        throw CharacterError.notFound(requested, this.#available);
+      }
+      this.#selected = requested;
+      return requested;
     }
     if (this.#available.length === 0) {
       throw CharacterError.noneAvailable(this.#configDir, this.#workspaceRoot());
     }
-    if (this.#available.length === 1) return this.#available[0] as string;
+    const held = this.selectedCharacter();
+    if (held !== undefined) return held;
+    if (this.#available.length === 1) {
+      this.#selected = this.#available[0] as string;
+      return this.#selected;
+    }
     throw CharacterError.ambiguous(this.#available);
   }
 }

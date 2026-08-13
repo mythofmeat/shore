@@ -236,6 +236,26 @@ describe("resolve_handshake_character", () => {
       expect(resolveHandshakeCharacter(c.requested, characters)).toBe(c.resolved);
     });
   }
+
+  const two = [{ name: "ada" }, { name: "bea" }];
+
+  test("a refused request lands on the character the daemon is already serving", () => {
+    expect(resolveHandshakeCharacter("ghost", two, "bea")).toBe("bea");
+  });
+
+  test("a request that can be honoured still wins over what is held", () => {
+    expect(resolveHandshakeCharacter("ada", two, "bea")).toBe("ada");
+  });
+
+  test("no request at all inherits the held character rather than going ambiguous", () => {
+    expect(resolveHandshakeCharacter(null, two, "bea")).toBe("bea");
+    expect(resolveHandshakeCharacter(null, two, null)).toBeNull();
+  });
+
+  test("a held character that no longer exists is not offered", () => {
+    expect(resolveHandshakeCharacter(null, two, "gone")).toBeNull();
+    expect(resolveHandshakeCharacter("ghost", two, "gone")).toBeNull();
+  });
 });
 
 describe("event_matches_session", () => {

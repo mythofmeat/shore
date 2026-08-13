@@ -424,6 +424,58 @@ test("an invalid character overlay fails closed with the rejected field", async 
   );
 });
 
+describe("the character a bare command lands on", () => {
+  const registryWith = async (names: readonly string[]): Promise<CharacterRegistry> => {
+    const root = makeRoot();
+    const configDir = join(root, "config");
+    const dataDir = join(root, "data");
+    mkdirSync(configDir, { recursive: true });
+    mkdirSync(dataDir, { recursive: true });
+    writeFileSync(join(configDir, "config.toml"), "[defaults]\n");
+    for (const name of names) writeCharacter(configDir, name, true);
+    return await CharacterRegistry.create(
+      configDir,
+      dataDir,
+      loadFrom(join(configDir, "config.toml")),
+    );
+  };
+
+  test("a second character does not strand a session already on one", async () => {
+    const registry = await registryWith(["ada"]);
+    expect(registry.resolveCharacter(undefined)).toBe("ada");
+
+    writeCharacter(registry.globalConfig().dirs.config, "bea", true);
+    await registry.refresh();
+
+    expect(registry.resolveCharacter(undefined)).toBe("ada");
+  });
+
+  test("naming one moves the selection, and it sticks", async () => {
+    const registry = await registryWith(["ada", "bea"]);
+    expect(registry.resolveCharacter("bea")).toBe("bea");
+    expect(registry.resolveCharacter(undefined)).toBe("bea");
+  });
+
+  test("with nothing chosen yet, two characters is still ambiguous", async () => {
+    const registry = await registryWith(["ada", "bea"]);
+    expect(() => registry.resolveCharacter(undefined)).toThrow(/multiple characters available/);
+  });
+
+  test("a selection that disappears stops being the answer", async () => {
+    const registry = await registryWith(["ada", "bea"]);
+    expect(registry.resolveCharacter("ada")).toBe("ada");
+
+    rmSync(join(registry.globalConfig().dirs.config, "characters", "ada"), {
+      recursive: true,
+      force: true,
+    });
+    await registry.refresh();
+
+    expect(registry.selectedCharacter()).toBeUndefined();
+    expect(registry.resolveCharacter(undefined)).toBe("bea");
+  });
+});
+
 /**
  * The characters the generator created before constructing the registry.
  *

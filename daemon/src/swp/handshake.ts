@@ -10,6 +10,7 @@ import type { HandshakeProvider, HelloSnapshot, HistorySnapshot } from "./connec
 
 export interface HandshakeRegistry {
   availableCharacters(): readonly string[];
+  selectedCharacter?(): string | undefined;
   globalConfig(): LoadedConfig;
   effectiveConfig(name: string): LoadedConfig;
   getOrCreate(name: string): Promise<ConversationEngine>;
@@ -41,7 +42,8 @@ export function helloSnapshot(registry: HandshakeRegistry): HelloSnapshot {
   const characters: CharacterInfo[] = registry
     .availableCharacters()
     .map((name) => characterMetadata(configDir, name));
-  return { characters };
+  const selected = registry.selectedCharacter?.();
+  return { characters, ...(selected === undefined ? {} : { selected }) };
 }
 
 export async function buildSessionHistorySnapshot(
@@ -73,7 +75,7 @@ export async function buildSessionHistorySnapshot(
     messages: history.messages as HistorySnapshot["messages"],
     activeStart: history.active_start ?? 0,
     config: configBlock,
-    selectedCharacter: history.selected_character ?? null,
+    selectedCharacter: history.selected_character ?? selectedCharacter,
     revision: history.revision,
   };
 }

@@ -11,10 +11,12 @@ export function msgTypeName(msg: ClientMessage): string {
 export function resolveHandshakeCharacter(
   requested: string | null,
   characters: readonly CharacterInfo[],
+  held: string | null = null,
 ): string | null {
-  if (requested !== null) {
-    return characters.some((character) => character.name === requested) ? requested : null;
-  }
+  const known = (name: string): boolean => characters.some((c) => c.name === name);
+  if (requested !== null && known(requested)) return requested;
+  if (held !== null && known(held)) return held;
+  if (requested !== null) return null;
   return characters.length === 1 ? (characters[0]?.name ?? null) : null;
 }
 
