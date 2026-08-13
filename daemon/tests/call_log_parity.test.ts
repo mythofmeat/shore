@@ -194,9 +194,79 @@ describe.each(["call_log", "transcript"])("%s", (command) => {
         }
         return;
       }
-      expect(withoutBytes(run())).toEqual(withoutBytes(row.ok));
+      expect(withoutBytes(withoutWire(run()))).toEqual(withoutBytes(row.ok));
     });
   }
+});
+
+// ── the raw HTTP exchanges ──────────────────────────────────────────────────
+
+/**
+ * `wire` is newer than the fixture: the Rust daemon recorded no raw HTTP
+ * exchanges, so no frozen row can carry the key. Strip it here and pin the
+ * behaviour directly below instead.
+ */
+function withoutWire(value: unknown): unknown {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
+  const { wire: _wire, ...rest } = value as Record<string, unknown>;
+  return rest;
+}
+
+test("dumping one call returns the raw HTTP exchanges recorded under it", () => {
+  const store = CallStore.openInMemory();
+  const id = store.recordCall({
+    call_id: "wire-1",
+    ts: at(0),
+    call_type: "message",
+    character: "poppy",
+    model: "claude-x",
+    provider: "anthropic",
+    usage: ZERO_USAGE,
+    request_body: JSON.stringify({ normalized: true }),
+    response_body: null,
+  });
+  store.recordHttpCall({
+    call_id: "wire-1",
+    seq: 0,
+    ts: at(0),
+    character: "poppy",
+    call_type: "message",
+    method: "POST",
+    url: "https://api.anthropic.com/v1/messages",
+    status: 200,
+    status_text: "OK",
+    request_headers: [["content-type", "application/json"]],
+    request_body: Buffer.from(`{"thinking":{"type":"enabled"}}`, "utf8"),
+    response_headers: [["content-type", "text/event-stream"]],
+    response_body: Buffer.from("event: message_start\n", "utf8"),
+  });
+
+  const out = callLog({ characterName: "poppy", callStore: store }, { id }) as {
+    wire: { seq: number; url: string; status: number; request_body: string; response_body: string }[];
+  };
+
+  expect(out.wire).toHaveLength(1);
+  expect(out.wire[0]?.url).toBe("https://api.anthropic.com/v1/messages");
+  expect(out.wire[0]?.status).toBe(200);
+  expect(out.wire[0]?.request_body).toBe(`{"thinking":{"type":"enabled"}}`);
+  expect(out.wire[0]?.response_body).toBe("event: message_start\n");
+});
+
+test("a call with no recorded exchange dumps an empty wire list", () => {
+  const store = CallStore.openInMemory();
+  const id = store.recordCall({
+    call_id: "wire-none",
+    ts: at(0),
+    call_type: "message",
+    character: "poppy",
+    model: "claude-x",
+    provider: "anthropic",
+    usage: ZERO_USAGE,
+    request_body: "{}",
+    response_body: null,
+  });
+  const out = callLog({ characterName: "poppy", callStore: store }, { id }) as { wire: unknown[] };
+  expect(out.wire).toEqual([]);
 });
 
 // ── the reordering, restated ────────────────────────────────────────────────
