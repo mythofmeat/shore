@@ -1,12 +1,11 @@
-use std::collections::HashMap;
 use std::io::{self, IsTerminal, Read as _};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::OnceLock;
 
-use shore_common::protocol::server_msg::{MessageOrigin, NewMessage, ServerMessage};
-use shore_common::protocol::types::{CharacterAvatar, CharacterInfo, Role};
+use shore_common::protocol::server_msg::ServerMessage;
+use shore_common::protocol::types::Role;
 use shore_common::swp_client::{SWPConnection, ServerAddr};
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, info, instrument};
 
 use crate::cli::{Cli, CliCommand, LogRole};
 use crate::output;
@@ -88,17 +87,11 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
     let addr = resolve_addr(&cli)?;
 
     // Character resolution: --character flag > SHORE_CHARACTER env > state file > None (daemon auto-selects).
-    // `shore notify` defaults to all characters, so it deliberately ignores
-    // the persisted active-character state unless the user passed -c/--character.
-    let character = if matches!(cli.command, CliCommand::Notify { .. }) {
-        cli.character.clone()
-    } else {
-        cli.character.clone().or_else(state::read_active_character)
-    };
+    let character = cli.character.clone().or_else(state::read_active_character);
 
     info!(character = ?character, "CLI executing command");
 
-    let (mut conn, server_hello, history) =
+    let (mut conn, _server_hello, history) =
         SWPConnection::connect(&addr, "cli", "shore-cli", character.clone()).await?;
 
     // Prefer the daemon's authoritative answer over the local request.
@@ -110,19 +103,13 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
     // themselves correctly without threading the name through every call site.
     let _ignored = SESSION_DISPLAY_CHARACTER.set(display_character.clone());
 
-    pre_apply_active_model(&mut conn, &cli).await;
+    pre_apply_active_model(&mut conn).await;
 
     match &cli.command {
         CliCommand::Send { .. } => handle_send_command(&mut conn, &cli.command).await?,
         CliCommand::Regen { guidance } => {
             _ = conn.send_regen(true, guidance.clone()).await?;
             recv_streaming_response(&mut conn).await?;
-        }
-        CliCommand::Notify {
-            all_messages,
-            autonomous_only: _,
-        } => {
-            handle_notify(&mut conn, &cli, *all_messages, &server_hello.characters).await?;
         }
         CliCommand::Alt { .. } => handle_alt_command(&mut conn, &cli.command).await?,
         CliCommand::Character {
@@ -222,7 +209,6 @@ async fn handle_generic_swp_command(
         CliCommand::Send { .. }
         | CliCommand::Regen { .. }
         | CliCommand::Alt { .. }
-        | CliCommand::Notify { .. }
         | CliCommand::Log { .. }
         | CliCommand::Status { .. }
         | CliCommand::Debug { .. }
@@ -782,10 +768,7 @@ async fn try_handle_local_only(cli: &Cli) -> Option<Result<(), Box<dyn std::erro
 /// daemon, so a one-shot CLI invocation discards the choice on exit. Re-apply
 /// it here so every subsequent command sees it. A stale entry (model removed
 /// from config) must not stop the user's actual command.
-async fn pre_apply_active_model(conn: &mut SWPConnection, cli: &Cli) {
-    if matches!(cli.command, CliCommand::Notify { .. }) {
-        return;
-    }
+async fn pre_apply_active_model(conn: &mut SWPConnection) {
     let Some(model) = state::read_active_model() else {
         return;
     };
@@ -938,298 +921,6 @@ async fn handle_complete_query(
 /// Resolve the Shore config directory.
 fn config_dir() -> PathBuf {
     shore_common::dirs::config_dir()
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum NotifyMode {
-    AutonomousOnly,
-    AllMessages,
-}
-
-const NOTIFY_PREVIEW_MAX: usize = 200;
-
-async fn handle_notify(
-    conn: &mut SWPConnection,
-    cli: &Cli,
-    all_messages: bool,
-    characters: &[CharacterInfo],
-) -> Result<(), Box<dyn std::error::Error>> {
-    let mode = if all_messages {
-        NotifyMode::AllMessages
-    } else {
-        NotifyMode::AutonomousOnly
-    };
-    let config_dir = resolve_notify_config_dir(cli);
-    let requested_character = cli.character.as_deref();
-    let avatars = notification_avatars(characters);
-
-    info!(
-        character = ?requested_character,
-        all_messages,
-        config_dir = %config_dir.display(),
-        "starting desktop notification listener"
-    );
-
-    loop {
-        match conn.recv().await? {
-            ServerMessage::NewMessage(msg) => {
-                if should_notify_message(&msg, requested_character, mode) {
-                    let character = notify_character(&msg, requested_character);
-                    let title = format!("Shore - {character}");
-                    let body = notification_preview(&msg.message.content)
-                        .unwrap_or_else(|| "New message".to_owned());
-                    let icon =
-                        notification_icon_path(&config_dir, character, avatars.get(character));
-                    if let Err(e) = send_desktop_notification(&title, &body, icon.as_deref()) {
-                        warn!(error = %e, "desktop notification failed");
-                    }
-                }
-            }
-            ServerMessage::Shutdown(_) => break,
-            ServerMessage::Ping(_) | ServerMessage::History(_) => {}
-            other @ (ServerMessage::Hello(_)
-            | ServerMessage::CommandOutput(_)
-            | ServerMessage::Error(_)
-            | ServerMessage::StreamStart(_)
-            | ServerMessage::StreamChunk(_)
-            | ServerMessage::StreamEnd(_)
-            | ServerMessage::Phase(_)
-            | ServerMessage::ToolCall(_)
-            | ServerMessage::ToolResult(_)
-            | ServerMessage::SendImage(_)
-            | ServerMessage::CacheWarning(_)
-            | ServerMessage::ProviderFallbackWarning(_)
-            | ServerMessage::UsageWarning(_)
-            | ServerMessage::ConfigWarning(_)
-            | ServerMessage::Unknown) => {
-                debug!(?other, "ignoring non-notification event");
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn notification_avatars(characters: &[CharacterInfo]) -> HashMap<String, CharacterAvatar> {
-    characters
-        .iter()
-        .filter_map(|info| {
-            info.avatar
-                .clone()
-                .map(|avatar| (info.name.clone(), avatar))
-        })
-        .collect()
-}
-
-fn resolve_notify_config_dir(cli: &Cli) -> PathBuf {
-    if let Some(config) = &cli.config {
-        let path = PathBuf::from(config);
-        if path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| name == "config.toml")
-            || path.extension().and_then(|ext| ext.to_str()) == Some("toml")
-        {
-            return path
-                .parent()
-                .unwrap_or_else(|| Path::new("."))
-                .to_path_buf();
-        }
-        return path;
-    }
-
-    shore_common::swp_client::discover_config_dir()
-        .ok()
-        .flatten()
-        .unwrap_or_else(config_dir)
-}
-
-fn should_notify_message(
-    msg: &NewMessage,
-    requested_character: Option<&str>,
-    mode: NotifyMode,
-) -> bool {
-    if let Some(character) = requested_character {
-        if msg.character.as_deref() != Some(character) {
-            return false;
-        }
-    }
-
-    match mode {
-        NotifyMode::AutonomousOnly => msg.message.origin == Some(MessageOrigin::Autonomous),
-        NotifyMode::AllMessages => {
-            msg.message.role == Role::Assistant
-                && matches!(
-                    msg.message.origin,
-                    Some(MessageOrigin::AssistantReply | MessageOrigin::Autonomous)
-                )
-        }
-    }
-}
-
-fn notify_character<'msg>(
-    msg: &'msg NewMessage,
-    requested_character: Option<&'msg str>,
-) -> &'msg str {
-    msg.character
-        .as_deref()
-        .or(requested_character)
-        .unwrap_or_else(|| session_display_character())
-}
-
-fn notification_preview(content: &str) -> Option<String> {
-    let line = content
-        .lines()
-        .find(|line| !line.trim().is_empty())
-        .unwrap_or(content)
-        .trim();
-    if line.is_empty() {
-        return None;
-    }
-
-    let mut preview = String::new();
-    for ch in line.chars().take(NOTIFY_PREVIEW_MAX) {
-        preview.push(ch);
-    }
-    if line.chars().count() > NOTIFY_PREVIEW_MAX {
-        preview.push_str("...");
-    }
-    Some(preview)
-}
-
-fn notification_icon_path(
-    config_dir: &Path,
-    character: &str,
-    remote_avatar: Option<&CharacterAvatar>,
-) -> Option<PathBuf> {
-    if let Some(avatar) = remote_avatar {
-        match cache_avatar_icon(character, avatar) {
-            Ok(path) => return Some(path),
-            Err(e) => warn!(
-                character,
-                error = %e,
-                "failed to cache remote notification avatar"
-            ),
-        }
-    }
-
-    local_avatar_icon_path(config_dir, character)
-}
-
-fn local_avatar_icon_path(config_dir: &Path, character: &str) -> Option<PathBuf> {
-    for filename in ["avatar.png", "avatar.jpg", "avatar.jpeg", "avatar.webp"] {
-        let path = config_dir.join("characters").join(character).join(filename);
-        if path.is_file() {
-            return Some(path);
-        }
-    }
-    None
-}
-
-fn cache_avatar_icon(
-    character: &str,
-    avatar: &CharacterAvatar,
-) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let cache_dir = shore_common::dirs::ShoreDirs::resolve()
-        .cache
-        .join("notification-icons");
-    cache_avatar_icon_in_dir(&cache_dir, character, avatar)
-}
-
-fn cache_avatar_icon_in_dir(
-    cache_dir: &Path,
-    character: &str,
-    avatar: &CharacterAvatar,
-) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let bytes = {
-        use base64::Engine as _;
-        base64::engine::general_purpose::STANDARD.decode(&avatar.data)?
-    };
-    if bytes.is_empty() {
-        return Err("remote avatar payload is empty".into());
-    }
-
-    std::fs::create_dir_all(cache_dir)?;
-    let path = cache_dir.join(format!(
-        "{}.{}",
-        notification_avatar_basename(character),
-        notification_avatar_extension(&avatar.mime_type)
-    ));
-    std::fs::write(&path, bytes)?;
-    Ok(path)
-}
-
-fn notification_avatar_basename(character: &str) -> String {
-    let basename: String = character
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
-                ch
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    if basename.is_empty() {
-        "character".to_owned()
-    } else {
-        basename
-    }
-}
-
-fn notification_avatar_extension(mime_type: &str) -> &'static str {
-    match mime_type {
-        "image/png" => "png",
-        "image/jpeg" => "jpg",
-        "image/webp" => "webp",
-        _ => "img",
-    }
-}
-
-fn send_desktop_notification(
-    title: &str,
-    body: &str,
-    icon: Option<&Path>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    #[cfg(target_os = "macos")]
-    {
-        // Pass user-controlled text as argv so AppleScript never parses it as
-        // source. macOS notifications do not support the Linux icon option.
-        let _ignored = icon;
-        let status = std::process::Command::new("osascript")
-            .args([
-                "-e",
-                "on run argv",
-                "-e",
-                "display notification (item 2 of argv) with title (item 1 of argv)",
-                "-e",
-                "end run",
-                "--",
-                title,
-                body,
-            ])
-            .status()?;
-        return if status.success() {
-            Ok(())
-        } else {
-            Err(format!("osascript exited with status {status}").into())
-        };
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        let mut cmd = std::process::Command::new("notify-send");
-        let _ignored = cmd.arg("--app-name=shore");
-        if let Some(icon_path) = icon {
-            _ = cmd.arg("--icon").arg(icon_path);
-        }
-        let status = cmd.arg(title).arg(body).status()?;
-        if status.success() {
-            Ok(())
-        } else {
-            Err(format!("notify-send exited with status {status}").into())
-        }
-    }
 }
 
 /// Print the config directory path by querying the daemon.
@@ -1672,154 +1363,6 @@ mod tests {
         args.get(key).expect("expected command argument")
     }
 
-    fn notify_msg(character: &str, origin: Option<MessageOrigin>, role: Role) -> NewMessage {
-        NewMessage {
-            revision: 1,
-            character: Some(character.into()),
-            message: Message {
-                msg_id: "m1".into(),
-                origin,
-                role,
-                content: "hello".into(),
-                images: vec![],
-                content_blocks: vec![],
-                alt_index: None,
-                alt_count: None,
-                alternatives: vec![],
-                provider_key: None,
-                model: None,
-                timestamp: "2026-01-01T00:00:00Z".into(),
-            },
-        }
-    }
-
-    #[test]
-    fn notify_filter_autonomous_only() {
-        let auto = notify_msg("Alice", Some(MessageOrigin::Autonomous), Role::Assistant);
-        let reply = notify_msg(
-            "Alice",
-            Some(MessageOrigin::AssistantReply),
-            Role::Assistant,
-        );
-        assert!(super::should_notify_message(
-            &auto,
-            None,
-            super::NotifyMode::AutonomousOnly
-        ));
-        assert!(!super::should_notify_message(
-            &reply,
-            None,
-            super::NotifyMode::AutonomousOnly
-        ));
-    }
-
-    #[test]
-    fn notify_filter_all_messages_assistant_only() {
-        let reply = notify_msg(
-            "Alice",
-            Some(MessageOrigin::AssistantReply),
-            Role::Assistant,
-        );
-        let user = notify_msg("Alice", Some(MessageOrigin::UserInput), Role::User);
-        assert!(super::should_notify_message(
-            &reply,
-            None,
-            super::NotifyMode::AllMessages
-        ));
-        assert!(!super::should_notify_message(
-            &user,
-            None,
-            super::NotifyMode::AllMessages
-        ));
-    }
-
-    #[test]
-    fn notify_filter_respects_character() {
-        let auto = notify_msg("Alice", Some(MessageOrigin::Autonomous), Role::Assistant);
-        assert!(super::should_notify_message(
-            &auto,
-            Some("Alice"),
-            super::NotifyMode::AutonomousOnly
-        ));
-        assert!(!super::should_notify_message(
-            &auto,
-            Some("Bob"),
-            super::NotifyMode::AutonomousOnly
-        ));
-    }
-
-    #[test]
-    fn notification_preview_uses_first_non_empty_line_and_truncates() {
-        let content = format!(
-            "\n\n  {}\nsecond",
-            "x".repeat(super::NOTIFY_PREVIEW_MAX + 2)
-        );
-        let preview = super::notification_preview(&content).unwrap();
-        assert_eq!(preview.len(), super::NOTIFY_PREVIEW_MAX + 3);
-        assert!(preview.ends_with("..."));
-    }
-
-    #[test]
-    fn avatar_icon_path_requires_existing_avatar() {
-        let tmp = tempfile::tempdir().unwrap();
-        let dir = tmp.path().join("characters").join("Alice");
-        std::fs::create_dir_all(&dir).unwrap();
-        assert!(super::local_avatar_icon_path(tmp.path(), "Alice").is_none());
-        std::fs::write(dir.join("avatar.png"), b"png").unwrap();
-        assert!(super::local_avatar_icon_path(tmp.path(), "Alice").is_some());
-    }
-
-    #[test]
-    fn notification_avatars_indexes_handshake_avatars() {
-        let avatars = super::notification_avatars(&[CharacterInfo {
-            name: "Alice".into(),
-            avatar: Some(CharacterAvatar {
-                mime_type: "image/png".into(),
-                data: "cG5n".into(),
-            }),
-        }]);
-        assert_eq!(
-            avatars.get("Alice").map(|avatar| avatar.mime_type.as_str()),
-            Some("image/png")
-        );
-    }
-
-    #[test]
-    fn cache_avatar_icon_materializes_remote_avatar() {
-        let tmp = tempfile::tempdir().unwrap();
-        let avatar = CharacterAvatar {
-            mime_type: "image/png".into(),
-            data: {
-                use base64::Engine as _;
-                base64::engine::general_purpose::STANDARD.encode(b"png")
-            },
-        };
-
-        let path = super::cache_avatar_icon_in_dir(tmp.path(), "Alice Smith", &avatar).unwrap();
-        assert_eq!(
-            path.file_name().and_then(|name| name.to_str()),
-            Some("Alice_Smith.png")
-        );
-        assert_eq!(std::fs::read(path).unwrap(), b"png");
-    }
-
-    #[test]
-    fn cache_avatar_icon_uses_mime_extension() {
-        let tmp = tempfile::tempdir().unwrap();
-        let cache = tempfile::tempdir().unwrap();
-        let avatar = CharacterAvatar {
-            mime_type: "image/jpeg".into(),
-            data: {
-                use base64::Engine as _;
-                base64::engine::general_purpose::STANDARD.encode(b"jpg")
-            },
-        };
-
-        let path = super::cache_avatar_icon_in_dir(cache.path(), "Alice", &avatar).unwrap();
-        assert_eq!(path.extension().and_then(|ext| ext.to_str()), Some("jpg"));
-        assert!(super::local_avatar_icon_path(tmp.path(), "Alice").is_none());
-    }
-
     /// Helper: write a JSON line to a writer.
     async fn write_json_line<W: AsyncWriteExt + Unpin, T: serde::Serialize>(w: &mut W, val: &T) {
         let line = serde_json::to_string(val).unwrap();
@@ -1940,7 +1483,6 @@ mod tests {
                 super::recv_streaming_response(&mut conn).await.unwrap();
             }
             other @ (CliCommand::Alt { .. }
-            | CliCommand::Notify { .. }
             | CliCommand::Log { .. }
             | CliCommand::Character { .. }
             | CliCommand::Status { .. }

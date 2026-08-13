@@ -52,14 +52,10 @@ package_shore-cli() {
     depends=('gcc-libs' 'glibc')
     optdepends=(
         'shore-daemon: the daemon this client talks to'
-        'libnotify: desktop notifications via `shore notify`'
     )
 
     setup
     install -Dm755 "./client/target/release/shore" "$pkgdir/usr/bin/shore"
-
-    install -Dm644 "./contrib/systemd/shore-notify.service" \
-        "$pkgdir/usr/lib/systemd/user/shore-notify.service"
 
     install -dm755 "$pkgdir/usr/share/fish/vendor_completions.d"
     "./client/target/release/shore" completions fish \

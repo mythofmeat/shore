@@ -74,17 +74,12 @@ fails a job whose working directory is missing.
 
 Neither blocks packaging, both are visible to anyone using a Mac:
 
-- **Notifications.** `shore notify`, the daemon, and the cache-anomaly warning
-  all shell out to `notify-send`, which does not exist here
-  (`client/shore-cli/src/run.rs:1216`, `daemon/src/notifications.ts:46`,
+- **Notifications.** The daemon and the cache-anomaly warning both shell out to
+  `notify-send`, which does not exist here (`daemon/src/notifications.ts:46`,
   `daemon/src/ledger/record.ts:125`). `terminal-notifier` or an `osascript`
   shim would be the substitute.
 - **Image paste in the TUI.** `client/shore-tui/src/clipboard.rs:69` shells out
   to `wl-paste`; the macOS equivalent is `pbpaste` or an AppleScript call.
-
-There is no `shore-notify` counterpart to
-`contrib/systemd/shore-notify.service` here, because it would only run
-`notify-send` and fail.
 
 ## Builds are not reproducible
 

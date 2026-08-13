@@ -79,17 +79,6 @@ pub(crate) enum CliCommand {
         json: bool,
     },
 
-    /// Listen for daemon events and send desktop notifications
-    Notify {
-        /// Notify only for autonomous character messages (default)
-        #[arg(long, conflicts_with = "all_messages")]
-        autonomous_only: bool,
-
-        /// Notify for all assistant messages, including normal replies
-        #[arg(long, conflicts_with = "autonomous_only")]
-        all_messages: bool,
-    },
-
     /// Show conversation log, get/edit/delete messages
     #[command(args_conflicts_with_subcommands = true)]
     Log {
@@ -743,7 +732,6 @@ pub(crate) fn to_swp_command(cmd: &CliCommand) -> Option<(&'static str, serde_js
         // These use dedicated SWP message types or are handled locally.
         CliCommand::Send { system: false, .. }
         | CliCommand::Regen { .. }
-        | CliCommand::Notify { .. }
         | CliCommand::Completions { .. }
         | CliCommand::Complete { .. }
         | CliCommand::Config {
@@ -1181,41 +1169,6 @@ mod tests {
                 assert_eq!(guidance.as_deref(), Some("be more concise"));
             }
         );
-    }
-
-    // ── Notify ───────────────────────────────────────────────────────
-
-    #[test]
-    fn parse_notify_default() {
-        let cli = parse(&["notify"]);
-        assert_variant!(
-            &cli.command,
-            CliCommand::Notify {
-                autonomous_only,
-                all_messages,
-            } => {
-                assert!(!autonomous_only);
-                assert!(!all_messages);
-            }
-        );
-    }
-
-    #[test]
-    fn parse_notify_all_messages() {
-        let cli = parse(&["notify", "--all-messages"]);
-        assert_variant!(
-            &cli.command,
-            CliCommand::Notify { all_messages, .. } => {
-                assert!(*all_messages);
-            }
-        );
-    }
-
-    #[test]
-    fn parse_notify_modes_conflict() {
-        let result =
-            Cli::try_parse_from(["shore", "notify", "--autonomous-only", "--all-messages"]);
-        assert!(result.is_err());
     }
 
     // ── Alt ──────────────────────────────────────────────────────────
@@ -2002,15 +1955,6 @@ mod tests {
     }
 
     #[test]
-    fn notify_maps_to_none() {
-        let cmd = CliCommand::Notify {
-            autonomous_only: false,
-            all_messages: false,
-        };
-        assert!(to_swp_command(&cmd).is_none());
-    }
-
-    #[test]
     fn completions_maps_to_none() {
         let cmd = CliCommand::Completions { shell: Shell::Fish };
         assert!(to_swp_command(&cmd).is_none());
@@ -2713,7 +2657,7 @@ mod tests {
 
     #[test]
     fn all_non_message_commands_map() {
-        // Every variant except Send, Regen, Notify, Character (no --info),
+        // Every variant except Send, Regen, Character (no --info),
         // Config --path, and Completions should produce Some.
         let mut commands = log_status_debug_samples();
         commands.extend(model_samples());
