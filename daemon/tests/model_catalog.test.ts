@@ -3,7 +3,7 @@
  * anything for an sdk and model, and what an sdk starts that field at.
  *
  * This replaces the `applicability` and `default_value` halves of
- * `models_parity`, which recorded 728 and 91 rows respectively — the cartesian
+ * `model_resolution`, which recorded 728 and 91 rows respectively — the cartesian
  * product of 7 sdks, 8 model ids and 13 fields, filled in by a Rust binary that
  * no longer builds. The rules are `applicability` and `defaultValue` in
  * `capabilities.ts`, about sixty lines between them.

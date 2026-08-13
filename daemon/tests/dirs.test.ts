@@ -264,7 +264,7 @@ describe("load_raw_config_table", () => {
 
   test("Bun's TOML parser accepts an unterminated table header Rust rejects", () => {
     // The third Bun.TOML divergence this branch has hit, after the `\\U` escape
-    // (models_parity) and the nan/inf literals (stream_parity) — and the worst
+    // (model_resolution) and the nan/inf literals (stream) — and the worst
     // of them, because it turns a *fatal* config error into a plausible-looking
     // success rather than into wrong data.
     //

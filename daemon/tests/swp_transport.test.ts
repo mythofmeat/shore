@@ -1,7 +1,7 @@
 /**
  * Behavioural tests for the parts of the transport a value fixture cannot pin.
  *
- * **These are not fixture-derived.** `swp_parity.test.ts` replays values the
+ * **These are not fixture-derived.** `swp.test.ts` replays values the
  * Rust actually produced; everything here is a policy read out of
  * `the deleted port` and asserted directly, because the
  * behaviour is a property of a *loop over channels and time* rather than a

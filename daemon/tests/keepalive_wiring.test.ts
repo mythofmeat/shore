@@ -2,7 +2,7 @@
  * The wire between the cadence and the scheduler (#47).
  *
  * Every piece of this already had tests and every one of them passed while the
- * keepalive had never pinged in this daemon's life. `request_parity` checked
+ * keepalive had never pinged in this daemon's life. `request` checked
  * the cadence at the producer, against a fixture. `keepalive_service` and
  * `cache_keepalive` checked the scheduler from a prefix a test handed them.
  * `handler_deps` checked the chat turn with a stubbed cache. Between the

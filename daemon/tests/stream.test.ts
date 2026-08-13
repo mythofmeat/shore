@@ -325,7 +325,7 @@ describe("[notifications] parsing", () => {
 
   test("Bun's TOML parser mishandles the float literals nan/inf/-inf", () => {
     // Not a defect in this port, but a hazard underneath it, recorded like the
-    // `\U` escape in `models_parity.test.ts`.
+    // `\U` escape in `model_resolution.test.ts`.
     //
     // TOML spec has `nan`, `inf` and `-inf` as float literals; the Rust `toml`
     // crate decodes all three. `Bun.TOML.parse` returns `nan` and `inf` as

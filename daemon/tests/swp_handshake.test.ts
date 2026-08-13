@@ -1,7 +1,7 @@
 /**
  * What a client is actually told on connect, now that something answers.
  *
- * The transport's own handshake is pinned by `swp_parity.json`; this is the
+ * The transport's own handshake is pinned by `swp.json`; this is the
  * provider behind it, and what it is worth pinning for is the set of answers
  * that are deliberately *not* errors:
  *

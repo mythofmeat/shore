@@ -8,7 +8,7 @@
  * (`memory/compaction/mod.rs:956`); the pass's own writes are already committed
  * through the workspace `git` tool as they are made.
  *
- * `pushAfterCompaction` takes the push as a callback, so `compaction_parity`
+ * `pushAfterCompaction` takes the push as a callback, so `compaction`
  * pins the *gate* — enabled, and a `compacted` outcome — while injecting a stub
  * for the effect. That is what hid the wrong function at the only real call
  * site, and it is why the last case here asserts on reachability rather than on

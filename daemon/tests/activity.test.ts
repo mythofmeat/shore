@@ -1,7 +1,7 @@
 /**
  * The activity tracker's own behaviour.
  *
- * `activity_parity.test.ts` replays message streams recorded from the Rust and
+ * `activity_walks.test.ts` replays message streams recorded from the Rust and
  * is the stronger check for anything a stream can reach. This file covers what
  * a recorded stream cannot: the stats cache, which is a function of elapsed
  * time rather than of the messages; the guards on `backfill`, which are about

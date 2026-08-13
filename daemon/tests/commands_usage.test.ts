@@ -2,7 +2,7 @@
  * `commands/usage.ts` — the clearing, the forward, and the failures.
  *
  * The reports themselves are pinned elsewhere and not repeated here:
- * `ledger_usage_parity.test.ts` replays a fixture generated from the Rust for
+ * `ledger_usage_cases.test.ts` replays a fixture generated from the Rust for
  * every mode a ledger alone can answer, and `ledger_usage.test.ts` covers
  * `recalculate`, which needs a catalog. What is left for the command is what it
  * does *around* the report — empty the pricing caches when asked, hand the args

@@ -7,9 +7,9 @@
  * was only ever reached through a live `MessageHandler`.
  *
  * **Not fixture-derived, and it does not need to be.** Every step of the chain
- * it runs is already pinned by the frozen `preferences_parity.json`
+ * it runs is already pinned by the frozen `preferences.json`
  * (`resolveActiveForCharacter`, `resolveSamplerSettings`,
- * `applySamplerOverlay`) and by `setup_parity.json` (`resolveGenerationModel`).
+ * `applySamplerOverlay`) and by `setup.json` (`resolveGenerationModel`).
  * What is unpinned is the composition: which preferences feed the chain, where
  * the legacy file is read from, and the one argument that makes this function
  * different from {@link resolveChatModelForCharacter}. So that is what is

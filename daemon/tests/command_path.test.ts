@@ -190,7 +190,7 @@ function resolveCharacter(
  * The `none_available` message the Rust returned, verbatim, and the absolute
  * path the port answers with instead (#41).
  *
- * The reasoning lives in `characters_parity.test.ts`, which owns the message;
+ * The reasoning lives in `characters.test.ts`, which owns the message;
  * this file replays a handler that only relays it. Both keyed on the exact old
  * string for the same reason.
  */

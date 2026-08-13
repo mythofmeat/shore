@@ -572,7 +572,7 @@ describe("runGeneration", () => {
 
       // Not fixture-driven: the Rust's autonomy manager keeps its state in a
       // file the generator would have had to read back turn by turn, and each
-      // of these calls is pinned on its own elsewhere (turn_parity for the
+      // of these calls is pinned on its own elsewhere (turn for the
       // first two, persistence for the last two). What is unpinned without
       // this is that the driver makes them, and in this order.
       const expectedCalls = ["ensureState"];
@@ -612,7 +612,7 @@ describe("runGeneration", () => {
  * Not from the fixture: the generator handed `handle_generation` a
  * `ResolvedModel` the Rust handler had already merged, so no recorded case has
  * an overlay to carry. What both halves are is pinned —
- * `handler_active_model.test.ts` for the resolution, `setup_parity.json` for
+ * `handler_active_model.test.ts` for the resolution, `setup.json` for
  * the merge — and what is not is that the driver threads one into the other. A
  * dropped overlay is silent: the turn runs, on the catalog's defaults, and the
  * user's `shore model set temperature` did nothing.

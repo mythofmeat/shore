@@ -2,7 +2,7 @@
  * `ConfigDuration` and `parseCacheKeepalive`: the two string formats a user can
  * type into config.toml for a span of time.
  *
- * The case list came from `models_parity`, which replayed it against a
+ * The case list came from `model_resolution`, which replayed it against a
  * recording of the Rust. The inputs are the valuable half — BOM and the three
  * unicode spaces, u64 overflow at both the value and the suffix, the
  * fractional-precision ceiling, a bare "." — and no one would re-derive them by

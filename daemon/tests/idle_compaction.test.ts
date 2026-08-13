@@ -4,7 +4,7 @@
  * There is no parity fixture here and that is deliberate — see the header of
  * `src/autonomy/idle_compaction.ts`. Everything the action delegates to is
  * pinned elsewhere (the pass by the compaction fixtures, the trigger by
- * `tick_parity.json`, the state writes by `autonomy_runner.test.ts`), so what is
+ * `tick.json`, the state writes by `autonomy_runner.test.ts`), so what is
  * left to protect is which pieces it calls, with what, and in what order. A
  * generated fixture would have recorded nothing these doubles do not.
  *
@@ -375,7 +375,7 @@ describe("runIdleCompaction: putting the world back in step", () => {
     // spends money warming the wrong thing. There is still a prefix worth
     // protecting, so the answer is the rebuilt one rather than standing down.
     // The disarming direction — a rebuild that produces nothing — is the same
-    // `repoint`, and `deep_archive_parity.test.ts` is where it is pinned.
+    // `repoint`, and `deep_archive.test.ts` is where it is pinned.
     expect(cache.get("ada")).toBeDefined();
     expect(cache.get("ada")).not.toEqual(stale());
     expect(armed).toEqual(["ada", "ada"]);

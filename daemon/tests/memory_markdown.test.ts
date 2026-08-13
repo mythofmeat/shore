@@ -63,7 +63,7 @@ interface PureCase {
 }
 
 const fixture = JSON.parse(
-  readFileSync(join(import.meta.dir, "memory_fixtures/markdown_parity.json"), "utf8"),
+  readFileSync(join(import.meta.dir, "memory_fixtures/memory_markdown.json"), "utf8"),
 ) as {
   constants: { max_direct_hits: number };
   modified_at_format: Array<{

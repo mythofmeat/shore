@@ -2,7 +2,7 @@
  * `SHORE_WORKSPACE_DIR`: a character's workspace, moved out of its config
  * directory.
  *
- * Not fixture-driven, unlike `dirs_parity.test.ts` — the frozen fixture pins
+ * Not fixture-driven, unlike `dirs.test.ts` — the frozen fixture pins
  * the layout as it was, and this is the layout that did not exist when it was
  * generated. What that test still guarantees is the half that matters here:
  * with no root set, every path helper answers exactly what it answered before,

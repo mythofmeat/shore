@@ -1,7 +1,7 @@
 /**
  * The heartbeat clock's own behaviour.
  *
- * `heartbeat_parity.test.ts` replays decision walks recorded from the Rust and
+ * `heartbeat_walks.test.ts` replays decision walks recorded from the Rust and
  * is the stronger check for anything a walk can reach. This file covers what a
  * randomised walk cannot: exact boundaries, and the two `force*` calls that read
  * the clock rather than taking a `now`, so they could not be recorded.

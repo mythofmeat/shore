@@ -1,7 +1,7 @@
 /**
  * The budget gate, at every seam that spends.
  *
- * `ledger_budget_parity.test.ts` proves the *decision* matches the Rust. This
+ * `ledger_budget.test.ts` proves the *decision* matches the Rust. This
  * proves the decision is actually consulted: that a blocked call never reaches
  * the provider, that it surfaces as a budget refusal rather than a transport
  * failure, and that an allowed call is untouched.

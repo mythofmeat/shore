@@ -41,7 +41,7 @@ const doc = fixture as unknown as {
 const NOW = Date.parse(doc.now);
 const opts = { localZone: doc.timezone, now: NOW };
 
-/** Mirrors `config()` in usage_parity.rs. */
+/** Mirrors `config()` in the deleted port's usage tests. */
 function config(timezone: string): UsageConfig {
   return {
     timezone,
@@ -60,7 +60,7 @@ function config(timezone: string): UsageConfig {
   };
 }
 
-/** Mirrors `modes()` in usage_parity.rs. */
+/** Mirrors `modes()` in the deleted port's usage tests. */
 const MODES: Record<string, Record<string, unknown>> = {
   summary: {},
   budget: { budget: true },
@@ -72,7 +72,7 @@ const MODES: Record<string, Record<string, unknown>> = {
   anomalies: { anomalies: true },
 };
 
-/** Mirrors `filters()` in usage_parity.rs. */
+/** Mirrors `filters()` in the deleted port's usage tests. */
 const FILTERS: Record<string, Record<string, unknown>> = {
   none: {},
   character: { character: "aria" },

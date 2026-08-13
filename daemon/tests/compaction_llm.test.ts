@@ -35,7 +35,7 @@ const section = (name: string): Json[] => fx[name] as Json[];
  *
  * The Rust cited a file that has never existed in this repository. The fixture
  * is frozen, so the citation cannot be taken out of it — it is cut out of the
- * expectation instead, the way `app_parity` handles the deleted `[daemon]`
+ * expectation instead, the way `app` handles the deleted `[daemon]`
  * keys. Every other character of the message stays compared literally.
  */
 const withoutDeadCitation = (err: string): string =>

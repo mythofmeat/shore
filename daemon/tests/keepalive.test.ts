@@ -50,7 +50,7 @@ describe("requests the daemon sends", () => {
 
   test("the prefix push is an ordinary request plus a cadence", () => {
     // Not in the fixture as a body of its own: it is a flattened `LlmRequest`
-    // plus `context`, both already pinned by `wire_parity.json`. What is new is
+    // plus `context`, both already pinned by `wire.json`. What is new is
     // the cadence key, and that `buildKeepalivePing` strips it before the body
     // reaches a provider — asserted in `keepalive_service.test.ts`.
     const ping = buildKeepalivePing({

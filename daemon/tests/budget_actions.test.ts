@@ -1,7 +1,7 @@
 /**
  * `pause_heartbeat`, and `warn_at` thresholds that actually do something.
  *
- * `ledger_budget_parity.test.ts` pins the decisions the Rust made; this covers
+ * `ledger_budget.test.ts` pins the decisions the Rust made; this covers
  * the two it never had. Both are about a budget being *wrong* in the expensive
  * direction rather than failing to enforce:
  *

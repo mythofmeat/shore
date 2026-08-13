@@ -96,7 +96,7 @@ function stripAbsent(value: unknown): unknown {
 /**
  * Drop the two fields #92 added to a diagnostics entry. The Rust that
  * generated this fixture recorded neither, so they are asserted in the
- * truncation tests in `dispatch_parity.test.ts` rather than written in here.
+ * truncation tests in `dispatch.test.ts` rather than written in here.
  */
 function withoutTruncationFields(value: unknown): unknown {
   if (value === null || typeof value !== "object") return value;

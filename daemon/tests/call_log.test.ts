@@ -142,7 +142,7 @@ function contextFor(caseName: string, character: string): CallLogContext {
  * Drop `request_bytes`/`response_bytes` wherever they appear.
  *
  * They are the one field the two libzstd builds disagree on, and they are
- * pinned against Rust's own bytes in `call_store_parity.test.ts` rather than
+ * pinned against Rust's own bytes in `call_store.test.ts` rather than
  * here. Everything else in every row still compares exactly.
  */
 function withoutBytes(value: unknown): unknown {

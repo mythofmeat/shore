@@ -2,7 +2,7 @@
  * Startup connection policy for MCP servers: who gets retried, who does not,
  * and what the result looks like when servers come up out of order (#37).
  *
- * Not parity — the Rust had none of this. `mcp_parity.test.ts` still owns
+ * Not parity — the Rust had none of this. `mcp.test.ts` still owns
  * everything the port froze; this file owns the retry that was added on top.
  *
  * Sleep is injected throughout, so the tests assert the *schedule* rather than

@@ -6,8 +6,8 @@
  * unambiguous. The Rust wrote `characters/<name>/workspace/SOUL.md` — relative
  * to the config directory, and saying so nowhere.
  *
- * Not fixture-driven: the frozen captures in `characters_parity.json` and
- * `command_path_parity.json` record the Rust's string, and their replays
+ * Not fixture-driven: the frozen captures in `characters.json` and
+ * `command_path.json` record the Rust's string, and their replays
  * rewrite it into this shape rather than being edited. This is where the shape
  * itself is pinned.
  */

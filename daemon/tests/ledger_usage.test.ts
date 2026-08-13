@@ -1,7 +1,7 @@
 /**
  * The `shore usage` paths the recorded cases in `ledger_usage_cases` do not reach.
  *
- * `ledger_usage_parity.test.ts` pins every mode that is answerable from a
+ * `ledger_usage_cases.test.ts` pins every mode that is answerable from a
  * ledger alone. Two are not, and they are here:
  *
  *   - **`recalculate`** drives the pricing catalog, and a fixture that fetched

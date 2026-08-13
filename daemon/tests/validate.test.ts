@@ -96,7 +96,7 @@ const replayable = cases.filter(
 );
 
 /**
- * Dirs are not what this layer decides — they are `dirs_parity.json`'s subject
+ * Dirs are not what this layer decides — they are `dirs.json`'s subject
  * — and `parseConfigTable` only carries them through onto the result.
  */
 const DIRS: ShoreDirs = {

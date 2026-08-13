@@ -35,7 +35,7 @@ import {
 import { testTmp } from "./support/tmp.ts";
 
 const fixture = JSON.parse(
-  readFileSync(new URL("./tools_fixtures/workspace_parity.json", import.meta.url), "utf8"),
+  readFileSync(new URL("./tools_fixtures/workspace_tools.json", import.meta.url), "utf8"),
 ) as Fixture;
 
 interface Fixture {

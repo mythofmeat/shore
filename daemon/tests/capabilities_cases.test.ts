@@ -9,7 +9,7 @@
  */
 import { expect, test } from "bun:test";
 
-import fixture from "./capability_parity_fixture.toml";
+import fixture from "./capability_cases.toml";
 import {
   claudeThinkingCaps,
   parseClaudeModel,
@@ -24,7 +24,7 @@ interface Case {
   enabled?: boolean;
 }
 
-// Shared with the Rust tests (`capabilities.rs::cross_language_parity_fixture`):
+// Shared with the Rust tests (originally shared with the deleted port's own tests):
 // both reimplementations of the parser + rule evaluator must agree with these.
 const cases = (fixture as { case: Case[] }).case;
 

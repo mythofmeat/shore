@@ -43,7 +43,7 @@ const doc = fixture as unknown as {
 
 const opts = { localZone: doc.timezone };
 
-// ── The configs, mirroring `configs()` in budget_parity.rs ───────────────────
+// ── The configs, mirroring `configs()` in the deleted port's budget tests ───────────────────
 
 const budget = (
   name: string,
@@ -131,7 +131,7 @@ const CONFIGS: Record<string, UsageConfig> = {
   },
 };
 
-/** The call contexts, mirroring `calls()` in budget_parity.rs. */
+/** The call contexts, mirroring `calls()` in the deleted port's budget tests. */
 const CALLS: Record<string, BudgetCallContext> = {
   foreground_aria: {
     provider: "anthropic",

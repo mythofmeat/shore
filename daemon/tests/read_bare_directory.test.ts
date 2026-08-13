@@ -1,9 +1,9 @@
 /**
  * `read` on a bare `workspace` or `memory` (#39).
  *
- * Not fixture-driven: the frozen capture in `tools_fixtures/workspace_parity.json`
+ * Not fixture-driven: the frozen capture in `tools_fixtures/workspace_tools.json`
  * pins what the Rust did, and what the Rust did here was refuse. See the
- * `READ_DIVERGES_FROM_RUST` note in `workspace_tools_parity.test.ts` for why
+ * `READ_DIVERGES_FROM_RUST` note in `workspace_tools.test.ts` for why
  * that fixture stays as it is.
  *
  * Two things are being held down. First, the prefixes list — the schema says

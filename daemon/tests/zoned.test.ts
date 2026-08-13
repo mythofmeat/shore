@@ -1,7 +1,7 @@
 /**
  * The wall-clock primitives, tested directly.
  *
- * `ledger_budget_parity.test.ts` exercises these through whole budget windows
+ * `ledger_budget.test.ts` exercises these through whole budget windows
  * against the Rust, which is the real lock. These are here because when that
  * one fails, the diff is a budget status and the cause is three layers down —
  * this says which primitive broke.
