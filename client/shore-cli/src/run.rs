@@ -147,6 +147,7 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
             handle_local_model_command(&mut conn, &cli.command).await?;
         }
         other @ (CliCommand::Character { .. }
+        | CliCommand::Trace { .. }
         | CliCommand::Debug { .. }
         | CliCommand::Model { .. }
         | CliCommand::Provider { .. }
@@ -201,6 +202,12 @@ async fn handle_generic_swp_command(
                     )
                 )
         }
+        CliCommand::Trace { subcommand } => match subcommand {
+            crate::cli::TraceCommand::Calls { json, .. }
+            | crate::cli::TraceCommand::Heartbeat { json, .. }
+            | crate::cli::TraceCommand::Events { json, .. }
+            | crate::cli::TraceCommand::Subagent { json, .. } => *json,
+        },
         CliCommand::Character { json, .. }
         | CliCommand::Memory { json, .. }
         | CliCommand::Config { json, .. }
@@ -343,10 +350,6 @@ async fn handle_log_command(
         reasoning,
         tools,
         subagent_tools,
-        heartbeat,
-        events,
-        subagent,
-        api,
         count,
         follow,
         ..
@@ -376,22 +379,6 @@ async fn handle_log_command(
             output::print_log_plain(std::slice::from_ref(&data), display_character, filter);
         } else {
             output::print_single_message(&data, display_character, filter);
-        }
-        return Ok(());
-    }
-
-    // Background observability views (the heartbeat transcript, the event
-    // ring, raw call payloads) map to their own SWP commands via `to_swp_command`.
-    if *heartbeat || *events || subagent.is_some() || api.is_some() {
-        let Some((name, swp_args)) = crate::cli::to_swp_command(cmd) else {
-            return Ok(());
-        };
-        _ = conn.send_command(name, swp_args).await?;
-        let data = recv_command_data(conn).await?;
-        if *json {
-            cli_out!("{}", serde_json::to_string_pretty(&data)?);
-        } else {
-            output::format_command(name, &data);
         }
         return Ok(());
     }
@@ -1484,6 +1471,7 @@ mod tests {
             }
             other @ (CliCommand::Alt { .. }
             | CliCommand::Log { .. }
+            | CliCommand::Trace { .. }
             | CliCommand::Character { .. }
             | CliCommand::Status { .. }
             | CliCommand::Debug { .. }
@@ -1673,13 +1661,6 @@ mod tests {
             reasoning: false,
             tools: false,
             subagent_tools: false,
-            heartbeat: false,
-            events: false,
-            subagent: None,
-            api: None,
-            call_type: None,
-            diff: false,
-            against: None,
         });
         let received = execute_with_mock(cli, command_response("edit")).await;
 
@@ -1711,13 +1692,6 @@ mod tests {
             reasoning: false,
             tools: false,
             subagent_tools: false,
-            heartbeat: false,
-            events: false,
-            subagent: None,
-            api: None,
-            call_type: None,
-            diff: false,
-            against: None,
         });
         let received = execute_with_mock(cli, command_response("delete")).await;
 

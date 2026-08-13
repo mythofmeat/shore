@@ -94,7 +94,7 @@ pub(crate) enum CliCommand {
         count: u32,
 
         /// Show only messages from one role (`character` aliases `assistant`)
-        #[arg(long, value_enum, conflicts_with_all = ["heartbeat", "events", "api"])]
+        #[arg(long, value_enum)]
         role: Option<LogRole>,
 
         /// Follow mode: keep listening for new messages
@@ -124,53 +124,13 @@ pub(crate) enum CliCommand {
         /// Also show sub-agent nested tool activity, in --follow (hidden by default)
         #[arg(long = "subagent-tools")]
         subagent_tools: bool,
+    },
 
-        /// Show the heartbeat transcript: what each tick thought, the tools it
-        /// called and their results, and the model/provider that served it
-        #[arg(long, conflicts_with_all = ["events", "api", "msg_ref"])]
-        heartbeat: bool,
-
-        /// Show the heartbeat operational event timeline (tick fired, dormant,
-        /// woke, timeout) instead of the transcript
-        #[arg(long, conflicts_with_all = ["heartbeat", "api", "msg_ref"])]
-        events: bool,
-
-        /// Show stored sub-agent runs: the tools each `ask_<name>` call made and
-        /// what came back. Bare lists recent runs; pass the parent tool_use id
-        /// (`--subagent toolu_01A`) to dump one run
-        #[expect(
-            clippy::option_option,
-            reason = "clap needs absent, present-without-value, and present-with-value states"
-        )]
-        #[arg(
-            long,
-            num_args = 0..=1,
-            value_name = "TOOL_USE_ID",
-            conflicts_with_all = ["heartbeat", "events", "api", "msg_ref"]
-        )]
-        subagent: Option<Option<String>>,
-
-        /// Inspect raw LLM call payloads. Bare lists recent calls; pass an id
-        /// (`--api 42`) to dump that call's full request/response
-        #[expect(
-            clippy::option_option,
-            reason = "clap needs absent, present-without-value, and present-with-value states"
-        )]
-        #[arg(long, num_args = 0..=1, value_name = "ID", conflicts_with = "msg_ref")]
-        api: Option<Option<i64>>,
-
-        /// Filter `--api` by ledger call type (e.g. message, heartbeat, compaction)
-        #[arg(long, requires = "api")]
-        call_type: Option<String>,
-
-        /// With `--api <id>`, also show what changed since the previous call
-        #[arg(long, requires = "api")]
-        diff: bool,
-
-        /// With `--api <id> --diff`, compare against this call id instead of
-        /// the previous one
-        #[arg(long, requires = "diff", value_name = "ID")]
-        against: Option<i64>,
+    /// Inspect what the daemon did behind the conversation: raw model calls,
+    /// heartbeat activity, and stored sub-agent runs.
+    Trace {
+        #[command(subcommand)]
+        subcommand: TraceCommand,
     },
 
     /// List or switch characters (no args = list, with name = switch)
@@ -488,6 +448,74 @@ pub(crate) enum LogCommand {
 }
 
 #[derive(Subcommand, Debug)]
+pub(crate) enum TraceCommand {
+    /// Raw model call payloads. Bare lists recent calls; pass an id to dump
+    /// that call's full request and response
+    Calls {
+        /// Call id to dump (from the bare listing)
+        id: Option<i64>,
+
+        /// Number of calls to list
+        #[arg(short = 'n', long = "count", default_value = "20")]
+        count: u32,
+
+        /// Filter the listing by ledger call type (message, heartbeat, ...)
+        #[arg(long, conflicts_with = "id")]
+        call_type: Option<String>,
+
+        /// Also show what changed since the previous call
+        #[arg(long, requires = "id")]
+        diff: bool,
+
+        /// Compare against this call id instead of the previous one
+        #[arg(long, requires = "diff", value_name = "ID")]
+        against: Option<i64>,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// The heartbeat transcript: what each tick thought, the tools it called
+    /// and their results, and the model that served it
+    Heartbeat {
+        /// Number of entries to show
+        #[arg(short = 'n', long = "count", default_value = "20")]
+        count: u32,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// The heartbeat operational timeline: tick fired, dormant, woke, timeout
+    Events {
+        /// Number of events to show
+        #[arg(short = 'n', long = "count", default_value = "20")]
+        count: u32,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Stored sub-agent runs: the tools each `ask_<name>` call made and what
+    /// came back. Bare lists recent runs; pass a parent tool_use id for one
+    Subagent {
+        /// Parent tool_use id of a single run to dump
+        id: Option<String>,
+
+        /// Number of runs to list
+        #[arg(short = 'n', long = "count", default_value = "20")]
+        count: u32,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand, Debug)]
 pub(crate) enum ModelCommand {
     /// Show, set, or reset saved sampler settings (temperature, top_p,
     /// reasoning_effort, budget_tokens, max_output_tokens, cache_ttl,
@@ -768,6 +796,7 @@ pub(crate) fn to_swp_command(cmd: &CliCommand) -> Option<(&'static str, serde_js
 
         // Log: subcommands (edit/delete), single message ref, or list.
         CliCommand::Log { .. } => log_to_swp(cmd),
+        CliCommand::Trace { .. } => trace_to_swp(cmd),
 
         // Status: diagnostics mode or normal status.
         CliCommand::Status {
@@ -813,13 +842,6 @@ fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         subcommand,
         msg_ref,
         role,
-        heartbeat,
-        events,
-        subagent,
-        api,
-        call_type,
-        diff,
-        against,
         count,
         ..
     } = cmd
@@ -848,48 +870,63 @@ fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         }
         return Some(("get", Value::Object(args)));
     }
-    if *heartbeat {
-        return Some((
-            "transcript",
-            json!({ "source": "heartbeat", "count": count }),
-        ));
-    }
-    if *events {
-        return Some(("heartbeat_log", json!({ "count": count })));
-    }
-    if let Some(subagent_arg) = subagent {
-        let mut args = Map::new();
-        match subagent_arg {
-            Some(id) => _ = args.insert("ids".into(), json!([id])),
-            None => _ = args.insert("count".into(), json!(count)),
-        }
-        return Some(("subagent_trace", Value::Object(args)));
-    }
-    if let Some(api_arg) = api {
-        let mut args = Map::new();
-        // `--api <id>` dumps one call; bare `--api` lists recent calls.
-        if let Some(id) = api_arg {
-            _ = args.insert("id".into(), json!(id));
-            if *diff {
-                _ = args.insert("diff".into(), json!(true));
-                if let Some(other) = against {
-                    _ = args.insert("against".into(), json!(other));
-                }
-            }
-        } else {
-            _ = args.insert("count".into(), json!(count));
-            if let Some(ct) = call_type {
-                _ = args.insert("call_type".into(), json!(ct));
-            }
-        }
-        return Some(("call_log", Value::Object(args)));
-    }
     let mut args = Map::new();
     let _ignored = args.insert("turns".into(), json!(count));
     if let Some(role_filter) = role {
         _ = args.insert("role".into(), json!(role_filter.as_protocol_role()));
     }
     Some(("log", Value::Object(args)))
+}
+
+/// The observability views: raw call payloads, heartbeat activity, sub-agent runs.
+fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
+    use serde_json::{Map, Value, json};
+    let CliCommand::Trace { subcommand } = cmd else {
+        return None;
+    };
+    match subcommand {
+        TraceCommand::Heartbeat { count, .. } => Some((
+            "transcript",
+            json!({ "source": "heartbeat", "count": count }),
+        )),
+        TraceCommand::Events { count, .. } => Some(("heartbeat_log", json!({ "count": count }))),
+        TraceCommand::Subagent { id, count, .. } => {
+            let mut args = Map::new();
+            match id {
+                Some(one) => _ = args.insert("ids".into(), json!([one])),
+                None => _ = args.insert("count".into(), json!(count)),
+            }
+            Some(("subagent_trace", Value::Object(args)))
+        }
+        TraceCommand::Calls {
+            id,
+            count,
+            call_type,
+            diff,
+            against,
+            ..
+        } => {
+            let mut args = Map::new();
+            match id {
+                Some(one) => {
+                    _ = args.insert("id".into(), json!(one));
+                    if *diff {
+                        _ = args.insert("diff".into(), json!(true));
+                        if let Some(other) = against {
+                            _ = args.insert("against".into(), json!(other));
+                        }
+                    }
+                }
+                None => {
+                    _ = args.insert("count".into(), json!(count));
+                    if let Some(ct) = call_type {
+                        _ = args.insert("call_type".into(), json!(ct));
+                    }
+                }
+            }
+            Some(("call_log", Value::Object(args)))
+        }
+    }
 }
 
 /// `model` setting (show/set/clear) or model list/switch/info/reset.
@@ -1226,18 +1263,9 @@ mod tests {
                 reasoning,
                 tools,
                 subagent_tools,
-                heartbeat,
-                events,
-                subagent,
-                api,
-                call_type,
-                diff,
-                against,
             } => {
                 assert!(subcommand.is_none());
                 assert!(msg_ref.is_none());
-                assert!(!diff);
-                assert!(against.is_none());
                 assert_eq!(*count, 64);
                 assert!(role.is_none());
                 assert!(!follow);
@@ -1247,11 +1275,6 @@ mod tests {
                 assert!(!reasoning);
                 assert!(!tools);
                 assert!(!subagent_tools);
-                assert!(!heartbeat);
-                assert!(!events);
-                assert!(subagent.is_none());
-                assert!(api.is_none());
-                assert!(call_type.is_none());
             }
         );
     }
@@ -2456,13 +2479,6 @@ mod tests {
             reasoning: false,
             tools: false,
             subagent_tools: false,
-            heartbeat: false,
-            events: false,
-            subagent: None,
-            api: None,
-            call_type: None,
-            diff: false,
-            against: None,
         };
         let (name, args) = to_swp_command(&cmd).unwrap();
         assert_eq!(name, "edit");
@@ -2486,13 +2502,6 @@ mod tests {
             reasoning: false,
             tools: false,
             subagent_tools: false,
-            heartbeat: false,
-            events: false,
-            subagent: None,
-            api: None,
-            call_type: None,
-            diff: false,
-            against: None,
         };
         let (name, args) = to_swp_command(&cmd).unwrap();
         assert_eq!(name, "delete");
@@ -2538,13 +2547,6 @@ mod tests {
             reasoning: false,
             tools: false,
             subagent_tools: false,
-            heartbeat: false,
-            events: false,
-            subagent: None,
-            api: None,
-            call_type: None,
-            diff: false,
-            against: None,
         };
         let (name, args) = to_swp_command(&cmd).unwrap();
         assert_eq!(name, "get");
@@ -2566,13 +2568,6 @@ mod tests {
             reasoning: false,
             tools: false,
             subagent_tools: false,
-            heartbeat: false,
-            events: false,
-            subagent: None,
-            api: None,
-            call_type: None,
-            diff: false,
-            against: None,
         };
         let (name, args) = to_swp_command(&cmd).unwrap();
         assert_eq!(name, "log");
@@ -2581,8 +2576,8 @@ mod tests {
     }
 
     #[test]
-    fn log_subagent_bare_lists_recent_runs() {
-        let cli = parse(&["log", "--subagent", "-n", "5"]);
+    fn trace_subagent_bare_lists_recent_runs() {
+        let cli = parse(&["trace", "subagent", "-n", "5"]);
         let (name, args) = to_swp_command(&cli.command).unwrap();
         assert_eq!(name, "subagent_trace");
         assert_eq!(arg(&args, "count"), 5);
@@ -2590,8 +2585,8 @@ mod tests {
     }
 
     #[test]
-    fn log_subagent_with_id_asks_for_one_run() {
-        let cli = parse(&["log", "--subagent", "toolu_01A"]);
+    fn trace_subagent_with_id_asks_for_one_run() {
+        let cli = parse(&["trace", "subagent", "toolu_01A"]);
         let (name, args) = to_swp_command(&cli.command).unwrap();
         assert_eq!(name, "subagent_trace");
         assert_eq!(arg(&args, "ids"), &serde_json::json!(["toolu_01A"]));
@@ -2599,15 +2594,15 @@ mod tests {
     }
 
     #[test]
-    fn log_subagent_tools_is_not_log_subagent() {
+    fn log_subagent_tools_stays_on_the_conversation() {
         let cli = parse(&["log", "--subagent-tools"]);
         let (name, _) = to_swp_command(&cli.command).unwrap();
         assert_eq!(name, "log");
     }
 
     #[test]
-    fn log_api_diff_asks_for_a_comparison() {
-        let cli = parse(&["log", "--api", "42", "--diff"]);
+    fn trace_calls_diff_asks_for_a_comparison() {
+        let cli = parse(&["trace", "calls", "42", "--diff"]);
         let (name, args) = to_swp_command(&cli.command).unwrap();
         assert_eq!(name, "call_log");
         assert_eq!(arg(&args, "id"), 42);
@@ -2616,17 +2611,36 @@ mod tests {
     }
 
     #[test]
-    fn log_api_diff_against_pins_the_other_side() {
-        let cli = parse(&["log", "--api", "42", "--diff", "--against", "40"]);
+    fn trace_calls_diff_against_pins_the_other_side() {
+        let cli = parse(&["trace", "calls", "42", "--diff", "--against", "40"]);
         let (_, args) = to_swp_command(&cli.command).unwrap();
         assert_eq!(arg(&args, "against"), 40);
     }
 
     #[test]
-    fn log_api_without_diff_asks_for_no_comparison() {
-        let cli = parse(&["log", "--api", "42"]);
+    fn trace_calls_without_diff_asks_for_no_comparison() {
+        let cli = parse(&["trace", "calls", "42"]);
         let (_, args) = to_swp_command(&cli.command).unwrap();
         assert!(args.get("diff").is_none());
+    }
+
+    #[test]
+    fn trace_calls_bare_lists_and_can_filter_by_type() {
+        let cli = parse(&["trace", "calls", "-n", "5", "--call-type", "heartbeat"]);
+        let (name, args) = to_swp_command(&cli.command).unwrap();
+        assert_eq!(name, "call_log");
+        assert_eq!(arg(&args, "count"), 5);
+        assert_eq!(arg(&args, "call_type"), "heartbeat");
+    }
+
+    #[test]
+    fn trace_heartbeat_and_events_are_separate_views() {
+        let (heartbeat, hb_args) = to_swp_command(&parse(&["trace", "heartbeat"]).command).unwrap();
+        assert_eq!(heartbeat, "transcript");
+        assert_eq!(arg(&hb_args, "source"), "heartbeat");
+
+        let (events, _) = to_swp_command(&parse(&["trace", "events"]).command).unwrap();
+        assert_eq!(events, "heartbeat_log");
     }
 
     #[test]
@@ -2681,13 +2695,6 @@ mod tests {
                 reasoning: false,
                 tools: false,
                 subagent_tools: false,
-                heartbeat: false,
-                events: false,
-                subagent: None,
-                api: None,
-                call_type: None,
-                diff: false,
-                against: None,
             },
             CliCommand::Log {
                 subcommand: Some(LogCommand::Edit {
@@ -2704,13 +2711,6 @@ mod tests {
                 reasoning: false,
                 tools: false,
                 subagent_tools: false,
-                heartbeat: false,
-                events: false,
-                subagent: None,
-                api: None,
-                call_type: None,
-                diff: false,
-                against: None,
             },
             CliCommand::Log {
                 subcommand: Some(LogCommand::Delete {
@@ -2726,13 +2726,6 @@ mod tests {
                 reasoning: false,
                 tools: false,
                 subagent_tools: false,
-                heartbeat: false,
-                events: false,
-                subagent: None,
-                api: None,
-                call_type: None,
-                diff: false,
-                against: None,
             },
             CliCommand::Log {
                 subcommand: None,
@@ -2746,13 +2739,6 @@ mod tests {
                 reasoning: false,
                 tools: false,
                 subagent_tools: false,
-                heartbeat: false,
-                events: false,
-                subagent: None,
-                api: None,
-                call_type: None,
-                diff: false,
-                against: None,
             },
             CliCommand::Status {
                 section: None,

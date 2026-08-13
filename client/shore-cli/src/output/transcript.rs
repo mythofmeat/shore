@@ -621,7 +621,7 @@ pub(crate) fn print_single_message(
     print_log(std::slice::from_ref(data), character_name, filter);
 }
 
-/// Print heartbeat event log returned by `shore log --heartbeat`.
+/// Print heartbeat event log returned by `shore trace events`.
 pub(crate) fn print_heartbeat_log(data: &serde_json::Value) {
     let stdout = io::stdout();
     let mut out = stdout.lock();

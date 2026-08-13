@@ -403,7 +403,7 @@ fn print_call_log(data: &serde_json::Value) {
     }
     print_dim_line(
         &mut out,
-        "(shore log --api <id> to dump one call; --json for raw)",
+        "(shore trace calls <id> to dump one call; --json for raw)",
     );
 }
 
@@ -660,7 +660,7 @@ fn print_call_diff(
     _ = writeln!(out);
     print_dim_line(
         out,
-        "(shore log --api <id> for the call in full; --json for the raw diff)",
+        "(shore trace calls <id> for the call in full; --json for the raw diff)",
     );
 }
 
@@ -795,7 +795,7 @@ fn print_subagent_trace(data: &serde_json::Value) {
 fn subagent_trace_empty_message(data: &serde_json::Value) -> String {
     match data["requested_ids"].as_array().and_then(|ids| ids.first()) {
         Some(id) => format!(
-            "(no sub-agent run with id {} — `shore log --subagent` lists what is stored)",
+            "(no sub-agent run with id {} — `shore trace subagent` lists what is stored)",
             id.as_str().unwrap_or("?")
         ),
         None => "(no sub-agent runs recorded yet)".to_owned(),
@@ -3280,7 +3280,7 @@ mod tests {
         assert_eq!(rendered, "  Max output tokens 8192\n");
     }
 
-    /// Visual preview of `shore log --subagent` rendering. Run with:
+    /// Visual preview of `shore trace subagent` rendering. Run with:
     /// `cargo test -p shore-cli render_preview_subagent -- --ignored --nocapture --test-threads=1`
     #[test]
     #[ignore = "visual preview"]
@@ -3293,7 +3293,7 @@ mod tests {
         set_color_enabled(false);
 
         let mut stdout = io::stdout();
-        let _ignored = stdout.write_all(b"\n----- SUBAGENT RUNS (shore log --subagent) -----\n");
+        let _ignored = stdout.write_all(b"\n----- SUBAGENT RUNS (shore trace subagent) -----\n");
         _ = stdout.write_all(&buf);
         _ = stdout.write_all(b"----- end -----\n");
         _ = stdout.flush();
