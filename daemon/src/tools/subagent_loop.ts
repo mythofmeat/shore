@@ -41,6 +41,7 @@ import {
   subagentToolSubset,
   templateVars,
 } from "./subagent.ts";
+import { appendSubagentTrace } from "./subagent_trace.ts";
 import { schemasFrom } from "./validate.ts";
 
 const TAGGED_FRAMES = new Set([
@@ -69,8 +70,9 @@ export interface SubagentDeps {
 
 export function subagentRunner(
   deps: SubagentDeps,
-): (name: string, query: string, signal?: AbortSignal) => Promise<string> {
-  return async (name, query, signal) => await runSubagent(deps, name, query, signal);
+): (name: string, query: string, signal?: AbortSignal, toolUseId?: string) => Promise<string> {
+  return async (name, query, signal, toolUseId) =>
+    await runSubagent(deps, name, query, signal, toolUseId);
 }
 
 export async function runSubagent(
@@ -78,6 +80,7 @@ export async function runSubagent(
   name: string,
   query: string,
   signal?: AbortSignal,
+  toolUseId?: string,
 ): Promise<string> {
   const { config } = deps;
   const spec = config.app.subagents.get(name);
@@ -169,16 +172,34 @@ export async function runSubagent(
   };
 
   const send = taggedSink(name, deps.sendDirect);
+  const messages: Message[] = [];
   const phase = toolPhase({
     sendDirect: send,
     ctx: nestedContext(deps.ctx, signal),
     limits: toolLimits(config),
     diagnostics: deps.diagnostics,
+    subagent: name,
     ...(deps.rid === undefined ? {} : { rid: deps.rid }),
     now: deps.now ?? (() => new Date().toISOString()),
     newMessageId: deps.newMessageId ?? (() => `m_${crypto.randomUUID()}`),
     schemas: schemasFrom(request.tools),
-  });
+  }, messages);
+
+  const trace = async (outcome: { result?: string; error?: string }): Promise<void> => {
+    if (toolUseId === undefined) return;
+    try {
+      await appendSubagentTrace(deps.ctx.characterDataDir, {
+        subagent: name,
+        parent_tool_use_id: toolUseId,
+        ...(deps.rid === undefined ? {} : { rid: deps.rid }),
+        model: request.model,
+        messages,
+        ...outcome,
+      });
+    } catch (e) {
+      console.warn(`shore: failed to record subagent '${name}' trace: ${String(e)}`);
+    }
+  };
 
   const events: AsyncIterable<StreamEvent> =
     request.sdk === "anthropic" || provider === undefined
@@ -188,24 +209,41 @@ export async function runSubagent(
       : genericToolLoopEvents(provider, request, phase, signal);
 
   const blocked = budgetBlockFor(request);
-  if (blocked) throw new BudgetBlocked(blocked.message, blocked.scope, blocked.reset_at);
+  if (blocked) {
+    await trace({ error: blocked.message });
+    throw new BudgetBlocked(blocked.message, blocked.scope, blocked.reset_at);
+  }
   const initialAttempt = beginCallAttempt(request.context, request);
-  const outcome = await consumeStream(recordingStream(
-    request.context,
-    request,
-    events,
-    initialAttempt,
-    (continued, callType) => {
-      const next = { ...continued, context: { ...continued.context!, call_type: callType } };
-      const nextBlock = budgetBlockFor(next);
-      if (nextBlock) throw new BudgetBlocked(nextBlock.message, nextBlock.scope, nextBlock.reset_at);
-      return beginCallAttempt(next.context, next);
-    },
-  ), {
-    regen: false,
-    sink: send,
-  });
-  if ("err" in outcome) throw new InvalidArgs(describe(outcome.err));
+  let outcome;
+  try {
+    outcome = await consumeStream(recordingStream(
+      request.context,
+      request,
+      events,
+      initialAttempt,
+      (continued, callType) => {
+        const next = { ...continued, context: { ...continued.context!, call_type: callType } };
+        const nextBlock = budgetBlockFor(next);
+        if (nextBlock) {
+          throw new BudgetBlocked(nextBlock.message, nextBlock.scope, nextBlock.reset_at);
+        }
+        return beginCallAttempt(next.context, next);
+      },
+    ), {
+      regen: false,
+      sink: send,
+    });
+  } catch (e) {
+    await trace({ error: e instanceof Error ? e.message : String(e) });
+    throw e;
+  }
+
+  if ("err" in outcome) {
+    const failure = describe(outcome.err);
+    await trace({ error: failure });
+    throw new InvalidArgs(failure);
+  }
+  await trace({ result: outcome.ok.content });
   return outcome.ok.content;
 }
 

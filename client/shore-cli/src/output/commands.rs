@@ -313,6 +313,7 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "heartbeat_log" => super::transcript::print_heartbeat_log(data),
         "call_log" => print_call_log(data),
         "transcript" => print_transcript(data),
+        "subagent_trace" => print_subagent_trace(data),
         "heartbeat_tick_now" => print_heartbeat_tick_now(data),
         "heartbeat_set_dormant" => print_heartbeat_status_change(data, "dormant"),
         "heartbeat_set_active" => print_heartbeat_status_change(data, "active"),
@@ -432,10 +433,75 @@ fn print_one_call(out: &mut impl Write, call: &serde_json::Value, width: usize) 
     for (label, key) in [("request", "request"), ("response", "response")] {
         write_fg(out, Color::Cyan, &format!("  {label}:\n"));
         let body = display_payload_body(&call[key]);
-        _ = writeln!(out, "{}", truncate_display(&body, CALL_BODY_PREVIEW));
+        let formatted = if key == "response" {
+            format_stream_payload(&body)
+        } else {
+            format_json_payload(&body)
+        };
+        _ = writeln!(out, "{}", truncate_payload(&formatted, CALL_BODY_PREVIEW));
         _ = writeln!(out);
     }
     print_dim_line(out, "(--json for the full, untruncated payload)");
+}
+
+fn format_json_payload(body: &str) -> String {
+    serde_json::from_str::<serde_json::Value>(body).map_or_else(
+        |_| body.to_owned(),
+        |value| serde_json::to_string_pretty(&value).unwrap_or_else(|_| body.to_owned()),
+    )
+}
+
+fn format_stream_payload(body: &str) -> String {
+    let mut events = Vec::new();
+    for parsed in serde_json::Deserializer::from_str(body).into_iter::<serde_json::Value>() {
+        let Ok(value) = parsed else {
+            return body.to_owned();
+        };
+        if events
+            .last_mut()
+            .is_some_and(|previous| merge_stream_delta(previous, &value))
+        {
+            continue;
+        }
+        events.push(value);
+    }
+    if events.is_empty() {
+        return body.to_owned();
+    }
+    events
+        .iter()
+        .map(|event| serde_json::to_string_pretty(event).unwrap_or_else(|_| event.to_string()))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn merge_stream_delta(previous: &mut serde_json::Value, next: &serde_json::Value) -> bool {
+    let Some(kind) = next["type"].as_str() else {
+        return false;
+    };
+    if previous["type"].as_str() != Some(kind) {
+        return false;
+    }
+    let field = match kind {
+        "text" | "thinking" => "text",
+        "reasoning_content" => "reasoning",
+        _ => return false,
+    };
+    let (Some(left), Some(right)) = (previous[field].as_str(), next[field].as_str()) else {
+        return false;
+    };
+    let merged = format!("{left}{right}");
+    previous[field] = serde_json::Value::String(merged);
+    true
+}
+
+fn truncate_payload(s: &str, max: usize) -> String {
+    let count = s.chars().count();
+    if count <= max {
+        return s.to_owned();
+    }
+    let kept: String = s.chars().take(max).collect();
+    format!("{kept}… (+{} chars)", count.saturating_sub(max))
 }
 
 fn print_wire_exchanges(out: &mut impl Write, wire: Option<&serde_json::Value>, width: usize) {
@@ -706,6 +772,140 @@ fn print_transcript_entry(
         }
     }
     _ = writeln!(out);
+}
+
+fn print_subagent_trace(data: &serde_json::Value) {
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    let width = term_width();
+    let char_name = data["character"].as_str().unwrap_or("?");
+    write_section_header(&mut out, "sub-agent runs", char_name, width);
+
+    let Some(entries) = data["entries"].as_array().filter(|e| !e.is_empty()) else {
+        print_dim_line(&mut out, "(no sub-agent runs recorded yet)");
+        return;
+    };
+    let mut prev_date: Option<String> = None;
+    for entry in entries {
+        print_subagent_run(&mut out, entry, &mut prev_date);
+    }
+}
+
+fn print_subagent_run(
+    out: &mut impl Write,
+    entry: &serde_json::Value,
+    prev_date: &mut Option<String>,
+) {
+    let ts = entry["ts"].as_str().unwrap_or("");
+    let time_str = parse_timestamp(ts).map_or_else(
+        || ts.chars().take(16).collect::<String>(),
+        |dt| {
+            let formatted = format_time(&dt, prev_date.as_deref());
+            *prev_date = Some(dt.format("%Y-%m-%d").to_string());
+            formatted
+        },
+    );
+    write_fg(out, Color::DarkGrey, &format!("  {time_str:<14}"));
+    write_fg(
+        out,
+        Color::Blue,
+        &format!("ask_{}", entry["subagent"].as_str().unwrap_or("?")),
+    );
+    write_fg(
+        out,
+        Color::Magenta,
+        &format!(
+            "  {}",
+            abbreviate_model(entry["model"].as_str().unwrap_or("?"))
+        ),
+    );
+    _ = writeln!(out);
+    write_dim(
+        out,
+        &format!(
+            "                {}",
+            entry["parent_tool_use_id"].as_str().unwrap_or("?")
+        ),
+    );
+    _ = writeln!(out);
+
+    if let Some(messages) = entry["messages"].as_array() {
+        for msg in messages {
+            let Some(blocks) = msg["content_blocks"].as_array() else {
+                continue;
+            };
+            for block in blocks {
+                print_subagent_block(out, block);
+            }
+        }
+    }
+
+    match (entry["error"].as_str(), entry["result"].as_str()) {
+        (Some(error), _) => {
+            write_fg(out, Color::Red, "                failed: ");
+            _ = writeln!(out, "{}", truncate_display(error, 600));
+        }
+        (None, Some(result)) => {
+            write_fg(out, Color::White, "                answer: ");
+            _ = writeln!(out, "{}", truncate_display(result, 600));
+        }
+        (None, None) => {}
+    }
+    _ = writeln!(out);
+}
+
+fn print_subagent_block(out: &mut impl Write, block: &serde_json::Value) {
+    match block["type"].as_str().unwrap_or("") {
+        "thinking" => {
+            let thinking = block["thinking"].as_str().unwrap_or("");
+            if thinking.trim().is_empty() {
+                return;
+            }
+            write_fg(out, Color::DarkCyan, "                reasoning: ");
+            _ = writeln!(out, "{}", truncate_display(thinking.trim(), 600));
+        }
+        "text" => {
+            let text = block["text"].as_str().unwrap_or("");
+            if text.trim().is_empty() {
+                return;
+            }
+            write_fg(out, Color::White, "                text: ");
+            _ = writeln!(out, "{}", truncate_display(text.trim(), 600));
+        }
+        "tool_use" => {
+            write_fg(
+                out,
+                Color::Cyan,
+                &format!(
+                    "                tool {}: ",
+                    block["name"].as_str().unwrap_or("?")
+                ),
+            );
+            _ = writeln!(
+                out,
+                "{}",
+                truncate_display(&block["input"].to_string(), 200)
+            );
+        }
+        "tool_result" => {
+            let is_error = block["is_error"].as_bool().unwrap_or(false);
+            let arrow = if is_error { "  ✗ " } else { "  → " };
+            let body = block["content"]
+                .as_str()
+                .map_or_else(|| block["content"].to_string(), str::to_owned);
+            if is_error {
+                write_fg(out, Color::Red, &format!("                {arrow}"));
+                _ = writeln!(out, "{}", truncate_display(&body, 600));
+            } else {
+                write_dim(
+                    out,
+                    &format!("                {arrow}{}", truncate_display(&body, 600)),
+                );
+                _ = writeln!(out);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Truncate `s` to at most `max` chars, flattening newlines, with a dropped
@@ -2639,7 +2839,7 @@ fn print_cache_coverage(data: &serde_json::Value) {
         let writes = row["cache_write_tokens"].as_u64().unwrap_or(0);
         let label = match row["reason"].as_str() {
             Some(reason) => format!("{state} ({reason})"),
-            None => state.to_string(),
+            None => state.to_owned(),
         };
         cli_out!("  {label:<40} {calls:>6} calls  read {reads}  write {writes}");
     }
@@ -2661,7 +2861,9 @@ fn print_rate_limits(data: &serde_json::Value) {
         let input = quota_fraction(row, "input_tokens");
         let output = quota_fraction(row, "output_tokens");
         let resets = row["resets_at"].as_str().unwrap_or("?");
-        cli_out!("  {host:<24} requests {requests}  input {input}  output {output}  resets {resets}");
+        cli_out!(
+            "  {host:<24} requests {requests}  input {input}  output {output}  resets {resets}"
+        );
     }
 }
 
@@ -2903,6 +3105,137 @@ mod tests {
     }
 
     #[test]
+    fn call_request_payload_is_pretty_printed() {
+        let formatted = format_json_payload(r#"{"sdk":"openai","messages":[]}"#);
+
+        assert_eq!(
+            formatted,
+            "{\n  \"sdk\": \"openai\",\n  \"messages\": []\n}"
+        );
+    }
+
+    #[test]
+    fn call_response_payload_coalesces_stream_deltas() {
+        let body = concat!(
+            "{\"type\":\"start\",\"model\":\"kimi-k3\"}\n",
+            "{\"type\":\"text\",\"text\":\"you\"}\n",
+            "{\"type\":\"text\",\"text\":\" know\"}\n",
+            "{\"type\":\"text\",\"text\":\" what?\"}\n",
+            "{\"type\":\"done\",\"finish_reason\":\"stop\"}"
+        );
+        let formatted = format_stream_payload(body);
+
+        assert_eq!(formatted.matches("\"type\": \"text\"").count(), 1);
+        assert!(formatted.contains("\"text\": \"you know what?\""));
+        assert!(formatted.contains("\"model\": \"kimi-k3\""));
+        assert!(formatted.contains("\"finish_reason\": \"stop\""));
+    }
+
+    #[test]
+    fn malformed_call_payload_is_left_alone() {
+        let body = "not json\nand still useful";
+
+        assert_eq!(format_json_payload(body), body);
+        assert_eq!(format_stream_payload(body), body);
+    }
+
+    #[test]
+    fn call_payload_truncation_preserves_newlines() {
+        assert_eq!(truncate_payload("one\ntwo", 5), "one\nt… (+2 chars)");
+    }
+
+    fn sample_subagent_run() -> serde_json::Value {
+        serde_json::json!({
+            "ts": "2026-08-12T23:00:56.613+10:00",
+            "subagent": "researcher",
+            "parent_tool_use_id": "toolu_01A",
+            "rid": "r-1",
+            "model": "anthropic/claude-haiku-4-5",
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content_blocks": [
+                        {"type": "thinking", "thinking": "She asked when the flatmate left. Memory first, then the workspace."},
+                        {"type": "tool_use", "name": "search_memory", "input": {"query": "flatmate moved out"}},
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content_blocks": [
+                        {"type": "tool_result", "tool_use_id": "t1", "content": "MEMORY.md: June — Sam took the smaller room.", "is_error": false},
+                    ],
+                },
+                {
+                    "role": "assistant",
+                    "content_blocks": [
+                        {"type": "tool_use", "name": "read", "input": {"path": "notes/house.md"}},
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content_blocks": [
+                        {"type": "tool_result", "tool_use_id": "t2", "content": "file unreadable: notes/house.md", "is_error": true},
+                    ],
+                },
+            ],
+            "result": "Sam moved out in June and took the smaller room with them.",
+        })
+    }
+
+    #[test]
+    fn subagent_run_renders_tools_and_the_answer() {
+        set_color_enabled(false);
+        let mut buf = Vec::new();
+        print_subagent_run(&mut buf, &sample_subagent_run(), &mut None);
+        let rendered = String::from_utf8(buf).expect("utf8");
+
+        assert!(rendered.contains("ask_researcher"));
+        assert!(rendered.contains("toolu_01A"));
+        assert!(rendered.contains("tool search_memory"));
+        assert!(rendered.contains("Sam took the smaller room"));
+        assert!(rendered.contains("✗"));
+        assert!(rendered.contains("answer: Sam moved out in June"));
+    }
+
+    fn with_error(mut entry: serde_json::Value, message: &str) -> serde_json::Value {
+        if let Some(obj) = entry.as_object_mut() {
+            _ = obj.insert("error".to_owned(), serde_json::json!(message));
+        }
+        entry
+    }
+
+    #[test]
+    fn a_failed_subagent_run_shows_the_error_instead_of_an_answer() {
+        set_color_enabled(false);
+        let entry = with_error(sample_subagent_run(), "budget exhausted for subagent");
+        let mut buf = Vec::new();
+        print_subagent_run(&mut buf, &entry, &mut None);
+        let rendered = String::from_utf8(buf).expect("utf8");
+
+        assert!(rendered.contains("failed: budget exhausted"));
+        assert!(!rendered.contains("answer:"));
+    }
+
+    /// Visual preview of `shore log --subagent` rendering. Run with:
+    /// `cargo test -p shore-cli render_preview_subagent -- --ignored --nocapture --test-threads=1`
+    #[test]
+    #[ignore = "visual preview"]
+    fn render_preview_subagent() {
+        set_color_enabled(true);
+        let mut buf = Vec::new();
+        print_subagent_run(&mut buf, &sample_subagent_run(), &mut None);
+        let failed = with_error(sample_subagent_run(), "upstream returned 529 overloaded");
+        print_subagent_run(&mut buf, &failed, &mut Some("2026-08-12".to_owned()));
+        set_color_enabled(false);
+
+        let mut stdout = io::stdout();
+        let _ignored = stdout.write_all(b"\n----- SUBAGENT RUNS (shore log --subagent) -----\n");
+        _ = stdout.write_all(&buf);
+        _ = stdout.write_all(b"----- end -----\n");
+        _ = stdout.flush();
+    }
+
+    #[test]
     fn payload_json_is_pretty_printed_without_string_escaping() {
         let body = serde_json::json!({"messages": [{"role": "user", "content": "hello"}]});
         let rendered = display_payload_body(&body);
@@ -3025,7 +3358,10 @@ mod tests {
         assert!(text.contains("KEEPALIVE HALTED"), "{text}");
         assert!(text.contains("poppy"), "{text}");
         assert!(text.contains("2026-08-13T07:36:41+00:00"), "{text}");
-        assert!(text.contains("two keepalive pings in a row missed"), "{text}");
+        assert!(
+            text.contains("two keepalive pings in a row missed"),
+            "{text}"
+        );
         // The halt has no runtime exit, so the banner must not read as
         // something a restart clears.
         assert!(text.contains("does not clear on its own"), "{text}");

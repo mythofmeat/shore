@@ -597,6 +597,9 @@ async function chatTurn(
   const root = await mkdtemp(join(tmpdir(), "shore-budget-chat-"));
   cleanups.push(() => rmSync(root, { recursive: true, force: true }));
   const config = await chatConfig(root, spareKey);
+  if (usage !== undefined) {
+    config.app.usage = usage as unknown as typeof config.app.usage;
+  }
   const ledger = spentLedger();
   const counting = countingProvider();
   const fallbacks: unknown[] = [];
@@ -636,7 +639,6 @@ async function chatTurn(
     compaction: { run: async () => 0, applyDeferredEdits: async () => {} },
     newlyCrossedUsageBudgetWarnings: async () => [],
     ledgerPath: ledger,
-    usageConfig: () => usage,
     sleep: async () => {
       sleeps += 1;
     },

@@ -54,7 +54,7 @@ export interface PersistContext {
   notifier: NotificationService;
   sessionTokens: SessionTokens;
   diagnostics: { api_calls: { push: (entry: ApiCallEntry) => void } };
-  newlyCrossedUsageBudgetWarnings: () => Promise<UsageBudgetWarningEvent[]>;
+  newlyCrossedUsageBudgetWarnings: (character: string) => Promise<UsageBudgetWarningEvent[]>;
   now: () => string;
   newMessageId: () => string;
 }
@@ -112,7 +112,7 @@ export async function persistAndNotify(
     notifyContent,
     params.wallClockMs,
   );
-  await emitUsageBudgetWarnings(ctx, request.rid);
+  await emitUsageBudgetWarnings(ctx, charName, request.rid);
 }
 
 export function lastRequestWithResponse(
@@ -193,10 +193,14 @@ function saturatingAdd(a: number, b: number): number {
   return sum > Number.MAX_SAFE_INTEGER ? Number.MAX_SAFE_INTEGER : sum;
 }
 
-async function emitUsageBudgetWarnings(ctx: PersistContext, rid: string | undefined): Promise<void> {
+async function emitUsageBudgetWarnings(
+  ctx: PersistContext,
+  charName: string,
+  rid: string | undefined,
+): Promise<void> {
   let warnings: UsageBudgetWarningEvent[];
   try {
-    warnings = await ctx.newlyCrossedUsageBudgetWarnings();
+    warnings = await ctx.newlyCrossedUsageBudgetWarnings(charName);
   } catch (e) {
     console.warn(`shore: usage budget warning check failed: ${String(e)}`);
     return;

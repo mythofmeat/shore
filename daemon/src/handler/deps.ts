@@ -66,7 +66,8 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
   const dataDir = runtime.config.dirs.data;
   const ledgerPath = rustJoin(dataDir, "ledger.db");
   const global = () => runtime.registry.globalConfig();
-  const usage = () => usageConfigView(global().app.usage);
+  const usage = (character: string) =>
+    usageConfigView(runtime.registry.effectiveConfig(character).app.usage);
 
   return {
     registry: generationRegistry(runtime.registry),
@@ -85,7 +86,6 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
     compaction: chatCompactionRunner(a),
     newlyCrossedUsageBudgetWarnings: usageBudgetWarnings(ledgerPath, usage, a.now),
     ledgerPath,
-    usageConfig: usage,
     keepaliveMaxSecs: () =>
       Number(global().app.cache.keepalive_max.asSecs()),
     tools: (charName, turn) => chatToolDeps(a, charName, turn),
@@ -181,12 +181,12 @@ export function chatCompactionRunner(a: GenerationAssembly): GenerationDeps["com
 
 export function usageBudgetWarnings(
   ledgerPath: string,
-  usage: () => UsageConfig | undefined,
+  usage: (character: string) => UsageConfig | undefined,
   now: (() => number) | undefined,
-): () => Promise<UsageBudgetWarningEvent[]> {
+): (character: string) => Promise<UsageBudgetWarningEvent[]> {
   const clock = now ?? (() => Date.now());
-  return () => {
-    const config = usage();
+  return (character) => {
+    const config = usage(character);
     if (config === undefined || (config.budgets ?? []).length === 0) {
       return Promise.resolve([]);
     }

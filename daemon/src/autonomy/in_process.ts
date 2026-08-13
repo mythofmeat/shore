@@ -72,9 +72,12 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
         }
       },
 
-      dispatch: async (name, input) => {
+      dispatch: async (name, input, toolUseId) => {
         try {
-          const value = await dispatchTool(name, input as Record<string, unknown>, toolCtx);
+          const value = await dispatchTool(name, input as Record<string, unknown>, {
+            ...toolCtx,
+            ...(toolUseId === undefined ? {} : { toolUseId }),
+          });
           return {
             output: typeof value === "string" ? value : (JSON.stringify(value) ?? ""),
             isError: false,

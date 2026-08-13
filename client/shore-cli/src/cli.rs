@@ -146,6 +146,21 @@ pub(crate) enum CliCommand {
         #[arg(long, conflicts_with_all = ["heartbeat", "api", "msg_ref"])]
         events: bool,
 
+        /// Show stored sub-agent runs: the tools each `ask_<name>` call made and
+        /// what came back. Bare lists recent runs; pass the parent tool_use id
+        /// (`--subagent toolu_01A`) to dump one run
+        #[expect(
+            clippy::option_option,
+            reason = "clap needs absent, present-without-value, and present-with-value states"
+        )]
+        #[arg(
+            long,
+            num_args = 0..=1,
+            value_name = "TOOL_USE_ID",
+            conflicts_with_all = ["heartbeat", "events", "api", "msg_ref"]
+        )]
+        subagent: Option<Option<String>>,
+
         /// Inspect raw LLM call payloads. Bare lists recent calls; pass an id
         /// (`--api 42`) to dump that call's full request/response
         #[expect(
@@ -812,6 +827,7 @@ fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         role,
         heartbeat,
         events,
+        subagent,
         api,
         call_type,
         diff,
@@ -852,6 +868,14 @@ fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     }
     if *events {
         return Some(("heartbeat_log", json!({ "count": count })));
+    }
+    if let Some(subagent_arg) = subagent {
+        let mut args = Map::new();
+        match subagent_arg {
+            Some(id) => _ = args.insert("ids".into(), json!([id])),
+            None => _ = args.insert("count".into(), json!(count)),
+        }
+        return Some(("subagent_trace", Value::Object(args)));
     }
     if let Some(api_arg) = api {
         let mut args = Map::new();
@@ -1251,6 +1275,7 @@ mod tests {
                 subagent_tools,
                 heartbeat,
                 events,
+                subagent,
                 api,
                 call_type,
                 diff,
@@ -1271,6 +1296,7 @@ mod tests {
                 assert!(!subagent_tools);
                 assert!(!heartbeat);
                 assert!(!events);
+                assert!(subagent.is_none());
                 assert!(api.is_none());
                 assert!(call_type.is_none());
             }
@@ -2488,6 +2514,7 @@ mod tests {
             subagent_tools: false,
             heartbeat: false,
             events: false,
+            subagent: None,
             api: None,
             call_type: None,
             diff: false,
@@ -2517,6 +2544,7 @@ mod tests {
             subagent_tools: false,
             heartbeat: false,
             events: false,
+            subagent: None,
             api: None,
             call_type: None,
             diff: false,
@@ -2568,6 +2596,7 @@ mod tests {
             subagent_tools: false,
             heartbeat: false,
             events: false,
+            subagent: None,
             api: None,
             call_type: None,
             diff: false,
@@ -2595,6 +2624,7 @@ mod tests {
             subagent_tools: false,
             heartbeat: false,
             events: false,
+            subagent: None,
             api: None,
             call_type: None,
             diff: false,
@@ -2604,6 +2634,31 @@ mod tests {
         assert_eq!(name, "log");
         assert_eq!(arg(&args, "turns"), 20);
         assert_eq!(arg(&args, "role"), "assistant");
+    }
+
+    #[test]
+    fn log_subagent_bare_lists_recent_runs() {
+        let cli = parse(&["log", "--subagent", "-n", "5"]);
+        let (name, args) = to_swp_command(&cli.command).unwrap();
+        assert_eq!(name, "subagent_trace");
+        assert_eq!(arg(&args, "count"), 5);
+        assert!(args.get("ids").is_none());
+    }
+
+    #[test]
+    fn log_subagent_with_id_asks_for_one_run() {
+        let cli = parse(&["log", "--subagent", "toolu_01A"]);
+        let (name, args) = to_swp_command(&cli.command).unwrap();
+        assert_eq!(name, "subagent_trace");
+        assert_eq!(arg(&args, "ids"), &serde_json::json!(["toolu_01A"]));
+        assert!(args.get("count").is_none());
+    }
+
+    #[test]
+    fn log_subagent_tools_is_not_log_subagent() {
+        let cli = parse(&["log", "--subagent-tools"]);
+        let (name, _) = to_swp_command(&cli.command).unwrap();
+        assert_eq!(name, "log");
     }
 
     #[test]
@@ -2684,6 +2739,7 @@ mod tests {
                 subagent_tools: false,
                 heartbeat: false,
                 events: false,
+                subagent: None,
                 api: None,
                 call_type: None,
                 diff: false,
@@ -2706,6 +2762,7 @@ mod tests {
                 subagent_tools: false,
                 heartbeat: false,
                 events: false,
+                subagent: None,
                 api: None,
                 call_type: None,
                 diff: false,
@@ -2727,6 +2784,7 @@ mod tests {
                 subagent_tools: false,
                 heartbeat: false,
                 events: false,
+                subagent: None,
                 api: None,
                 call_type: None,
                 diff: false,
@@ -2746,6 +2804,7 @@ mod tests {
                 subagent_tools: false,
                 heartbeat: false,
                 events: false,
+                subagent: None,
                 api: None,
                 call_type: None,
                 diff: false,

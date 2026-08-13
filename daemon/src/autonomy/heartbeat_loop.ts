@@ -34,7 +34,11 @@ export interface HeartbeatLoopDeps {
     iteration: number,
     callType: string,
   ) => Promise<GenerateResponse | undefined>;
-  dispatch: (name: string, input: unknown) => Promise<HeartbeatToolResult>;
+  dispatch: (
+    name: string,
+    input: unknown,
+    toolUseId?: string,
+  ) => Promise<HeartbeatToolResult>;
   scheduleNextWake: (hoursFromNow: number, reason: string) => string;
   note: (text: string) => void;
   recordTranscript?: (round: TranscriptRound) => void;
@@ -88,7 +92,7 @@ export async function dispatchHeartbeatTools(
       });
       isError = false;
     } else {
-      const result = await deps.dispatch(name, input);
+      const result = await deps.dispatch(name, input, id);
       output = result.output;
       isError = result.isError;
       if (!isError && name === "generate_image") {

@@ -51,6 +51,7 @@ export interface ToolCallEntry {
   duration_ms: number;
   input_summary: string;
   output_summary: string;
+  subagent?: string | undefined;
   truncated?: boolean;
   result_chars?: number;
 }

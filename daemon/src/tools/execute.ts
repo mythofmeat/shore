@@ -24,6 +24,7 @@ export interface ToolExecution {
   limits: ToolLimitsView;
   diagnostics: { push: (entry: ToolCallEntry) => void };
   rid?: string;
+  subagent?: string;
   now: () => string;
   newMessageId: () => string;
   monotonicMs?: () => number;
@@ -61,7 +62,7 @@ export async function executeToolUse(
     const value = await dispatchWithinDeadline(
       toolUse.name,
       toolUse.input,
-      exec.ctx,
+      { ...exec.ctx, toolUseId: toolUse.id },
       timeoutFor(exec.limits, toolUse.name),
     );
     rawOutput = typeof value === "string" ? value : (JSON.stringify(value) ?? "");
@@ -146,6 +147,7 @@ function recordToolDiagnostics(
     duration_ms: durationMs,
     input_summary: truncateSummary(JSON.stringify(toolUse.input) ?? "", SUMMARY_CHARS),
     output_summary: truncateSummary(output, SUMMARY_CHARS),
+    ...(exec.subagent === undefined ? {} : { subagent: exec.subagent }),
     ...(window === undefined
       ? {}
       : { truncated: window.truncated, result_chars: window.originalChars }),
