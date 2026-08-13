@@ -87,10 +87,21 @@ describe("prompt parity: assemble_prompt", () => {
   });
 
   for (const c of cases) {
-    test(c.name, () => {
+    const kept = KEPT_UNDER_CORRECTED_ESTIMATOR.get(c.name);
+    const label = kept === undefined ? c.name : `${c.name} (diverges: #89)`;
+    test(label, () => {
       const got = assemblePrompt(paramsOf(c), ZONE);
 
       expect(got.system).toEqual(c.expect.system);
+
+      if (kept !== undefined) {
+        expect(got.messages.length).toBe(kept);
+        expect(got.messages.map((m) => m.role)).toEqual(
+          c.expect.messages.slice(c.expect.messages.length - kept).map((m) => m.role),
+        );
+        return;
+      }
+
       expect(got.messages.length).toBe(c.expect.messages.length);
 
       c.expect.messages.forEach((want, i) => {
@@ -105,6 +116,22 @@ describe("prompt parity: assemble_prompt", () => {
     });
   }
 });
+
+/**
+ * The two cases whose answer changed with #89, and by how much.
+ *
+ * The Rust estimated a token at four UTF-8 bytes. Measured against what
+ * Anthropic actually billed on captured requests the true figure is near
+ * three, so the Rust's budget was about 30% too generous and both of these
+ * cases kept one message more than fits. The fixture still records what the
+ * Rust answered — it is frozen and this is a deliberate divergence, not drift
+ * — so the corrected count is pinned here instead, alongside the rule that
+ * trimming always drops from the front.
+ */
+const KEPT_UNDER_CORRECTED_ESTIMATOR = new Map<string, number>([
+  ["budget_drops_oldest", 2],
+  ["multibyte_counts_utf8_bytes_not_chars", 1],
+]);
 
 describe("prompt parity: xml_tag_from_name", () => {
   for (const c of fixture.xml_tag_from_name as {

@@ -82,7 +82,7 @@ describe("a stream that dies before the usage frame", () => {
     const rows = rowsOf(path);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.["finish_reason"]).toBe("error");
-    expect(rows[0]?.["output_tokens"]).toBe(100);
+    expect(rows[0]?.["output_tokens"]).toBe(134);
     expect(rows[0]?.["output_tokens_estimated"]).toBe(1);
   });
 
@@ -92,7 +92,7 @@ describe("a stream that dies before the usage frame", () => {
 
     const rows = rowsOf(path);
     expect(rows[0]?.["finish_reason"]).toBe("cancelled");
-    expect(rows[0]?.["output_tokens"]).toBe(10);
+    expect(rows[0]?.["output_tokens"]).toBe(14);
     expect(rows[0]?.["output_tokens_estimated"]).toBe(1);
   });
 

@@ -1,7 +1,7 @@
 import builtinSystemTemplate from "../../prompts/engine/builtin_system.md" with { type: "text" };
 import { hostZone, naiveInZone, partsOf } from "../ledger/zoned";
 import type { ContentBlock, ImageRef, Message, Role } from "./types";
-import { estimateTokens } from "./tokens.ts";
+import { estimateTokens, withSafetyMargin } from "./tokens.ts";
 
 const DEFAULT_MAX_CONTEXT_TOKENS = 200_000;
 
@@ -142,7 +142,7 @@ function availableMessageTokens(
   maxOutput: number,
 ): number {
   const systemTokens = estimateTokens(system.map((b) => b.content).join("\n"));
-  return Math.max(0, maxContext - maxOutput - systemTokens);
+  return withSafetyMargin(Math.max(0, maxContext - maxOutput - systemTokens));
 }
 
 export function renderTemplate(template: string, vars: Map<string, string>): string {
