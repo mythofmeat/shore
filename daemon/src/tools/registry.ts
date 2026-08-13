@@ -277,7 +277,7 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
         },
         max_results: {
           type: "number",
-          description: "Maximum matching messages to return. Defaults to 20, maximum 100.",
+          description: "Maximum matching messages to return. Defaults to 8, maximum 50.",
         },
         model: {
           type: "string",
@@ -287,7 +287,12 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
         excerpt_chars: {
           type: "number",
           description:
-            "Approximate excerpt length in characters. Defaults to 360; maximum 2000. Use larger values when you need full quotes rather than context snippets.",
+            "Approximate result text length in characters. Defaults to 240; maximum 2000. Use larger values when you need full quotes rather than context snippets.",
+        },
+        include_alternatives: {
+          type: "boolean",
+          description:
+            "Also search unselected regenerated alternatives. Defaults to false to avoid duplicate or superseded answers.",
         },
       },
       required: [],

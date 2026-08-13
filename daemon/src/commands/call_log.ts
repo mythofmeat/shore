@@ -1,4 +1,10 @@
-import type { CallFilter, CallStore, TranscriptRow } from "../call_store.ts";
+import type {
+  CallFilter,
+  CallPayload,
+  CallStore,
+  HttpExchangeRow,
+  TranscriptRow,
+} from "../call_store.ts";
 import { invalidRequest, internalError } from "./errors.ts";
 import type { Args, Json } from "./conversation.ts";
 
@@ -22,6 +28,31 @@ function countArg(args: Args, fallback: number): number {
 
 const CALL_STORE_FAILED = "call store query failed";
 
+function decodeJsonBody(body: string | null): unknown {
+  if (body === null) return null;
+  try {
+    return JSON.parse(body) as unknown;
+  } catch {
+    return body;
+  }
+}
+
+function presentCall(call: CallPayload): Json {
+  return {
+    ...call,
+    request: decodeJsonBody(call.request),
+    response: decodeJsonBody(call.response),
+  };
+}
+
+function presentWire(exchanges: readonly HttpExchangeRow[]): Json {
+  return exchanges.map((exchange) => ({
+    ...exchange,
+    request_body: decodeJsonBody(exchange.request_body),
+    response_body: decodeJsonBody(exchange.response_body),
+  }));
+}
+
 export function callLog(ctx: CallLogContext, args: Args): Json {
   const store = ctx.callStore;
   if (store === undefined) return { enabled: false, entries: [] };
@@ -32,7 +63,7 @@ export function callLog(ctx: CallLogContext, args: Args): Json {
     if (payload === null) throw invalidRequest(`no call with id ${id}`);
     const wire = query(CALL_STORE_FAILED, () => store.httpCallsFor(payload.call_id));
     if (args["diff"] !== true) {
-      return { enabled: true, call: payload, wire: wire as unknown as Json };
+      return { enabled: true, call: presentCall(payload), wire: presentWire(wire) };
     }
 
     const against = asI64(args["against"]) ?? query(CALL_STORE_FAILED, () => store.previousCallId(id));
@@ -45,8 +76,8 @@ export function callLog(ctx: CallLogContext, args: Args): Json {
     }
     return {
       enabled: true,
-      call: payload,
-      wire: wire as unknown as Json,
+      call: presentCall(payload),
+      wire: presentWire(wire),
       diff: diff as unknown as Json,
     };
   }

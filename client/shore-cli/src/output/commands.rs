@@ -403,8 +403,8 @@ fn print_one_call(out: &mut impl Write, call: &serde_json::Value, width: usize) 
     _ = writeln!(out);
     for (label, key) in [("request", "request"), ("response", "response")] {
         write_fg(out, Color::Cyan, &format!("  {label}:\n"));
-        let body = call[key].as_str().unwrap_or("");
-        _ = writeln!(out, "{}", truncate_display(body, CALL_BODY_PREVIEW));
+        let body = display_payload_body(&call[key]);
+        _ = writeln!(out, "{}", truncate_display(&body, CALL_BODY_PREVIEW));
         _ = writeln!(out);
     }
     print_dim_line(out, "(--json for the full, untruncated payload)");
@@ -459,15 +459,24 @@ fn print_wire_exchanges(out: &mut impl Write, wire: Option<&serde_json::Value>, 
             ("wire request", "request_body"),
             ("wire response", "response_body"),
         ] {
-            let Some(body) = exchange[key].as_str().filter(|b| !b.is_empty()) else {
+            let body = display_payload_body(&exchange[key]);
+            if body.is_empty() {
                 continue;
-            };
+            }
             write_fg(out, Color::Cyan, &format!("  {label}:\n"));
-            _ = writeln!(out, "{}", truncate_display(body, CALL_BODY_PREVIEW));
+            _ = writeln!(out, "{}", truncate_display(&body, CALL_BODY_PREVIEW));
         }
         _ = writeln!(out);
     }
     print_dim_line(out, "(--json for the untruncated wire bytes and headers)");
+}
+
+fn display_payload_body(body: &serde_json::Value) -> String {
+    match body {
+        serde_json::Value::Null => String::new(),
+        serde_json::Value::String(text) => text.clone(),
+        value => serde_json::to_string_pretty(value).unwrap_or_default(),
+    }
 }
 
 /// Max characters of a single changed chunk shown in a diff.
@@ -2779,6 +2788,20 @@ mod tests {
 
     fn line<'src>(lines: &'src [&str], index: usize) -> &'src str {
         lines.get(index).copied().expect("expected rendered line")
+    }
+
+    #[test]
+    fn payload_json_is_pretty_printed_without_string_escaping() {
+        let body = serde_json::json!({"messages": [{"role": "user", "content": "hello"}]});
+        let rendered = display_payload_body(&body);
+        assert!(rendered.contains("\"messages\": ["));
+        assert!(!rendered.contains("\\\"messages\\\""));
+    }
+
+    #[test]
+    fn non_json_payload_text_is_preserved() {
+        let body = serde_json::Value::String("event: message_start\n".into());
+        assert_eq!(display_payload_body(&body), "event: message_start\n");
     }
 
     /// Visual preview of `shore tools` rendering. Run with:

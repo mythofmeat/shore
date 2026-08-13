@@ -4,8 +4,8 @@
  * `tests/handler_fixtures/generation_parity.json` was generated in a worktree
  * at `9023b46d` by driving the real `handle_generation` against a fake sidecar
  * on a Unix socket — real registry, real engine, real `active.jsonl`, real tool
- * socket, real persistence. Nothing regenerates it; a diff here is a defect in
- * `src/handler/generation.ts`, not a fixture to refresh.
+ * socket, real persistence. Its search-history tool definition tracks the
+ * current contract; the rest remains a frozen driver record.
  *
  * # What stands in for the fake sidecar
  *

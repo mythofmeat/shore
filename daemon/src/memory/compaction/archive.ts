@@ -2,7 +2,10 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { atomicWrite } from "../../engine/atomic.ts";
-import type { CompactionManifest } from "../../engine/segments.ts";
+import { HISTORY_DB_FILE, HistoryStore } from "../../engine/history_store.ts";
+import { normalizeMessage } from "../../engine/message_store.ts";
+import { SegmentReader, type CompactionManifest } from "../../engine/segments.ts";
+import type { Message } from "../../engine/types.ts";
 import { rustLines, rustTrim } from "../lines.ts";
 import { CompactionError } from "./types.ts";
 import type { ConversationManager } from "./types.ts";
@@ -11,10 +14,16 @@ const ACTIVE_JSONL_FILE = "active.jsonl";
 const COMPACTION_MANIFEST_FILE = "compaction.json";
 const SEGMENTS_DIR = "segments";
 
+export interface DurableHistoryLocation {
+  dbPath: string;
+  character: string;
+}
+
 export function conversationManager(
   characterDir: string,
   now: () => string = () => new Date().toISOString(),
   newId: () => string = () => crypto.randomUUID(),
+  history?: DurableHistoryLocation,
 ): ConversationManager {
   return {
     archiveAndRetain: (_conversationId, params) =>
@@ -25,6 +34,7 @@ export function conversationManager(
         now,
         newId,
         params.operationId,
+        history,
       ),
   };
 }
@@ -36,18 +46,32 @@ export async function archiveAndRetain(
   now: () => string = () => new Date().toISOString(),
   newId: () => string = () => crypto.randomUUID(),
   operationId?: string,
+  history?: DurableHistoryLocation,
 ): Promise<string> {
   const lines = rustLines(activeContent).filter((l) => rustTrim(l) !== "");
   const keep = Math.min(keepLastN, lines.length);
   const splitAt = lines.length - keep;
   const archived = lines.slice(0, splitAt);
   const retained = lines.slice(splitAt);
+  const retainedContent = retained.length === 0 ? "" : retained.join("\n") + "\n";
+
+  if (history !== undefined && archived.length > 0) {
+    await archiveToDatabase(
+      history,
+      archived,
+      retainedContent,
+      activeContent,
+      now,
+      operationId,
+      characterDir,
+    );
+    return newId();
+  }
 
   if (archived.length > 0) {
     await writeSegment(characterDir, archived, now, operationId);
   }
 
-  const retainedContent = retained.length === 0 ? "" : retained.join("\n") + "\n";
   try {
     await atomicWrite(join(characterDir, ACTIVE_JSONL_FILE), retainedContent);
   } catch (e) {
@@ -57,24 +81,74 @@ export async function archiveAndRetain(
   return newId();
 }
 
+async function archiveToDatabase(
+  history: DurableHistoryLocation,
+  archived: readonly string[],
+  retainedContent: string,
+  activeContent: string,
+  now: () => string,
+  operationId: string | undefined,
+  characterDir: string,
+): Promise<void> {
+  const messages = archived.map((line) => normalizeMessage(JSON.parse(line) as Message));
+  const reader = await SegmentReader.load(characterDir, {
+    dbPath: history.dbPath,
+    character: history.character,
+  });
+  reader.close();
+  const store = HistoryStore.open(history.dbPath);
+  let idx: number | undefined;
+  try {
+    store.recoverPending(history.character, activeContent);
+    if (operationId === undefined || !store.hasCompactionOperation(history.character, operationId)) {
+      idx = store.beginCompaction(
+        history.character,
+        {
+          file: HISTORY_DB_FILE,
+          message_count: messages.length,
+          compacted_at: now(),
+          ...(operationId === undefined ? {} : { compaction_id: operationId }),
+        },
+        messages,
+        activeContent,
+        retainedContent,
+      );
+    }
+    try {
+      await atomicWrite(join(characterDir, ACTIVE_JSONL_FILE), retainedContent);
+    } catch (e) {
+      if (idx !== undefined) store.abortCompaction(history.character, idx);
+      throw CompactionError.conversationManager(`failed to write retained messages: ${message(e)}`);
+    }
+    if (idx !== undefined) store.finishCompaction(history.character, idx);
+  } finally {
+    store.close();
+  }
+}
+
+interface WrittenSegment {
+  idx: number;
+  entry: CompactionManifest["segments"][number];
+}
+
 async function writeSegment(
   characterDir: string,
   archived: readonly string[],
   now: () => string,
   operationId?: string,
-): Promise<void> {
+): Promise<WrittenSegment> {
   const manifestPath = join(characterDir, COMPACTION_MANIFEST_FILE);
   const manifest = await readManifest(manifestPath);
-  if (
-    operationId !== undefined &&
-    manifest.segments.some((segment) => segment.compaction_id === operationId)
-  ) {
-    return;
+  if (operationId !== undefined) {
+    const idx = manifest.segments.findIndex((segment) => segment.compaction_id === operationId);
+    const entry = manifest.segments[idx];
+    if (idx >= 0 && entry !== undefined) return { idx, entry };
   }
 
   const segmentIndex = manifest.segments.length + 1;
   const segmentFile = `${String(segmentIndex).padStart(4, "0")}.jsonl`;
   const segmentsDir = join(characterDir, SEGMENTS_DIR);
+  const compactedAt = now();
 
   try {
     await mkdir(segmentsDir, { recursive: true });
@@ -87,12 +161,13 @@ async function writeSegment(
     throw CompactionError.conversationManager(`failed to write segment file: ${message(e)}`);
   }
 
-  manifest.segments.push({
+  const entry: CompactionManifest["segments"][number] = {
     file: segmentFile,
     message_count: archived.length,
-    compacted_at: now(),
+    compacted_at: compactedAt,
     ...(operationId === undefined ? {} : { compaction_id: operationId }),
-  });
+  };
+  manifest.segments.push(entry);
   manifest.total_compacted_messages += archived.length;
 
   try {
@@ -100,6 +175,7 @@ async function writeSegment(
   } catch (e) {
     throw CompactionError.conversationManager(`failed to write compaction.json: ${message(e)}`);
   }
+  return { idx: manifest.segments.length - 1, entry };
 }
 
 async function readManifest(path: string): Promise<CompactionManifest> {

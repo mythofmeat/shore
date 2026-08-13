@@ -821,7 +821,7 @@
     },
     {
       "name": "a provider error mid-stream fails the turn and persists nothing",
-      "note": "the chunks already relayed stay relayed \u2014 the client saw them \u2014 but the turn is not written and no stream_end goes out, so a client that stopped at the last chunk is left waiting on a turn that failed",
+      "note": "the chunks already relayed stay relayed — the client saw them — but the turn is not written and no stream_end goes out, so a client that stopped at the last chunk is left waiting on a turn that failed",
       "input": {
         "history": [],
         "body": {
@@ -1692,7 +1692,7 @@
               },
               {
                 "name": "web_search",
-                "description": "Search the web and return a list of results with titles, URLs, and content snippets. Use it to gather more info about a topic, when you're uncertain about a fact, or whenever the conversation touches on recent events, specific people, products, or things that may have happened after your training cutoff. Don't hedge or caveat about whether you 'should' look something up \u2014 searching is free, so if it would help, just do it. Pair with `fetch_url` to read the full content of a result page when a snippet isn't enough.",
+                "description": "Search the web and return a list of results with titles, URLs, and content snippets. Use it to gather more info about a topic, when you're uncertain about a fact, or whenever the conversation touches on recent events, specific people, products, or things that may have happened after your training cutoff. Don't hedge or caveat about whether you 'should' look something up — searching is free, so if it would help, just do it. Pair with `fetch_url` to read the full content of a result page when a snippet isn't enough.",
                 "input_schema": {
                   "type": "object",
                   "properties": {
@@ -1729,7 +1729,7 @@
               },
               {
                 "name": "activity_heatmap",
-                "description": "View eshen's activity heatmap \u2014 when they typically message you, broken down by hour of day and day of week. Use when you want to understand their rhythm: whether now is an unusual time for them to be talking to you, when they're most likely to be around, or whether they've been more or less active lately. Returns hour-by-hour density, classification (peak/trough/normal), total user-turn count over the window, and an engagement score. The `days` parameter controls how much history is included; 30 is a good default for seeing a steady pattern.",
+                "description": "View eshen's activity heatmap — when they typically message you, broken down by hour of day and day of week. Use when you want to understand their rhythm: whether now is an unusual time for them to be talking to you, when they're most likely to be around, or whether they've been more or less active lately. Returns hour-by-hour density, classification (peak/trough/normal), total user-turn count over the window, and an engagement score. The `days` parameter controls how much history is included; 30 is a good default for seeing a steady pattern.",
                 "input_schema": {
                   "type": "object",
                   "properties": {
@@ -1743,7 +1743,7 @@
               },
               {
                 "name": "roll_dice",
-                "description": "Roll dice using standard dice notation, returning the individual rolls and their total. Use for anything that genuinely benefits from a random outcome \u2014 decisions, games, random prompts, divination-as-play \u2014 not as a substitute for simply making up a number when one isn't needed. Accepts `NdS[+/-M]` where N is the number of dice, S is the number of sides, and M is an optional modifier. Examples: `2d6`, `1d20+5`, `4d6-1`, or `d8` for a single die.",
+                "description": "Roll dice using standard dice notation, returning the individual rolls and their total. Use for anything that genuinely benefits from a random outcome — decisions, games, random prompts, divination-as-play — not as a substitute for simply making up a number when one isn't needed. Accepts `NdS[+/-M]` where N is the number of dice, S is the number of sides, and M is an optional modifier. Examples: `2d6`, `1d20+5`, `4d6-1`, or `d8` for a single die.",
                 "input_schema": {
                   "type": "object",
                   "properties": {
@@ -1759,7 +1759,7 @@
               },
               {
                 "name": "read",
-                "description": "Read a file, or see what's in a directory. Point it at a file and it returns the content as text; point it at a directory and it lists what's there, with each entry's name, type, and size. Omit the path entirely to list your workspace root. Use offset and limit to page through a large file. Reach for this when you're looking for something by name, date, or where it sits in your folders \u2014 `search` is for fuzzy content matching, this is for exact lookups and for reading what you found.",
+                "description": "Read a file, or see what's in a directory. Point it at a file and it returns the content as text; point it at a directory and it lists what's there, with each entry's name, type, and size. Omit the path entirely to list your workspace root. Use offset and limit to page through a large file. Reach for this when you're looking for something by name, date, or where it sits in your folders — `search` is for fuzzy content matching, this is for exact lookups and for reading what you found.",
                 "input_schema": {
                   "type": "object",
                   "properties": {
@@ -1781,7 +1781,7 @@
               },
               {
                 "name": "edit",
-                "description": "Write a file, or change part of one. Two ways to call it, and you pick one or the other: pass `content` to write a whole file, creating it if it doesn't exist and replacing it entirely if it does (parent folders are made for you) \u2014 that's how you create a new file or rewrite one you've outgrown. Pass `edits` to change text inside a file that already exists, leaving the rest alone; prefer this when you're correcting or adding to something, so you don't lose what's already there. Each edit's old_string must match exactly, whitespace and newlines included, so read the file first if you're unsure what's in it. By default old_string must match exactly once \u2014 add surrounding context to make it unique, or set replace_all to replace every occurrence. `edits` on a file that doesn't exist is an error rather than a new file: if you meant to create it, say so with `content`.",
+                "description": "Write a file, or change part of one. Two ways to call it, and you pick one or the other: pass `content` to write a whole file, creating it if it doesn't exist and replacing it entirely if it does (parent folders are made for you) — that's how you create a new file or rewrite one you've outgrown. Pass `edits` to change text inside a file that already exists, leaving the rest alone; prefer this when you're correcting or adding to something, so you don't lose what's already there. Each edit's old_string must match exactly, whitespace and newlines included, so read the file first if you're unsure what's in it. By default old_string must match exactly once — add surrounding context to make it unique, or set replace_all to replace every occurrence. `edits` on a file that doesn't exist is an error rather than a new file: if you meant to create it, say so with `content`.",
                 "input_schema": {
                   "type": "object",
                   "properties": {
@@ -1826,7 +1826,7 @@
               },
               {
                 "name": "search",
-                "description": "Find files matching a query. Uses hybrid ranking (semantic + lexical) by default so paraphrased queries still find the right file; pass `mode: \"lexical\"` for substring-only or `mode: \"vector\"` for pure semantic similarity. Best for fuzzy concept questions (\"anything about my dog?\") rather than structural lookups by date or filename \u2014 use `read` for those. Returns paths, line numbers, and short excerpts. Treat results as discovery and follow up with `read` on the top files for full context.",
+                "description": "Find files matching a query. Uses hybrid ranking (semantic + lexical) by default so paraphrased queries still find the right file; pass `mode: \"lexical\"` for substring-only or `mode: \"vector\"` for pure semantic similarity. Best for fuzzy concept questions (\"anything about my dog?\") rather than structural lookups by date or filename — use `read` for those. Returns paths, line numbers, and short excerpts. Treat results as discovery and follow up with `read` on the top files for full context.",
                 "input_schema": {
                   "type": "object",
                   "properties": {
@@ -1845,7 +1845,7 @@
                     },
                     "path": {
                       "type": "string",
-                      "description": "Optional relative path to scope the search to a subtree. Works in all modes \u2014 hybrid/vector queries are filtered to this subtree after ranking against the workspace-wide embedding index."
+                      "description": "Optional relative path to scope the search to a subtree. Works in all modes — hybrid/vector queries are filtered to this subtree after ranking against the workspace-wide embedding index."
                     },
                     "max_results": {
                       "type": "number",
@@ -1875,7 +1875,7 @@
               },
               {
                 "name": "git",
-                "description": "Run a git command in your workspace, which is a git repository. Pass the subcommand on its own (`\"commit\"`) and each argument as a separate element of `args` (`[\"-m\", \"why this matters\"]`) \u2014 the command is not parsed as a shell line, so quoting, pipes, and redirects have no meaning here. Use it to keep a history of your memory: `status` and `diff` to see what you've changed, `add` then `commit` to record it, `log` to look back at what past-you saved and why. Commits are attributed to you, separately from anyone else working in the same repository. History is append-only: anything that discards, rewrites, or forces is refused \u2014 `reset --hard`, `rebase`, `restore`, `clean -f`, forced checkouts, history deletion, and checking a path back out over your working copy (`checkout HEAD -- <path>`, which would throw away edits you have not committed). `config` is refused too, as is anything that reaches a remote \u2014 `push`, `fetch`, `pull`, `clone`, and remote changes: syncing is the daemon's job, not yours.",
+                "description": "Run a git command in your workspace, which is a git repository. Pass the subcommand on its own (`\"commit\"`) and each argument as a separate element of `args` (`[\"-m\", \"why this matters\"]`) — the command is not parsed as a shell line, so quoting, pipes, and redirects have no meaning here. Use it to keep a history of your memory: `status` and `diff` to see what you've changed, `add` then `commit` to record it, `log` to look back at what past-you saved and why. Commits are attributed to you, separately from anyone else working in the same repository. History is append-only: anything that discards, rewrites, or forces is refused — `reset --hard`, `rebase`, `restore`, `clean -f`, forced checkouts, history deletion, and checking a path back out over your working copy (`checkout HEAD -- <path>`, which would throw away edits you have not committed). `config` is refused too, as is anything that reaches a remote — `push`, `fetch`, `pull`, `clone`, and remote changes: syncing is the daemon's job, not yours.",
                 "input_schema": {
                   "type": "object",
                   "properties": {
@@ -1902,7 +1902,7 @@
               },
               {
                 "name": "search_chat_logs",
-                "description": "Search your own conversation history, including compacted older segments and the active conversation window. Use this when the user asks what you discussed before, when you need to verify a past exchange, when you need messages from a specific time range, or when the answer may be in the transcript rather than in curated memory files. Provide `query` for keyword search, `start_time` and/or `end_time` for an inclusive RFC3339 time range, `model` to restrict to assistant messages minted by a matching model, or combine them. Returns matching messages with role, timestamp, source, minting model (when recorded), and an excerpt.\n\nOnly the visible chat text is searched \u2014 your private thinking and tool-call/tool-result payloads are never matched or returned, so this behaves like searching the actual conversation. `query` matches on individual words, not the phrase as a whole: a message matches if it contains *any* of the query terms, and messages containing more of the terms (or the exact phrase) rank higher \u2014 so natural-language queries like \"cache bug overnight\" work and you don't need to reduce them to a single keyword. Keyword results are ranked by relevance blended with recency (recent matches surface above older ones of similar relevance); time-range-only queries are returned oldest-first. `searched_messages` reports the total number of stored messages examined for the query (the full corpus), not the number returned. Excerpts are clipped to `excerpt_chars` (default 360, max 2000) \u2014 raise it when you need full quotes, or follow up with another `search_chat_logs` for adjacent terms/time windows or `search`/`read` against memory to get the full picture.\n\nEach result's `model` field is the model that generated that message (regenerated alternatives carry their own). It is `null` on user turns and on messages stored before model tracking, and the `model` filter skips those \u2014 so an empty result for an old period means \"not attributable\", not \"never said\". To audit how you sounded on one model versus another, combine `model` with a time range and compare excerpts from each. The `model_history` tool tells you which models served you over a period.",
+                "description": "Search your own conversation history, including compacted older messages and the active conversation window. Use this when the user asks what you discussed before, when you need to verify a past exchange, when you need messages from a specific time range, or when the answer may be in the transcript rather than in curated memory files. Provide `query` for keyword search, `start_time` and/or `end_time` for an inclusive RFC3339 time range, `model` to restrict to assistant messages minted by a matching model, or combine them. Returns a small set of matching messages with role, timestamp, minting model (when recorded), and clean text snippets.\n\nOnly visible chat text is searched — private thinking and tool-call/tool-result payloads are never matched or returned. Multi-word searches keep the matches with the best term coverage instead of flooding the result with messages that mention only one common word. Results are deduplicated and ranked by relevance blended with recency; time-range-only queries are returned oldest-first. Unselected regenerated answers are omitted unless `include_alternatives` is true. `searched_messages` reports the full corpus size, not the number returned. Text is clipped to `excerpt_chars` (default 240, max 2000); raise it when you need a fuller quote.\n\nEach result's `model` field is the model that generated that message (regenerated alternatives carry their own). It is `null` on user turns and on messages stored before model tracking, and the `model` filter skips those — so an empty result for an old period means \"not attributable\", not \"never said\". To audit how you sounded on one model versus another, combine `model` with a time range and compare excerpts from each. The `model_history` tool tells you which models served you over a period.",
                 "input_schema": {
                   "type": "object",
                   "properties": {
@@ -1920,7 +1920,7 @@
                     },
                     "max_results": {
                       "type": "number",
-                      "description": "Maximum matching messages to return. Defaults to 20, maximum 100."
+                      "description": "Maximum matching messages to return. Defaults to 8, maximum 50."
                     },
                     "model": {
                       "type": "string",
@@ -1928,7 +1928,11 @@
                     },
                     "excerpt_chars": {
                       "type": "number",
-                      "description": "Approximate excerpt length in characters. Defaults to 360; maximum 2000. Use larger values when you need full quotes rather than context snippets."
+                      "description": "Approximate result text length in characters. Defaults to 240; maximum 2000. Use larger values when you need full quotes rather than context snippets."
+                    },
+                    "include_alternatives": {
+                      "type": "boolean",
+                      "description": "Also search unselected regenerated alternatives. Defaults to false to avoid duplicate or superseded answers."
                     }
                   },
                   "required": []
@@ -1936,7 +1940,7 @@
               },
               {
                 "name": "model_history",
-                "description": "Report which LLM models generated your words over a time period, from the daemon's usage ledger. Use this to correlate how you sounded with which model was running \u2014 for example when auditing personality drift across model switches \u2014 or when the user asks what model you were on at some point. Provide optional `start_time`/`end_time` RFC3339 bounds; omit both for your full recorded history.\n\nReturns one row per model/provider/call-type combination with `first_seen`, `last_seen`, and call counts, ordered by first appearance. The `kind` field classifies each row: `interactive` (replies in conversation), `autonomous` (heartbeat messages you sent unprompted \u2014 these often run on a different model than your interactive replies), or `background` (memory maintenance machinery: dreaming, compaction, sub-agents \u2014 not your voice). Caveat: `tool_loop` rows are counted as interactive but also include sub-agent continuation calls, so treat `message` rows as the cleanest signal for your conversational voice.\n\nCoverage starts when this daemon's ledger began recording \u2014 history from earlier systems is not in the ledger (check memory files for hand-kept timelines), and if you were renamed, calls before the rename are recorded under the old name. To pair a period with actual quotes, follow up with `search_chat_logs` using the same time bounds (its results carry a per-message `model` where recorded).",
+                "description": "Report which LLM models generated your words over a time period, from the daemon's usage ledger. Use this to correlate how you sounded with which model was running — for example when auditing personality drift across model switches — or when the user asks what model you were on at some point. Provide optional `start_time`/`end_time` RFC3339 bounds; omit both for your full recorded history.\n\nReturns one row per model/provider/call-type combination with `first_seen`, `last_seen`, and call counts, ordered by first appearance. The `kind` field classifies each row: `interactive` (replies in conversation), `autonomous` (heartbeat messages you sent unprompted — these often run on a different model than your interactive replies), or `background` (memory maintenance machinery: dreaming, compaction, sub-agents — not your voice). Caveat: `tool_loop` rows are counted as interactive but also include sub-agent continuation calls, so treat `message` rows as the cleanest signal for your conversational voice.\n\nCoverage starts when this daemon's ledger began recording — history from earlier systems is not in the ledger (check memory files for hand-kept timelines), and if you were renamed, calls before the rename are recorded under the old name. To pair a period with actual quotes, follow up with `search_chat_logs` using the same time bounds (its results carry a per-message `model` where recorded).",
                 "input_schema": {
                   "type": "object",
                   "properties": {
@@ -2077,7 +2081,7 @@
             },
             {
               "name": "web_search",
-              "description": "Search the web and return a list of results with titles, URLs, and content snippets. Use it to gather more info about a topic, when you're uncertain about a fact, or whenever the conversation touches on recent events, specific people, products, or things that may have happened after your training cutoff. Don't hedge or caveat about whether you 'should' look something up \u2014 searching is free, so if it would help, just do it. Pair with `fetch_url` to read the full content of a result page when a snippet isn't enough.",
+              "description": "Search the web and return a list of results with titles, URLs, and content snippets. Use it to gather more info about a topic, when you're uncertain about a fact, or whenever the conversation touches on recent events, specific people, products, or things that may have happened after your training cutoff. Don't hedge or caveat about whether you 'should' look something up — searching is free, so if it would help, just do it. Pair with `fetch_url` to read the full content of a result page when a snippet isn't enough.",
               "input_schema": {
                 "type": "object",
                 "properties": {
@@ -2114,7 +2118,7 @@
             },
             {
               "name": "activity_heatmap",
-              "description": "View eshen's activity heatmap \u2014 when they typically message you, broken down by hour of day and day of week. Use when you want to understand their rhythm: whether now is an unusual time for them to be talking to you, when they're most likely to be around, or whether they've been more or less active lately. Returns hour-by-hour density, classification (peak/trough/normal), total user-turn count over the window, and an engagement score. The `days` parameter controls how much history is included; 30 is a good default for seeing a steady pattern.",
+              "description": "View eshen's activity heatmap — when they typically message you, broken down by hour of day and day of week. Use when you want to understand their rhythm: whether now is an unusual time for them to be talking to you, when they're most likely to be around, or whether they've been more or less active lately. Returns hour-by-hour density, classification (peak/trough/normal), total user-turn count over the window, and an engagement score. The `days` parameter controls how much history is included; 30 is a good default for seeing a steady pattern.",
               "input_schema": {
                 "type": "object",
                 "properties": {
@@ -2128,7 +2132,7 @@
             },
             {
               "name": "roll_dice",
-              "description": "Roll dice using standard dice notation, returning the individual rolls and their total. Use for anything that genuinely benefits from a random outcome \u2014 decisions, games, random prompts, divination-as-play \u2014 not as a substitute for simply making up a number when one isn't needed. Accepts `NdS[+/-M]` where N is the number of dice, S is the number of sides, and M is an optional modifier. Examples: `2d6`, `1d20+5`, `4d6-1`, or `d8` for a single die.",
+              "description": "Roll dice using standard dice notation, returning the individual rolls and their total. Use for anything that genuinely benefits from a random outcome — decisions, games, random prompts, divination-as-play — not as a substitute for simply making up a number when one isn't needed. Accepts `NdS[+/-M]` where N is the number of dice, S is the number of sides, and M is an optional modifier. Examples: `2d6`, `1d20+5`, `4d6-1`, or `d8` for a single die.",
               "input_schema": {
                 "type": "object",
                 "properties": {
@@ -2144,7 +2148,7 @@
             },
             {
               "name": "read",
-              "description": "Read a file, or see what's in a directory. Point it at a file and it returns the content as text; point it at a directory and it lists what's there, with each entry's name, type, and size. Omit the path entirely to list your workspace root. Use offset and limit to page through a large file. Reach for this when you're looking for something by name, date, or where it sits in your folders \u2014 `search` is for fuzzy content matching, this is for exact lookups and for reading what you found.",
+              "description": "Read a file, or see what's in a directory. Point it at a file and it returns the content as text; point it at a directory and it lists what's there, with each entry's name, type, and size. Omit the path entirely to list your workspace root. Use offset and limit to page through a large file. Reach for this when you're looking for something by name, date, or where it sits in your folders — `search` is for fuzzy content matching, this is for exact lookups and for reading what you found.",
               "input_schema": {
                 "type": "object",
                 "properties": {
@@ -2166,7 +2170,7 @@
             },
             {
               "name": "edit",
-              "description": "Write a file, or change part of one. Two ways to call it, and you pick one or the other: pass `content` to write a whole file, creating it if it doesn't exist and replacing it entirely if it does (parent folders are made for you) \u2014 that's how you create a new file or rewrite one you've outgrown. Pass `edits` to change text inside a file that already exists, leaving the rest alone; prefer this when you're correcting or adding to something, so you don't lose what's already there. Each edit's old_string must match exactly, whitespace and newlines included, so read the file first if you're unsure what's in it. By default old_string must match exactly once \u2014 add surrounding context to make it unique, or set replace_all to replace every occurrence. `edits` on a file that doesn't exist is an error rather than a new file: if you meant to create it, say so with `content`.",
+              "description": "Write a file, or change part of one. Two ways to call it, and you pick one or the other: pass `content` to write a whole file, creating it if it doesn't exist and replacing it entirely if it does (parent folders are made for you) — that's how you create a new file or rewrite one you've outgrown. Pass `edits` to change text inside a file that already exists, leaving the rest alone; prefer this when you're correcting or adding to something, so you don't lose what's already there. Each edit's old_string must match exactly, whitespace and newlines included, so read the file first if you're unsure what's in it. By default old_string must match exactly once — add surrounding context to make it unique, or set replace_all to replace every occurrence. `edits` on a file that doesn't exist is an error rather than a new file: if you meant to create it, say so with `content`.",
               "input_schema": {
                 "type": "object",
                 "properties": {
@@ -2211,7 +2215,7 @@
             },
             {
               "name": "search",
-              "description": "Find files matching a query. Uses hybrid ranking (semantic + lexical) by default so paraphrased queries still find the right file; pass `mode: \"lexical\"` for substring-only or `mode: \"vector\"` for pure semantic similarity. Best for fuzzy concept questions (\"anything about my dog?\") rather than structural lookups by date or filename \u2014 use `read` for those. Returns paths, line numbers, and short excerpts. Treat results as discovery and follow up with `read` on the top files for full context.",
+              "description": "Find files matching a query. Uses hybrid ranking (semantic + lexical) by default so paraphrased queries still find the right file; pass `mode: \"lexical\"` for substring-only or `mode: \"vector\"` for pure semantic similarity. Best for fuzzy concept questions (\"anything about my dog?\") rather than structural lookups by date or filename — use `read` for those. Returns paths, line numbers, and short excerpts. Treat results as discovery and follow up with `read` on the top files for full context.",
               "input_schema": {
                 "type": "object",
                 "properties": {
@@ -2230,7 +2234,7 @@
                   },
                   "path": {
                     "type": "string",
-                    "description": "Optional relative path to scope the search to a subtree. Works in all modes \u2014 hybrid/vector queries are filtered to this subtree after ranking against the workspace-wide embedding index."
+                    "description": "Optional relative path to scope the search to a subtree. Works in all modes — hybrid/vector queries are filtered to this subtree after ranking against the workspace-wide embedding index."
                   },
                   "max_results": {
                     "type": "number",
@@ -2260,7 +2264,7 @@
             },
             {
               "name": "git",
-              "description": "Run a git command in your workspace, which is a git repository. Pass the subcommand on its own (`\"commit\"`) and each argument as a separate element of `args` (`[\"-m\", \"why this matters\"]`) \u2014 the command is not parsed as a shell line, so quoting, pipes, and redirects have no meaning here. Use it to keep a history of your memory: `status` and `diff` to see what you've changed, `add` then `commit` to record it, `log` to look back at what past-you saved and why. Commits are attributed to you, separately from anyone else working in the same repository. History is append-only: anything that discards, rewrites, or forces is refused \u2014 `reset --hard`, `rebase`, `restore`, `clean -f`, forced checkouts, history deletion, and checking a path back out over your working copy (`checkout HEAD -- <path>`, which would throw away edits you have not committed). `config` is refused too, as is anything that reaches a remote \u2014 `push`, `fetch`, `pull`, `clone`, and remote changes: syncing is the daemon's job, not yours.",
+              "description": "Run a git command in your workspace, which is a git repository. Pass the subcommand on its own (`\"commit\"`) and each argument as a separate element of `args` (`[\"-m\", \"why this matters\"]`) — the command is not parsed as a shell line, so quoting, pipes, and redirects have no meaning here. Use it to keep a history of your memory: `status` and `diff` to see what you've changed, `add` then `commit` to record it, `log` to look back at what past-you saved and why. Commits are attributed to you, separately from anyone else working in the same repository. History is append-only: anything that discards, rewrites, or forces is refused — `reset --hard`, `rebase`, `restore`, `clean -f`, forced checkouts, history deletion, and checking a path back out over your working copy (`checkout HEAD -- <path>`, which would throw away edits you have not committed). `config` is refused too, as is anything that reaches a remote — `push`, `fetch`, `pull`, `clone`, and remote changes: syncing is the daemon's job, not yours.",
               "input_schema": {
                 "type": "object",
                 "properties": {
@@ -2287,7 +2291,7 @@
             },
             {
               "name": "search_chat_logs",
-              "description": "Search your own conversation history, including compacted older segments and the active conversation window. Use this when the user asks what you discussed before, when you need to verify a past exchange, when you need messages from a specific time range, or when the answer may be in the transcript rather than in curated memory files. Provide `query` for keyword search, `start_time` and/or `end_time` for an inclusive RFC3339 time range, `model` to restrict to assistant messages minted by a matching model, or combine them. Returns matching messages with role, timestamp, source, minting model (when recorded), and an excerpt.\n\nOnly the visible chat text is searched \u2014 your private thinking and tool-call/tool-result payloads are never matched or returned, so this behaves like searching the actual conversation. `query` matches on individual words, not the phrase as a whole: a message matches if it contains *any* of the query terms, and messages containing more of the terms (or the exact phrase) rank higher \u2014 so natural-language queries like \"cache bug overnight\" work and you don't need to reduce them to a single keyword. Keyword results are ranked by relevance blended with recency (recent matches surface above older ones of similar relevance); time-range-only queries are returned oldest-first. `searched_messages` reports the total number of stored messages examined for the query (the full corpus), not the number returned. Excerpts are clipped to `excerpt_chars` (default 360, max 2000) \u2014 raise it when you need full quotes, or follow up with another `search_chat_logs` for adjacent terms/time windows or `search`/`read` against memory to get the full picture.\n\nEach result's `model` field is the model that generated that message (regenerated alternatives carry their own). It is `null` on user turns and on messages stored before model tracking, and the `model` filter skips those \u2014 so an empty result for an old period means \"not attributable\", not \"never said\". To audit how you sounded on one model versus another, combine `model` with a time range and compare excerpts from each. The `model_history` tool tells you which models served you over a period.",
+              "description": "Search your own conversation history, including compacted older messages and the active conversation window. Use this when the user asks what you discussed before, when you need to verify a past exchange, when you need messages from a specific time range, or when the answer may be in the transcript rather than in curated memory files. Provide `query` for keyword search, `start_time` and/or `end_time` for an inclusive RFC3339 time range, `model` to restrict to assistant messages minted by a matching model, or combine them. Returns a small set of matching messages with role, timestamp, minting model (when recorded), and clean text snippets.\n\nOnly visible chat text is searched — private thinking and tool-call/tool-result payloads are never matched or returned. Multi-word searches keep the matches with the best term coverage instead of flooding the result with messages that mention only one common word. Results are deduplicated and ranked by relevance blended with recency; time-range-only queries are returned oldest-first. Unselected regenerated answers are omitted unless `include_alternatives` is true. `searched_messages` reports the full corpus size, not the number returned. Text is clipped to `excerpt_chars` (default 240, max 2000); raise it when you need a fuller quote.\n\nEach result's `model` field is the model that generated that message (regenerated alternatives carry their own). It is `null` on user turns and on messages stored before model tracking, and the `model` filter skips those — so an empty result for an old period means \"not attributable\", not \"never said\". To audit how you sounded on one model versus another, combine `model` with a time range and compare excerpts from each. The `model_history` tool tells you which models served you over a period.",
               "input_schema": {
                 "type": "object",
                 "properties": {
@@ -2305,7 +2309,7 @@
                   },
                   "max_results": {
                     "type": "number",
-                    "description": "Maximum matching messages to return. Defaults to 20, maximum 100."
+                    "description": "Maximum matching messages to return. Defaults to 8, maximum 50."
                   },
                   "model": {
                     "type": "string",
@@ -2313,7 +2317,11 @@
                   },
                   "excerpt_chars": {
                     "type": "number",
-                    "description": "Approximate excerpt length in characters. Defaults to 360; maximum 2000. Use larger values when you need full quotes rather than context snippets."
+                    "description": "Approximate result text length in characters. Defaults to 240; maximum 2000. Use larger values when you need full quotes rather than context snippets."
+                  },
+                  "include_alternatives": {
+                    "type": "boolean",
+                    "description": "Also search unselected regenerated alternatives. Defaults to false to avoid duplicate or superseded answers."
                   }
                 },
                 "required": []
@@ -2321,7 +2329,7 @@
             },
             {
               "name": "model_history",
-              "description": "Report which LLM models generated your words over a time period, from the daemon's usage ledger. Use this to correlate how you sounded with which model was running \u2014 for example when auditing personality drift across model switches \u2014 or when the user asks what model you were on at some point. Provide optional `start_time`/`end_time` RFC3339 bounds; omit both for your full recorded history.\n\nReturns one row per model/provider/call-type combination with `first_seen`, `last_seen`, and call counts, ordered by first appearance. The `kind` field classifies each row: `interactive` (replies in conversation), `autonomous` (heartbeat messages you sent unprompted \u2014 these often run on a different model than your interactive replies), or `background` (memory maintenance machinery: dreaming, compaction, sub-agents \u2014 not your voice). Caveat: `tool_loop` rows are counted as interactive but also include sub-agent continuation calls, so treat `message` rows as the cleanest signal for your conversational voice.\n\nCoverage starts when this daemon's ledger began recording \u2014 history from earlier systems is not in the ledger (check memory files for hand-kept timelines), and if you were renamed, calls before the rename are recorded under the old name. To pair a period with actual quotes, follow up with `search_chat_logs` using the same time bounds (its results carry a per-message `model` where recorded).",
+              "description": "Report which LLM models generated your words over a time period, from the daemon's usage ledger. Use this to correlate how you sounded with which model was running — for example when auditing personality drift across model switches — or when the user asks what model you were on at some point. Provide optional `start_time`/`end_time` RFC3339 bounds; omit both for your full recorded history.\n\nReturns one row per model/provider/call-type combination with `first_seen`, `last_seen`, and call counts, ordered by first appearance. The `kind` field classifies each row: `interactive` (replies in conversation), `autonomous` (heartbeat messages you sent unprompted — these often run on a different model than your interactive replies), or `background` (memory maintenance machinery: dreaming, compaction, sub-agents — not your voice). Caveat: `tool_loop` rows are counted as interactive but also include sub-agent continuation calls, so treat `message` rows as the cleanest signal for your conversational voice.\n\nCoverage starts when this daemon's ledger began recording — history from earlier systems is not in the ledger (check memory files for hand-kept timelines), and if you were renamed, calls before the rename are recorded under the old name. To pair a period with actual quotes, follow up with `search_chat_logs` using the same time bounds (its results carry a per-message `model` where recorded).",
               "input_schema": {
                 "type": "object",
                 "properties": {
@@ -2351,7 +2359,7 @@
     },
     {
       "name": "tools disabled keeps the loop out of the sidecar",
-      "note": "`can_delegate_tool_loop` is false, so a turn that stops on tool_use runs the daemon's own tool phase instead \u2014 which with no tools enabled produces no tool turns at all",
+      "note": "`can_delegate_tool_loop` is false, so a turn that stops on tool_use runs the daemon's own tool phase instead — which with no tools enabled produces no tool turns at all",
       "input": {
         "history": [],
         "body": {

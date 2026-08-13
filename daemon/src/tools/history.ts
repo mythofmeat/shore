@@ -7,9 +7,9 @@ import { InvalidArgs, ToolIoError } from "./errors";
 
 const ACTIVE_JSONL_FILE = "active.jsonl";
 
-const DEFAULT_MAX_RESULTS = 20;
-const MAX_RESULTS = 100;
-const EXCERPT_CHARS = 360;
+const DEFAULT_MAX_RESULTS = 8;
+const MAX_RESULTS = 50;
+const EXCERPT_CHARS = 240;
 const MIN_EXCERPT_CHARS = 80;
 const MAX_EXCERPT_CHARS = 2000;
 
@@ -182,6 +182,12 @@ export class QueryMatcher {
     return score;
   }
 
+  coverage(content: string): number {
+    const contentLower = content.toLowerCase();
+    if (this.terms.length === 0) return contentLower.includes(this.rawLower) ? 1 : 0;
+    return new Set(this.terms.filter((term) => contentLower.includes(term))).size;
+  }
+
   earliestIndex(contentLower: string): number | undefined {
     let best = indexOrUndefined(contentLower, this.rawLower);
     for (const term of this.terms) {
@@ -245,6 +251,28 @@ export function excerptFor(
   return excerpt;
 }
 
+function cleanExcerptFor(
+  content: string,
+  matcher: QueryMatcher | undefined,
+  excerptChars: number,
+): string {
+  const normalized = content.replace(/\s+/gu, " ").trim();
+  let excerpt = excerptFor(normalized, matcher, excerptChars);
+  const leading = excerpt.startsWith("...");
+  const trailing = excerpt.endsWith("...");
+  if (leading) excerpt = excerpt.slice(3);
+  if (trailing) excerpt = excerpt.slice(0, -3);
+  if (leading) {
+    const boundary = excerpt.indexOf(" ");
+    if (boundary >= 0) excerpt = excerpt.slice(boundary + 1);
+  }
+  if (trailing) {
+    const boundary = excerpt.lastIndexOf(" ");
+    if (boundary >= 0) excerpt = excerpt.slice(0, boundary);
+  }
+  return `${leading ? "… " : ""}${excerpt.trim()}${trailing ? " …" : ""}`;
+}
+
 function chatText(blocks: ContentBlock[]): string {
   return deriveContentFromBlocks(blocks, false);
 }
@@ -254,11 +282,14 @@ interface SearchFilters {
   range: TimeRange;
   modelFilter: string | undefined;
   excerptChars: number;
+  includeAlternatives: boolean;
 }
 
 interface ScoredCandidate {
   value: Record<string, unknown>;
   relevance: number;
+  coverage: number;
+  normalizedText: string;
   parsedTs: number | undefined;
 }
 
@@ -285,10 +316,18 @@ export function matchesTimeRange(
 
 function candidate(
   relevance: number,
+  coverage: number,
+  text: string,
   timestamp: string,
   value: Record<string, unknown>,
 ): ScoredCandidate {
-  return { relevance, parsedTs: parseRfc3339(timestamp), value };
+  return {
+    relevance,
+    coverage,
+    normalizedText: text.toLowerCase().replace(/\s+/gu, " ").trim(),
+    parsedTs: parseRfc3339(timestamp),
+    value,
+  };
 }
 
 function roleLabel(role: Message["role"]): string {
@@ -298,11 +337,10 @@ function roleLabel(role: Message["role"]): string {
 function collectMatches(
   candidates: ScoredCandidate[],
   messages: readonly Message[],
-  source: string,
   filters: SearchFilters,
   stats: { skipped: number },
 ): void {
-  const { matcher, range, modelFilter, excerptChars } = filters;
+  const { matcher, range, modelFilter, excerptChars, includeAlternatives } = filters;
 
   for (const message of messages) {
     const text = chatText(message.content_blocks);
@@ -310,18 +348,18 @@ function collectMatches(
       const relevance = relevanceFor(matcher, text);
       if (relevance !== undefined && matchesTimeRange(message.timestamp, range, stats)) {
         candidates.push(
-          candidate(relevance, message.timestamp, {
+          candidate(relevance, matcher?.coverage(text) ?? 0, text, message.timestamp, {
             msg_id: message.msg_id,
             role: roleLabel(message.role),
             timestamp: message.timestamp,
-            source,
             model: message.model ?? null,
-            excerpt: excerptFor(text, matcher, excerptChars),
+            text: cleanExcerptFor(text, matcher, excerptChars),
           }),
         );
       }
     }
 
+    if (!includeAlternatives) continue;
     const alternatives: MessageAlternative[] = message.alternatives ?? [];
     for (const [index, alternative] of alternatives.entries()) {
       if (alternative.content === message.content) continue;
@@ -338,15 +376,14 @@ function collectMatches(
       if (!matchesTimeRange(timestamp, range, stats)) continue;
 
       candidates.push(
-        candidate(relevance, timestamp, {
+        candidate(relevance, matcher?.coverage(altText) ?? 0, altText, timestamp, {
           msg_id: message.msg_id,
           role: roleLabel(message.role),
           timestamp,
-          source: `${source}:alt:${index}`,
           alternative_index: index,
           alternative_count: alternatives.length,
           model: altModel ?? null,
-          excerpt: excerptFor(altText, matcher, excerptChars),
+          text: cleanExcerptFor(altText, matcher, excerptChars),
         }),
       );
     }
@@ -384,6 +421,27 @@ function rankCandidates(candidates: ScoredCandidate[]): void {
     if (diff !== 0) return diff < 0 ? -1 : 1;
     return compareOptionalTs(b.parsedTs, a.parsedTs);
   });
+}
+
+function bestResults(
+  candidates: ScoredCandidate[],
+  matcher: QueryMatcher | undefined,
+  maxResults: number,
+): Record<string, unknown>[] {
+  let eligible = candidates;
+  if (matcher !== undefined && matcher.terms.length > 1 && candidates.length > 0) {
+    const bestCoverage = Math.max(...candidates.map((candidate) => candidate.coverage));
+    eligible = candidates.filter((candidate) => candidate.coverage === bestCoverage);
+  }
+  const seen = new Set<string>();
+  const results: Record<string, unknown>[] = [];
+  for (const candidate of eligible) {
+    if (seen.has(candidate.normalizedText)) continue;
+    seen.add(candidate.normalizedText);
+    results.push(candidate.value);
+    if (results.length === maxResults) break;
+  }
+  return results;
 }
 
 function compareOptionalTs(a: number | undefined, b: number | undefined): number {
@@ -424,6 +482,7 @@ export async function handleSearchHistory(
     range,
     modelFilter,
     excerptChars: excerptCharsFrom(input),
+    includeAlternatives: input["include_alternatives"] === true,
   };
 
   const candidates: ScoredCandidate[] = [];
@@ -431,17 +490,21 @@ export async function handleSearchHistory(
   let searchedMessages = 0;
 
   const segments = await ioGuard(() => SegmentReader.load(characterDataDir));
-  for (let index = 0; index < segments.segmentCount(); index += 1) {
-    const messages = await ioGuard(() => segments.readSegment(index));
-    searchedMessages += messages.length;
-    collectMatches(candidates, messages, `segment:${index}`, filters, stats);
+  try {
+    for (let index = 0; index < segments.segmentCount(); index += 1) {
+      const messages = await ioGuard(() => segments.readSegment(index));
+      searchedMessages += messages.length;
+      collectMatches(candidates, messages, filters, stats);
+    }
+  } finally {
+    segments.close();
   }
 
   const active = await ioGuard(() =>
     MessageStore.load(join(characterDataDir, ACTIVE_JSONL_FILE)),
   );
   searchedMessages += active.messageCount();
-  collectMatches(candidates, active.messages(), "active", filters, stats);
+  collectMatches(candidates, active.messages(), filters, stats);
 
   if (matcher !== undefined) {
     rankCandidates(candidates);
@@ -449,7 +512,7 @@ export async function handleSearchHistory(
     candidates.sort((a, b) => compareOptionalTs(a.parsedTs, b.parsedTs));
   }
 
-  const results = candidates.slice(0, maxResults).map((c) => c.value);
+  const results = bestResults(candidates, matcher, maxResults);
 
   return {
     query: query ?? null,

@@ -26,6 +26,7 @@ import { mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { Message } from "../src/engine/types.ts";
+import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import { LastRequestCache } from "../src/cache/last_request.ts";
 import { runIdleCompaction, type IdleCompactionDeps } from "../src/autonomy/idle_compaction.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
@@ -169,6 +170,15 @@ async function segmentNames(characterDir: string): Promise<string[]> {
   }
 }
 
+function historySegmentCount(dataDir: string): number {
+  const store = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
+  try {
+    return store.segmentCount("ada");
+  } finally {
+    store.close();
+  }
+}
+
 /** A cached body good enough to be used as the pass's prefix. */
 const stale = () =>
   ({ model: "claude-fixture", messages: [{ role: "user", content: "before" }] }) as never;
@@ -195,7 +205,7 @@ function withKey<T>(fn: () => Promise<T>): Promise<T> {
 
 describe("runIdleCompaction: the pass", () => {
   test("keeps the configured retention, because it passes no keep-turns override", async () => {
-    const { config, characterDir } = await world();
+    const { config, dataDir, characterDir } = await world();
     expect(config.app.memory.compaction.keep_recent_turns).toBe(2);
 
     const result = await withKey(() => runIdleCompaction("ada", deps(config)));
@@ -205,7 +215,8 @@ describe("runIdleCompaction: the pass", () => {
     // the user is still in.
     expect(await activeIds(characterDir)).toEqual(["m_3", "m_4", "m_5", "m_6"]);
     expect(result.turnCount).toBe(2);
-    expect(await segmentNames(characterDir)).toEqual(["0001.jsonl"]);
+    expect(await segmentNames(characterDir)).toEqual([]);
+    expect(historySegmentCount(dataDir)).toBe(1);
   });
 
   test("archives a trailing autonomous message rather than retaining it", async () => {
@@ -336,7 +347,7 @@ describe("runIdleCompaction: putting the world back in step", () => {
   });
 
   test("an engine reload that throws is a warning, not a failed compaction", async () => {
-    const { config, characterDir } = await world();
+    const { config, dataDir, characterDir } = await world();
 
     const result = await withKey(() =>
       runIdleCompaction(
@@ -348,7 +359,8 @@ describe("runIdleCompaction: putting the world back in step", () => {
     // The pass already happened; there is nobody to report a reload failure to.
     expect(result.failed).toBeUndefined();
     expect(result.turnCount).toBe(2);
-    expect(await segmentNames(characterDir)).toEqual(["0001.jsonl"]);
+    expect(await segmentNames(characterDir)).toEqual([]);
+    expect(historySegmentCount(dataDir)).toBe(1);
   });
 
   test("re-points the keepalive at the rebuilt prefix, not the pre-pass one", async () => {
