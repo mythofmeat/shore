@@ -218,7 +218,7 @@ export type Field =
   | "zai_subscription"
   | "replay_prior_thinking";
 
-const FIELDS: readonly Field[] = [
+export const FIELDS: readonly Field[] = [
   "max_context_tokens",
   "max_output_tokens",
   "temperature",
