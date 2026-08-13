@@ -73,25 +73,50 @@ export function replayableMessagesWithDrops(req: SidecarRequest): {
 
   const out: WireMessage[] = [];
   for (const msg of req.messages) {
+    const accompaniesToolUse =
+      msg.role === "assistant" && msg.content.some((block) => block.type === "tool_use");
+
+    const reason = thinkingDropReason(msg, {
+      stripPrior: stripPrior && !accompaniesToolUse,
+      keepsUncarried,
+      activeProvider,
+      activeModel,
+    });
+
     const kept = msg.content.filter((block) => {
       if (block.type === "text" && block.text.trim() === "") return false;
       if (!isThinking(block)) return true;
-      if (stripPrior && msg.role === "assistant") {
-        drops.strippedByPolicy += 1;
-        return false;
-      }
-      if (block.type === "thinking" && !carriesOpaqueData(block) && !keepsUncarried) {
-        drops.uncarried += 1;
-        return false;
-      }
-      if (isPortable(block, msg.provider_key, msg.model, activeProvider, activeModel)) return true;
-      drops.unportable += 1;
+      if (reason === undefined) return true;
+      drops[reason] += 1;
       return false;
     });
     if (kept.length === 0) continue;
     out.push({ ...msg, content: kept });
   }
   return { messages: out, drops };
+}
+
+interface DropRules {
+  stripPrior: boolean;
+  keepsUncarried: boolean;
+  activeProvider: string;
+  activeModel: string;
+}
+
+function thinkingDropReason(msg: WireMessage, rules: DropRules): keyof ThinkingDrops | undefined {
+  const thinking = msg.content.filter(isThinking);
+  if (thinking.length === 0) return undefined;
+  if (rules.stripPrior && msg.role === "assistant") return "strippedByPolicy";
+  if (
+    !rules.keepsUncarried &&
+    thinking.some((block) => block.type === "thinking" && !carriesOpaqueData(block))
+  ) {
+    return "uncarried";
+  }
+  const portable = thinking.every((block) =>
+    isPortable(block, msg.provider_key, msg.model, rules.activeProvider, rules.activeModel),
+  );
+  return portable ? undefined : "unportable";
 }
 
 export function totalThinkingDrops(drops: ThinkingDrops): number {
