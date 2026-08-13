@@ -12,7 +12,7 @@ import type {
 
 import type { ContentBlock, ImageRef } from "../../engine/types.ts";
 import { foldEffort } from "../capabilities.ts";
-import { type ResolvedImage, resolveImage, resolveImageBlock } from "../images.ts";
+import { type ResolvedImage, resolveImage, resolveImageBlock, imageLabel, omissionNotice } from "../images.ts";
 import type {
   GenerateResponse,
   SidecarProvider,
@@ -284,8 +284,12 @@ export function turnToOpenRouter(turn: TurnMessage): ChatMessages[] {
     if (b.type === "text") {
       parts.push({ type: "text", text: b.text });
     } else if (b.type === "image") {
-      const resolved = resolveImageBlock(b.source);
-      if (resolved) parts.push(imageUrlPart(resolved));
+      const resolution = resolveImageBlock(b.source);
+      if ("omitted" in resolution) {
+        parts.push({ type: "text", text: omissionNotice("an attached image", resolution.omitted) });
+      } else {
+        parts.push(imageUrlPart(resolution.image));
+      }
     }
   }
   if (parts.length > 0) {
@@ -301,13 +305,16 @@ function imageUrlPart(resolved: ResolvedImage): ImagePart {
   return { type: "image_url", image_url: { url: `data:${resolved.mediaType};base64,${resolved.base64}` } };
 }
 
-function imagesToParts(images: ImageRef[] | undefined): ImagePart[] {
+function imagesToParts(images: ImageRef[] | undefined): Array<TextPart | ImagePart> {
   if (!images || images.length === 0) return [];
-  const out: ImagePart[] = [];
+  const out: Array<TextPart | ImagePart> = [];
   for (const img of images) {
-    const resolved = resolveImage(img);
-    if (!resolved) continue;
-    out.push(imageUrlPart(resolved));
+    const resolution = resolveImage(img);
+    if ("omitted" in resolution) {
+      out.push({ type: "text", text: omissionNotice(imageLabel(img), resolution.omitted) });
+      continue;
+    }
+    out.push(imageUrlPart(resolution.image));
   }
   return out;
 }

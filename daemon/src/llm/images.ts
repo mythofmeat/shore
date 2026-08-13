@@ -18,6 +18,16 @@ export interface ResolvedImage {
   base64: string;
 }
 
+export type ImageResolution = { image: ResolvedImage } | { omitted: string };
+
+export function resolvedImage(resolution: ImageResolution): ResolvedImage | undefined {
+  return "image" in resolution ? resolution.image : undefined;
+}
+
+export function omissionNotice(label: string, reason: string): string {
+  return `[image omitted: ${label} — ${reason}]`;
+}
+
 const SUPPORTED_MIME = new Set(Object.values(MIME_BY_EXT));
 
 function base64Bytes(data: string): number {
@@ -26,60 +36,49 @@ function base64Bytes(data: string): number {
   return Math.floor((normalized.length * 3) / 4) - padding;
 }
 
+function tooLarge(bytes: number, maxBytes: number): string {
+  return `it is ${String(bytes)} bytes, over the ${String(maxBytes)}-byte limit`;
+}
+
 export function resolveImageBlock(
   source: { media_type: string; data: string },
   maxBytes: number = DEFAULT_MAX_IMAGE_BYTES,
-): ResolvedImage | undefined {
+): ImageResolution {
   const mediaType = source.media_type?.toLowerCase();
   if (!mediaType || !SUPPORTED_MIME.has(mediaType)) {
-    console.warn(`[image] unsupported media type ${source.media_type}; skipping`);
-    return undefined;
+    return { omitted: `${source.media_type || "an unlabelled type"} is not a supported format` };
   }
-  if (!source.data) return undefined;
+  if (!source.data) return { omitted: "it carried no image data" };
   const bytes = base64Bytes(source.data);
-  if (bytes > maxBytes) {
-    console.warn(
-      `[image] inline image block is ${bytes} bytes; exceeds cap ${maxBytes}; skipping`,
-    );
-    return undefined;
-  }
-  return { mediaType, base64: source.data };
+  if (bytes > maxBytes) return { omitted: tooLarge(bytes, maxBytes) };
+  return { image: { mediaType, base64: source.data } };
 }
 
 export function resolveImage(
   ref: ImageRef,
   maxBytes: number = DEFAULT_MAX_IMAGE_BYTES,
-): ResolvedImage | undefined {
+): ImageResolution {
   const mediaType = MIME_BY_EXT[path.extname(ref.path).toLowerCase()];
   if (!mediaType) {
-    console.warn(`[image] unsupported extension for ${ref.path}; skipping`);
-    return undefined;
+    return { omitted: `${path.extname(ref.path) || "no extension"} is not a supported format` };
   }
 
   if (ref.data !== undefined && ref.data.length > 0) {
     const inlineBytes = base64Bytes(ref.data);
-    if (inlineBytes > maxBytes) {
-      console.warn(
-        `[image] inline image ${ref.path} is ${inlineBytes} bytes; exceeds cap ${maxBytes}; skipping`,
-      );
-      return undefined;
-    }
-    return { mediaType, base64: ref.data };
+    if (inlineBytes > maxBytes) return { omitted: tooLarge(inlineBytes, maxBytes) };
+    return { image: { mediaType, base64: ref.data } };
   }
 
   try {
     const size = fs.statSync(ref.path).size;
-    if (size > maxBytes) {
-      console.warn(
-        `[image] ${ref.path} is ${size} bytes; exceeds cap ${maxBytes}; skipping`,
-      );
-      return undefined;
-    }
+    if (size > maxBytes) return { omitted: tooLarge(size, maxBytes) };
     const bytes = fs.readFileSync(ref.path);
-    return { mediaType, base64: bytes.toString("base64") };
+    return { image: { mediaType, base64: bytes.toString("base64") } };
   } catch (e) {
-    console.warn(`[image] could not read ${ref.path}: ${(e as Error).message}`);
-    return undefined;
+    return { omitted: `it could not be read (${(e as Error).message})` };
   }
 }
 
+export function imageLabel(ref: ImageRef): string {
+  return path.basename(ref.path);
+}

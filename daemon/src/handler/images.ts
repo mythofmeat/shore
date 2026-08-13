@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import type { ContentBlock, ImageRef } from "../engine/types.ts";
 import { base64Rejection } from "../tools/images.ts";
+import { omissionNotice, resolveImage } from "../llm/images.ts";
 
 export interface ImageUpload {
   filename: string;
@@ -177,20 +178,32 @@ export async function ingestImages(
 ): Promise<{ images: ImageRef[]; blocks: ContentBlock[] }> {
   const attachmentsDir = join(dataDir, charName, "images", "attachments");
   const images: ImageRef[] = [];
+  const blocks: ContentBlock[] = [];
+
+  const keep = (label: string, ref: ImageRef | undefined): void => {
+    if (ref === undefined) {
+      blocks.push({ type: "text", text: omissionNotice(label, "it could not be attached") });
+      return;
+    }
+    const resolution = resolveImage(ref);
+    if ("omitted" in resolution) {
+      blocks.push({ type: "text", text: omissionNotice(label, resolution.omitted) });
+      return;
+    }
+    images.push(ref);
+  };
 
   for (const upload of imageData) {
-    const ref = await ingestUpload(attachmentsDir, upload, now);
-    if (ref !== undefined) images.push(ref);
+    keep(upload.filename, await ingestUpload(attachmentsDir, upload, now));
   }
 
   if (imageData.length === 0) {
     for (const src of imagePaths) {
-      const ref = await ingestLegacyPath(attachmentsDir, src, now);
-      if (ref !== undefined) images.push(ref);
+      keep(src.split(/[/\\]/).pop() ?? src, await ingestLegacyPath(attachmentsDir, src, now));
     }
   }
 
-  return { images, blocks: [] };
+  return { images, blocks };
 }
 
 async function ingestUpload(

@@ -13,7 +13,7 @@ import type {
 
 import { claudeThinkingCaps, effortBudget } from "../capabilities.ts";
 import type { ContentBlock, ImageRef } from "../../engine/types.ts";
-import { resolveImage } from "../images.ts";
+import { resolveImage, imageLabel, omissionNotice } from "../images.ts";
 import type {
   GenerateResponse,
   ProviderOptions,
@@ -528,14 +528,21 @@ function imagesToAnthropicBlocks(images: ImageRef[] | undefined): ContentBlockPa
   if (!images || images.length === 0) return [];
   const out: ContentBlockParam[] = [];
   for (const img of images) {
-    const resolved = resolveImage(img);
-    if (!resolved) continue;
+    const resolution = resolveImage(img);
+    if ("omitted" in resolution) {
+      out.push({ type: "text", text: omissionNotice(imageLabel(img), resolution.omitted) });
+      continue;
+    }
     out.push({
       type: "image",
       source: {
         type: "base64",
-        media_type: resolved.mediaType as "image/png" | "image/jpeg" | "image/webp" | "image/gif",
-        data: resolved.base64,
+        media_type: resolution.image.mediaType as
+          | "image/png"
+          | "image/jpeg"
+          | "image/webp"
+          | "image/gif",
+        data: resolution.image.base64,
       },
     });
   }

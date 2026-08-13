@@ -10,7 +10,7 @@ import type {
 
 import type { ContentBlock, ImageRef } from "../../engine/types.ts";
 import { foldEffort } from "../capabilities.ts";
-import { type ResolvedImage, resolveImage, resolveImageBlock } from "../images.ts";
+import { type ResolvedImage, resolveImage, resolveImageBlock, imageLabel, omissionNotice } from "../images.ts";
 import type {
   GenerateResponse,
   SidecarProvider,
@@ -269,8 +269,12 @@ export function turnToOpenAI(turn: TurnMessage): ChatCompletionMessageParam[] {
     } else if (b.type === "text") {
       parts.push({ type: "text", text: b.text });
     } else if (b.type === "image") {
-      const resolved = resolveImageBlock(b.source);
-      if (resolved) parts.push(imageUrlPart(resolved));
+      const resolution = resolveImageBlock(b.source);
+      if ("omitted" in resolution) {
+        parts.push({ type: "text", text: omissionNotice("an attached image", resolution.omitted) });
+      } else {
+        parts.push(imageUrlPart(resolution.image));
+      }
     }
   }
   if (parts.length > 0) {
@@ -289,13 +293,18 @@ function imageUrlPart(resolved: ResolvedImage): OpenAIImagePart {
   };
 }
 
-function imagesToOpenAIParts(images: ImageRef[] | undefined): OpenAIImagePart[] {
+function imagesToOpenAIParts(
+  images: ImageRef[] | undefined,
+): Array<OpenAIImagePart | OpenAITextPart> {
   if (!images || images.length === 0) return [];
-  const out: OpenAIImagePart[] = [];
+  const out: Array<OpenAIImagePart | OpenAITextPart> = [];
   for (const img of images) {
-    const resolved = resolveImage(img);
-    if (!resolved) continue;
-    out.push(imageUrlPart(resolved));
+    const resolution = resolveImage(img);
+    if ("omitted" in resolution) {
+      out.push({ type: "text", text: omissionNotice(imageLabel(img), resolution.omitted) });
+      continue;
+    }
+    out.push(imageUrlPart(resolution.image));
   }
   return out;
 }
