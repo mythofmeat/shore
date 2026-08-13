@@ -94,8 +94,8 @@ describe("inlined image blocks reach the wire", () => {
   });
 });
 
-describe("malformed image blocks drop the image, not the turn", () => {
-  test("unsupported media type is skipped but text survives", () => {
+describe("an image that cannot travel is declared, not dropped in silence", () => {
+  test("an unsupported media type becomes a note the model can read", () => {
     const turn = {
       role: "user",
       content: [
@@ -104,10 +104,14 @@ describe("malformed image blocks drop the image, not the turn", () => {
       ],
     } as TurnMessage;
     const msgs = turnToOpenAI(turn) as unknown as Array<Record<string, unknown>>;
-    expect(msgs[0]?.["content"]).toEqual([{ type: "text", text: "still here" }]);
+    const parts = msgs[0]?.["content"] as Array<{ type: string; text?: string }>;
+    expect(parts).toHaveLength(2);
+    expect(parts[0]?.text).toContain("image omitted");
+    expect(parts[0]?.text).toContain("image/tiff");
+    expect(parts[1]).toEqual({ type: "text", text: "still here" });
   });
 
-  test("oversized image is skipped but text survives", () => {
+  test("an oversized image says so, and says how big it was", () => {
     // base64 expands 4/3, so 8 MiB of chars decodes to 6 MiB — past the 5 MiB cap.
     const huge = "A".repeat(8 * 1024 * 1024);
     const turn = {
@@ -118,7 +122,10 @@ describe("malformed image blocks drop the image, not the turn", () => {
       ],
     } as TurnMessage;
     const msgs = turnToOpenAI(turn) as unknown as Array<Record<string, unknown>>;
-    expect(msgs[0]?.["content"]).toEqual([{ type: "text", text: "still here" }]);
+    const parts = msgs[0]?.["content"] as Array<{ type: string; text?: string }>;
+    expect(parts).toHaveLength(2);
+    expect(parts[0]?.text).toContain("over the 5242880-byte limit");
+    expect(parts[1]).toEqual({ type: "text", text: "still here" });
   });
 });
 

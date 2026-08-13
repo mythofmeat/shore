@@ -10,6 +10,12 @@
  * from there to HEAD.
  *
  * The generator stays uncommitted, per #12.
+ *
+ * One case was removed rather than ported: `carrier_without_thinking` recorded
+ * the Rust dropping a signature that arrived with no thinking text, which is
+ * every `display: "omitted"` response. Stream capture is now owned by
+ * `thinking_signature_capture.test.ts`, which asserts the documented behaviour
+ * instead of the behaviour that shipped.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -583,18 +589,6 @@ describe("stream accumulation", () => {
         }
       }
     }
-  });
-
-  test("a carrier survives a flush that emits nothing", () => {
-    // `flushThinking` with an empty buffer must not clear the pending carrier,
-    // or a signature that arrives before its text is lost.
-    const acc = new StreamAccumulator();
-    const sink: FrameSink = () => {};
-    acc.handle({ type: "thinking_signature", signature: "s" }, false, sink);
-    acc.flushThinking();
-    acc.handle({ type: "thinking", text: "t" }, false, sink);
-    const result = acc.finish("", "end_turn", zeroUsage(), { total_ms: 0, time_to_first_token_ms: 0 });
-    expect(result.content_blocks).toEqual([{ type: "thinking", thinking: "t", signature: "s" }]);
   });
 
   test("finish hands over its arrays rather than aliasing them", () => {

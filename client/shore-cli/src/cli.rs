@@ -820,7 +820,7 @@ pub(crate) fn to_swp_command(cmd: &CliCommand) -> Option<(&'static str, serde_js
 /// transcript, the heartbeat event timeline, raw call payloads, or the message
 /// list.
 fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
-    use serde_json::{json, Map, Value};
+    use serde_json::{Map, Value, json};
     let CliCommand::Log {
         subcommand,
         msg_ref,
@@ -906,7 +906,7 @@ fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
 
 /// `model` setting (show/set/clear) or model list/switch/info/reset.
 fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
-    use serde_json::{json, Map, Value};
+    use serde_json::{Map, Value, json};
     let CliCommand::Model {
         subcommand,
         name,
@@ -1012,7 +1012,7 @@ fn provider_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)
 
 /// `memory` compact subcommand, or status/query.
 fn memory_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
-    use serde_json::{json, Map, Value};
+    use serde_json::{Map, Value, json};
     let CliCommand::Memory {
         subcommand, query, ..
     } = cmd

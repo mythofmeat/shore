@@ -1,5 +1,6 @@
 import { join } from "node:path";
 
+import { HISTORY_DB_FILE } from "../engine/history_store.ts";
 import { MessageStore, isToolResultOnly } from "../engine/message_store.ts";
 import type { Message } from "../engine/types.ts";
 import { conversationManager } from "../memory/compaction/archive.ts";
@@ -115,6 +116,7 @@ async function pureArchive(
       characterDir,
       deps.now ?? (() => new Date().toISOString()),
       deps.newId ?? (() => crypto.randomUUID()),
+      { dbPath: join(dataDir, HISTORY_DB_FILE), character },
     ).archiveAndRetain("deep-idle", { keepLastN: tail, activeContent });
   } catch (e) {
     console.warn(

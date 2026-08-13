@@ -2,6 +2,7 @@ export interface ToolUseEvent {
   id: string;
   name: string;
   input: unknown;
+  input_error?: string;
 }
 
 export type CapBehavior =

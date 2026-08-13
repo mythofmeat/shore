@@ -92,8 +92,13 @@ export async function status(ctx: StatusContext): Promise<Json> {
   const pending = await pendingDeferredEditPaths(characterDataDir).catch(() => []);
 
   const tokens = ctx.sessionTokens;
+  const halt = ctx.autonomy.keepaliveHalt();
   return {
     character: ctx.characterName,
+    keepalive_halted:
+      halt === undefined
+        ? null
+        : { character: halt.character, reason: halt.reason, at: rfc3339(halt.at) },
     message_count: ctx.turnCount,
     turn_count: ctx.turnCount,
     active_model: effectiveModel,

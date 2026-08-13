@@ -42,6 +42,7 @@ import {
   templateVars,
 } from "./subagent.ts";
 import { appendSubagentTrace } from "./subagent_trace.ts";
+import { schemasFrom } from "./validate.ts";
 
 const TAGGED_FRAMES = new Set([
   "stream_start",
@@ -181,6 +182,7 @@ export async function runSubagent(
     ...(deps.rid === undefined ? {} : { rid: deps.rid }),
     now: deps.now ?? (() => new Date().toISOString()),
     newMessageId: deps.newMessageId ?? (() => `m_${crypto.randomUUID()}`),
+    schemas: schemasFrom(request.tools),
   }, messages);
 
   const trace = async (outcome: { result?: string; error?: string }): Promise<void> => {

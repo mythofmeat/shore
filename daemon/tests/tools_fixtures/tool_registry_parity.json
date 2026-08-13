@@ -249,7 +249,7 @@
     },
     {
       "name": "search_chat_logs",
-      "description": "Search your own conversation history, including compacted older segments and the active conversation window. Use this when the user asks what you discussed before, when you need to verify a past exchange, when you need messages from a specific time range, or when the answer may be in the transcript rather than in curated memory files. Provide `query` for keyword search, `start_time` and/or `end_time` for an inclusive RFC3339 time range, `model` to restrict to assistant messages minted by a matching model, or combine them. Returns matching messages with role, timestamp, source, minting model (when recorded), and an excerpt.\n\nOnly the visible chat text is searched — your private thinking and tool-call/tool-result payloads are never matched or returned, so this behaves like searching the actual conversation. `query` matches on individual words, not the phrase as a whole: a message matches if it contains *any* of the query terms, and messages containing more of the terms (or the exact phrase) rank higher — so natural-language queries like \"cache bug overnight\" work and you don't need to reduce them to a single keyword. Keyword results are ranked by relevance blended with recency (recent matches surface above older ones of similar relevance); time-range-only queries are returned oldest-first. `searched_messages` reports the total number of stored messages examined for the query (the full corpus), not the number returned. Excerpts are clipped to `excerpt_chars` (default 360, max 2000) — raise it when you need full quotes, or follow up with another `search_chat_logs` for adjacent terms/time windows or `search`/`read` against memory to get the full picture.\n\nEach result's `model` field is the model that generated that message (regenerated alternatives carry their own). It is `null` on user turns and on messages stored before model tracking, and the `model` filter skips those — so an empty result for an old period means \"not attributable\", not \"never said\". To audit how you sounded on one model versus another, combine `model` with a time range and compare excerpts from each. The `model_history` tool tells you which models served you over a period.",
+      "description": "Search your own conversation history, including compacted older messages and the active conversation window. Use this when the user asks what you discussed before, when you need to verify a past exchange, when you need messages from a specific time range, or when the answer may be in the transcript rather than in curated memory files. Provide `query` for keyword search, `start_time` and/or `end_time` for an inclusive RFC3339 time range, `model` to restrict to assistant messages minted by a matching model, or combine them.\n\nOnly visible chat text is searched — private thinking and tool-call/tool-result payloads are never indexed, matched, or returned. Search uses a rebuildable FTS cache and, when an embedding provider is configured, can blend lexical and semantic candidates. Semantic indexing fills incrementally, so diagnostics report indexed, total, and pending chunks; lexical matching remains complete while that backfill is unfinished. An embedding failure falls back to lexical search and is reported.\n\nResults contain the complete visible text of each matching message, preserving paragraphs and formatting. Each hit also includes the immediately preceding and following visible messages, including across archived/active boundaries. Three matching messages are returned by default. Unselected regenerated answers are omitted unless `include_alternatives` is true.\n\nEach result's `model` field is the model that generated that message (regenerated alternatives carry their own). It is `null` on user turns and on messages stored before model tracking, and the `model` filter skips those — so an empty result for an old period means \"not attributable\", not \"never said\". To audit how you sounded on one model versus another, combine `model` with a time range and compare messages from each. The `model_history` tool tells you which models served you over a period.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -267,15 +267,25 @@
           },
           "max_results": {
             "type": "number",
-            "description": "Maximum matching messages to return. Defaults to 20, maximum 100."
+            "description": "Maximum matching messages to return. Defaults to 3, maximum 50."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "lexical",
+              "hybrid",
+              "vector"
+            ],
+            "description": "Retrieval mode. `auto` uses hybrid search when embeddings are configured and lexical FTS otherwise; `vector` searches only currently embedded chunks."
           },
           "model": {
             "type": "string",
             "description": "Optional model filter: only return assistant messages minted by a matching model. Case-insensitive substring match with '.' and '-' treated as equal, so 'opus-4.6' matches both 'claude-opus-4-6' and 'anthropic/claude-opus-4.6'. Messages stored before model tracking carry no model and never match."
           },
-          "excerpt_chars": {
-            "type": "number",
-            "description": "Approximate excerpt length in characters. Defaults to 360; maximum 2000. Use larger values when you need full quotes rather than context snippets."
+          "include_alternatives": {
+            "type": "boolean",
+            "description": "Also search unselected regenerated alternatives. Defaults to false to avoid duplicate or superseded answers."
           }
         },
         "required": []
@@ -668,7 +678,7 @@
         },
         {
           "name": "search_chat_logs",
-          "description": "Search your own conversation history, including compacted older segments and the active conversation window. Use this when the user asks what you discussed before, when you need to verify a past exchange, when you need messages from a specific time range, or when the answer may be in the transcript rather than in curated memory files. Provide `query` for keyword search, `start_time` and/or `end_time` for an inclusive RFC3339 time range, `model` to restrict to assistant messages minted by a matching model, or combine them. Returns matching messages with role, timestamp, source, minting model (when recorded), and an excerpt.\n\nOnly the visible chat text is searched — your private thinking and tool-call/tool-result payloads are never matched or returned, so this behaves like searching the actual conversation. `query` matches on individual words, not the phrase as a whole: a message matches if it contains *any* of the query terms, and messages containing more of the terms (or the exact phrase) rank higher — so natural-language queries like \"cache bug overnight\" work and you don't need to reduce them to a single keyword. Keyword results are ranked by relevance blended with recency (recent matches surface above older ones of similar relevance); time-range-only queries are returned oldest-first. `searched_messages` reports the total number of stored messages examined for the query (the full corpus), not the number returned. Excerpts are clipped to `excerpt_chars` (default 360, max 2000) — raise it when you need full quotes, or follow up with another `search_chat_logs` for adjacent terms/time windows or `search`/`read` against memory to get the full picture.\n\nEach result's `model` field is the model that generated that message (regenerated alternatives carry their own). It is `null` on user turns and on messages stored before model tracking, and the `model` filter skips those — so an empty result for an old period means \"not attributable\", not \"never said\". To audit how you sounded on one model versus another, combine `model` with a time range and compare excerpts from each. The `model_history` tool tells you which models served you over a period.",
+          "description": "Search your own conversation history, including compacted older messages and the active conversation window. Use this when the user asks what you discussed before, when you need to verify a past exchange, when you need messages from a specific time range, or when the answer may be in the transcript rather than in curated memory files. Provide `query` for keyword search, `start_time` and/or `end_time` for an inclusive RFC3339 time range, `model` to restrict to assistant messages minted by a matching model, or combine them.\n\nOnly visible chat text is searched — private thinking and tool-call/tool-result payloads are never indexed, matched, or returned. Search uses a rebuildable FTS cache and, when an embedding provider is configured, can blend lexical and semantic candidates. Semantic indexing fills incrementally, so diagnostics report indexed, total, and pending chunks; lexical matching remains complete while that backfill is unfinished. An embedding failure falls back to lexical search and is reported.\n\nResults contain the complete visible text of each matching message, preserving paragraphs and formatting. Each hit also includes the immediately preceding and following visible messages, including across archived/active boundaries. Three matching messages are returned by default. Unselected regenerated answers are omitted unless `include_alternatives` is true.\n\nEach result's `model` field is the model that generated that message (regenerated alternatives carry their own). It is `null` on user turns and on messages stored before model tracking, and the `model` filter skips those — so an empty result for an old period means \"not attributable\", not \"never said\". To audit how you sounded on one model versus another, combine `model` with a time range and compare messages from each. The `model_history` tool tells you which models served you over a period.",
           "input_schema": {
             "type": "object",
             "properties": {
@@ -686,15 +696,25 @@
               },
               "max_results": {
                 "type": "number",
-                "description": "Maximum matching messages to return. Defaults to 20, maximum 100."
+                "description": "Maximum matching messages to return. Defaults to 3, maximum 50."
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "lexical",
+                  "hybrid",
+                  "vector"
+                ],
+                "description": "Retrieval mode. `auto` uses hybrid search when embeddings are configured and lexical FTS otherwise; `vector` searches only currently embedded chunks."
               },
               "model": {
                 "type": "string",
                 "description": "Optional model filter: only return assistant messages minted by a matching model. Case-insensitive substring match with '.' and '-' treated as equal, so 'opus-4.6' matches both 'claude-opus-4-6' and 'anthropic/claude-opus-4.6'. Messages stored before model tracking carry no model and never match."
               },
-              "excerpt_chars": {
-                "type": "number",
-                "description": "Approximate excerpt length in characters. Defaults to 360; maximum 2000. Use larger values when you need full quotes rather than context snippets."
+              "include_alternatives": {
+                "type": "boolean",
+                "description": "Also search unselected regenerated alternatives. Defaults to false to avoid duplicate or superseded answers."
               }
             },
             "required": []
@@ -961,7 +981,7 @@
         },
         {
           "name": "search_chat_logs",
-          "description": "Search your own conversation history, including compacted older segments and the active conversation window. Use this when the user asks what you discussed before, when you need to verify a past exchange, when you need messages from a specific time range, or when the answer may be in the transcript rather than in curated memory files. Provide `query` for keyword search, `start_time` and/or `end_time` for an inclusive RFC3339 time range, `model` to restrict to assistant messages minted by a matching model, or combine them. Returns matching messages with role, timestamp, source, minting model (when recorded), and an excerpt.\n\nOnly the visible chat text is searched — your private thinking and tool-call/tool-result payloads are never matched or returned, so this behaves like searching the actual conversation. `query` matches on individual words, not the phrase as a whole: a message matches if it contains *any* of the query terms, and messages containing more of the terms (or the exact phrase) rank higher — so natural-language queries like \"cache bug overnight\" work and you don't need to reduce them to a single keyword. Keyword results are ranked by relevance blended with recency (recent matches surface above older ones of similar relevance); time-range-only queries are returned oldest-first. `searched_messages` reports the total number of stored messages examined for the query (the full corpus), not the number returned. Excerpts are clipped to `excerpt_chars` (default 360, max 2000) — raise it when you need full quotes, or follow up with another `search_chat_logs` for adjacent terms/time windows or `search`/`read` against memory to get the full picture.\n\nEach result's `model` field is the model that generated that message (regenerated alternatives carry their own). It is `null` on user turns and on messages stored before model tracking, and the `model` filter skips those — so an empty result for an old period means \"not attributable\", not \"never said\". To audit how you sounded on one model versus another, combine `model` with a time range and compare excerpts from each. The `model_history` tool tells you which models served you over a period.",
+          "description": "Search your own conversation history, including compacted older messages and the active conversation window. Use this when the user asks what you discussed before, when you need to verify a past exchange, when you need messages from a specific time range, or when the answer may be in the transcript rather than in curated memory files. Provide `query` for keyword search, `start_time` and/or `end_time` for an inclusive RFC3339 time range, `model` to restrict to assistant messages minted by a matching model, or combine them.\n\nOnly visible chat text is searched — private thinking and tool-call/tool-result payloads are never indexed, matched, or returned. Search uses a rebuildable FTS cache and, when an embedding provider is configured, can blend lexical and semantic candidates. Semantic indexing fills incrementally, so diagnostics report indexed, total, and pending chunks; lexical matching remains complete while that backfill is unfinished. An embedding failure falls back to lexical search and is reported.\n\nResults contain the complete visible text of each matching message, preserving paragraphs and formatting. Each hit also includes the immediately preceding and following visible messages, including across archived/active boundaries. Three matching messages are returned by default. Unselected regenerated answers are omitted unless `include_alternatives` is true.\n\nEach result's `model` field is the model that generated that message (regenerated alternatives carry their own). It is `null` on user turns and on messages stored before model tracking, and the `model` filter skips those — so an empty result for an old period means \"not attributable\", not \"never said\". To audit how you sounded on one model versus another, combine `model` with a time range and compare messages from each. The `model_history` tool tells you which models served you over a period.",
           "input_schema": {
             "type": "object",
             "properties": {
@@ -979,15 +999,25 @@
               },
               "max_results": {
                 "type": "number",
-                "description": "Maximum matching messages to return. Defaults to 20, maximum 100."
+                "description": "Maximum matching messages to return. Defaults to 3, maximum 50."
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "lexical",
+                  "hybrid",
+                  "vector"
+                ],
+                "description": "Retrieval mode. `auto` uses hybrid search when embeddings are configured and lexical FTS otherwise; `vector` searches only currently embedded chunks."
               },
               "model": {
                 "type": "string",
                 "description": "Optional model filter: only return assistant messages minted by a matching model. Case-insensitive substring match with '.' and '-' treated as equal, so 'opus-4.6' matches both 'claude-opus-4-6' and 'anthropic/claude-opus-4.6'. Messages stored before model tracking carry no model and never match."
               },
-              "excerpt_chars": {
-                "type": "number",
-                "description": "Approximate excerpt length in characters. Defaults to 360; maximum 2000. Use larger values when you need full quotes rather than context snippets."
+              "include_alternatives": {
+                "type": "boolean",
+                "description": "Also search unselected regenerated alternatives. Defaults to false to avoid duplicate or superseded answers."
               }
             },
             "required": []
@@ -1254,7 +1284,7 @@
         },
         {
           "name": "search_chat_logs",
-          "description": "Search your own conversation history, including compacted older segments and the active conversation window. Use this when the user asks what you discussed before, when you need to verify a past exchange, when you need messages from a specific time range, or when the answer may be in the transcript rather than in curated memory files. Provide `query` for keyword search, `start_time` and/or `end_time` for an inclusive RFC3339 time range, `model` to restrict to assistant messages minted by a matching model, or combine them. Returns matching messages with role, timestamp, source, minting model (when recorded), and an excerpt.\n\nOnly the visible chat text is searched — your private thinking and tool-call/tool-result payloads are never matched or returned, so this behaves like searching the actual conversation. `query` matches on individual words, not the phrase as a whole: a message matches if it contains *any* of the query terms, and messages containing more of the terms (or the exact phrase) rank higher — so natural-language queries like \"cache bug overnight\" work and you don't need to reduce them to a single keyword. Keyword results are ranked by relevance blended with recency (recent matches surface above older ones of similar relevance); time-range-only queries are returned oldest-first. `searched_messages` reports the total number of stored messages examined for the query (the full corpus), not the number returned. Excerpts are clipped to `excerpt_chars` (default 360, max 2000) — raise it when you need full quotes, or follow up with another `search_chat_logs` for adjacent terms/time windows or `search`/`read` against memory to get the full picture.\n\nEach result's `model` field is the model that generated that message (regenerated alternatives carry their own). It is `null` on user turns and on messages stored before model tracking, and the `model` filter skips those — so an empty result for an old period means \"not attributable\", not \"never said\". To audit how you sounded on one model versus another, combine `model` with a time range and compare excerpts from each. The `model_history` tool tells you which models served you over a period.",
+          "description": "Search your own conversation history, including compacted older messages and the active conversation window. Use this when the user asks what you discussed before, when you need to verify a past exchange, when you need messages from a specific time range, or when the answer may be in the transcript rather than in curated memory files. Provide `query` for keyword search, `start_time` and/or `end_time` for an inclusive RFC3339 time range, `model` to restrict to assistant messages minted by a matching model, or combine them.\n\nOnly visible chat text is searched — private thinking and tool-call/tool-result payloads are never indexed, matched, or returned. Search uses a rebuildable FTS cache and, when an embedding provider is configured, can blend lexical and semantic candidates. Semantic indexing fills incrementally, so diagnostics report indexed, total, and pending chunks; lexical matching remains complete while that backfill is unfinished. An embedding failure falls back to lexical search and is reported.\n\nResults contain the complete visible text of each matching message, preserving paragraphs and formatting. Each hit also includes the immediately preceding and following visible messages, including across archived/active boundaries. Three matching messages are returned by default. Unselected regenerated answers are omitted unless `include_alternatives` is true.\n\nEach result's `model` field is the model that generated that message (regenerated alternatives carry their own). It is `null` on user turns and on messages stored before model tracking, and the `model` filter skips those — so an empty result for an old period means \"not attributable\", not \"never said\". To audit how you sounded on one model versus another, combine `model` with a time range and compare messages from each. The `model_history` tool tells you which models served you over a period.",
           "input_schema": {
             "type": "object",
             "properties": {
@@ -1272,15 +1302,25 @@
               },
               "max_results": {
                 "type": "number",
-                "description": "Maximum matching messages to return. Defaults to 20, maximum 100."
+                "description": "Maximum matching messages to return. Defaults to 3, maximum 50."
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "lexical",
+                  "hybrid",
+                  "vector"
+                ],
+                "description": "Retrieval mode. `auto` uses hybrid search when embeddings are configured and lexical FTS otherwise; `vector` searches only currently embedded chunks."
               },
               "model": {
                 "type": "string",
                 "description": "Optional model filter: only return assistant messages minted by a matching model. Case-insensitive substring match with '.' and '-' treated as equal, so 'opus-4.6' matches both 'claude-opus-4-6' and 'anthropic/claude-opus-4.6'. Messages stored before model tracking carry no model and never match."
               },
-              "excerpt_chars": {
-                "type": "number",
-                "description": "Approximate excerpt length in characters. Defaults to 360; maximum 2000. Use larger values when you need full quotes rather than context snippets."
+              "include_alternatives": {
+                "type": "boolean",
+                "description": "Also search unselected regenerated alternatives. Defaults to false to avoid duplicate or superseded answers."
               }
             },
             "required": []
@@ -1547,7 +1587,7 @@
         },
         {
           "name": "search_chat_logs",
-          "description": "Search your own conversation history, including compacted older segments and the active conversation window. Use this when the user asks what you discussed before, when you need to verify a past exchange, when you need messages from a specific time range, or when the answer may be in the transcript rather than in curated memory files. Provide `query` for keyword search, `start_time` and/or `end_time` for an inclusive RFC3339 time range, `model` to restrict to assistant messages minted by a matching model, or combine them. Returns matching messages with role, timestamp, source, minting model (when recorded), and an excerpt.\n\nOnly the visible chat text is searched — your private thinking and tool-call/tool-result payloads are never matched or returned, so this behaves like searching the actual conversation. `query` matches on individual words, not the phrase as a whole: a message matches if it contains *any* of the query terms, and messages containing more of the terms (or the exact phrase) rank higher — so natural-language queries like \"cache bug overnight\" work and you don't need to reduce them to a single keyword. Keyword results are ranked by relevance blended with recency (recent matches surface above older ones of similar relevance); time-range-only queries are returned oldest-first. `searched_messages` reports the total number of stored messages examined for the query (the full corpus), not the number returned. Excerpts are clipped to `excerpt_chars` (default 360, max 2000) — raise it when you need full quotes, or follow up with another `search_chat_logs` for adjacent terms/time windows or `search`/`read` against memory to get the full picture.\n\nEach result's `model` field is the model that generated that message (regenerated alternatives carry their own). It is `null` on user turns and on messages stored before model tracking, and the `model` filter skips those — so an empty result for an old period means \"not attributable\", not \"never said\". To audit how you sounded on one model versus another, combine `model` with a time range and compare excerpts from each. The `model_history` tool tells you which models served you over a period.",
+          "description": "Search your own conversation history, including compacted older messages and the active conversation window. Use this when the user asks what you discussed before, when you need to verify a past exchange, when you need messages from a specific time range, or when the answer may be in the transcript rather than in curated memory files. Provide `query` for keyword search, `start_time` and/or `end_time` for an inclusive RFC3339 time range, `model` to restrict to assistant messages minted by a matching model, or combine them.\n\nOnly visible chat text is searched — private thinking and tool-call/tool-result payloads are never indexed, matched, or returned. Search uses a rebuildable FTS cache and, when an embedding provider is configured, can blend lexical and semantic candidates. Semantic indexing fills incrementally, so diagnostics report indexed, total, and pending chunks; lexical matching remains complete while that backfill is unfinished. An embedding failure falls back to lexical search and is reported.\n\nResults contain the complete visible text of each matching message, preserving paragraphs and formatting. Each hit also includes the immediately preceding and following visible messages, including across archived/active boundaries. Three matching messages are returned by default. Unselected regenerated answers are omitted unless `include_alternatives` is true.\n\nEach result's `model` field is the model that generated that message (regenerated alternatives carry their own). It is `null` on user turns and on messages stored before model tracking, and the `model` filter skips those — so an empty result for an old period means \"not attributable\", not \"never said\". To audit how you sounded on one model versus another, combine `model` with a time range and compare messages from each. The `model_history` tool tells you which models served you over a period.",
           "input_schema": {
             "type": "object",
             "properties": {
@@ -1565,15 +1605,25 @@
               },
               "max_results": {
                 "type": "number",
-                "description": "Maximum matching messages to return. Defaults to 20, maximum 100."
+                "description": "Maximum matching messages to return. Defaults to 3, maximum 50."
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "lexical",
+                  "hybrid",
+                  "vector"
+                ],
+                "description": "Retrieval mode. `auto` uses hybrid search when embeddings are configured and lexical FTS otherwise; `vector` searches only currently embedded chunks."
               },
               "model": {
                 "type": "string",
                 "description": "Optional model filter: only return assistant messages minted by a matching model. Case-insensitive substring match with '.' and '-' treated as equal, so 'opus-4.6' matches both 'claude-opus-4-6' and 'anthropic/claude-opus-4.6'. Messages stored before model tracking carry no model and never match."
               },
-              "excerpt_chars": {
-                "type": "number",
-                "description": "Approximate excerpt length in characters. Defaults to 360; maximum 2000. Use larger values when you need full quotes rather than context snippets."
+              "include_alternatives": {
+                "type": "boolean",
+                "description": "Also search unselected regenerated alternatives. Defaults to false to avoid duplicate or superseded answers."
               }
             },
             "required": []

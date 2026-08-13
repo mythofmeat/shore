@@ -13,7 +13,7 @@ import type {
 
 import { claudeThinkingCaps, effortBudget } from "../capabilities.ts";
 import type { ContentBlock, ImageRef } from "../../engine/types.ts";
-import { resolveImage } from "../images.ts";
+import { resolveImage, imageLabel, omissionNotice } from "../images.ts";
 import type {
   GenerateResponse,
   ProviderOptions,
@@ -26,8 +26,18 @@ import type {
   WireMessage,
 } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA, streamErrorEvent } from "../types.ts";
-import { recordCacheCall, type CachePlacement } from "../../cache/forensics.ts";
+import {
+  ANTHROPIC_CACHE_CONTROL_LIMIT,
+  recordCacheCall,
+  type CachePlacement,
+} from "../../cache/forensics.ts";
 import { replayableMessages } from "../replay.ts";
+import { cacheBoundaryIndex } from "../system_boundary.ts";
+import { effectiveCacheTtl } from "../cache_capability.ts";
+import { anthropicClientFor } from "./anthropic_client.ts";
+import { parseToolArgs } from "../tool_args.ts";
+
+type ThinkingDisplay = NonNullable<ProviderOptions["thinking_display"]>;
 
 export class AnthropicProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
@@ -144,7 +154,12 @@ export async function* anthropicContentEvents(
         if (state?.kind === "thinking" && state.signature) {
           yield { type: "thinking_signature", signature: state.signature };
         } else if (state?.kind === "tool_use") {
-          yield { type: "tool_use", id: state.id, name: state.name, input: parseArgs(state.partialJson) };
+          yield {
+            type: "tool_use",
+            id: state.id,
+            name: state.name,
+            ...parseToolArgs(state.partialJson),
+          };
         }
         break;
       }
@@ -204,11 +219,7 @@ type AnthropicParams = MessageCreateParams & {
 function buildAnthropicCall(
   req: SidecarRequest,
 ): { client: Anthropic; params: AnthropicParams; placement: CachePlacement } {
-  const client = new Anthropic({
-    apiKey: req.api_key,
-    maxRetries: 0,
-    ...(req.base_url ? { baseURL: stripTrailingV1(req.base_url) } : {}),
-  });
+  const client = anthropicClientFor(req);
   const { params, placement } = buildAnthropicPlan(req);
   return { client, params, placement };
 }
@@ -218,8 +229,12 @@ export function buildAnthropicPlan(req: SidecarRequest): {
   placement: CachePlacement;
 } {
   const opts = req.provider_options ?? {};
-  const cacheTtl = opts.cache_ttl ?? "";
+  const cacheTtl = effectiveCacheTtl(req.sdk, req.base_url, opts.cache_ttl ?? "");
   const cacheEnabled = cacheTtl !== "";
+  if (req.context !== undefined && cacheTtl !== (opts.cache_ttl ?? "")) {
+    if (cacheTtl === "") delete req.context.cache_ttl;
+    else req.context.cache_ttl = cacheTtl;
+  }
 
   const converted = convertInlineSystemMessages(replayableMessages(req), req.model);
   const hasExistingMarkers = messagesHaveCacheControl(converted);
@@ -228,13 +243,19 @@ export function buildAnthropicPlan(req: SidecarRequest): {
   let system: TextBlockParam[];
   let msgBreakpoints: number[] = [];
   let sysBreakpoints: number[] = [];
+  let tally: BreakpointTally = {
+    requested: 0,
+    placed: 0,
+    droppedNoAnchor: 0,
+    droppedOverLimit: 0,
+  };
   if (cacheEnabled) {
-    const cc = makeCacheControl(cacheTtl);
     const msgs = normalizeMessages(converted);
     const labelled = req.system ?? [];
     const sys = systemToBlocks(labelled);
-    const { msgBp, sysBp } = tsDefaultPlacement(msgs, labelled);
-    placeBreakpoints(msgs, sys, cc, msgBp, sysBp);
+    const placement = applyDefaultPlacement(msgs, sys, labelled, cacheTtl);
+    const { msgBp, sysBp } = placement;
+    tally = placement.tally;
     messages = msgs;
     system = sys;
     msgBreakpoints = msgBp;
@@ -244,7 +265,12 @@ export function buildAnthropicPlan(req: SidecarRequest): {
     system = systemToBlocks(req.system);
   }
 
-  const { thinking, outputConfig } = buildThinkingParams(opts, req.model, req.max_tokens);
+  const { thinking, outputConfig } = buildThinkingParams(
+    opts,
+    req.model,
+    req.max_tokens,
+    opts.thinking_display,
+  );
   const tools = buildTools(req.tools);
 
   const params: AnthropicParams = {
@@ -277,16 +303,16 @@ export function buildAnthropicPlan(req: SidecarRequest): {
       sys_blocks: system.length,
       cache_enabled: cacheEnabled,
       has_existing_markers: hasExistingMarkers,
+      breakpoints_requested: tally.requested,
+      breakpoints_placed: tally.placed,
+      breakpoints_dropped_no_anchor: tally.droppedNoAnchor,
+      breakpoints_dropped_over_limit: tally.droppedOverLimit,
     },
   };
 }
 
 export function buildAnthropicParams(req: SidecarRequest): AnthropicParams {
   return buildAnthropicPlan(req).params;
-}
-
-function stripTrailingV1(baseUrl: string): string {
-  return baseUrl.replace(/\/v1\/?$/, "");
 }
 
 type CacheControl = { type: "ephemeral" } | { type: "ephemeral"; ttl: "1h" };
@@ -310,12 +336,7 @@ function normalizeMessages(messages: WireMessage[]): MessageParam[] {
   });
 }
 
-function lastStableSystemIndex(system: SystemContent): number {
-  for (let i = system.length - 1; i >= 0; i--) {
-    if (system[i]?.label !== "memory_index") return i;
-  }
-  return -1;
-}
+
 
 function isToolResultOnlyUser(msg: MessageParam): boolean {
   const content = msg.content;
@@ -361,36 +382,111 @@ function tsDefaultPlacement(
   messages: MessageParam[],
   system: SystemContent,
 ): { msgBp: number[]; sysBp: number[] } {
-  const sysIdx = lastStableSystemIndex(system);
+  const sysIdx = cacheBoundaryIndex(system);
   return {
     sysBp: sysIdx >= 0 ? [sysIdx] : [],
     msgBp: tsMessageBreakpoints(messages),
   };
 }
 
-function placeBreakpoints(
+export interface BreakpointTally {
+  requested: number;
+  placed: number;
+  droppedNoAnchor: number;
+  droppedOverLimit: number;
+}
+
+export function placeBreakpoints(
   messages: MessageParam[],
   system: TextBlockParam[],
   cc: CacheControl,
   msgBp: number[],
   sysBp: number[],
-): void {
+): BreakpointTally {
+  const tally: BreakpointTally = {
+    requested: msgBp.length + sysBp.length,
+    placed: 0,
+    droppedNoAnchor: 0,
+    droppedOverLimit: 0,
+  };
+
+  const atLimit = (): boolean => tally.placed >= ANTHROPIC_CACHE_CONTROL_LIMIT;
+
   for (const idx of sysBp) {
     const block = system[idx];
-    if (block) block.cache_control = cc;
+    if (!block) {
+      tally.droppedNoAnchor += 1;
+      continue;
+    }
+    if (atLimit()) {
+      tally.droppedOverLimit += 1;
+      continue;
+    }
+    block.cache_control = cc;
+    tally.placed += 1;
   }
+
   const placed = new Set<number>();
   for (const pos of msgBp) {
+    if (atLimit()) {
+      tally.droppedOverLimit += 1;
+      continue;
+    }
+    let landed = false;
     for (let i = pos; i >= 0; i--) {
       if (placed.has(i)) break;
       const msg = messages[i];
       if (!msg || !Array.isArray(msg.content)) continue;
       if (applyMessageBreakpoint(msg.content, cc)) {
         placed.add(i);
+        tally.placed += 1;
+        landed = true;
         break;
       }
     }
+    if (!landed) tally.droppedNoAnchor += 1;
   }
+
+  return warnIfDropped(tally);
+}
+
+function warnIfDropped(tally: BreakpointTally): BreakpointTally {
+  const dropped = tally.droppedNoAnchor + tally.droppedOverLimit;
+  if (dropped === 0) return tally;
+  console.warn(
+    `shore: dropped ${String(dropped)} cache breakpoint(s) of ` +
+      `${String(tally.requested)} requested — ${String(tally.droppedNoAnchor)} had no block ` +
+      `that would take a marker, ${String(tally.droppedOverLimit)} exceeded the ` +
+      `${String(ANTHROPIC_CACHE_CONTROL_LIMIT)} the API allows per request`,
+  );
+  return tally;
+}
+
+export function clearCacheMarkers(
+  messages: MessageParam[],
+  system: TextBlockParam[],
+): void {
+  for (const message of messages) {
+    if (!Array.isArray(message.content)) continue;
+    for (const block of message.content) {
+      delete (block as { cache_control?: unknown }).cache_control;
+    }
+  }
+  for (const block of system) {
+    delete (block as { cache_control?: unknown }).cache_control;
+  }
+}
+
+export function applyDefaultPlacement(
+  messages: MessageParam[],
+  system: TextBlockParam[],
+  labelled: SystemContent,
+  cacheTtl: string,
+): { msgBp: number[]; sysBp: number[]; tally: BreakpointTally } {
+  const cc = makeCacheControl(cacheTtl);
+  const { msgBp, sysBp } = tsDefaultPlacement(messages, labelled);
+  const tally = placeBreakpoints(messages, system, cc, msgBp, sysBp);
+  return { msgBp, sysBp, tally };
 }
 
 export function placeContinuationBreakpoints(
@@ -401,19 +497,8 @@ export function placeContinuationBreakpoints(
 ): { msgBp: number[]; sysBp: number[] } {
   if (cacheTtl === "") return { msgBp: [], sysBp: [] };
 
-  for (const message of messages) {
-    if (!Array.isArray(message.content)) continue;
-    for (const block of message.content) {
-      delete (block as { cache_control?: unknown }).cache_control;
-    }
-  }
-  for (const block of system) {
-    delete (block as { cache_control?: unknown }).cache_control;
-  }
-
-  const cc = makeCacheControl(cacheTtl);
-  const { msgBp, sysBp } = tsDefaultPlacement(messages, labelled);
-  placeBreakpoints(messages, system, cc, msgBp, sysBp);
+  clearCacheMarkers(messages, system);
+  const { msgBp, sysBp } = applyDefaultPlacement(messages, system, labelled, cacheTtl);
   return { msgBp, sysBp };
 }
 
@@ -522,14 +607,21 @@ function imagesToAnthropicBlocks(images: ImageRef[] | undefined): ContentBlockPa
   if (!images || images.length === 0) return [];
   const out: ContentBlockParam[] = [];
   for (const img of images) {
-    const resolved = resolveImage(img);
-    if (!resolved) continue;
+    const resolution = resolveImage(img);
+    if ("omitted" in resolution) {
+      out.push({ type: "text", text: omissionNotice(imageLabel(img), resolution.omitted) });
+      continue;
+    }
     out.push({
       type: "image",
       source: {
         type: "base64",
-        media_type: resolved.mediaType as "image/png" | "image/jpeg" | "image/webp" | "image/gif",
-        data: resolved.base64,
+        media_type: resolution.image.mediaType as
+          | "image/png"
+          | "image/jpeg"
+          | "image/webp"
+          | "image/gif",
+        data: resolution.image.base64,
       },
     });
   }
@@ -550,13 +642,14 @@ function clampEnabledBudget(requested: number, maxTokens: number): number | unde
 }
 
 type ThinkingParam =
-  | { type: "adaptive"; display: "summarized" }
+  | { type: "adaptive"; display: ThinkingDisplay }
   | { type: "enabled"; budget_tokens: number };
 
 export function buildThinkingParams(
   opts: ProviderOptions,
   model: string,
   maxTokens: number,
+  display: ThinkingDisplay = "summarized",
 ): { thinking?: ThinkingParam; outputConfig?: { effort: NamedEffort } } {
   const effort = opts.reasoning_effort;
   const namedEffort = isEffortValue(effort) ? effort : undefined;
@@ -573,7 +666,7 @@ export function buildThinkingParams(
   if (wantsAdaptive) {
     if (caps.adaptive) {
       return {
-        thinking: { type: "adaptive", display: "summarized" },
+        thinking: { type: "adaptive", display },
         ...(namedEffort !== undefined ? { outputConfig: { effort: namedEffort } } : {}),
       };
     }
@@ -586,7 +679,7 @@ export function buildThinkingParams(
     const b = clampEnabledBudget(requestedBudget ?? 1024, maxTokens);
     if (b !== undefined) return { thinking: { type: "enabled", budget_tokens: b } };
   }
-  if (caps.adaptive) return { thinking: { type: "adaptive", display: "summarized" } };
+  if (caps.adaptive) return { thinking: { type: "adaptive", display } };
   return {};
 }
 
@@ -625,13 +718,5 @@ function mergeAnthropicUsage(
   };
 }
 
-function parseArgs(argsJson: string): unknown {
-  if (argsJson.trim() === "") return {};
-  try {
-    return JSON.parse(argsJson);
-  } catch {
-    return {};
-  }
-}
 
 export { imagesToAnthropicBlocks };

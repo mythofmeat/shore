@@ -12,7 +12,7 @@ import type {
 
 import type { ContentBlock, ImageRef } from "../../engine/types.ts";
 import { foldEffort } from "../capabilities.ts";
-import { type ResolvedImage, resolveImage, resolveImageBlock } from "../images.ts";
+import { type ResolvedImage, resolveImage, resolveImageBlock, imageLabel, omissionNotice } from "../images.ts";
 import type {
   GenerateResponse,
   SidecarProvider,
@@ -25,6 +25,7 @@ import type {
 import { systemToText, toolResultText, toTurn } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
+import { parseToolArgs } from "../tool_args.ts";
 
 export class OpenRouterProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
@@ -60,7 +61,7 @@ export class OpenRouterProvider implements SidecarProvider {
         type: "tool_use",
         id: tc.id ?? "tc_0",
         name: tc.function?.name ?? "",
-        input: parseArgs(tc.function?.arguments ?? ""),
+        ...parseToolArgs(tc.function?.arguments ?? ""),
       });
     }
 
@@ -147,7 +148,12 @@ export async function* openRouterStreamEvents(
 
   for (const tc of [...toolCalls.entries()].sort((a, b) => a[0] - b[0])) {
     markFirst();
-    yield { type: "tool_use", id: tc[1].id, name: tc[1].name, input: parseArgs(tc[1].argsJson) };
+    yield {
+      type: "tool_use",
+      id: tc[1].id,
+      name: tc[1].name,
+      ...parseToolArgs(tc[1].argsJson),
+    };
   }
 
   const total = now() - startedAt;
@@ -278,8 +284,12 @@ export function turnToOpenRouter(turn: TurnMessage): ChatMessages[] {
     if (b.type === "text") {
       parts.push({ type: "text", text: b.text });
     } else if (b.type === "image") {
-      const resolved = resolveImageBlock(b.source);
-      if (resolved) parts.push(imageUrlPart(resolved));
+      const resolution = resolveImageBlock(b.source);
+      if ("omitted" in resolution) {
+        parts.push({ type: "text", text: omissionNotice("an attached image", resolution.omitted) });
+      } else {
+        parts.push(imageUrlPart(resolution.image));
+      }
     }
   }
   if (parts.length > 0) {
@@ -295,13 +305,16 @@ function imageUrlPart(resolved: ResolvedImage): ImagePart {
   return { type: "image_url", image_url: { url: `data:${resolved.mediaType};base64,${resolved.base64}` } };
 }
 
-function imagesToParts(images: ImageRef[] | undefined): ImagePart[] {
+function imagesToParts(images: ImageRef[] | undefined): Array<TextPart | ImagePart> {
   if (!images || images.length === 0) return [];
-  const out: ImagePart[] = [];
+  const out: Array<TextPart | ImagePart> = [];
   for (const img of images) {
-    const resolved = resolveImage(img);
-    if (!resolved) continue;
-    out.push(imageUrlPart(resolved));
+    const resolution = resolveImage(img);
+    if ("omitted" in resolution) {
+      out.push({ type: "text", text: omissionNotice(imageLabel(img), resolution.omitted) });
+      continue;
+    }
+    out.push(imageUrlPart(resolution.image));
   }
   return out;
 }
@@ -323,14 +336,6 @@ function extractUsage(u: ChatUsage | undefined): Usage {
   return usage;
 }
 
-function parseArgs(argsJson: string): unknown {
-  if (argsJson.trim() === "") return {};
-  try {
-    return JSON.parse(argsJson);
-  } catch {
-    return {};
-  }
-}
 
 function mapFinishReason(finish: string): string {
   switch (finish) {

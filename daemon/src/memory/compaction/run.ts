@@ -1,5 +1,7 @@
+import { join } from "node:path";
 
 import type { LoadedConfig } from "../../config/loader.ts";
+import { HISTORY_DB_FILE } from "../../engine/history_store.ts";
 import { loadCharacterConfig } from "../../config/loader.ts";
 import { resolvePromptTemplate } from "../../config/dirs.ts";
 import { characterMemoryDir } from "../../config/dirs.ts";
@@ -97,6 +99,7 @@ export async function runCompactionPass(
           loaded.characterDir,
           deps.now ?? (() => new Date().toISOString()),
           deps.newId ?? (() => crypto.randomUUID()),
+          { dbPath: join(dataDir, HISTORY_DB_FILE), character },
         ),
         ...(resolved.markdownStore === undefined ? {} : { markdownStore: resolved.markdownStore }),
         dryRun: options.dryRun ?? false,
@@ -112,7 +115,10 @@ export async function runCompactionPass(
           ? {}
           : { maxToolIterations: resolved.maxToolIterations }),
       },
-      { keepRecentTurns: resolved.effective.app.memory.compaction.keep_recent_turns },
+      {
+        keepRecentTurns: resolved.effective.app.memory.compaction.keep_recent_turns,
+        maxContextTokens: resolved.effective.app.memory.compaction.max_context_tokens,
+      },
     );
 
     await pushAfterCompaction(resolved.effective.app.memory.git_push, outcome, async () => {

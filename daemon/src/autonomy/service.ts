@@ -1,7 +1,11 @@
 import type { ActivityStats } from "./activity.ts";
 import { HeartbeatClock, type HeartbeatClockConfig } from "./heartbeat.ts";
 import { HeartbeatLog, type HeartbeatEvent } from "./heartbeat_log.ts";
-import { DEFAULT_KEEPALIVE_MAX_SECS, type KeepaliveService } from "../cache/keepalive.ts";
+import {
+  DEFAULT_KEEPALIVE_MAX_SECS,
+  type KeepaliveHalt,
+  type KeepaliveService,
+} from "../cache/keepalive.ts";
 import {
   CharacterAutonomy,
   type AutonomyExecutor,
@@ -85,6 +89,10 @@ export class AutonomyService {
     keepalive.onEvent((event) => {
       this.#entries.get(event.character)?.runner.note("dormant_ping", event.detail, event.at);
     });
+  }
+
+  keepaliveHalt(): KeepaliveHalt | undefined {
+    return this.#keepalive?.halted;
   }
 
   async register(request: RegisterCharacter): Promise<void> {

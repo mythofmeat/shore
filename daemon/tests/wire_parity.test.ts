@@ -352,6 +352,17 @@ describe("the census survives the real code paths", () => {
   // side declares but drops on the floor, so push the whole census through the
   // paths that actually consume it.
   const everyBlock = Object.values(wire.wire_block) as ContentBlock[];
+  // A real assistant message's thinking blocks all come from one turn of one
+  // model, so they carry or fail to carry together. The census mixes a
+  // carrier-less block in with carried ones, which no model produces, and
+  // `replayableMessages` now drops a message's thinking all-or-nothing rather
+  // than partially. Split the census along that seam so both halves stay
+  // message-shaped and every variant still reaches the adapter.
+  const uncarried = (b: ContentBlock): boolean =>
+    b.type === "thinking" && b.signature === undefined && b.reasoning_details === undefined &&
+    b.reasoning_content === undefined;
+  const carriedBlocks = everyBlock.filter((b) => !uncarried(b));
+  const uncarriedBlocks = everyBlock.filter(uncarried);
 
   const req: SidecarRequest = {
     sdk: "anthropic",
@@ -366,7 +377,14 @@ describe("the census survives the real code paths", () => {
         role: "assistant",
         provider_key: "anthropic",
         model: "claude-opus-4-8",
-        content: everyBlock,
+        content: carriedBlocks,
+      },
+      { role: "user", content: [{ type: "text", text: "and again" }] },
+      {
+        role: "assistant",
+        provider_key: "anthropic",
+        model: "claude-opus-4-8",
+        content: [...uncarriedBlocks, { type: "text", text: "answer" }],
       },
     ],
     max_tokens: 64,
@@ -377,10 +395,21 @@ describe("the census survives the real code paths", () => {
   test("replay keeps the blocks minted by the active model", () => {
     const out = replayableMessages(req);
     const kept = out[1]?.content.map((b) => b.type) ?? [];
-    // Thinking minted by this exact model replays; the foreign carriers do not.
+    // Thinking minted by this exact model replays, and so does every carrier
+    // variant the census declares.
     expect(kept).toContain("thinking");
+    expect(kept).toContain("redacted_thinking");
     expect(kept).toContain("tool_result");
     expect(kept).toContain("image");
+  });
+
+  test("a message whose thinking carries nothing replayable loses all of it", () => {
+    // Not a partial drop: the whole message's thinking goes, because the API
+    // rejects a latest assistant message whose thinking sequence does not match
+    // what the model generated.
+    const out = replayableMessages(req);
+    const kept = out[3]?.content.map((b) => b.type) ?? [];
+    expect(kept).toEqual(["text"]);
   });
 
   test("the anthropic adapter accepts every variant without throwing", () => {

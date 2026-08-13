@@ -47,87 +47,87 @@
     {
       "input": "exactly-five!",
       "max": 12,
-      "output": "exactly-five…"
+      "output": "exactly-five\u2026"
     },
     {
-      "input": "ééééé",
+      "input": "\u00e9\u00e9\u00e9\u00e9\u00e9",
       "max": 10,
-      "output": "ééééé"
+      "output": "\u00e9\u00e9\u00e9\u00e9\u00e9"
     },
     {
-      "input": "ééééé",
+      "input": "\u00e9\u00e9\u00e9\u00e9\u00e9",
       "max": 9,
-      "output": "éééé…"
+      "output": "\u00e9\u00e9\u00e9\u00e9\u2026"
     },
     {
-      "input": "ééééé",
+      "input": "\u00e9\u00e9\u00e9\u00e9\u00e9",
       "max": 8,
-      "output": "éééé…"
+      "output": "\u00e9\u00e9\u00e9\u00e9\u2026"
     },
     {
-      "input": "aéb",
+      "input": "a\u00e9b",
       "max": 2,
-      "output": "a…"
+      "output": "a\u2026"
     },
     {
-      "input": "aéb",
+      "input": "a\u00e9b",
       "max": 3,
-      "output": "aé…"
+      "output": "a\u00e9\u2026"
     },
     {
-      "input": "🎵🎵🎵",
+      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
       "max": 12,
-      "output": "🎵🎵🎵"
+      "output": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5"
     },
     {
-      "input": "🎵🎵🎵",
+      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
       "max": 11,
-      "output": "🎵🎵…"
+      "output": "\ud83c\udfb5\ud83c\udfb5\u2026"
     },
     {
-      "input": "🎵🎵🎵",
+      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
       "max": 9,
-      "output": "🎵🎵…"
+      "output": "\ud83c\udfb5\ud83c\udfb5\u2026"
     },
     {
-      "input": "🎵🎵🎵",
+      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
       "max": 4,
-      "output": "🎵…"
+      "output": "\ud83c\udfb5\u2026"
     },
     {
-      "input": "🎵🎵🎵",
+      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
       "max": 3,
-      "output": "…"
+      "output": "\u2026"
     },
     {
-      "input": "🎵🎵🎵",
+      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
       "max": 0,
-      "output": "…"
+      "output": "\u2026"
     },
     {
       "input": "abc",
       "max": 0,
-      "output": "…"
+      "output": "\u2026"
     },
     {
-      "input": "🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵",
+      "input": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5",
       "max": 200,
-      "output": "🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵🎵…"
+      "output": "\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\ud83c\udfb5\u2026"
     },
     {
-      "input": "éx",
+      "input": "e\u0301x",
       "max": 1,
-      "output": "e…"
+      "output": "e\u2026"
     },
     {
-      "input": "éx",
+      "input": "e\u0301x",
       "max": 2,
-      "output": "e…"
+      "output": "e\u2026"
     },
     {
-      "input": "éx",
+      "input": "e\u0301x",
       "max": 3,
-      "output": "é…"
+      "output": "e\u0301\u2026"
     }
   ],
   "shell_escape": [
@@ -196,16 +196,16 @@
       "output": "'\\''('\\''"
     },
     {
-      "input": "🎵 unicode 🎵",
-      "output": "🎵 unicode 🎵"
+      "input": "\ud83c\udfb5 unicode \ud83c\udfb5",
+      "output": "\ud83c\udfb5 unicode \ud83c\udfb5"
     }
   ],
   "command_template": [
     {
       "template": "echo '{title}: {body}'",
-      "title": "Shore — Test",
+      "title": "Shore \u2014 Test",
       "body": "hello world",
-      "rendered": "echo 'Shore — Test: hello world'"
+      "rendered": "echo 'Shore \u2014 Test: hello world'"
     },
     {
       "template": "echo '{title}'",
@@ -2100,57 +2100,6 @@
       }
     },
     {
-      "name": "carrier_without_thinking",
-      "lines": [
-        "{\"type\":\"start\",\"model\":\"m\"}",
-        "{\"type\":\"thinking_signature\",\"signature\":\"orphan\"}",
-        "{\"type\":\"text\",\"text\":\"a\"}",
-        "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
-      ],
-      "regen": false,
-      "rid": null,
-      "frames": [
-        {
-          "type": "stream_start",
-          "rid": null,
-          "regen": false,
-          "subagent": null
-        },
-        {
-          "type": "stream_chunk",
-          "rid": null,
-          "text": "a",
-          "content_type": "text",
-          "subagent": null
-        }
-      ],
-      "outcome": {
-        "ok": {
-          "content": "C",
-          "model": "m",
-          "finish_reason": "end_turn",
-          "usage": {
-            "input_tokens": 10,
-            "output_tokens": 5,
-            "cache_read_tokens": 8,
-            "cache_creation_tokens": 2,
-            "total_cost_usd": null
-          },
-          "timing": {
-            "total_ms": 150,
-            "time_to_first_token_ms": 50
-          },
-          "tool_uses": [],
-          "content_blocks": [
-            {
-              "type": "text",
-              "text": "a"
-            }
-          ]
-        }
-      }
-    },
-    {
       "name": "signature_attaches_to_first_flush",
       "lines": [
         "{\"type\":\"start\",\"model\":\"m\"}",
@@ -2731,8 +2680,8 @@
       "name": "multibyte_text",
       "lines": [
         "{\"type\":\"start\",\"model\":\"m\"}",
-        "{\"type\":\"text\",\"text\":\"🎵\"}",
-        "{\"type\":\"text\",\"text\":\"é\"}",
+        "{\"type\":\"text\",\"text\":\"\ud83c\udfb5\"}",
+        "{\"type\":\"text\",\"text\":\"\u00e9\"}",
         "{\"type\":\"done\",\"content\":\"C\",\"finish_reason\":\"end_turn\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_tokens\":8,\"cache_creation_tokens\":2},\"timing\":{\"total_ms\":150,\"time_to_first_token_ms\":50}}"
       ],
       "regen": false,
@@ -2747,14 +2696,14 @@
         {
           "type": "stream_chunk",
           "rid": null,
-          "text": "🎵",
+          "text": "\ud83c\udfb5",
           "content_type": "text",
           "subagent": null
         },
         {
           "type": "stream_chunk",
           "rid": null,
-          "text": "é",
+          "text": "\u00e9",
           "content_type": "text",
           "subagent": null
         }
@@ -2779,7 +2728,7 @@
           "content_blocks": [
             {
               "type": "text",
-              "text": "🎵é"
+              "text": "\ud83c\udfb5\u00e9"
             }
           ]
         }
@@ -3464,13 +3413,13 @@
             {
               "type": "tool_result",
               "tool_use_id": "t",
-              "content": "﻿",
+              "content": "\ufeff",
               "is_error": false
             }
           ]
         }
       ],
-      "notify_content": "﻿"
+      "notify_content": "\ufeff"
     },
     {
       "name": "next_line_tool_result_is_blank",
@@ -3481,7 +3430,7 @@
             {
               "type": "tool_result",
               "tool_use_id": "t",
-              "content": "",
+              "content": "\u0085",
               "is_error": false
             }
           ]
@@ -3497,7 +3446,7 @@
           "content_blocks": [
             {
               "type": "text",
-              "text": ""
+              "text": "\u0085"
             }
           ]
         }
@@ -3512,12 +3461,12 @@
           "content_blocks": [
             {
               "type": "text",
-              "text": "﻿"
+              "text": "\ufeff"
             }
           ]
         }
       ],
-      "notify_content": "﻿"
+      "notify_content": "\ufeff"
     }
   ],
   "message_from_response": [

@@ -13,7 +13,7 @@ import {
 } from "ai";
 
 import type { ContentBlock, ImageRef } from "../../engine/types.ts";
-import { resolveImage, resolveImageBlock } from "../images.ts";
+import { resolveImage, resolveImageBlock, imageLabel, omissionNotice } from "../images.ts";
 import type {
   GenerateResponse,
   SidecarProvider,
@@ -247,9 +247,18 @@ export function turnToVercel(turn: TurnMessage, toolNames: Map<string, string>):
     if (b.type === "text") {
       userParts.push({ type: "text", text: b.text });
     } else if (b.type === "image") {
-      const resolved = resolveImageBlock(b.source);
-      if (resolved) {
-        userParts.push({ type: "image", image: resolved.base64, mediaType: resolved.mediaType });
+      const resolution = resolveImageBlock(b.source);
+      if ("omitted" in resolution) {
+        userParts.push({
+          type: "text",
+          text: omissionNotice("an attached image", resolution.omitted),
+        });
+      } else {
+        userParts.push({
+          type: "image",
+          image: resolution.image.base64,
+          mediaType: resolution.image.mediaType,
+        });
       }
     }
   }
@@ -259,13 +268,24 @@ export function turnToVercel(turn: TurnMessage, toolNames: Map<string, string>):
 
 function imageParts(
   images: ImageRef[] | undefined,
-): Array<{ type: "image"; image: string; mediaType: string }> {
+): Array<
+  { type: "image"; image: string; mediaType: string } | { type: "text"; text: string }
+> {
   if (!images || images.length === 0) return [];
-  const out: Array<{ type: "image"; image: string; mediaType: string }> = [];
+  const out: Array<
+    { type: "image"; image: string; mediaType: string } | { type: "text"; text: string }
+  > = [];
   for (const img of images) {
-    const resolved = resolveImage(img);
-    if (!resolved) continue;
-    out.push({ type: "image", image: resolved.base64, mediaType: resolved.mediaType });
+    const resolution = resolveImage(img);
+    if ("omitted" in resolution) {
+      out.push({ type: "text", text: omissionNotice(imageLabel(img), resolution.omitted) });
+      continue;
+    }
+    out.push({
+      type: "image",
+      image: resolution.image.base64,
+      mediaType: resolution.image.mediaType,
+    });
   }
   return out;
 }

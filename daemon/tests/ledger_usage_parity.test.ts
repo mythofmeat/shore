@@ -255,7 +255,17 @@ function withoutEffectiveAction(payload: unknown): unknown {
     budgets?: Record<string, unknown>[];
     call_attempts?: unknown;
   };
-  const { call_attempts: _attempts, ...withoutAttempts } = report;
+  const {
+    call_attempts: _attempts,
+    rate_limits: _quota,
+    cache_coverage: _coverage,
+    anomaly_counts_7d: _byKind,
+    ...withoutAttempts
+  } = report as typeof report & {
+    rate_limits?: unknown;
+    cache_coverage?: unknown;
+    anomaly_counts_7d?: unknown;
+  };
   if (report.budgets === undefined) return withoutAttempts;
   const strip = (o: Record<string, unknown>): Record<string, unknown> => {
     const { effective_action: _dropped, ...rest } = o;

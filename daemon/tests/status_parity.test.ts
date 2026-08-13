@@ -36,6 +36,7 @@ import type { HeartbeatClockConfig } from "../src/autonomy/heartbeat.ts";
 import { STATE_FILENAME } from "../src/autonomy/state_file.ts";
 import type { AutonomyActionResult, AutonomyExecutor } from "../src/autonomy/runner.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
+import { KeepaliveService } from "../src/cache/keepalive.ts";
 import { CommandError } from "../src/commands/errors.ts";
 import type { ErrorCode } from "../src/protocol/ErrorCode.ts";
 import {
@@ -435,7 +436,13 @@ describe("status", () => {
         );
       }
 
-      expect(withoutVolatile(result)).toEqual(withoutVolatile(row.ok));
+      // `keepalive_halted` has no counterpart in the frozen Rust, which had no
+      // double-miss tripwire to report. Every fixture case is a healthy daemon,
+      // so the field is pinned null here and exercised on its own below.
+      expect(result["keepalive_halted"]).toBeNull();
+      const { keepalive_halted: _halt, ...envelope } = result;
+
+      expect(withoutVolatile(envelope)).toEqual(withoutVolatile(row.ok));
     });
   }
 });
@@ -628,4 +635,75 @@ test("the envelope's turn count and the activity count are different numbers", a
   expect(result.turn_count).toBe(7);
   expect(result.activity.message_count).toBe(140);
   expect(result.activity.turn_count).toBe(140);
+});
+
+/**
+ * A halted keepalive is a defect that needs a source fix, so it has to reach a
+ * surface someone reads. Before this it went only to the daemon log and a
+ * `dormant_ping` note in the heartbeat log, where it could sit unseen while
+ * every call paid full price. The halt has no clearing path by design, which is
+ * exactly why hiding it is expensive.
+ */
+describe("a halted keepalive reaches the status envelope", () => {
+  async function haltedContext(): Promise<StatusContext> {
+    const ctx = await build("restored");
+    let at = 0;
+    const keepalive = new KeepaliveService(
+      async () => ({
+        content: "",
+        model: "claude-opus-4-6",
+        finish_reason: "end_turn",
+        usage: {
+          input_tokens: 1,
+          output_tokens: 1,
+          cache_read_tokens: 0,
+          cache_creation_tokens: 14_144,
+        },
+        timing: { total_ms: 1, time_to_first_token_ms: 1 },
+        tool_uses: [],
+        content_blocks: [],
+      }),
+      () => at,
+    );
+    ctx.autonomy.attachKeepalive(keepalive);
+    for (let i = 0; i < 2; i += 1) {
+      keepalive.arm(
+        {
+          model: "claude-opus-4-6",
+          max_tokens: 1,
+          messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+          keepalive_interval_ms: 1_000,
+          context: { character: CHARACTER, call_type: "message", thinking_enabled: false },
+        } as never,
+        true,
+      );
+      at += 10_000;
+      await keepalive.tick();
+    }
+    return ctx;
+  }
+
+  test("a healthy daemon reports no halt", async () => {
+    const ctx = await build("restored");
+    const result = (await status(ctx)) as Record<string, unknown>;
+    expect(result["keepalive_halted"]).toBeNull();
+  });
+
+  test("a halted daemon reports the character, the reason, and when", async () => {
+    const ctx = await haltedContext();
+    const result = (await status(ctx)) as Record<string, unknown>;
+    const halt = result["keepalive_halted"] as Record<string, unknown> | null;
+
+    expect(halt).not.toBeNull();
+    expect(halt?.["character"]).toBe(CHARACTER);
+    expect(String(halt?.["reason"])).toContain("two keepalive pings in a row missed");
+    expect(String(halt?.["at"])).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  test("the halt outlives every later status read", async () => {
+    const ctx = await haltedContext();
+    const first = (await status(ctx)) as Record<string, unknown>;
+    const second = (await status(ctx)) as Record<string, unknown>;
+    expect(second["keepalive_halted"]).toEqual(first["keepalive_halted"]);
+  });
 });

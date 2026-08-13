@@ -304,5 +304,9 @@ function usageContext(
       "provider error: usage reports need a ledger on disk; this client has none configured",
     );
   }
-  return { ledger: deps.ledgerPath, usage: usageConfigView(session.config.app.usage) };
+  return {
+    ledger: deps.ledgerPath,
+    usage: usageConfigView(session.config.app.usage),
+    callStore: deps.callStore,
+  };
 }

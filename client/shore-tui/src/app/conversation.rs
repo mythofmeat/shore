@@ -1,4 +1,4 @@
-use super::*;
+use super::{ImageRef, Role, StreamMetadata};
 
 /// A content block within a turn, mirroring the wire `ContentBlock`
 /// (text / thinking / tool_use / tool_result). Blocks are ordered and
@@ -17,7 +17,10 @@ pub(crate) enum Block {
         input: serde_json::Value,
     },
     ToolResult {
-        #[expect(dead_code, reason = "stored for protocol fidelity; TUI renders by tool_name")]
+        #[expect(
+            dead_code,
+            reason = "stored for protocol fidelity; TUI renders by tool_name"
+        )]
         tool_id: String,
         tool_name: String,
         output: String,

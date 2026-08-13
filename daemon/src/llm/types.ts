@@ -1,5 +1,7 @@
 import type { ContentBlock, ImageRef } from "../engine/types.ts";
 import type { UsageConfig } from "../ledger/budget.ts";
+import { isAbortError } from "./abort.ts";
+import { retryAfterMsFromError } from "./retry_after.ts";
 
 export type Sdk =
   | "anthropic"
@@ -56,6 +58,7 @@ export interface ProviderOptions {
   gemini_generation?: number;
   zai_clear_thinking?: boolean;
   zai_subscription?: boolean;
+  thinking_display?: "summarized" | "omitted";
 }
 
 export interface CallContext {
@@ -70,6 +73,7 @@ export interface CallContext {
   forensics_dir?: string;
   rid?: string;
   usage?: UsageConfig;
+  thinking_dropped?: number;
 }
 
 export interface SidecarRequest {
@@ -111,7 +115,7 @@ export type StreamEvent =
   | { type: "reasoning_details"; details: unknown[] }
   | { type: "reasoning_content"; reasoning: string }
   | { type: "redacted_thinking"; data: string }
-  | { type: "tool_use"; id: string; name: string; input: unknown }
+  | { type: "tool_use"; id: string; name: string; input: unknown; input_error?: string }
   | {
       type: "done";
       content: string;
@@ -133,6 +137,8 @@ export type StreamEvent =
       message: string;
       usage: Usage;
       timing: Timing;
+      aborted?: boolean;
+      retry_after_ms?: number;
     };
 
 export function streamErrorEvent(
@@ -142,6 +148,7 @@ export function streamErrorEvent(
   firstTokenAt: number,
   now: () => number,
 ): StreamEvent {
+  const retryAfter = retryAfterMsFromError(err, now);
   return {
     type: "error",
     message: err instanceof Error ? err.message : String(err),
@@ -150,6 +157,8 @@ export function streamErrorEvent(
       total_ms: now() - startedAt,
       time_to_first_token_ms: firstTokenAt === 0 ? 0 : firstTokenAt - startedAt,
     },
+    ...(isAbortError(err) ? { aborted: true } : {}),
+    ...(retryAfter === undefined ? {} : { retry_after_ms: retryAfter }),
   };
 }
 

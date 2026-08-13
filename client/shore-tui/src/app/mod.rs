@@ -3,21 +3,21 @@ use shore_common::protocol::types::{CharacterInfo, ImageRef, Role, StreamMetadat
 
 use crate::images::ImageCache;
 
-mod cache;
-mod usage;
-mod conversation;
-mod notifications;
 mod alt;
-mod stream;
+mod cache;
+mod conversation;
 mod input;
+mod notifications;
+mod stream;
+mod usage;
 
-pub(crate) use cache::*;
-pub(crate) use usage::*;
-pub(crate) use conversation::*;
-pub(crate) use notifications::*;
 pub(crate) use alt::*;
-pub(crate) use stream::*;
+pub(crate) use cache::*;
+pub(crate) use conversation::*;
 pub(crate) use input::*;
+pub(crate) use notifications::*;
+pub(crate) use stream::*;
+pub(crate) use usage::*;
 
 /// Connection status for the status bar.
 #[derive(Clone, Copy, PartialEq, Eq)]

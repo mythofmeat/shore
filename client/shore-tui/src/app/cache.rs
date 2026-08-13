@@ -1,4 +1,4 @@
-use super::*;
+use super::Line;
 
 /// Cached output of `draw_conversation`'s line-building pass.
 ///

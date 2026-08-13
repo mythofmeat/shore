@@ -173,6 +173,32 @@ fn write_activity_section(out: &mut impl Write, activity: &serde_json::Value, wi
     _ = writeln!(out);
 }
 
+/// Report a halted cache keepalive, loudly.
+///
+/// The halt fires when two pings in a row miss with nothing between them, which
+/// means the cache is not holding what shore writes to it. Nothing clears it:
+/// there is no runtime cause worth resuming from, so the only exit is a fix in
+/// the source. Without this row the halt reaches only the daemon log, where it
+/// would sit unread while every call paid full price.
+fn print_keepalive_halt(out: &mut impl Write, data: &serde_json::Value) {
+    let Some(halt) = data.get("keepalive_halted").filter(|h| !h.is_null()) else {
+        return;
+    };
+    let at = halt["at"].as_str().unwrap_or("?");
+    let reason = halt["reason"].as_str().unwrap_or("no reason recorded");
+    let character = halt["character"].as_str().unwrap_or("?");
+
+    _ = writeln!(out);
+    write_fg(out, Color::Red, "  KEEPALIVE HALTED");
+    _ = writeln!(out, " \u{00b7} {character} \u{00b7} {at}");
+    _ = writeln!(out, "  {reason}.");
+    _ = writeln!(
+        out,
+        "  This does not clear on its own and restarting only hides it. Read the wire in"
+    );
+    _ = writeln!(out, "  calls.db and fix the cause.");
+}
+
 /// Print the status dashboard.
 pub(crate) fn print_status(data: &serde_json::Value, character_name: &str) {
     let stdout = io::stdout();
@@ -214,6 +240,8 @@ pub(crate) fn print_status(data: &serde_json::Value, character_name: &str) {
         };
         write_row(&mut out, "Prompt Edits", &detail);
     }
+
+    print_keepalive_halt(&mut out, data);
 
     _ = writeln!(out);
 
@@ -404,11 +432,11 @@ fn print_one_call(out: &mut impl Write, call: &serde_json::Value, width: usize) 
     _ = writeln!(out);
     for (label, key) in [("request", "request"), ("response", "response")] {
         write_fg(out, Color::Cyan, &format!("  {label}:\n"));
-        let body = call[key].as_str().unwrap_or("");
+        let body = display_payload_body(&call[key]);
         let formatted = if key == "response" {
-            format_stream_payload(body)
+            format_stream_payload(&body)
         } else {
-            format_json_payload(body)
+            format_json_payload(&body)
         };
         _ = writeln!(out, "{}", truncate_payload(&formatted, CALL_BODY_PREVIEW));
         _ = writeln!(out);
@@ -525,15 +553,29 @@ fn print_wire_exchanges(out: &mut impl Write, wire: Option<&serde_json::Value>, 
             ("wire request", "request_body"),
             ("wire response", "response_body"),
         ] {
-            let Some(body) = exchange[key].as_str().filter(|b| !b.is_empty()) else {
+            let body = display_payload_body(&exchange[key]);
+            if body.is_empty() {
                 continue;
-            };
+            }
             write_fg(out, Color::Cyan, &format!("  {label}:\n"));
-            _ = writeln!(out, "{}", truncate_display(body, CALL_BODY_PREVIEW));
+            _ = writeln!(out, "{}", truncate_display(&body, CALL_BODY_PREVIEW));
         }
         _ = writeln!(out);
     }
     print_dim_line(out, "(--json for the untruncated wire bytes and headers)");
+}
+
+fn display_payload_body(body: &serde_json::Value) -> String {
+    match body {
+        serde_json::Value::Null => String::new(),
+        serde_json::Value::String(text) => text.clone(),
+        value @ serde_json::Value::Bool(_)
+        | value @ serde_json::Value::Number(_)
+        | value @ serde_json::Value::Array(_)
+        | value @ serde_json::Value::Object(_) => {
+            serde_json::to_string_pretty(value).unwrap_or_default()
+        }
+    }
 }
 
 /// Max characters of a single changed chunk shown in a diff.
@@ -772,7 +814,10 @@ fn print_subagent_run(
     write_fg(
         out,
         Color::Magenta,
-        &format!("  {}", abbreviate_model(entry["model"].as_str().unwrap_or("?"))),
+        &format!(
+            "  {}",
+            abbreviate_model(entry["model"].as_str().unwrap_or("?"))
+        ),
     );
     _ = writeln!(out);
     write_dim(
@@ -836,7 +881,11 @@ fn print_subagent_block(out: &mut impl Write, block: &serde_json::Value) {
                     block["name"].as_str().unwrap_or("?")
                 ),
             );
-            _ = writeln!(out, "{}", truncate_display(&block["input"].to_string(), 200));
+            _ = writeln!(
+                out,
+                "{}",
+                truncate_display(&block["input"].to_string(), 200)
+            );
         }
         "tool_result" => {
             let is_error = block["is_error"].as_bool().unwrap_or(false);
@@ -848,7 +897,10 @@ fn print_subagent_block(out: &mut impl Write, block: &serde_json::Value) {
                 write_fg(out, Color::Red, &format!("                {arrow}"));
                 _ = writeln!(out, "{}", truncate_display(&body, 600));
             } else {
-                write_dim(out, &format!("                {arrow}{}", truncate_display(&body, 600)));
+                write_dim(
+                    out,
+                    &format!("                {arrow}{}", truncate_display(&body, 600)),
+                );
                 _ = writeln!(out);
             }
         }
@@ -2738,6 +2790,91 @@ fn print_usage_summary(data: &serde_json::Value) {
     }
     let anomaly_count = data["anomaly_count_7d"].as_u64().unwrap_or(0);
     cli_out!("\nAnomalies (last 7d): {anomaly_count}");
+    print_anomaly_breakdown(data);
+    print_cache_coverage(data);
+    print_rate_limits(data);
+}
+
+/// Break the anomaly total down by kind. A bare count says something is wrong;
+/// which kind says what, and a keepalive that misses is pure waste.
+fn print_anomaly_breakdown(data: &serde_json::Value) {
+    let Some(rows) = data["anomaly_counts_7d"].as_array() else {
+        return;
+    };
+    for row in rows {
+        let kind = row["anomaly"].as_str().unwrap_or("?");
+        let calls = row["calls"].as_u64().unwrap_or(0);
+        let writes = row["cache_write_tokens"].as_u64().unwrap_or(0);
+        cli_out!("  {kind:<24} {calls:>6}  cache write {writes}");
+        // Two pings missing in a row means the first one's write never landed.
+        // No amount of re-arming fixes that, so it is called out rather than
+        // left as one row among several.
+        if kind == "keepalive_double_miss" {
+            cli_out!(
+                "    ^ two pings missed in a row with nothing between them. The first wrote the"
+            );
+            cli_out!(
+                "      entry the second should have read. The cache is not holding what shore"
+            );
+            cli_out!("      writes; keepalives halt when this happens.");
+        }
+    }
+}
+
+/// Render how many calls the cache tracker could classify, and why the rest
+/// could not. Unclassified calls are invisible to any warm/cold percentage, so
+/// showing them keeps the denominator honest.
+fn print_cache_coverage(data: &serde_json::Value) {
+    let Some(rows) = data["cache_coverage"].as_array() else {
+        return;
+    };
+    if rows.is_empty() {
+        return;
+    }
+    cli_out!("\nCache coverage:");
+    for row in rows {
+        let state = row["state"].as_str().unwrap_or("?");
+        let calls = row["calls"].as_u64().unwrap_or(0);
+        let reads = row["cache_read_tokens"].as_u64().unwrap_or(0);
+        let writes = row["cache_write_tokens"].as_u64().unwrap_or(0);
+        let label = match row["reason"].as_str() {
+            Some(reason) => format!("{state} ({reason})"),
+            None => state.to_owned(),
+        };
+        cli_out!("  {label:<40} {calls:>6} calls  read {reads}  write {writes}");
+    }
+}
+
+/// Render the provider quota headroom captured on the most recent response
+/// from each provider host.
+fn print_rate_limits(data: &serde_json::Value) {
+    let Some(rows) = data["rate_limits"].as_array() else {
+        return;
+    };
+    if rows.is_empty() {
+        return;
+    }
+    cli_out!("\nProvider quota (as of the last response):");
+    for row in rows {
+        let host = row["host"].as_str().unwrap_or("?");
+        let requests = quota_fraction(row, "requests");
+        let input = quota_fraction(row, "input_tokens");
+        let output = quota_fraction(row, "output_tokens");
+        let resets = row["resets_at"].as_str().unwrap_or("?");
+        cli_out!(
+            "  {host:<24} requests {requests}  input {input}  output {output}  resets {resets}"
+        );
+    }
+}
+
+fn quota_fraction(row: &serde_json::Value, field: &str) -> String {
+    let remaining = row[format!("{field}_remaining")].as_u64();
+    let limit = row[format!("{field}_limit")].as_u64();
+    match (remaining, limit) {
+        (Some(r), Some(l)) => format!("{r}/{l}"),
+        (Some(r), None) => format!("{r}"),
+        _ => "-".into(),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2765,11 +2902,7 @@ fn format_duration_compact(secs: i64) -> String {
     } else {
         format!("{seconds}s")
     };
-    if neg {
-        format!("-{body}")
-    } else {
-        body
-    }
+    if neg { format!("-{body}") } else { body }
 }
 
 /// Format a duration in seconds for "threshold" rows like "100m" or "48h".
@@ -3102,6 +3235,20 @@ mod tests {
         _ = stdout.flush();
     }
 
+    #[test]
+    fn payload_json_is_pretty_printed_without_string_escaping() {
+        let body = serde_json::json!({"messages": [{"role": "user", "content": "hello"}]});
+        let rendered = display_payload_body(&body);
+        assert!(rendered.contains("\"messages\": ["));
+        assert!(!rendered.contains("\\\"messages\\\""));
+    }
+
+    #[test]
+    fn non_json_payload_text_is_preserved() {
+        let body = serde_json::Value::String("event: message_start\n".into());
+        assert_eq!(display_payload_body(&body), "event: message_start\n");
+    }
+
     /// Visual preview of `shore tools` rendering. Run with:
     /// `cargo test -p shore-cli render_preview_tools -- --ignored --nocapture --test-threads=1`
     #[test]
@@ -3179,6 +3326,58 @@ mod tests {
             "active_model": null,
         });
         print_status(&data, "Sable");
+    }
+
+    #[test]
+    fn keepalive_halt_prints_nothing_when_healthy() {
+        set_color_enabled(false);
+        let mut out: Vec<u8> = Vec::new();
+        print_keepalive_halt(&mut out, &serde_json::json!({ "keepalive_halted": null }));
+        assert!(out.is_empty());
+
+        let mut missing: Vec<u8> = Vec::new();
+        print_keepalive_halt(&mut missing, &serde_json::json!({ "character": "Sable" }));
+        assert!(missing.is_empty());
+    }
+
+    #[test]
+    fn keepalive_halt_names_the_character_the_reason_and_the_fix() {
+        set_color_enabled(false);
+        let mut out: Vec<u8> = Vec::new();
+        print_keepalive_halt(
+            &mut out,
+            &serde_json::json!({
+                "keepalive_halted": {
+                    "character": "poppy",
+                    "reason": "two keepalive pings in a row missed with nothing in between",
+                    "at": "2026-08-13T07:36:41+00:00",
+                }
+            }),
+        );
+        let text = String::from_utf8(out).expect("utf8");
+        assert!(text.contains("KEEPALIVE HALTED"), "{text}");
+        assert!(text.contains("poppy"), "{text}");
+        assert!(text.contains("2026-08-13T07:36:41+00:00"), "{text}");
+        assert!(
+            text.contains("two keepalive pings in a row missed"),
+            "{text}"
+        );
+        // The halt has no runtime exit, so the banner must not read as
+        // something a restart clears.
+        assert!(text.contains("does not clear on its own"), "{text}");
+    }
+
+    #[test]
+    fn keepalive_halt_survives_a_missing_reason() {
+        set_color_enabled(false);
+        let mut out: Vec<u8> = Vec::new();
+        print_keepalive_halt(
+            &mut out,
+            &serde_json::json!({ "keepalive_halted": { "character": "poppy" } }),
+        );
+        let text = String::from_utf8(out).expect("utf8");
+        assert!(text.contains("KEEPALIVE HALTED"), "{text}");
+        assert!(text.contains("no reason recorded"), "{text}");
     }
 
     #[test]
@@ -3791,7 +3990,7 @@ mod tests {
             },
         });
         assert_eq!(acting_now(&budget), "warn");
-        assert_eq!(acting_now(&budget["pace"]), "pause_heartbeat");
+        assert_eq!(budget.get("pace").map(acting_now), Some("pause_heartbeat"));
     }
 
     #[test]

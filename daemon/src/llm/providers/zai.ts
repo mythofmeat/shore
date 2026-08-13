@@ -20,6 +20,7 @@ import { systemToText, toTurn } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
 import { turnToOpenAI } from "./openai.ts";
+import { parseToolArgs } from "../tool_args.ts";
 
 export const ZAI_BASE_URL = "https://api.z.ai/api/paas/v4";
 export const ZAI_CODING_BASE_URL = "https://api.z.ai/api/coding/paas/v4";
@@ -212,7 +213,7 @@ export async function* zaiStreamEvents(
 
   for (const [, tc] of [...toolCalls.entries()].sort((a, b) => a[0] - b[0])) {
     markFirst();
-    yield { type: "tool_use", id: tc.id, name: tc.name, input: parseArgs(tc.argsJson) };
+    yield { type: "tool_use", id: tc.id, name: tc.name, ...parseToolArgs(tc.argsJson) };
   }
 
   const total = now() - startedAt;
@@ -257,12 +258,9 @@ export function zaiGenerateResponse(
         type: "tool_use",
         id: tc.id ?? "tc_0",
         name: tc.function?.name ?? "",
-        input:
-          typeof rawArgs === "string"
-            ? parseArgs(rawArgs)
-            : rawArgs && typeof rawArgs === "object"
-              ? rawArgs
-              : {},
+        ...(typeof rawArgs === "string"
+          ? parseToolArgs(rawArgs)
+          : { input: rawArgs && typeof rawArgs === "object" ? rawArgs : {} }),
       });
     }
   }
@@ -356,14 +354,6 @@ function stringifyArguments(args: string | Record<string, unknown>): string {
   return typeof args === "string" ? args : JSON.stringify(args);
 }
 
-function parseArgs(argsJson: string): unknown {
-  if (argsJson.trim() === "") return {};
-  try {
-    return JSON.parse(argsJson);
-  } catch {
-    return {};
-  }
-}
 
 function normalizeZaiFinishReason(reason: string | null | undefined): string {
   switch (reason) {

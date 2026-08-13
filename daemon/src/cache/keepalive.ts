@@ -1,4 +1,5 @@
 import { CacheKeepalive, type KeepaliveSnapshot } from "./schedule.ts";
+import { KEEPALIVE_REWRITE_TOKENS } from "./tracker.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
 import {
   beginCallAttempt,
@@ -6,7 +7,15 @@ import {
   recordGenerateError,
   type CallAttempt,
 } from "../ledger/record.ts";
-import type { GenerateResponse, SidecarRequest, Usage, WireMessage } from "../llm/types.ts";
+import { createHash } from "node:crypto";
+
+import type {
+  GenerateResponse,
+  SidecarRequest,
+  SystemContent,
+  Usage,
+  WireMessage,
+} from "../llm/types.ts";
 
 const KEEPALIVE_TICK_MS = 10_000;
 
@@ -19,7 +28,7 @@ export interface KeepalivePrefix extends SidecarRequest {
 
 export interface KeepaliveEvent {
   character: string;
-  outcome: "sent" | "cold" | "failed" | "skipped";
+  outcome: "sent" | "cold" | "rewrote" | "failed" | "skipped" | "halted";
   detail: string;
   at: number;
 }
@@ -58,6 +67,35 @@ interface Entry {
   maxIdleSecs: number;
   prefix: KeepalivePrefix | undefined;
   inFlight: boolean;
+  armedFingerprint: string | undefined;
+  lastCallFingerprint: string | undefined;
+  consecutiveMisses: number;
+}
+
+export interface KeepaliveHalt {
+  character: string;
+  reason: string;
+  at: number;
+}
+
+export function prefixFingerprint(req: {
+  system?: SystemContent | undefined;
+  messages: readonly WireMessage[];
+}): string {
+  const shape = [
+    (req.system ?? []).map((b) => b.text),
+    req.messages.map((m) => [m.role, JSON.stringify(m.content)]),
+  ];
+  return createHash("sha256").update(JSON.stringify(shape)).digest("hex");
+}
+
+export function prefixIsStale(entry: {
+  armedFingerprint: string | undefined;
+  lastCallFingerprint: string | undefined;
+}): boolean {
+  if (entry.armedFingerprint === undefined) return false;
+  if (entry.lastCallFingerprint === undefined) return false;
+  return entry.armedFingerprint !== entry.lastCallFingerprint;
 }
 
 export function pingLandedCold(usage: {
@@ -65,6 +103,14 @@ export function pingLandedCold(usage: {
   cache_creation_tokens: number;
 }): boolean {
   return usage.cache_read_tokens === 0 && usage.cache_creation_tokens > 0;
+}
+
+export function pingRewrotePrefix(usage: {
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+}): boolean {
+  if (pingLandedCold(usage)) return false;
+  return usage.cache_creation_tokens >= KEEPALIVE_REWRITE_TOKENS;
 }
 
 export interface KeepaliveCallLabels {
@@ -110,6 +156,7 @@ export class KeepaliveService {
   readonly #ledgerPath: string | undefined;
   readonly #configuredMaxIdleSecs: () => number;
   #sink: KeepaliveEventSink | undefined;
+  #halt: KeepaliveHalt | undefined;
 
   constructor(
     send: PingSender,
@@ -133,12 +180,36 @@ export class KeepaliveService {
     this.#sink = sink;
   }
 
+  get halted(): KeepaliveHalt | undefined {
+    return this.#halt;
+  }
+
+  #haltAll(character: string, wroteTokens: number): void {
+    const reason =
+      `two keepalive pings in a row missed with nothing in between. The first wrote ` +
+      `${String(wroteTokens)} tokens, which should have left an entry the second one read — ` +
+      `it did not. The cache is not holding what shore writes to it, so every further ping ` +
+      `would pay full price for nothing. All keepalives are stopped for the life of this ` +
+      `daemon; nothing resumes them, because nothing that causes this is fixable at runtime`;
+    this.#halt = { character, reason, at: this.#now() };
+    console.error(`shore: KEEPALIVE HALTED (${character}) — ${reason}`);
+    this.#push({
+      character,
+      outcome: "halted",
+      detail: `Cache keepalive HALTED: ${reason}`,
+      at: this.#now(),
+    });
+    for (const [, other] of this.#entries) other.keepalive.onCacheInvalidated();
+  }
+
   arm(prefix: KeepalivePrefix, warm = false): void {
     const character = prefix.context?.character;
     if (character === undefined) return;
     const maxIdleSecs = prefix.context?.keepalive_max_secs ?? this.#configuredMaxIdleSecs();
     const entry = this.#entryFor(character, maxIdleSecs);
     entry.prefix = prefix;
+    entry.armedFingerprint = prefixFingerprint(prefix);
+    entry.lastCallFingerprint = undefined;
     entry.keepalive.setInterval(prefix.keepalive_interval_ms, prefix.model, this.#now());
     if (warm) entry.keepalive.onPrefixWarmed(this.#now());
   }
@@ -150,11 +221,21 @@ export class KeepaliveService {
     entry.keepalive.onCacheInvalidated();
   }
 
-  observe(character: string, model: string, callType: string, maxIdleSecs?: number): void {
+  observe(
+    character: string,
+    model: string,
+    callType: string,
+    maxIdleSecs?: number,
+    fingerprint?: string,
+  ): void {
     if (callType === "keepalive") return;
     const entry =
       this.#entries.get(character) ??
       this.#entryFor(character, maxIdleSecs ?? this.#configuredMaxIdleSecs());
+    if (fingerprint !== undefined && entry.prefix?.model === model) {
+      entry.lastCallFingerprint = fingerprint;
+    }
+    entry.consecutiveMisses = 0;
     entry.keepalive.onCacheWarmed(model, this.#now());
   }
 
@@ -210,6 +291,7 @@ export class KeepaliveService {
   }
 
   async tick(): Promise<void> {
+    if (this.#halt !== undefined) return;
     const due: string[] = [];
     for (const [character, entry] of this.#entries) {
       if (entry.inFlight) continue;
@@ -253,6 +335,9 @@ export class KeepaliveService {
       maxIdleSecs,
       prefix: undefined,
       inFlight: false,
+      armedFingerprint: undefined,
+      lastCallFingerprint: undefined,
+      consecutiveMisses: 0,
     };
     this.#entries.set(character, entry);
     return entry;
@@ -276,6 +361,16 @@ export class KeepaliveService {
     const prefix = entry.prefix;
     if (prefix === undefined) {
       this.#skip(character, entry, "no cached request");
+      return;
+    }
+
+    if (prefixIsStale(entry)) {
+      this.#skip(
+        character,
+        entry,
+        "the last real call sent a different prefix, so this ping would write a fresh entry " +
+          "for one already superseded; the next real turn re-arms it",
+      );
       return;
     }
 
@@ -309,6 +404,11 @@ export class KeepaliveService {
 
     const usage = response.usage;
     if (pingLandedCold(usage)) {
+      entry.consecutiveMisses += 1;
+      if (entry.consecutiveMisses >= 2) {
+        this.#haltAll(character, usage.cache_creation_tokens);
+        return;
+      }
       entry.keepalive.onCacheInvalidated();
       this.#push({
         character,
@@ -316,6 +416,21 @@ export class KeepaliveService {
         detail:
           `Cache refresh ping (COLD — wrote cache, disarmed; ` +
           `cache_read: ${usage.cache_read_tokens}, input: ${usage.input_tokens})`,
+        at: this.#now(),
+      });
+      return;
+    }
+    entry.consecutiveMisses = 0;
+
+    if (pingRewrotePrefix(usage)) {
+      entry.keepalive.onPingSucceeded(this.#now());
+      this.#push({
+        character,
+        outcome: "rewrote",
+        detail:
+          `Cache refresh ping rewrote the prefix — it had moved under the ping ` +
+          `(cache_read: ${usage.cache_read_tokens}, cache_write: ${usage.cache_creation_tokens}); ` +
+          `the entry it just wrote is what the next ping reads`,
         at: this.#now(),
       });
       return;

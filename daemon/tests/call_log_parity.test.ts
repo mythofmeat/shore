@@ -242,13 +242,15 @@ test("dumping one call returns the raw HTTP exchanges recorded under it", () => 
   });
 
   const out = callLog({ characterName: "poppy", callStore: store }, { id }) as {
-    wire: { seq: number; url: string; status: number; request_body: string; response_body: string }[];
+    call: { request: unknown };
+    wire: { seq: number; url: string; status: number; request_body: unknown; response_body: unknown }[];
   };
 
+  expect(out.call.request).toEqual({ normalized: true });
   expect(out.wire).toHaveLength(1);
   expect(out.wire[0]?.url).toBe("https://api.anthropic.com/v1/messages");
   expect(out.wire[0]?.status).toBe(200);
-  expect(out.wire[0]?.request_body).toBe(`{"thinking":{"type":"enabled"}}`);
+  expect(out.wire[0]?.request_body).toEqual({ thinking: { type: "enabled" } });
   expect(out.wire[0]?.response_body).toBe("event: message_start\n");
 });
 

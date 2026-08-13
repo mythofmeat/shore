@@ -1,4 +1,4 @@
-use super::*;
+use super::{ConversationEntry, ImageRef};
 
 #[derive(Clone, Debug)]
 pub(crate) struct AltChoice {

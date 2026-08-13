@@ -129,6 +129,24 @@ export async function buildCompactionResponse(
     };
   }
 
+  if (outcome.kind === "truncated") {
+    console.warn(
+      `shore: compaction for ${character} hit the token ceiling ` +
+        `(${String(outcome.truncatedTurns)} truncated turn(s)) — conversation NOT archived`,
+    );
+    return {
+      status: "truncated",
+      character,
+      message_count: outcome.messageCount,
+      turn_count: outcome.compactedTurns,
+      compacted_turns: outcome.compactedTurns,
+      tool_rounds: outcome.toolRounds,
+      tools_called: outcome.toolsCalled,
+      truncated_turns: outcome.truncatedTurns,
+      partial_writes: outcome.partialWrites,
+    };
+  }
+
   if (outcome.kind === "paused") {
     return {
       status: "paused",

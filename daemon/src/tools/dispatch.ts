@@ -17,7 +17,7 @@ import { normalizeProtectedPath, normalizePromptVisiblePath } from "./workspace_
 import type { Embedder } from "../llm/embed.ts";
 import type { RetrievalConfig } from "../memory/workspace_index.ts";
 
-export type RetrievalMode = "auto" | "lexical" | "hybrid";
+export type RetrievalMode = "auto" | "lexical" | "hybrid" | "vector";
 
 export interface ToolContext {
   imageDir: string;
@@ -36,6 +36,7 @@ export interface ToolContext {
 
   embedder?: Embedder;
   memoryIndexPath?: string;
+  historyIndexPath?: string;
 
   deferEdit?: (path: string) => Promise<void> | void;
 
@@ -60,12 +61,14 @@ function defaultSearchMode(
   mode: RetrievalMode,
   embedderAvailable: boolean,
   indexPathAvailable: boolean,
-): "lexical" | "hybrid" {
+): "lexical" | "hybrid" | "vector" {
   switch (mode) {
     case "lexical":
       return "lexical";
     case "hybrid":
       return "hybrid";
+    case "vector":
+      return "vector";
     case "auto":
       return embedderAvailable && indexPathAvailable ? "hybrid" : "lexical";
   }
@@ -129,7 +132,11 @@ export async function dispatchTool(
 
   switch (name) {
     case "search_chat_logs":
-      return await handleSearchHistory(args, ctx.characterDataDir);
+      return await handleSearchHistory(args, ctx.characterDataDir, {
+        ...(ctx.historyIndexPath === undefined ? {} : { indexPath: ctx.historyIndexPath }),
+        ...(ctx.embedder === undefined ? {} : { embedder: ctx.embedder }),
+        defaultMode: ctx.retrievalMode,
+      });
 
     case "model_history":
       return await handleModelHistory(args, ctx.characterName, ctx.modelHistoryQuery);
@@ -227,12 +234,51 @@ export function timeoutFor(cfg: ToolLimitsView, name: string): number | undefine
   return resolved > 0 ? resolved : undefined;
 }
 
-export function truncateToolResult(output: string, maxChars: number): string {
-  if (maxChars === 0) return output;
+export interface ToolResultWindow {
+  output: string;
+  truncated: boolean;
+  originalChars: number;
+  headChars: number;
+  tailChars: number;
+}
+
+const HEAD_SHARE = 0.6;
+
+export function windowToolResult(output: string, maxChars: number): ToolResultWindow {
   const chars = [...output];
-  if (chars.length <= maxChars) return output;
-  const kept = chars.slice(0, maxChars).join("");
-  return `${kept}\n\n[tool_result truncated: showing first ${maxChars} of ${chars.length} characters]`;
+  if (maxChars === 0 || chars.length <= maxChars) {
+    return {
+      output,
+      truncated: false,
+      originalChars: chars.length,
+      headChars: chars.length,
+      tailChars: 0,
+    };
+  }
+
+  const headChars = Math.max(1, Math.ceil(maxChars * HEAD_SHARE));
+  const tailChars = maxChars - headChars;
+  const head = chars.slice(0, headChars).join("");
+  const tail = tailChars > 0 ? chars.slice(chars.length - tailChars).join("") : "";
+  const elided = chars.length - headChars - tailChars;
+
+  const marker =
+    `[tool_result truncated: ${String(chars.length)} characters, showing the first ` +
+    `${String(headChars)}${tailChars > 0 ? ` and the last ${String(tailChars)}` : ""}; ` +
+    `${String(elided)} elided. Narrow the call — a more specific path, pattern, or range — ` +
+    `to see the rest.]`;
+
+  return {
+    output: tailChars > 0 ? `${head}\n\n${marker}\n\n${tail}` : `${head}\n\n${marker}`,
+    truncated: true,
+    originalChars: chars.length,
+    headChars,
+    tailChars,
+  };
+}
+
+export function truncateToolResult(output: string, maxChars: number): string {
+  return windowToolResult(output, maxChars).output;
 }
 
 export async function dispatchWithinDeadline(

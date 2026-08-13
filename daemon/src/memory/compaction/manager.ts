@@ -4,6 +4,8 @@ import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { pushAssistantTurn } from "../../llm/request";
 import type { GenerateResponse, SidecarRequest, WireMessage } from "../../llm/types";
 import { runToolLoop, type ToolLoopDriver, type ToolUseEvent } from "../../engine/tool_loop";
+import { hitTokenCeiling } from "../../llm/finish_reason.ts";
+import { retainedTurns as retentionForBudget } from "./retention.ts";
 import type { ContentBlock } from "../../engine/types";
 import type { MarkdownMemoryStore } from "../markdown_store";
 import { MEMORY_INDEX_FILE, noteMemoryIndexDeferred } from "../deferred_edits";
@@ -193,6 +195,7 @@ interface ToolLoopState extends CheckpointLoopState {
   dryRunPreviews: MemoryFileOp[];
   toolRounds: number;
   maxRoundsHit: boolean;
+  truncatedTurns?: number;
 }
 
 function extractMemoryWriteIntent(
@@ -341,6 +344,9 @@ class CompactionDriver implements ToolLoopDriver<GenerateResponse> {
 
   async callModel(): Promise<GenerateResponse> {
     const resp = await this.llm.generate(this.request);
+    if (hitTokenCeiling(resp.finish_reason)) {
+      this.state.truncatedTurns = (this.state.truncatedTurns ?? 0) + 1;
+    }
     pushAssistantTurn(this.request, resp);
     this.state.pendingTurn = resp;
     this.state.pendingResults = [];
@@ -447,6 +453,7 @@ async function rollbackCompaction(writes: AppliedCompactionWrite[]): Promise<voi
 
 export interface CompactionSettings {
   keepRecentTurns: number;
+  maxContextTokens?: number;
 }
 
 export interface CompactOptions {
@@ -517,7 +524,9 @@ async function tryRealpath(p: string): Promise<string | undefined> {
 export async function compact(opts: CompactOptions, settings: CompactionSettings): Promise<CompactionOutcome> {
   const { messages, tools } = opts;
 
-  const keepTurns = opts.keepTurnsOverride ?? settings.keepRecentTurns;
+  const keepTurns =
+    opts.keepTurnsOverride ??
+    retentionForBudget(messages, settings.keepRecentTurns, settings.maxContextTokens ?? 0);
   const splitAt = archiveSplitIndex(messages, keepTurns, opts.retainTrailingAutonomous);
   if (splitAt === 0) throw CompactionError.insufficientMessages();
 
@@ -631,6 +640,26 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
     checkpoint.pauseReason = "iteration_limit";
     await persistCheckpoint(opts, checkpoint);
     return pausedOutcome(opts, checkpoint);
+  }
+
+  const truncatedTurns = state.truncatedTurns ?? 0;
+  if (truncatedTurns > 0) {
+    await clearCheckpoint(opts);
+    console.warn(
+      `shore: compaction for ${opts.conversationId} was cut off at the token ceiling ` +
+        `(${String(truncatedTurns)} truncated turn${truncatedTurns === 1 ? "" : "s"}); active ` +
+        `conversation NOT archived — a partial summary is not a completed pass`,
+    );
+    return {
+      kind: "truncated",
+      conversationId: opts.conversationId,
+      messageCount: splitAt,
+      compactedTurns,
+      toolRounds: state.toolRounds,
+      toolsCalled: state.toolsCalled,
+      truncatedTurns,
+      partialWrites: state.writesApplied.map((write) => write.displayPath),
+    };
   }
 
   if (state.writesApplied.length === 0) {

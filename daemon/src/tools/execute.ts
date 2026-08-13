@@ -9,10 +9,12 @@ import {
   dispatchWithinDeadline,
   resultCharsFor,
   timeoutFor,
-  truncateToolResult,
+  windowToolResult,
   type ToolContext,
   type ToolLimitsView,
+  type ToolResultWindow,
 } from "./dispatch.ts";
+import { schemaViolation, type ToolSchemas } from "./validate.ts";
 
 const SUMMARY_CHARS = 200;
 
@@ -26,6 +28,7 @@ export interface ToolExecution {
   now: () => string;
   newMessageId: () => string;
   monotonicMs?: () => number;
+  schemas?: ToolSchemas;
 }
 
 export async function executeToolUse(
@@ -43,6 +46,15 @@ export async function executeToolUse(
 
   const clock = exec.monotonicMs ?? Date.now;
   const startedAt = clock();
+
+  const rejection = argumentRejection(toolUse, exec.schemas);
+  if (rejection !== undefined) {
+    console.warn(`shore: rejected a ${toolUse.name} call — ${rejection}`);
+    recordToolDiagnostics(exec, toolUse, clock() - startedAt, rejection, true);
+    emitToolResult(exec, toolUse, rejection, true);
+    return { type: "tool_result", tool_use_id: toolUse.id, content: rejection, is_error: true };
+  }
+
   let rawOutput: string;
   let isError: boolean;
   let okValue: unknown;
@@ -62,16 +74,31 @@ export async function executeToolUse(
   }
   const dispatchMs = clock() - startedAt;
 
-  const output = truncateToolResult(rawOutput, resultCharsFor(exec.limits, toolUse.name));
+  const windowed = windowToolResult(rawOutput, resultCharsFor(exec.limits, toolUse.name));
+  const output = windowed.output;
 
   if (!isError && toolUse.name === "generate_image") {
     attachGeneratedImage(okValue, intermediateMessages, exec);
   }
 
-  recordToolDiagnostics(exec, toolUse, dispatchMs, output, isError);
+  recordToolDiagnostics(exec, toolUse, dispatchMs, output, isError, windowed);
   emitToolResult(exec, toolUse, output, isError);
 
   return { type: "tool_result", tool_use_id: toolUse.id, content: output, is_error: isError };
+}
+
+export function argumentRejection(
+  toolUse: ToolUseEvent,
+  schemas: ToolSchemas | undefined,
+): string | undefined {
+  const reason =
+    toolUse.input_error ?? schemaViolation(schemas?.get(toolUse.name), toolUse.input);
+  if (reason === undefined) return undefined;
+  return (
+    `The call to ${toolUse.name} was not run because ${reason}. ` +
+    `Nothing was executed and no state changed. Issue the call again with complete, ` +
+    `well-formed arguments.`
+  );
 }
 
 export function attachGeneratedImage(
@@ -110,6 +137,7 @@ function recordToolDiagnostics(
   durationMs: number,
   output: string,
   isError: boolean,
+  window?: ToolResultWindow,
 ): void {
   exec.diagnostics.push({
     timestamp: exec.now(),
@@ -120,6 +148,9 @@ function recordToolDiagnostics(
     input_summary: truncateSummary(JSON.stringify(toolUse.input) ?? "", SUMMARY_CHARS),
     output_summary: truncateSummary(output, SUMMARY_CHARS),
     ...(exec.subagent === undefined ? {} : { subagent: exec.subagent }),
+    ...(window === undefined
+      ? {}
+      : { truncated: window.truncated, result_chars: window.originalChars }),
   });
 }
 

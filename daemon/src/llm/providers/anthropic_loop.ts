@@ -1,4 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
 import type {
   BetaMessage,
   BetaMessageParam,
@@ -6,6 +5,9 @@ import type {
 } from "@anthropic-ai/sdk/resources/beta/messages";
 
 import { runnableTools } from "./anthropic_tools.ts";
+import { isAbortError } from "../abort.ts";
+import { effectiveCacheTtl } from "../cache_capability.ts";
+import { anthropicClientFor } from "./anthropic_client.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
 import type { ContentBlock } from "../../engine/types.ts";
 import type { SidecarRequest, StreamEvent, SystemContent, Usage } from "../types.ts";
@@ -51,15 +53,11 @@ export async function* anthropicToolLoopEvents(
     if (callFirstTokenAt === 0) callFirstTokenAt = now();
   };
 
-  const client = new Anthropic({
-    apiKey: req.api_key,
-    maxRetries: 0,
-    ...(req.base_url ? { baseURL: req.base_url.replace(/\/v1\/?$/, "") } : {}),
-  });
+  const client = anthropicClientFor(req);
 
   const { params } = buildAnthropicPlan(req);
   const labelled: SystemContent = req.system ?? [];
-  const cacheTtl = req.provider_options?.cache_ttl ?? "";
+  const cacheTtl = effectiveCacheTtl(req.sdk, req.base_url, req.provider_options?.cache_ttl ?? "");
 
   const abort = new AbortController();
   if (signal?.aborted) abort.abort();
@@ -175,6 +173,7 @@ export async function* anthropicToolLoopEvents(
         total_ms: total,
         time_to_first_token_ms: firstTokenAt === 0 ? total : firstTokenAt - startedAt,
       },
+      ...(isAbortError(cause) || signal?.aborted === true ? { aborted: true } : {}),
     };
     return;
   }

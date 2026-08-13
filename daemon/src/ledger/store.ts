@@ -37,7 +37,10 @@ CREATE TABLE IF NOT EXISTS calls (
     cache_read_cost     REAL,
     cache_write_cost    REAL,
     cost_source         TEXT    DEFAULT 'pricing_catalog',
-    total_cost          REAL
+    total_cost          REAL,
+    output_tokens_estimated INTEGER NOT NULL DEFAULT 0,
+    thinking_dropped    INTEGER NOT NULL DEFAULT 0,
+    cache_state_reason  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS call_attempts (
@@ -123,6 +126,9 @@ const MIGRATIONS: readonly string[] = [
       FOREIGN KEY (call_id) REFERENCES calls(id)
   )`,
   "CREATE INDEX IF NOT EXISTS idx_call_attempts_status ON call_attempts (status, started_at)",
+  "ALTER TABLE calls ADD COLUMN output_tokens_estimated INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE calls ADD COLUMN thinking_dropped INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE calls ADD COLUMN cache_state_reason TEXT",
 ];
 
 function migrate(db: Database): void {
@@ -185,6 +191,19 @@ export interface RecordCall {
   cache_ttl?: string | undefined;
   reasoning_effort?: string | undefined;
   tool_surface?: string | undefined;
+  output_tokens_estimated?: boolean | undefined;
+  thinking_dropped?: number | undefined;
+}
+
+export type CacheStateReason =
+  | "cancelled"
+  | "errored_before_usage"
+  | "provider_reports_no_cache";
+
+export interface CacheClassification {
+  state: string | null;
+  anomaly: string | null;
+  reason: CacheStateReason | null;
 }
 
 export interface CallRow {
@@ -214,6 +233,9 @@ export interface CallRow {
   cache_write_cost: number | null;
   cost_source: string | null;
   total_cost: number | null;
+  output_tokens_estimated: number;
+  thinking_dropped: number;
+  cache_state_reason: string | null;
 }
 
 const INSERT_SQL = `INSERT INTO calls (
@@ -222,14 +244,14 @@ const INSERT_SQL = `INSERT INTO calls (
   cache_ttl, reasoning_effort, tool_surface, total_ms, ttft_ms, finish_reason,
   thinking_enabled, cache_state, cache_anomaly,
   input_cost, output_cost, cache_read_cost, cache_write_cost,
-  cost_source, total_cost
+  cost_source, total_cost, output_tokens_estimated, thinking_dropped, cache_state_reason
 ) VALUES (
   $ts, $character, $provider, $api_key_name, $model, $call_type,
   $input_tokens, $output_tokens, $cache_read_tokens, $cache_write_tokens,
   $cache_ttl, $reasoning_effort, $tool_surface, $total_ms, $ttft_ms, $finish_reason,
   $thinking_enabled, $cache_state, $cache_anomaly,
   $input_cost, $output_cost, $cache_read_cost, $cache_write_cost,
-  $cost_source, $total_cost
+  $cost_source, $total_cost, $output_tokens_estimated, $thinking_dropped, $cache_state_reason
 )`;
 
 const LAST_ANTHROPIC_CALL_SQL = `SELECT ts, model, thinking_enabled, cache_read_tokens, tool_surface
@@ -337,8 +359,8 @@ export class Ledger {
 
   record(record: RecordCall, now: () => Date = () => new Date(), attemptId?: string): CallRow {
     const ts = now().toISOString();
-    const [cache_state, cache_anomaly] = this.#trackCacheState(record, ts);
-    const row = this.#buildRow(record, ts, cache_state, cache_anomaly);
+    const classified = this.#trackCacheState(record, ts);
+    const row = this.#buildRow(record, ts, classified);
     const insert = () => this.#db.query(INSERT_SQL).run({
       $ts: row.ts,
       $character: row.character,
@@ -365,6 +387,9 @@ export class Ledger {
       $cache_write_cost: row.cache_write_cost,
       $cost_source: row.cost_source,
       $total_cost: row.total_cost,
+      $output_tokens_estimated: row.output_tokens_estimated,
+      $thinking_dropped: row.thinking_dropped,
+      $cache_state_reason: row.cache_state_reason,
     });
     if (attemptId === undefined) {
       const result = insert();
@@ -414,12 +439,16 @@ export class Ledger {
     );
   }
 
-  #trackCacheState(record: RecordCall, ts: string): [string | null, string | null] {
-    if (record.finish_reason === "cancelled") return [null, null];
+  #trackCacheState(record: RecordCall, ts: string): CacheClassification {
+    if (record.finish_reason === "cancelled") {
+      return { state: null, anomaly: null, reason: "cancelled" };
+    }
 
     const noCacheSignal =
       record.usage.cache_read_tokens === 0 && record.usage.cache_creation_tokens === 0;
-    if (record.finish_reason === "error" && noCacheSignal) return [null, null];
+    if (record.finish_reason === "error" && noCacheSignal) {
+      return { state: null, anomaly: null, reason: "errored_before_usage" };
+    }
 
     this.#seedIfNeeded(record.character);
 
@@ -427,8 +456,14 @@ export class Ledger {
       this.#feedForeignCall(record, ts);
       const hasMetrics =
         record.usage.cache_read_tokens > 0 || record.usage.cache_creation_tokens > 0;
-      if (!hasMetrics) return [null, null];
-      return [record.usage.cache_read_tokens > 0 ? "warm" : "cold", null];
+      if (!hasMetrics) {
+        return { state: null, anomaly: null, reason: "provider_reports_no_cache" };
+      }
+      return {
+        state: record.usage.cache_read_tokens > 0 ? "warm" : "cold",
+        anomaly: null,
+        reason: null,
+      };
     }
 
     const observation: Observation = {
@@ -443,7 +478,7 @@ export class Ledger {
     const result = this.#trackers.forCharacter(record.character, this.#ttlSecs).observe(observation);
     const state: CacheState = result.state;
     const anomaly: Anomaly | undefined = result.anomaly;
-    return [state, anomaly ?? null];
+    return { state, anomaly: anomaly ?? null, reason: null };
   }
 
   #feedForeignCall(record: RecordCall, ts: string): void {
@@ -463,12 +498,8 @@ export class Ledger {
     }
   }
 
-  #buildRow(
-    record: RecordCall,
-    ts: string,
-    cache_state: string | null,
-    cache_anomaly: string | null,
-  ): CallRow {
+  #buildRow(record: RecordCall, ts: string, classified: CacheClassification): CallRow {
+    const { state: cache_state, anomaly: cache_anomaly } = classified;
     const subscription = isSubscriptionProvider(record.provider);
 
     const priced = subscription
@@ -517,6 +548,9 @@ export class Ledger {
       cache_write_cost: breakdown?.cache_write ?? null,
       cost_source,
       total_cost: providerTotal ?? priced?.total ?? (subscription ? 0 : null),
+      output_tokens_estimated: record.output_tokens_estimated === true ? 1 : 0,
+      thinking_dropped: record.thinking_dropped ?? 0,
+      cache_state_reason: classified.reason,
     };
   }
 }

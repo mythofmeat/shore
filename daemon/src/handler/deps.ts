@@ -205,13 +205,29 @@ export interface HandlerAssembly
 }
 
 export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps {
+  const runGeneration = makeRunGeneration(buildGenerationDeps(a));
+  const dispatchCommand = makeDispatchCommand(buildCommandPathDeps(a));
   return {
     router: a.router,
     leases: new StreamLeases(),
     registry: handlerRegistry(a.runtime.registry),
     notifier: handlerNotifier(a.runtime.notifier),
-    dispatchCommand: makeDispatchCommand(buildCommandPathDeps(a)),
-    runGeneration: makeRunGeneration(buildGenerationDeps(a)),
+    dispatchCommand: async (command, meta) => {
+      const endForeground = a.runtime.historyIndex.beginForeground();
+      try {
+        return await dispatchCommand(command, meta);
+      } finally {
+        endForeground();
+      }
+    },
+    runGeneration: async (params) => {
+      const endForeground = a.runtime.historyIndex.beginForeground();
+      try {
+        await runGeneration(params);
+      } finally {
+        endForeground();
+      }
+    },
     ...(a.log === undefined ? {} : { log: a.log }),
   };
 }
@@ -351,6 +367,7 @@ export async function applyReloadedConfig(
   config: LoadedConfig,
 ): Promise<ReloadSummary> {
   const summary = await a.runtime.registry.reloadRuntimeState(config);
+  await a.runtime.refreshHistoryIndexes();
   await reconnectMcpIfChanged(a, config);
   a.autonomy.reloadConfig((name) => a.runtime.registry.effectiveConfig(name));
   await pushHistorySnapshots(a);

@@ -1,5 +1,6 @@
 import { Ledger, type RecordCall, type Timing, type Usage } from "./store.ts";
 import { toolSurfaceFingerprint } from "./tool_surface.ts";
+import { estimateTokens } from "../engine/tokens.ts";
 import type { CallContext, GenerateResponse, SidecarRequest, StreamEvent } from "../llm/types.ts";
 
 const ledgers = new Map<string, Ledger | null>();
@@ -65,6 +66,7 @@ interface Recorded {
   timing: Timing;
   finish_reason: string;
   call_type?: string;
+  output_tokens_estimated?: boolean;
 }
 
 export interface CallAttempt {
@@ -72,7 +74,12 @@ export interface CallAttempt {
   id: string;
 }
 
-type CallObserver = (ctx: CallContext, model: string, callType: string) => void;
+type CallObserver = (
+  ctx: CallContext,
+  model: string,
+  callType: string,
+  req: SidecarRequest,
+) => void;
 
 let observer: CallObserver | undefined;
 
@@ -110,6 +117,8 @@ function record(
     cache_ttl: ctx.cache_ttl,
     reasoning_effort: ctx.reasoning_effort,
     tool_surface: toolSurfaceFingerprint(req.tools),
+    ...(call.output_tokens_estimated === true ? { output_tokens_estimated: true } : {}),
+    ...(ctx.thinking_dropped === undefined ? {} : { thinking_dropped: ctx.thinking_dropped }),
   };
   const row = ledger.record(entry, () => new Date(), attempt?.id);
   if (row.cache_anomaly !== null) {
@@ -131,7 +140,7 @@ function tryRecord(
   const finishReason = call.finish_reason;
   if (observer === undefined || !callLanded(finishReason)) return;
   try {
-    observer(ctx, req.model, call.call_type ?? ctx.call_type);
+    observer(ctx, req.model, call.call_type ?? ctx.call_type, req);
   } catch (e) {
     console.error(`shore: call observer failed: ${String(e)}`);
   }
@@ -239,8 +248,17 @@ export async function* recordingStream(
   let recorded = 0;
   let attempt = initialAttempt;
   const trackAttempts = initialAttempt !== undefined;
+  let streamedText = "";
+  const partialUsage = (): { usage: Usage; estimated: boolean } => {
+    if (streamedText === "") return { usage: NO_USAGE, estimated: false };
+    return {
+      usage: { ...NO_USAGE, output_tokens: estimateTokens(streamedText) },
+      estimated: true,
+    };
+  };
   try {
     for await (const event of source) {
+      if (event.type === "text" || event.type === "thinking") streamedText += event.text;
       if (event.type === "call_complete") {
         tryRecord(ctx, req, {
           usage: event.usage,
@@ -264,10 +282,14 @@ export async function* recordingStream(
           recorded += 1;
         }
       } else if (event.type === "error") {
+        const partial = partialUsage();
+        const seen = recorded === 0 ? event.usage : NO_USAGE;
+        const useEstimate = seen.output_tokens === 0 && partial.estimated;
         tryRecord(ctx, req, {
-          usage: recorded === 0 ? event.usage : NO_USAGE,
+          usage: useEstimate ? { ...seen, output_tokens: partial.usage.output_tokens } : seen,
           timing: event.timing,
           finish_reason: "error",
+          ...(useEstimate ? { output_tokens_estimated: true } : {}),
         }, attempt);
         attempt = undefined;
         recorded += 1;
@@ -276,10 +298,12 @@ export async function* recordingStream(
     }
   } finally {
     if (recorded === 0) {
+      const partial = partialUsage();
       tryRecord(ctx, req, {
-        usage: NO_USAGE,
+        usage: partial.usage,
         timing: { total_ms: 0, time_to_first_token_ms: 0 },
         finish_reason: "cancelled",
+        ...(partial.estimated ? { output_tokens_estimated: true } : {}),
       }, attempt);
     }
   }

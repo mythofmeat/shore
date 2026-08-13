@@ -7,9 +7,9 @@
 use crate::protocol::client_msg::ClientMessage;
 use crate::protocol::server_msg::ServerMessage;
 use crate::swp_client::sync::{SyncDecision, SyncState};
-use crate::swp_client::{discover_or_default, SWPConnection, ServerAddr};
+use crate::swp_client::{SWPConnection, ServerAddr, discover_or_default};
 use tokio::sync::mpsc;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use tracing::{debug, error, info, warn};
 
 /// Events sent from the connection task to the application loop.

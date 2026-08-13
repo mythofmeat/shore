@@ -305,7 +305,12 @@ describe("dispatchCommand", () => {
         expect(got["message"]).toBe(expectedMessage(want["message"] as string, h.configDir));
       } else {
         expect(got["name"]).toBe(want["name"] as string);
-        expect(got["data_keys"]).toEqual(want["data_keys"] as string[]);
+        // `keepalive_halted` reports the double-miss tripwire, which the Rust
+        // had no counterpart for. This file pins command *routing*, so the new
+        // key is dropped here and asserted in `status_parity`.
+        expect((got["data_keys"] as string[]).filter((k) => k !== "keepalive_halted")).toEqual(
+          want["data_keys"] as string[],
+        );
         // The character that set it is not the character asking, so the answer
         // is the configured default rather than the other character's pick.
         expect(got["data_active"]).toEqual(

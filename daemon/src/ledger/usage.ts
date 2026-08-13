@@ -14,6 +14,8 @@ import {
   exportTsv,
   modelUsageSummary,
   nullCostRows,
+  anomalyCounts,
+  cacheCoverage,
   queryAnomalies,
   updateCosts,
   usageSummary,
@@ -47,6 +49,7 @@ export interface UsageRequest {
   ledger: string;
   args?: Record<string, unknown> | undefined;
   usage?: UsageConfig | undefined;
+  rateLimits?: () => unknown[];
 }
 
 export interface UsageOptions extends BudgetOptions {
@@ -215,7 +218,7 @@ export async function usageReport(
     return recalculate(db, ledger.pricing, flag(args, "force"));
   }
 
-  return summaryPayload(db, config, filter, last, timezone, opts, now);
+  return summaryPayload(db, config, filter, last, timezone, opts, now, request.rateLimits?.() ?? []);
 }
 
 function budgetPayload(
@@ -281,6 +284,7 @@ function summaryPayload(
   timezone: string,
   opts: UsageOptions,
   now: number,
+  rateLimits: unknown[],
 ): unknown {
   const cacheHealth = activeAnthropicCharacters(db, filter).map(([character, lastRow]) => ({
     character,
@@ -304,6 +308,9 @@ function summaryPayload(
     summary: usageSummary(db, filter),
     cache_health: cacheHealth,
     anomaly_count_7d: queryAnomalies(db, anomalyFilter).length,
+    anomaly_counts_7d: anomalyCounts(db, anomalyFilter),
+    cache_coverage: cacheCoverage(db, filter),
+    rate_limits: rateLimits,
     call_attempts: callAttemptStatus(db),
     budgets: budgetStatuses(db, config, now, opts),
   };

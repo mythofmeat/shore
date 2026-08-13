@@ -309,10 +309,12 @@ describe("runDeepIdleArchive", () => {
     expect(result).toEqual({ turnCount: 0, events: [], deepArchiveDone: true });
     expect(notes).toEqual([[kase.notification.title, kase.notification.body]]);
     expect(reloaded).toEqual(["ada"]);
-    // The same bytes the fixture recorded, reached through the action rather
-    // than through `archiveAndRetain` directly.
+    // The active bytes still match the fixture. Production archival itself is
+    // database-only, so no new JSONL segment is left behind.
     expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe(kase.active_after);
-    expect(await segmentsAfter(characterDir)).toEqual(kase.segments_after as never);
+    const segments = await segmentsAfter(characterDir);
+    if (kase.prior_segment) expect(segments).toEqual({ "0001.jsonl": "{}\n" });
+    else expect(segments).toEqual({});
    });
   }
 
@@ -531,26 +533,28 @@ describe("runDeepIdleArchive", () => {
     third?.release();
   });
 
-  test("an archive that cannot write fails and leaves the period open", async () => {
+  test("a broken legacy segments path cannot block a database archive", async () => {
     const kase = fixture.pure_archive[0]!;
     const { config, characterDir } = await world(kase.active_before);
-    // `segments` as a *file*: the segment write cannot create its directory, so
-    // `archiveAndRetain` throws after the guard is taken.
+    // A leftover legacy `segments` path is irrelevant to database-backed
+    // archiving and must not prevent the active window from being compacted.
     await writeFile(join(characterDir, "segments"), "not a directory");
 
     const result = await runDeepIdleArchive("ada", deps(config), kase.covered_turn_count);
 
-    expect(result.failed).toBeDefined();
-    expect(result.deepArchiveDone).toBe(false);
-    expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe(kase.active_before);
+    expect(result.failed).toBeUndefined();
+    expect(result.deepArchiveDone).toBe(true);
+    expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe(kase.active_after);
   });
 
-  test("a conversation that will not load fails rather than archiving nothing", async () => {
+  test("a conversation with one unreadable line still opens, minus that line", async () => {
+    // Before #98 a single malformed line made the file unopenable and the
+    // archive failed outright. The good turns are now recovered and the bad
+    // line is quarantined; here every line is bad, so nothing is archivable.
     const { config, characterDir } = await world([]);
     await writeFile(join(characterDir, "active.jsonl"), "{not json\n");
 
     const result = await runDeepIdleArchive("ada", deps(config), 0);
-    expect(result.deepArchiveDone).toBe(false);
-    expect(result.failed).toBeDefined();
+    expect(result.failed).toBeUndefined();
   });
 });

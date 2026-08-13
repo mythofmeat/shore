@@ -1,0 +1,96 @@
+/**
+ * The estimator's scale constant, fitted from shore's own captured wire.
+ *
+ * Measured over `/opt/docker/silvershore/data/shore-cache/calls.db` — the live
+ * instance's capture, 177 successful exchanges — by recomputing what
+ * `estimateMessageTokens` counts over each recorded request body and comparing
+ * it to the input tokens the provider billed in the recorded response.
+ *
+ * ratio = estimate-at-four-bytes / billed. A ratio below 1 is an under-count.
+ *
+ *   api.anthropic.com   n=80   min 0.806  median 0.837  max 0.895
+ *   opencode.ai         n=78   min 0.500  median 0.880  max 1.075
+ *   openrouter.ai       n=8    min 0.808  median 0.956  max 1.000
+ *
+ * So four bytes per token under-counts by about 16% on Anthropic, and the
+ * implied divisor is 3.35 at the median and 3.22 at the worst observed sample.
+ * 3.2 sits just under that worst case, which is why it is the constant: on this
+ * corpus it never under-counts on Anthropic or OpenRouter.
+ *
+ * The issue that prompted this quoted 0.762–0.769, a divisor near 3.07. That is
+ * a tighter and lower band than measured here; the difference is which bytes
+ * are counted. What both agree on is the direction and rough size, and the
+ * numbers below are the ones re-derived rather than the ones quoted.
+ *
+ * opencode's 0.500 minimum is a genuine outlier — fitting to it would mean a
+ * divisor of 2 and a permanently half-empty window — so the constant is fitted
+ * to Anthropic, which is both the tightest band and the lowest.
+ */
+
+import { describe, expect, test } from "bun:test";
+
+import {
+  BYTES_PER_TOKEN,
+  CONTEXT_SAFETY_FRACTION,
+  estimateTokens,
+  withSafetyMargin,
+} from "../src/engine/tokens.ts";
+
+interface Corpus {
+  host: string;
+  samples: number;
+  minRatio: number;
+  medianRatio: number;
+  maxRatio: number;
+}
+
+const MEASURED: Corpus[] = [
+  { host: "api.anthropic.com", samples: 80, minRatio: 0.806, medianRatio: 0.837, maxRatio: 0.895 },
+  { host: "opencode.ai", samples: 78, minRatio: 0.5, medianRatio: 0.88, maxRatio: 1.075 },
+  { host: "openrouter.ai", samples: 8, minRatio: 0.808, medianRatio: 0.956, maxRatio: 1.0 },
+];
+
+const anthropic = MEASURED[0]!;
+
+describe("the estimator's scale constant", () => {
+  test("four bytes per token under-counted, which is what made it worth changing", () => {
+    expect(anthropic.medianRatio).toBeLessThan(1);
+    expect(4 * anthropic.medianRatio).toBeGreaterThan(BYTES_PER_TOKEN);
+  });
+
+  test("it never under-counts on the worst Anthropic sample measured", () => {
+    expect(BYTES_PER_TOKEN).toBeLessThanOrEqual(4 * anthropic.minRatio);
+  });
+
+  test("nor on the worst OpenRouter one", () => {
+    const openrouter = MEASURED[2]!;
+    expect(BYTES_PER_TOKEN).toBeLessThanOrEqual(4 * openrouter.minRatio);
+  });
+
+  test("at the Anthropic median it lands within a few percent of what was billed", () => {
+    const billed = 60_000;
+    const bytes = billed * anthropic.medianRatio * 4;
+    const estimated = Math.ceil(bytes / BYTES_PER_TOKEN);
+    expect(Math.abs(estimated - billed) / billed).toBeLessThan(0.05);
+  });
+
+  test("counting is in UTF-8 bytes, so multibyte text is not undercounted", () => {
+    expect(estimateTokens("日本語")).toBe(Math.ceil(9 / BYTES_PER_TOKEN));
+    expect(estimateTokens("abc")).toBe(1);
+    expect(estimateTokens("")).toBe(0);
+  });
+});
+
+describe("withSafetyMargin", () => {
+  test("holds back a slice of the budget so an estimator miss trims rather than overshoots", () => {
+    expect(withSafetyMargin(1000)).toBe(1000 * (1 - CONTEXT_SAFETY_FRACTION));
+    expect(withSafetyMargin(0)).toBe(0);
+    expect(withSafetyMargin(-5)).toBe(0);
+  });
+
+  test("the margin covers the spread the fit does not", () => {
+    const worstOvershoot = 4 * anthropic.minRatio - BYTES_PER_TOKEN;
+    expect(worstOvershoot).toBeGreaterThanOrEqual(0);
+    expect(CONTEXT_SAFETY_FRACTION).toBeGreaterThan(0);
+  });
+});

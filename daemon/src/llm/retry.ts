@@ -15,6 +15,8 @@ export function shouldRetryError(
   attempt: number,
   policy: RetryPolicy,
 ): RetryDecision {
+  if (error.kind === "aborted") return FAIL;
+
   const credKind = classifyCredentialFailure("", error);
   if (shouldRotate(credKind)) {
     console.warn(

@@ -142,6 +142,7 @@ export async function generateWithCredentialFallback(
         deps.retry ?? DEFAULT_RETRY,
         undefined,
         deps.sleep,
+        signal === undefined ? {} : { signal },
       ),
     { record: (event) => fallbacks.push(event) },
   );

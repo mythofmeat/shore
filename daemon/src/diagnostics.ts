@@ -52,6 +52,8 @@ export interface ToolCallEntry {
   input_summary: string;
   output_summary: string;
   subagent?: string | undefined;
+  truncated?: boolean;
+  result_chars?: number;
 }
 
 export interface ErrorEntry {

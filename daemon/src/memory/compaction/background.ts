@@ -72,6 +72,20 @@ export function handleCompactionOutcome(
     return 0;
   }
 
+  if (outcome.kind === "truncated") {
+    console.warn(
+      `shore: background compaction for ${character} was cut off at the token ceiling ` +
+        `(truncated_turns=${outcome.truncatedTurns}, tool_rounds=${outcome.toolRounds}, ` +
+        `partial_writes=${JSON.stringify(outcome.partialWrites)}) — conversation NOT archived`,
+    );
+    notify(
+      `Shore — ${character}`,
+      `Compaction was cut off at the token ceiling and wrote only part of its summary. ` +
+        `Conversation kept; will retry on next trigger.`,
+    );
+    return 0;
+  }
+
   if (outcome.kind === "paused") {
     console.warn(
       `shore: background compaction paused for ${character} ` +

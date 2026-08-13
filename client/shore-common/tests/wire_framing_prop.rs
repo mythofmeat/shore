@@ -5,8 +5,8 @@
 
 use proptest::prelude::*;
 use proptest::test_runner::TestCaseError;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 use shore_common::protocol::client_msg::{
     Cancel, ClientHello, ClientMessage, ClientMessageBody, Command, ImageUpload, MessageOverrides,
@@ -213,15 +213,17 @@ fn arb_client_message() -> BoxedStrategy<ClientMessage> {
         prop::option::of(arb_ident()),
         prop::option::of(arb_ident()),
     )
-        .prop_map(|(client_type, client_name, capabilities, character, token)| {
-            ClientMessage::Hello(ClientHello {
-                client_type,
-                client_name,
-                capabilities,
-                character,
-                token,
-            })
-        });
+        .prop_map(
+            |(client_type, client_name, capabilities, character, token)| {
+                ClientMessage::Hello(ClientHello {
+                    client_type,
+                    client_name,
+                    capabilities,
+                    character,
+                    token,
+                })
+            },
+        );
 
     let image_upload = (
         arb_ident(),

@@ -15,7 +15,7 @@ import {
 } from "@google/genai";
 
 import { geminiLevelName } from "../capabilities.ts";
-import { resolveImageBlock } from "../images.ts";
+import { resolveImageBlock, omissionNotice } from "../images.ts";
 import type { ContentBlock } from "../../engine/types.ts";
 import type {
   GenerateResponse,
@@ -261,9 +261,13 @@ function translateParts(content: WireMessage["content"], toolIdToName: Map<strin
         break;
       }
       case "image": {
-        const resolved = resolveImageBlock(block.source);
-        if (resolved) {
-          parts.push({ inlineData: { mimeType: resolved.mediaType, data: resolved.base64 } });
+        const resolution = resolveImageBlock(block.source);
+        if ("omitted" in resolution) {
+          parts.push({ text: omissionNotice("an attached image", resolution.omitted) });
+        } else {
+          parts.push({
+            inlineData: { mimeType: resolution.image.mediaType, data: resolution.image.base64 },
+          });
         }
         break;
       }

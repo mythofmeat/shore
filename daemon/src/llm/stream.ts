@@ -13,6 +13,7 @@ export interface ToolUseEvent {
   id: string;
   name: string;
   input: unknown;
+  input_error?: string;
 }
 
 export interface StreamResult {
@@ -52,15 +53,14 @@ export class StreamAccumulator {
   }
 
   flushThinking(): void {
-    if (this.#thinkingBuf !== "") {
-      this.#contentBlocks.push({
-        type: "thinking",
-        thinking: this.#thinkingBuf,
-        ...this.#pendingCarrier,
-      });
-      this.#thinkingBuf = "";
-      this.#pendingCarrier = undefined;
-    }
+    if (this.#thinkingBuf === "" && this.#pendingCarrier === undefined) return;
+    this.#contentBlocks.push({
+      type: "thinking",
+      thinking: this.#thinkingBuf,
+      ...this.#pendingCarrier,
+    });
+    this.#thinkingBuf = "";
+    this.#pendingCarrier = undefined;
   }
 
   handle(event: StreamEvent, regen: boolean, sink: FrameSink, rid?: string): StreamStep {
@@ -120,13 +120,16 @@ export class StreamAccumulator {
       case "tool_use": {
         this.flushText();
         this.flushThinking();
+        const carried =
+          event.input_error === undefined ? {} : { input_error: event.input_error };
         this.#contentBlocks.push({
           type: "tool_use",
           id: event.id,
           name: event.name,
           input: event.input,
+          ...carried,
         });
-        this.#toolUses.push({ id: event.id, name: event.name, input: event.input });
+        this.#toolUses.push({ id: event.id, name: event.name, input: event.input, ...carried });
         return { kind: "continue" };
       }
 
@@ -147,12 +150,18 @@ export class StreamAccumulator {
       case "error":
         return {
           kind: "error",
-          error: {
-            kind: "stream_errored",
-            message: event.message,
-            usage: event.usage,
-            timing: event.timing,
-          },
+          error:
+            event.aborted === true
+              ? { kind: "aborted", message: event.message }
+              : {
+                  kind: "stream_errored",
+                  message: event.message,
+                  usage: event.usage,
+                  timing: event.timing,
+                  ...(event.retry_after_ms === undefined
+                    ? {}
+                    : { retry_after_ms: event.retry_after_ms }),
+                },
         };
     }
   }

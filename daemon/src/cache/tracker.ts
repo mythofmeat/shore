@@ -3,7 +3,11 @@ export type CacheState = "cold" | "warm";
 export type Anomaly =
   | "unexpected_write"
   | "keepalive_miss"
-  | "cold_keepalive";
+  | "cold_keepalive"
+  | "keepalive_rewrote"
+  | "keepalive_double_miss";
+
+export const KEEPALIVE_REWRITE_TOKENS = 1000;
 
 export interface Observation {
   ts: string;
@@ -64,6 +68,8 @@ export class CacheTracker {
   #ttlSecs: number;
   #maxIdleSecs: number;
   #ttlExpiredSinceWarm = false;
+
+  #lastKeepaliveMissed = false;
   #lastActivityTs: number | undefined;
 
   constructor(ttlSecs: number = DEFAULT_TTL_SECS, maxIdleSecs: number = DEFAULT_MAX_IDLE_SECS) {
@@ -118,6 +124,7 @@ export class CacheTracker {
       this.#ttlExpiredSinceWarm = false;
       this.#updateMetadata(obsTs, obs.model, obs.thinking_enabled, obs.tool_surface);
       this.#lastCallType = obs.call_type;
+      this.#lastKeepaliveMissed = false;
       return { state: this.#state, anomaly: undefined };
     }
 
@@ -181,14 +188,21 @@ export class CacheTracker {
       }
     }
 
-    if (
-      anomaly === undefined &&
+    const pureMiss =
       obs.call_type === "keepalive" &&
       obs.cache_read_tokens === 0 &&
-      obs.cache_write_tokens > 0
-    ) {
-      anomaly = "cold_keepalive";
+      obs.cache_write_tokens > 0;
+
+    if (obs.call_type === "keepalive") {
+      if (pureMiss && this.#lastKeepaliveMissed) {
+        anomaly = "keepalive_double_miss";
+      } else if (anomaly === undefined && pureMiss) {
+        anomaly = "cold_keepalive";
+      } else if (anomaly === undefined && obs.cache_write_tokens >= KEEPALIVE_REWRITE_TOKENS) {
+        anomaly = "keepalive_rewrote";
+      }
     }
+    this.#lastKeepaliveMissed = obs.call_type === "keepalive" ? pureMiss : false;
 
     if (loopKind !== undefined) {
       if (anomaly === undefined) {

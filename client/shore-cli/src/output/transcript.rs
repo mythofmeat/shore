@@ -8,10 +8,10 @@ use super::styling::{
     format_tool_input, format_tool_output, print_image_refs, write_tool_body_plain,
 };
 use super::{
+    COLOR_RESULT, COLOR_THINKING, COLOR_TOOL, SIGIL_ERROR, SIGIL_OK, SIGIL_THINKING, SIGIL_TOOL,
     parse_timestamp, primary_tool_arg, print_dim_line, process_wrap_width, term_width, use_color,
     write_channel_rule, write_process_body, write_section_header, write_sigil_header,
-    write_thinking_content_line, COLOR_RESULT, COLOR_THINKING, COLOR_TOOL, SIGIL_ERROR, SIGIL_OK,
-    SIGIL_THINKING, SIGIL_TOOL,
+    write_thinking_content_line,
 };
 
 // ---------------------------------------------------------------------------

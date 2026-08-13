@@ -277,17 +277,23 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
         },
         max_results: {
           type: "number",
-          description: "Maximum matching messages to return. Defaults to 20, maximum 100.",
+          description: "Maximum matching messages to return. Defaults to 3, maximum 50.",
+        },
+        mode: {
+          type: "string",
+          enum: ["auto", "lexical", "hybrid", "vector"],
+          description:
+            "Retrieval mode. `auto` uses hybrid search when embeddings are configured and lexical FTS otherwise; `vector` searches only currently embedded chunks.",
         },
         model: {
           type: "string",
           description:
             "Optional model filter: only return assistant messages minted by a matching model. Case-insensitive substring match with '.' and '-' treated as equal, so 'opus-4.6' matches both 'claude-opus-4-6' and 'anthropic/claude-opus-4.6'. Messages stored before model tracking carry no model and never match.",
         },
-        excerpt_chars: {
-          type: "number",
+        include_alternatives: {
+          type: "boolean",
           description:
-            "Approximate excerpt length in characters. Defaults to 360; maximum 2000. Use larger values when you need full quotes rather than context snippets.",
+            "Also search unselected regenerated alternatives. Defaults to false to avoid duplicate or superseded answers.",
         },
       },
       required: [],

@@ -1,4 +1,5 @@
 import type { LlmError } from "./errors";
+import { parseRetryAfterMs } from "./retry_after";
 
 const OPENAI_BASE_URL = "https://api.openai.com/v1";
 
@@ -6,6 +7,7 @@ export interface Embedder {
   embed(inputs: string[]): Promise<number[][]>;
   readonly modelId: string;
   readonly dimensions: number | undefined;
+  readonly identity?: string;
 }
 
 export function toF32(value: number): number {
@@ -66,6 +68,7 @@ export function parseEmbeddingResponse(resp: unknown, expectedCount: number): nu
 export class OpenAIEmbedder implements Embedder {
   readonly modelId: string;
   readonly dimensions: number | undefined;
+  readonly identity?: string;
   readonly #apiKey: string;
   readonly #baseUrl: string | undefined;
   readonly #fetch: typeof fetch;
@@ -76,9 +79,11 @@ export class OpenAIEmbedder implements Embedder {
     baseUrl: string | undefined,
     dimensions: number | undefined,
     fetchImpl: typeof fetch = fetch,
+    identity?: string,
   ) {
     this.modelId = model;
     this.dimensions = dimensions;
+    if (identity !== undefined) this.identity = identity;
     this.#apiKey = apiKey;
     this.#baseUrl = baseUrl;
     this.#fetch = fetchImpl;
@@ -102,7 +107,13 @@ export class OpenAIEmbedder implements Embedder {
 
     const text = await response.text();
     if (!response.ok) {
-      throw { kind: "http_status", status: response.status, body: text } satisfies LlmError;
+      const retryAfter = parseRetryAfterMs(response.headers);
+      throw {
+        kind: "http_status",
+        status: response.status,
+        body: text,
+        ...(retryAfter === undefined ? {} : { retry_after_ms: retryAfter }),
+      } satisfies LlmError;
     }
 
     let parsed: unknown;

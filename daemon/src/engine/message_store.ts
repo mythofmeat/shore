@@ -2,6 +2,12 @@ import { rename, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { rustTrim } from "../memory/lines.ts";
+import {
+  auditAlternatives,
+  describeAlternativeDefects,
+  type AlternativeDefect,
+} from "./alt_audit.ts";
+import { backupBeforeWrite, quarantineLines } from "./backup.ts";
 import { mergeToolLoopMessages } from "./merge";
 import type { ContentBlock, ImageRef, Message, MessageAlternative, Role } from "./types";
 
@@ -147,13 +153,17 @@ export function isToolResultOnly(m: Message): boolean {
 
 const isRealUserTurn = (m: Message): boolean => m.role === "user" && !isToolResultOnly(m);
 
+export function cannotTravelInAlternative(b: ContentBlock): boolean {
+  if (b.type === "tool_use" || b.type === "tool_result") return true;
+  return b.type === "text" && b.text.trim() === "";
+}
+
 function keptInAlternative(b: ContentBlock): boolean {
-  if (b.type === "thinking" || b.type === "redacted_thinking") return true;
-  return b.type === "text" && b.text.trim() !== "";
+  return !cannotTravelInAlternative(b);
 }
 
 function alternativeFromMessage(msg: Message): MessageAlternative {
-  let blocks: ContentBlock[] = msg.content_blocks.filter(keptInAlternative);
+  let blocks: ContentBlock[] = structuredClone(msg.content_blocks).filter(keptInAlternative);
   let content = deriveContentFromBlocks(blocks, false);
   if (content === "" && msg.content.trim() !== "") {
     content = msg.content;
@@ -193,6 +203,8 @@ function messageFromAlternative(template: Message, index: number): Message | und
 export class MessageStore {
   #messages: Message[];
   readonly #path: string;
+  #quarantined = 0;
+  #altDefects: readonly AlternativeDefect[] = [];
 
   private constructor(path: string, messages: Message[]) {
     this.#path = path;
@@ -218,22 +230,49 @@ export class MessageStore {
       throw e;
     }
     const messages: Message[] = [];
+    const unreadable: string[] = [];
     for (const rawLine of raw.split("\n")) {
       const line = rawLine.trim();
       if (line === "") continue;
       let parsed: Message;
       try {
         parsed = JSON.parse(line) as Message;
-      } catch (e) {
-        throw new JsonParseError(path, (e as Error).message);
+      } catch {
+        unreadable.push(rawLine);
+        continue;
       }
       messages.push(normalizeMessage(parsed));
     }
-    return { store: new MessageStore(path, messages), raw };
+
+    if (unreadable.length > 0) {
+      const quarantined = await quarantineLines(path, unreadable);
+      console.error(
+        `shore: ${String(unreadable.length)} unreadable line(s) in ${path} were quarantined` +
+          `${quarantined === undefined ? "" : ` to ${quarantined}`}; ` +
+          `${String(messages.length)} message(s) loaded`,
+      );
+    }
+
+    const defects = auditAlternatives(messages);
+    const report = describeAlternativeDefects(path, defects);
+    if (report !== undefined) console.warn(report);
+
+    const store = new MessageStore(path, messages);
+    store.#quarantined = unreadable.length;
+    store.#altDefects = defects;
+    return { store, raw };
   }
 
   get path(): string {
     return this.#path;
+  }
+
+  get quarantinedLines(): number {
+    return this.#quarantined;
+  }
+
+  get alternativeDefects(): readonly AlternativeDefect[] {
+    return this.#altDefects;
   }
 
   messages(): readonly Message[] {
@@ -425,6 +464,7 @@ export class MessageStore {
   }
 
   async #persist(): Promise<void> {
+    await backupBeforeWrite(this.#path);
     let buf = "";
     for (const msg of this.#messages) buf += `${serializeForStorage(msg)}\n`;
 

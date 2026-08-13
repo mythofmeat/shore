@@ -771,14 +771,18 @@ mod tests {
     fn heading() {
         let lines = render_markdown("# Title\n## Subtitle\nBody");
         assert_eq!(lines.len(), 3);
-        assert!(lines[0].spans[0]
-            .style
-            .add_modifier
-            .contains(Modifier::BOLD));
-        assert!(lines[0].spans[0]
-            .style
-            .add_modifier
-            .contains(Modifier::UNDERLINED));
+        assert!(
+            lines[0].spans[0]
+                .style
+                .add_modifier
+                .contains(Modifier::BOLD)
+        );
+        assert!(
+            lines[0].spans[0]
+                .style
+                .add_modifier
+                .contains(Modifier::UNDERLINED)
+        );
     }
 
     #[test]
@@ -791,10 +795,12 @@ mod tests {
     #[test]
     fn inline_code() {
         let lines = render_markdown("use `foo` here");
-        assert!(lines[0]
-            .spans
-            .iter()
-            .any(|span| span.content == "foo" && span.style.fg == Some(Color::Yellow)));
+        assert!(
+            lines[0]
+                .spans
+                .iter()
+                .any(|span| span.content == "foo" && span.style.fg == Some(Color::Yellow))
+        );
     }
 
     #[test]
@@ -862,10 +868,12 @@ mod tests {
             lines.iter().any(|line| line.width() == 0),
             "interior blank code line should be preserved"
         );
-        assert!(lines
-            .iter()
-            .flat_map(|line| line.spans.iter())
-            .any(|span| span.style.fg == Some(Color::Green)));
+        assert!(
+            lines
+                .iter()
+                .flat_map(|line| line.spans.iter())
+                .any(|span| span.style.fg == Some(Color::Green))
+        );
     }
 
     #[test]
@@ -903,9 +911,11 @@ mod tests {
         assert!(line_text(&lines[0]).starts_with("- before"));
         assert!(rendered.contains("abcdefghij"));
         assert!(rendered.contains("klmnop"));
-        assert!(lines
-            .iter()
-            .any(|line| line_text(line).starts_with("  after")));
+        assert!(
+            lines
+                .iter()
+                .any(|line| line_text(line).starts_with("  after"))
+        );
         assert_eq!(
             lines
                 .iter()
