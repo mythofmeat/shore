@@ -155,6 +155,9 @@ export class StreamAccumulator {
                   message: event.message,
                   usage: event.usage,
                   timing: event.timing,
+                  ...(event.retry_after_ms === undefined
+                    ? {}
+                    : { retry_after_ms: event.retry_after_ms }),
                 },
         };
     }

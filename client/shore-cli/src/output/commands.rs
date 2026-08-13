@@ -2548,6 +2548,37 @@ fn print_usage_summary(data: &serde_json::Value) {
     }
     let anomaly_count = data["anomaly_count_7d"].as_u64().unwrap_or(0);
     cli_out!("\nAnomalies (last 7d): {anomaly_count}");
+    print_rate_limits(data);
+}
+
+/// Render the provider quota headroom captured on the most recent response
+/// from each provider host.
+fn print_rate_limits(data: &serde_json::Value) {
+    let Some(rows) = data["rate_limits"].as_array() else {
+        return;
+    };
+    if rows.is_empty() {
+        return;
+    }
+    cli_out!("\nProvider quota (as of the last response):");
+    for row in rows {
+        let host = row["host"].as_str().unwrap_or("?");
+        let requests = quota_fraction(row, "requests");
+        let input = quota_fraction(row, "input_tokens");
+        let output = quota_fraction(row, "output_tokens");
+        let resets = row["resets_at"].as_str().unwrap_or("?");
+        cli_out!("  {host:<24} requests {requests}  input {input}  output {output}  resets {resets}");
+    }
+}
+
+fn quota_fraction(row: &serde_json::Value, field: &str) -> String {
+    let remaining = row[format!("{field}_remaining")].as_u64();
+    let limit = row[format!("{field}_limit")].as_u64();
+    match (remaining, limit) {
+        (Some(r), Some(l)) => format!("{r}/{l}"),
+        (Some(r), None) => format!("{r}"),
+        _ => "-".into(),
+    }
 }
 
 // ---------------------------------------------------------------------------

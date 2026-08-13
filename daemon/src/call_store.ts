@@ -4,6 +4,7 @@ import { chmodSync } from "node:fs";
 import { constants as zlibConstants, zstdCompressSync, zstdDecompressSync } from "node:zlib";
 
 import { splitJsonPayload } from "./payload_split.ts";
+import { rateLimitSnapshot, type RateLimitSnapshot } from "./llm/retry_after.ts";
 
 const ZSTD_LEVEL = 3;
 
@@ -205,6 +206,11 @@ export interface HttpExchangeRow {
   response_body: string | null;
   request_bytes: number;
   response_bytes: number;
+}
+
+export interface RateLimitReading extends RateLimitSnapshot {
+  host: string;
+  observed_at: string;
 }
 
 export interface PayloadChunk {
@@ -556,6 +562,28 @@ export class CallStore {
     }));
   }
 
+  latestRateLimits(limitPerHost = 40): RateLimitReading[] {
+    const rows = this.#db
+      .query(
+        `SELECT url, ts, response_headers_zstd
+           FROM http_calls
+          WHERE status IS NOT NULL AND response_headers_zstd IS NOT NULL
+          ORDER BY id DESC LIMIT ?1`,
+      )
+      .all(limitPerHost) as Row[];
+
+    const byHost = new Map<string, RateLimitReading>();
+    for (const row of rows) {
+      const url = text(row["url"]);
+      const host = hostOf(url);
+      if (host === undefined || byHost.has(host)) continue;
+      const snapshot = rateLimitSnapshot(headersFrom(row["response_headers_zstd"]));
+      if (snapshot === undefined) continue;
+      byHost.set(host, { host, observed_at: text(row["ts"]), ...snapshot });
+    }
+    return [...byHost.values()];
+  }
+
   httpCallCount(): number {
     const row = this.#db.query("SELECT COUNT(*) AS n FROM http_calls").get() as Row;
     return count(row["n"]);
@@ -894,6 +922,14 @@ function zstdCompressBytes(data: Uint8Array | null): Uint8Array | null {
       [zlibConstants.ZSTD_c_contentSizeFlag]: 0,
     },
   });
+}
+
+function hostOf(url: string): string | undefined {
+  try {
+    return new URL(url).host;
+  } catch {
+    return undefined;
+  }
 }
 
 function headersFrom(blob: unknown): [string, string][] {

@@ -1,4 +1,5 @@
 import type { LlmError } from "./errors";
+import { parseRetryAfterMs } from "./retry_after";
 
 const OPENAI_BASE_URL = "https://api.openai.com/v1";
 
@@ -102,7 +103,13 @@ export class OpenAIEmbedder implements Embedder {
 
     const text = await response.text();
     if (!response.ok) {
-      throw { kind: "http_status", status: response.status, body: text } satisfies LlmError;
+      const retryAfter = parseRetryAfterMs(response.headers);
+      throw {
+        kind: "http_status",
+        status: response.status,
+        body: text,
+        ...(retryAfter === undefined ? {} : { retry_after_ms: retryAfter }),
+      } satisfies LlmError;
     }
 
     let parsed: unknown;

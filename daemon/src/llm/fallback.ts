@@ -1,6 +1,7 @@
 import { AbortError, abortRejection, isAbortError } from "./abort";
 import { classifyCredentialFailure, shouldRotate, type CredentialFailureKind } from "./credentials";
 import { shouldRetryError } from "./retry";
+import { retryAfterMsFromError } from "./retry_after";
 import type { KeyCandidate } from "./credentials";
 import type { LlmError } from "./errors";
 
@@ -169,13 +170,22 @@ export async function streamWithRetry<T>(
       if (context.signal?.aborted === true) throw error;
       if (isAbortError(raw)) throw raw;
       if (!shouldRetry(error, attemptIndex, settings.maxRetries)) throw error;
+      const hint = retryAfterHint(raw);
       const delay = retryDelayMs(settings, attemptIndex, {
+        ...(hint === undefined ? {} : { retryAfterMs: hint }),
         ...(context.random === undefined ? {} : { random: context.random }),
       });
       await sleepUnlessAborted(sleep, delay, context.signal);
       attemptIndex += 1;
     }
   }
+}
+
+export function retryAfterHint(raw: unknown): number | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const carried = (raw as { retry_after_ms?: unknown }).retry_after_ms;
+  if (typeof carried === "number" && Number.isFinite(carried) && carried >= 0) return carried;
+  return retryAfterMsFromError(raw);
 }
 
 function defaultShouldRetry(error: LlmError, attempt: number, maxRetries: number): boolean {

@@ -1,6 +1,7 @@
 import type { ContentBlock, ImageRef } from "../engine/types.ts";
 import type { UsageConfig } from "../ledger/budget.ts";
 import { isAbortError } from "./abort.ts";
+import { retryAfterMsFromError } from "./retry_after.ts";
 
 export type Sdk =
   | "anthropic"
@@ -135,6 +136,7 @@ export type StreamEvent =
       usage: Usage;
       timing: Timing;
       aborted?: boolean;
+      retry_after_ms?: number;
     };
 
 export function streamErrorEvent(
@@ -144,6 +146,7 @@ export function streamErrorEvent(
   firstTokenAt: number,
   now: () => number,
 ): StreamEvent {
+  const retryAfter = retryAfterMsFromError(err, now);
   return {
     type: "error",
     message: err instanceof Error ? err.message : String(err),
@@ -153,6 +156,7 @@ export function streamErrorEvent(
       time_to_first_token_ms: firstTokenAt === 0 ? 0 : firstTokenAt - startedAt,
     },
     ...(isAbortError(err) ? { aborted: true } : {}),
+    ...(retryAfter === undefined ? {} : { retry_after_ms: retryAfter }),
   };
 }
 

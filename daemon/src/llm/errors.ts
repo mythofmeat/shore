@@ -2,11 +2,17 @@ import type { Timing, Usage } from "./types.ts";
 
 export type LlmError =
   | { kind: "transport"; message: string }
-  | { kind: "http_status"; status: number; body: string }
+  | { kind: "http_status"; status: number; body: string; retry_after_ms?: number }
   | { kind: "serialize"; message: string }
   | { kind: "deserialize"; message: string }
   | { kind: "incomplete_stream" }
-  | { kind: "stream_errored"; message: string; usage: Usage; timing: Timing }
+  | {
+      kind: "stream_errored";
+      message: string;
+      usage: Usage;
+      timing: Timing;
+      retry_after_ms?: number;
+    }
   | { kind: "missing_api_key"; var: string }
   | { kind: "provider"; message: string }
   | { kind: "budget_blocked"; message: string; scope?: string }
