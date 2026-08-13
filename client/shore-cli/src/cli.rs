@@ -1,6 +1,8 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 
+const GLOBAL_HEADING: &str = "Global options";
+
 #[derive(Parser, Debug)]
 #[command(
     name = "shore",
@@ -9,20 +11,26 @@ use clap_complete::Shell;
     disable_help_subcommand = true
 )]
 pub(crate) struct Cli {
+    /// Character to talk to (overrides SHORE_CHARACTER env var)
+    #[arg(
+        long,
+        short = 'c',
+        global = true,
+        env = "SHORE_CHARACTER",
+        help_heading = GLOBAL_HEADING
+    )]
+    pub character: Option<String>,
+
     /// TCP address of the daemon (overrides discovery)
-    #[arg(long, global = true, env = "SHORE_ADDR")]
+    #[arg(long, global = true, env = "SHORE_ADDR", help_heading = GLOBAL_HEADING)]
     pub addr: Option<String>,
 
     /// Path to config file (selects daemon instance)
-    #[arg(long, global = true)]
+    #[arg(long, global = true, help_heading = GLOBAL_HEADING)]
     pub config: Option<String>,
 
-    /// Character to talk to (overrides SHORE_CHARACTER env var)
-    #[arg(long, short = 'c', global = true, env = "SHORE_CHARACTER")]
-    pub character: Option<String>,
-
     /// Disable colored output (also respects NO_COLOR env var)
-    #[arg(long, global = true)]
+    #[arg(long, global = true, help_heading = GLOBAL_HEADING)]
     pub no_color: bool,
 
     #[command(subcommand)]
@@ -32,6 +40,7 @@ pub(crate) struct Cli {
 #[derive(Subcommand, Debug)]
 pub(crate) enum CliCommand {
     /// Send a message
+    #[command(display_order = 1)]
     Send {
         /// The message text
         message: Vec<String>,
@@ -58,6 +67,7 @@ pub(crate) enum CliCommand {
     },
 
     /// Regenerate the last assistant response
+    #[command(display_order = 2)]
     Regen {
         /// Optional guidance for the regeneration
         #[arg(short, long)]
@@ -65,6 +75,7 @@ pub(crate) enum CliCommand {
     },
 
     /// List or select alternate responses for the latest assistant message
+    #[command(display_order = 3)]
     Alt {
         /// Selector: list, prev, next, last, first, or 1-based alternate position
         #[arg(allow_hyphen_values = true)]
@@ -81,6 +92,7 @@ pub(crate) enum CliCommand {
 
     /// Show conversation log, get/edit/delete messages
     #[command(args_conflicts_with_subcommands = true)]
+    #[command(display_order = 4)]
     Log {
         #[command(subcommand)]
         subcommand: Option<LogCommand>,
@@ -128,12 +140,14 @@ pub(crate) enum CliCommand {
 
     /// Inspect what the daemon did behind the conversation: raw model calls,
     /// heartbeat activity, and stored sub-agent runs.
+    #[command(display_order = 13)]
     Trace {
         #[command(subcommand)]
         subcommand: TraceCommand,
     },
 
     /// List or switch characters (no args = list, with name = switch)
+    #[command(display_order = 6)]
     Character {
         /// Character name to switch to
         name: Option<String>,
@@ -152,6 +166,7 @@ pub(crate) enum CliCommand {
     },
 
     /// Show daemon and session status
+    #[command(display_order = 11)]
     Status {
         /// Show only a specific section (e.g. autonomy, tokens)
         #[arg(long)]
@@ -171,6 +186,7 @@ pub(crate) enum CliCommand {
     },
 
     /// Advanced debugging utilities
+    #[command(display_order = 14)]
     Debug {
         #[command(subcommand)]
         subcommand: DebugCommand,
@@ -185,6 +201,7 @@ pub(crate) enum CliCommand {
     /// `shore model --all`                include hidden discovered models
     /// `shore model setting [...]`        manage saved sampler settings
     #[command(args_conflicts_with_subcommands = true, verbatim_doc_comment)]
+    #[command(display_order = 7)]
     Model {
         #[command(subcommand)]
         subcommand: Option<ModelCommand>,
@@ -222,6 +239,7 @@ pub(crate) enum CliCommand {
     ///                                   or every discovery-enabled
     ///                                   provider when no name is given
     #[command(args_conflicts_with_subcommands = true, verbatim_doc_comment)]
+    #[command(display_order = 8)]
     Provider {
         #[command(subcommand)]
         subcommand: Option<ProviderCommand>,
@@ -233,6 +251,7 @@ pub(crate) enum CliCommand {
 
     /// Show, query, or manage the memory system
     #[command(args_conflicts_with_subcommands = true)]
+    #[command(display_order = 5)]
     Memory {
         #[command(subcommand)]
         subcommand: Option<MemoryCommand>,
@@ -247,6 +266,7 @@ pub(crate) enum CliCommand {
 
     /// Show or modify configuration
     #[command(args_conflicts_with_subcommands = true)]
+    #[command(display_order = 9)]
     Config {
         #[command(subcommand)]
         subcommand: Option<ConfigCommand>,
@@ -286,6 +306,7 @@ pub(crate) enum CliCommand {
 
     /// Show the tool surface: which tools are enabled, sub-agent ownership,
     /// the exec allowlist, and any dangling config references
+    #[command(display_order = 10)]
     Tools {
         /// Output raw JSON
         #[arg(long)]
@@ -293,6 +314,7 @@ pub(crate) enum CliCommand {
     },
 
     /// Show token usage statistics and costs
+    #[command(display_order = 12)]
     Usage {
         #[command(subcommand)]
         subcommand: Option<UsageCommand>,
@@ -344,6 +366,7 @@ pub(crate) enum CliCommand {
     },
 
     /// Generate shell completions
+    #[command(display_order = 15)]
     Completions {
         /// Shell to generate completions for
         shell: Shell,
@@ -2966,7 +2989,10 @@ mod tests {
     #[test]
     fn the_character_filter_is_the_one_the_user_selected() {
         let (_, none) = to_swp_command(&parse(&["usage"]).command, None).unwrap();
-        assert!(none.get("character").is_some_and(serde_json::Value::is_null));
+        assert!(
+            none.get("character")
+                .is_some_and(serde_json::Value::is_null)
+        );
 
         let (_, ada) = to_swp_command(&parse(&["usage"]).command, Some("ada")).unwrap();
         assert_eq!(arg(&ada, "character"), "ada");
