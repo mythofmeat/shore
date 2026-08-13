@@ -1,4 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
 import type {
   BetaMessage,
   BetaMessageParam,
@@ -8,6 +7,7 @@ import type {
 import { runnableTools } from "./anthropic_tools.ts";
 import { isAbortError } from "../abort.ts";
 import { effectiveCacheTtl } from "../cache_capability.ts";
+import { anthropicClientFor } from "./anthropic_client.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
 import type { ContentBlock } from "../../engine/types.ts";
 import type { SidecarRequest, StreamEvent, SystemContent, Usage } from "../types.ts";
@@ -53,11 +53,7 @@ export async function* anthropicToolLoopEvents(
     if (callFirstTokenAt === 0) callFirstTokenAt = now();
   };
 
-  const client = new Anthropic({
-    apiKey: req.api_key,
-    maxRetries: 0,
-    ...(req.base_url ? { baseURL: req.base_url.replace(/\/v1\/?$/, "") } : {}),
-  });
+  const client = anthropicClientFor(req);
 
   const { params } = buildAnthropicPlan(req);
   const labelled: SystemContent = req.system ?? [];

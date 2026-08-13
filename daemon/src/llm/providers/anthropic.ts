@@ -34,6 +34,7 @@ import {
 import { replayableMessages } from "../replay.ts";
 import { cacheBoundaryIndex } from "../system_boundary.ts";
 import { effectiveCacheTtl } from "../cache_capability.ts";
+import { anthropicClientFor } from "./anthropic_client.ts";
 import { thinkingDisplayForCallType, type ThinkingDisplay } from "../thinking_display.ts";
 import { parseToolArgs } from "../tool_args.ts";
 
@@ -217,11 +218,7 @@ type AnthropicParams = MessageCreateParams & {
 function buildAnthropicCall(
   req: SidecarRequest,
 ): { client: Anthropic; params: AnthropicParams; placement: CachePlacement } {
-  const client = new Anthropic({
-    apiKey: req.api_key,
-    maxRetries: 0,
-    ...(req.base_url ? { baseURL: stripTrailingV1(req.base_url) } : {}),
-  });
+  const client = anthropicClientFor(req);
   const { params, placement } = buildAnthropicPlan(req);
   return { client, params, placement };
 }
@@ -317,10 +314,6 @@ export function buildAnthropicPlan(req: SidecarRequest): {
 
 export function buildAnthropicParams(req: SidecarRequest): AnthropicParams {
   return buildAnthropicPlan(req).params;
-}
-
-function stripTrailingV1(baseUrl: string): string {
-  return baseUrl.replace(/\/v1\/?$/, "");
 }
 
 type CacheControl = { type: "ephemeral" } | { type: "ephemeral"; ttl: "1h" };
