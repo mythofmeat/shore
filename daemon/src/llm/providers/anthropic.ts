@@ -34,6 +34,7 @@ import {
 import { replayableMessages } from "../replay.ts";
 import { cacheBoundaryIndex } from "../system_boundary.ts";
 import { effectiveCacheTtl } from "../cache_capability.ts";
+import { thinkingDisplayForCallType, type ThinkingDisplay } from "../thinking_display.ts";
 import { parseToolArgs } from "../tool_args.ts";
 
 export class AnthropicProvider implements SidecarProvider {
@@ -266,7 +267,14 @@ export function buildAnthropicPlan(req: SidecarRequest): {
     system = systemToBlocks(req.system);
   }
 
-  const { thinking, outputConfig } = buildThinkingParams(opts, req.model, req.max_tokens);
+  const display =
+    opts.thinking_display ?? thinkingDisplayForCallType(req.context?.call_type);
+  const { thinking, outputConfig } = buildThinkingParams(
+    opts,
+    req.model,
+    req.max_tokens,
+    display,
+  );
   const tools = buildTools(req.tools);
 
   const params: AnthropicParams = {
@@ -642,13 +650,14 @@ function clampEnabledBudget(requested: number, maxTokens: number): number | unde
 }
 
 type ThinkingParam =
-  | { type: "adaptive"; display: "summarized" }
+  | { type: "adaptive"; display: ThinkingDisplay }
   | { type: "enabled"; budget_tokens: number };
 
 export function buildThinkingParams(
   opts: ProviderOptions,
   model: string,
   maxTokens: number,
+  display: ThinkingDisplay = "summarized",
 ): { thinking?: ThinkingParam; outputConfig?: { effort: NamedEffort } } {
   const effort = opts.reasoning_effort;
   const namedEffort = isEffortValue(effort) ? effort : undefined;
@@ -665,7 +674,7 @@ export function buildThinkingParams(
   if (wantsAdaptive) {
     if (caps.adaptive) {
       return {
-        thinking: { type: "adaptive", display: "summarized" },
+        thinking: { type: "adaptive", display },
         ...(namedEffort !== undefined ? { outputConfig: { effort: namedEffort } } : {}),
       };
     }
@@ -678,7 +687,7 @@ export function buildThinkingParams(
     const b = clampEnabledBudget(requestedBudget ?? 1024, maxTokens);
     if (b !== undefined) return { thinking: { type: "enabled", budget_tokens: b } };
   }
-  if (caps.adaptive) return { thinking: { type: "adaptive", display: "summarized" } };
+  if (caps.adaptive) return { thinking: { type: "adaptive", display } };
   return {};
 }
 

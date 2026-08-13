@@ -58,6 +58,7 @@ export interface ProviderOptions {
   gemini_generation?: number;
   zai_clear_thinking?: boolean;
   zai_subscription?: boolean;
+  thinking_display?: "summarized" | "omitted";
 }
 
 export interface CallContext {
