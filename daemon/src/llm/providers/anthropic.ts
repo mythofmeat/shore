@@ -251,12 +251,12 @@ export function buildAnthropicPlan(req: SidecarRequest): {
     droppedOverLimit: 0,
   };
   if (cacheEnabled) {
-    const cc = makeCacheControl(cacheTtl);
     const msgs = normalizeMessages(converted);
     const labelled = req.system ?? [];
     const sys = systemToBlocks(labelled);
-    const { msgBp, sysBp } = tsDefaultPlacement(msgs, labelled);
-    tally = placeBreakpoints(msgs, sys, cc, msgBp, sysBp);
+    const placement = applyDefaultPlacement(msgs, sys, labelled, cacheTtl);
+    const { msgBp, sysBp } = placement;
+    tally = placement.tally;
     messages = msgs;
     system = sys;
     msgBreakpoints = msgBp;
@@ -462,14 +462,10 @@ function warnIfDropped(tally: BreakpointTally): BreakpointTally {
   return tally;
 }
 
-export function placeContinuationBreakpoints(
+export function clearCacheMarkers(
   messages: MessageParam[],
   system: TextBlockParam[],
-  labelled: SystemContent,
-  cacheTtl: string,
-): { msgBp: number[]; sysBp: number[] } {
-  if (cacheTtl === "") return { msgBp: [], sysBp: [] };
-
+): void {
   for (const message of messages) {
     if (!Array.isArray(message.content)) continue;
     for (const block of message.content) {
@@ -479,10 +475,30 @@ export function placeContinuationBreakpoints(
   for (const block of system) {
     delete (block as { cache_control?: unknown }).cache_control;
   }
+}
 
+export function applyDefaultPlacement(
+  messages: MessageParam[],
+  system: TextBlockParam[],
+  labelled: SystemContent,
+  cacheTtl: string,
+): { msgBp: number[]; sysBp: number[]; tally: BreakpointTally } {
   const cc = makeCacheControl(cacheTtl);
   const { msgBp, sysBp } = tsDefaultPlacement(messages, labelled);
-  placeBreakpoints(messages, system, cc, msgBp, sysBp);
+  const tally = placeBreakpoints(messages, system, cc, msgBp, sysBp);
+  return { msgBp, sysBp, tally };
+}
+
+export function placeContinuationBreakpoints(
+  messages: MessageParam[],
+  system: TextBlockParam[],
+  labelled: SystemContent,
+  cacheTtl: string,
+): { msgBp: number[]; sysBp: number[] } {
+  if (cacheTtl === "") return { msgBp: [], sysBp: [] };
+
+  clearCacheMarkers(messages, system);
+  const { msgBp, sysBp } = applyDefaultPlacement(messages, system, labelled, cacheTtl);
   return { msgBp, sysBp };
 }
 
