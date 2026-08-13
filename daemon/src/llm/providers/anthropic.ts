@@ -35,8 +35,9 @@ import { replayableMessages } from "../replay.ts";
 import { cacheBoundaryIndex } from "../system_boundary.ts";
 import { effectiveCacheTtl } from "../cache_capability.ts";
 import { anthropicClientFor } from "./anthropic_client.ts";
-import { thinkingDisplayForCallType, type ThinkingDisplay } from "../thinking_display.ts";
 import { parseToolArgs } from "../tool_args.ts";
+
+type ThinkingDisplay = NonNullable<ProviderOptions["thinking_display"]>;
 
 export class AnthropicProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
@@ -264,13 +265,11 @@ export function buildAnthropicPlan(req: SidecarRequest): {
     system = systemToBlocks(req.system);
   }
 
-  const display =
-    opts.thinking_display ?? thinkingDisplayForCallType(req.context?.call_type);
   const { thinking, outputConfig } = buildThinkingParams(
     opts,
     req.model,
     req.max_tokens,
-    display,
+    opts.thinking_display,
   );
   const tools = buildTools(req.tools);
 

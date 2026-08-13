@@ -1,7 +1,22 @@
+/**
+ * Thinking display follows Anthropic's two documented values and nothing else.
+ *
+ * https://platform.claude.com/docs/en/build-with-claude/thinking
+ *   "It accepts two values" — "summarized" and "omitted". "No `display` setting
+ *   returns the raw chain of thought."
+ *   "You're still charged for the full thinking tokens. Omitting reduces
+ *   latency, not cost."
+ *   "`display` is invalid with `thinking.type: "disabled"`"
+ *
+ * Shore asks for the summary everywhere and lets an explicit provider option
+ * override it. Deriving the value from the call type, as `6c1b80da` did, bought
+ * no token saving and made a keepalive ping send a different thinking parameter
+ * than the call whose prefix it was armed against.
+ */
+
 import { describe, expect, test } from "bun:test";
 
 import { buildAnthropicPlan, buildThinkingParams } from "../src/llm/providers/anthropic.ts";
-import { thinkingDisplayForCallType } from "../src/llm/thinking_display.ts";
 import type { CallContext, SidecarRequest } from "../src/llm/types.ts";
 
 function context(callType: string): CallContext {
@@ -26,41 +41,27 @@ function request(callType: string, over: Partial<SidecarRequest> = {}): SidecarR
 const displayOf = (req: SidecarRequest): unknown =>
   (buildAnthropicPlan(req).params as { thinking?: { display?: unknown } }).thinking?.display;
 
-describe("thinkingDisplayForCallType", () => {
-  test("a call whose thinking a client renders keeps the summary", () => {
-    for (const callType of ["message", "tool_loop", "subagent", "heartbeat", "dreaming"]) {
-      expect(thinkingDisplayForCallType(callType)).toBe("summarized");
+describe("every call type asks for the same thinking display", () => {
+  test("the call type does not change what goes on the wire", () => {
+    for (const callType of [
+      "message",
+      "tool_loop",
+      "subagent",
+      "heartbeat",
+      "dreaming",
+      "compaction",
+      "keepalive",
+      "memory_agent",
+    ]) {
+      expect(displayOf(request(callType))).toBe("summarized");
     }
   });
 
-  test("a call with no surface for it does not pay to receive it", () => {
-    for (const callType of ["compaction", "keepalive", "memory_agent"]) {
-      expect(thinkingDisplayForCallType(callType)).toBe("omitted");
-    }
+  test("a keepalive ping matches the chat turn whose prefix it re-sends", () => {
+    expect(displayOf(request("keepalive"))).toBe(displayOf(request("message")));
   });
 
-  test("an unlabelled call keeps the summary rather than guessing", () => {
-    expect(thinkingDisplayForCallType(undefined)).toBe("summarized");
-  });
-});
-
-describe("the built request follows the call type", () => {
-  test("a chat turn asks for summarized thinking", () => {
-    expect(displayOf(request("message"))).toBe("summarized");
-  });
-
-  test("a compaction pass asks for omitted", () => {
-    expect(displayOf(request("compaction"))).toBe("omitted");
-  });
-
-  test("an explicit provider option overrides the call type either way", () => {
-    expect(
-      displayOf(
-        request("compaction", {
-          provider_options: { reasoning_effort: "adaptive", thinking_display: "summarized" },
-        }),
-      ),
-    ).toBe("summarized");
+  test("an explicit provider option overrides it either way", () => {
     expect(
       displayOf(
         request("message", {
@@ -68,11 +69,18 @@ describe("the built request follows the call type", () => {
         }),
       ),
     ).toBe("omitted");
+    expect(
+      displayOf(
+        request("compaction", {
+          provider_options: { reasoning_effort: "adaptive", thinking_display: "summarized" },
+        }),
+      ),
+    ).toBe("summarized");
   });
 });
 
-describe("buildThinkingParams keeps its old default", () => {
-  test("called without a display it still asks for summarized", () => {
+describe("buildThinkingParams", () => {
+  test("called without a display it asks for summarized", () => {
     const built = buildThinkingParams({ reasoning_effort: "adaptive" }, "claude-opus-4-8", 4096);
     expect(built.thinking).toEqual({ type: "adaptive", display: "summarized" });
   });
@@ -81,5 +89,10 @@ describe("buildThinkingParams keeps its old default", () => {
     const built = buildThinkingParams({ budget_tokens: 2048 }, "claude-3-7-sonnet", 4096, "omitted");
     expect(built.thinking).toMatchObject({ type: "enabled" });
     expect(built.thinking).not.toHaveProperty("display");
+  });
+
+  test("a request that asks for no thinking carries no display to pair with it", () => {
+    const built = buildThinkingParams({}, "claude-opus-4-8", 4096, "summarized");
+    expect(built.thinking).toBeUndefined();
   });
 });
