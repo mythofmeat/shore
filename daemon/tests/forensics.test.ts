@@ -54,6 +54,10 @@ const PLACEMENT: CachePlacement = {
   sys_blocks: 3,
   cache_enabled: true,
   has_existing_markers: false,
+  breakpoints_requested: 4,
+  breakpoints_placed: 4,
+  breakpoints_dropped_no_anchor: 0,
+  breakpoints_dropped_over_limit: 0,
 };
 
 describe("cache forensics rows", () => {

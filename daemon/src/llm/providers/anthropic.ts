@@ -26,7 +26,11 @@ import type {
   WireMessage,
 } from "../types.ts";
 import { EMPTY_TOOL_SCHEMA, streamErrorEvent } from "../types.ts";
-import { recordCacheCall, type CachePlacement } from "../../cache/forensics.ts";
+import {
+  ANTHROPIC_CACHE_CONTROL_LIMIT,
+  recordCacheCall,
+  type CachePlacement,
+} from "../../cache/forensics.ts";
 import { replayableMessages } from "../replay.ts";
 import { parseToolArgs } from "../tool_args.ts";
 
@@ -234,13 +238,19 @@ export function buildAnthropicPlan(req: SidecarRequest): {
   let system: TextBlockParam[];
   let msgBreakpoints: number[] = [];
   let sysBreakpoints: number[] = [];
+  let tally: BreakpointTally = {
+    requested: 0,
+    placed: 0,
+    droppedNoAnchor: 0,
+    droppedOverLimit: 0,
+  };
   if (cacheEnabled) {
     const cc = makeCacheControl(cacheTtl);
     const msgs = normalizeMessages(converted);
     const labelled = req.system ?? [];
     const sys = systemToBlocks(labelled);
     const { msgBp, sysBp } = tsDefaultPlacement(msgs, labelled);
-    placeBreakpoints(msgs, sys, cc, msgBp, sysBp);
+    tally = placeBreakpoints(msgs, sys, cc, msgBp, sysBp);
     messages = msgs;
     system = sys;
     msgBreakpoints = msgBp;
@@ -283,6 +293,10 @@ export function buildAnthropicPlan(req: SidecarRequest): {
       sys_blocks: system.length,
       cache_enabled: cacheEnabled,
       has_existing_markers: hasExistingMarkers,
+      breakpoints_requested: tally.requested,
+      breakpoints_placed: tally.placed,
+      breakpoints_dropped_no_anchor: tally.droppedNoAnchor,
+      breakpoints_dropped_over_limit: tally.droppedOverLimit,
     },
   };
 }
@@ -374,29 +388,77 @@ function tsDefaultPlacement(
   };
 }
 
-function placeBreakpoints(
+export interface BreakpointTally {
+  requested: number;
+  placed: number;
+  droppedNoAnchor: number;
+  droppedOverLimit: number;
+}
+
+export function placeBreakpoints(
   messages: MessageParam[],
   system: TextBlockParam[],
   cc: CacheControl,
   msgBp: number[],
   sysBp: number[],
-): void {
+): BreakpointTally {
+  const tally: BreakpointTally = {
+    requested: msgBp.length + sysBp.length,
+    placed: 0,
+    droppedNoAnchor: 0,
+    droppedOverLimit: 0,
+  };
+
+  const atLimit = (): boolean => tally.placed >= ANTHROPIC_CACHE_CONTROL_LIMIT;
+
   for (const idx of sysBp) {
     const block = system[idx];
-    if (block) block.cache_control = cc;
+    if (!block) {
+      tally.droppedNoAnchor += 1;
+      continue;
+    }
+    if (atLimit()) {
+      tally.droppedOverLimit += 1;
+      continue;
+    }
+    block.cache_control = cc;
+    tally.placed += 1;
   }
+
   const placed = new Set<number>();
   for (const pos of msgBp) {
+    if (atLimit()) {
+      tally.droppedOverLimit += 1;
+      continue;
+    }
+    let landed = false;
     for (let i = pos; i >= 0; i--) {
       if (placed.has(i)) break;
       const msg = messages[i];
       if (!msg || !Array.isArray(msg.content)) continue;
       if (applyMessageBreakpoint(msg.content, cc)) {
         placed.add(i);
+        tally.placed += 1;
+        landed = true;
         break;
       }
     }
+    if (!landed) tally.droppedNoAnchor += 1;
   }
+
+  return warnIfDropped(tally);
+}
+
+function warnIfDropped(tally: BreakpointTally): BreakpointTally {
+  const dropped = tally.droppedNoAnchor + tally.droppedOverLimit;
+  if (dropped === 0) return tally;
+  console.warn(
+    `shore: dropped ${String(dropped)} cache breakpoint(s) of ` +
+      `${String(tally.requested)} requested — ${String(tally.droppedNoAnchor)} had no block ` +
+      `that would take a marker, ${String(tally.droppedOverLimit)} exceeded the ` +
+      `${String(ANTHROPIC_CACHE_CONTROL_LIMIT)} the API allows per request`,
+  );
+  return tally;
 }
 
 export function placeContinuationBreakpoints(
