@@ -319,6 +319,25 @@ describe("configCheck", () => {
       await check(row("config_check", name), w, () => configCheck(w.ctx, ENV));
     });
   }
+
+  test("a provider:model_id default is a working setup, not two warnings", async () => {
+    const w = await build(
+      "mid",
+      '\n[providers.deepseek]\napi_key_env = "SHORE_FIXTURE_KEY_SET"\n\n' +
+        '[defaults]\nmodel = "deepseek:deepseek-v4-flash"\n',
+    );
+    const result = configCheck(w.ctx, ENV) as { warnings: string[]; info: string[] };
+
+    expect(result.warnings).toEqual([]);
+    expect(result.info).toContain("Default model: deepseek:deepseek-v4-flash");
+  });
+
+  test("a default naming an unconfigured provider is still called out", async () => {
+    const w = await build("mid", '\n[defaults]\nmodel = "ghost:whatever"\n');
+    const result = configCheck(w.ctx, ENV) as { warnings: string[] };
+
+    expect(result.warnings).toContain('Default model "ghost:whatever" not found in catalog');
+  });
 });
 
 // ── config, read ────────────────────────────────────────────────────────

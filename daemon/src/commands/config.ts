@@ -2,7 +2,13 @@ import { join } from "node:path";
 
 import { ConfigDuration } from "../config/duration.ts";
 import { discoverCharacters, type Env } from "../config/dirs.ts";
-import { ConfigError, loadCharacterConfig, loadConfig, type LoadedConfig } from "../config/loader.ts";
+import {
+  ConfigError,
+  loadCharacterConfig,
+  loadConfig,
+  modelRefResolves,
+  type LoadedConfig,
+} from "../config/loader.ts";
 import { findModel, NO_CHAT_MODELS_MESSAGE } from "../config/models.ts";
 import type { ResolvedModel } from "../config/models.ts";
 import { serializeConfigValue } from "../config/serialize.ts";
@@ -80,22 +86,22 @@ export function configCheck(ctx: ConfigContext, env: NodeJS.ProcessEnv = process
   const warnings: string[] = [];
   const info: string[] = [];
 
-  if (ctx.config.models.chat.size === 0) {
-    warnings.push(NO_CHAT_MODELS_MESSAGE);
-  } else {
+  const defaultModel = ctx.config.app.defaults.model;
+  const defaultResolves =
+    defaultModel !== undefined &&
+    modelRefResolves(ctx.config.models, ctx.config.providers, defaultModel);
+
+  if (ctx.config.models.chat.size > 0) {
     info.push(`${ctx.config.models.chat.size} chat model(s) configured`);
+  } else if (!defaultResolves) {
+    warnings.push(NO_CHAT_MODELS_MESSAGE);
   }
 
-  const defaultModel = ctx.config.app.defaults.model;
   if (defaultModel !== undefined) {
-    let found = true;
-    try {
-      findModel(ctx.config.models, defaultModel);
-    } catch {
-      found = false;
+    if (defaultResolves) info.push(`Default model: ${defaultModel}`);
+    else {
+      warnings.push(`Default model "${defaultModel}" not found in catalog`);
     }
-    if (found) info.push(`Default model: ${defaultModel}`);
-    else warnings.push(`Default model "${defaultModel}" not found in catalog`);
   } else if (ctx.config.models.chat.size > 0) {
     warnings.push("No default model set. First chat model will be used.");
   }

@@ -669,7 +669,7 @@ function catalogHas(catalog: ModelCatalog, name: string): boolean {
   }
 }
 
-function modelRefResolves(
+export function modelRefResolves(
   catalog: ModelCatalog,
   providers: ProviderRegistry,
   name: string,
