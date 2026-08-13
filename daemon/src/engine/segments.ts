@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { MessageNotFound, JsonParseError, normalizeMessage } from "./message_store";
+import { quarantineLines } from "./backup.ts";
 import type { Message } from "./types";
 
 const SEGMENTS_DIR = "segments";
@@ -87,16 +88,27 @@ export class SegmentReader {
     const content = await readFile(path, "utf8");
 
     const messages: Message[] = [];
+    const unreadable: string[] = [];
     for (const rawLine of content.split("\n")) {
       const line = rawLine.trim();
       if (line === "") continue;
       let parsed: Message;
       try {
         parsed = JSON.parse(line) as Message;
-      } catch (e) {
-        throw new JsonParseError(path, (e as Error).message);
+      } catch {
+        unreadable.push(rawLine);
+        continue;
       }
       messages.push(normalizeMessage(parsed));
+    }
+
+    if (unreadable.length > 0) {
+      const quarantined = await quarantineLines(path, unreadable);
+      console.error(
+        `shore: ${String(unreadable.length)} unreadable line(s) in segment ${path} were ` +
+          `quarantined${quarantined === undefined ? "" : ` to ${quarantined}`}; ` +
+          `${String(messages.length)} message(s) recovered`,
+      );
     }
     return messages;
   }

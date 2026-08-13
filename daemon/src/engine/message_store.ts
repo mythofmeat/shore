@@ -2,6 +2,7 @@ import { rename, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { rustTrim } from "../memory/lines.ts";
+import { backupBeforeWrite, quarantineLines } from "./backup.ts";
 import { mergeToolLoopMessages } from "./merge";
 import type { ContentBlock, ImageRef, Message, MessageAlternative, Role } from "./types";
 
@@ -193,6 +194,7 @@ function messageFromAlternative(template: Message, index: number): Message | und
 export class MessageStore {
   #messages: Message[];
   readonly #path: string;
+  #quarantined = 0;
 
   private constructor(path: string, messages: Message[]) {
     this.#path = path;
@@ -218,22 +220,40 @@ export class MessageStore {
       throw e;
     }
     const messages: Message[] = [];
+    const unreadable: string[] = [];
     for (const rawLine of raw.split("\n")) {
       const line = rawLine.trim();
       if (line === "") continue;
       let parsed: Message;
       try {
         parsed = JSON.parse(line) as Message;
-      } catch (e) {
-        throw new JsonParseError(path, (e as Error).message);
+      } catch {
+        unreadable.push(rawLine);
+        continue;
       }
       messages.push(normalizeMessage(parsed));
     }
-    return { store: new MessageStore(path, messages), raw };
+
+    if (unreadable.length > 0) {
+      const quarantined = await quarantineLines(path, unreadable);
+      console.error(
+        `shore: ${String(unreadable.length)} unreadable line(s) in ${path} were quarantined` +
+          `${quarantined === undefined ? "" : ` to ${quarantined}`}; ` +
+          `${String(messages.length)} message(s) loaded`,
+      );
+    }
+
+    const store = new MessageStore(path, messages);
+    store.#quarantined = unreadable.length;
+    return { store, raw };
   }
 
   get path(): string {
     return this.#path;
+  }
+
+  get quarantinedLines(): number {
+    return this.#quarantined;
   }
 
   messages(): readonly Message[] {
@@ -425,6 +445,7 @@ export class MessageStore {
   }
 
   async #persist(): Promise<void> {
+    await backupBeforeWrite(this.#path);
     let buf = "";
     for (const msg of this.#messages) buf += `${serializeForStorage(msg)}\n`;
 

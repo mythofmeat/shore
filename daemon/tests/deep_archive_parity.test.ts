@@ -545,12 +545,14 @@ describe("runDeepIdleArchive", () => {
     expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe(kase.active_before);
   });
 
-  test("a conversation that will not load fails rather than archiving nothing", async () => {
+  test("a conversation with one unreadable line still opens, minus that line", async () => {
+    // Before #98 a single malformed line made the file unopenable and the
+    // archive failed outright. The good turns are now recovered and the bad
+    // line is quarantined; here every line is bad, so nothing is archivable.
     const { config, characterDir } = await world([]);
     await writeFile(join(characterDir, "active.jsonl"), "{not json\n");
 
     const result = await runDeepIdleArchive("ada", deps(config), 0);
-    expect(result.deepArchiveDone).toBe(false);
-    expect(result.failed).toBeDefined();
+    expect(result.failed).toBeUndefined();
   });
 });

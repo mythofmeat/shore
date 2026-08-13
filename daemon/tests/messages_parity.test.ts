@@ -51,7 +51,14 @@ describe("loading", () => {
       await inTemp(async (path) => {
         if (c.file !== null) await Bun.write(path, c.file);
         if (!c.expect.ok) {
-          await expect(MessageStore.load(path)).rejects.toThrow();
+          // The Rust refused the whole file on one bad line, which is what the
+          // fixture records. Since #98 the good lines are kept and the bad ones
+          // are quarantined — losing a conversation to a single malformed line
+          // was the worse failure. What is pinned now is that the damage is
+          // counted and that no unparseable line is silently accepted.
+          const store = await MessageStore.load(path);
+          expect(store.quarantinedLines).toBeGreaterThan(0);
+          expect(store.messages().length).toBe(countParsableLines(c.file ?? ""));
           return;
         }
         const store = await MessageStore.load(path);
@@ -61,6 +68,18 @@ describe("loading", () => {
     });
   }
 });
+
+function countParsableLines(file: string): number {
+  return file.split("\n").filter((line) => {
+    if (line.trim() === "") return false;
+    try {
+      JSON.parse(line);
+      return true;
+    } catch {
+      return false;
+    }
+  }).length;
+}
 
 describe("attach_generated_alt", () => {
   for (const c of fixture.attach_generated_alt as unknown as {
