@@ -27,6 +27,7 @@ import { join } from "node:path";
 
 import { nestedContext, runSubagent, taggedSink } from "../src/tools/subagent_loop.ts";
 import { readSubagentTraces } from "../src/tools/subagent_trace.ts";
+import { BudgetBlocked } from "../src/llm/generate.ts";
 import { NotImplemented, InvalidArgs, type ToolContext } from "../src/tools/dispatch.ts";
 import { defaultAppConfig, type SubagentConfig } from "../src/config/app.ts";
 import { emptyCatalog, type ModelCatalog } from "../src/config/models.ts";
@@ -411,6 +412,23 @@ describe("the trace", () => {
     const traces = await readSubagentTraces(join(root, "data", "ada"));
     expect(traces).toHaveLength(1);
     expect(traces[0]?.error).toContain("upstream exploded");
+    expect(traces[0]?.result).toBeUndefined();
+  });
+
+  test("a run stopped by a budget is recorded, which is the failure that looks like nothing happened", async () => {
+    const { config, root } = await configWith({ researcher: spec() }, (app) => {
+      app.usage.budgets = [
+        { name: "smoketest", period: "day", cost_usd: 0, limit: "block" },
+      ] as typeof app.usage.budgets;
+    });
+
+    await expect(
+      run(config, root, "researcher", scriptedProvider("never reached"), [], "toolu_parent"),
+    ).rejects.toBeInstanceOf(BudgetBlocked);
+
+    const traces = await readSubagentTraces(join(root, "data", "ada"));
+    expect(traces).toHaveLength(1);
+    expect(traces[0]?.error).toContain("smoketest");
     expect(traces[0]?.result).toBeUndefined();
   });
 

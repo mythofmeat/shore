@@ -209,7 +209,10 @@ export async function runSubagent(
       : genericToolLoopEvents(provider, request, phase, signal);
 
   const blocked = budgetBlockFor(request);
-  if (blocked) throw new BudgetBlocked(blocked.message, blocked.scope, blocked.reset_at);
+  if (blocked) {
+    await trace({ error: blocked.message });
+    throw new BudgetBlocked(blocked.message, blocked.scope, blocked.reset_at);
+  }
   const initialAttempt = beginCallAttempt(request.context, request);
   let outcome;
   try {
