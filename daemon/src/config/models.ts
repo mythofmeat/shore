@@ -36,7 +36,7 @@ function asciiLowercase(s: string): string {
   return s.replace(/[A-Z]/g, (c) => c.toLowerCase());
 }
 
-const SDK_VARIANTS: readonly Sdk[] = [
+export const SDK_VARIANTS: readonly Sdk[] = [
   "anthropic",
   "openai",
   "openrouter",
