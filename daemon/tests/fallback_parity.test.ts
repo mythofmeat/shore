@@ -419,6 +419,7 @@ describe("transient retry", () => {
       async (ms) => {
         delays.push(ms);
       },
+      { random: () => 0 },
     );
     expect(got).toBe("ok");
     expect(calls).toBe(3);

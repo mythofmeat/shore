@@ -1,3 +1,4 @@
+import { AbortError, abortRejection } from "./abort";
 import { classifyCredentialFailure, shouldRotate, type CredentialFailureKind } from "./credentials";
 import { shouldRetryError } from "./retry";
 import type { KeyCandidate } from "./credentials";
@@ -5,6 +6,8 @@ import type { LlmError } from "./errors";
 
 export const DEFAULT_MAX_RETRIES = 2;
 export const DEFAULT_BACKOFF_BASE_MS = 500;
+export const DEFAULT_BACKOFF_MAX_MS = 30_000;
+export const DEFAULT_JITTER_FRACTION = 0.25;
 
 const MAX_REASON_BYTES = 200;
 
@@ -87,6 +90,8 @@ export function backoffDelayMs(baseMs: number, attempt: number): number {
 export interface RetrySettings {
   maxRetries: number;
   backoffBaseMs: number;
+  backoffMaxMs?: number;
+  jitterFraction?: number;
 }
 
 export const DEFAULT_RETRY: RetrySettings = {
@@ -94,17 +99,64 @@ export const DEFAULT_RETRY: RetrySettings = {
   backoffBaseMs: DEFAULT_BACKOFF_BASE_MS,
 };
 
+export interface DelayInputs {
+  retryAfterMs?: number;
+  random?: () => number;
+}
+
+export function retryDelayMs(
+  settings: RetrySettings,
+  attempt: number,
+  inputs: DelayInputs = {},
+): number {
+  const ceiling = Math.max(0, settings.backoffMaxMs ?? DEFAULT_BACKOFF_MAX_MS);
+  const spread = Math.max(0, settings.jitterFraction ?? DEFAULT_JITTER_FRACTION);
+  const random = inputs.random ?? Math.random;
+  const exponential = backoffDelayMs(settings.backoffBaseMs, attempt);
+  const hint = inputs.retryAfterMs;
+  const floor = hint !== undefined && hint > 0 ? Math.max(exponential, hint) : exponential;
+
+  if (floor >= ceiling) return Math.max(0, Math.round(ceiling - ceiling * spread * random()));
+
+  const headroom = Math.min(floor * spread, ceiling - floor);
+  return Math.ceil(floor + headroom * random());
+}
+
 export type Attempt<T> = () => Promise<T>;
 
 export type Sleep = (ms: number) => Promise<void>;
 
 const realSleep: Sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export async function sleepUnlessAborted(
+  sleep: Sleep,
+  ms: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (signal === undefined) {
+    await sleep(ms);
+    return;
+  }
+  if (signal.aborted) throw new AbortError();
+  const rejection = abortRejection(signal);
+  try {
+    await Promise.race([sleep(ms), rejection.promise]);
+  } finally {
+    rejection.dispose();
+  }
+}
+
+export interface RetryContext {
+  signal?: AbortSignal;
+  random?: () => number;
+}
+
 export async function streamWithRetry<T>(
   attempt: Attempt<T>,
   settings: RetrySettings = DEFAULT_RETRY,
   shouldRetry: (error: LlmError, attempt: number, maxRetries: number) => boolean = defaultShouldRetry,
   sleep: Sleep = realSleep,
+  context: RetryContext = {},
 ): Promise<T> {
   let attemptIndex = 0;
   for (;;) {
@@ -113,7 +165,10 @@ export async function streamWithRetry<T>(
     } catch (raw) {
       const error = raw as LlmError;
       if (!shouldRetry(error, attemptIndex, settings.maxRetries)) throw error;
-      await sleep(backoffDelayMs(settings.backoffBaseMs, attemptIndex));
+      const delay = retryDelayMs(settings, attemptIndex, {
+        ...(context.random === undefined ? {} : { random: context.random }),
+      });
+      await sleepUnlessAborted(sleep, delay, context.signal);
       attemptIndex += 1;
     }
   }

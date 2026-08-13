@@ -423,6 +423,7 @@ async function streamTurn(
         retry,
         undefined,
         deps.sleep ?? realSleep,
+        { signal: params.signal },
       ),
     {
       record: (event) => recordKeyFallback(deps, params, event),
