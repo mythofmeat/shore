@@ -147,14 +147,17 @@ export function isToolResultOnly(m: Message): boolean {
 
 const isRealUserTurn = (m: Message): boolean => m.role === "user" && !isToolResultOnly(m);
 
+function keptInAlternative(b: ContentBlock): boolean {
+  if (b.type === "thinking" || b.type === "redacted_thinking") return true;
+  return b.type === "text" && b.text.trim() !== "";
+}
+
 function alternativeFromMessage(msg: Message): MessageAlternative {
-  let blocks: ContentBlock[] = msg.content_blocks.filter(
-    (b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text" && b.text.trim() !== "",
-  );
+  let blocks: ContentBlock[] = msg.content_blocks.filter(keptInAlternative);
   let content = deriveContentFromBlocks(blocks, false);
   if (content === "" && msg.content.trim() !== "") {
     content = msg.content;
-    blocks = [{ type: "text", text: msg.content }];
+    blocks = [...blocks, { type: "text", text: msg.content }];
   }
   return {
     content,
