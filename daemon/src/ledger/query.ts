@@ -115,6 +115,7 @@ function rowFromSqlite(r: Record<string, unknown>): CallRow {
     cost_source: optText(r["cost_source"]),
     total_cost: cost(r["total_cost"]),
     output_tokens_estimated: r["output_tokens_estimated"] === 1 ? 1 : 0,
+    thinking_dropped: count(r["thinking_dropped"]),
   };
 }
 

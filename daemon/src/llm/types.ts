@@ -72,6 +72,7 @@ export interface CallContext {
   forensics_dir?: string;
   rid?: string;
   usage?: UsageConfig;
+  thinking_dropped?: number;
 }
 
 export interface SidecarRequest {

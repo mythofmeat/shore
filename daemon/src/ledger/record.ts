@@ -113,6 +113,7 @@ function record(
     reasoning_effort: ctx.reasoning_effort,
     tool_surface: toolSurfaceFingerprint(req.tools),
     ...(call.output_tokens_estimated === true ? { output_tokens_estimated: true } : {}),
+    ...(ctx.thinking_dropped === undefined ? {} : { thinking_dropped: ctx.thinking_dropped }),
   };
   const row = ledger.record(entry, () => new Date(), attempt?.id);
   if (row.cache_anomaly !== null) {

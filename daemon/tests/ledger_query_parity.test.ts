@@ -69,8 +69,9 @@ function withoutToolSurface<T extends { tool_surface: unknown }>(rows: T[]): Rec
     const {
       tool_surface: _dropped,
       output_tokens_estimated: _alsoPostRust,
+      thinking_dropped: _postRustToo,
       ...rest
-    } = row as T & { output_tokens_estimated?: unknown };
+    } = row as T & { output_tokens_estimated?: unknown; thinking_dropped?: unknown };
     return rest as Record<string, unknown>;
   });
 }

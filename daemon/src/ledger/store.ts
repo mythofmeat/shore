@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS calls (
     cache_write_cost    REAL,
     cost_source         TEXT    DEFAULT 'pricing_catalog',
     total_cost          REAL,
-    output_tokens_estimated INTEGER NOT NULL DEFAULT 0
+    output_tokens_estimated INTEGER NOT NULL DEFAULT 0,
+    thinking_dropped    INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS call_attempts (
@@ -125,6 +126,7 @@ const MIGRATIONS: readonly string[] = [
   )`,
   "CREATE INDEX IF NOT EXISTS idx_call_attempts_status ON call_attempts (status, started_at)",
   "ALTER TABLE calls ADD COLUMN output_tokens_estimated INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE calls ADD COLUMN thinking_dropped INTEGER NOT NULL DEFAULT 0",
 ];
 
 function migrate(db: Database): void {
@@ -188,6 +190,7 @@ export interface RecordCall {
   reasoning_effort?: string | undefined;
   tool_surface?: string | undefined;
   output_tokens_estimated?: boolean | undefined;
+  thinking_dropped?: number | undefined;
 }
 
 export interface CallRow {
@@ -218,6 +221,7 @@ export interface CallRow {
   cost_source: string | null;
   total_cost: number | null;
   output_tokens_estimated: number;
+  thinking_dropped: number;
 }
 
 const INSERT_SQL = `INSERT INTO calls (
@@ -226,14 +230,14 @@ const INSERT_SQL = `INSERT INTO calls (
   cache_ttl, reasoning_effort, tool_surface, total_ms, ttft_ms, finish_reason,
   thinking_enabled, cache_state, cache_anomaly,
   input_cost, output_cost, cache_read_cost, cache_write_cost,
-  cost_source, total_cost, output_tokens_estimated
+  cost_source, total_cost, output_tokens_estimated, thinking_dropped
 ) VALUES (
   $ts, $character, $provider, $api_key_name, $model, $call_type,
   $input_tokens, $output_tokens, $cache_read_tokens, $cache_write_tokens,
   $cache_ttl, $reasoning_effort, $tool_surface, $total_ms, $ttft_ms, $finish_reason,
   $thinking_enabled, $cache_state, $cache_anomaly,
   $input_cost, $output_cost, $cache_read_cost, $cache_write_cost,
-  $cost_source, $total_cost, $output_tokens_estimated
+  $cost_source, $total_cost, $output_tokens_estimated, $thinking_dropped
 )`;
 
 const LAST_ANTHROPIC_CALL_SQL = `SELECT ts, model, thinking_enabled, cache_read_tokens, tool_surface
@@ -370,6 +374,7 @@ export class Ledger {
       $cost_source: row.cost_source,
       $total_cost: row.total_cost,
       $output_tokens_estimated: row.output_tokens_estimated,
+      $thinking_dropped: row.thinking_dropped,
     });
     if (attemptId === undefined) {
       const result = insert();
@@ -523,6 +528,7 @@ export class Ledger {
       cost_source,
       total_cost: providerTotal ?? priced?.total ?? (subscription ? 0 : null),
       output_tokens_estimated: record.output_tokens_estimated === true ? 1 : 0,
+      thinking_dropped: record.thinking_dropped ?? 0,
     };
   }
 }

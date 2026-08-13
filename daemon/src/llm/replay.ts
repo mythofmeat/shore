@@ -52,7 +52,16 @@ function isThinking(block: ContentBlock): boolean {
   return block.type === "thinking" || block.type === "redacted_thinking";
 }
 
-export function replayableMessages(req: SidecarRequest): WireMessage[] {
+export interface ThinkingDrops {
+  strippedByPolicy: number;
+  unportable: number;
+  uncarried: number;
+}
+
+export function replayableMessagesWithDrops(req: SidecarRequest): {
+  messages: WireMessage[];
+  drops: ThinkingDrops;
+} {
   const activeProvider = req.provider_key ?? "";
   const activeModel = req.model;
   const keepsUncarried = ECHOES_UNSIGNED_THINKING.has(req.sdk);
@@ -60,17 +69,46 @@ export function replayableMessages(req: SidecarRequest): WireMessage[] {
   const stripPrior =
     req.replay_prior_thinking === "none" && !REQUIRES_REASONING_REPLAY.has(activeProvider);
 
+  const drops: ThinkingDrops = { strippedByPolicy: 0, unportable: 0, uncarried: 0 };
+
   const out: WireMessage[] = [];
   for (const msg of req.messages) {
     const kept = msg.content.filter((block) => {
       if (block.type === "text" && block.text.trim() === "") return false;
       if (!isThinking(block)) return true;
-      if (stripPrior && msg.role === "assistant") return false;
-      if (block.type === "thinking" && !carriesOpaqueData(block) && !keepsUncarried) return false;
-      return isPortable(block, msg.provider_key, msg.model, activeProvider, activeModel);
+      if (stripPrior && msg.role === "assistant") {
+        drops.strippedByPolicy += 1;
+        return false;
+      }
+      if (block.type === "thinking" && !carriesOpaqueData(block) && !keepsUncarried) {
+        drops.uncarried += 1;
+        return false;
+      }
+      if (isPortable(block, msg.provider_key, msg.model, activeProvider, activeModel)) return true;
+      drops.unportable += 1;
+      return false;
     });
     if (kept.length === 0) continue;
     out.push({ ...msg, content: kept });
   }
-  return out;
+  return { messages: out, drops };
+}
+
+export function totalThinkingDrops(drops: ThinkingDrops): number {
+  return drops.strippedByPolicy + drops.unportable + drops.uncarried;
+}
+
+export function replayableMessages(req: SidecarRequest): WireMessage[] {
+  const { messages, drops } = replayableMessagesWithDrops(req);
+
+  if (req.context !== undefined) req.context.thinking_dropped = totalThinkingDrops(drops);
+
+  if (drops.unportable > 0) {
+    console.warn(
+      `shore: ${String(drops.unportable)} thinking block(s) were minted by another ` +
+        `provider or model and could not travel to ${req.provider_key ?? req.sdk}/${req.model}; ` +
+        `the turn goes over the wire stripped`,
+    );
+  }
+  return messages;
 }
