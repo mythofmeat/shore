@@ -53,15 +53,14 @@ export class StreamAccumulator {
   }
 
   flushThinking(): void {
-    if (this.#thinkingBuf !== "") {
-      this.#contentBlocks.push({
-        type: "thinking",
-        thinking: this.#thinkingBuf,
-        ...this.#pendingCarrier,
-      });
-      this.#thinkingBuf = "";
-      this.#pendingCarrier = undefined;
-    }
+    if (this.#thinkingBuf === "" && this.#pendingCarrier === undefined) return;
+    this.#contentBlocks.push({
+      type: "thinking",
+      thinking: this.#thinkingBuf,
+      ...this.#pendingCarrier,
+    });
+    this.#thinkingBuf = "";
+    this.#pendingCarrier = undefined;
   }
 
   handle(event: StreamEvent, regen: boolean, sink: FrameSink, rid?: string): StreamStep {
