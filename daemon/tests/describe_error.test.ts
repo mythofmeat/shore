@@ -37,6 +37,7 @@ describe("isLlmError", () => {
       MISSING,
       { kind: "provider", message: "x" },
       { kind: "budget_blocked", message: "x" },
+      { kind: "aborted", message: "x" },
     ];
     for (const e of all) expect(isLlmError(e)).toBe(true);
   });

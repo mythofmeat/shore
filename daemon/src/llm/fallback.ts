@@ -1,4 +1,4 @@
-import { AbortError, abortRejection } from "./abort";
+import { AbortError, abortRejection, isAbortError } from "./abort";
 import { classifyCredentialFailure, shouldRotate, type CredentialFailureKind } from "./credentials";
 import { shouldRetryError } from "./retry";
 import type { KeyCandidate } from "./credentials";
@@ -37,6 +37,8 @@ export function sanitizeReason(error: LlmError): string {
       return "response deserialization failed";
     case "budget_blocked":
       return truncateBytes(error.message, MAX_REASON_BYTES);
+    case "aborted":
+      return "request cancelled";
   }
 }
 
@@ -164,6 +166,8 @@ export async function streamWithRetry<T>(
       return await attempt();
     } catch (raw) {
       const error = raw as LlmError;
+      if (context.signal?.aborted === true) throw error;
+      if (isAbortError(raw)) throw raw;
       if (!shouldRetry(error, attemptIndex, settings.maxRetries)) throw error;
       const delay = retryDelayMs(settings, attemptIndex, {
         ...(context.random === undefined ? {} : { random: context.random }),

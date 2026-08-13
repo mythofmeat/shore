@@ -147,12 +147,15 @@ export class StreamAccumulator {
       case "error":
         return {
           kind: "error",
-          error: {
-            kind: "stream_errored",
-            message: event.message,
-            usage: event.usage,
-            timing: event.timing,
-          },
+          error:
+            event.aborted === true
+              ? { kind: "aborted", message: event.message }
+              : {
+                  kind: "stream_errored",
+                  message: event.message,
+                  usage: event.usage,
+                  timing: event.timing,
+                },
         };
     }
   }

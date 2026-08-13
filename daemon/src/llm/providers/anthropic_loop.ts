@@ -6,6 +6,7 @@ import type {
 } from "@anthropic-ai/sdk/resources/beta/messages";
 
 import { runnableTools } from "./anthropic_tools.ts";
+import { isAbortError } from "../abort.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
 import type { ContentBlock } from "../../engine/types.ts";
 import type { SidecarRequest, StreamEvent, SystemContent, Usage } from "../types.ts";
@@ -175,6 +176,7 @@ export async function* anthropicToolLoopEvents(
         total_ms: total,
         time_to_first_token_ms: firstTokenAt === 0 ? total : firstTokenAt - startedAt,
       },
+      ...(isAbortError(cause) || signal?.aborted === true ? { aborted: true } : {}),
     };
     return;
   }

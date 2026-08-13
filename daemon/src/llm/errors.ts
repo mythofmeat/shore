@@ -9,7 +9,8 @@ export type LlmError =
   | { kind: "stream_errored"; message: string; usage: Usage; timing: Timing }
   | { kind: "missing_api_key"; var: string }
   | { kind: "provider"; message: string }
-  | { kind: "budget_blocked"; message: string; scope?: string };
+  | { kind: "budget_blocked"; message: string; scope?: string }
+  | { kind: "aborted"; message: string };
 
 const LLM_ERROR_KINDS: ReadonlySet<string> = new Set([
   "transport",
@@ -21,6 +22,7 @@ const LLM_ERROR_KINDS: ReadonlySet<string> = new Set([
   "missing_api_key",
   "provider",
   "budget_blocked",
+  "aborted",
 ]);
 
 export function isLlmError(value: unknown): value is LlmError {
@@ -55,5 +57,7 @@ export function describeLlmError(error: LlmError): string {
       return `provider error: ${error.message}`;
     case "budget_blocked":
       return error.message;
+    case "aborted":
+      return `request was cancelled: ${error.message}`;
   }
 }

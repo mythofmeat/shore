@@ -1,5 +1,6 @@
 import type { ContentBlock, ImageRef } from "../engine/types.ts";
 import type { UsageConfig } from "../ledger/budget.ts";
+import { isAbortError } from "./abort.ts";
 
 export type Sdk =
   | "anthropic"
@@ -133,6 +134,7 @@ export type StreamEvent =
       message: string;
       usage: Usage;
       timing: Timing;
+      aborted?: boolean;
     };
 
 export function streamErrorEvent(
@@ -150,6 +152,7 @@ export function streamErrorEvent(
       total_ms: now() - startedAt,
       time_to_first_token_ms: firstTokenAt === 0 ? 0 : firstTokenAt - startedAt,
     },
+    ...(isAbortError(err) ? { aborted: true } : {}),
   };
 }
 
