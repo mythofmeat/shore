@@ -20,6 +20,7 @@ import {
   resultCharsFor,
   timeoutFor,
   truncateToolResult,
+  windowToolResult,
   type RetrievalMode,
   type ToolContext,
   type ToolLimitsView,
@@ -531,18 +532,47 @@ describe("deferred edit annotation", () => {
 describe("result truncation", () => {
   type TruncRow = { input: string; max_chars: number; output: string };
 
+  /**
+   * The Rust kept the head only and said so, which is what the fixture
+   * records. Since #92 the window keeps both ends at the same character cost
+   * — for a build log or a file read the tail is usually the part that matters
+   * — and the marker names a recovery instead of stating a fact and stopping.
+   *
+   * The fixture is frozen, so the cases that pass through untouched still
+   * assert against it verbatim; the ones that truncate assert the properties
+   * the Rust's format also had, plus the two that are new.
+   */
   for (const [i, row] of (fixture.truncate as TruncRow[]).entries()) {
+    const truncates = row.output.includes("[tool_result truncated");
     test(`case ${i}: ${JSON.stringify(row.input)} @ ${row.max_chars}`, () => {
-      expect(truncateToolResult(row.input, row.max_chars)).toBe(row.output);
+      const got = windowToolResult(row.input, row.max_chars);
+      if (!truncates) {
+        expect(got.output).toBe(row.output);
+        expect(got.truncated).toBe(false);
+        return;
+      }
+      expect(got.truncated).toBe(true);
+      expect(got.originalChars).toBe([...row.input].length);
+      expect(got.headChars + got.tailChars).toBe(row.max_chars);
+      expect(got.output.startsWith([...row.input].slice(0, got.headChars).join(""))).toBe(true);
+      expect(got.output).toContain(`${String([...row.input].length)} characters`);
+      expect(got.output).toContain("Narrow the call");
     });
   }
 
+  test("the tail is kept, not only the head", () => {
+    const got = windowToolResult("START" + "x".repeat(200) + "THE-ERROR-IS-HERE", 20);
+    expect(got.output).toContain("START");
+    expect(got.output).toContain("IS-HERE");
+    expect(got.headChars + got.tailChars).toBe(20);
+  });
+
   test("counts code points, not UTF-16 units", () => {
     // Four musical notes are 8 UTF-16 units and 4 chars. A `.length`-based
-    // implementation keeps two notes here and reports "3 of 8".
-    expect(truncateToolResult("🎵🎵🎵🎵", 3)).toBe(
-      "🎵🎵🎵\n\n[tool_result truncated: showing first 3 of 4 characters]",
-    );
+    // implementation would report "of 8" here.
+    const got = windowToolResult("🎵🎵🎵🎵", 3);
+    expect(got.originalChars).toBe(4);
+    expect(got.output).toContain("4 characters");
     expect("🎵🎵🎵🎵".length).toBe(8);
   });
 

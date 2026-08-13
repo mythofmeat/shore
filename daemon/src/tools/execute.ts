@@ -9,9 +9,10 @@ import {
   dispatchWithinDeadline,
   resultCharsFor,
   timeoutFor,
-  truncateToolResult,
+  windowToolResult,
   type ToolContext,
   type ToolLimitsView,
+  type ToolResultWindow,
 } from "./dispatch.ts";
 import { schemaViolation, type ToolSchemas } from "./validate.ts";
 
@@ -72,13 +73,14 @@ export async function executeToolUse(
   }
   const dispatchMs = clock() - startedAt;
 
-  const output = truncateToolResult(rawOutput, resultCharsFor(exec.limits, toolUse.name));
+  const windowed = windowToolResult(rawOutput, resultCharsFor(exec.limits, toolUse.name));
+  const output = windowed.output;
 
   if (!isError && toolUse.name === "generate_image") {
     attachGeneratedImage(okValue, intermediateMessages, exec);
   }
 
-  recordToolDiagnostics(exec, toolUse, dispatchMs, output, isError);
+  recordToolDiagnostics(exec, toolUse, dispatchMs, output, isError, windowed);
   emitToolResult(exec, toolUse, output, isError);
 
   return { type: "tool_result", tool_use_id: toolUse.id, content: output, is_error: isError };
@@ -134,6 +136,7 @@ function recordToolDiagnostics(
   durationMs: number,
   output: string,
   isError: boolean,
+  window?: ToolResultWindow,
 ): void {
   exec.diagnostics.push({
     timestamp: exec.now(),
@@ -143,6 +146,9 @@ function recordToolDiagnostics(
     duration_ms: durationMs,
     input_summary: truncateSummary(JSON.stringify(toolUse.input) ?? "", SUMMARY_CHARS),
     output_summary: truncateSummary(output, SUMMARY_CHARS),
+    ...(window === undefined
+      ? {}
+      : { truncated: window.truncated, result_chars: window.originalChars }),
   });
 }
 

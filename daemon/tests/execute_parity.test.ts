@@ -104,6 +104,17 @@ function stripAbsent(value: unknown): unknown {
   );
 }
 
+/**
+ * Drop the two fields #92 added to a diagnostics entry. The Rust that
+ * generated this fixture recorded neither, so they are asserted in the
+ * truncation tests in `dispatch_parity.test.ts` rather than written in here.
+ */
+function withoutTruncationFields(value: unknown): unknown {
+  if (value === null || typeof value !== "object") return value;
+  const { truncated: _t, result_chars: _c, ...rest } = value as Record<string, unknown>;
+  return rest;
+}
+
 // ── the fixture's shapes ────────────────────────────────────────────────
 
 interface FixtureLimits {
@@ -216,8 +227,47 @@ interface ExecCase {
   output: unknown;
 }
 
+/**
+ * The three cases whose recorded output is the Rust's head-only truncation
+ * marker. #92 replaced it with a head+tail window carrying a recovery hint, so
+ * their exact text is a deliberate divergence; what still has to hold is that
+ * the result is capped, that both ends survive, and that the original length
+ * is reported. That is asserted below instead of against the frozen fixture.
+ */
+const TRUNCATION_FORMAT_DIVERGES = new Set([
+  "a long result is truncated before anything sees it",
+  "a per-tool cap outranks the global one",
+  "an error result is truncated too",
+]);
+
 describe("execute_tool_use", () => {
   for (const c of fixture.execute_tool_use as unknown as ExecCase[]) {
+    if (TRUNCATION_FORMAT_DIVERGES.has(c.name)) {
+      test(`${c.name} (diverges: #92)`, async () => {
+        const ctx = scriptedContext(c.input.tool.name, c.input.scripted);
+        const { exec, diagnostics } = harness(c.input.rid, limitsFrom(c.input.limits), ctx);
+        const block = await executeToolUse(
+          c.input.tool,
+          exec,
+          structuredClone(c.input.intermediate_messages),
+        );
+
+        const cap = limitsFrom(c.input.limits);
+        const kept =
+          cap.config?.[c.input.tool.name]?.max_result_chars ?? cap.max_result_chars;
+        const content = (block as { content: string }).content;
+        const entry = diagnostics[0] as { truncated: boolean; result_chars: number };
+
+        expect(entry.truncated).toBe(true);
+        expect(entry.result_chars).toBeGreaterThan(kept);
+        expect(content).toContain(`${String(entry.result_chars)} characters`);
+        expect(content).toContain("Narrow the call");
+        const [head, tail] = content.split("\n\n[tool_result truncated:");
+        expect(head?.length ?? 0).toBeGreaterThan(0);
+        expect((tail ?? "").split("to see the rest.]\n\n")[1]?.length ?? 0).toBeGreaterThan(0);
+      });
+      continue;
+    }
     test(c.name, async () => {
       const ctx = scriptedContext(c.input.tool.name, c.input.scripted);
       const { exec, frames, diagnostics } = harness(
@@ -229,12 +279,16 @@ describe("execute_tool_use", () => {
 
       const block = await executeToolUse(c.input.tool, exec, messages);
 
+      // `truncated` and `result_chars` are #92 additions to the diagnostics
+      // entry; the Rust that generated this fixture recorded neither, so they
+      // are asserted separately in the truncation tests rather than written
+      // into a frozen fixture.
       expect(
         normalise(
           stripAbsent({
-            block,
+            block: withoutTruncationFields(block),
             frames,
-            diagnostics,
+            diagnostics: diagnostics.map(withoutTruncationFields),
             intermediate_messages: messages,
           }),
         ),

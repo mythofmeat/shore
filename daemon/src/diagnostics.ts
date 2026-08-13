@@ -51,6 +51,8 @@ export interface ToolCallEntry {
   duration_ms: number;
   input_summary: string;
   output_summary: string;
+  truncated?: boolean;
+  result_chars?: number;
 }
 
 export interface ErrorEntry {
