@@ -276,6 +276,37 @@ pub(crate) fn print_status(data: &serde_json::Value, character_name: &str) {
     }
 }
 
+pub(crate) fn print_character_list(data: &serde_json::Value, active: Option<&str>) {
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    let width = term_width();
+    write_section_header(&mut out, "Characters", "", width);
+
+    let names: Vec<&str> = data["characters"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|c| c["name"].as_str())
+        .collect();
+    if names.is_empty() {
+        print_dim_line(
+            &mut out,
+            "(none — `shore character --new <name>` creates one)",
+        );
+        return;
+    }
+    for name in names {
+        if active == Some(name) {
+            _ = write!(out, "  * ");
+            write_fg(&mut out, character_color(name), name);
+            write_dim(&mut out, " (active)");
+            _ = writeln!(out);
+        } else {
+            _ = writeln!(out, "    {name}");
+        }
+    }
+}
+
 /// Render one named slice of the status payload. Returns false when the
 /// payload has no such section, so the caller can report an unknown name.
 pub(crate) fn print_status_section(data: &serde_json::Value, section: &str) -> bool {
@@ -408,12 +439,9 @@ fn print_call_log(data: &serde_json::Value) {
         print_dim_line(&mut out, "(no calls recorded)");
         return;
     };
-    write_section_header(
-        &mut out,
-        "call log",
-        &format!("{} calls", entries.len()),
-        width,
-    );
+    let count = entries.len();
+    let plural = if count == 1 { "call" } else { "calls" };
+    write_section_header(&mut out, "call log", &format!("{count} {plural}"), width);
     for entry in entries {
         let usage = &entry["usage"];
         write_fg(
@@ -1231,12 +1259,19 @@ fn session_activate_heartbeat(h: &serde_json::Value) -> String {
 
 /// Print edit confirmation.
 fn print_edit_confirmation(data: &serde_json::Value) {
-    let msg_ref = data["ref"].as_str().unwrap_or("?");
+    let msg_ref = data["_display_ref"]
+        .as_str()
+        .or_else(|| data["ref"].as_str())
+        .unwrap_or("?");
     cli_out!("Edited message {msg_ref}");
 }
 
 /// Print delete confirmation.
 fn print_delete_confirmation(data: &serde_json::Value) {
+    if let Some(display_ref) = data["_display_ref"].as_str() {
+        cli_out!("Deleted message {display_ref}");
+        return;
+    }
     if let Some(arr) = data["deleted"].as_array() {
         let n = arr.len();
         if n == 1 {
@@ -1257,10 +1292,37 @@ fn print_delete_confirmation(data: &serde_json::Value) {
 
 /// Print alternate-response selection confirmation.
 fn print_alt_confirmation(data: &serde_json::Value) {
-    let msg_ref = data["ref"].as_str().unwrap_or("?");
+    let msg_ref = data["_display_ref"]
+        .as_str()
+        .or_else(|| data["ref"].as_str())
+        .unwrap_or("?");
     let position = data["position"].as_u64().unwrap_or(0);
     let count = data["alt_count"].as_u64().unwrap_or(0);
     cli_out!("Selected alternate {position}/{count} for {msg_ref}");
+    if let Some(content) = data["content"].as_str() {
+        let preview = first_line_preview(content, ALT_PREVIEW_CHARS);
+        if !preview.is_empty() {
+            let stdout = io::stdout();
+            let mut out = stdout.lock();
+            write_dim(&mut out, &format!("  {preview}\n"));
+        }
+    }
+}
+
+/// Characters of the newly selected alternate echoed back as confirmation.
+const ALT_PREVIEW_CHARS: usize = 160;
+
+fn first_line_preview(content: &str, max: usize) -> String {
+    let line = content
+        .lines()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or("")
+        .trim();
+    if line.chars().count() <= max {
+        return line.to_owned();
+    }
+    let kept: String = line.chars().take(max).collect();
+    format!("{kept}…")
 }
 
 fn alt_preview(content: &str, max_width: usize) -> String {
@@ -1279,7 +1341,10 @@ fn alt_preview(content: &str, max_width: usize) -> String {
 
 /// Print alternate-response list.
 fn print_alt_list(data: &serde_json::Value) {
-    let msg_ref = data["ref"].as_str().unwrap_or("?");
+    let msg_ref = data["_display_ref"]
+        .as_str()
+        .or_else(|| data["ref"].as_str())
+        .unwrap_or("?");
     let alternatives: &[serde_json::Value] =
         data["alternatives"].as_array().map_or(&[], Vec::as_slice);
     if alternatives.is_empty() {
@@ -2425,6 +2490,9 @@ pub(crate) fn print_diagnostics(data: &serde_json::Value) {
                 w,
                 &format!("in:{input:<5} out:{output_t:<5} cache:{cr}/{cw}  {secs}s"),
             );
+            if let Some(sub) = call["subagent"].as_str() {
+                write_dim(w, &format!("  via {sub}"));
+            }
 
             if let Some(err) = call.get("error").filter(|v| !v.is_null()) {
                 write_fg(
@@ -2551,12 +2619,6 @@ fn format_local_ampm(rfc3339: &str) -> String {
 /// can see why the budget total isn't the same as today's summary).
 const TIME_W: usize = 19;
 
-/// Width of a pace row's label so its `Spend` column starts where the budget
-/// row's does: the budget row's name+period fields span `24 + 1 + 6 + 1 = 32`
-/// columns, and the pace row spends 4 on its `└ ` prefix plus 1 on the trailing
-/// separator.
-const PACE_LABEL_W: usize = 27;
-
 fn print_budget_table(data: &serde_json::Value) {
     let budgets = data["budgets"].as_array();
     if budgets.is_none_or(Vec::is_empty) {
@@ -2564,20 +2626,8 @@ fn print_budget_table(data: &serde_json::Value) {
         return;
     }
 
-    let table_w = 24 + 1 + 6 + 1 + 11 + 1 + 7 + 2 + 15 + 1 + 16 + 1 + TIME_W + 1 + TIME_W;
-
-    cli_out!(
-        "{:<24} {:<6} {:>11} {:>7}  {:<15} {:<16} {:<TIME_W$} {:<TIME_W$}",
-        "Budget",
-        "Period",
-        "Spend",
-        "Used",
-        "Status",
-        "Action",
-        "Started",
-        "Resets"
-    );
-    cli_out!("{}", "-".repeat(table_w));
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
     if let Some(rows) = budgets {
         for budget in rows {
             let current = budget["current_cost"].as_f64().unwrap_or(0.0);
@@ -2595,33 +2645,46 @@ fn print_budget_table(data: &serde_json::Value) {
                 .as_str()
                 .map(format_local_ampm)
                 .map_or_else(|| "?".into(), |s| ellipsize(&s, TIME_W));
-            cli_out!(
-                "{:<24} {:<6} {:>5.2}/{:<5.2} {:>6.0}%  {:<15} {:<16} {started:<TIME_W$} {reset:<TIME_W$}",
-                budget["name"].as_str().unwrap_or("budget"),
-                budget["period"].as_str().unwrap_or("day"),
-                current,
-                limit,
-                percent,
-                budget["status"].as_str().unwrap_or("ok"),
-                acting_now(budget),
+            _ = writeln!(
+                out,
+                "  {}",
+                ellipsize(
+                    budget["name"].as_str().unwrap_or("budget"),
+                    term_width().saturating_sub(2)
+                )
             );
-            if let Some(row) = pace_row(budget) {
-                cli_out!("{row}");
+            write_row(
+                &mut out,
+                "Period",
+                budget["period"].as_str().unwrap_or("day"),
+            );
+            write_row(
+                &mut out,
+                "Spend",
+                &format!("${current:.2} / ${limit:.2} · {percent:.0}%"),
+            );
+            write_row(
+                &mut out,
+                "State",
+                &format!(
+                    "{} · action {}",
+                    budget["status"].as_str().unwrap_or("ok"),
+                    acting_now(budget)
+                ),
+            );
+            write_row(&mut out, "Window", &format!("{started} → {reset}"));
+            for (label, value) in pace_rows(budget) {
+                write_row(&mut out, label, &value);
             }
+            _ = writeln!(out);
         }
     }
 }
 
-/// Continuation line for a budget that configures a pace, or `None` when it
-/// doesn't.
-///
-/// Rendered under its budget rather than as extra columns: the table is already
-/// ~104 wide, and the pace's "spend against today's allowance" is a different
-/// measurement from the period totals above it.
-fn pace_row(budget: &serde_json::Value) -> Option<String> {
+fn pace_rows(budget: &serde_json::Value) -> Vec<(&'static str, String)> {
     let pace = &budget["pace"];
     if !pace.is_object() {
-        return None;
+        return Vec::new();
     }
 
     let current = pace["current_cost"].as_f64().unwrap_or(0.0);
@@ -2640,23 +2703,33 @@ fn pace_row(budget: &serde_json::Value) -> Option<String> {
         .map(format_local_ampm)
         .map_or_else(|| "?".into(), |s| ellipsize(&s, TIME_W));
 
-    let row = format!(
-        "  \u{2514} {:<PACE_LABEL_W$} {:>5.2}/{:<5.2} {:>6.0}%  {:<15} {:<16} {started:<TIME_W$} {resets:<TIME_W$}",
-        format!("{} pace", pace["period"].as_str().unwrap_or("day")),
-        current,
-        allowance,
-        percent,
-        pace["status"].as_str().unwrap_or("ok"),
-        acting_now(pace),
-    );
-    let Some(base) = pace["base_allowance"].as_f64() else {
-        return Some(row);
-    };
-    let rollover = pace["rollover"].as_f64().unwrap_or(0.0);
-    let debt = pace["debt_adjustment"].as_f64().unwrap_or(0.0);
-    Some(format!(
-        "{row}\n      base ${base:.2}  + rollover ${rollover:.2}  - debt adjustment ${debt:.2}"
-    ))
+    let mut rows = vec![
+        (
+            "Pace",
+            format!(
+                "{} · ${current:.2} / ${allowance:.2} · {percent:.0}%",
+                pace["period"].as_str().unwrap_or("day")
+            ),
+        ),
+        (
+            "Pace State",
+            format!(
+                "{} · action {}",
+                pace["status"].as_str().unwrap_or("ok"),
+                acting_now(pace)
+            ),
+        ),
+        ("Pace Window", format!("{started} → {resets}")),
+    ];
+    if let Some(base) = pace["base_allowance"].as_f64() {
+        let rollover = pace["rollover"].as_f64().unwrap_or(0.0);
+        let debt = pace["debt_adjustment"].as_f64().unwrap_or(0.0);
+        rows.push((
+            "Pace Basis",
+            format!("${base:.2} + ${rollover:.2} rollover − ${debt:.2} debt"),
+        ));
+    }
+    rows
 }
 
 /// The action in force at the current spend, for the `Action` column.
@@ -2681,52 +2754,11 @@ fn usage_display_date(data: &serde_json::Value) -> String {
     }
 }
 
-/// Render the per-provider/model summary table for `shore usage`.
-///
-/// Column widths for `Provider` and `Model` are computed from the rendered
-/// rows so that an oversized name (e.g. `openrouter-anthropic`) can no longer
-/// shove every subsequent value under the wrong header. Values that exceed
-/// the per-column cap are truncated with `…`.
 fn write_usage_summary_table(out: &mut impl Write, data: &serde_json::Value) -> io::Result<()> {
-    const PROVIDER_HEADER: &str = "Provider";
-    const MODEL_HEADER: &str = "Model";
-    // Caps keep one freakishly long name from blowing the table out across
-    // the terminal; anything longer is truncated with `…`.
-    const MAX_PROVIDER_W: usize = 28;
-    const MAX_MODEL_W: usize = 40;
-
     let period = data["period"].as_str().unwrap_or("today");
     let today = usage_display_date(data);
-    writeln!(out, "Shore Usage \u{2014} {today} (period: {period})\n")?;
-
+    write_section_header(out, "Usage", &format!("{today} · {period}"), term_width());
     let summary = data["summary"].as_array();
-
-    let mut provider_w = PROVIDER_HEADER.chars().count();
-    let mut model_w = MODEL_HEADER.chars().count();
-    if let Some(rows) = summary {
-        for s in rows {
-            if let Some(p) = s["provider"].as_str() {
-                provider_w = provider_w.max(p.chars().count());
-            }
-            if let Some(m) = s["model"].as_str() {
-                model_w = model_w.max(m.chars().count());
-            }
-        }
-    }
-    provider_w = provider_w.min(MAX_PROVIDER_W);
-    model_w = model_w.min(MAX_MODEL_W);
-
-    writeln!(
-        out,
-        "{:<provider_w$} {:<model_w$} {:>5}  {:>9}  {:>9}  {:>9}  {:>9}  {:>8}",
-        PROVIDER_HEADER, MODEL_HEADER, "Calls", "Input", "Output", "Cache R", "Cache W", "Cost"
-    )?;
-
-    let total_w = [provider_w, 1, model_w, 1, 5, 2, 9, 2, 9, 2, 9, 2, 9, 2, 8]
-        .into_iter()
-        .fold(0_usize, usize::saturating_add);
-    writeln!(out, "{}", "-".repeat(total_w))?;
-
     let mut grand_total = 0.0_f64;
     if let Some(rows) = summary {
         for s in rows {
@@ -2737,28 +2769,47 @@ fn write_usage_summary_table(out: &mut impl Write, data: &serde_json::Value) -> 
                     format!("${c:.2}")
                 },
             );
-            let provider = ellipsize(s["provider"].as_str().unwrap_or(""), provider_w);
-            let model = ellipsize(s["model"].as_str().unwrap_or(""), model_w);
-            writeln!(
+            let provider = s["provider"].as_str().unwrap_or("?");
+            let model = s["model"].as_str().unwrap_or("?");
+            let heading = ellipsize(
+                &format!("{provider} · {model}"),
+                term_width().saturating_sub(2),
+            );
+            writeln!(out, "  {heading}")?;
+            write_row(
                 out,
-                "{provider:<provider_w$} {model:<model_w$} {:>5}  {:>9}  {:>9}  {:>9}  {:>9}  {:>8}",
-                s["call_count"].as_u64().unwrap_or(0),
-                format_k(s["total_input"].as_u64().unwrap_or(0)),
-                format_k(s["total_output"].as_u64().unwrap_or(0)),
-                format_k(s["total_cache_read"].as_u64().unwrap_or(0)),
-                format_k(s["total_cache_write"].as_u64().unwrap_or(0)),
-                cost_str,
-            )?;
+                "Calls",
+                &format!(
+                    "{} · cost {cost_str}",
+                    s["call_count"].as_u64().unwrap_or(0)
+                ),
+            );
+            write_row(
+                out,
+                "Input",
+                &format_k(s["total_input"].as_u64().unwrap_or(0)),
+            );
+            write_row(
+                out,
+                "Output",
+                &format_k(s["total_output"].as_u64().unwrap_or(0)),
+            );
+            write_row(
+                out,
+                "Cache Read",
+                &format_k(s["total_cache_read"].as_u64().unwrap_or(0)),
+            );
+            write_row(
+                out,
+                "Cache Write",
+                &format_k(s["total_cache_write"].as_u64().unwrap_or(0)),
+            );
+            writeln!(out)?;
         }
         if rows.is_empty() {
-            writeln!(out, "  No usage data for this period.")?;
+            print_dim_line(out, "No usage data for this period.");
         } else {
-            // "Total:" sits in the column space before Cost; the dollar amount
-            // right-aligns inside the 8-char Cost column so it lines up with
-            // the per-row costs above it.
-            let label_w = total_w.saturating_sub(9);
-            let total_str = format!("${grand_total:.2}");
-            writeln!(out, "{:>label_w$} {total_str:>8}", "Total:")?;
+            write_row(out, "Total Cost", &format!("${grand_total:.2}"));
         }
     }
     Ok(())
@@ -2779,7 +2830,15 @@ pub(crate) fn print_usage(data: &serde_json::Value) {
         "budget" => {
             let today = usage_display_date(data);
             let timezone = data["timezone"].as_str().unwrap_or("local");
-            cli_out!("Shore Usage Budgets - {today} (timezone: {timezone})\n");
+            let stdout = io::stdout();
+            let mut out = stdout.lock();
+            write_section_header(
+                &mut out,
+                "Usage budgets",
+                &format!("{today} · {timezone}"),
+                term_width(),
+            );
+            drop(out);
             print_budget_table(data);
         }
         "anomalies" => print_usage_anomalies(data),
@@ -2791,22 +2850,17 @@ pub(crate) fn print_usage(data: &serde_json::Value) {
     }
 }
 
-/// Render the `usage --by-call-type` breakdown table.
 fn print_usage_by_call_type(data: &serde_json::Value) {
     let period = data["period"].as_str().unwrap_or("today");
     let today = usage_display_date(data);
-    cli_out!("Shore Usage by Call Type \u{2014} {today} (period: {period})\n");
-    cli_out!(
-        "{:<18} {:>5}  {:>9}  {:>9}  {:>9}  {:>9}  {:>8}",
-        "Call Type",
-        "Calls",
-        "Input",
-        "Output",
-        "Cache R",
-        "Cache W",
-        "Cost"
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    write_section_header(
+        &mut out,
+        "Usage by call type",
+        &format!("{today} · {period}"),
+        term_width(),
     );
-    cli_out!("{}", "-".repeat(78));
     let summary = data["summary"].as_array();
     let mut grand_total = 0.0_f64;
     if let Some(rows) = summary {
@@ -2818,41 +2872,32 @@ fn print_usage_by_call_type(data: &serde_json::Value) {
                     format!("${c:.2}")
                 },
             );
-            cli_out!(
-                "{:<18} {:>5}  {:>9}  {:>9}  {:>9}  {:>9}  {:>8}",
-                s["call_type"].as_str().unwrap_or(""),
-                s["call_count"].as_u64().unwrap_or(0),
-                format_k(s["total_input"].as_u64().unwrap_or(0)),
-                format_k(s["total_output"].as_u64().unwrap_or(0)),
-                format_k(s["total_cache_read"].as_u64().unwrap_or(0)),
-                format_k(s["total_cache_write"].as_u64().unwrap_or(0)),
-                cost_str,
+            write_usage_group(
+                &mut out,
+                s["call_type"].as_str().unwrap_or("?"),
+                s,
+                &cost_str,
             );
         }
         if rows.is_empty() {
-            cli_out!("  No usage data for this period.");
+            print_dim_line(&mut out, "No usage data for this period.");
         } else {
-            cli_out!("{:>70} ${grand_total:.2}", "Total:");
+            write_row(&mut out, "Total Cost", &format!("${grand_total:.2}"));
         }
     }
 }
 
-/// Render the `usage --by-kind` breakdown table.
 fn print_usage_by_kind(data: &serde_json::Value) {
     let period = data["period"].as_str().unwrap_or("today");
     let today = usage_display_date(data);
-    cli_out!("Shore Usage by Kind - {today} (period: {period})\n");
-    cli_out!(
-        "{:<20} {:>5}  {:>9}  {:>9}  {:>9}  {:>9}  {:>8}",
-        "Usage Kind",
-        "Calls",
-        "Input",
-        "Output",
-        "Cache R",
-        "Cache W",
-        "Cost"
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    write_section_header(
+        &mut out,
+        "Usage by kind",
+        &format!("{today} · {period}"),
+        term_width(),
     );
-    cli_out!("{}", "-".repeat(80));
     let summary = data["summary"].as_array();
     let mut grand_total = 0.0_f64;
     if let Some(rows) = summary {
@@ -2864,42 +2909,32 @@ fn print_usage_by_kind(data: &serde_json::Value) {
                     format!("${c:.2}")
                 },
             );
-            cli_out!(
-                "{:<20} {:>5}  {:>9}  {:>9}  {:>9}  {:>9}  {:>8}",
+            write_usage_group(
+                &mut out,
                 s["usage_kind"].as_str().unwrap_or(""),
-                s["call_count"].as_u64().unwrap_or(0),
-                format_k(s["total_input"].as_u64().unwrap_or(0)),
-                format_k(s["total_output"].as_u64().unwrap_or(0)),
-                format_k(s["total_cache_read"].as_u64().unwrap_or(0)),
-                format_k(s["total_cache_write"].as_u64().unwrap_or(0)),
-                cost_str,
+                s,
+                &cost_str,
             );
         }
         if rows.is_empty() {
-            cli_out!("  No usage data for this period.");
+            print_dim_line(&mut out, "No usage data for this period.");
         } else {
-            cli_out!("{:>72} ${grand_total:.2}", "Total:");
+            write_row(&mut out, "Total Cost", &format!("${grand_total:.2}"));
         }
     }
 }
 
-/// Render the `usage --by-api-key` breakdown table.
 fn print_usage_by_api_key(data: &serde_json::Value) {
     let period = data["period"].as_str().unwrap_or("today");
     let today = usage_display_date(data);
-    cli_out!("Shore Usage by API Key - {today} (period: {period})\n");
-    cli_out!(
-        "{:<22} {:<18} {:>5}  {:>9}  {:>9}  {:>9}  {:>9}  {:>8}",
-        "Provider",
-        "API Key",
-        "Calls",
-        "Input",
-        "Output",
-        "Cache R",
-        "Cache W",
-        "Cost"
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    write_section_header(
+        &mut out,
+        "Usage by API key",
+        &format!("{today} · {period}"),
+        term_width(),
     );
-    cli_out!("{}", "-".repeat(102));
     let summary = data["summary"].as_array();
     let mut grand_total = 0.0_f64;
     if let Some(rows) = summary {
@@ -2911,49 +2946,100 @@ fn print_usage_by_api_key(data: &serde_json::Value) {
                     format!("${c:.2}")
                 },
             );
-            cli_out!(
-                "{:<22} {:<18} {:>5}  {:>9}  {:>9}  {:>9}  {:>9}  {:>8}",
-                s["provider"].as_str().unwrap_or(""),
-                s["api_key_name"].as_str().unwrap_or("unknown"),
-                s["call_count"].as_u64().unwrap_or(0),
-                format_k(s["total_input"].as_u64().unwrap_or(0)),
-                format_k(s["total_output"].as_u64().unwrap_or(0)),
-                format_k(s["total_cache_read"].as_u64().unwrap_or(0)),
-                format_k(s["total_cache_write"].as_u64().unwrap_or(0)),
-                cost_str,
+            write_usage_group(
+                &mut out,
+                &format!(
+                    "{} · {}",
+                    s["provider"].as_str().unwrap_or("?"),
+                    s["api_key_name"].as_str().unwrap_or("unknown")
+                ),
+                s,
+                &cost_str,
             );
         }
         if rows.is_empty() {
-            cli_out!("  No usage data for this period.");
+            print_dim_line(&mut out, "No usage data for this period.");
         } else {
-            cli_out!("{:>94} ${grand_total:.2}", "Total:");
+            write_row(&mut out, "Total Cost", &format!("${grand_total:.2}"));
         }
     }
 }
 
-/// Render the `usage --anomalies` listing.
+fn write_usage_group(out: &mut impl Write, name: &str, row: &serde_json::Value, cost: &str) {
+    _ = writeln!(out, "  {}", ellipsize(name, term_width().saturating_sub(2)));
+    write_row(
+        out,
+        "Calls",
+        &format!("{} · cost {cost}", row["call_count"].as_u64().unwrap_or(0)),
+    );
+    write_row(
+        out,
+        "Input",
+        &format_k(row["total_input"].as_u64().unwrap_or(0)),
+    );
+    write_row(
+        out,
+        "Output",
+        &format_k(row["total_output"].as_u64().unwrap_or(0)),
+    );
+    write_row(
+        out,
+        "Cache Read",
+        &format_k(row["total_cache_read"].as_u64().unwrap_or(0)),
+    );
+    write_row(
+        out,
+        "Cache Write",
+        &format_k(row["total_cache_write"].as_u64().unwrap_or(0)),
+    );
+    _ = writeln!(out);
+}
+
 fn print_usage_anomalies(data: &serde_json::Value) {
+    let today = usage_display_date(data);
+    let subtitle = match data["period"].as_str() {
+        Some(period) => format!("{today} · {period}"),
+        None => today,
+    };
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    write_section_header(&mut out, "Cache anomalies", &subtitle, term_width());
     let Some(anomalies) = data["anomalies"].as_array() else {
-        cli_out!("No cache anomalies found.");
+        print_dim_line(&mut out, "No cache anomalies found.");
         return;
     };
     if anomalies.is_empty() {
-        cli_out!("No cache anomalies found.");
+        print_dim_line(&mut out, "No cache anomalies found.");
     } else {
-        cli_out!("Cache Anomalies:\n");
         for r in anomalies {
-            cli_out!(
-                "  {} {} {} {} \u{2014} {} (read: {}, write: {})",
-                r["ts"].as_str().unwrap_or("?"),
+            _ = writeln!(
+                out,
+                "  {} · {}",
                 r["character"].as_str().unwrap_or("?"),
-                r["model"].as_str().unwrap_or("?"),
-                r["call_type"].as_str().unwrap_or("?"),
-                r["anomaly"].as_str().unwrap_or("?"),
-                r["cache_read_tokens"].as_u64().unwrap_or(0),
-                r["cache_write_tokens"].as_u64().unwrap_or(0),
+                r["anomaly"].as_str().unwrap_or("?")
             );
+            write_row(&mut out, "When", r["ts"].as_str().unwrap_or("?"));
+            write_row(
+                &mut out,
+                "Call",
+                &format!(
+                    "{} · {}",
+                    r["model"].as_str().unwrap_or("?"),
+                    r["call_type"].as_str().unwrap_or("?")
+                ),
+            );
+            write_row(
+                &mut out,
+                "Cache",
+                &format!(
+                    "read {} · write {}",
+                    r["cache_read_tokens"].as_u64().unwrap_or(0),
+                    r["cache_write_tokens"].as_u64().unwrap_or(0)
+                ),
+            );
+            _ = writeln!(out);
         }
-        cli_out!("\nTotal: {} anomalies", anomalies.len());
+        write_row(&mut out, "Total", &format!("{} anomalies", anomalies.len()));
     }
 }
 
@@ -2991,7 +3077,7 @@ fn print_usage_summary(data: &serde_json::Value) {
 
     if let Some(health) = data["cache_health"].as_array() {
         if !health.is_empty() {
-            cli_out!("\nCache Health (anthropic):");
+            print_usage_section("Cache health", "anthropic");
             for entry in health {
                 let char_name = entry["character"].as_str().unwrap_or("?");
                 let state = entry["state"].as_str().unwrap_or("cold");
@@ -3001,22 +3087,35 @@ fn print_usage_summary(data: &serde_json::Value) {
                 } else {
                     "Cold".into()
                 };
-                cli_out!("  {char_name:<8} \u{2014} {state_str}");
+                cli_out!("  {char_name:<13}{state_str}");
             }
         }
     }
 
     if let Some(budgets) = data["budgets"].as_array() {
         if !budgets.is_empty() {
-            cli_out!("\nBudgets:");
+            print_usage_section("Usage budgets", "");
             print_budget_table(data);
         }
     }
     let anomaly_count = data["anomaly_count_7d"].as_u64().unwrap_or(0);
-    cli_out!("\nAnomalies (last 7d): {anomaly_count}");
+    print_usage_section("Cache anomalies", "last 7d");
+    write_usage_row("Total", &anomaly_count.to_string());
     print_anomaly_breakdown(data);
     print_cache_coverage(data);
     print_rate_limits(data);
+}
+
+fn print_usage_section(title: &str, suffix: &str) {
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    write_section_header(&mut out, title, suffix, term_width());
+}
+
+fn write_usage_row(label: &str, value: &str) {
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    write_row(&mut out, label, value);
 }
 
 /// Break the anomaly total down by kind. A bare count says something is wrong;
@@ -3055,7 +3154,7 @@ fn print_cache_coverage(data: &serde_json::Value) {
     if rows.is_empty() {
         return;
     }
-    cli_out!("\nCache coverage:");
+    print_usage_section("Cache coverage", "");
     for row in rows {
         let state = row["state"].as_str().unwrap_or("?");
         let calls = row["calls"].as_u64().unwrap_or(0);
@@ -3078,7 +3177,7 @@ fn print_rate_limits(data: &serde_json::Value) {
     if rows.is_empty() {
         return;
     }
-    cli_out!("\nProvider quota (as of the last response):");
+    print_usage_section("Provider quota", "last response");
     for row in rows {
         let host = row["host"].as_str().unwrap_or("?");
         let requests = quota_fraction(row, "requests");
@@ -3323,10 +3422,6 @@ fn write_autonomy_events(out: &mut impl Write, autonomy: &serde_json::Value) {
 mod tests {
     use super::*;
     use crate::output::set_color_enabled;
-
-    fn line<'src>(lines: &'src [&str], index: usize) -> &'src str {
-        lines.get(index).copied().expect("expected rendered line")
-    }
 
     #[test]
     fn call_request_payload_is_pretty_printed() {
@@ -4047,11 +4142,11 @@ mod tests {
     }
 
     #[test]
-    fn pace_row_omitted_without_a_pace() {
+    fn pace_rows_omitted_without_a_pace() {
         let budget = serde_json::json!({ "name": "weekly", "period": "week" });
         assert!(
-            pace_row(&budget).is_none(),
-            "an unpaced budget gets no continuation line"
+            pace_rows(&budget).is_empty(),
+            "an unpaced budget gets no pace rows"
         );
     }
 
@@ -4059,7 +4154,7 @@ mod tests {
     /// `PaceStatus`), since this renderer reads the JSON untyped and would
     /// silently print zeros if a key were ever renamed on the producer side.
     #[test]
-    fn pace_row_renders_spend_against_allowance() {
+    fn pace_rows_render_spend_state_window_and_basis() {
         let budget = serde_json::json!({
             "name": "weekly",
             "period": "week",
@@ -4084,30 +4179,20 @@ mod tests {
                 "over_limit": false
             }
         });
-        let row = pace_row(&budget).expect("paced budget renders a row");
-        assert!(row.contains("day pace"), "row names the pace period: {row}");
+        let rows = pace_rows(&budget);
+        let rendered = rows
+            .iter()
+            .map(|(label, value)| format!("{label}: {value}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(rendered.contains("Pace: day"), "pace period: {rendered}");
+        assert!(rendered.contains("$1.00 / $2.17"), "pace spend: {rendered}");
+        assert!(rendered.contains("46%"), "pace share: {rendered}");
         assert!(
-            row.contains("1.00/2.17"),
-            "row shows spend against allowance: {row}"
+            rendered.contains("$2.00 + $0.25 rollover − $0.08 debt"),
+            "pace basis: {rendered}"
         );
-        assert!(row.contains("46%"), "row shows the used share: {row}");
-        assert!(
-            row.contains("base $2.00  + rollover $0.25  - debt adjustment $0.08"),
-            "row explains how the allowance was formed: {row}"
-        );
-        assert!(
-            row.contains("2026-05-22"),
-            "row shows the pace sub-window bounds: {row}"
-        );
-        // The pace row sits under the budget row's columns, so the two read
-        // down a single axis. 37 is where `{:<24} {:<6} {:>5.2}` puts the
-        // budget row's spend separator. Counted in chars, not bytes — the
-        // `└` prefix is three bytes wide but occupies one column.
-        assert_eq!(
-            row.chars().position(|c| c == '/'),
-            Some(37),
-            "pace spend column must line up with the budget row's: {row}"
-        );
+        assert!(rendered.contains("2026-05-22"), "pace window: {rendered}");
     }
 
     #[test]
@@ -4122,13 +4207,7 @@ mod tests {
     }
 
     #[test]
-    #[expect(
-        clippy::string_slice,
-        reason = "test slices a fixed ASCII table row at a find()-derived offset, so the bounds are char boundaries"
-    )]
-    fn usage_summary_table_keeps_columns_aligned_with_long_provider() {
-        // Regression for issue #32: an over-long provider name used to push
-        // every subsequent value one column to the right.
+    fn usage_summary_uses_section_rows_and_stays_narrow() {
         let data = serde_json::json!({
             "mode": "summary",
             "period": "today",
@@ -4159,56 +4238,17 @@ mod tests {
         let mut buf: Vec<u8> = Vec::new();
         write_usage_summary_table(&mut buf, &data).expect("write");
         let rendered = String::from_utf8(buf).expect("utf8");
-        let lines: Vec<&str> = rendered.lines().collect();
-        // Layout: title, blank, header, separator, two rows, total.
-        let header = line(&lines, 2);
-        let separator = line(&lines, 3);
-        let row1 = line(&lines, 4);
-        let row2 = line(&lines, 5);
-
-        // Every body line shares the same width as the separator, so no row
-        // can shift columns relative to the header.
-        assert_eq!(
-            row1.chars().count(),
-            separator.chars().count(),
-            "row1 width"
-        );
-        assert_eq!(
-            row2.chars().count(),
-            separator.chars().count(),
-            "row2 width"
-        );
-        assert_eq!(
-            header.chars().count(),
-            separator.chars().count(),
-            "header width"
-        );
-
-        // The Cost column right-aligns to the table edge — `$5.11` must end
-        // at the last column of the separator.
-        assert!(row1.ends_with("$5.11"));
-        assert!(row2.ends_with("$0.42"));
-
-        // The grand-total line's cost must end at the same column as the
-        // per-row cost (i.e. share the table's right edge). Before the fix
-        // the dollar amount sat ~3 columns left of the Cost column.
-        let total_line = line(&lines, 6);
         assert!(
-            total_line.ends_with("$5.53"),
-            "total line should right-align with Cost column: {total_line:?}"
+            rendered.starts_with("── Usage ("),
+            "section header: {rendered}"
         );
-        assert_eq!(
-            total_line.chars().count(),
-            separator.chars().count(),
-            "total line width should equal table width"
+        assert!(rendered.contains("openrouter-anthropic · anthropic/claude-opus-4.6"));
+        assert!(rendered.contains("Calls        96 · cost $5.11"));
+        assert!(rendered.contains("Total Cost   $5.53"));
+        assert!(
+            rendered.lines().all(|line| line.chars().count() <= 80),
+            "usage view exceeded terminal width:\n{rendered}"
         );
-
-        // The Calls column ("Calls" header is 5 wide) must contain the number
-        // at the same byte offset on both rows.
-        let calls_idx_header = header.find("Calls").expect("Calls header present");
-        let calls_end = calls_idx_header + "Calls".len();
-        assert_eq!(&row1[calls_end - 2..calls_end], "96");
-        assert_eq!(&row2[calls_end - 2..calls_end], "12");
     }
 
     #[test]
@@ -4237,9 +4277,8 @@ mod tests {
             rendered.contains('\u{2026}'),
             "expected ellipsis for runaway provider"
         );
-        for line in rendered.lines().skip(2) {
-            // Sanity: no line should exceed a reasonable cap width.
-            assert!(line.chars().count() <= 120, "line too wide: {line:?}");
+        for line in rendered.lines() {
+            assert!(line.chars().count() <= 80, "line too wide: {line:?}");
         }
     }
 

@@ -19,10 +19,12 @@ import type {
   SidecarProvider,
   SidecarRequest,
   StreamEvent,
+  Timing,
   ToolDefinition,
+  Usage,
 } from "../llm/types.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
-import type { ToolCallEntry } from "../diagnostics.ts";
+import type { ApiCallEntry, ToolCallEntry } from "../diagnostics.ts";
 import { rustJoin } from "../config/dirs.ts";
 import {
   InvalidArgs,
@@ -62,6 +64,7 @@ export interface SubagentDeps {
   mcpRegistry?: Pick<McpRegistry, "namesMatching"> | undefined;
   sendDirect?: ((message: ServerMessage) => void) | undefined;
   diagnostics: { push: (entry: ToolCallEntry) => void };
+  apiDiagnostics?: { push: (entry: ApiCallEntry) => void } | undefined;
   conversation?: readonly Message[] | undefined;
   env?: NodeJS.ProcessEnv | undefined;
   rid?: string | undefined;
@@ -202,12 +205,13 @@ export async function runSubagent(
     }
   };
 
-  const events: AsyncIterable<StreamEvent> =
+  const providerEvents: AsyncIterable<StreamEvent> =
     request.sdk === "anthropic" || provider === undefined
       ? capturedEvents(deps.callStore, request, () =>
           anthropicToolLoopEvents(request, phase, signal),
         )
       : genericToolLoopEvents(provider, request, phase, signal);
+  const events = diagnosticSubagentEvents(deps, name, request, providerEvents);
 
   const blocked = budgetBlockFor(request);
   if (blocked) {
@@ -235,7 +239,8 @@ export async function runSubagent(
       sink: send,
     });
   } catch (e) {
-    await trace({ error: e instanceof Error ? e.message : String(e) });
+    const failure = e instanceof Error ? e.message : String(e);
+    await trace({ error: failure });
     throw e;
   }
 
@@ -246,6 +251,91 @@ export async function runSubagent(
   }
   await trace({ result: outcome.ok.content });
   return outcome.ok.content;
+}
+
+async function* diagnosticSubagentEvents(
+  deps: SubagentDeps,
+  name: string,
+  request: SidecarRequest,
+  source: AsyncIterable<StreamEvent>,
+): AsyncIterable<StreamEvent> {
+  let recorded = 0;
+  try {
+    for await (const event of source) {
+      if (event.type === "call_complete") {
+        recordSubagentCall(
+          deps,
+          name,
+          request,
+          event.usage,
+          event.timing,
+          event.finish_reason,
+        );
+        recorded += 1;
+      } else if (event.type === "error") {
+        recordSubagentCall(
+          deps,
+          name,
+          request,
+          event.usage,
+          event.timing,
+          "error",
+          event.message,
+        );
+        recorded += 1;
+      } else if (event.type === "done" && recorded === 0) {
+        recordSubagentCall(
+          deps,
+          name,
+          request,
+          event.usage,
+          event.timing,
+          event.finish_reason,
+        );
+        recorded += 1;
+      }
+      yield event;
+    }
+  } catch (e) {
+    recordSubagentCall(
+      deps,
+      name,
+      request,
+      undefined,
+      undefined,
+      "error",
+      e instanceof Error ? e.message : String(e),
+    );
+    throw e;
+  }
+}
+
+function recordSubagentCall(
+  deps: SubagentDeps,
+  name: string,
+  request: SidecarRequest,
+  usage: Usage | undefined,
+  timing: Timing | undefined,
+  finishReason: string,
+  error?: string,
+): void {
+  const sink = deps.apiDiagnostics;
+  if (sink === undefined) return;
+  sink.push({
+    timestamp: deps.now?.() ?? new Date().toISOString(),
+    model: request.model,
+    provider: request.provider_key ?? request.sdk,
+    input_tokens: usage?.input_tokens ?? 0,
+    output_tokens: usage?.output_tokens ?? 0,
+    cache_read_tokens: usage?.cache_read_tokens ?? 0,
+    cache_write_tokens: usage?.cache_creation_tokens ?? 0,
+    ttft_ms: timing?.time_to_first_token_ms ?? 0,
+    total_ms: timing?.total_ms ?? 0,
+    finish_reason: finishReason,
+    subagent: name,
+    error: error ?? null,
+    ...(usage?.total_cost_usd === undefined ? {} : { total_cost_usd: usage.total_cost_usd }),
+  });
 }
 
 export function nestedContext(ctx: ToolContext, signal?: AbortSignal): ToolContext {

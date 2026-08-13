@@ -627,12 +627,9 @@ pub(crate) fn print_heartbeat_log(data: &serde_json::Value) {
     let mut out = stdout.lock();
     let width = term_width();
 
-    let Some(events) = data["events"].as_array() else {
-        print_dim_line(&mut out, "(no heartbeat events)");
-        return;
-    };
-
+    let events: &[serde_json::Value] = data["events"].as_array().map_or(&[], Vec::as_slice);
     if events.is_empty() {
+        write_section_header(&mut out, "heartbeat events", "", width);
         print_dim_line(&mut out, "(no heartbeat events)");
         return;
     }

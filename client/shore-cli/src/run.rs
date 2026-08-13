@@ -415,6 +415,10 @@ async fn run_log_subcommand(
     sub: &crate::cli::LogCommand,
     json: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let display_ref = match sub {
+        crate::cli::LogCommand::Edit { msg_ref, .. }
+        | crate::cli::LogCommand::Delete { msg_ref } => msg_ref,
+    };
     let (name, args) = match sub {
         crate::cli::LogCommand::Edit { msg_ref, content } => (
             "edit",
@@ -429,9 +433,17 @@ async fn run_log_subcommand(
     if json {
         cli_out!("{}", serde_json::to_string_pretty(&data)?);
     } else {
-        output::format_command(name, &data);
+        let shown = response_with_display_ref(data, display_ref);
+        output::format_command(name, &shown);
     }
     Ok(())
+}
+
+fn response_with_display_ref(mut data: serde_json::Value, display_ref: &str) -> serde_json::Value {
+    if let Some(object) = data.as_object_mut() {
+        _ = object.insert("_display_ref".into(), serde_json::json!(display_ref));
+    }
+    data
 }
 
 /// Fetch a single message by ref (`get`), optionally filtered to one role.
@@ -632,7 +644,8 @@ async fn handle_alt_command(
     if *json {
         cli_out!("{}", serde_json::to_string_pretty(&data)?);
     } else {
-        output::format_command(name, &data);
+        let shown = response_with_display_ref(data, msg_ref.as_deref().unwrap_or("last"));
+        output::format_command(name, &shown);
     }
     Ok(())
 }
@@ -864,19 +877,7 @@ async fn handle_list_characters(
     let data = recv_command_data(conn).await?;
 
     let active = state::read_active_character();
-
-    if let Some(chars) = data.get("characters").and_then(serde_json::Value::as_array) {
-        debug!(count = chars.len(), "Listed characters from daemon");
-        for ch in chars {
-            if let Some(name) = ch["name"].as_str() {
-                if active.as_deref() == Some(name) {
-                    cli_out!("  * {name} (active)");
-                } else {
-                    cli_out!("    {name}");
-                }
-            }
-        }
-    }
+    output::print_character_list(&data, active.as_deref());
     Ok(())
 }
 
@@ -1984,5 +1985,18 @@ mod tests {
             "nano"
         );
         assert_eq!(super::resolve_editor(Some(String::new()), None, None), "vi");
+    }
+
+    #[test]
+    fn display_ref_decorates_human_output_without_replacing_the_wire_ref() {
+        let shown = super::response_with_display_ref(
+            serde_json::json!({ "ref": "m_290d4d13-9370" }),
+            "last",
+        );
+        assert_eq!(
+            shown.get("ref"),
+            Some(&serde_json::json!("m_290d4d13-9370"))
+        );
+        assert_eq!(shown.get("_display_ref"), Some(&serde_json::json!("last")));
     }
 }

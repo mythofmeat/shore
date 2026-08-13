@@ -295,16 +295,19 @@ export function sharedToolDeps(
     ...(subagent === undefined
       ? {}
       : {
-          runSubagent: (parent: ToolContext) =>
-            subagentRunner({
+          runSubagent: (parent: ToolContext) => {
+            const recorded = subagent.diagnostics ?? new Diagnostics();
+            return subagentRunner({
               config,
               ctx: parent,
               providers: subagent.providers,
               ...(subagent.callStore === undefined ? {} : { callStore: subagent.callStore }),
               mcpRegistry: mcp.current,
-              diagnostics: (subagent.diagnostics ?? new Diagnostics()).tool_calls,
+              diagnostics: recorded.tool_calls,
+              apiDiagnostics: recorded.api_calls,
               ...(subagent.env === undefined ? {} : { env: subagent.env }),
-            }),
+            });
+          },
         }),
     imageGenerator: async (params) =>
       await generateImage({
