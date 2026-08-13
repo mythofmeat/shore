@@ -315,6 +315,7 @@ fn print_call_log(data: &serde_json::Value) {
         } else {
             print_one_call(&mut out, call, width);
         }
+        print_wire_exchanges(&mut out, data.get("wire"), width);
         return;
     }
 
@@ -407,6 +408,66 @@ fn print_one_call(out: &mut impl Write, call: &serde_json::Value, width: usize) 
         _ = writeln!(out);
     }
     print_dim_line(out, "(--json for the full, untruncated payload)");
+}
+
+fn print_wire_exchanges(out: &mut impl Write, wire: Option<&serde_json::Value>, width: usize) {
+    let Some(exchanges) = wire.and_then(serde_json::Value::as_array) else {
+        return;
+    };
+    if exchanges.is_empty() {
+        print_dim_line(out, "(no raw HTTP exchange recorded for this call)");
+        return;
+    }
+
+    write_section_header(
+        out,
+        "wire",
+        &format!("{} HTTP exchange(s)", exchanges.len()),
+        width,
+    );
+    for exchange in exchanges {
+        let status = exchange["status"]
+            .as_u64()
+            .map_or_else(|| "-".to_owned(), |s| s.to_string());
+        write_fg(
+            out,
+            Color::Magenta,
+            &format!(
+                "  #{} {} {}",
+                exchange["seq"].as_u64().unwrap_or(0),
+                exchange["method"].as_str().unwrap_or("?"),
+                exchange["url"].as_str().unwrap_or("?"),
+            ),
+        );
+        _ = writeln!(out);
+        let err = exchange["error"]
+            .as_str()
+            .map_or_else(String::new, |e| format!("  ERROR: {e}"));
+        write_dim(
+            out,
+            &format!(
+                "     -> {} {}  {}ms  {}B up / {}B down{}\n",
+                status,
+                exchange["status_text"].as_str().unwrap_or(""),
+                exchange["duration_ms"].as_u64().unwrap_or(0),
+                exchange["request_bytes"].as_u64().unwrap_or(0),
+                exchange["response_bytes"].as_u64().unwrap_or(0),
+                err,
+            ),
+        );
+        for (label, key) in [
+            ("wire request", "request_body"),
+            ("wire response", "response_body"),
+        ] {
+            let Some(body) = exchange[key].as_str().filter(|b| !b.is_empty()) else {
+                continue;
+            };
+            write_fg(out, Color::Cyan, &format!("  {label}:\n"));
+            _ = writeln!(out, "{}", truncate_display(body, CALL_BODY_PREVIEW));
+        }
+        _ = writeln!(out);
+    }
+    print_dim_line(out, "(--json for the untruncated wire bytes and headers)");
 }
 
 /// Max characters of a single changed chunk shown in a diff.

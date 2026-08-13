@@ -106,6 +106,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       providers,
       tools: sharedToolDeps(config, mcp, {
         providers,
+        ...(callStore === undefined ? {} : { callStore }),
         ...(options.env === undefined ? {} : { env: options.env }),
       }),
       ...(callStore === undefined ? {} : { callStore }),
@@ -231,6 +232,7 @@ export function sharedToolDeps(
   mcp: McpHolder,
   subagent?: {
     providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
+    callStore?: CallStore | undefined;
     env?: NodeJS.ProcessEnv | undefined;
   },
 ): ToolContextDeps {
@@ -244,6 +246,7 @@ export function sharedToolDeps(
               config,
               ctx: parent,
               providers: subagent.providers,
+              ...(subagent.callStore === undefined ? {} : { callStore: subagent.callStore }),
               mcpRegistry: mcp.current,
               diagnostics: new Diagnostics().tool_calls,
               ...(subagent.env === undefined ? {} : { env: subagent.env }),

@@ -54,6 +54,67 @@ function baseRecord(req: SidecarRequest, ts: Date): Omit<CallRecord, "usage"> {
   };
 }
 
+export function capturedEvents(
+  store: CallRecorder | undefined,
+  req: SidecarRequest,
+  start: () => AsyncIterable<StreamEvent>,
+  now: () => number = Date.now,
+): AsyncIterable<StreamEvent> {
+  return store === undefined ? start() : recordEvents(store, req, start, now);
+}
+
+async function* recordEvents(
+  store: CallRecorder,
+  req: SidecarRequest,
+  start: () => AsyncIterable<StreamEvent>,
+  now: () => number,
+): AsyncIterable<StreamEvent> {
+  const ts = new Date();
+  const startedAt = now();
+  const base = baseRecord(req, ts);
+  const lines: string[] = [];
+  let usage: Usage | undefined;
+  let finishReason: string | undefined;
+  let failure: string | undefined;
+
+  const scope = newWireScope(base.call_id, {
+    character: base.character,
+    call_type: base.call_type,
+    rid: base.rid,
+  });
+
+  try {
+    for await (const event of wireScopedIteration(scope, start)) {
+      try {
+        lines.push(JSON.stringify(event));
+      } catch {
+        lines.push(JSON.stringify({ type: event.type, error: "event not serializable" }));
+      }
+      if (event.type === "done" || event.type === "call_complete" || event.type === "error") {
+        usage = event.usage ?? usage;
+        if ("finish_reason" in event) finishReason = event.finish_reason;
+      }
+      if (event.type === "error") failure = event.message;
+      yield event;
+    }
+  } catch (e) {
+    failure = e instanceof Error ? e.message : String(e);
+    throw e;
+  } finally {
+    try {
+      store.recordCall({
+        ...base,
+        finish_reason: finishReason ?? null,
+        usage: storeUsage(usage),
+        duration_ms: now() - startedAt,
+        error: failure ?? null,
+        response_body: lines.length > 0 ? lines.join("\n") : null,
+      });
+    } catch {
+    }
+  }
+}
+
 export function withCallCapture(
   provider: SidecarProvider,
   store: CallRecorder | undefined,
@@ -69,48 +130,8 @@ export function withCallCapture(
   };
 
   return {
-    async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
-      const ts = new Date();
-      const startedAt = now();
-      const base = baseRecord(req, ts);
-      const lines: string[] = [];
-      let usage: Usage | undefined;
-      let finishReason: string | undefined;
-      let failure: string | undefined;
-
-      const scope = newWireScope(base.call_id, {
-        character: base.character,
-        call_type: base.call_type,
-        rid: base.rid,
-      });
-
-      try {
-        for await (const event of wireScopedIteration(scope, () => provider.stream(req, signal))) {
-          try {
-            lines.push(JSON.stringify(event));
-          } catch {
-            lines.push(JSON.stringify({ type: event.type, error: "event not serializable" }));
-          }
-          if (event.type === "done" || event.type === "call_complete" || event.type === "error") {
-            usage = event.usage ?? usage;
-            if ("finish_reason" in event) finishReason = event.finish_reason;
-          }
-          if (event.type === "error") failure = event.message;
-          yield event;
-        }
-      } catch (e) {
-        failure = e instanceof Error ? e.message : String(e);
-        throw e;
-      } finally {
-        write({
-          ...base,
-          finish_reason: finishReason ?? null,
-          usage: storeUsage(usage),
-          duration_ms: now() - startedAt,
-          error: failure ?? null,
-          response_body: lines.length > 0 ? lines.join("\n") : null,
-        });
-      }
+    stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
+      return capturedEvents(store, req, () => provider.stream(req, signal), now);
     },
 
     async generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {

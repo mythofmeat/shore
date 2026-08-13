@@ -9,10 +9,16 @@
  * would have caught that — everything else pins the row's shape.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 
-import { captureProviders, withCallCapture, type CallRecorder } from "../src/llm/capture.ts";
+import {
+  capturedEvents,
+  captureProviders,
+  withCallCapture,
+  type CallRecorder,
+} from "../src/llm/capture.ts";
 import { REDACTED } from "../src/llm/redact.ts";
+import { installWireCapture, type WireExchange } from "../src/llm/wire_capture.ts";
 import { CallStore, type CallRecord } from "../src/call_store.ts";
 import type {
   GenerateResponse,
@@ -95,6 +101,13 @@ async function drain(it: AsyncIterable<StreamEvent>): Promise<StreamEvent[]> {
   for await (const e of it) out.push(e);
   return out;
 }
+
+let uninstallWire: (() => void) | undefined;
+
+afterEach(() => {
+  uninstallWire?.();
+  uninstallWire = undefined;
+});
 
 describe("call capture", () => {
   test("a streamed call is recorded", async () => {
@@ -257,6 +270,58 @@ describe("call capture", () => {
     } finally {
       store.close();
     }
+  });
+
+  test("a tool loop that never touches the provider is still recorded", async () => {
+    const store = recorder();
+
+    const seen = await drain(
+      capturedEvents(store, req(), async function* () {
+        yield { type: "start", model: "m" } as StreamEvent;
+        yield DONE;
+      }),
+    );
+
+    expect(seen.map((e) => e.type)).toEqual(["start", "done"]);
+    expect(store.rows).toHaveLength(1);
+    expect(store.rows[0]!.call_type).toBe("message");
+    expect(store.rows[0]!.finish_reason).toBe("end_turn");
+  });
+
+  test("a tool loop's own HTTP calls land under the loop's call id", async () => {
+    const server = Bun.serve({ port: 0, fetch: () => new Response(`{"ok":true}`) });
+    const exchanges: WireExchange[] = [];
+    uninstallWire = installWireCapture((e) => exchanges.push(e));
+    const store = recorder();
+
+    await drain(
+      capturedEvents(store, req(), async function* () {
+        yield { type: "start", model: "m" } as StreamEvent;
+        await fetch(`http://localhost:${server.port}/v1/messages`, { method: "POST", body: "{}" });
+        await fetch(`http://localhost:${server.port}/v1/messages`, { method: "POST", body: "{}" });
+        yield DONE;
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    server.stop(true);
+
+    expect(store.rows).toHaveLength(1);
+    expect(exchanges).toHaveLength(2);
+    expect(exchanges.map((e) => e.call_id)).toEqual([
+      store.rows[0]!.call_id,
+      store.rows[0]!.call_id,
+    ]);
+    expect(exchanges.map((e) => e.seq)).toEqual([0, 1]);
+    expect(exchanges[0]!.character).toBe("poppy");
+  });
+
+  test("no store means the loop's events pass through untouched", async () => {
+    const seen = await drain(
+      capturedEvents(undefined, req(), async function* () {
+        yield DONE;
+      }),
+    );
+    expect(seen.map((e) => e.type)).toEqual(["done"]);
   });
 
   test("adapters shared across sdk keys get one wrapper", () => {
