@@ -159,9 +159,10 @@ export function backgroundModels(ctx: ModelsContext): unknown {
       ctx.characterName === undefined
         ? undefined
         : resolveChatModelForCharacter(configView(ctx.config), ctx.characterName, findEffective);
+    const chatModel = inherited?.qualifiedName ?? ctx.config.app.defaults.model;
     return {
       task,
-      model: inherited?.qualifiedName ?? "(unresolved)",
+      model: chatModel ?? "(unresolved)",
       source: "inherited: active chat model",
     };
   });

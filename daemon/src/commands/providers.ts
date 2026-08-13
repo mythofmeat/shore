@@ -46,8 +46,8 @@ export function listProviders(ctx: ProvidersContext): unknown {
     return {
       name,
       enabled: entry.enabled,
-      sdk: entry.sdk ?? null,
-      base_url: entry.baseUrl ?? null,
+      sdk: entry.sdk ?? defaultSdk(name),
+      base_url: entry.baseUrl ?? defaultBaseUrl(name) ?? null,
       discovery_enabled: entry.discovery.enabled,
       keys: entry.keys.map((k) => ({
         name: k.name,

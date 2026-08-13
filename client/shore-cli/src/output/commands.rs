@@ -1206,6 +1206,14 @@ fn print_model_list(data: &serde_json::Value) {
     let suffix = if include_hidden { "all" } else { "" };
     write_section_header(&mut out, "Models", suffix, width);
 
+    let listed = data["models"].as_array().map_or(0, Vec::len);
+    if listed == 0 {
+        print_dim_line(
+            &mut out,
+            "(no models in the catalog — `shore model --info` shows what the active \
+             model resolves to)",
+        );
+    }
     if let Some(models) = data["models"].as_array() {
         // Size columns to the widest value so rows stay visually separated
         // even when names like `arcee-ai/trinity-large-thinking:free` or
@@ -1581,11 +1589,17 @@ fn print_provider_list(data: &serde_json::Value) {
                 format!("{total} models · fetched {fetched}")
             };
             write_row(&mut out, "Cache", &summary);
+        } else if discovery {
+            write_row(
+                &mut out,
+                "Cache",
+                &format!("(empty — `shore provider refresh {name}`)"),
+            );
         } else {
             write_row(
                 &mut out,
                 "Cache",
-                "(empty — `shore provider refresh <name>`)",
+                "(none — discovery is off for this provider)",
             );
         }
         _ = writeln!(out);

@@ -72,7 +72,7 @@
           {
             "name": "beta",
             "enabled": false,
-            "sdk": null,
+            "sdk": "openai",
             "base_url": null,
             "discovery_enabled": false,
             "keys": [
@@ -94,7 +94,7 @@
           {
             "name": "gamma",
             "enabled": true,
-            "sdk": null,
+            "sdk": "openai",
             "base_url": null,
             "discovery_enabled": true,
             "keys": [
@@ -136,7 +136,7 @@
           {
             "name": "alpha",
             "enabled": true,
-            "sdk": null,
+            "sdk": "openai",
             "base_url": null,
             "discovery_enabled": false,
             "keys": [

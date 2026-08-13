@@ -14114,12 +14114,12 @@
             "background": [
               {
                 "task": "heartbeat",
-                "model": "(unresolved)",
+                "model": "alpha",
                 "source": "inherited: active chat model"
               },
               {
                 "task": "compaction",
-                "model": "(unresolved)",
+                "model": "alpha",
                 "source": "inherited: active chat model"
               }
             ]
