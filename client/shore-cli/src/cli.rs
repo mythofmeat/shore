@@ -662,6 +662,88 @@ pub(crate) enum DebugCommand {
     /// it, which is what starts the keepalive cadence.
     #[command(name = "session_activate")]
     SessionActivate,
+
+    /// Invoke one tool directly and print what the model would have received.
+    ///
+    /// The call runs through the same path a real turn uses: arguments are
+    /// schema-checked, the per-tool timeout applies, and the result is
+    /// truncated to the configured window. Side effects are real — `edit`
+    /// writes to the workspace, `ask_<agent>` spends tokens.
+    ///
+    /// `shore debug tool read path=notes.md`
+    /// `shore debug tool search query=cache mode=hybrid`
+    /// `shore debug tool ask_librarian query="what did we decide about TTLs"`
+    #[command(name = "tool", verbatim_doc_comment)]
+    Tool {
+        /// A built-in tool, `ask_<subagent>`, or `mcp__<server>__<tool>`
+        name: String,
+
+        /// Arguments as `key=value`, coerced to the tool's declared types
+        #[arg(value_parser = parse_key_value)]
+        args: Vec<(String, String)>,
+
+        /// Whole argument object as JSON, for nested or array values.
+        /// `key=value` pairs win where both set the same key.
+        #[arg(long, value_parser = parse_json_object)]
+        input: Option<serde_json::Value>,
+
+        /// Also print the untruncated result and full nested tool output
+        #[arg(long)]
+        raw: bool,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Invoke a sub-agent directly with a natural-language query.
+    /// Shorthand for `debug tool ask_<name> query=<query>`.
+    #[command(name = "subagent")]
+    Subagent {
+        /// Sub-agent name, without the `ask_` prefix
+        name: String,
+
+        /// The query to send
+        #[arg(required = true)]
+        query: Vec<String>,
+
+        /// Also print the untruncated result and full nested tool output
+        #[arg(long)]
+        raw: bool,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+fn parse_key_value(raw: &str) -> Result<(String, String), String> {
+    match raw.split_once('=') {
+        Some(("", _)) => Err(format!("'{raw}' has no argument name before the '='")),
+        Some((key, value)) => Ok((key.to_owned(), value.to_owned())),
+        None => Err(format!(
+            "expected key=value, got '{raw}' — pass nested payloads with --input '{{...}}'"
+        )),
+    }
+}
+
+fn parse_json_object(raw: &str) -> Result<serde_json::Value, String> {
+    let value: serde_json::Value =
+        serde_json::from_str(raw).map_err(|e| format!("not valid JSON: {e}"))?;
+    if value.is_object() {
+        Ok(value)
+    } else {
+        Err("must be a JSON object, e.g. '{\"path\":\"notes.md\"}'".to_owned())
+    }
+}
+
+fn pairs_object(pairs: &[(String, String)]) -> serde_json::Value {
+    serde_json::Value::Object(
+        pairs
+            .iter()
+            .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
+            .collect(),
+    )
 }
 
 /// Generate and print shell completions to stdout.
@@ -837,6 +919,32 @@ pub(crate) fn to_swp_command(
             DebugCommand::StatusActive => Some(("heartbeat_set_active", json!({}))),
             DebugCommand::KeepalivePingNow => Some(("keepalive_ping_now", json!({}))),
             DebugCommand::SessionActivate => Some(("session_activate", json!({}))),
+            DebugCommand::Tool {
+                name,
+                args,
+                input,
+                raw,
+                ..
+            } => Some((
+                "run_tool",
+                json!({
+                    "tool": name,
+                    "input": input.clone().unwrap_or_else(|| json!({})),
+                    "pairs": pairs_object(args),
+                    "raw": raw,
+                }),
+            )),
+            DebugCommand::Subagent {
+                name, query, raw, ..
+            } => Some((
+                "run_tool",
+                json!({
+                    "tool": format!("ask_{name}"),
+                    "input": { "query": query.join(" ") },
+                    "pairs": {},
+                    "raw": raw,
+                }),
+            )),
         },
 
         CliCommand::Model { .. } => model_to_swp(cmd),
@@ -2057,6 +2165,69 @@ mod tests {
                 subcommand: DebugCommand::KeepalivePingNow
             }
         ));
+    }
+
+    #[test]
+    fn debug_tool_sends_pairs_as_strings_for_the_daemon_to_coerce() {
+        let cli = parse(&["debug", "tool", "read", "path=notes.md", "offset=3"]);
+        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        assert_eq!(name, "run_tool");
+        assert_eq!(arg(&args, "tool"), "read");
+        assert_eq!(
+            arg(&args, "pairs"),
+            &serde_json::json!({ "path": "notes.md", "offset": "3" })
+        );
+        assert_eq!(arg(&args, "input"), &serde_json::json!({}));
+        assert_eq!(arg(&args, "raw"), false);
+    }
+
+    #[test]
+    fn debug_tool_value_may_contain_equals_signs() {
+        let cli = parse(&["debug", "tool", "search", "query=a=b"]);
+        let (_name, args) = to_swp_command(&cli.command, None).unwrap();
+        assert_eq!(arg(&args, "pairs"), &serde_json::json!({ "query": "a=b" }));
+    }
+
+    #[test]
+    fn debug_tool_input_carries_nested_json_alongside_pairs() {
+        let cli = parse(&[
+            "debug",
+            "tool",
+            "read",
+            "path=notes.md",
+            "--input",
+            r#"{"globs":["*.md"]}"#,
+            "--raw",
+        ]);
+        let (_name, args) = to_swp_command(&cli.command, None).unwrap();
+        assert_eq!(arg(&args, "input"), &serde_json::json!({ "globs": ["*.md"] }));
+        assert_eq!(arg(&args, "pairs"), &serde_json::json!({ "path": "notes.md" }));
+        assert_eq!(arg(&args, "raw"), true);
+    }
+
+    #[test]
+    fn debug_tool_rejects_an_argument_with_no_equals() {
+        let err = Cli::try_parse_from(["shore", "debug", "tool", "read", "notes.md"]).unwrap_err();
+        assert!(err.to_string().contains("expected key=value"));
+    }
+
+    #[test]
+    fn debug_tool_rejects_input_that_is_not_a_json_object() {
+        let err =
+            Cli::try_parse_from(["shore", "debug", "tool", "read", "--input", "[1,2]"]).unwrap_err();
+        assert!(err.to_string().contains("must be a JSON object"));
+    }
+
+    #[test]
+    fn debug_subagent_is_shorthand_for_ask_with_a_joined_query() {
+        let cli = parse(&["debug", "subagent", "librarian", "what", "did", "we", "decide"]);
+        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        assert_eq!(name, "run_tool");
+        assert_eq!(arg(&args, "tool"), "ask_librarian");
+        assert_eq!(
+            arg(&args, "input"),
+            &serde_json::json!({ "query": "what did we decide" })
+        );
     }
 
     #[test]

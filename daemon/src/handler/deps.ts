@@ -129,8 +129,13 @@ export function turnAutonomy(
   };
 }
 
+export type ToolAssembly = Pick<
+  GenerationAssembly,
+  "runtime" | "providers" | "diagnostics" | "env"
+>;
+
 export function chatToolDeps(
-  a: GenerationAssembly,
+  a: ToolAssembly,
   charName: string,
   turn: SubagentTurn,
 ): ToolContextDeps {
@@ -543,6 +548,10 @@ function commandDeps(a: CommandAssembly): CommandDeps {
         await a.autonomy.settled(character);
         return created;
       },
+    },
+    runTool: {
+      tools: (charName, turn) => chatToolDeps(a, charName, turn),
+      mcpTools: () => runtime.mcp.current.allTools(),
     },
   };
 }

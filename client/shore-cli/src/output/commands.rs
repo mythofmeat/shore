@@ -373,6 +373,7 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "heartbeat_set_active" => print_heartbeat_status_change(data, "active"),
         "session_activate" => print_session_activate(data),
         "keepalive_ping_now" => print_keepalive_ping(data),
+        "run_tool" => print_run_tool(data),
         _ => print_command_output_fallback(name, data),
     }
 }
@@ -1059,6 +1060,123 @@ fn print_keepalive_ping(data: &serde_json::Value) {
     if let Some(err) = data["error"].as_str() {
         cli_out!("  {err}");
     }
+}
+
+fn print_run_tool(data: &serde_json::Value) {
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    let width = term_width();
+
+    let tool = data["tool"].as_str().unwrap_or("?");
+    let ok = data["ok"].as_bool().unwrap_or(false);
+    write_section_header(&mut out, tool, run_tool_subtitle(data), width);
+
+    write_fg(
+        &mut out,
+        if ok { Color::Green } else { Color::Red },
+        if ok { "  ok" } else { "  failed" },
+    );
+    write_dim(
+        &mut out,
+        &format!(
+            "  in {}  \u{2022}  {} chars",
+            format_duration_ms(data["duration_ms"].as_u64().unwrap_or(0)),
+            data["result_chars"].as_u64().unwrap_or(0)
+        ),
+    );
+    _ = writeln!(out);
+
+    for note in run_tool_notes(data) {
+        print_dim_line(&mut out, &note);
+    }
+
+    print_run_tool_calls(&mut out, data, width);
+
+    _ = writeln!(out);
+    let body = data["raw"]
+        .as_str()
+        .or_else(|| data["output"].as_str())
+        .unwrap_or("");
+    if body.is_empty() {
+        print_dim_line(&mut out, "(the tool returned nothing)");
+    } else {
+        _ = writeln!(out, "{body}");
+    }
+}
+
+fn run_tool_subtitle(data: &serde_json::Value) -> &str {
+    match data["kind"].as_str().unwrap_or("") {
+        "subagent" => "sub-agent",
+        "mcp" => "mcp",
+        _ => "",
+    }
+}
+
+fn run_tool_notes(data: &serde_json::Value) -> Vec<String> {
+    let mut notes = Vec::new();
+
+    if data["rejected"].as_bool().unwrap_or(false) {
+        notes.push("refused before dispatch \u{2014} nothing ran, nothing changed".to_owned());
+    }
+
+    if data["truncated"].as_bool().unwrap_or(false) {
+        let shown = data["output"].as_str().map_or(0, |s| s.chars().count());
+        let total = data["result_chars"].as_u64().unwrap_or(0);
+        let tail = if data["raw"].is_string() {
+            " (--raw shown below)"
+        } else {
+            " (--raw for the rest)"
+        };
+        notes.push(format!(
+            "truncated \u{2014} the model would see {shown} of {total} chars{tail}"
+        ));
+    }
+
+    if !data["enabled"].as_bool().unwrap_or(true) {
+        notes.push(
+            "not on this character's tool surface \u{2014} it ran here, but the model \
+             cannot call it (`shore tools`)"
+                .to_owned(),
+        );
+    }
+
+    notes
+}
+
+fn print_run_tool_calls(out: &mut impl Write, data: &serde_json::Value, width: usize) {
+    let Some(calls) = data["calls"].as_array().filter(|c| !c.is_empty()) else {
+        return;
+    };
+
+    _ = writeln!(out);
+    write_section_header(out, "nested calls", &format!("{}", calls.len()), width);
+    for call in calls {
+        let ok = call["ok"].as_bool().unwrap_or(false);
+        write_fg(out, if ok { Color::Green } else { Color::Red }, "  \u{2022} ");
+        write_fg(out, Color::Blue, call["tool"].as_str().unwrap_or("?"));
+        if let Some(agent) = call["subagent"].as_str() {
+            write_dim(out, &format!("  (ask_{agent})"));
+        }
+        _ = writeln!(out);
+        write_dim(out, &format!("      {}", call["input"].as_str().unwrap_or("")));
+        _ = writeln!(out);
+        for line in call["output"].as_str().unwrap_or("").lines() {
+            write_dim(out, &format!("      \u{2192} {line}"));
+            _ = writeln!(out);
+        }
+    }
+}
+
+const MILLIS_PER_SECOND: u64 = 1_000;
+const MILLIS_PER_TENTH: u64 = 100;
+
+fn format_duration_ms(ms: u64) -> String {
+    if ms < MILLIS_PER_SECOND {
+        return format!("{ms}ms");
+    }
+    let seconds = checked_div_u64(ms, MILLIS_PER_SECOND);
+    let tenths = checked_div_u64(checked_rem_u64(ms, MILLIS_PER_SECOND), MILLIS_PER_TENTH);
+    format!("{seconds}.{tenths}s")
 }
 
 fn session_activate_keepalive(k: &serde_json::Value) -> String {
@@ -3641,6 +3759,98 @@ mod tests {
         format_command("config_reset", &serde_json::json!({"message": "reloaded"}));
         format_command("inject_system", &serde_json::json!({}));
         format_command("edit", &serde_json::json!({"ref": "m42"}));
+    }
+
+    #[test]
+    fn run_tool_notes_are_silent_when_the_call_was_ordinary() {
+        let data = serde_json::json!({
+            "ok": true,
+            "rejected": false,
+            "truncated": false,
+            "enabled": true,
+        });
+        assert!(run_tool_notes(&data).is_empty());
+    }
+
+    #[test]
+    fn run_tool_notes_say_a_rejected_call_never_ran() {
+        let data = serde_json::json!({
+            "ok": false,
+            "rejected": true,
+            "truncated": false,
+            "enabled": true,
+        });
+        let notes = run_tool_notes(&data);
+        assert_eq!(notes.len(), 1);
+        assert!(notes.join(" ").contains("nothing ran"));
+    }
+
+    #[test]
+    fn run_tool_notes_compare_what_the_model_would_see_against_the_whole_result() {
+        let data = serde_json::json!({
+            "ok": true,
+            "rejected": false,
+            "truncated": true,
+            "output": "abcde",
+            "result_chars": 900,
+            "raw": serde_json::Value::Null,
+            "enabled": true,
+        });
+        let notes = run_tool_notes(&data).join(" ");
+        assert!(notes.contains("5 of 900"));
+        assert!(notes.contains("--raw for the rest"));
+    }
+
+    #[test]
+    fn run_tool_notes_flag_a_tool_the_model_cannot_reach() {
+        let data = serde_json::json!({
+            "ok": true,
+            "rejected": false,
+            "truncated": false,
+            "enabled": false,
+        });
+        assert!(
+            run_tool_notes(&data)
+                .join(" ")
+                .contains("not on this character's tool surface")
+        );
+    }
+
+    #[test]
+    fn format_duration_ms_switches_to_seconds_past_a_second() {
+        assert_eq!(format_duration_ms(0), "0ms");
+        assert_eq!(format_duration_ms(999), "999ms");
+        assert_eq!(format_duration_ms(1_000), "1.0s");
+        assert_eq!(format_duration_ms(8_240), "8.2s");
+    }
+
+    #[test]
+    fn print_run_tool_renders_a_subagent_run_with_its_nested_calls() {
+        set_color_enabled(false);
+        format_command(
+            "run_tool",
+            &serde_json::json!({
+                "tool": "ask_librarian",
+                "character": "ada",
+                "kind": "subagent",
+                "enabled": true,
+                "input": { "query": "what did we decide" },
+                "ok": true,
+                "rejected": false,
+                "duration_ms": 8_240,
+                "output": "we decided on a 1h TTL",
+                "truncated": false,
+                "result_chars": 22,
+                "raw": serde_json::Value::Null,
+                "calls": [{
+                    "tool": "read",
+                    "subagent": "librarian",
+                    "ok": true,
+                    "input": "{\"path\":\"notes.md\"}",
+                    "output": "the tide came in",
+                }],
+            }),
+        );
     }
 
     #[test]

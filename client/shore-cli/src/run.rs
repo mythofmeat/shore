@@ -214,12 +214,16 @@ async fn handle_generic_swp_command(
         | CliCommand::Config { json, .. }
         | CliCommand::Tools { json, .. }
         | CliCommand::Usage { json, .. } => *json,
+        CliCommand::Debug { subcommand } => matches!(
+            subcommand,
+            crate::cli::DebugCommand::Tool { json: true, .. }
+                | crate::cli::DebugCommand::Subagent { json: true, .. }
+        ),
         CliCommand::Send { .. }
         | CliCommand::Regen { .. }
         | CliCommand::Alt { .. }
         | CliCommand::Log { .. }
         | CliCommand::Status { .. }
-        | CliCommand::Debug { .. }
         | CliCommand::Completions { .. }
         | CliCommand::Complete { .. } => false,
     };

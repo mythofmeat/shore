@@ -14,6 +14,7 @@ import {
   type ToolInput,
 } from "./workspace.ts";
 import { normalizeProtectedPath, normalizePromptVisiblePath } from "./workspace_path.ts";
+import type { ToolsConfig } from "../config/app.ts";
 import type { Embedder } from "../llm/embed.ts";
 import type { RetrievalConfig } from "../memory/workspace_index.ts";
 
@@ -223,6 +224,23 @@ export interface ToolLimitsView {
   max_result_chars: number;
   timeout_ms: number;
   config?: Record<string, { max_result_chars?: number; timeout_ms?: number }>;
+}
+
+export function toolLimitsFrom(cfg: ToolsConfig): ToolLimitsView {
+  const overrides: Record<string, { max_result_chars?: number; timeout_ms?: number }> = {};
+  for (const [name, override] of cfg.config) {
+    overrides[name] = {
+      ...(override.max_result_chars === undefined
+        ? {}
+        : { max_result_chars: override.max_result_chars }),
+      ...(override.timeout === undefined ? {} : { timeout_ms: override.timeout.asMillis() }),
+    };
+  }
+  return {
+    max_result_chars: cfg.max_result_chars,
+    timeout_ms: cfg.timeout.asMillis(),
+    config: overrides,
+  };
 }
 
 export function resultCharsFor(cfg: ToolLimitsView, name: string): number {

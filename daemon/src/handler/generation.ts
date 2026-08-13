@@ -34,7 +34,7 @@ import type {
 import { usageConfigView } from "../ledger/budget.ts";
 import { anyEnabled } from "../tools/registry.ts";
 import { toolPhase, type ToolPhase } from "../tools/execute.ts";
-import type { ToolLimitsView } from "../tools/dispatch.ts";
+import { toolLimitsFrom, type ToolLimitsView } from "../tools/dispatch.ts";
 import type { ToolCallEntry } from "../diagnostics.ts";
 import { buildToolContext, credentialEntry, type ToolContextDeps } from "./tool_context.ts";
 import { buildGenerationRequest, resolveGenerationModel, type SetupEngine } from "./setup.ts";
@@ -508,19 +508,7 @@ function callContext(
 }
 
 function toolLimits(config: LoadedConfig): ToolLimitsView {
-  const cfg = config.app.tools;
-  const overrides: Record<string, { max_result_chars?: number; timeout_ms?: number }> = {};
-  for (const [name, o] of cfg.config) {
-    overrides[name] = {
-      ...(o.max_result_chars === undefined ? {} : { max_result_chars: o.max_result_chars }),
-      ...(o.timeout === undefined ? {} : { timeout_ms: o.timeout.asMillis() }),
-    };
-  }
-  return {
-    max_result_chars: cfg.max_result_chars,
-    timeout_ms: cfg.timeout.asMillis(),
-    config: overrides,
-  };
+  return toolLimitsFrom(config.app.tools);
 }
 
 function thinkingEnabled(opts: ProviderOptions | undefined): boolean {

@@ -25,6 +25,7 @@ import { compact, type CompactContext } from "./compact.ts";
 import { sessionActivateCommand, type SessionActivateContext } from "./activate.ts";
 import { keepalivePingNowCommand, type KeepalivePingContext } from "./keepalive.ts";
 import { memory } from "./memory.ts";
+import { runTool, type RunToolContext } from "./run_tool.ts";
 import {
   backgroundModels,
   listModels,
@@ -82,6 +83,7 @@ export interface CommandDeps {
   compaction?: Omit<CompactContext, "config" | "autonomy">;
   keepalive?: Omit<KeepalivePingContext, "config" | "dataDir">;
   activate?: Pick<SessionActivateContext, "register">;
+  runTool?: Pick<RunToolContext, "tools" | "mcpTools">;
 }
 
 const CHARACTERLESS = new Set([
@@ -193,6 +195,19 @@ export async function runCommand(
         dataDir: session.dataDir,
         ...(deps.now === undefined ? {} : { now: deps.now }),
       });
+    case "run_tool":
+      if (deps.runTool === undefined) throw unwired("run_tool");
+      return await runTool(
+        character,
+        {
+          ...deps.runTool,
+          config: session.config,
+          dataDir: session.dataDir,
+          conversation: engine.messages(),
+          diagnostics: deps.diagnostics.tool_calls,
+        },
+        args,
+      );
     case "keepalive_ping_now":
       if (deps.keepalive === undefined) throw unwired("keepalive_ping_now");
       return await keepalivePingNowCommand(character, {

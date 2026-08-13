@@ -27,6 +27,7 @@ import { rustJoin } from "../config/dirs.ts";
 import {
   InvalidArgs,
   NotImplemented,
+  toolLimitsFrom,
   type ToolContext,
   type ToolLimitsView,
 } from "./dispatch.ts";
@@ -271,17 +272,5 @@ function describe(err: { kind: string; message?: string }): string {
 }
 
 function toolLimits(config: LoadedConfig): ToolLimitsView {
-  const cfg = config.app.tools;
-  const overrides: Record<string, { max_result_chars?: number; timeout_ms?: number }> = {};
-  for (const [toolName, o] of cfg.config) {
-    overrides[toolName] = {
-      ...(o.max_result_chars === undefined ? {} : { max_result_chars: o.max_result_chars }),
-      ...(o.timeout === undefined ? {} : { timeout_ms: o.timeout.asMillis() }),
-    };
-  }
-  return {
-    max_result_chars: cfg.max_result_chars,
-    timeout_ms: cfg.timeout.asMillis(),
-    config: overrides,
-  };
+  return toolLimitsFrom(config.app.tools);
 }

@@ -103,8 +103,8 @@ MUTANTS = [
      "const output = truncateToolResult(rawOutput, resultCharsFor(exec.limits, toolUse.name));",
      "const output = truncateToolResult(rawOutput, exec.limits.max_result_chars);"),
     ("the block carries the uncapped result",
-     'return { type: "tool_result", tool_use_id: toolUse.id, content: output, is_error: isError };',
-     'return { type: "tool_result", tool_use_id: toolUse.id, content: rawOutput, is_error: isError };'),
+     'block: { type: "tool_result", tool_use_id: toolUse.id, content: output, is_error: isError },',
+     'block: { type: "tool_result", tool_use_id: toolUse.id, content: rawOutput, is_error: isError },'),
     ("the frame carries the uncapped result",
      "  recordToolDiagnostics(exec, toolUse, dispatchMs, output, isError);\n"
      "  emitToolResult(exec, toolUse, output, isError);",
@@ -148,11 +148,11 @@ MUTANTS = [
      "    output,\n    is_error: isError,",
      "    output,\n    is_error: false,"),
     ("the returned block defaults is_error to false",
-     'content: output, is_error: isError };',
-     'content: output, is_error: false };'),
+     'content: output, is_error: isError },',
+     'content: output, is_error: false },'),
     ("the returned block echoes the tool name as the tool_use_id",
-     'return { type: "tool_result", tool_use_id: toolUse.id,',
-     'return { type: "tool_result", tool_use_id: toolUse.name,'),
+     'block: { type: "tool_result", tool_use_id: toolUse.id, content: output,',
+     'block: { type: "tool_result", tool_use_id: toolUse.name, content: output,'),
 
     # ── the diagnostics row ─────────────────────────────────────────────
     ("the diagnostics row is not appended",

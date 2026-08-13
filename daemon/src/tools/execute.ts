@@ -31,11 +31,28 @@ export interface ToolExecution {
   schemas?: ToolSchemas;
 }
 
+export interface ToolRun {
+  block: ContentBlock;
+  raw: string;
+  isError: boolean;
+  rejected: boolean;
+  durationMs: number;
+  window?: ToolResultWindow;
+}
+
 export async function executeToolUse(
   toolUse: ToolUseEvent,
   exec: ToolExecution,
   intermediateMessages: Message[],
 ): Promise<ContentBlock> {
+  return (await runToolUse(toolUse, exec, intermediateMessages)).block;
+}
+
+export async function runToolUse(
+  toolUse: ToolUseEvent,
+  exec: ToolExecution,
+  intermediateMessages: Message[],
+): Promise<ToolRun> {
   exec.sendDirect({
     type: "tool_call",
     ...(exec.rid !== undefined ? { rid: exec.rid } : {}),
@@ -50,9 +67,16 @@ export async function executeToolUse(
   const rejection = argumentRejection(toolUse, exec.schemas);
   if (rejection !== undefined) {
     console.warn(`shore: rejected a ${toolUse.name} call — ${rejection}`);
-    recordToolDiagnostics(exec, toolUse, clock() - startedAt, rejection, true);
+    const rejectedMs = clock() - startedAt;
+    recordToolDiagnostics(exec, toolUse, rejectedMs, rejection, true);
     emitToolResult(exec, toolUse, rejection, true);
-    return { type: "tool_result", tool_use_id: toolUse.id, content: rejection, is_error: true };
+    return {
+      block: { type: "tool_result", tool_use_id: toolUse.id, content: rejection, is_error: true },
+      raw: rejection,
+      isError: true,
+      rejected: true,
+      durationMs: rejectedMs,
+    };
   }
 
   let rawOutput: string;
@@ -84,7 +108,14 @@ export async function executeToolUse(
   recordToolDiagnostics(exec, toolUse, dispatchMs, output, isError, windowed);
   emitToolResult(exec, toolUse, output, isError);
 
-  return { type: "tool_result", tool_use_id: toolUse.id, content: output, is_error: isError };
+  return {
+    block: { type: "tool_result", tool_use_id: toolUse.id, content: output, is_error: isError },
+    raw: rawOutput,
+    isError,
+    rejected: false,
+    durationMs: dispatchMs,
+    window: windowed,
+  };
 }
 
 export function argumentRejection(

@@ -362,6 +362,17 @@ export function renderToolDefs(
   }));
 }
 
+export const SUBAGENT_INPUT_SCHEMA: Record<string, unknown> = Object.freeze({
+  type: "object",
+  properties: {
+    query: {
+      type: "string",
+      description: "Natural-language request for this sub-agent.",
+    },
+  },
+  required: ["query"],
+});
+
 export function subagentToolDefs(
   subagents: ReadonlyMap<string, SubagentConfigView>,
   enabled: readonly string[],
@@ -375,16 +386,7 @@ export function subagentToolDefs(
     .map((name) => ({
       name: `ask_${name}`,
       description: renderTemplate((subagents.get(name) as SubagentConfigView).description, vars),
-      input_schema: {
-        type: "object",
-        properties: {
-          query: {
-            type: "string",
-            description: "Natural-language request for this sub-agent.",
-          },
-        },
-        required: ["query"],
-      },
+      input_schema: SUBAGENT_INPUT_SCHEMA,
     }));
 }
 
