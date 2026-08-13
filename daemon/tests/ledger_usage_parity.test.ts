@@ -258,8 +258,9 @@ function withoutEffectiveAction(payload: unknown): unknown {
   const {
     call_attempts: _attempts,
     rate_limits: _quota,
+    cache_coverage: _coverage,
     ...withoutAttempts
-  } = report as typeof report & { rate_limits?: unknown };
+  } = report as typeof report & { rate_limits?: unknown; cache_coverage?: unknown };
   if (report.budgets === undefined) return withoutAttempts;
   const strip = (o: Record<string, unknown>): Record<string, unknown> => {
     const { effective_action: _dropped, ...rest } = o;

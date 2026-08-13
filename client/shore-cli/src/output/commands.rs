@@ -2548,7 +2548,32 @@ fn print_usage_summary(data: &serde_json::Value) {
     }
     let anomaly_count = data["anomaly_count_7d"].as_u64().unwrap_or(0);
     cli_out!("\nAnomalies (last 7d): {anomaly_count}");
+    print_cache_coverage(data);
     print_rate_limits(data);
+}
+
+/// Render how many calls the cache tracker could classify, and why the rest
+/// could not. Unclassified calls are invisible to any warm/cold percentage, so
+/// showing them keeps the denominator honest.
+fn print_cache_coverage(data: &serde_json::Value) {
+    let Some(rows) = data["cache_coverage"].as_array() else {
+        return;
+    };
+    if rows.is_empty() {
+        return;
+    }
+    cli_out!("\nCache coverage:");
+    for row in rows {
+        let state = row["state"].as_str().unwrap_or("?");
+        let calls = row["calls"].as_u64().unwrap_or(0);
+        let reads = row["cache_read_tokens"].as_u64().unwrap_or(0);
+        let writes = row["cache_write_tokens"].as_u64().unwrap_or(0);
+        let label = match row["reason"].as_str() {
+            Some(reason) => format!("{state} ({reason})"),
+            None => state.to_string(),
+        };
+        cli_out!("  {label:<40} {calls:>6} calls  read {reads}  write {writes}");
+    }
 }
 
 /// Render the provider quota headroom captured on the most recent response

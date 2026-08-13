@@ -116,6 +116,7 @@ function rowFromSqlite(r: Record<string, unknown>): CallRow {
     total_cost: cost(r["total_cost"]),
     output_tokens_estimated: r["output_tokens_estimated"] === 1 ? 1 : 0,
     thinking_dropped: count(r["thinking_dropped"]),
+    cache_state_reason: optText(r["cache_state_reason"]),
   };
 }
 
@@ -219,6 +220,34 @@ export function usageSummary(
     provider: text(r["provider"]),
     model: text(r["model"]),
     ...totalsFrom(r),
+  }));
+}
+
+export interface CacheCoverage {
+  state: string;
+  reason: string | null;
+  calls: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+}
+
+export function cacheCoverage(db: Database, filter: QueryFilter): CacheCoverage[] {
+  const { where, values } = buildWhere(filter);
+  const sql = `SELECT COALESCE(cache_state, 'unclassified') AS state,
+                      cache_state_reason AS reason,
+                      COUNT(*) AS calls,
+                      COALESCE(SUM(cache_read_tokens), 0) AS reads,
+                      COALESCE(SUM(cache_write_tokens), 0) AS writes
+                 FROM calls
+                 ${where}
+                GROUP BY state, reason
+                ORDER BY calls DESC`;
+  return rows(db, sql, values).map((r) => ({
+    state: text(r["state"]),
+    reason: optText(r["reason"]),
+    calls: count(r["calls"]),
+    cache_read_tokens: count(r["reads"]),
+    cache_write_tokens: count(r["writes"]),
   }));
 }
 
