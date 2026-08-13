@@ -7,8 +7,8 @@
 //! before there is anyone to ask).
 
 pub mod active_character;
-pub mod image_protocol;
 pub mod dirs;
+pub mod image_protocol;
 pub mod protocol;
 pub mod swp_client;
 pub mod token;

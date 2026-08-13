@@ -4,9 +4,9 @@ use std::io::Write;
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 
+pub(crate) use shore_common::image_protocol::ImageProtocol;
 pub(crate) use shore_common::image_protocol::detect_protocol as detect_protocol_from_env;
 pub(crate) use shore_common::image_protocol::detect_protocol_probe;
-pub(crate) use shore_common::image_protocol::ImageProtocol;
 
 pub(crate) type KittyImageId = u32;
 
@@ -271,7 +271,13 @@ impl ImageCache {
         self.cache.clear();
     }
 
-    pub(crate) fn calculate_cells(&self, pw: u32, ph: u32, max_cols: u16, max_rows: u16) -> (u16, u16) {
+    pub(crate) fn calculate_cells(
+        &self,
+        pw: u32,
+        ph: u32,
+        max_cols: u16,
+        max_rows: u16,
+    ) -> (u16, u16) {
         let cw = self.cell_width as f64;
         let ch = self.cell_height as f64;
 
@@ -337,7 +343,10 @@ pub(crate) fn placeholder_lines_at(id: KittyImageId, cols: u16, rows: u16) -> Ve
 /// Replace U+2800 stand-in characters with U+10EEEE kitty placeholders in a
 /// rendered buffer. Must be called after Paragraph renders but before the
 /// frame is flushed to the terminal.
-pub(crate) fn fixup_placeholder_cells(buf: &mut ratatui::buffer::Buffer, area: ratatui::layout::Rect) {
+pub(crate) fn fixup_placeholder_cells(
+    buf: &mut ratatui::buffer::Buffer,
+    area: ratatui::layout::Rect,
+) {
     for y in area.y..(area.y + area.height) {
         for x in area.x..(area.x + area.width) {
             let cell = &buf[(x, y)];

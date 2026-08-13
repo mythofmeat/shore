@@ -59,7 +59,8 @@ impl SyncState {
         match msg {
             ServerMessage::History(history) => {
                 if history.selected_character != self.selected_character {
-                    self.selected_character = history.selected_character.clone();
+                    self.selected_character
+                        .clone_from(&history.selected_character);
                     self.message_revision = history.revision;
                     self.snapshot_revision = history.revision;
                     return SyncDecision::Deliver;

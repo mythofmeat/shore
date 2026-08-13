@@ -2,7 +2,7 @@ use std::fs;
 use std::io::{self, Write};
 
 use base64::Engine;
-pub(crate) use shore_common::image_protocol::{detect_protocol, ImageProtocol};
+pub(crate) use shore_common::image_protocol::{ImageProtocol, detect_protocol};
 use tracing::{debug, warn};
 
 /// Render an image inline using the detected protocol, or fall back to text.

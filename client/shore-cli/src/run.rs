@@ -309,7 +309,9 @@ async fn handle_config_reload(
         for file in &changed {
             cli_err!("  {file}");
         }
-        cli_err!("Activating them invalidates the warm prompt cache; the next message pays a one-time cache write.");
+        cli_err!(
+            "Activating them invalidates the warm prompt cache; the next message pays a one-time cache write."
+        );
         cli_err!("Activate now? [y/N]");
         let mut answer = String::new();
         let _ignored = io::stdin().read_line(&mut answer)?;
@@ -866,7 +868,10 @@ async fn handle_create_character(
 const SCAFFOLD_GUIDE: &[(&str, &str)] = &[
     ("SOUL.md", "who the character is"),
     ("USER.md", "who you are, to them"),
-    ("AGENTS.md", "the system prompt (a copy of the built-in one)"),
+    (
+        "AGENTS.md",
+        "the system prompt (a copy of the built-in one)",
+    ),
     ("TOOLS.md", "extra guidance on using tools"),
 ];
 
@@ -1428,7 +1433,9 @@ fn resolve_editor(
 /// stated an intent for shore specifically.
 ///
 /// Returns an empty string if the user saves an empty file or the editor exits non-zero.
-fn edit_message_in_editor(configured: Option<String>) -> Result<String, Box<dyn std::error::Error>> {
+fn edit_message_in_editor(
+    configured: Option<String>,
+) -> Result<String, Box<dyn std::error::Error>> {
     let editor = resolve_editor(
         configured,
         std::env::var("VISUAL").ok(),
@@ -1640,14 +1647,14 @@ async fn recv_command_data(
 #[cfg(test)]
 mod tests {
     use crate::test_env::set_env;
-    use tokio::io::duplex;
     use tokio::io::AsyncWriteExt;
+    use tokio::io::duplex;
 
+    use shore_common::protocol::SWP_V1;
     use shore_common::protocol::client_msg::ClientMessage;
     use shore_common::protocol::error::ErrorCode;
     use shore_common::protocol::server_msg::*;
     use shore_common::protocol::types::*;
-    use shore_common::protocol::SWP_V1;
 
     use crate::cli::{Cli, CliCommand};
 
@@ -2434,7 +2441,10 @@ mod tests {
             super::resolve_editor(None, Some("code -w".into()), Some("nano".into())),
             "code -w"
         );
-        assert_eq!(super::resolve_editor(None, None, Some("nano".into())), "nano");
+        assert_eq!(
+            super::resolve_editor(None, None, Some("nano".into())),
+            "nano"
+        );
         assert_eq!(super::resolve_editor(None, None, None), "vi");
     }
 

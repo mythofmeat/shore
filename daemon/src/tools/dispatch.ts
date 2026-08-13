@@ -17,7 +17,7 @@ import { normalizeProtectedPath, normalizePromptVisiblePath } from "./workspace_
 import type { Embedder } from "../llm/embed.ts";
 import type { RetrievalConfig } from "../memory/workspace_index.ts";
 
-export type RetrievalMode = "auto" | "lexical" | "hybrid";
+export type RetrievalMode = "auto" | "lexical" | "hybrid" | "vector";
 
 export interface ToolContext {
   imageDir: string;
@@ -36,6 +36,7 @@ export interface ToolContext {
 
   embedder?: Embedder;
   memoryIndexPath?: string;
+  historyIndexPath?: string;
 
   deferEdit?: (path: string) => Promise<void> | void;
 
@@ -53,12 +54,14 @@ function defaultSearchMode(
   mode: RetrievalMode,
   embedderAvailable: boolean,
   indexPathAvailable: boolean,
-): "lexical" | "hybrid" {
+): "lexical" | "hybrid" | "vector" {
   switch (mode) {
     case "lexical":
       return "lexical";
     case "hybrid":
       return "hybrid";
+    case "vector":
+      return "vector";
     case "auto":
       return embedderAvailable && indexPathAvailable ? "hybrid" : "lexical";
   }
@@ -122,7 +125,11 @@ export async function dispatchTool(
 
   switch (name) {
     case "search_chat_logs":
-      return await handleSearchHistory(args, ctx.characterDataDir);
+      return await handleSearchHistory(args, ctx.characterDataDir, {
+        ...(ctx.historyIndexPath === undefined ? {} : { indexPath: ctx.historyIndexPath }),
+        ...(ctx.embedder === undefined ? {} : { embedder: ctx.embedder }),
+        defaultMode: ctx.retrievalMode,
+      });
 
     case "model_history":
       return await handleModelHistory(args, ctx.characterName, ctx.modelHistoryQuery);

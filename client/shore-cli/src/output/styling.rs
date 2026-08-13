@@ -3,8 +3,8 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crossterm::style::{Color, ResetColor, SetForegroundColor};
 use shore_common::protocol::server_msg::{
-    ConfigWarning, Phase, ProviderFallbackWarning, SendImage, ServerMessage, StreamChunk, StreamEnd,
-    ToolCall, ToolResult, UsageWarning,
+    ConfigWarning, Phase, ProviderFallbackWarning, SendImage, ServerMessage, StreamChunk,
+    StreamEnd, ToolCall, ToolResult, UsageWarning,
 };
 use shore_common::protocol::tool_display::{
     format_tool_input_with_limit, format_tool_output_with_limit,
@@ -12,10 +12,10 @@ use shore_common::protocol::tool_display::{
 use shore_common::protocol::types::ImageRef;
 
 use super::{
-    abbreviate_model, primary_tool_arg, process_wrap_width, use_color, write_channel_rule,
-    write_process_body, write_sigil_header, write_thinking_content_line, COLOR_RESULT,
-    COLOR_SUBAGENT, COLOR_THINKING, COLOR_TOOL, MAX_TOOL_OUTPUT, SIGIL_ERROR, SIGIL_OK,
-    SIGIL_SUBAGENT, SIGIL_THINKING, SIGIL_TOOL,
+    COLOR_RESULT, COLOR_SUBAGENT, COLOR_THINKING, COLOR_TOOL, MAX_TOOL_OUTPUT, SIGIL_ERROR,
+    SIGIL_OK, SIGIL_SUBAGENT, SIGIL_THINKING, SIGIL_TOOL, abbreviate_model, primary_tool_arg,
+    process_wrap_width, use_color, write_channel_rule, write_process_body, write_sigil_header,
+    write_thinking_content_line,
 };
 use crate::images;
 
@@ -346,7 +346,10 @@ pub(crate) fn print_config_warning(w: &ConfigWarning) {
         Some(character) => _ = writeln!(out, " ({character}) {}: {}", w.path, w.message),
         None => _ = writeln!(out, " {}: {}", w.path, w.message),
     }
-    _ = writeln!(out, "the daemon is still running the last config that loaded");
+    _ = writeln!(
+        out,
+        "the daemon is still running the last config that loaded"
+    );
 }
 
 /// Print whichever warning frame this is.

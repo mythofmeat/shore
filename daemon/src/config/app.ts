@@ -585,10 +585,10 @@ const THINKING: StructSpec<ThinkingConfig> = {
   fields: { replay_prior_thinking: readThinkingReplay },
 };
 
-export type RetrievalMode = "auto" | "lexical" | "hybrid";
+export type RetrievalMode = "auto" | "lexical" | "hybrid" | "vector";
 export type RetrievalBinaryMode = "skip" | "metadata" | "try_embed";
 
-const RETRIEVAL_MODES: readonly RetrievalMode[] = ["auto", "lexical", "hybrid"];
+const RETRIEVAL_MODES: readonly RetrievalMode[] = ["auto", "lexical", "hybrid", "vector"];
 const BINARY_MODES: readonly RetrievalBinaryMode[] = ["skip", "metadata", "try_embed"];
 
 export interface RetrievalConfig {

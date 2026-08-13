@@ -49,15 +49,15 @@ use std::time::Duration;
 
 use clap::Parser;
 use crossterm::event::{DisableBracketedPaste, EnableBracketedPaste, EventStream};
-use crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, DisableLineWrap, EnableLineWrap, EnterAlternateScreen,
-    LeaveAlternateScreen,
-};
 use crossterm::execute;
+use crossterm::terminal::{
+    DisableLineWrap, EnableLineWrap, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode,
+    enable_raw_mode,
+};
 use futures_util::StreamExt;
+use ratatui::Terminal;
 use ratatui::backend::{CrosstermBackend, TestBackend};
 use ratatui::buffer::Buffer;
-use ratatui::Terminal;
 use shore_common::protocol::client_msg::{ClientMessage, Command};
 use shore_common::protocol::server_msg::ServerMessage;
 use shore_common::protocol::types::{ContentBlock, Message, Role, StreamMetadata};
@@ -1701,9 +1701,9 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         ServerMessage::SendImage(img) => {
             let (max_cols, max_rows) = image_max_cells();
             if let Some(b64) = &img.data {
-                let _ =
-                    app.image_cache
-                        .ensure_transmitted_from_b64(&img.path, b64, max_cols, max_rows);
+                let _ = app
+                    .image_cache
+                    .ensure_transmitted_from_b64(&img.path, b64, max_cols, max_rows);
             } else {
                 let _ = app
                     .image_cache
@@ -2773,10 +2773,11 @@ mod redraw_tests {
         );
 
         assert_eq!(effect.redraw, RedrawEffect::Immediate);
-        assert!(app
-            .completion
-            .candidates
-            .contains(&"temperature = 0.7".into()));
+        assert!(
+            app.completion
+                .candidates
+                .contains(&"temperature = 0.7".into())
+        );
         assert_eq!(app.completion.selected, Some(0));
     }
 
@@ -2859,10 +2860,11 @@ mod redraw_tests {
         assert_eq!(effect.redraw, RedrawEffect::Immediate);
         assert!(!app.sampler_settings_loading);
         assert!(app.pending_sampler_settings_rid.is_none());
-        assert!(app
-            .completion
-            .candidates
-            .contains(&"temperature = 0.7".into()));
+        assert!(
+            app.completion
+                .candidates
+                .contains(&"temperature = 0.7".into())
+        );
     }
 
     #[test]
@@ -3078,10 +3080,11 @@ mod redraw_tests {
             _ => panic!("expected model_settings command"),
         }
         assert!(app.sampler_settings_loading);
-        assert!(app
-            .notifications
-            .iter()
-            .any(|n| n.content == "setting temperature updated"));
+        assert!(
+            app.notifications
+                .iter()
+                .any(|n| n.content == "setting temperature updated")
+        );
     }
 
     #[test]
@@ -3259,12 +3262,13 @@ mod redraw_tests {
             .find(|t| t.msg_id.as_deref() == Some("m_existing"))
             .map(|t| &t.metadata);
         assert!(matches!(existing_metadata, Some(None)));
-        assert!(app
-            .entries
-            .iter()
-            .filter_map(ConversationEntry::as_turn)
-            .any(|t| {
-                t.msg_id.as_deref() == Some("m_missing_from_history") && t.metadata.is_some()
-            }));
+        assert!(
+            app.entries
+                .iter()
+                .filter_map(ConversationEntry::as_turn)
+                .any(|t| {
+                    t.msg_id.as_deref() == Some("m_missing_from_history") && t.metadata.is_some()
+                })
+        );
     }
 }

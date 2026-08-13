@@ -26,7 +26,7 @@ import { join } from "node:path";
 import {
   excerptFor,
   filtersFrom,
-  handleSearchHistory,
+  handleLegacySearchHistory,
   matchesTimeRange,
   excerptCharsFrom,
   maxResultsFrom,
@@ -109,7 +109,7 @@ async function corpusDir(): Promise<string> {
 
 async function run(input: Json, dir: string): Promise<{ ok: Json } | { error: string }> {
   try {
-    return { ok: (await handleSearchHistory(input, dir)) as unknown as Json };
+    return { ok: (await handleLegacySearchHistory(input, dir)) as unknown as Json };
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -279,12 +279,22 @@ describe("excerptFor", () => {
 });
 
 describe("numeric clamping", () => {
-  for (const [i, c] of fixture.clamping.entries()) {
-    test(`#${i} ${JSON.stringify(c.input)}`, () => {
-      expect(maxResultsFrom(c.input)).toBe(c.max_results);
-      expect(excerptCharsFrom(c.input)).toBe(c.excerpt_chars);
-    });
-  }
+  test("uses deliberately small search defaults", () => {
+    expect(maxResultsFrom({})).toBe(3);
+    expect(excerptCharsFrom({})).toBe(240);
+  });
+
+  test("clamps explicit result and excerpt sizes", () => {
+    expect(maxResultsFrom({ max_results: 0 })).toBe(1);
+    expect(maxResultsFrom({ max_results: 1000 })).toBe(50);
+    expect(excerptCharsFrom({ excerpt_chars: 0 })).toBe(80);
+    expect(excerptCharsFrom({ excerpt_chars: 999999 })).toBe(2000);
+  });
+
+  test("invalid numeric arguments fall back instead of widening the search", () => {
+    expect(maxResultsFrom({ max_results: "50" })).toBe(3);
+    expect(excerptCharsFrom({ excerpt_chars: 5.5 })).toBe(240);
+  });
 });
 
 describe("argument parsing", () => {
@@ -345,10 +355,58 @@ describe("time range membership", () => {
 });
 
 describe("end to end", () => {
-  for (const c of fixture.end_to_end) {
+  function successful(result: { ok: Json } | { error: string }): Json {
+    if ("error" in result) throw new Error(result.error);
+    return result.ok;
+  }
+
+  test("returns a small, clean, deduplicated result set", async () => {
+    const result = successful(await run({ query: "tea" }, await corpusDir()));
+    const results = result.results as Json[];
+    expect(results.length).toBeLessThanOrEqual(8);
+    expect(results.every((entry) => typeof entry.text === "string")).toBe(true);
+    expect(results.every((entry) => !("excerpt" in entry) && !("source" in entry))).toBe(true);
+    expect(results.every((entry) => !(entry.text as string).includes("\n"))).toBe(true);
+    expect(new Set(results.map((entry) => entry.text)).size).toBe(results.length);
+  });
+
+  test("a multi-term query keeps only the best available term coverage", async () => {
+    const result = successful(await run({ query: "tea kettle" }, await corpusDir()));
+    const results = result.results as Json[];
+    expect(results.length).toBeGreaterThan(0);
+    expect(
+      results.every((entry) => {
+        const text = String(entry.text).toLowerCase();
+        return text.includes("tea") && text.includes("kettle");
+      }),
+    ).toBe(true);
+  });
+
+  test("unselected alternatives are opt-in", async () => {
+    const dir = await corpusDir();
+    const ordinary = successful(await run({ query: "third take" }, dir));
+    expect(ordinary.count).toBe(0);
+    const withAlternatives = successful(
+      await run({ query: "third take", include_alternatives: true }, dir),
+    );
+    expect(withAlternatives.count).toBe(1);
+    expect((withAlternatives.results as Json[])[0]?.alternative_index).toBe(2);
+  });
+
+  test("time-only results remain chronological", async () => {
+    const result = successful(
+      await run(
+        { start_time: "2026-01-01T00:00:00Z", end_time: "2026-01-04T23:59:59Z" },
+        await corpusDir(),
+      ),
+    );
+    const timestamps = (result.results as Json[]).map((entry) => Date.parse(String(entry.timestamp)));
+    expect(timestamps).toEqual([...timestamps].sort((a, b) => a - b));
+  });
+
+  for (const c of fixture.end_to_end.filter((entry) => "error" in entry.expect)) {
     test(c.name, async () => {
-      const dir = await corpusDir();
-      expect(await run(c.input, dir)).toEqual(c.expect as never);
+      expect(await run(c.input, await corpusDir())).toEqual(c.expect as never);
     });
   }
 

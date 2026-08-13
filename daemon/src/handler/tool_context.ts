@@ -6,6 +6,7 @@ import { resolveImageGenConfig } from "../llm/image_generate.ts";
 import { ensureActivePromptSnapshot } from "../memory/deferred_edits.ts";
 import { resolveEmbedder } from "../memory/retrieval.ts";
 import { indexPath, type RetrievalConfig } from "../memory/workspace_index.ts";
+import { historyIndexPath } from "../memory/history_index.ts";
 import type { RetrievalConfig as ConfiguredRetrieval } from "../config/app.ts";
 import type { ToolContext } from "../tools/dispatch.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
@@ -75,6 +76,7 @@ export async function buildToolContext(
     retrievalConfig: retrievalView(config.app.memory.retrieval),
     retrievalMode: config.app.memory.retrieval.mode,
     memoryIndexPath: indexPath(config.dirs.cache, charName),
+    historyIndexPath: historyIndexPath(config.dirs.cache, charName),
     ...("ok" in imageGen ? { imageGenConfig: imageGen.ok } : {}),
     ...(deps.imageGenerator === undefined ? {} : { imageGenerator: deps.imageGenerator }),
     ...(deps.modelHistoryQuery === undefined ? {} : { modelHistoryQuery: deps.modelHistoryQuery }),
@@ -92,7 +94,7 @@ export async function buildToolContext(
   return ctx;
 }
 
-function providerRecord(
+export function providerRecord(
   config: LoadedConfig,
 ): Record<string, { entry?: ProviderEntry; baseUrl?: string }> {
   const out: Record<string, { entry?: ProviderEntry; baseUrl?: string }> = {};

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 
+import { HISTORY_DB_FILE } from "./history_store.ts";
 import { mergeToolLoopMessages } from "./merge";
 import { MessageStore, type AltSelection, type PendingAlt } from "./message_store";
 import { SegmentReader } from "./segments";
@@ -22,6 +23,7 @@ export type HistoryListener = (history: History) => void;
 export class ConversationEngine {
   readonly #characterName: string;
   readonly #characterDir: string;
+  readonly #historyDbPath: string;
   #messages: MessageStore;
   #segments: SegmentReader;
   #revision = 0;
@@ -31,12 +33,14 @@ export class ConversationEngine {
   private constructor(
     characterName: string,
     characterDir: string,
+    historyDbPath: string,
     messages: MessageStore,
     segments: SegmentReader,
     onHistory: HistoryListener | undefined,
   ) {
     this.#characterName = characterName;
     this.#characterDir = characterDir;
+    this.#historyDbPath = historyDbPath;
     this.#messages = messages;
     this.#segments = segments;
     this.#onHistory = onHistory;
@@ -48,9 +52,20 @@ export class ConversationEngine {
     onHistory?: HistoryListener,
   ): Promise<ConversationEngine> {
     const characterDir = join(dataDir, characterName);
+    const historyDbPath = join(dataDir, HISTORY_DB_FILE);
     const messages = await MessageStore.load(join(characterDir, ACTIVE_JSONL_FILE));
-    const segments = await SegmentReader.load(characterDir);
-    return new ConversationEngine(characterName, characterDir, messages, segments, onHistory);
+    const segments = await SegmentReader.load(characterDir, {
+      dbPath: historyDbPath,
+      character: characterName,
+    });
+    return new ConversationEngine(
+      characterName,
+      characterDir,
+      historyDbPath,
+      messages,
+      segments,
+      onHistory,
+    );
   }
 
   get characterName(): string {
@@ -180,7 +195,11 @@ export class ConversationEngine {
 
   async reload(): Promise<void> {
     this.#messages = await MessageStore.load(join(this.#characterDir, ACTIVE_JSONL_FILE));
-    this.#segments = await SegmentReader.load(this.#characterDir);
+    this.#segments.close();
+    this.#segments = await SegmentReader.load(this.#characterDir, {
+      dbPath: this.#historyDbPath,
+      character: this.#characterName,
+    });
     this.#advanceRewrite();
     this.broadcastHistory();
   }

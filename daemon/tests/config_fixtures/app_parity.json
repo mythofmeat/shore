@@ -790,8 +790,8 @@
     {
       "name": "an unknown retrieval mode does not parse",
       "toml": "[memory.retrieval]\nmode = \"semantic\"\n",
-      "doc_err": "unknown variant `semantic`, expected one of `auto`, `lexical`, `hybrid`",
-      "table_err": "unknown variant `semantic`, expected one of `auto`, `lexical`, `hybrid`"
+      "doc_err": "unknown variant `semantic`, expected one of `auto`, `lexical`, `hybrid`, `vector`",
+      "table_err": "unknown variant `semantic`, expected one of `auto`, `lexical`, `hybrid`, `vector`"
     },
     {
       "name": "an unknown binary mode does not parse",

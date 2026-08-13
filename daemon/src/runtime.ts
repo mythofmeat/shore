@@ -6,11 +6,12 @@ import { LastRequestCache } from "./cache/last_request.ts";
 import { AutonomyService, startAutonomyTimer } from "./autonomy/service.ts";
 import { CallStore } from "./call_store.ts";
 import { CharacterRegistry } from "./characters.ts";
-import { pluginsDir, rustJoin } from "./config/dirs.ts";
+import { characterDataDir, pluginsDir, rustJoin } from "./config/dirs.ts";
 import { loadConfig, type LoadedConfig } from "./config/loader.ts";
 import type { HistoryListener } from "./engine/conversation.ts";
 import type { Message } from "./engine/types.ts";
 import type { ToolContextDeps } from "./handler/tool_context.ts";
+import { providerRecord } from "./handler/tool_context.ts";
 import { Diagnostics } from "./diagnostics.ts";
 import type { ToolContext } from "./tools/dispatch.ts";
 import { subagentRunner } from "./tools/subagent_loop.ts";
@@ -28,6 +29,9 @@ import { McpClient, type McpServerSpec } from "./mcp/client.ts";
 import { NotificationService } from "./notifications.ts";
 import { McpRegistry, type McpServerConfigView } from "./tools/mcp_registry.ts";
 import { McpHolder } from "./tools/mcp_holder.ts";
+import { resolveEmbedder } from "./memory/retrieval.ts";
+import { historyIndexPath } from "./memory/history_index.ts";
+import { HistoryIndexService } from "./memory/history_index_service.ts";
 
 const CALL_STORE_RETENTION_DAYS = 14;
 const CALL_STORE_MAX_BYTES = 536_870_912;
@@ -55,6 +59,8 @@ export interface ShoreRuntime {
   readonly notifier: NotificationService;
   readonly keepalive: KeepaliveService;
   readonly autonomy: AutonomyService;
+  readonly historyIndex: HistoryIndexService;
+  refreshHistoryIndexes(): Promise<void>;
   shutdown(): Promise<void>;
 }
 
@@ -72,12 +78,46 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
   const providers = captureProviders(options.providers, callStore);
   const uninstallWireCapture = installCallStoreWireCapture(callStore);
 
+  let historyIndex: HistoryIndexService | undefined;
   const registry = await CharacterRegistry.create(
     config.dirs.config,
     config.dirs.data,
     config,
-    options.onHistory,
+    (history) => {
+      const character = history.selected_character;
+      if (character !== undefined) historyIndex?.noteMutation(character);
+      options.onHistory?.(history);
+    },
   );
+
+  historyIndex = new HistoryIndexService();
+  const refreshHistoryIndexes = async () => {
+    const available = new Set(registry.availableCharacters());
+    for (const character of historyIndex?.registeredCharacters() ?? []) {
+      if (!available.has(character)) historyIndex?.unregister(character);
+    }
+    for (const character of available) {
+      const effective = registry.effectiveConfig(character);
+      let embedder;
+      try {
+        embedder = resolveEmbedder({
+          ...(effective.app.defaults.embedding === undefined
+            ? {}
+            : { defaultRef: effective.app.defaults.embedding }),
+          embedding: Object.fromEntries(effective.models.embedding),
+          providers: providerRecord(effective),
+        });
+      } catch {}
+      historyIndex?.register({
+        character,
+        characterDataDir: characterDataDir(effective.dirs.data, character),
+        indexPath: historyIndexPath(effective.dirs.cache, character),
+        ...(embedder === undefined ? {} : { embedder }),
+      });
+    }
+  };
+  await refreshHistoryIndexes();
+  await historyIndex.start();
 
   const keepalive = new KeepaliveService(
     (req, signal) => {
@@ -115,6 +155,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       ...(options.env === undefined ? {} : { env: options.env }),
       notifyAutonomousMessage: autonomousMessageNotifier(notifier),
       notifyCompactionComplete: compactionCompleteNotifier(notifier),
+      beginForeground: () => historyIndex.beginForeground(),
     }),
   );
   autonomy.attachKeepalive(keepalive);
@@ -131,7 +172,10 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     notifier,
     keepalive,
     autonomy,
+    historyIndex,
+    refreshHistoryIndexes,
     async shutdown() {
+      await historyIndex.shutdown();
       await mcp.current.shutdown();
       uninstallWireCapture();
       callStore?.close();

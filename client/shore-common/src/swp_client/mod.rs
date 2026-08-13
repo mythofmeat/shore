@@ -5,7 +5,7 @@ pub mod discovery;
 pub mod error;
 pub mod sync;
 
-pub use conn_manager::{spawn_connection, ConnCommand, ConnEvent};
+pub use conn_manager::{ConnCommand, ConnEvent, spawn_connection};
 pub use connection::{SWPConnection, ServerAddr};
 pub use discovery::{discover_config_dir, discover_or_default};
 pub use error::{ClientError, DiscoveryKind, Result};
@@ -403,5 +403,4 @@ mod tests {
         let result = toml::from_str::<crate::swp_client::client_config::ClientConfig>(toml);
         assert!(result.is_err());
     }
-
 }
