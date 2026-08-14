@@ -1,5 +1,6 @@
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import { atomicWrite } from "../../engine/atomic.ts";
 import { HISTORY_DB_FILE, HistoryStore } from "../../engine/history_store.ts";
@@ -203,6 +204,10 @@ async function readManifest(path: string): Promise<CompactionManifest> {
 }
 
 export async function segmentCount(characterDir: string): Promise<number> {
+  return Math.max(await manifestSegmentCount(characterDir), durableSegmentCount(characterDir));
+}
+
+async function manifestSegmentCount(characterDir: string): Promise<number> {
   try {
     return (await readManifest(join(characterDir, COMPACTION_MANIFEST_FILE))).segments.length;
   } catch {
@@ -210,7 +215,38 @@ export async function segmentCount(characterDir: string): Promise<number> {
   }
 }
 
+function durableSegmentCount(characterDir: string): number {
+  return withHistoryStore(characterDir, (store, character) => store.segmentCount(character)) ?? 0;
+}
+
+function withHistoryStore<T>(
+  characterDir: string,
+  read: (store: HistoryStore, character: string) => T,
+): T | undefined {
+  const dbPath = join(dirname(characterDir), HISTORY_DB_FILE);
+  if (!existsSync(dbPath)) return undefined;
+  let store: HistoryStore | undefined;
+  try {
+    store = HistoryStore.open(dbPath);
+    return read(store, basename(characterDir));
+  } catch {
+    return undefined;
+  } finally {
+    store?.close();
+  }
+}
+
 export async function hasCompactionOperation(
+  characterDir: string,
+  operationId: string,
+): Promise<boolean> {
+  return (
+    (await manifestHasCompactionOperation(characterDir, operationId)) ||
+    durableHasCompactionOperation(characterDir, operationId)
+  );
+}
+
+async function manifestHasCompactionOperation(
   characterDir: string,
   operationId: string,
 ): Promise<boolean> {
@@ -220,6 +256,12 @@ export async function hasCompactionOperation(
   } catch {
     return false;
   }
+}
+
+function durableHasCompactionOperation(characterDir: string, operationId: string): boolean {
+  return withHistoryStore(characterDir, (store, character) =>
+    store.hasCompactionOperation(character, operationId),
+  ) ?? false;
 }
 
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
