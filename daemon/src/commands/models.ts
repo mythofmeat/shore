@@ -4,7 +4,7 @@ import {
   listEffectiveModels,
   type EffectiveModel,
 } from "../config/effective_catalog.ts";
-import { resolvedModelToWire, type ResolvedModel } from "../config/models.ts";
+import { firstChatModel, resolvedModelToWire, type ResolvedModel } from "../config/models.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import {
   characterPreferencesPath,
@@ -74,11 +74,24 @@ function requireCharacter(ctx: ModelsContext): string {
   return ctx.characterName;
 }
 
+export function effectiveChatModel(
+  config: LoadedConfig,
+  character: string | undefined,
+): ResolvedModel | undefined {
+  if (character === undefined) return undefined;
+  return resolveChatModelForCharacter(configView(config), character, findEffective);
+}
+
 function resolveActiveModel(ctx: ModelsContext): ResolvedModel {
-  if (ctx.activeResolvedModel !== undefined) return ctx.activeResolvedModel;
-  const name = ctx.activeModel ?? ctx.config.app.defaults.model;
-  if (name === undefined) throw invalidRequest("No model specified and no active model set");
-  return resolve(ctx, name, true);
+  const resolved = effectiveChatModel(ctx.config, ctx.characterName);
+  if (resolved !== undefined) return resolved;
+
+  const fallback = ctx.config.app.defaults.model;
+  if (fallback !== undefined) return resolve(ctx, fallback, true);
+
+  const first = firstChatModel(ctx.config.models);
+  if (first === undefined) throw invalidRequest("No model specified and no active model set");
+  return first;
 }
 
 const BACKGROUND_TASKS: readonly BackgroundTask[] = ["heartbeat", "compaction"];
@@ -183,22 +196,18 @@ function effectiveModelToJson(entry: EffectiveModel): unknown {
 }
 
 function activeName(ctx: ModelsContext, entries: EffectiveModel[]): string | undefined {
-  if (ctx.activeResolvedModel !== undefined) return ctx.activeResolvedModel.qualifiedName;
-
-  const byName = (name: string): string => {
-    try {
-      return findEffectiveModel(configView(ctx.config), ctx.config.dirs.cache, name, true)
-        .qualifiedName;
-    } catch {
-      return name;
-    }
-  };
-
-  const active = ctx.activeModel;
-  if (active !== undefined && active !== "") return byName(active);
+  const resolved = effectiveChatModel(ctx.config, ctx.characterName);
+  if (resolved !== undefined) return resolved.qualifiedName;
 
   const fallback = ctx.config.app.defaults.model;
-  if (fallback !== undefined && fallback !== "") return byName(fallback);
+  if (fallback !== undefined && fallback !== "") {
+    try {
+      return findEffectiveModel(configView(ctx.config), ctx.config.dirs.cache, fallback, true)
+        .qualifiedName;
+    } catch {
+      return fallback;
+    }
+  }
 
   return entries[0]?.resolved.qualifiedName;
 }
@@ -307,7 +316,9 @@ function loadPreferencesFor(
 
 export function switchModel(ctx: ModelsContext, args: Args): unknown {
   const name = asStr(args["name"]);
-  if (name === undefined) return { active: ctx.activeModel ?? null };
+  if (name === undefined) {
+    return { active: effectiveChatModel(ctx.config, ctx.characterName)?.qualifiedName ?? null };
+  }
 
   const includeHidden = asBool(args["include_hidden"]) ?? false;
   const resolved = resolve(ctx, name, includeHidden);

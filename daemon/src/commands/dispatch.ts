@@ -30,6 +30,7 @@ import { memory } from "./memory.ts";
 import { runTool, type RunToolContext } from "./run_tool.ts";
 import {
   backgroundModels,
+  effectiveChatModel,
   listModels,
   modelInfo,
   modelSettings,
@@ -307,7 +308,7 @@ function statusContext(
   return {
     characterName: engine.characterName,
     turnCount: engine.turnCount(),
-    activeModel: session.activeModel,
+    activeModel: effectiveChatModel(session.config, engine.characterName)?.qualifiedName,
     config: { app: { defaults: { model: session.config.app.defaults.model } }, dirs: session.config.dirs },
     sessionTokens: deps.sessionTokens,
     autonomy: deps.autonomy,

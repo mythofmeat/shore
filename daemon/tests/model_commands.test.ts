@@ -312,3 +312,30 @@ describe("model commands", () => {
     });
   }
 });
+
+/**
+ * The session `active_model` used to steer display while generation resolved
+ * from the preferences file, so `shore model` and `shore status` could name a
+ * model no turn would ever use. Both sides read the preferences now.
+ *
+ * Driven with the session pointing somewhere else on purpose: if the override
+ * came back, `active` would follow it and this would fail.
+ */
+test("the active model is the one generation resolves, not the session's", async () => {
+  const ctx = await buildContext({
+    catalog: '[chat.anthropic.alpha]\nmodel_id = "alpha-id"\n' +
+      '[chat.anthropic.beta]\nmodel_id = "beta-id"\n',
+    defaults: "",
+    discovery: [],
+    character: "ada",
+    global_prefs: null,
+    character_prefs: '[selected]\nprovider = "anthropic"\nmodel_id = "beta-id"\n',
+    active_model: "chat.anthropic.alpha",
+    pre_resolved: null,
+  });
+
+  expect((listModels(ctx, {}) as { active: string }).active).toBe("chat.anthropic.beta");
+  expect((modelInfo(ctx, {}) as { qualified_name: string }).qualified_name).toBe(
+    "chat.anthropic.beta",
+  );
+});
