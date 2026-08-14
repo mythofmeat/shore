@@ -185,6 +185,7 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
         | CliCommand::Model { .. }
         | CliCommand::Provider { .. }
         | CliCommand::Memory { .. }
+        | CliCommand::Compact { .. }
         | CliCommand::Config { .. }
         | CliCommand::Tools { .. }
         | CliCommand::Usage { .. }
@@ -247,6 +248,7 @@ async fn handle_generic_swp_command(
         },
         CliCommand::Character { json, .. }
         | CliCommand::Memory { json, .. }
+        | CliCommand::Compact { json, .. }
         | CliCommand::Config { json, .. }
         | CliCommand::Tools { json, .. }
         | CliCommand::Usage { json, .. } => *json,
@@ -1634,6 +1636,7 @@ mod tests {
             | CliCommand::Model { .. }
             | CliCommand::Provider { .. }
             | CliCommand::Memory { .. }
+            | CliCommand::Compact { .. }
             | CliCommand::Config { .. }
             | CliCommand::Tools { .. }
             | CliCommand::Usage { .. }
@@ -1755,13 +1758,12 @@ mod tests {
 
     // ── Character is handled locally (see state.rs) ───────────────
 
-    // ── Memory compact command ───────────────────────────────────────
+    // ── Compact command ──────────────────────────────────────────────
 
     #[tokio::test]
-    async fn memory_compact_sends_command() {
-        let cli = test_cli(CliCommand::Memory {
-            subcommand: Some(crate::cli::MemoryCommand::Compact { keep_turns: None }),
-            query: None,
+    async fn compact_sends_command() {
+        let cli = test_cli(CliCommand::Compact {
+            keep_turns: None,
             json: false,
         });
         let received = execute_with_mock(cli, command_response("compact")).await;
@@ -1780,7 +1782,6 @@ mod tests {
     #[tokio::test]
     async fn memory_sends_command_with_query() {
         let cli = test_cli(CliCommand::Memory {
-            subcommand: None,
             query: Some("recent topics".into()),
             json: false,
         });

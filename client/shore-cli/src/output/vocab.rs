@@ -230,6 +230,19 @@ struct Row {
     tone: Tone,
 }
 
+impl Row {
+    /// A label is a dim key when it names a value beside it, and the content
+    /// itself when the row carries a mark — a marked row is a list entry, and
+    /// dimming the entry the mark points at says "inactive" about the thing
+    /// just flagged as active.
+    fn label_tone(&self) -> Tone {
+        match self.mark {
+            Mark::None => Tone::Muted,
+            Mark::Active | Mark::On | Mark::Off | Mark::Warn => self.tone,
+        }
+    }
+}
+
 impl Rows {
     pub(crate) fn new() -> Self {
         Self::default()
@@ -288,7 +301,7 @@ impl Rows {
                 paint(out, row.mark.tone(), &row.mark.glyph().to_string());
                 let _ignored = write!(out, "{}", " ".repeat(MARK_COLUMN.saturating_sub(1)));
             }
-            paint(out, Tone::Muted, &row.label);
+            paint(out, row.label_tone(), &row.label);
             if row.value.is_empty() {
                 newline(out);
                 continue;
@@ -871,6 +884,43 @@ mod tests {
             out, "  * qifei  active\n    Yuna\n",
             "names must align whether or not the row carries a mark, \
              and a valueless row must not pad out to nothing"
+        );
+    }
+
+    /// The `*` said "this is the active one" while the name beside it was
+    /// painted the same grey as every inactive name, so the row read as
+    /// flagged and disabled at once.
+    #[test]
+    fn a_marked_row_paints_its_name_the_way_the_mark_does() {
+        let _guard = crate::output::COLOR_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        set_color_enabled(true);
+        let mut buf = Vec::new();
+        let mut rows = Rows::new();
+        rows.add_marked(Mark::Active, "qifei", "", Tone::Active);
+        rows.add_marked(Mark::None, "Yuna", "", Tone::Plain);
+        rows.write(&mut buf);
+        set_color_enabled(false);
+
+        let out = String::from_utf8(buf).unwrap_or_default();
+        let mut lines = out.lines();
+        let active = lines.next().unwrap_or_default();
+        let inactive = lines.next().unwrap_or_default();
+        let muted = format!("{}", SetForegroundColor(Tone::Muted.color().unwrap()));
+        let cyan = format!("{}", SetForegroundColor(Tone::Active.color().unwrap()));
+
+        assert!(
+            active.contains(&format!("{cyan}qifei")),
+            "the active name must carry the mark's colour: {active:?}"
+        );
+        assert!(
+            !active.contains(&format!("{muted}qifei")),
+            "the active name must not also be dimmed: {active:?}"
+        );
+        assert!(
+            inactive.contains(&format!("{muted}Yuna")),
+            "an unmarked name stays dim: {inactive:?}"
         );
     }
 
