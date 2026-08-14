@@ -11,9 +11,6 @@ use crate::cli::{Cli, CliCommand, LogRole, ModelCommand};
 use crate::output;
 use crate::state;
 
-/// Display name for the character attached to this CLI session, set once
-/// after the handshake and read by any code that renders assistant output
-/// outside the main command dispatcher.
 static SESSION_DISPLAY_CHARACTER: OnceLock<String> = OnceLock::new();
 
 fn session_display_character() -> &'static str {
@@ -38,23 +35,6 @@ fn active_start_index(data: &serde_json::Value) -> usize {
         .unwrap_or(0)
 }
 
-/// An error whose message the user has already been shown.
-///
-/// A server error is printed where it happens — mid-stream, after the spinner
-/// is cleared, and with its protocol code — and then still has to fail the
-/// process. Returning the bare message left `main` printing the same sentence
-/// a second time, without the code and detached from where it occurred:
-///
-/// ```text
-/// server error ["invalid_request"]: no characters available — …
-/// error: no characters available — …
-/// ```
-///
-/// The message is kept rather than dropped, so anything that logs or wraps the
-/// error still has it; what changes is that `main` knows not to print it
-/// again. Reaching for a sentinel rather than deleting one of the two prints
-/// is deliberate — the printed one carries the code and the position, and the
-/// `Err` is what sets the exit status.
 #[derive(Debug)]
 pub(crate) struct ReportedError(String);
 
@@ -72,12 +52,10 @@ impl std::fmt::Display for ReportedError {
 
 impl std::error::Error for ReportedError {}
 
-/// Whether `err` has already been reported to the user by the code that raised it.
 pub(crate) fn already_reported(err: &(dyn std::error::Error + 'static)) -> bool {
     err.downcast_ref::<ReportedError>().is_some()
 }
 
-/// Execute the CLI command by connecting to the daemon and dispatching.
 #[instrument(skip(cli))]
 pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(result) = try_handle_local_only(&cli).await {
@@ -86,7 +64,6 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
 
     let addr = resolve_addr(&cli)?;
 
-    // Character resolution: --character flag > SHORE_CHARACTER env > state file > None (daemon auto-selects).
     let character = cli.character.clone().or_else(state::read_active_character);
 
     info!(character = ?character, "CLI executing command");
@@ -94,13 +71,10 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
     let (mut conn, _server_hello, history) =
         SWPConnection::connect(&addr, "cli", "shore-cli", character.clone()).await?;
 
-    // Prefer the daemon's authoritative answer over the local request.
     let display_character = state::resolve_display_character(
         history.selected_character.as_deref(),
         character.as_deref(),
     );
-    // Stash so incidental messages inside `recv_command_data` can label
-    // themselves correctly without threading the name through every call site.
     let _ignored = SESSION_DISPLAY_CHARACTER.set(display_character.clone());
 
     if let Some(requested) = cli.character.as_deref().filter(|r| !r.is_empty()) {
@@ -197,15 +171,11 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
     Ok(())
 }
 
-/// Map a non-send/regen/local command to its SWP command, send it, and render
-/// the response honoring `--json` / `--toml` / config formatting.
 async fn handle_generic_swp_command(
     conn: &mut SWPConnection,
     other: &CliCommand,
     character: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // `config reload` is a two-round-trip interactive flow, not a single
-    // mapped command.
     if let CliCommand::Config {
         subcommand: Some(_),
         ..
@@ -266,11 +236,6 @@ async fn handle_generic_swp_command(
         | CliCommand::Completions { .. }
         | CliCommand::Complete { .. } => false,
     };
-    // Read-only config only. Clap's `conflicts_with_all` rejects
-    // `--toml` alongside `--check` or a set value at parse time; the
-    // narrow match here documents that intent and avoids serializing
-    // non-config responses (e.g. "set" confirmations) as TOML if a
-    // future code path forgets the parse-time guard.
     let toml_mode = matches!(
         other,
         CliCommand::Config {
@@ -341,14 +306,6 @@ fn usage_view(cmd: &CliCommand) -> Option<output::usage::View> {
     })
 }
 
-/// Handle `shore config reload`: validate and reload config from disk, and
-/// activate pending system-prompt edits only after the user confirms.
-///
-/// Two round-trips: a check call reports which prompt-visible files differ
-/// from the active snapshot (any config error aborts here), then the apply
-/// call adopts the fresh config and — if confirmed — refreshes the snapshot.
-/// Refreshing changes the system prompt bytes, so the provider prompt cache
-/// goes cold and the next message pays a one-time cache write.
 async fn handle_config_reload(
     conn: &mut SWPConnection,
     cmd: &CliCommand,
@@ -365,7 +322,6 @@ async fn handle_config_reload(
     _ = conn
         .send_command("config_reload", serde_json::json!({}))
         .await?;
-    // Config errors surface here as a printed server error + Err.
     let check = recv_command_data(conn).await?;
 
     let changed: Vec<String> = check
@@ -419,8 +375,6 @@ async fn handle_config_reload(
     Ok(())
 }
 
-/// Handle every `shore log` form: edit/delete subcommands, a single message
-/// ref, the heartbeat log, or the message list (optionally `--follow`).
 async fn handle_log_command(
     conn: &mut SWPConnection,
     cmd: &CliCommand,
@@ -443,7 +397,6 @@ async fn handle_log_command(
         return Ok(());
     };
 
-    // Default view shows only message text; each flag opts a channel back in.
     let filter = output::LogFilter {
         reasoning: *reasoning,
         tools: *tools,
@@ -489,7 +442,6 @@ async fn handle_log_command(
     Ok(())
 }
 
-/// Send a `shore log edit`/`delete` subcommand and print the acknowledgement.
 async fn run_log_subcommand(
     conn: &mut SWPConnection,
     sub: &crate::cli::LogCommand,
@@ -526,7 +478,6 @@ fn response_with_display_ref(mut data: serde_json::Value, display_ref: &str) -> 
     data
 }
 
-/// Fetch a single message by ref (`get`), optionally filtered to one role.
 async fn fetch_single_message(
     conn: &mut SWPConnection,
     msg_ref: &str,
@@ -546,8 +497,6 @@ async fn fetch_single_message(
     recv_command_data(conn).await
 }
 
-/// Render a `shore log` message list honoring `--json` / `--content`, else the
-/// boundary-annotated view drawn for a terminal or flattened for a pipe.
 fn render_log_list(
     data: &serde_json::Value,
     json: bool,
@@ -578,8 +527,6 @@ fn render_log_list(
     Ok(())
 }
 
-/// Stream live log frames after a `shore log --follow`, filtered by `role` and
-/// the `--reasoning` / `--tools` / `--subagent-tools` channel flags.
 async fn follow_log_stream(
     conn: &mut SWPConnection,
     role: Option<&LogRole>,
@@ -588,8 +535,6 @@ async fn follow_log_stream(
 ) -> Result<(), Box<dyn std::error::Error>> {
     loop {
         let msg = conn.recv().await?;
-        // Sub-agent frames belong to the nested tool loop; gate them on
-        // --subagent-tools regardless of frame kind.
         if msg.subagent().is_some() && !filter.subagent_tools {
             continue;
         }
@@ -606,7 +551,6 @@ async fn follow_log_stream(
                 }
             }
             ServerMessage::StreamChunk(chunk) if log_role_matches(role, &Role::Assistant) => {
-                // Hide reasoning chunks unless --reasoning is set.
                 if chunk.content_type == "thinking" && !filter.reasoning {
                     continue;
                 }
@@ -652,8 +596,6 @@ async fn follow_log_stream(
     Ok(())
 }
 
-/// Handle `shore send` / `shore send --system`: read the message (args, stdin,
-/// or editor), then stream the response or inject a system message.
 async fn handle_send_command(
     conn: &mut SWPConnection,
     cmd: &CliCommand,
@@ -692,7 +634,6 @@ async fn handle_send_command(
     Ok(())
 }
 
-/// Handle `shore alt`: map the selector/ref to its SWP command and render.
 async fn handle_alt_command(
     conn: &mut SWPConnection,
     cmd: &CliCommand,
@@ -717,8 +658,6 @@ async fn handle_alt_command(
     Ok(())
 }
 
-/// Handle `shore status` / `shore status --diagnostics`, including a single
-/// `--section` lookup.
 async fn handle_status_command(
     conn: &mut SWPConnection,
     cmd: &CliCommand,
@@ -769,23 +708,11 @@ async fn handle_status_command(
     Ok(())
 }
 
-/// Handle the model commands the CLI applies locally — `model --reset` and a
-/// bare `model <name>` switch — which clear the runtime mirror. (`--all`
-/// propagates `include_hidden = true`, the documented escape hatch from the
-/// `discovery.ignore` error message.)
-/// A `shore model` invocation that changes which model is active.
 enum ModelChange<'target> {
     SwitchTo(&'target str),
     Reset,
 }
 
-/// Recognise a model change in either spelling.
-///
-/// `shore model <name>` and `shore model use <name>` mean the same thing, and
-/// so do `shore model --reset` and `shore model reset`. They have to leave by
-/// the same door: the change is only complete once the locally pinned model is
-/// cleared, and a spelling that skips that gets silently switched back by the
-/// next command that connects.
 fn model_change(cmd: &CliCommand) -> Option<ModelChange<'_>> {
     let CliCommand::Model {
         subcommand, reset, ..
@@ -834,29 +761,17 @@ async fn apply_model_change(
     Ok(())
 }
 
-/// Handle the commands that never need a daemon connection — `config --path`,
-/// `character --new`, and `complete`. Returns `Some(result)` when
-/// one of them ran, or `None` to continue with the normal connected path.
 async fn try_handle_local_only(cli: &Cli) -> Option<Result<(), Box<dyn std::error::Error>>> {
-    // config --path: query the daemon for its actual config dir, fall back to local.
     if matches!(&cli.command, CliCommand::Config { path: true, .. }) {
         return Some(print_config_path(cli).await);
     }
     if let CliCommand::Complete { kind } = &cli.command {
-        // Any failure (daemon down, parse error) ends with empty stdout
-        // and a zero exit code so fish falls back to no suggestions.
         let _ignored = handle_complete_query(*kind, cli).await;
         return Some(Ok(()));
     }
     None
 }
 
-/// Best-effort re-apply of the persisted active model after connecting.
-///
-/// Regression for #3: `switch_model` only mutates per-session state on the
-/// daemon, so a one-shot CLI invocation discards the choice on exit. Re-apply
-/// it here so every subsequent command sees it. A stale entry (model removed
-/// from config) must not stop the user's actual command.
 async fn pre_apply_active_model(conn: &mut SWPConnection) {
     let Some(model) = state::read_active_model() else {
         return;
@@ -868,9 +783,6 @@ async fn pre_apply_active_model(conn: &mut SWPConnection) {
         debug!(error = %e, model = %model, "failed to pre-apply active model");
         return;
     }
-    // Drain the response so it doesn't get mixed into the next command's
-    // stream. Errors (e.g. stale model) are ignored — the user's real
-    // command still runs.
     match conn.recv().await {
         Ok(ServerMessage::CommandOutput(_)) => {
             debug!(model = %model, "pre-applied active model");
@@ -891,7 +803,6 @@ async fn pre_apply_active_model(conn: &mut SWPConnection) {
     }
 }
 
-/// Handle `switch-character` locally: validate via daemon, write state file.
 async fn handle_switch_character(
     conn: &mut SWPConnection,
     name: &str,
@@ -907,8 +818,6 @@ async fn handle_switch_character(
     Ok(())
 }
 
-/// Handle `character --new`: the daemon scaffolds, because the daemon owns the
-/// config directory the character has to land in.
 async fn handle_create_character(
     conn: &mut SWPConnection,
     name: &str,
@@ -937,7 +846,6 @@ async fn handle_create_character(
     Ok(())
 }
 
-/// What each scaffolded file is for, in the order the prompt assembles them.
 const SCAFFOLD_GUIDE: &[(&str, &str)] = &[
     ("SOUL.md", "who the character is"),
     ("USER.md", "who you are, to them"),
@@ -948,7 +856,6 @@ const SCAFFOLD_GUIDE: &[(&str, &str)] = &[
     ("TOOLS.md", "extra guidance on using tools"),
 ];
 
-/// Handle `list-characters`: query daemon, annotate active character.
 async fn handle_list_characters(
     conn: &mut SWPConnection,
     json: bool,
@@ -967,18 +874,12 @@ async fn handle_list_characters(
     Ok(())
 }
 
-/// Emit plain names (one per line) for shell completion helpers.
-///
-/// Errors are returned so the caller can swallow them — completion tooling
-/// must never print to stderr or exit non-zero on transient failures.
 async fn handle_complete_query(
     kind: crate::cli::CompleteKind,
     cli: &Cli,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::cli::CompleteKind;
     let addr = resolve_addr(cli)?;
-    // Character selection doesn't matter for list_models/list_characters,
-    // so hand the daemon None and let it auto-attach.
     let (mut conn, _hello, _history) =
         SWPConnection::connect(&addr, "cli", "shore-cli", None).await?;
 
@@ -1000,13 +901,10 @@ async fn handle_complete_query(
     Ok(())
 }
 
-/// Resolve the Shore config directory.
 fn config_dir() -> PathBuf {
     shore_common::dirs::config_dir()
 }
 
-/// Print the config directory path by querying the daemon.
-/// Falls back to local resolution if the daemon is unreachable.
 async fn print_config_path(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     let addr = resolve_addr(cli)?;
     let character = cli.character.clone().or_else(state::read_active_character);
@@ -1029,11 +927,6 @@ async fn print_config_path(cli: &Cli) -> Result<(), Box<dyn std::error::Error>> 
     }
 }
 
-/// Print the `shore config` payload as TOML, ready to paste into a config file.
-///
-/// With `show_all = false`, drops keys whose value equals the daemon's built-in
-/// default so the output is a diff against defaults — paste-able to override
-/// only what you've customized.
 fn print_config_toml(
     data: &serde_json::Value,
     show_all: bool,
@@ -1045,17 +938,11 @@ fn print_config_toml(
     let effective: &serde_json::Value = if show_all {
         payload
     } else {
-        // If nothing differs from defaults, render an empty table rather than
-        // erroring out — `shore config --toml` should still succeed.
         filtered = filter_non_defaults(payload, defaults)
             .unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new()));
         &filtered
     };
 
-    // Section view (`shore config <key> --toml`): wrap the subtree under its
-    // table name so the output drops into a config file as-is — otherwise
-    // nested tables would be at root level (e.g. `[heartbeat]` instead of
-    // `[behavior.heartbeat]`).
     let section_payload;
     let to_serialize: &serde_json::Value = if let Some(k) = key {
         let mut section_map = serde_json::Map::new();
@@ -1081,9 +968,6 @@ fn print_config_toml(
     Ok(())
 }
 
-/// Return a copy of `value` with every leaf that equals its corresponding entry
-/// in `defaults` removed, and subtables with no surviving descendants pruned.
-/// Returns `None` when nothing survives.
 fn filter_non_defaults(
     value: &serde_json::Value,
     defaults: Option<&serde_json::Value>,
@@ -1101,7 +985,6 @@ fn filter_non_defaults(
                 } else if d.is_none_or(|dd| dd != v) {
                     let _ignored = out.insert(k.clone(), v.clone());
                 } else {
-                    // Value equals its default: omit it from the diff.
                 }
             }
             if out.is_empty() {
@@ -1123,9 +1006,6 @@ fn filter_non_defaults(
     }
 }
 
-/// Convert a `serde_json::Value` to a `toml::Value`, preserving key order but
-/// emitting non-table fields before nested tables so the TOML serializer never
-/// hits a "value after table" error. Drops `null` entries (TOML has no null).
 fn json_to_toml_value(value: &serde_json::Value) -> Option<toml::Value> {
     match value {
         serde_json::Value::Null => None,
@@ -1164,18 +1044,12 @@ fn json_to_toml_value(value: &serde_json::Value) -> Option<toml::Value> {
     }
 }
 
-/// Read all of stdin to a string (for piped input).
 fn read_stdin() -> Result<String, Box<dyn std::error::Error>> {
     let mut buf = String::new();
     let _ignored = io::stdin().read_to_string(&mut buf)?;
     Ok(buf.trim().to_owned())
 }
 
-/// Ask the daemon for `[advanced].editor`, or `None` if it is unset or unreachable.
-///
-/// A failure here must not stop the user composing a message: the environment
-/// fallback below is a correct answer, so an unreadable key is silently no
-/// preference rather than an error.
 async fn configured_editor(conn: &mut SWPConnection) -> Option<String> {
     _ = conn
         .send_command("config", serde_json::json!({ "key": "advanced.editor" }))
@@ -1186,7 +1060,6 @@ async fn configured_editor(conn: &mut SWPConnection) -> Option<String> {
     (!editor.is_empty()).then(|| editor.to_owned())
 }
 
-/// Pick the editor to launch, ignoring candidates that are set but blank.
 fn resolve_editor(
     configured: Option<String>,
     visual: Option<String>,
@@ -1200,13 +1073,6 @@ fn resolve_editor(
         .unwrap_or_else(|| "vi".into())
 }
 
-/// Open the configured editor with a temp file and return the composed text.
-///
-/// Precedence is `[advanced].editor`, then `$VISUAL`, then `$EDITOR`, then `vi`
-/// — the config wins over the ambient environment, because a user who set it
-/// stated an intent for shore specifically.
-///
-/// Returns an empty string if the user saves an empty file or the editor exits non-zero.
 fn edit_message_in_editor(
     configured: Option<String>,
 ) -> Result<String, Box<dyn std::error::Error>> {
@@ -1237,7 +1103,6 @@ fn edit_message_in_editor(
     Ok(content)
 }
 
-/// Resolve the daemon address from CLI flags or discovery.
 fn resolve_addr(cli: &Cli) -> Result<ServerAddr, shore_common::swp_client::ClientError> {
     if let Some(addr) = &cli.addr {
         return Ok(ServerAddr(addr.clone()));
@@ -1245,27 +1110,19 @@ fn resolve_addr(cli: &Cli) -> Result<ServerAddr, shore_common::swp_client::Clien
     shore_common::swp_client::discover_or_default(None)
 }
 
-/// Receive and render a streaming response (for send/regen).
 async fn recv_streaming_response(
     conn: &mut SWPConnection,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut spinner = output::StreamSpinner::new();
     spinner.start();
 
-    // Reset once per turn (not per tool-loop round) so blank-line separation
-    // between blocks survives across rounds.
     output::reset_chunk_state();
 
-    // Which sub-agent's nested loop we're currently rendering, if any. A frame
-    // tagged with a sub-agent name opens the section; the first untagged frame
-    // after it closes the section. (The primary loop is blocked awaiting the
-    // sub-agent, so its frames can't interleave, and nesting is one level deep.)
     let mut current_subagent: Option<String> = None;
 
     loop {
         let msg = conn.recv().await?;
 
-        // Bracket sub-agent activity on tag transitions.
         let tag = msg.subagent();
         if tag != current_subagent.as_deref() {
             if let Some(prev) = &current_subagent {
@@ -1292,8 +1149,6 @@ async fn recv_streaming_response(
                 }
             }
             ServerMessage::StreamEnd(end) => {
-                // A sub-agent boundary never ends the primary generation — keep
-                // the spinner up and read on.
                 if end.subagent.is_some() {
                     spinner.restart();
                     continue;
@@ -1301,8 +1156,6 @@ async fn recv_streaming_response(
                 spinner.stop().await;
                 debug!(finish_reason = end.finish_reason, "Stream complete");
                 if end.finish_reason == "tool_use" {
-                    // Tool loop: more messages will follow.
-                    // Restart spinner for the next LLM round.
                     spinner.restart();
                     continue;
                 }
@@ -1338,7 +1191,6 @@ async fn recv_streaming_response(
                 output::print_send_image(img);
             }
             ServerMessage::Phase(phase) => {
-                // Update spinner instead of printing static label when active.
                 if spinner.is_active() {
                     spinner.set_phase(&phase.phase);
                     if let Some(model) = &phase.model {
@@ -1366,7 +1218,6 @@ async fn recv_streaming_response(
     }
 }
 
-/// Receive a command response and return the data payload.
 async fn recv_command_data(
     conn: &mut SWPConnection,
 ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
@@ -1397,8 +1248,6 @@ async fn recv_command_data(
                         .unwrap_or_else(|| session_display_character()),
                 );
             }
-            // A `shore config` that saved a file the daemon then refused is
-            // exactly where this has to land, not only in the daemon's log.
             ServerMessage::ConfigWarning(w) => {
                 output::print_config_warning(w);
             }
@@ -1419,8 +1268,6 @@ async fn recv_command_data(
         }
     }
 }
-
-// ── Tests ────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
@@ -1451,7 +1298,6 @@ mod tests {
         args.get(key).expect("expected command argument")
     }
 
-    /// Helper: write a JSON line to a writer.
     async fn write_json_line<W: AsyncWriteExt + Unpin, T: serde::Serialize>(w: &mut W, val: &T) {
         let line = serde_json::to_string(val).unwrap();
         w.write_all(line.as_bytes()).await.unwrap();
@@ -1459,7 +1305,6 @@ mod tests {
         w.flush().await.unwrap();
     }
 
-    /// Helper: read one JSON line from a reader.
     async fn read_json_line<
         R: tokio::io::AsyncBufReadExt + Unpin,
         T: serde::de::DeserializeOwned,
@@ -1471,8 +1316,6 @@ mod tests {
         serde_json::from_str(line.trim()).unwrap()
     }
 
-    /// Spawn a mock SWP server that completes the handshake, reads one client
-    /// message, and responds with the given server messages.
     async fn mock_server(
         server_stream: tokio::io::DuplexStream,
         responses: Vec<ServerMessage>,
@@ -1480,7 +1323,6 @@ mod tests {
         let (r, mut w) = tokio::io::split(server_stream);
         let mut reader = tokio::io::BufReader::new(r);
 
-        // Handshake: send server hello
         let hello = ServerMessage::Hello(ServerHello {
             v: SWP_V1,
             server_name: "test-daemon".into(),
@@ -1488,10 +1330,8 @@ mod tests {
         });
         write_json_line(&mut w, &hello).await;
 
-        // Read client hello
         let _client_hello: ClientMessage = read_json_line(&mut reader).await;
 
-        // Send empty history
         let history = ServerMessage::History(History {
             rid: None,
             messages: vec![],
@@ -1502,10 +1342,8 @@ mod tests {
         });
         write_json_line(&mut w, &history).await;
 
-        // Read the client's command/message
         let client_msg: ClientMessage = read_json_line(&mut reader).await;
 
-        // Send all response messages
         for msg in &responses {
             write_json_line(&mut w, msg).await;
         }
@@ -1528,15 +1366,6 @@ mod tests {
         }
     }
 
-    /// `shore model X` and `shore model use X` are the same request, and the
-    /// switch is only finished once the locally pinned model is cleared. When
-    /// `use` took the generic path instead, a pin written by the TUI survived
-    /// and the next command that connected re-applied it — switching you back
-    /// without saying so.
-    /// Switching is only finished once the locally pinned model is cleared.
-    /// When `use` took the generic path instead, a pin written by the TUI
-    /// survived and the next command that connected re-applied it — switching
-    /// you back without saying so.
     #[test]
     fn switching_models_clears_the_local_pin() {
         let cmd = model_command(Some(ModelCommand::Use {
@@ -1558,7 +1387,6 @@ mod tests {
         ));
     }
 
-    /// Reading commands must not go down the path that clears the pin.
     #[test]
     fn reading_about_models_changes_nothing() {
         let listing = model_command(None);
@@ -1570,7 +1398,6 @@ mod tests {
         }
     }
 
-    /// Build a Cli struct for testing (bypasses actual socket connection).
     fn test_cli(command: CliCommand) -> Cli {
         Cli {
             addr: None,
@@ -1579,28 +1406,17 @@ mod tests {
         }
     }
 
-    /// A resolvable `SHORE_TOKEN` for the two mock-server helpers below.
-    ///
-    /// Every handshake sends one, so without this each of these tests would
-    /// fail at connect with an unauthorized error rather than exercising the
-    /// command it is about. Set once and never cleared — the process
-    /// environment is shared by this parallel test binary, and clearing it
-    /// would break whichever neighbour was mid-connect. It must be set *before*
-    /// the client task starts, which is why it lives here rather than in
-    /// `mock_server`: that runs spawned, concurrently with the connect.
     fn with_token() {
         static ONCE: std::sync::Once = std::sync::Once::new();
         ONCE.call_once(|| set_env(shore_common::token::TOKEN_ENV, "test-token"));
     }
 
-    /// Execute a command against a mock server and return what the server received.
     async fn execute_with_mock(cli: Cli, responses: Vec<ServerMessage>) -> ClientMessage {
         with_token();
         let (client_stream, server_stream) = duplex(16384);
 
         let server_handle = tokio::spawn(mock_server(server_stream, responses));
 
-        // Connect using the raw stream and run the command logic
         let (mut conn, _hello, _history) = shore_common::swp_client::SWPConnection::connect_raw(
             client_stream,
             "cli",
@@ -1695,8 +1511,6 @@ mod tests {
         })]
     }
 
-    // ── Send command ─────────────────────────────────────────────────
-
     #[tokio::test]
     async fn send_sends_swp_message() {
         let cli = test_cli(CliCommand::Send {
@@ -1715,8 +1529,6 @@ mod tests {
         );
     }
 
-    // ── Regen command ────────────────────────────────────────────────
-
     #[tokio::test]
     async fn regen_sends_swp_regen() {
         let cli = test_cli(CliCommand::Regen);
@@ -1727,8 +1539,6 @@ mod tests {
             ClientMessage::Regen(r) => assert!(r.stream)
         );
     }
-
-    // ── Status command ───────────────────────────────────────────────
 
     #[tokio::test]
     async fn status_sends_swp_command() {
@@ -1748,10 +1558,6 @@ mod tests {
         );
     }
 
-    // ── Character is handled locally (see state.rs) ───────────────
-
-    // ── Compact command ──────────────────────────────────────────────
-
     #[tokio::test]
     async fn compact_sends_command() {
         let cli = test_cli(CliCommand::Compact {
@@ -1768,8 +1574,6 @@ mod tests {
             }
         );
     }
-
-    // ── Log edit command ─────────────────────────────────────────────
 
     #[tokio::test]
     async fn log_edit_sends_edit_command() {
@@ -1800,8 +1604,6 @@ mod tests {
         );
     }
 
-    // ── Log delete command ───────────────────────────────────────────
-
     #[tokio::test]
     async fn log_delete_sends_delete_command() {
         let cli = test_cli(CliCommand::Log {
@@ -1828,8 +1630,6 @@ mod tests {
             }
         );
     }
-
-    // ── Streaming with thinking chunks ───────────────────────────────
 
     #[tokio::test]
     async fn streaming_with_thinking_chunks() {
@@ -1886,10 +1686,6 @@ mod tests {
 
     #[test]
     fn json_to_toml_reorders_tables_after_scalars() {
-        // serde_json with `preserve_order` keeps insertion order, which the
-        // daemon doesn't guarantee. The converter must move tables after
-        // scalars within each table so toml serialization never errors with
-        // "value after table".
         let json = serde_json::json!({
             "section_a": { "nested": true },
             "scalar": "value",
@@ -1904,7 +1700,6 @@ mod tests {
             | toml::Value::Datetime(_)
             | toml::Value::Array(_) => panic!("expected table"),
         };
-        // scalar definition must precede the [section_a] header
         let scalar_idx = rendered.find("scalar").expect("scalar present");
         let table_idx = rendered.find("[section_a]").expect("table header present");
         assert!(
@@ -1947,9 +1742,6 @@ mod tests {
 
     #[test]
     fn print_config_toml_section_view_wraps_under_key() {
-        // Regression: `shore config <section> --toml` must wrap the subtree
-        // under its table name, otherwise pasting the output back into a
-        // config file would land nested tables at the wrong path.
         let data = serde_json::json!({
             "key": "daemon",
             "config": {
@@ -1959,9 +1751,6 @@ mod tests {
                 "addr": "127.0.0.1:7320",
             },
         });
-        // Capture stdout by routing through to_string_pretty directly via the
-        // same logic. Since print_config_toml writes to stdout, exercise the
-        // wrapping logic by replicating the path.
         let payload = data.get("config").unwrap();
         let key = data.get("key").and_then(|v| v.as_str()).unwrap();
         let mut section_map = serde_json::Map::new();
@@ -1985,13 +1774,9 @@ mod tests {
 
     #[test]
     fn filter_non_defaults_returns_none_when_all_match() {
-        // Regression: when nothing differs from defaults, the caller should
-        // be able to render an empty TOML table rather than fail outright.
         let config = serde_json::json!({ "a": 1, "b": 2 });
         let defaults = serde_json::json!({ "a": 1, "b": 2 });
         assert!(super::filter_non_defaults(&config, Some(&defaults)).is_none());
-        // The caller substitutes an empty object so json_to_toml_value yields
-        // a valid (empty) table.
         let fallback = serde_json::Value::Object(serde_json::Map::new());
         let tv = super::json_to_toml_value(&fallback).expect("empty table");
         assert!(matches!(tv, toml::Value::Table(ref t) if t.is_empty()));
@@ -2008,9 +1793,6 @@ mod tests {
         assert!(!t.contains_key("set"), "null entries should be dropped");
     }
 
-    // ── the failure is reported once ────────────────────────────────
-
-    /// Drive one command against a mock server that answers with an error.
     async fn error_from_mock(err: Error) -> Box<dyn std::error::Error> {
         with_token();
         let (client_stream, server_stream) = duplex(16384);
@@ -2036,9 +1818,6 @@ mod tests {
         failure
     }
 
-    /// The server error is printed where it happens, so `main` must not print
-    /// it a second time. Both halves are asserted: the marker `main` reads,
-    /// and the message it still carries for anything that logs it.
     #[tokio::test]
     async fn a_server_error_is_marked_as_already_reported() {
         let failure = error_from_mock(Error {
@@ -2052,18 +1831,12 @@ mod tests {
         assert_eq!(failure.to_string(), "no characters available");
     }
 
-    /// The other direction, which is what stops the marker from swallowing
-    /// everything: an error nobody printed still has to be printed by `main`.
     #[test]
     fn an_unprinted_error_is_not_marked() {
         let failure: Box<dyn std::error::Error> = "connection refused".into();
         assert!(!super::already_reported(failure.as_ref()));
     }
 
-    /// `[advanced].editor` was accepted, validated and stored by the daemon and
-    /// read by nobody: `shore send` with no message went straight to `$VISUAL`.
-    /// Config wins over the ambient environment — a user who set it stated an
-    /// intent for shore, where `$EDITOR` is whatever the shell happened to have.
     #[test]
     fn the_configured_editor_outranks_the_environment() {
         assert_eq!(
@@ -2089,8 +1862,6 @@ mod tests {
         assert_eq!(super::resolve_editor(None, None, None), "vi");
     }
 
-    /// An exported-but-empty `EDITOR=` is the common shell accident. Taking it
-    /// literally spawns nothing and loses the message the user just wrote.
     #[test]
     fn a_blank_candidate_is_skipped_rather_than_launched() {
         assert_eq!(

@@ -5,13 +5,6 @@ use base64::Engine;
 pub(crate) use shore_common::image_protocol::{ImageProtocol, detect_protocol};
 use tracing::{debug, warn};
 
-/// Render an image inline using the detected protocol, or fall back to text.
-///
-/// `path` is the filesystem path to the image (used as a label and as a
-/// fallback when `data` is not provided).
-/// `caption` is an optional human-readable name.
-/// `data` is base64-encoded image bytes from the daemon, used when the CLI is
-/// connected to a remote daemon and the file path doesn't exist locally.
 pub(crate) fn render_image(path: &str, caption: Option<&str>, data: Option<&str>) {
     let label = caption.unwrap_or(path);
 
@@ -44,8 +37,6 @@ pub(crate) fn render_image(path: &str, caption: Option<&str>, data: Option<&str>
     }
 }
 
-/// Resolve image bytes from the embedded base64 payload (preferred for remote
-/// daemons) or fall back to reading the local filesystem path.
 fn resolve_bytes(path: &str, data: Option<&str>) -> Option<Vec<u8>> {
     if let Some(b64) = data {
         match base64::engine::general_purpose::STANDARD.decode(b64) {
@@ -58,10 +49,6 @@ fn resolve_bytes(path: &str, data: Option<&str>) -> Option<Vec<u8>> {
     fs::read(path).ok()
 }
 
-/// Render an image using the Kitty graphics protocol.
-///
-/// Uses the "transmit and display" action with base64-encoded data,
-/// chunked into 4096-byte pieces per the protocol spec.
 fn render_kitty(data: &[u8]) -> io::Result<()> {
     let encoded = base64::engine::general_purpose::STANDARD.encode(data);
     let stdout = io::stdout();
@@ -78,7 +65,6 @@ fn render_kitty(data: &[u8]) -> io::Result<()> {
     for (i, chunk) in chunks.iter().enumerate() {
         let is_last = i.checked_add(1) == Some(chunks.len());
         if i == 0 {
-            // First chunk: action=transmit+display, format=100 (PNG/auto)
             write!(
                 out,
                 "\x1b_Ga=T,f=100,m={};{}\x1b\\",
@@ -86,7 +72,6 @@ fn render_kitty(data: &[u8]) -> io::Result<()> {
                 chunk
             )?;
         } else {
-            // Continuation chunk
             write!(out, "\x1b_Gm={};{}\x1b\\", i32::from(!is_last), chunk)?;
         }
     }
@@ -94,7 +79,6 @@ fn render_kitty(data: &[u8]) -> io::Result<()> {
     out.flush()
 }
 
-/// Render an image using the iTerm2 inline images protocol.
 fn render_iterm2(data: &[u8], name: &str) -> io::Result<()> {
     let encoded = base64::engine::general_purpose::STANDARD.encode(data);
     let name_b64 = base64::engine::general_purpose::STANDARD.encode(name);
@@ -112,14 +96,10 @@ fn render_iterm2(data: &[u8], name: &str) -> io::Result<()> {
     out.flush()
 }
 
-// ── Tests ────────────────────────────────────────────────────────────────
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use shore_common::image_protocol::detect_protocol_from_env;
-
-    // ── Protocol detection from env ──────────────────────────────────
 
     #[test]
     fn shore_images_kitty_override() {
@@ -222,13 +202,8 @@ mod tests {
         assert_eq!(ImageProtocol::Iterm2.to_string(), "iterm2");
     }
 
-    // ── resolve_bytes ────────────────────────────────────────────────
-
     #[test]
     fn resolve_bytes_prefers_embedded_data_over_path() {
-        // When the daemon embeds image data, the CLI must use it instead of
-        // hitting the daemon's local filesystem path — that path may not
-        // exist on the CLI's host (remote daemon case).
         let bytes = b"remote-embedded".to_vec();
         let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
         let resolved = resolve_bytes("/nonexistent/remote/path.png", Some(&b64));

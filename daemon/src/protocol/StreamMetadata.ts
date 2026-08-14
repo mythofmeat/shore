@@ -2,7 +2,4 @@
 import type { TimingInfo } from "./TimingInfo";
 import type { TokenCounts } from "./TokenCounts";
 
-/**
- * Metadata attached to stream_end.
- */
 export type StreamMetadata = { tokens: TokenCounts, timing: TimingInfo, model: string, };

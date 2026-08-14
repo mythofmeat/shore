@@ -19,32 +19,19 @@ use super::{
 };
 use crate::images;
 
-/// Running state for the stream, tracking enough to render the same cohesive
-/// channel layout as the transcript: speech flush-left, and thinking/tool/result
-/// as a dim inset "process" channel with blank lines between blocks.
 #[expect(
     clippy::struct_excessive_bools,
     reason = "stream rendering state tracks independent cursor/channel flags"
 )]
 struct ChunkState {
-    /// Whether the previous chunk was thinking content.
     was_thinking: bool,
-    /// Whether anything has been printed this turn (the first block gets no
-    /// leading blank line).
     has_emitted: bool,
-    /// Whether the cursor is at the start of a line.
     at_line_start: bool,
-    /// Whether the last block was a process block (thinking/tool/result) — used
-    /// to decide when a blank-line separator is needed.
     last_was_process: bool,
-    /// Buffer for the in-progress thinking logical line, accumulated across
-    /// chunks until a `\n` completes it.
     thinking_line: String,
 }
 
 impl ChunkState {
-    /// Initial state: nothing emitted, cursor at column 0 (the assistant header
-    /// line ends with a newline before streaming begins).
     const INITIAL: Self = Self {
         was_thinking: false,
         has_emitted: false,
@@ -66,15 +53,10 @@ fn lock_chunk_state() -> MutexGuard<'static, ChunkState> {
     CHUNK_STATE.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// Reset stream chunk state. Call once at the start of each turn (not per
-/// tool-loop round) so blank-line separation survives across rounds.
 pub(crate) fn reset_chunk_state() {
     *lock_chunk_state() = ChunkState::INITIAL;
 }
 
-/// Begin a new block, inserting a blank-line separator when either this block
-/// or the previous one is a process block. The first block of the turn gets no
-/// leading blank.
 fn begin_block(out: &mut impl Write, state: &mut ChunkState, is_process: bool) {
     let had = state.has_emitted;
     state.has_emitted = true;
@@ -84,20 +66,17 @@ fn begin_block(out: &mut impl Write, state: &mut ChunkState, is_process: bool) {
         return;
     }
     if !state.at_line_start {
-        let _ignored = writeln!(out); // close the open content line
+        let _ignored = writeln!(out);
         state.at_line_start = true;
     }
     if prev_process && is_process {
-        write_channel_rule(out); // keep the gutter unbroken between blocks
+        write_channel_rule(out);
     } else if is_process || prev_process {
-        let _ignored = writeln!(out); // channel ↔ speech boundary
+        let _ignored = writeln!(out);
     } else {
-        // Speech ↔ speech: no separator needed.
     }
 }
 
-/// Print a stream chunk to stdout. Thinking renders as a dim, inset, sigil-led
-/// process block; response text is written verbatim (flush-left, soft-wrapped).
 pub(crate) fn print_chunk(chunk: &StreamChunk) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
@@ -106,8 +85,6 @@ pub(crate) fn print_chunk(chunk: &StreamChunk) {
     let _ignored = out.flush();
 }
 
-/// Flush any buffered thinking that did not end in a newline. Emits the partial
-/// line into the process channel, leaving the cursor at a fresh line start.
 fn flush_thinking(out: &mut impl Write, state: &mut ChunkState) {
     if state.thinking_line.is_empty() {
         return;
@@ -117,21 +94,17 @@ fn flush_thinking(out: &mut impl Write, state: &mut ChunkState) {
     state.at_line_start = true;
 }
 
-/// Render a single chunk to `out`. Thinking is buffered per logical line and
-/// emitted dim + word-wrapped + sigil-led; transitions between thinking and
-/// speech get a blank-line separator. Response text is written verbatim.
 fn print_chunk_to(out: &mut impl Write, state: &mut ChunkState, chunk: &StreamChunk) {
     let is_thinking = chunk.content_type == "thinking";
     let first = !state.has_emitted;
     let transition = !first && state.was_thinking != is_thinking;
 
     if transition && state.was_thinking {
-        flush_thinking(out, state); // commit the tail of the thinking block first
+        flush_thinking(out, state);
     }
     if first || transition {
         begin_block(out, state, is_thinking);
         if is_thinking {
-            // Open the thinking block with its colored header; content follows.
             write_sigil_header(out, SIGIL_THINKING, "Thinking", COLOR_THINKING);
             state.at_line_start = true;
         }
@@ -146,7 +119,6 @@ fn print_chunk_to(out: &mut impl Write, state: &mut ChunkState, chunk: &StreamCh
         let width = process_wrap_width();
         for ch in chunk.text.chars() {
             if ch == '\n' {
-                // A complete logical line (possibly empty) — emit it now.
                 let line = std::mem::take(&mut state.thinking_line);
                 write_thinking_content_line(out, &line, width);
                 state.at_line_start = true;
@@ -160,9 +132,6 @@ fn print_chunk_to(out: &mut impl Write, state: &mut ChunkState, chunk: &StreamCh
     }
 }
 
-/// Open a sub-agent's nested section with a dim, sigil-led header
-/// (`» <name> (sub-agent)`). The frames that follow — its thinking, tool calls,
-/// results, and output — render in the process channel until [`print_subagent_end`].
 pub(crate) fn print_subagent_begin(name: &str) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
@@ -180,7 +149,6 @@ pub(crate) fn print_subagent_begin(name: &str) {
     let _ignored = out.flush();
 }
 
-/// Close a sub-agent's nested section (`» <name> done`).
 pub(crate) fn print_subagent_end(name: &str) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
@@ -198,10 +166,6 @@ pub(crate) fn print_subagent_end(name: &str) {
     let _ignored = out.flush();
 }
 
-/// Render a sub-agent stream chunk. Both its thinking and its output text go to
-/// the dim process channel (buffered per logical line like thinking), so the
-/// whole nested section stays visually distinct from the primary model's
-/// flush-left speech.
 pub(crate) fn print_subagent_chunk(chunk: &StreamChunk) {
     if chunk.text.is_empty() {
         return;
@@ -219,27 +183,21 @@ pub(crate) fn print_subagent_chunk(chunk: &StreamChunk) {
             state.thinking_line.push(ch);
         }
     }
-    // Treat the buffered tail as thinking so a transition back to primary
-    // speech flushes it with a separator.
     state.was_thinking = true;
     let _ignored = out.flush();
 }
 
-/// Print stream metadata after stream_end.
 pub(crate) fn print_stream_end(end: &StreamEnd) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
 
-    // Commit any buffered thinking that ended without a newline.
     {
         let mut state = lock_chunk_state();
         flush_thinking(&mut out, &mut state);
     }
 
-    // Newline after streamed content
     let _ignored = writeln!(out);
 
-    // Metadata line in dim
     let model = abbreviate_model(&end.metadata.model);
     let meta = format!(
         "[{} | in:{} out:{} cache_r:{} cache_w:{} | ttft:{}ms total:{}ms]",
@@ -254,8 +212,6 @@ pub(crate) fn print_stream_end(end: &StreamEnd) {
     paint(&mut out, Tone::Muted, &meta);
     _ = writeln!(out);
 
-    // A reply that stopped at the token ceiling is cut off mid-sentence.
-    // Without this the truncation is indistinguishable from a short answer.
     if matches!(end.finish_reason.as_str(), "max_tokens" | "length") {
         paint(
             &mut out,
@@ -265,10 +221,9 @@ pub(crate) fn print_stream_end(end: &StreamEnd) {
         _ = writeln!(out);
     }
 
-    _ = writeln!(out); // blank line after metadata
+    _ = writeln!(out);
 }
 
-/// Print an error in red to stderr.
 pub(crate) fn print_error(err: &dyn std::fmt::Display) {
     let stderr = io::stderr();
     let mut out = stderr.lock();
@@ -277,9 +232,6 @@ pub(crate) fn print_error(err: &dyn std::fmt::Display) {
     _ = writeln!(out, ": {err}");
 }
 
-/// Print a provider key fallback warning. Emitted when the daemon
-/// rotates away from a credential-flagged key (e.g. an exhausted budget
-/// key) so the user sees the rotation immediately.
 pub(crate) fn print_provider_fallback_warning(w: &ProviderFallbackWarning) {
     let stderr = io::stderr();
     let mut out = stderr.lock();
@@ -288,7 +240,6 @@ pub(crate) fn print_provider_fallback_warning(w: &ProviderFallbackWarning) {
     _ = writeln!(out, ": {}", w.message);
 }
 
-/// Print a usage budget warning emitted after a threshold crossing.
 pub(crate) fn print_usage_warning(w: &UsageWarning) {
     let stderr = io::stderr();
     let mut out = stderr.lock();
@@ -297,11 +248,6 @@ pub(crate) fn print_usage_warning(w: &UsageWarning) {
     _ = writeln!(out, ": {}", w.message);
 }
 
-/// Print a config file the daemon read but would not adopt.
-///
-/// Named separately from [`print_usage_warning`] because the path matters as
-/// much as the message: the point is to say *which* file on disk is not the one
-/// the daemon is running on.
 pub(crate) fn print_config_warning(w: &ConfigWarning) {
     let stderr = io::stderr();
     let mut out = stderr.lock();
@@ -317,12 +263,6 @@ pub(crate) fn print_config_warning(w: &ConfigWarning) {
     );
 }
 
-/// Print whichever warning frame this is.
-///
-/// The three of them are handled together because the caller treats them the
-/// same way — stop the spinner, say the thing, carry on with the turn — and
-/// spelling that out three times is what pushed `recv_streaming_response` past
-/// its line budget.
 pub(crate) fn print_warning_frame(msg: &ServerMessage) {
     match msg {
         ServerMessage::ProviderFallbackWarning(w) => print_provider_fallback_warning(w),
@@ -347,7 +287,6 @@ pub(crate) fn print_warning_frame(msg: &ServerMessage) {
     }
 }
 
-/// Print a server protocol error.
 pub(crate) fn print_server_error(code: &str, message: &str) {
     let stderr = io::stderr();
     let mut out = stderr.lock();
@@ -356,24 +295,20 @@ pub(crate) fn print_server_error(code: &str, message: &str) {
     _ = writeln!(out, " [{code}]: {message}");
 }
 
-/// Render an inline image from a SendImage server message.
 pub(crate) fn print_send_image(img: &SendImage) {
     images::render_image(&img.path, img.caption.as_deref(), img.data.as_deref());
 }
 
-/// Render inline images from a message's image references.
 pub(crate) fn print_image_refs(refs: &[ImageRef]) {
     for img in refs {
         images::render_image(&img.path, img.caption.as_deref(), img.data.as_deref());
     }
 }
 
-/// Format a tool input value for display.
 pub(crate) fn format_tool_input(input: &serde_json::Value) -> Option<String> {
     format_tool_input_with_limit(input, Some(MAX_TOOL_OUTPUT))
 }
 
-/// Format a tool result for display. Not truncated — results are shown in full.
 pub(crate) fn format_tool_output(output: &str) -> String {
     format_tool_output_with_limit(output, None)
 }
@@ -385,14 +320,10 @@ pub(crate) fn write_tool_body_plain(out: &mut impl Write, body: &str) {
     }
 }
 
-/// Print a tool call into the process channel: `→ name · arg` then its input.
 pub(crate) fn print_tool_call(call: &ToolCall) {
     print_tool_call_styled(call, COLOR_TOOL);
 }
 
-/// As [`print_tool_call`], but for a sub-agent's nested loop — rendered in the
-/// sub-agent color so a nested tool call reads differently from the primary
-/// model's.
 pub(crate) fn print_subagent_tool_call(call: &ToolCall) {
     print_tool_call_styled(call, COLOR_SUBAGENT);
 }
@@ -402,7 +333,7 @@ fn print_tool_call_styled(call: &ToolCall, color: Tone) {
     let mut out = stdout.lock();
     let mut state = lock_chunk_state();
 
-    flush_thinking(&mut out, &mut state); // commit any buffered thinking first
+    flush_thinking(&mut out, &mut state);
     begin_block(&mut out, &mut state, true);
     state.was_thinking = false;
 
@@ -417,14 +348,10 @@ fn print_tool_call_styled(call: &ToolCall, color: Tone) {
     state.at_line_start = true;
 }
 
-/// Print a tool result into the process channel: `✓ result` / `✗ error` then
-/// the (truncated) output.
 pub(crate) fn print_tool_result(result: &ToolResult) {
     print_tool_result_styled(result, COLOR_RESULT);
 }
 
-/// As [`print_tool_result`], but for a sub-agent's nested loop — a successful
-/// result uses the sub-agent color; errors stay red.
 pub(crate) fn print_subagent_tool_result(result: &ToolResult) {
     print_tool_result_styled(result, COLOR_SUBAGENT);
 }
@@ -444,13 +371,11 @@ fn print_tool_result_styled(result: &ToolResult, ok_color: Tone) {
         (SIGIL_OK, "result", ok_color)
     };
     write_sigil_header(&mut out, sigil, label, color);
-    // Body stays dim; the colored header carries the status.
     let body = format_tool_output(&result.output);
     write_process_body(&mut out, &body);
     state.at_line_start = true;
 }
 
-/// Print the "thinking..." indicator when streaming starts.
 pub(crate) fn print_stream_start(regen: bool) {
     if !regen {
         return;
@@ -462,7 +387,6 @@ pub(crate) fn print_stream_start(regen: bool) {
     _ = out.flush();
 }
 
-/// Print a phase indicator (e.g. "thinking...") during streaming.
 pub(crate) fn print_phase(phase: &Phase) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
@@ -490,8 +414,6 @@ mod tests {
     fn print_server_error_does_not_panic() {
         print_server_error("busy", "engine is busy");
     }
-
-    // ── format_tool_input content assertions ────────────────────────
 
     #[test]
     fn format_tool_input_empty_object_returns_none() {
@@ -537,8 +459,6 @@ mod tests {
         assert!(result.contains("42"));
     }
 
-    // ── reset_chunk_state ───────────────────────────────────────────
-
     #[test]
     fn reset_chunk_state_clears_thinking() {
         set_color_enabled(false);
@@ -564,20 +484,12 @@ mod tests {
         }
     }
 
-    /// Visual preview harness (not an assertion). Streams interleaved thinking
-    /// token-by-token through the real chunk renderer, color ON, and dumps the
-    /// raw bytes so a terminal shows it exactly as live streaming would.
-    ///
-    /// Run it: `cargo test -p shore-cli render_preview_stream
-    ///          -- --ignored --nocapture --test-threads=1`
-    /// (or via `.claude/skills/run-shore-cli/preview.sh`).
     #[test]
     #[ignore = "visual preview; run explicitly with --ignored --nocapture"]
     fn render_preview_stream() {
         set_color_enabled(true);
         let mut state = ChunkState::default();
         let mut buf = Vec::new();
-        // A long thinking paragraph (streamed in fragments) to show wrapping.
         for c in [
             "Let me reason about this carefully — the user's query ",
             "spans more than the wrap width, so the gutter bar has to ",
@@ -611,15 +523,12 @@ mod tests {
         set_color_enabled(false);
         let mut state = ChunkState::default();
         let mut buf = Vec::new();
-        // thinking -> text -> thinking -> text, each as a single chunk.
         print_chunk_to(&mut buf, &mut state, &chunk("thinking", "T1"));
         print_chunk_to(&mut buf, &mut state, &chunk("text", "A1"));
         print_chunk_to(&mut buf, &mut state, &chunk("thinking", "T2"));
         print_chunk_to(&mut buf, &mut state, &chunk("text", "A2"));
         let output = String::from_utf8(buf).unwrap();
 
-        // Each thinking block opens with a `◌ Thinking` header; a blank line
-        // straddles every thinking/speech transition.
         assert_eq!(
             output,
             " \u{2502} \u{25cc} Thinking\n \u{2502}   T1\n\nA1\n\n \u{2502} \u{25cc} Thinking\n \u{2502}   T2\n\nA2"
@@ -631,13 +540,9 @@ mod tests {
         set_color_enabled(false);
         let mut state = ChunkState::default();
         let mut buf = Vec::new();
-        // A logical line is split across chunks (the newline lands mid-chunk,
-        // and a word straddles the boundary). The header is emitted at block
-        // start; each completed content line is inset. The trailing partial
-        // line waits for a flush.
         print_chunk_to(&mut buf, &mut state, &chunk("thinking", "line one\nli"));
         print_chunk_to(&mut buf, &mut state, &chunk("thinking", "ne two"));
-        flush_thinking(&mut buf, &mut state); // simulate stream end
+        flush_thinking(&mut buf, &mut state);
         let output = String::from_utf8(buf).unwrap();
         assert_eq!(
             output,
@@ -650,8 +555,6 @@ mod tests {
         set_color_enabled(false);
         let mut state = ChunkState::default();
         let mut buf = Vec::new();
-        // The header is emitted as soon as the block opens; the content line
-        // (no trailing newline) waits for the flush before a ToolCall/StreamEnd.
         print_chunk_to(
             &mut buf,
             &mut state,

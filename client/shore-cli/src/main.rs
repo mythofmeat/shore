@@ -44,16 +44,12 @@ fn main() -> ExitCode {
 
     let cli = <Cli as clap::Parser>::parse();
 
-    // Completion queries must never print to stderr — fish feeds both
-    // streams into the prompt, and any stray tracing line would be
-    // offered as a candidate. Silence everything for this one path.
     let default_filter = if matches!(cli.command, CliCommand::Complete { .. }) {
         "off"
     } else {
         "warn"
     };
 
-    // CLI logs to stderr so stdout stays clean for command output.
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter)),
@@ -62,7 +58,6 @@ fn main() -> ExitCode {
         .with_writer(std::io::stderr)
         .init();
 
-    // Handle local-only commands that don't need a daemon connection.
     if let CliCommand::Completions { shell } = &cli.command {
         cli::print_completions(*shell);
         return ExitCode::SUCCESS;
@@ -83,8 +78,6 @@ fn main() -> ExitCode {
     match outcome {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            // A server error was printed where it happened, with its protocol
-            // code; printing it here too is the same sentence twice.
             if !run::already_reported(e.as_ref()) {
                 output::print_error(&e);
             }

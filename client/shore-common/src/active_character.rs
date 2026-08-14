@@ -1,30 +1,11 @@
-//! The character selection both clients share.
-//!
-//! A plain-text file in the Shore runtime directory
-//! (`$XDG_RUNTIME_DIR/shore/active_character`), so it is ephemeral — cleared on
-//! reboot, which matches what it is: a session-level selection, not config.
-//!
-//! It lives here rather than in either client because both of them touch it.
-//! The CLI writes it after a validated `switch_character` and reads it when no
-//! `--character` was given; the TUI does the same. Issue #72 is what it cost
-//! when only one of them wrote: switching in the TUI and restarting landed you
-//! back on whatever the CLI had last stamped.
-//!
-//! A launch-time `--character` or `SHORE_CHARACTER` is deliberately *not*
-//! written. Those pin one terminal; writing them would move every other
-//! terminal's default as a side effect of starting a client.
-
 use std::path::PathBuf;
 
 use tracing::debug;
 
-/// Where the selection is kept.
 pub fn active_character_path() -> PathBuf {
     crate::dirs::runtime_dir().join("active_character")
 }
 
-/// The persisted selection, or `None` when the file is absent, empty or
-/// unreadable.
 pub fn read_active_character() -> Option<String> {
     let content = std::fs::read_to_string(active_character_path()).ok()?;
     let trimmed = content.trim();
@@ -36,7 +17,6 @@ pub fn read_active_character() -> Option<String> {
     Some(trimmed.to_owned())
 }
 
-/// Persist the selection, creating the runtime directory if it is not there.
 pub fn write_active_character(name: &str) -> std::io::Result<()> {
     let path = active_character_path();
     if let Some(parent) = path.parent() {
@@ -56,8 +36,6 @@ mod tests {
         assert!(active_character_path().ends_with("active_character"));
     }
 
-    /// One test, because `SHORE_RUNTIME_DIR` is process-wide and parallel
-    /// tests would race on it.
     #[test]
     fn round_trip_through_the_runtime_dir() {
         let tmp = tempfile::TempDir::new().unwrap();

@@ -10,18 +10,14 @@ pub(crate) use shore_common::image_protocol::detect_protocol_probe;
 
 pub(crate) type KittyImageId = u32;
 
-/// An image that has been transmitted to the terminal and is ready for display.
 pub(crate) struct TransmittedImage {
     pub id: KittyImageId,
     pub cols: u16,
     pub rows: u16,
-    /// Original pixel width of the source image.
     pub pw: u32,
-    /// Original pixel height of the source image.
     pub ph: u32,
 }
 
-/// Cache of transmitted images, keyed by file path.
 pub(crate) struct ImageCache {
     next_id: u32,
     cache: HashMap<String, TransmittedImage>,
@@ -30,12 +26,6 @@ pub(crate) struct ImageCache {
     cell_height: u16,
 }
 
-/// Open `/dev/tty` for writing.
-///
-/// Kitty graphics APC sequences must bypass stdout to avoid interleaving
-/// with ratatui/crossterm output. Writing to `/dev/tty` sends escape
-/// sequences directly to the terminal, matching how `probe_kitty_graphics`
-/// communicates.
 fn open_tty_write() -> Option<std::fs::File> {
     std::fs::OpenOptions::new()
         .write(true)
@@ -43,8 +33,6 @@ fn open_tty_write() -> Option<std::fs::File> {
         .ok()
 }
 
-/// Query the terminal for cell pixel dimensions via TIOCGWINSZ.
-/// Returns (cell_width, cell_height) or None if unavailable.
 #[cfg(unix)]
 #[expect(
     unsafe_code,
@@ -55,13 +43,9 @@ fn query_cell_size() -> Option<(u16, u16)> {
     let tty = std::fs::File::open("/dev/tty").ok()?;
     let fd = tty.as_raw_fd();
 
-    // winsize struct: rows, cols, xpixel, ypixel (all u16)
     // SAFETY: `winsize` is four `u16`s with no padding and no invalid bit
-    // patterns, so all-zeroes is a valid value. It is overwritten by the
-    // ioctl below, and only read when that ioctl reports success.
     let mut ws: libc::winsize = unsafe { std::mem::zeroed() };
     // SAFETY: `fd` comes from the `tty` file, which outlives this call, and
-    // TIOCGWINSZ writes exactly one initialized `winsize` through the pointer.
     let ret = unsafe { libc::ioctl(fd, libc::TIOCGWINSZ, &mut ws) };
     if ret != 0 || ws.ws_xpixel == 0 || ws.ws_ypixel == 0 || ws.ws_col == 0 || ws.ws_row == 0 {
         return None;
@@ -84,8 +68,6 @@ fn base64_encode(data: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(data)
 }
 
-/// Ensure image data is PNG-encoded for kitty `f=100` transmission.
-/// Returns the data unchanged if already PNG, otherwise decodes and re-encodes as PNG.
 fn ensure_png(data: &[u8]) -> Option<Vec<u8>> {
     if data.starts_with(b"\x89PNG\r\n\x1a\n") {
         return Some(data.to_vec());
@@ -96,9 +78,6 @@ fn ensure_png(data: &[u8]) -> Option<Vec<u8>> {
     Some(png_buf.into_inner())
 }
 
-// Kitty Unicode placeholder diacritics table (values 0-255).
-// Each entry is a combining diacritical mark codepoint.
-// Source: kitty gen/rowcolumn-diacritics.txt
 #[rustfmt::skip]
 const DIACRITICS: [u32; 256] = [
     0x0305, 0x030D, 0x030E, 0x0310, 0x0312, 0x033D, 0x033E, 0x033F,
@@ -147,8 +126,6 @@ impl ImageCache {
         }
     }
 
-    /// Re-detect protocol using terminal probe (requires raw mode).
-    /// Also refreshes cell pixel dimensions.
     pub(crate) fn probe_protocol(&mut self) {
         if self.protocol.is_none() {
             self.protocol = detect_protocol_probe();
@@ -159,8 +136,6 @@ impl ImageCache {
         }
     }
 
-    /// Transmit an image to kitty if not already cached.
-    /// Returns a reference to the cached image on success.
     pub(crate) fn ensure_transmitted(
         &mut self,
         path: &str,
@@ -201,8 +176,6 @@ impl ImageCache {
         self.cache.get(path)
     }
 
-    /// Transmit an image from base64 data if not already cached.
-    /// Uses `key` (typically the server path) as the cache key.
     pub(crate) fn ensure_transmitted_from_b64(
         &mut self,
         key: &str,
@@ -247,20 +220,14 @@ impl ImageCache {
         self.cache.get(key)
     }
 
-    /// Look up a previously transmitted image.
     pub(crate) fn get(&self, path: &str) -> Option<&TransmittedImage> {
         self.cache.get(path)
     }
 
-    /// Cheap fingerprint of cache state, used as a cache-invalidation key
-    /// by the renderer. `next_id` is monotonic across the cache's lifetime
-    /// (insertions only ever bump it), so combined with `cache.len()` it
-    /// uniquely identifies "the set of images currently visible."
     pub(crate) fn version(&self) -> u64 {
         ((self.next_id as u64) << 32) | (self.cache.len() as u64)
     }
 
-    /// Delete all transmitted images and clear the cache.
     pub(crate) fn clear(&mut self) {
         if self.protocol == Some(ImageProtocol::Kitty) && !self.cache.is_empty() {
             if let Some(mut tty) = open_tty_write() {
@@ -281,13 +248,11 @@ impl ImageCache {
         let cw = self.cell_width as f64;
         let ch = self.cell_height as f64;
 
-        // Scale to fit width
         let natural_cols = pw as f64 / cw;
         let cols_f = natural_cols.min(max_cols as f64).max(1.0);
         let scale_w = (cols_f * cw) / pw as f64;
         let rows_from_w = (ph as f64 * scale_w / ch).ceil();
 
-        // If height exceeds cap, scale to fit height instead
         let (cols, rows) = if rows_from_w > max_rows as f64 {
             let scale_h = (max_rows as f64 * ch) / ph as f64;
             let cols_from_h = (pw as f64 * scale_h / cw).floor().max(1.0);
@@ -300,20 +265,12 @@ impl ImageCache {
     }
 }
 
-/// Generate ratatui Lines containing kitty Unicode placeholder stand-ins.
-///
-/// Uses U+2800 (Braille Blank, width 1) instead of U+10EEEE (width 2 per
-/// `unicode-width`) so that ratatui allocates exactly one cell per placeholder.
-/// After rendering, call [`fixup_placeholder_cells`] to swap U+2800 → U+10EEEE
-/// before the frame is flushed.
 pub(crate) fn placeholder_lines(img: &TransmittedImage) -> Vec<Line<'static>> {
     let style = id_to_style(img.id);
     let mut lines = Vec::with_capacity(img.rows as usize);
     for row in 0..img.rows {
         let mut text = String::with_capacity(img.cols as usize * 12);
         for col in 0..img.cols {
-            // U+2800 is a width-1 stand-in for U+10EEEE (width-2 per unicode-width).
-            // Row/col diacritics are kept as-is — they combine with the base char.
             text.push('\u{2800}');
             text.push(diacritic(row as u8));
             text.push(diacritic(col as u8));
@@ -323,8 +280,6 @@ pub(crate) fn placeholder_lines(img: &TransmittedImage) -> Vec<Line<'static>> {
     lines
 }
 
-/// Generate placeholder lines for an image at arbitrary cell dimensions.
-/// Used for fullscreen display where dimensions differ from the cached inline size.
 pub(crate) fn placeholder_lines_at(id: KittyImageId, cols: u16, rows: u16) -> Vec<Line<'static>> {
     let style = id_to_style(id);
     let mut lines = Vec::with_capacity(rows as usize);
@@ -340,9 +295,6 @@ pub(crate) fn placeholder_lines_at(id: KittyImageId, cols: u16, rows: u16) -> Ve
     lines
 }
 
-/// Replace U+2800 stand-in characters with U+10EEEE kitty placeholders in a
-/// rendered buffer. Must be called after Paragraph renders but before the
-/// frame is flushed to the terminal.
 pub(crate) fn fixup_placeholder_cells(
     buf: &mut ratatui::buffer::Buffer,
     area: ratatui::layout::Rect,
@@ -379,8 +331,6 @@ fn id_to_style(id: u32) -> Style {
     }
 }
 
-/// Transmit image data to kitty (a=t: transmit only, no display).
-/// Uses chunked base64 transfer with `f=100` (PNG). Only valid for PNG data.
 fn transmit_kitty_data<W: Write>(w: &mut W, id: u32, encoded: &str) {
     const CHUNK_SIZE: usize = 4096;
     let chunks: Vec<&str> = encoded
@@ -399,20 +349,16 @@ fn transmit_kitty_data<W: Write>(w: &mut W, id: u32, encoded: &str) {
     }
 }
 
-/// Create a virtual placement for Unicode placeholder rendering.
 fn place_kitty<W: Write>(w: &mut W, id: u32, cols: u16, rows: u16) {
     let _ = write!(w, "\x1b_Ga=p,U=1,q=2,i={id},c={cols},r={rows}\x1b\\");
 }
 
-/// Parse image dimensions from raw file bytes (PNG, JPEG, WebP).
 fn image_dimensions(data: &[u8]) -> Option<(u32, u32)> {
-    // PNG: magic + IHDR
     if data.len() >= 24 && data.starts_with(b"\x89PNG\r\n\x1a\n") {
         let w = u32::from_be_bytes([data[16], data[17], data[18], data[19]]);
         let h = u32::from_be_bytes([data[20], data[21], data[22], data[23]]);
         return Some((w, h));
     }
-    // JPEG: scan for SOF0/SOF2 marker
     if data.len() >= 4 && data[0] == 0xFF && data[1] == 0xD8 {
         let mut i = 2;
         while i + 9 < data.len() {
@@ -434,7 +380,6 @@ fn image_dimensions(data: &[u8]) -> Option<(u32, u32)> {
             }
         }
     }
-    // WebP
     if data.len() >= 30 && data.starts_with(b"RIFF") && &data[8..12] == b"WEBP" {
         if &data[12..16] == b"VP8 " {
             let w = (u16::from_le_bytes([data[26], data[27]]) & 0x3FFF) as u32;
@@ -498,7 +443,6 @@ mod tests {
 
     #[test]
     fn detect_ghostty_from_env_var() {
-        // GHOSTTY_RESOURCES_DIR survives tmux/zellij
         assert_eq!(
             detect_protocol(None, None, Some("xterm-256color"), true, false),
             Some(ImageProtocol::Kitty)
@@ -507,7 +451,6 @@ mod tests {
 
     #[test]
     fn detect_kitty_from_window_id() {
-        // KITTY_WINDOW_ID survives tmux/zellij
         assert_eq!(
             detect_protocol(None, None, Some("xterm-256color"), false, true),
             Some(ImageProtocol::Kitty)
@@ -546,8 +489,6 @@ mod tests {
         };
         let lines = placeholder_lines(&img);
         assert_eq!(lines.len(), 2);
-        // Each line should have one span with 3 placeholder cells
-        // Each cell = U+10EEEE (4 bytes) + 2 combining chars
         for line in &lines {
             assert_eq!(line.spans.len(), 1);
         }
@@ -564,14 +505,13 @@ mod tests {
         };
         let lines = placeholder_lines(&img);
         let text = &lines[0].spans[0].content;
-        // First cell: U+2800 stand-in + diacritic(0) + diacritic(0)
         let chars: Vec<char> = text.chars().collect();
-        assert_eq!(chars[0], '\u{2800}'); // stand-in (fixup replaces with U+10EEEE)
-        assert_eq!(chars[1], diacritic(0)); // row 0
-        assert_eq!(chars[2], diacritic(0)); // col 0
+        assert_eq!(chars[0], '\u{2800}');
+        assert_eq!(chars[1], diacritic(0));
+        assert_eq!(chars[2], diacritic(0));
         assert_eq!(chars[3], '\u{2800}');
-        assert_eq!(chars[4], diacritic(0)); // row 0
-        assert_eq!(chars[5], diacritic(1)); // col 1
+        assert_eq!(chars[4], diacritic(0));
+        assert_eq!(chars[5], diacritic(1));
     }
 
     #[test]
@@ -592,12 +532,10 @@ mod tests {
         let para = ratatui::widgets::Paragraph::new(ratatui::text::Text::from(lines));
         ratatui::widgets::Widget::render(para, area, &mut buf);
 
-        // Before fixup: cells contain U+2800
         assert!(buf[(0, 0)].symbol().starts_with('\u{2800}'));
 
         fixup_placeholder_cells(&mut buf, area);
 
-        // After fixup: cells contain U+10EEEE
         assert!(buf[(0, 0)].symbol().starts_with('\u{10EEEE}'));
         assert!(buf[(1, 0)].symbol().starts_with('\u{10EEEE}'));
     }
@@ -623,12 +561,11 @@ mod tests {
 
     #[test]
     fn png_dimensions() {
-        // Minimal PNG header for a 100x50 image
         let mut data = vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
-        data.extend_from_slice(&[0, 0, 0, 13]); // IHDR length
+        data.extend_from_slice(&[0, 0, 0, 13]);
         data.extend_from_slice(b"IHDR");
-        data.extend_from_slice(&100u32.to_be_bytes()); // width
-        data.extend_from_slice(&50u32.to_be_bytes()); // height
+        data.extend_from_slice(&100u32.to_be_bytes());
+        data.extend_from_slice(&50u32.to_be_bytes());
         assert_eq!(image_dimensions(&data), Some((100, 50)));
     }
 
@@ -641,7 +578,6 @@ mod tests {
             cell_width: 8,
             cell_height: 16,
         };
-        // 160x80 image at 8x16 cell size = 20 cols x 5 rows
         let (cols, rows) = cache.calculate_cells(160, 80, 60, 30);
         assert_eq!(cols, 20);
         assert_eq!(rows, 5);
@@ -656,10 +592,8 @@ mod tests {
             cell_width: 8,
             cell_height: 16,
         };
-        // 800x400 image, max 40 cols: scaled to 40 cols
         let (cols, rows) = cache.calculate_cells(800, 400, 40, 30);
         assert_eq!(cols, 40);
-        // scale = 40*8/800 = 0.4, rows = ceil(400*0.4/16) = ceil(10) = 10
         assert_eq!(rows, 10);
     }
 
@@ -672,11 +606,6 @@ mod tests {
             cell_width: 8,
             cell_height: 16,
         };
-        // 800x3200 image, max 60 cols, max 10 rows
-        // Width-first: natural = 100 cols, clamped to 60, scale = 60*8/800 = 0.6
-        //   rows_from_w = ceil(3200*0.6/16) = ceil(120) = 120 → exceeds max_rows=10
-        // Height-first: scale_h = 10*16/3200 = 0.05
-        //   cols_from_h = floor(800*0.05/8) = floor(5.0) = 5
         let (cols, rows) = cache.calculate_cells(800, 3200, 60, 10);
         assert_eq!(rows, 10);
         assert_eq!(cols, 5);

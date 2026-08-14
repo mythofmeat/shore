@@ -1,14 +1,3 @@
-//! Golden-file integration tests for SWP protocol serialization.
-//!
-//! Each test has a hand-written JSON fixture matching the documented protocol
-//! spec. We verify:
-//! - Deserialization: fixture → Rust type, all fields correct
-//! - Serialization: Rust type → JSON, output matches fixture (modulo field order)
-//! - Forward compat: unknown fields are silently ignored
-//! - Missing optionals: deserialize to None/default
-//! - Version mismatch: produces ProtocolError
-
-// Test helpers panic on malformed fixtures by design; clippy's
 // allow-expect-in-tests doesn't reach non-#[test] helpers in integration tests.
 #![expect(
     clippy::expect_used,
@@ -31,9 +20,6 @@ macro_rules! assert_variant {
     }};
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────
-
-/// Deserialize `fixture` into `T`, then serialize back and compare JSON values.
 fn assert_golden<T>(fixture: &str) -> T
 where
     T: serde::Serialize + serde::de::DeserializeOwned + std::fmt::Debug,
@@ -55,12 +41,6 @@ fn field<'val>(value: &'val Value, key: &str) -> &'val Value {
 fn item<T>(items: &[T], index: usize) -> &T {
     items.get(index).expect("expected item")
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Server Messages — Golden Fixtures
-// ═══════════════════════════════════════════════════════════════════════════
-
-// ── ServerHello ──────────────────────────────────────────────────────────
 
 const SERVER_HELLO_FIXTURE: &str = r#"{
     "type": "hello",
@@ -111,8 +91,6 @@ fn server_hello_with_avatar_golden() {
     );
 }
 
-// ── History ──────────────────────────────────────────────────────────────
-
 const HISTORY_FIXTURE: &str = r#"{
     "type": "history",
     "messages": [
@@ -147,7 +125,6 @@ fn history_golden() {
     msg,
     ServerMessage::History(h) => {
         assert_eq!(h.messages.len(), 2);
-        // First message
         let first = item(&h.messages, 0);
         assert_eq!(first.msg_id, "m_001");
         assert_eq!(first.role, Role::User);
@@ -155,7 +132,6 @@ fn history_golden() {
         assert!(first.images.is_empty());
         assert_eq!(first.alt_index, None);
         assert_eq!(first.alt_count, None);
-        // Second message with images and alts
         let second = item(&h.messages, 1);
         assert_eq!(second.msg_id, "m_002");
         assert_eq!(second.role, Role::Assistant);
@@ -165,7 +141,6 @@ fn history_golden() {
         assert_eq!(image.caption.as_deref(), Some("waving"));
         assert_eq!(second.alt_index, Some(0));
         assert_eq!(second.alt_count, Some(2));
-        // Config
         assert_eq!(field(&h.config, "model"), "claude-haiku-4-5-20251001");
         assert_eq!(h.selected_character.as_deref(), Some("alice"));
         assert_eq!(h.active_start, 0);
@@ -173,8 +148,6 @@ fn history_golden() {
     }
     );
 }
-
-// ── Shutdown ─────────────────────────────────────────────────────────────
 
 const SHUTDOWN_FIXTURE: &str = r#"{"type": "shutdown"}"#;
 
@@ -184,8 +157,6 @@ fn shutdown_golden() {
     assert!(matches!(msg, ServerMessage::Shutdown(_)));
 }
 
-// ── Ping ─────────────────────────────────────────────────────────────────
-
 const PING_FIXTURE: &str = r#"{"type": "ping"}"#;
 
 #[test]
@@ -193,8 +164,6 @@ fn ping_golden() {
     let msg: ServerMessage = assert_golden(PING_FIXTURE);
     assert!(matches!(msg, ServerMessage::Ping(_)));
 }
-
-// ── CommandOutput ────────────────────────────────────────────────────────
 
 const COMMAND_OUTPUT_FIXTURE: &str = r#"{
     "type": "command_output",
@@ -219,8 +188,6 @@ fn command_output_golden() {
     );
 }
 
-// ── Error ────────────────────────────────────────────────────────────────
-
 const ERROR_FIXTURE: &str = r#"{
     "type": "error",
     "rid": "msg_01",
@@ -241,8 +208,6 @@ fn error_golden() {
     );
 }
 
-// ── StreamStart ──────────────────────────────────────────────────────────
-
 const STREAM_START_FIXTURE: &str = r#"{"type": "stream_start", "rid": "msg_01", "regen": false}"#;
 
 #[test]
@@ -256,8 +221,6 @@ fn stream_start_golden() {
     }
     );
 }
-
-// ── StreamChunk ──────────────────────────────────────────────────────────
 
 const STREAM_CHUNK_FIXTURE: &str = r#"{
     "type": "stream_chunk",
@@ -297,8 +260,6 @@ fn stream_chunk_thinking_golden() {
     }
     );
 }
-
-// ── StreamEnd ────────────────────────────────────────────────────────────
 
 const STREAM_END_FIXTURE: &str = r#"{
     "type": "stream_end",
@@ -344,8 +305,6 @@ fn stream_end_golden() {
     );
 }
 
-// ── Phase ────────────────────────────────────────────────────────────────
-
 const PHASE_FIXTURE: &str = r#"{
     "type": "phase",
     "rid": "msg_01",
@@ -365,9 +324,6 @@ fn phase_golden() {
     }
     );
 }
-
-// ── NewMessage ───────────────────────────────────────────────────────────
-// NewMessage uses #[serde(flatten)] so Message fields appear at top level.
 
 const NEW_MESSAGE_FIXTURE: &str = r#"{
     "type": "new_message",
@@ -431,8 +387,6 @@ fn new_message_with_alts_golden() {
     );
 }
 
-// ── ToolCall ─────────────────────────────────────────────────────────────
-
 const TOOL_CALL_FIXTURE: &str = r#"{
     "type": "tool_call",
     "rid": "msg_01",
@@ -450,15 +404,12 @@ fn tool_call_golden() {
         assert_eq!(tc.rid.as_deref(), Some("msg_01"));
         assert_eq!(tc.tool_id, "tc_001");
         assert_eq!(tc.tool_name, "web_search");
-        // input must be a JSON object, not a string
         assert!(tc.input.is_object());
         assert_eq!(field(&tc.input, "query"), "rust serde tutorial");
         assert_eq!(field(&tc.input, "max_results"), 5);
     }
     );
 }
-
-// ── ToolResult ───────────────────────────────────────────────────────────
 
 const TOOL_RESULT_FIXTURE: &str = r#"{
     "type": "tool_result",
@@ -484,8 +435,6 @@ fn tool_result_golden() {
     );
 }
 
-// ── SendImage ────────────────────────────────────────────────────────────
-
 const SEND_IMAGE_FIXTURE: &str = r#"{
     "type": "send_image",
     "rid": "msg_01",
@@ -505,8 +454,6 @@ fn send_image_golden() {
     }
     );
 }
-
-// ── CacheWarning ─────────────────────────────────────────────────────────
 
 const CACHE_WARNING_FIXTURE: &str = r#"{
     "type": "cache_warning",
@@ -528,8 +475,6 @@ fn cache_warning_golden() {
     }
     );
 }
-
-// ── UsageWarning ─────────────────────────────────────────────────────────
 
 const USAGE_WARNING_FIXTURE: &str = r#"{
     "type": "usage_warning",
@@ -556,15 +501,11 @@ fn usage_warning_golden() {
         assert_eq!(w.budget, "daily total");
         assert_eq!(w.period, "day");
         assert_eq!(w.crossed_warn_at, vec![0.8]);
-        // A cap warning omits `scope` entirely, so the frame is unchanged for
-        // clients built before pacing existed.
         assert_eq!(w.scope, None);
     }
     );
 }
 
-// A pace warning reuses the same frame: the cost and window fields describe the
-// pace allowance and its sub-window, with `scope` marking which limit tripped.
 const USAGE_WARNING_PACE_FIXTURE: &str = r#"{
     "type": "usage_warning",
     "rid": "msg_02",
@@ -594,8 +535,6 @@ fn usage_warning_pace_golden() {
     );
 }
 
-// ── ConfigWarning ────────────────────────────────────────────────────────
-
 const CONFIG_WARNING_FIXTURE: &str = r#"{
     "type": "config_warning",
     "path": "/home/u/.config/shore/characters/poppy/config.toml",
@@ -616,8 +555,6 @@ fn config_warning_golden() {
     );
 }
 
-// A failure in the global file names no character, and the field is absent
-// rather than null — a client that keys off its presence must see nothing.
 const CONFIG_WARNING_GLOBAL_FIXTURE: &str = r#"{
     "type": "config_warning",
     "path": "/home/u/.config/shore/config.toml",
@@ -635,10 +572,6 @@ fn config_warning_without_a_character_golden() {
     }
     );
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Client Messages — Golden Fixtures
-// ═══════════════════════════════════════════════════════════════════════════
 
 const CLIENT_HELLO_FIXTURE: &str = r#"{
     "type": "hello",
@@ -701,10 +634,6 @@ fn client_regen_golden() {
     );
 }
 
-/// `guidance` was decoded and discarded for the whole life of the field, and
-/// was removed rather than implemented. An older `shore` on the same machine
-/// still puts it on the wire, and must get a regenerated reply rather than a
-/// parse failure.
 #[test]
 fn client_regen_tolerates_a_retired_guidance_field() {
     let fixture = r#"{
@@ -744,10 +673,6 @@ fn client_command_golden() {
     }
     );
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Standalone Types — Golden Fixtures
-// ═══════════════════════════════════════════════════════════════════════════
 
 const MESSAGE_OBJECT_FIXTURE: &str = r#"{
     "msg_id": "m_100",
@@ -807,10 +732,6 @@ fn stream_metadata_golden() {
     assert_eq!(meta.timing.ttft_ms, 800);
     assert_eq!(meta.model, "claude-sonnet-4-6");
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Forward Compatibility — Unknown fields silently ignored
-// ═══════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn server_hello_unknown_fields_ignored() {
@@ -932,10 +853,6 @@ fn send_image_unknown_fields_ignored() {
     assert!(matches!(msg, ServerMessage::SendImage(_)));
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Missing Optional Fields → None/Default
-// ═══════════════════════════════════════════════════════════════════════════
-
 #[test]
 fn message_missing_optionals() {
     let fixture = r#"{
@@ -947,7 +864,7 @@ fn message_missing_optionals() {
     let msg: Message = serde_json::from_str(fixture).expect("missing optionals");
     assert_eq!(msg.alt_index, None);
     assert_eq!(msg.alt_count, None);
-    assert!(msg.images.is_empty()); // default empty vec
+    assert!(msg.images.is_empty());
 }
 
 #[test]
@@ -960,7 +877,7 @@ fn stream_chunk_missing_content_type_defaults_to_text() {
     assert_variant!(
     msg,
     ServerMessage::StreamChunk(c) => {
-        assert_eq!(c.content_type, "text"); // default
+        assert_eq!(c.content_type, "text");
     }
     );
 }
@@ -972,7 +889,7 @@ fn stream_start_missing_regen_defaults_to_false() {
     assert_variant!(
     msg,
     ServerMessage::StreamStart(s) => {
-        assert!(!s.regen); // default false
+        assert!(!s.regen);
     }
     );
 }
@@ -1004,8 +921,8 @@ fn client_message_missing_optionals() {
     msg,
     ClientMessage::Message(m) => {
         assert_eq!(m.rid, None);
-        assert!(!m.stream); // default false
-        assert!(m.images.is_empty()); // default empty
+        assert!(!m.stream);
+        assert!(m.images.is_empty());
         assert_eq!(m.absence_seconds, None);
     }
     );
@@ -1139,13 +1056,8 @@ fn request_scoped_server_messages_missing_rid_default_to_none() {
     }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Protocol Version Mismatch → ProtocolError
-// ═══════════════════════════════════════════════════════════════════════════
-
 #[test]
 fn protocol_version_mismatch_produces_error() {
-    // A server sends v: 99, client should detect mismatch
     let fixture = r#"{
         "type": "hello",
         "v": 99,
@@ -1157,8 +1069,6 @@ fn protocol_version_mismatch_produces_error() {
     msg,
     ServerMessage::Hello(h) => {
         assert_ne!(h.v, SWP_V1);
-        // In a real client, this mismatch would produce a ProtocolError.
-        // Verify the error type serializes correctly.
         let err = ServerMessage::Error(Error {
             rid: None,
             code: ErrorCode::ProtocolError,
@@ -1195,10 +1105,6 @@ fn protocol_error_code_golden() {
     );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// All ErrorCode variants golden
-// ═══════════════════════════════════════════════════════════════════════════
-
 #[test]
 fn all_error_codes_golden() {
     let cases = vec![
@@ -1217,17 +1123,12 @@ fn all_error_codes_golden() {
             msg,
             ServerMessage::Error(e) => {
                 assert_eq!(e.code, expected_code);
-                // Re-serialize and check code string
                 let json = serde_json::to_value(&e.code).unwrap();
                 assert_eq!(json.as_str().unwrap(), json_str);
             }
         );
     }
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Role enum golden
-// ═══════════════════════════════════════════════════════════════════════════
 
 #[test]
 fn all_roles_golden() {

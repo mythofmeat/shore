@@ -16,14 +16,6 @@ const SECONDS_PER_MINUTE: u64 = 60;
 const SECONDS_PER_HOUR: u64 = 3_600;
 const SECONDS_PER_DAY: u64 = 86_400;
 
-// ---------------------------------------------------------------------------
-// Status formatter -- human-readable dashboard
-// ---------------------------------------------------------------------------
-
-/// Map a normalized density (0.0-1.0) to a bar character.
-///
-/// Uses 8 Unicode block elements for non-zero values and a light shade for
-/// effectively-zero values.
 #[expect(
     clippy::float_arithmetic,
     reason = "heatmap rendering maps a normalized float density onto eight display glyphs"
@@ -47,20 +39,11 @@ fn format_millis_as_seconds_one_decimal(millis: u64) -> String {
     clippy::float_arithmetic,
     reason = "CLI usage summaries add daemon-provided f64 display costs for rounded totals only"
 )]
-/// Write the activity heatmap section into the status dashboard.
-///
-/// Renders a 24-character bar chart (one block per hour) with hour labels
-/// underneath, plus engagement and session stats.
 #[expect(
     clippy::float_arithmetic,
     reason = "activity heatmap uses visual-only logarithmic scaling of normalized f64 densities"
 )]
-// ---------------------------------------------------------------------------
-// Command-specific formatters
-// ---------------------------------------------------------------------------
 
-/// Dispatch a command response to the appropriate formatter.
-/// Falls back to generic JSON output for unknown command names.
 pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
     match name {
         "character_info" => print_character_info(data),
@@ -93,12 +76,8 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
     }
 }
 
-/// Max characters of a stored payload body shown when dumping one call. The
-/// full body is always available via `--json`.
 const CALL_BODY_PREVIEW: usize = 4000;
 
-/// Render the raw call-payload store: either an index of recent calls or, when
-/// `data.call` is present, one call's decompressed request/response.
 fn print_call_log(data: &serde_json::Value) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
@@ -174,7 +153,6 @@ fn print_call_log(data: &serde_json::Value) {
     );
 }
 
-/// Dump one stored call's metadata and decompressed request/response bodies.
 fn print_one_call(out: &mut impl Write, call: &serde_json::Value, width: usize) {
     write_section_header(
         out,
@@ -346,11 +324,8 @@ fn display_payload_body(body: &serde_json::Value) -> String {
     }
 }
 
-/// Max characters of a single changed chunk shown in a diff.
 const DIFF_CHUNK_PREVIEW: usize = 1200;
 
-/// Render one call as what changed since an earlier call: the unchanged
-/// prefix collapsed to a count, every added or removed chunk shown in full.
 fn print_call_diff(
     out: &mut impl Write,
     call: &serde_json::Value,
@@ -398,8 +373,6 @@ fn print_call_diff(
     for entry in entries {
         let op = entry["op"].as_str().unwrap_or("equal");
         let body = entry["text"].as_str().unwrap_or("");
-        // A chunk that is only the punctuation between two array elements
-        // carries no information; `--json` still has it.
         if op != "equal" && body.trim_matches([',', '[', ']', ' ', '\n']).is_empty() {
             continue;
         }
@@ -431,8 +404,6 @@ fn print_call_diff(
     );
 }
 
-/// Render the curated heartbeat transcript: per call, the model/provider
-/// and usage, the reasoning, visible text, and each tool call with its result.
 fn print_transcript(data: &serde_json::Value) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
@@ -455,8 +426,6 @@ fn print_transcript(data: &serde_json::Value) {
     }
 }
 
-/// Render one transcript row: header (time, call type, provider/model, usage),
-/// reasoning, visible text, and tool calls with truncated outputs.
 fn print_transcript_entry(
     out: &mut impl Write,
     entry: &serde_json::Value,
@@ -799,8 +768,6 @@ fn print_subagent_block(out: &mut impl Write, block: &serde_json::Value) {
     }
 }
 
-/// Truncate `s` to at most `max` chars, flattening newlines, with a dropped
-/// count suffix when it overflows.
 fn truncate_display(s: &str, max: usize) -> String {
     let flat = s.replace('\n', " ");
     let count = flat.chars().count();
@@ -843,9 +810,6 @@ fn print_heartbeat_status_change(data: &serde_json::Value, status: &str) {
     cli_out!("Heartbeat forced {status} for {character}.");
 }
 
-/// One line per clock: what the keepalive did, and where the heartbeat stands.
-/// The `primed` case names the cache write it just paid for, because that
-/// spend is the whole reason activation is a deliberate command.
 fn print_session_activate(data: &serde_json::Value) {
     let character = data["character"].as_str().unwrap_or("?");
     if data["registered"].as_bool().unwrap_or(false) {
@@ -1054,7 +1018,6 @@ fn session_activate_heartbeat(h: &serde_json::Value) -> String {
     }
 }
 
-/// Print edit confirmation.
 fn print_edit_confirmation(data: &serde_json::Value) {
     let msg_ref = data["_display_ref"]
         .as_str()
@@ -1063,7 +1026,6 @@ fn print_edit_confirmation(data: &serde_json::Value) {
     cli_out!("Edited message {msg_ref}");
 }
 
-/// Print delete confirmation.
 fn print_delete_confirmation(data: &serde_json::Value) {
     if let Some(display_ref) = data["_display_ref"].as_str() {
         cli_out!("Deleted message {display_ref}");
@@ -1083,11 +1045,9 @@ fn print_delete_confirmation(data: &serde_json::Value) {
     } else if let Some(id) = data["deleted"].as_str() {
         cli_out!("Deleted entry {id}");
     } else {
-        // No recognized deletion payload: nothing to report.
     }
 }
 
-/// Print alternate-response selection confirmation.
 fn print_alt_confirmation(data: &serde_json::Value) {
     let msg_ref = data["_display_ref"]
         .as_str()
@@ -1106,7 +1066,6 @@ fn print_alt_confirmation(data: &serde_json::Value) {
     }
 }
 
-/// Characters of the newly selected alternate echoed back as confirmation.
 const ALT_PREVIEW_CHARS: usize = 160;
 
 fn first_line_preview(content: &str, max: usize) -> String {
@@ -1136,7 +1095,6 @@ fn alt_preview(content: &str, max_width: usize) -> String {
     format!("{preview}...")
 }
 
-/// Print alternate-response list.
 fn print_alt_list(data: &serde_json::Value) {
     let msg_ref = data["_display_ref"]
         .as_str()
@@ -1171,19 +1129,16 @@ fn print_alt_list(data: &serde_json::Value) {
     _ = writeln!(out);
 }
 
-/// Print model switch confirmation.
 fn print_model_switched(data: &serde_json::Value) {
     let model = data["active"].as_str().unwrap_or("(none)");
     cli_out!("Switched to model: {}", abbreviate_model(model));
 }
 
-/// Print model reset confirmation.
 fn print_model_reset(data: &serde_json::Value) {
     let model = data["active"].as_str().unwrap_or("(none)");
     cli_out!("Model reset to: {}", abbreviate_model(model));
 }
 
-/// Print confirmation after `set_model_setting`.
 fn print_set_model_setting(data: &serde_json::Value) {
     let key = data["key"].as_str().unwrap_or("?");
     let scope = data["scope"].as_str().unwrap_or("?");
@@ -1196,7 +1151,6 @@ fn print_set_model_setting(data: &serde_json::Value) {
     cli_out!("[{scope}] {key} = {value}  ({})", abbreviate_model(model));
 }
 
-/// Print the result of `shore provider refresh <name>`.
 fn print_provider_refresh(data: &serde_json::Value) {
     let provider = data["provider"].as_str().unwrap_or("?");
     let count = data["model_count"].as_u64().unwrap_or(0);
@@ -1204,9 +1158,6 @@ fn print_provider_refresh(data: &serde_json::Value) {
     cli_out!("Refreshed {provider}: {count} models (fetched {fetched})");
 }
 
-/// Print the result of `shore provider refresh` (no name) — one row per
-/// provider with ok/FAIL status, plus a `skipped` section listing every
-/// provider that was excluded with a reason.
 fn print_provider_refresh_all(data: &serde_json::Value) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
@@ -1265,7 +1216,6 @@ fn print_provider_refresh_all(data: &serde_json::Value) {
     );
 }
 
-/// Print character info.
 fn print_character_info(data: &serde_json::Value) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
@@ -1308,12 +1258,10 @@ fn print_character_info(data: &serde_json::Value) {
         write_row(&mut out, "Data", dir);
     }
 
-    // Definition preview
     if let Some(preview) = data["definition_preview"].as_str() {
         if !preview.is_empty() {
             _ = writeln!(out);
             write_section_header(&mut out, "Preview", "", width);
-            // Show first few lines, dimmed
             for line in preview.lines().take(8) {
                 paint(&mut out, Tone::Muted, &format!("  {line}"));
                 _ = writeln!(out);
@@ -1325,19 +1273,16 @@ fn print_character_info(data: &serde_json::Value) {
     _ = writeln!(out);
 }
 
-/// Print memory status or query result.
 fn print_memory(data: &serde_json::Value) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
     let width = term_width();
 
-    // If there's a "result" field, this is a query response.
     if let Some(result) = data["result"].as_str() {
         _ = writeln!(out, "{result}");
         return;
     }
 
-    // Otherwise it's a status response.
     let char_name = data["character"].as_str().unwrap_or("?");
     write_section_header(&mut out, "Memory", char_name, width);
 
@@ -1357,7 +1302,6 @@ fn print_memory(data: &serde_json::Value) {
     _ = writeln!(out);
 }
 
-/// Print compaction result.
 fn print_compact_result(data: &serde_json::Value) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
@@ -1401,8 +1345,6 @@ fn print_compact_result(data: &serde_json::Value) {
     _ = writeln!(out);
 }
 
-/// Print config reload result: what was reloaded, whether system prompt
-/// edits were activated, and any sections that still need a daemon restart.
 fn print_config_reload(data: &serde_json::Value) {
     let path = data["config_path"].as_str().unwrap_or("config");
     cli_out!("Configuration reloaded from {path}");
@@ -1422,7 +1364,6 @@ fn print_config_reload(data: &serde_json::Value) {
             changed.join(", ")
         );
     } else {
-        // No pending prompt edits — nothing to report.
     }
 
     if let Some(sections) = data["restart_required"].as_array() {
@@ -1436,13 +1377,11 @@ fn print_config_reload(data: &serde_json::Value) {
     }
 }
 
-/// Print diagnostics from ring buffers.
 pub(crate) fn print_diagnostics(data: &serde_json::Value) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
     let width = term_width();
 
-    // -- API Calls --
     print_diagnostics_section(
         &mut out,
         "API Calls",
@@ -1477,7 +1416,6 @@ pub(crate) fn print_diagnostics(data: &serde_json::Value) {
         },
     );
 
-    // -- Tool Calls --
     print_diagnostics_section(
         &mut out,
         "Tool Calls",
@@ -1503,7 +1441,6 @@ pub(crate) fn print_diagnostics(data: &serde_json::Value) {
         },
     );
 
-    // -- Errors --
     print_diagnostics_section(&mut out, "Errors", &data["errors"], width, |w, err| {
         let etype = err["error_type"].as_str().unwrap_or("?");
         let msg = err["message"].as_str().unwrap_or("?");
@@ -1513,8 +1450,6 @@ pub(crate) fn print_diagnostics(data: &serde_json::Value) {
     });
 }
 
-/// Print a diagnostics section with a header, shared timestamp formatting,
-/// and a per-entry formatter.
 fn print_diagnostics_section<W: Write>(
     out: &mut W,
     title: &str,
@@ -1543,12 +1478,7 @@ fn print_diagnostics_section<W: Write>(
     }
     _ = writeln!(out);
 }
-// ---------------------------------------------------------------------------
-// Autonomy section — rendered inside `shore status`
-// ---------------------------------------------------------------------------
 
-/// Format a duration in seconds into a compact label like "1h 8m" or "32m".
-/// Negative inputs render with a leading "-".
 fn format_duration_compact(secs: i64) -> String {
     let neg = secs < 0;
     let mut remaining_seconds = secs.unsigned_abs();
@@ -1727,8 +1657,6 @@ mod tests {
         assert_eq!(rendered, "  Max output tokens 8192\n");
     }
 
-    /// Visual preview of `shore trace subagent` rendering. Run with:
-    /// `cargo test -p shore-cli render_preview_subagent -- --ignored --nocapture --test-threads=1`
     #[test]
     #[ignore = "visual preview"]
     fn render_preview_subagent() {
@@ -1949,22 +1877,9 @@ mod tests {
         assert_eq!(display_payload_body(&body), "event: message_start\n");
     }
 
-
-
-
-
-    // ── classification_color ─────────────────────────────────────────
-
-
-    // ── heartbeat_description edge cases ──────────────────────────
-
-
-    // ── format_command dispatch ─────────────────────────────────────
-
     #[test]
     fn format_command_dispatches_known_commands() {
         set_color_enabled(false);
-        // These should all run without panic and hit their formatters.
         format_command("config_reload", &serde_json::json!({"applied": true}));
         format_command("inject_system", &serde_json::json!({}));
         format_command("edit", &serde_json::json!({"ref": "m42"}));
@@ -2065,25 +1980,20 @@ mod tests {
     #[test]
     fn format_command_fallback_for_unknown() {
         set_color_enabled(false);
-        // Unknown commands should use fallback (JSON pretty print), not panic.
         format_command("totally_unknown", &serde_json::json!({"key": "val"}));
     }
 
     #[test]
     fn print_delete_confirmation_single_and_multiple() {
         set_color_enabled(false);
-        // Single deletion.
         print_delete_confirmation(&serde_json::json!({"deleted": ["msg_1"]}));
-        // Multiple deletions.
         print_delete_confirmation(&serde_json::json!({"deleted": ["msg_1", "msg_2", "msg_3"]}));
-        // String form.
         print_delete_confirmation(&serde_json::json!({"deleted": "msg_42"}));
     }
 
     #[test]
     fn print_model_switched_shows_abbreviated_name() {
         set_color_enabled(false);
-        // Should not panic and should abbreviate the date suffix.
         print_model_switched(&serde_json::json!({"active": "claude-sonnet-4-20250514"}));
     }
 

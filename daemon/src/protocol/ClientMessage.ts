@@ -5,7 +5,4 @@ import type { ClientMessageBody } from "./ClientMessageBody";
 import type { Command } from "./Command";
 import type { Regen } from "./Regen";
 
-/**
- * All client → server message types, tagged by "type".
- */
 export type ClientMessage = { "type": "hello" } & ClientHello | { "type": "message" } & ClientMessageBody | { "type": "regen" } & Regen | { "type": "command" } & Command | { "type": "cancel" } & Cancel;

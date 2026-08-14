@@ -6,29 +6,10 @@ pub(crate) enum SyncDecision {
     DropStale,
 }
 
-/// Dedup gate for a single connection's inbound stream.
-///
-/// `History` snapshots and `NewMessage` pushes carry independent meanings even
-/// though they share the revision counter: a snapshot reflects the *whole*
-/// conversation at a revision, while a push is *one* message at a revision. The
-/// daemon emits both for the same append — `append_message` broadcasts a
-/// `History` at revision N, then the handler emits the `NewMessage` also at
-/// revision N — so a single shared watermark would let the snapshot suppress its
-/// own paired push (`N <= N`). Clients that render from `NewMessage` (the Matrix
-/// bridge's `mirror_all`) would then see nothing.
-///
-/// So we keep two watermarks. `snapshot_revision` drops stale `History`
-/// snapshots on reconnect/reload; `message_revision` drops `NewMessage`s already
-/// covered by the handshake snapshot (or redelivered). A mid-session `History`
-/// never advances `message_revision`, so it can't shadow the push that follows
-/// it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SyncState {
-    /// Character whose independent revision sequence these watermarks describe.
     selected_character: Option<String>,
-    /// Highest revision delivered as a `NewMessage`; gates `NewMessage`.
     message_revision: u64,
-    /// Highest revision delivered as a `History`; gates `History`.
     snapshot_revision: u64,
 }
 
@@ -41,16 +22,10 @@ impl SyncState {
         }
     }
 
-    /// The character the daemon last said this connection is on.
-    ///
-    /// Authoritative because every switch arrives as a `History` snapshot
-    /// carrying the new name, whoever asked for it — so this is what a
-    /// reconnect has to ask for, not whatever the process started with.
     pub(crate) fn selected_character(&self) -> Option<&str> {
         self.selected_character.as_deref()
     }
 
-    /// Highest revision observed on either stream — for diagnostics only.
     pub(crate) fn latest_revision(&self) -> u64 {
         self.message_revision.max(self.snapshot_revision)
     }
@@ -190,9 +165,6 @@ mod tests {
         })
     }
 
-    // Regression: `append_message` broadcasts a `History` at revision N, then the
-    // handler emits the paired `NewMessage` also at revision N. The snapshot must
-    // not suppress its own push, or `mirror_all` clients see nothing.
     #[test]
     fn history_does_not_shadow_paired_new_message_at_same_revision() {
         let mut sync = SyncState::new(5, Some("alice"));
@@ -200,13 +172,10 @@ mod tests {
         assert_eq!(sync.observe(&history(6)), SyncDecision::Deliver);
         assert_eq!(sync.observe(&new_message(6)), SyncDecision::Deliver);
 
-        // The next append: History(7) then NewMessage(7) both deliver too.
         assert_eq!(sync.observe(&history(7)), SyncDecision::Deliver);
         assert_eq!(sync.observe(&new_message(7)), SyncDecision::Deliver);
     }
 
-    // A delivered `NewMessage` advances its own watermark, so a redelivered push
-    // at the same revision is still dropped.
     #[test]
     fn new_message_dedupes_against_delivered_messages() {
         let mut sync = SyncState::new(5, Some("alice"));

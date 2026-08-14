@@ -19,7 +19,6 @@ pub(crate) use notifications::*;
 pub(crate) use stream::*;
 pub(crate) use usage::*;
 
-/// Connection status for the status bar.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ConnectionStatus {
     Disconnected,
@@ -27,8 +26,6 @@ pub(crate) enum ConnectionStatus {
     Connected,
 }
 
-/// Whether the palette is showing the top-level command list, a child
-/// picker scoped to a command, or a focused value editor.
 #[derive(Default, Clone)]
 pub(crate) enum PaletteMode {
     #[default]
@@ -37,8 +34,6 @@ pub(crate) enum PaletteMode {
     ValueEditor(ValueEditorState),
 }
 
-/// Per-submenu state. `cmd_text` doubles as the live filter while in
-/// submenu mode; saved fields restore the parent input on Esc.
 #[derive(Clone)]
 pub(crate) struct SubmenuState {
     pub parent: String,
@@ -46,8 +41,6 @@ pub(crate) struct SubmenuState {
     pub saved_cmd_cursor: usize,
 }
 
-/// Per-value-editor state. The saved fields restore the parent command
-/// input on Esc, matching submenu cancellation semantics.
 #[derive(Clone)]
 pub(crate) struct ValueEditorState {
     pub key: String,
@@ -74,8 +67,6 @@ pub(crate) struct EffectiveSamplerField {
     pub scope: Option<String>,
 }
 
-/// Effective sampler values plus their provenance scopes, as returned by
-/// the daemon's `model_settings` command.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct EffectiveSamplerSnapshot {
     pub model: Option<String>,
@@ -95,12 +86,7 @@ pub(crate) struct EffectiveSamplerSnapshot {
     pub gemini_generation: EffectiveSamplerField,
     pub zai_clear_thinking: EffectiveSamplerField,
     pub zai_subscription: EffectiveSamplerField,
-    /// Per-key capability label from the daemon's matrix
-    /// (`honored`/`ignored`/`rejected`/`always`). Empty when the daemon
-    /// didn't send `applicability` (older daemon) — callers then show all keys.
     pub applicability: std::collections::BTreeMap<String, String>,
-    /// Accepted `reasoning_effort` values for the active model's sdk, as
-    /// reported by the daemon. Empty falls back to the built-in preset list.
     pub reasoning_effort_domain: Vec<String>,
 }
 
@@ -156,10 +142,6 @@ impl EffectiveSamplerSnapshot {
         })
     }
 
-    /// Whether the active model's resolved sdk honors `key` — mirrors the
-    /// daemon's capability matrix and the CLI's `visible_setting_keys`. A key
-    /// absent from `applicability` (no opinion, or an older daemon that didn't
-    /// send the map) is treated as visible.
     pub(crate) fn key_honored(&self, key: &str) -> bool {
         match self.applicability.get(key).map(String::as_str) {
             Some(label) => label == "honored" || label == "always",
@@ -227,23 +209,15 @@ impl EffectiveSamplerSnapshot {
     }
 }
 
-/// Completion state for the command palette.
 #[derive(Default)]
 pub(crate) struct CompletionState {
-    /// Filtered candidates matching current input.
     pub candidates: Vec<String>,
-    /// Currently selected index (None = no selection).
     pub selected: Option<usize>,
-    /// Section header shown above candidates when completing arguments
-    /// to a known command (e.g. "model", "setting key"). `None` for the
-    /// top-level command list.
     pub header: Option<String>,
-    /// Top vs. submenu picker.
     pub mode: PaletteMode,
 }
 
 impl CompletionState {
-    /// Reset the menu to a hidden state.
     pub(crate) fn clear(&mut self) {
         self.candidates.clear();
         self.selected = None;
@@ -252,18 +226,13 @@ impl CompletionState {
     }
 }
 
-/// An image in the conversation, with its position in the rendered line list.
 #[derive(Clone, Debug)]
 pub(crate) struct ImageEntry {
-    /// Cache key (image path).
     pub path: String,
-    /// Display name for the status bar.
     pub display_name: String,
-    /// Line index in the conversation lines vec where this image starts.
     pub line: usize,
 }
 
-/// Main application state.
 pub(crate) struct App {
     pub entries: Vec<ConversationEntry>,
     pub stream: StreamState,
@@ -274,10 +243,6 @@ pub(crate) struct App {
     pub connection_status: ConnectionStatus,
     pub character_name: String,
     pub characters: Vec<CharacterInfo>,
-    /// Switch-ready model identifiers from `list_models` — the daemon's
-    /// `qualified_name` (static `chat.<provider>.<name>` or discovered
-    /// `provider:model_id`), never the bare name, which is ambiguous when
-    /// two providers expose the same upstream id.
     pub model_names: Vec<String>,
     pub active_model_names: Vec<String>,
     pub show_model_list: bool,
@@ -289,14 +254,9 @@ pub(crate) struct App {
     pub tokens: TokenCounts,
     pub is_private: bool,
     pub should_quit: bool,
-    /// Set when quit was triggered by a SIGINT-equivalent (Ctrl+C keybind or
-    /// external SIGINT). The shutdown path exits with code 130 afterward so
-    /// supervisors see the conventional interrupt exit.
     pub interrupt: bool,
     pub auto_scroll: bool,
-    /// Last known maximum conversation scroll offset, updated by the renderer.
     pub conversation_max_scroll: u16,
-    /// Cursor for the next older archived history page.
     pub history_next_before: Option<usize>,
     pub history_has_more_before: bool,
     pub history_page_loading: bool,
@@ -309,40 +269,19 @@ pub(crate) struct App {
     pub show_images: bool,
     pub show_timestamps: bool,
     pub show_metadata: bool,
-    /// When the usage-budget chip is shown on the input border.
     pub usage_display: UsageDisplay,
-    /// Which budget (and which of its limits) that chip follows.
     pub budget_focus: BudgetFocus,
     pub show_help: bool,
-    /// Latest known usage-budget statuses, refreshed by the `usage` query and
-    /// `UsageWarning` pushes. Empty until the first reply arrives.
     pub usage_budgets: Vec<UsageBudget>,
-    /// Images queued for attachment to the next outgoing message.
     pub pending_images: Vec<String>,
-    /// Temp-file paths for paste-origin images, removed on TUI shutdown.
     pub paste_temp_paths: Vec<std::path::PathBuf>,
-    /// When editing a message, holds the ref (e.g. "last", "-1") being edited.
     pub editing_ref: Option<String>,
-    /// Index of all rendered images with their line positions, rebuilt each frame.
     pub image_index: Vec<ImageEntry>,
-    /// When set, the fullscreen image viewer is active showing this image index.
     pub fullscreen: Option<usize>,
-    /// Animation frame for transient progress indicators.
     pub spinner_frame: usize,
-    /// Cached lines from the last `draw_conversation` rebuild. Reused on
-    /// frames where the fingerprint of conversation-affecting state hasn't
-    /// changed — the common case while the user is just typing.
     pub conv_cache: ConvCache,
-    /// Bumped on every wholesale entries replacement so the conv cache
-    /// fingerprint changes even when entry counts and last-two summaries
-    /// happen to match.
     pub history_version: u64,
-    /// Active transient notification toasts, newest last. Rendered as a
-    /// floating overlay over the conversation; expired entries are pruned by
-    /// the event loop via `expire_notifications`.
     pub notifications: Vec<Notification>,
-    /// Error/warning messages recorded this session, flushed to stderr on exit
-    /// so they survive in terminal scrollback for copy/paste debugging.
     pub error_log: Vec<String>,
 }
 
@@ -408,24 +347,8 @@ impl Default for App {
 }
 
 impl App {
-    /// Snapshot the state that affects `draw_conversation`'s output.
-    ///
-    /// Used as the cache key for the rendered conversation lines. The
-    /// fingerprint stays cheap by hashing lengths, counts, and flags
-    /// rather than full string contents — mutations to entry text grow
-    /// `content.len()`, so a length match plus an `entries.len()` match
-    /// is a tight enough proxy for "no change" without scanning bodies.
     pub(crate) fn conversation_fingerprint(&self, width: u16) -> ConvFingerprint {
         let entry_summary = |e: &ConversationEntry| -> u64 {
-            // Pack a kind tag plus a content-size signature into a u64.
-            // Different variants distinguish themselves via the high tag
-            // byte; mutations within a variant change the lower bits.
-            //
-            // For a `Turn`, only the *last* block mutates during streaming
-            // (text/thinking appends), and new blocks change the block count —
-            // so block-count + last-block length capture every in-place edit.
-            // Wholesale replacements (reconcile, :edit) bump `history_version`,
-            // which covers collisions among earlier-than-last-two entries.
             match e {
                 ConversationEntry::Turn(turn) => {
                     let block_len = |b: &Block| -> u64 {
@@ -510,11 +433,6 @@ impl App {
         self.auto_scroll = true;
     }
 
-    /// Borrow the in-flight streaming turn, opening one if the tail isn't
-    /// already a `Streaming` turn. The in-flight turn is always a trailing
-    /// assistant `Turn` whose blocks the stream handlers mutate in place.
-    /// Public so `StreamEnd` can attach metadata to (or open) the turn even
-    /// when a tool-use phase ends before any content has streamed.
     pub(crate) fn ensure_streaming_turn(&mut self) -> &mut Turn {
         let needs_new = !matches!(
             self.entries.last(),
@@ -537,13 +455,6 @@ impl App {
             .expect("just ensured a trailing streaming turn")
     }
 
-    /// Bracket nested sub-agent activity by comparing the incoming frame's
-    /// sub-agent tag to the section currently open. On a transition, close the
-    /// old section and/or open the new one by pushing the marker blocks into the
-    /// in-flight turn — exactly mirroring the CLI's tag-transition bracketing.
-    ///
-    /// A no-op (and no turn is forced into existence) when the tag is unchanged,
-    /// which is every frame of an ordinary, sub-agent-free generation.
     pub(crate) fn sync_subagent_section(&mut self, tag: Option<&str>) {
         if self.stream.subagent.as_deref() == tag {
             return;
@@ -561,9 +472,6 @@ impl App {
         }
     }
 
-    /// Append a live thinking delta to the in-flight turn. Merges into the
-    /// trailing `Thinking` block when the previous block was also thinking,
-    /// otherwise opens a new one — preserving interleaving with tool calls.
     pub(crate) fn stream_append_thinking(&mut self, text: &str) {
         let turn = self.ensure_streaming_turn();
         match turn.blocks.last_mut() {
@@ -572,10 +480,6 @@ impl App {
         }
     }
 
-    /// Append a live response-text delta to the in-flight turn. Merges into the
-    /// trailing `Text` block, otherwise opens a new one. Because text is just
-    /// another block, pre-tool text streams live and stays interleaved — no
-    /// phase-boundary drop, no single-header constraint.
     pub(crate) fn stream_append_text(&mut self, text: &str) {
         let turn = self.ensure_streaming_turn();
         match turn.blocks.last_mut() {
@@ -584,7 +488,6 @@ impl App {
         }
     }
 
-    /// Append a tool-call block to the in-flight turn.
     pub(crate) fn stream_push_tool_call(
         &mut self,
         tool_id: String,
@@ -598,7 +501,6 @@ impl App {
         });
     }
 
-    /// Append a tool-result block to the in-flight turn.
     pub(crate) fn stream_push_tool_result(
         &mut self,
         tool_id: String,
@@ -614,10 +516,6 @@ impl App {
         });
     }
 
-    /// Abort an in-flight stream (disconnect / error / cancel): discard the
-    /// optimistic, unconfirmed turn entirely and clear the stream scalars. A
-    /// reconnect's History rebuild reconciles the authoritative turn, so
-    /// dropping the whole in-flight turn (tool blocks included) is safe.
     pub(crate) fn abort_stream(&mut self) {
         if matches!(
             self.entries.last(),
@@ -628,15 +526,6 @@ impl App {
         self.stream.reset();
     }
 
-    /// Optimistically transition into the "regenerating" UI state before the
-    /// daemon's StreamStart arrives, so the spinner and (regenerating) label
-    /// appear immediately. Mirrors what StreamStart does on receipt, so it is
-    /// idempotent when the real StreamStart lands.
-    //
-    // Keep the previous assistant visible while the replacement streams.
-    // The daemon now makes regeneration non-destructive by storing the old
-    // reply as an alternate response; the History refresh after persistence
-    // swaps the active visible response.
     pub(crate) fn begin_regen_optimistic(&mut self) {
         self.stream.reset();
         self.stream.active = true;
@@ -645,13 +534,7 @@ impl App {
         self.scroll_to_bottom();
     }
 
-    /// Resolve a ref (e.g. "last", "-1", "-2") to the content of a
-    /// User or Assistant entry for local editing preview.
     pub(crate) fn resolve_ref_content(&self, raw_ref: &str) -> Option<String> {
-        // Filter to finalized User/Assistant turns (what the daemon considers
-        // messages). The in-flight streaming turn is an optimistic partial, not
-        // a ref target — exclude it so `:edit last` targets the last committed
-        // turn, not the reply currently being generated.
         let messages: Vec<&Turn> = self
             .entries
             .iter()
@@ -676,19 +559,14 @@ impl App {
         turn.map(Turn::joined_text)
     }
 
-    /// Raise an informational toast. The bulk of status chatter (command
-    /// acks, connection state) flows through here.
     pub(crate) fn set_status(&mut self, msg: impl Into<String>) {
         self.notify(NotificationLevel::Info, msg);
     }
 
-    /// Raise a warning-level toast (yellow).
     pub(crate) fn set_warning(&mut self, msg: impl Into<String>) {
         self.notify(NotificationLevel::Warning, msg);
     }
 
-    /// Raise an error-level toast (red) and record it to the session error log
-    /// so it is reprinted to stderr on exit for copy/paste debugging.
     pub(crate) fn set_error(&mut self, msg: impl Into<String>) {
         let msg = msg.into();
         tracing::error!("{msg}");
@@ -699,9 +577,6 @@ impl App {
         self.notify(NotificationLevel::Error, msg);
     }
 
-    /// Core toast raise: dedupes against the newest toast (a reconnect storm
-    /// bumps a `×N` count instead of stacking), caps the stack, and refreshes
-    /// the dismissal timer.
     pub(crate) fn notify(&mut self, level: NotificationLevel, msg: impl Into<String>) {
         let msg = msg.into();
         if let Some(last) = self.notifications.last_mut() {
@@ -723,8 +598,6 @@ impl App {
         }
     }
 
-    /// Drop toasts whose lifetime has elapsed. Returns true if any were
-    /// removed, so the event loop can trigger a redraw.
     pub(crate) fn expire_notifications(&mut self, now: std::time::Instant) -> bool {
         let before = self.notifications.len();
         self.notifications
@@ -732,14 +605,10 @@ impl App {
         self.notifications.len() != before
     }
 
-    /// Immediately clear all toasts (e.g. on a fresh user turn).
     pub(crate) fn dismiss_notifications(&mut self) {
         self.notifications.clear();
     }
 
-    /// Dismiss the newest toast — the one drawn at the top of the stack.
-    /// Returns whether a toast was removed, so the caller can decide whether
-    /// the keypress was consumed.
     pub(crate) fn dismiss_latest_notification(&mut self) -> bool {
         self.notifications.pop().is_some()
     }
@@ -879,8 +748,6 @@ impl App {
         }
     }
 
-    /// Canonical parent name for commands whose arguments are picked
-    /// via a submenu rather than typed inline.
     pub(crate) fn canonical_submenu_parent(name: &str) -> Option<&'static str> {
         match name {
             "model" => Some("model"),
@@ -916,12 +783,6 @@ impl App {
         };
 
         if equivalent {
-            // Same model in a different surface form (e.g. bare upstream id from
-            // stream metadata vs. provider-qualified name or alias). Keep the
-            // existing `self.model` — the daemon's `model_settings` resolver
-            // expects the form it originally handed us, and a bare upstream id
-            // often isn't resolvable on its own. Track the new form too so
-            // snapshot-matching still works against it.
             if let Some(next) = next {
                 if !self.active_model_names.iter().any(|n| n == next) {
                     self.active_model_names.push(next.to_string());
@@ -974,12 +835,6 @@ impl App {
                 })
     }
 
-    /// Register the identifiers from an authoritative `model_settings`
-    /// snapshot as active-model match keys, without disturbing `self.model`
-    /// (which must keep the resolver-friendly form the daemon originally
-    /// handed us). Lets later unsolicited pushes and the model-list marker
-    /// recognise the active model even when the daemon labels it differently
-    /// than the surface form we currently track.
     pub(crate) fn note_active_model_from_snapshot(&mut self, snapshot: &EffectiveSamplerSnapshot) {
         let mut keys = Vec::new();
         if let Some(model) = snapshot.model.as_deref() {
@@ -1037,7 +892,6 @@ impl App {
             || (!self.model.is_empty() && Self::model_identifier_matches(&self.model, candidate))
     }
 
-    /// Static commands and their descriptions, shown in the palette.
     const COMMANDS: &'static [(&'static str, &'static str)] = &[
         ("cancel", "Stop the current generation"),
         ("character", "Switch active character"),
@@ -1054,17 +908,12 @@ impl App {
         ("view", "Configure TUI display options"),
     ];
 
-    /// Look up the description for a top-level command. Returns `None`
-    /// for argument candidates (e.g. `model gpt-4o`).
     pub(crate) fn command_description(name: &str) -> Option<&'static str> {
         Self::COMMANDS
             .iter()
             .find_map(|(n, d)| (*n == name).then_some(*d))
     }
 
-    /// Sampler keys accepted by `:setting <key> <value>`. Mirrors the
-    /// daemon's `SAMPLER_KEYS` constant. The trailing vendor knobs are gated
-    /// per-model by the daemon's capability matrix — see [`Self::visible_setting_keys`].
     const SETTING_KEYS: &'static [&'static str] = &[
         "temperature",
         "top_p",
@@ -1086,9 +935,6 @@ impl App {
         Self::SETTING_KEYS.contains(&key)
     }
 
-    /// `SETTING_KEYS` filtered to those the active model's sdk honors, per the
-    /// daemon's `applicability` matrix (mirrors the CLI's `visible_setting_keys`).
-    /// Before a snapshot arrives, every key is shown.
     fn visible_setting_keys(&self) -> Vec<&'static str> {
         Self::SETTING_KEYS
             .iter()
@@ -1124,35 +970,21 @@ impl App {
             "subagent" => Some(self.show_subagent),
             "images" => Some(self.show_images),
             "metadata" => Some(self.show_metadata),
-            // Value-typed: "active" means anything other than Off (drives the
-            // submenu's on/off marker). The exact mode is shown by the row label.
             "usage" => Some(self.usage_display != UsageDisplay::Off),
-            // Likewise value-typed: "active" means the chip is pinned to a
-            // specific budget or limit rather than following the most urgent.
             "budget" => Some(self.budget_focus != BudgetFocus::default()),
             _ => None,
         }
     }
 
-    /// Set the usage chip's visibility mode (`:view usage <mode>` / prefs).
     pub(crate) fn set_usage_display(&mut self, mode: UsageDisplay) {
         self.usage_display = mode;
     }
 
-    /// Advance the usage chip mode through off → always → warn (submenu Enter
-    /// and `:view usage toggle`), returning the new mode.
     pub(crate) fn cycle_usage_display(&mut self) -> UsageDisplay {
         self.usage_display = self.usage_display.cycled();
         self.usage_display
     }
 
-    /// The budget to surface in the usage chip: the one `:view budget` pinned
-    /// by name, or — unpinned — the one nearest (or past) its limit, so the
-    /// most pressing constraint is what's shown.
-    ///
-    /// A name that matches nothing (a typo, or a budget dropped from the
-    /// config) yields no chip rather than silently falling back to another
-    /// budget's numbers.
     pub(crate) fn focused_budget(&self) -> Option<&UsageBudget> {
         if let Some(name) = &self.budget_focus.name {
             return self
@@ -1166,14 +998,10 @@ impl App {
             .max_by(|a, b| a.level_percent(scope).total_cmp(&b.level_percent(scope)))
     }
 
-    /// Pin the usage chip to a budget/limit (`:view budget <target>` / prefs).
     pub(crate) fn set_budget_focus(&mut self, focus: BudgetFocus) {
         self.budget_focus = focus;
     }
 
-    /// Targets the `:view` submenu's Enter cycles through: auto, then each
-    /// limit, then one entry per configured budget once there is more than one
-    /// (with a single budget, pinning it by name says nothing `auto` doesn't).
     fn budget_focus_cycle(&self) -> Vec<BudgetFocus> {
         let mut cycle = vec![
             BudgetFocus::default(),
@@ -1190,9 +1018,6 @@ impl App {
         cycle
     }
 
-    /// Advance to the next focus target (submenu Enter and
-    /// `:view budget toggle`), returning the new one. A focus pinned by name
-    /// that has since dropped out of the cycle restarts it.
     pub(crate) fn cycle_budget_focus(&mut self) -> BudgetFocus {
         let cycle = self.budget_focus_cycle();
         let next = cycle
@@ -1203,9 +1028,6 @@ impl App {
         self.budget_focus.clone()
     }
 
-    /// Replace cached budget statuses from a `usage {budget:true}` reply's
-    /// `budgets` array. Missing fields default sensibly so a partial reply
-    /// never panics.
     pub(crate) fn apply_usage_budgets(&mut self, data: &serde_json::Value) {
         let Some(arr) = data.get("budgets").and_then(|v| v.as_array()) else {
             return;
@@ -1236,12 +1058,6 @@ impl App {
             .collect();
     }
 
-    /// Fold a `UsageWarning` push into the cached budget set for instant chip
-    /// feedback (the next `usage` poll supersedes it with authoritative data).
-    /// `over_limit` is inferred from `percent_used` since the push omits it.
-    ///
-    /// Scoped, because a budget and its pace warn independently: a pace push
-    /// must not clobber the cached cap figures, or vice versa.
     pub(crate) fn apply_usage_warning(&mut self, name: &str, scope: UsageScope, level: UsageLevel) {
         let existing = match self.usage_budgets.iter_mut().find(|b| b.name == name) {
             Some(existing) => existing,
@@ -1250,7 +1066,6 @@ impl App {
                     name: name.to_string(),
                     ..UsageBudget::default()
                 });
-                // Just pushed, so the last element is the entry we need.
                 let Some(pushed) = self.usage_budgets.last_mut() else {
                     return;
                 };
@@ -1276,8 +1091,6 @@ impl App {
             "subagent" => self.show_subagent = enabled,
             "images" => self.show_images = enabled,
             "metadata" => self.show_metadata = enabled,
-            // Boolean on/off maps onto the always/off ends of the tri-state so
-            // `:view usage on|off` keeps working; `warn` needs the explicit word.
             "usage" => {
                 self.usage_display = if enabled {
                     UsageDisplay::Always
@@ -1291,12 +1104,9 @@ impl App {
     }
 
     pub(crate) fn toggle_view_option(&mut self, key: &str) -> Option<bool> {
-        // Usage is value-typed: cycle through its three modes rather than
-        // flipping a boolean (which would skip `warn`).
         if key == "usage" {
             return Some(self.cycle_usage_display() != UsageDisplay::Off);
         }
-        // Likewise value-typed: cycle targets rather than flipping a boolean.
         if key == "budget" {
             return Some(self.cycle_budget_focus() != BudgetFocus::default());
         }
@@ -1456,7 +1266,6 @@ impl App {
         (min + steps * step).clamp(min, max)
     }
 
-    /// Update completion candidates based on current command input.
     pub(crate) fn update_completions(&mut self) {
         self.completion.selected = None;
         self.completion.header = None;
@@ -1474,7 +1283,6 @@ impl App {
         let input = &self.input.cmd_text;
 
         if input.is_empty() {
-            // Show all commands
             self.completion.candidates =
                 Self::COMMANDS.iter().map(|(n, _)| n.to_string()).collect();
             return;
@@ -1485,14 +1293,12 @@ impl App {
         let has_space = parts.next().is_some();
 
         if !has_space {
-            // Completing the command name
             self.completion.candidates = Self::COMMANDS
                 .iter()
                 .filter(|(n, _)| n.starts_with(cmd))
                 .map(|(n, _)| n.to_string())
                 .collect();
         } else {
-            // Completing arguments
             let arg = input.split_once(' ').map(|x| x.1).unwrap_or("").trim();
             match cmd {
                 "character" => {
@@ -1509,8 +1315,6 @@ impl App {
                 }
                 "model" => {
                     self.completion.header = Some("model".into());
-                    // Substring match, mirroring the model submenu: qualified
-                    // identifiers put the provider before the model id.
                     let mut candidates: Vec<String> = self
                         .model_names
                         .iter()
@@ -1533,14 +1337,11 @@ impl App {
                         .collect();
                 }
                 "setting" => {
-                    // First word completes either a sampler key or `reset`.
-                    // After a space we leave value entry to the user.
                     let (head, has_second) = match arg.split_once(' ') {
                         Some((h, _)) => (h, true),
                         None => (arg, false),
                     };
                     if has_second {
-                        // `:setting reset <key>` — complete the key list.
                         if head == "reset" {
                             self.completion.header = Some("setting key".into());
                             let key_arg = arg.split_once(' ').map(|x| x.1).unwrap_or("").trim();
@@ -1553,7 +1354,6 @@ impl App {
                                 .map(|k| format!("setting reset {k}"))
                                 .collect();
                         } else {
-                            // Value position — no canned suggestions.
                             self.completion.candidates.clear();
                         }
                     } else {
@@ -1604,9 +1404,6 @@ impl App {
         }
     }
 
-    /// Apply the currently selected completion to the command input.
-    /// In submenu mode this is a no-op — candidates are bare names that
-    /// shouldn't be spliced into the filter on Tab.
     pub(crate) fn apply_completion(&mut self) {
         if !matches!(self.completion.mode, PaletteMode::Top) {
             return;
@@ -1615,7 +1412,6 @@ impl App {
             if let Some(text) = self.completion.candidates.get(idx) {
                 self.input.cmd_text = text.clone();
                 self.input.cmd_cursor = text.len();
-                // If completing a command name (no space), add a space
                 if !text.contains(' ') {
                     self.input.cmd_text.push(' ');
                     self.input.cmd_cursor += 1;
@@ -1624,9 +1420,6 @@ impl App {
         }
     }
 
-    /// Build candidates for a submenu picker. Reads the parent name out
-    /// of `completion.mode` and uses `cmd_text` as a case-insensitive
-    /// prefix filter.
     fn update_submenu_candidates(&mut self) {
         let parent = match &self.completion.mode {
             PaletteMode::Submenu(s) => s.parent.clone(),
@@ -1651,9 +1444,6 @@ impl App {
 
         match parent.as_str() {
             "model" => {
-                // Qualified identifiers put the provider first, so a prefix
-                // filter would force typing the provider to reach the model
-                // id — match anywhere in the string instead.
                 let mut candidates: Vec<String> = self
                     .model_names
                     .iter()
@@ -1686,9 +1476,6 @@ impl App {
                 self.completion.candidates = candidates;
             }
             "setting:reasoning_effort" => {
-                // Prefer the per-sdk domain the daemon reported (e.g. OpenAI
-                // accepts `minimal` and rejects `max`); fall back to the full
-                // Anthropic set before any snapshot has arrived.
                 let domain: Vec<&str> = self
                     .effective_sampler
                     .as_ref()
@@ -1721,8 +1508,6 @@ impl App {
                 self.completion.candidates = candidates;
             }
             "setting:openrouter_provider" => {
-                // Free-form values — offer only `reset` plus whatever the user
-                // is typing as a custom entry.
                 let mut candidates = Self::filtered_presets(&["reset"], &filter);
                 if !raw_filter.is_empty() && !raw_filter.eq_ignore_ascii_case("reset") {
                     candidates.push(format!("Custom: {raw_filter}"));
@@ -1736,8 +1521,6 @@ impl App {
                 }
                 self.completion.candidates = candidates;
             }
-            // Daemon-side keepalive ping cadence: the `off` sentinel or a
-            // duration like `55m`. Mirrors the `cache_ttl` custom-entry handling.
             "setting:cache_keepalive" => {
                 let mut candidates = Self::filtered_presets(&["off", "55m", "reset"], &filter);
                 if !raw_filter.is_empty()
@@ -1758,7 +1541,6 @@ impl App {
                 }
                 self.completion.candidates = candidates;
             }
-            // Per-model tool-iteration cap (>= 1; reset/unset = unlimited).
             "setting:max_tool_iterations" => {
                 let mut candidates =
                     Self::filtered_presets(&["8", "16", "32", "64", "reset"], &filter);
@@ -1816,9 +1598,6 @@ impl App {
         };
     }
 
-    /// Values offered for `:view <key> <value>`. Most keys are booleans; the
-    /// two value-typed ones have their own domains, and `budget` additionally
-    /// offers the names the daemon has reported.
     fn view_value_presets(&self, key: &str, filter: &str) -> Vec<String> {
         let filter = filter.to_lowercase();
         match key {
@@ -1848,9 +1627,6 @@ impl App {
             .collect()
     }
 
-    /// Enter a submenu picker for the given parent command. Saves the
-    /// current `cmd_text`/cursor for restoration on Esc, clears the
-    /// input so the filter starts empty, and rebuilds candidates.
     pub(crate) fn enter_submenu(&mut self, parent: &str) {
         if parent == "setting" {
             self.sampler_settings_loading = true;
@@ -1900,8 +1676,6 @@ impl App {
         self.update_completions();
     }
 
-    /// Pop a submenu picker back to the top-level command list,
-    /// restoring the parent input text.
     pub(crate) fn exit_submenu(&mut self) {
         if let PaletteMode::Submenu(s) = std::mem::take(&mut self.completion.mode) {
             self.input.cmd_text = s.saved_cmd_text;
@@ -2000,13 +1774,6 @@ impl App {
         Some(format!("setting {} {value}", state.key))
     }
 
-    /// Apply the currently selected submenu candidate. Returns the full
-    /// command string (e.g. `"model gpt-4o"`) for the caller to feed
-    /// into `parse_command`. Most command-producing selections clear
-    /// completion state and exit command mode; local-only palettes may
-    /// instead apply in place and return `None`.
-    /// True when the palette is in the `view` submenu, whose options
-    /// toggle local prefs in-place via [`Self::apply_submenu`].
     pub(crate) fn is_view_submenu(&self) -> bool {
         matches!(&self.completion.mode, PaletteMode::Submenu(s) if s.parent == "view")
     }
@@ -2090,7 +1857,6 @@ impl App {
         Some(format!("{parent} {chosen}"))
     }
 
-    /// Cycle to the next completion candidate.
     pub(crate) fn next_completion(&mut self) {
         if self.completion.candidates.is_empty() {
             return;
@@ -2102,7 +1868,6 @@ impl App {
         self.apply_completion();
     }
 
-    /// Cycle to the previous completion candidate.
     pub(crate) fn prev_completion(&mut self) {
         let len = self.completion.candidates.len();
         if len == 0 {
@@ -2132,17 +1897,12 @@ mod tests {
                 "replay_prior_thinking": "always",
                 "budget_tokens": "ignored",
                 "zai_clear_thinking": "rejected",
-                // Daemon reports the keepalive cadence as honored everywhere
-                // and the tool-iteration cap as always-applicable.
                 "cache_keepalive": "honored",
                 "max_tool_iterations": "always",
-                // `openrouter_provider` deliberately omitted — "no opinion"
-                // must still be shown.
             },
         }))
         .expect("snapshot");
 
-        // Domain parsed through.
         assert_eq!(
             snapshot.reasoning_effort_domain,
             vec!["minimal", "low", "medium", "high", "xhigh"]
@@ -2155,12 +1915,12 @@ mod tests {
         let visible = app.visible_setting_keys();
 
         assert!(visible.contains(&"temperature"));
-        assert!(visible.contains(&"sdk")); // "always"
-        assert!(visible.contains(&"openrouter_provider")); // no opinion → shown
-        assert!(visible.contains(&"cache_keepalive")); // honored everywhere
-        assert!(visible.contains(&"max_tool_iterations")); // "always"
-        assert!(!visible.contains(&"budget_tokens")); // ignored → hidden
-        assert!(!visible.contains(&"zai_clear_thinking")); // rejected → hidden
+        assert!(visible.contains(&"sdk"));
+        assert!(visible.contains(&"openrouter_provider"));
+        assert!(visible.contains(&"cache_keepalive"));
+        assert!(visible.contains(&"max_tool_iterations"));
+        assert!(!visible.contains(&"budget_tokens"));
+        assert!(!visible.contains(&"zai_clear_thinking"));
     }
 
     #[test]
@@ -2247,11 +2007,6 @@ mod tests {
 
     #[test]
     fn set_active_model_does_not_downgrade_to_less_qualified_form() {
-        // The daemon's `model_settings` resolver expects the alias or
-        // provider-qualified name handed to us by switch_model / History.
-        // A subsequent `set_active_model` carrying the bare upstream id
-        // (e.g. from StreamEnd metadata) must not overwrite the qualified
-        // form, or the next `:setting` request will 404.
         let mut app = App::default();
         app.set_active_model(Some("openrouter:anthropic/claude-4.6-opus-20260205"));
         app.effective_sampler = Some(EffectiveSamplerSnapshot {
@@ -2312,7 +2067,6 @@ mod tests {
         app.entries
             .push(ConversationEntry::user("hi".into(), vec![], String::new()));
         app.set_status("connected");
-        // Toasts live outside the conversation log entirely.
         assert_eq!(app.entries.len(), 1);
         assert_eq!(app.notifications.len(), 1);
     }
@@ -2324,7 +2078,6 @@ mod tests {
             app.set_status(format!("msg {i}"));
         }
         assert_eq!(app.notifications.len(), MAX_NOTIFICATIONS);
-        // Oldest dropped; newest retained.
         assert_eq!(app.notifications.last().unwrap().content, "msg 9");
     }
 
@@ -2333,12 +2086,10 @@ mod tests {
         let mut app = App::default();
         app.set_status("hi");
         let now = app.notifications[0].created;
-        // Just before TTL: still present.
         assert!(
             !app.expire_notifications(now + NOTIFICATION_TTL - std::time::Duration::from_millis(1))
         );
         assert_eq!(app.notifications.len(), 1);
-        // After TTL: pruned, returns true.
         assert!(app.expire_notifications(now + NOTIFICATION_TTL));
         assert!(app.notifications.is_empty());
     }
@@ -2440,9 +2191,7 @@ mod tests {
             let focus = BudgetFocus::from_token(token).expect("parses");
             assert_eq!(focus.as_token(), token);
         }
-        // Wire spelling of the period limit normalizes onto `cap`.
         assert_eq!(BudgetFocus::from_token("budget").unwrap().as_token(), "cap");
-        // Case-insensitive keywords; names keep their case.
         assert_eq!(BudgetFocus::from_token("PACE").unwrap().as_token(), "pace");
         assert_eq!(
             BudgetFocus::from_token("Weekly").unwrap().as_token(),
@@ -2462,12 +2211,9 @@ mod tests {
             ..App::default()
         };
 
-        // Auto: the budget closest to binding, at its leading limit.
         assert_eq!(app.focused_budget().unwrap().name, "weekly");
         assert_eq!(app.focused_budget().unwrap().level(None).percent_used, 0.7);
 
-        // Pinned to the pace: ranked by pace, and a budget without one falls
-        // back to its cap so it can still be ranked (and still render).
         app.budget_focus = BudgetFocus::scoped(UsageScope::Pace);
         assert_eq!(app.focused_budget().unwrap().name, "monthly");
         assert_eq!(
@@ -2478,19 +2224,16 @@ mod tests {
             0.4
         );
 
-        // Pinned by name: that budget regardless of urgency.
         app.budget_focus = BudgetFocus::named("weekly");
         let focused = app.focused_budget().unwrap();
         assert_eq!(focused.name, "weekly");
         assert_eq!(focused.level(app.budget_focus.scope).percent_used, 0.7);
 
-        // Name + scope.
         app.budget_focus = BudgetFocus::from_token("weekly:pace").unwrap();
         let focused = app.focused_budget().unwrap();
         assert_eq!(focused.level(app.budget_focus.scope).percent_used, 0.2);
         assert!(focused.level_is_pace(app.budget_focus.scope));
 
-        // An unmatched name selects nothing.
         app.budget_focus = BudgetFocus::named("retired");
         assert!(app.focused_budget().is_none());
     }
@@ -2502,8 +2245,6 @@ mod tests {
             ..App::default()
         };
 
-        // One budget: naming it adds nothing over `auto`, so the cycle is
-        // just the three scope modes.
         assert_eq!(app.cycle_budget_focus().as_token(), "cap");
         assert_eq!(app.cycle_budget_focus().as_token(), "pace");
         assert_eq!(app.cycle_budget_focus().as_token(), "auto");
@@ -2514,7 +2255,6 @@ mod tests {
         assert_eq!(app.cycle_budget_focus().as_token(), "monthly");
         assert_eq!(app.cycle_budget_focus().as_token(), "auto");
 
-        // A pin that dropped out of the cycle restarts it rather than sticking.
         app.budget_focus = BudgetFocus::named("retired");
         assert_eq!(app.cycle_budget_focus().as_token(), "auto");
     }

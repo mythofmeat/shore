@@ -3,17 +3,11 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-/// Convert markdown text into styled ratatui Lines.
-///
-/// This is backed by `pulldown-cmark` with common chat-friendly extensions
-/// enabled, then projected into terminal-friendly lines for ratatui.
 #[cfg(test)]
 fn render_markdown(text: &str) -> Vec<Line<'static>> {
     render_markdown_inner(text, None)
 }
 
-/// Convert markdown text into styled ratatui Lines and pre-wrap each rendered
-/// line so outer indentation is preserved by ratatui's paragraph widget.
 pub(crate) fn render_markdown_wrapped(text: &str, max_width: usize) -> Vec<Line<'static>> {
     let max_width = (max_width > 0).then_some(max_width);
     render_markdown_inner(text, max_width)

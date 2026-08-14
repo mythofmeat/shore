@@ -1,11 +1,3 @@
-// Burn-down list. This crate opted into the workspace lint policy late (#8),
-// with ~690 pre-existing violations. Each entry below is an exemption for
-// code that predates the opt-in, not a decision that the lint is wrong here.
-//
-// These are `expect`, not `allow`, deliberately: when the last violation of a
-// lint is fixed, the expectation goes unfulfilled and the build fails until
-// the entry is deleted. The list can therefore only shrink. Do not add to it —
-// new code in this crate is held to the workspace policy like every other crate.
 #![expect(
     elided_lifetimes_in_paths,
     unused_qualifications,
@@ -151,7 +143,6 @@ fn main() -> io::Result<()> {
 }
 
 fn init_logging() {
-    // TUI owns the terminal, so log to a file instead of stdout/stderr.
     let log_dir = shore_common::dirs::runtime_dir();
     let _ = std::fs::create_dir_all(&log_dir);
     let log_file = std::fs::OpenOptions::new()
@@ -431,7 +422,6 @@ fn buffer_to_string(buf: &Buffer) -> String {
     text
 }
 
-/// Resolve the initial character: --character flag > SHORE_CHARACTER env > state file.
 fn resolve_character(cli_character: Option<String>) -> Option<String> {
     if cli_character.is_some() {
         return cli_character;
@@ -444,12 +434,6 @@ fn resolve_character(cli_character: Option<String>) -> Option<String> {
     shore_common::active_character::read_active_character()
 }
 
-/// Persist a switch the way the CLI does, so the next client to start — either
-/// one — comes up on the character this session ended on.
-///
-/// Only an in-session switch is written. A `--character` or `SHORE_CHARACTER`
-/// launch pins this terminal and nothing else, which is why [`resolve_character`]
-/// reads those first and this never writes them back.
 fn persist_active_character(name: &str) {
     if let Err(e) = shore_common::active_character::write_active_character(name) {
         tracing::warn!(character = name, error = %e, "could not persist the active character");
@@ -460,8 +444,6 @@ fn prefs_path() -> std::path::PathBuf {
     shore_common::dirs::config_dir().join("tui_prefs.json")
 }
 
-/// Pre-0.1.12 prefs lived in the runtime dir, which is wiped on logout/reboot.
-/// Kept only to migrate old files into [`prefs_path`] on first run.
 fn legacy_prefs_path() -> std::path::PathBuf {
     shore_common::dirs::runtime_dir().join("tui_prefs.json")
 }
@@ -496,7 +478,6 @@ fn load_prefs(app: &mut App) {
             {
                 app.usage_display = mode;
             } else if let Some(b) = v.get("show_usage").and_then(|v| v.as_bool()) {
-                // Migrate the previous boolean pref.
                 app.usage_display = if b {
                     app::UsageDisplay::Always
                 } else {
@@ -532,8 +513,6 @@ fn save_prefs(app: &App) {
             return;
         }
     }
-    // Write to a temp file and rename so a crash mid-write can't leave a
-    // truncated/corrupt prefs file behind.
     let tmp = path.with_extension("json.tmp");
     if let Err(e) = std::fs::write(&tmp, v.to_string()) {
         warn!("failed to write prefs: {e}");
@@ -574,16 +553,11 @@ fn open_in_editor(
     Ok(())
 }
 
-/// Open an external file picker and return the selected path(s).
-///
-/// Tries (in order): $SHORE_FILE_PICKER, yazi, fzf. Leaves the alternate
-/// screen while the picker runs so it can draw freely.
 fn pick_image(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     start_dir: Option<&str>,
 ) -> io::Result<Vec<String>> {
     let chooser_file = std::env::temp_dir().join("shore_image_pick");
-    // Remove stale chooser file
     let _ = std::fs::remove_file(&chooser_file);
 
     let start = start_dir.unwrap_or(".");
@@ -605,7 +579,6 @@ fn pick_image(
 
     match result {
         Some(true) => {
-            // Read selected path(s) from chooser file
             if let Ok(contents) = std::fs::read_to_string(&chooser_file) {
                 let paths: Vec<String> = contents
                     .lines()
@@ -617,9 +590,8 @@ fn pick_image(
                 Ok(vec![])
             }
         }
-        Some(false) => Ok(vec![]), // picker ran but user cancelled
+        Some(false) => Ok(vec![]),
         None => {
-            // No picker found — print hint to stderr before restoring screen
             Err(io::Error::new(
                 io::ErrorKind::NotFound,
                 "no file picker found (install yazi or fzf)",
@@ -628,8 +600,6 @@ fn pick_image(
     }
 }
 
-/// Try launching yazi. Returns Some(true) on success, Some(false) on
-/// cancel/error, None if yazi is not installed.
 fn try_yazi(chooser_file: &std::path::Path, start: &str) -> Option<bool> {
     let status = std::process::Command::new("yazi")
         .arg(start)
@@ -640,10 +610,7 @@ fn try_yazi(chooser_file: &std::path::Path, start: &str) -> Option<bool> {
     Some(status.success() && chooser_file.exists())
 }
 
-/// Try launching fzf with image-aware preview. Returns Some(true) on
-/// success, Some(false) on cancel, None if fzf is not installed.
 fn try_fzf(chooser_file: &std::path::Path, start: &str) -> Option<bool> {
-    // Build a list of image files and pipe into fzf
     let find = std::process::Command::new("find")
         .arg(start)
         .arg("-type")
@@ -660,7 +627,6 @@ fn try_fzf(chooser_file: &std::path::Path, start: &str) -> Option<bool> {
         .spawn()
         .ok()?;
 
-    // Detect best preview command: chafa > kitty icat > file
     let preview_cmd = if which_exists("chafa") {
         "chafa -s ${FZF_PREVIEW_COLUMNS}x${FZF_PREVIEW_LINES} {}".to_string()
     } else if which_exists("kitty") {
@@ -681,7 +647,6 @@ fn try_fzf(chooser_file: &std::path::Path, start: &str) -> Option<bool> {
     Some(status.success() && chooser_file.exists())
 }
 
-/// Check whether a command exists on PATH.
 fn which_exists(cmd: &str) -> bool {
     std::process::Command::new("which")
         .arg(cmd)
@@ -806,9 +771,6 @@ fn absorb_subagent_traces(app: &mut App, data: &serde_json::Value) {
     app.history_version = app.history_version.wrapping_add(1);
 }
 
-/// Query the daemon for current usage-budget statuses. Cheap to fire on each
-/// connect and after every completed generation, keeping the on-screen usage
-/// chip fresh without waiting for a `UsageWarning` push.
 fn usage_budget_conn_command() -> ConnCommand {
     ConnCommand::Send(ClientMessage::Command(Command {
         rid: None,
@@ -838,7 +800,6 @@ fn apply_redraw_effect(
 ) {
     match effect {
         RedrawEffect::None => {}
-        // Stream chunks are painted by the next stream frame tick.
         RedrawEffect::DeferredStream => *deferred_stream_dirty = true,
         RedrawEffect::Immediate => *needs_redraw = true,
         RedrawEffect::ImmediateFull => {
@@ -865,10 +826,6 @@ async fn process_conn_event(
     );
 }
 
-/// Flatten line breaks and replace control/escape characters so untrusted text
-/// can be safely replayed to the real terminal (e.g. session errors reprinted
-/// to stderr on exit). Without this, embedded ANSI/escape sequences could
-/// rewrite scrollback or spoof terminal output.
 fn sanitize_terminal_text(text: &str) -> String {
     text.chars()
         .map(|ch| match ch {
@@ -928,7 +885,6 @@ async fn handle_action(
         Action::PickImage(start_dir) => {
             match pick_image(terminal, start_dir.as_deref()) {
                 Ok(paths) if paths.is_empty() => {
-                    // User cancelled; the alternate screen was still restored.
                 }
                 Ok(paths) => {
                     let count = paths.len();
@@ -984,7 +940,6 @@ async fn handle_action(
 
 #[instrument(skip(cli, debug))]
 async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
-    // Set up terminal
     enable_raw_mode()?;
     execute!(
         io::stdout(),
@@ -1007,7 +962,6 @@ async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
             ..App::default()
         }
     };
-    // Probe terminal for kitty graphics support (raw mode is now active).
     if !debug.no_image_probe && !fixture_mode {
         app.image_cache.probe_protocol();
     }
@@ -1015,7 +969,6 @@ async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
         load_prefs(&mut app);
     }
 
-    // Spawn connection manager unless an offline fixture is driving the UI.
     let (cmd_tx, mut event_rx) = if fixture_mode {
         let (cmd_tx, _cmd_rx) = tokio::sync::mpsc::channel::<ConnCommand>(16);
         let (_event_tx, event_rx) = tokio::sync::mpsc::channel::<ConnEvent>(1);
@@ -1027,8 +980,6 @@ async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
     let mut terminal_events = EventStream::new();
     let mut stream_frame = tokio::time::interval(STREAM_FRAME_INTERVAL);
     stream_frame.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    // Drives auto-dismissal of notification toasts. Only polled while toasts
-    // are visible (see the guard on its select arm), so it costs nothing idle.
     let mut notif_tick = tokio::time::interval(Duration::from_millis(250));
     notif_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut needs_redraw = true;
@@ -1037,7 +988,6 @@ async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
     let mut conn_events_open = !fixture_mode;
     let mut frame_dump = debug.frame_dump_path.clone().map(FrameDump::new);
 
-    // Main event loop
     let result = loop {
         if needs_redraw {
             if needs_full_redraw {
@@ -1053,16 +1003,12 @@ async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
             deferred_stream_dirty = false;
         }
 
-        // Poll for events (crossterm keyboard or connection events)
         tokio::select! {
             biased;
-            // External SIGINT — safety net if the keyboard loop ever wedges
-            // and in case the user kills us with `kill -INT <pid>`.
             _ = tokio::signal::ctrl_c() => {
                 app.interrupt = true;
                 app.should_quit = true;
             }
-            // Connection events
             conn_event = event_rx.recv(), if conn_events_open => {
                 match conn_event {
                     Some(event) => {
@@ -1123,7 +1069,6 @@ async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
                     }
                 }
             }
-            // Keep progress indicators moving and coalesce high-rate stream chunks.
             _ = stream_frame.tick(), if app.stream.active => {
                 app.spinner_frame = app.spinner_frame.wrapping_add(1);
                 let scheduled_deferred_stream_paint = deferred_stream_dirty;
@@ -1132,7 +1077,6 @@ async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
                     deferred_stream_dirty = false;
                 }
             }
-            // Expire stale notification toasts so they fade on their own.
             _ = notif_tick.tick(), if !app.notifications.is_empty() => {
                 if app.expire_notifications(std::time::Instant::now()) {
                     needs_redraw = true;
@@ -1147,36 +1091,25 @@ async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
 
     info!("TUI exiting");
     if !fixture_mode {
-        // Save preferences and shutdown
         save_prefs(&app);
         let _ = cmd_tx.send(ConnCommand::Shutdown).await;
     }
 
-    // Best-effort cleanup of paste-origin temp files.
     for path in &app.paste_temp_paths {
         let _ = std::fs::remove_file(path);
     }
 
-    // Restore terminal
     execute!(io::stdout(), DisableBracketedPaste, EnableLineWrap)?;
     disable_raw_mode()?;
     execute!(io::stdout(), LeaveAlternateScreen)?;
 
-    // Reprint any errors raised this session to the now-restored normal screen
-    // so they survive in terminal scrollback for copy/paste debugging. They're
-    // also in the log file (`tui.log` under the Shore runtime directory).
     if !app.error_log.is_empty() {
         eprintln!("\n{} error(s) during this session:", app.error_log.len());
         for line in &app.error_log {
-            // error_log holds untrusted daemon/local error text; flatten line
-            // breaks and strip control/escape sequences so embedded codes can't
-            // rewrite scrollback or spoof output on the restored terminal.
             eprintln!("  • {}", sanitize_terminal_text(line));
         }
     }
 
-    // If the user interrupted us (Ctrl+C or external SIGINT), exit with the
-    // conventional 128+SIGINT=130 code so supervisors see it as a real signal.
     if app.interrupt {
         result?;
         std::process::exit(130);
@@ -1205,20 +1138,16 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
             app.effective_sampler = None;
             app.sampler_settings_loading = false;
             app.pending_sampler_settings_rid = None;
-            // Drop any prior session's budgets; the refresh queued below
-            // repopulates them so the chip never shows another session's state.
             app.usage_budgets.clear();
             app.characters = characters.clone();
 
             app.character_name = next_character;
 
-            // Check private flag from config
             if let Some(private) = config.get("private").and_then(|v| v.as_bool()) {
                 app.is_private = private;
             }
             app.set_active_model(config.get("active_model").and_then(|v| v.as_str()));
 
-            // Load any history from the handshake
             rebuild_entries_from_history(app, history, active_start);
             reset_history_paging(app);
             transmit_entry_images(app);
@@ -1238,13 +1167,12 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
 
         ConnEvent::Disconnected(reason) => {
             app.connection_status = ConnectionStatus::Connecting;
-            app.abort_stream(); // discard unconfirmed partial stream content
+            app.abort_stream();
             app.effective_sampler = None;
             app.sampler_settings_loading = false;
             app.pending_sampler_settings_rid = None;
             app.history_page_loading = false;
             app.pending_subagent_trace_ids.clear();
-            // Don't render stale budgets while disconnected/reconnecting.
             app.usage_budgets.clear();
             app.set_status(format!("reconnecting: {reason}"));
             UiEffect::redraw(RedrawEffect::Immediate)
@@ -1254,8 +1182,6 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
     }
 }
 
-/// Build display entries from a history snapshot, inserting the archive
-/// boundary before the first active-context message.
 fn build_history_entries(messages: Vec<Message>, active_start: usize) -> Vec<ConversationEntry> {
     let mut entries = Vec::new();
     let boundary_at = active_start.min(messages.len());
@@ -1279,27 +1205,11 @@ fn build_history_entries(messages: Vec<Message>, active_start: usize) -> Vec<Con
     entries
 }
 
-/// Replace the display log wholesale from a history snapshot. Used when no
-/// stream is in flight (handshake, `:log`).
 fn rebuild_entries_from_history(app: &mut App, messages: Vec<Message>, active_start: usize) {
     app.entries = build_history_entries(messages, active_start);
     splice_subagent_sections(&mut app.entries, &app.subagent_traces);
 }
 
-/// Apply a History snapshot while reconciling the in-flight turn by `msg_id`.
-///
-/// The completed turns come straight from the authoritative snapshot. If a
-/// stream is in flight, the snapshot's trailing assistant turn *is* the
-/// in-flight turn's authoritative form, so it is re-marked `Streaming` (the
-/// header/spinner stay attached) and the metadata summed across earlier
-/// phases is carried forward — snapshot turns arrive metadata-less.
-///
-/// We only ever re-mark the *trailing* entry (or a prior in-flight `msg_id`
-/// match), never an earlier assistant turn: a snapshot that lands before the
-/// new reply is persisted still ends on the user's message, and reopening the
-/// previous completed reply would attach this stream's spinner/metadata to the
-/// wrong turn. When the snapshot has no in-flight turn yet, the renderer's
-/// synthetic streaming header/spinner covers the gap until the next delta.
 fn reconcile_streaming_turn(app: &mut App, messages: Vec<Message>, active_start: usize) {
     let in_flight = app
         .entries
@@ -1315,8 +1225,6 @@ fn reconcile_streaming_turn(app: &mut App, messages: Vec<Message>, active_start:
         return;
     }
 
-    // Prefer the prior in-flight turn by `msg_id`; otherwise re-mark the
-    // trailing entry, but only when it is itself an assistant turn.
     let target_pos = prev_msg_id
         .as_deref()
         .and_then(|id| {
@@ -1344,9 +1252,6 @@ fn reconcile_streaming_turn(app: &mut App, messages: Vec<Message>, active_start:
     splice_subagent_sections(&mut app.entries, &app.subagent_traces);
 }
 
-/// Sum a stream phase's metadata onto an accumulating slot. Tokens and total
-/// time add across phases; the model label tracks the latest phase and
-/// `ttft_ms` is preserved from the first.
 fn accumulate_metadata(slot: &mut Option<StreamMetadata>, incoming: &StreamMetadata) {
     match slot {
         Some(acc) => {
@@ -1498,8 +1403,6 @@ fn blocks_from_content(
                 }
             }
             ContentBlock::RedactedThinking { .. } => {
-                // Carries no readable content; skip rather than render a
-                // useless "[redacted thinking]" placeholder.
             }
             ContentBlock::ToolUse { id, name, input } => {
                 blocks.push(Block::ToolUse {
@@ -1568,7 +1471,6 @@ fn expand_msg(msg: Message, entries: &mut Vec<ConversationEntry>) {
     }));
 }
 
-/// Max display cells for images: 80% terminal width (minus indent), 50% terminal height.
 fn image_max_cells() -> (u16, u16) {
     let (w, h) = crossterm::terminal::size().unwrap_or((80, 24));
     let max_cols = (w * 80 / 100).saturating_sub(4).max(1);
@@ -1576,8 +1478,6 @@ fn image_max_cells() -> (u16, u16) {
     (max_cols, max_rows)
 }
 
-/// Transmit images from conversation entries to kitty.
-/// Prefers embedded base64 data; falls back to reading from path.
 fn transmit_entry_images(app: &mut App) {
     let (max_cols, max_rows) = image_max_cells();
     for entry in &app.entries {
@@ -1590,7 +1490,6 @@ fn transmit_entry_images(app: &mut App) {
     }
 }
 
-/// Transmit a single ImageRef: prefer embedded data, fall back to path.
 fn transmit_image_ref(
     cache: &mut images::ImageCache,
     img: &shore_common::protocol::types::ImageRef,
@@ -1604,14 +1503,6 @@ fn transmit_image_ref(
     }
 }
 
-/// The switch-ready identifier for a `list_models` row — what completion
-/// inserts and `switch_model` receives. The daemon's `qualified_name` is
-/// canonical and never ambiguous (`chat.<provider>.<name>` for static
-/// entries, `provider:model_id` for discovered ones); a bare `name` is not —
-/// two providers can expose the same upstream id (e.g.
-/// `deepseek:deepseek-v4-pro` vs `opencode-go:deepseek-v4-pro`), which the
-/// daemon rejects as ambiguous. Compose `provider:model_id`, then fall back
-/// to the bare name, for daemons that omit `qualified_name`.
 fn model_switch_name(model: &serde_json::Value) -> Option<String> {
     if let Some(qualified) = model.get("qualified_name").and_then(|v| v.as_str()) {
         return Some(qualified.to_string());
@@ -1643,9 +1534,6 @@ fn active_model_candidate_name(active: &str, model: &serde_json::Value) -> Optio
         }
     }
 
-    // Return the switch name, not the bare `name`: these strings become
-    // `active_model_names` match keys, and a bare key would mark every
-    // provider's copy of a shared upstream id as active.
     identifiers
         .into_iter()
         .any(|identifier| App::model_identifier_matches(active, identifier))
@@ -1654,12 +1542,6 @@ fn active_model_candidate_name(active: &str, model: &serde_json::Value) -> Optio
 }
 
 pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffect {
-    // Open/close the nested sub-agent section before the content is handled, so
-    // the marker brackets land in the right spot among the streamed blocks
-    // (mirrors the CLI's pre-dispatch bracketing). Only the frame types that can
-    // carry the tag drive the section — an interleaved `Phase`/`Error`/etc.
-    // reads `subagent() == None` because it simply lacks the field, and must not
-    // be mistaken for a return to the primary model and close the section.
     if matches!(
         msg,
         ServerMessage::StreamStart(_)
@@ -1674,8 +1556,6 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
 
     let redraw = match msg {
         ServerMessage::StreamStart(start) => {
-            // A sub-agent's own stream boundary must not reset or regen the
-            // primary turn — it's nested activity inside an in-flight tool loop.
             if start.subagent.is_some() {
                 app.spinner_frame = 0;
                 return UiEffect::redraw(RedrawEffect::Immediate);
@@ -1687,9 +1567,6 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 app.stream.reset();
                 app.stream.active = true;
             } else {
-                // Continuation within a multi-phase (tool-use) turn — the
-                // in-flight `Streaming` turn (with its committed thinking/tool
-                // blocks) stays in place and keeps accumulating.
                 app.stream.phase = "responding".into();
                 app.stream.tool_name = None;
             }
@@ -1697,9 +1574,6 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         }
 
         ServerMessage::StreamChunk(chunk) => {
-            // Deltas are appended straight into `app.entries`, so the live view
-            // is the same ordered list the finalized turn renders from — no
-            // parallel buffer to reconcile.
             if chunk.content_type == "thinking" {
                 app.stream_append_thinking(&chunk.text);
                 app.stream.phase = "thinking".into();
@@ -1714,9 +1588,6 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         }
 
         ServerMessage::StreamEnd(end) => {
-            // A sub-agent's stream boundary never ends the primary generation;
-            // its section stays open (the next untagged frame closes it via
-            // `sync_subagent_section`). Skip all turn-finalization here.
             if end.subagent.is_some() {
                 return UiEffect::redraw(RedrawEffect::Immediate);
             }
@@ -1732,10 +1603,6 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
 
             let final_phase = end.finish_reason != "tool_use";
 
-            // Locate the turn to finalize: prefer an authoritative `msg_id`
-            // match (criterion #3), else the trailing in-flight `Streaming`
-            // turn — opened by the deltas or re-marked Streaming on the
-            // authoritative turn by `reconcile_streaming_turn`.
             let target_pos = end
                 .msg_id
                 .as_deref()
@@ -1755,18 +1622,11 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
 
             match target_pos.and_then(|pos| app.entries[pos].as_turn_mut()) {
                 Some(turn) => {
-                    // Sum this phase's metadata onto the turn (multi-phase
-                    // tool-use turns accumulate across phases; carried across
-                    // History reconciles by `reconcile_streaming_turn`).
                     accumulate_metadata(&mut turn.metadata, &end.metadata);
                     if turn.msg_id.is_none() {
                         turn.msg_id = end.msg_id.clone();
                     }
                     if final_phase {
-                        // Fallback when no authoritative History snapshot
-                        // supplied text: adopt the closing phase's content so
-                        // the turn isn't left textless. A no-op on the normal
-                        // path (History already populated the text blocks).
                         if !end.content.is_empty()
                             && !turn.blocks.iter().any(|b| matches!(b, Block::Text(_)))
                         {
@@ -1776,9 +1636,6 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     }
                 }
                 None if final_phase => {
-                    // No matching or in-flight turn (e.g. a msg_id absent from
-                    // the local log). Push a turn so the user isn't left with a
-                    // blank reply rather than annotating the wrong turn.
                     let mut metadata = None;
                     accumulate_metadata(&mut metadata, &end.metadata);
                     app.entries.push(ConversationEntry::Turn(Turn::text(
@@ -1791,8 +1648,6 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     )));
                 }
                 None => {
-                    // Tool-use phase boundary before any content streamed: open
-                    // the in-flight turn so its metadata has a home.
                     let turn = app.ensure_streaming_turn();
                     accumulate_metadata(&mut turn.metadata, &end.metadata);
                     if turn.msg_id.is_none() {
@@ -1809,15 +1664,11 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 if keep_bottom {
                     app.scroll_to_bottom();
                 }
-                // Spend just changed — refresh the usage chip from the daemon.
                 return UiEffect {
                     cmds: vec![usage_budget_conn_command()],
                     redraw: RedrawEffect::ImmediateFull,
                 };
             } else {
-                // Tool-use phase boundary: keep the turn Streaming. Its thinking
-                // and pre-tool text are already blocks, interleaved in order —
-                // no drop, no single-header workaround.
                 app.stream.phase = "tool_use".into();
                 app.stream.tool_name = None;
                 RedrawEffect::Immediate
@@ -1978,8 +1829,6 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 }
                 "list_models" => {
                     if let Some(models) = co.data.get("models").and_then(|v| v.as_array()) {
-                        // Cache switch-ready identifiers for tab completion —
-                        // bare names collide when providers share an upstream id.
                         app.model_names = models.iter().filter_map(model_switch_name).collect();
                         let active = co
                             .data
@@ -2007,7 +1856,6 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                             return UiEffect::redraw(RedrawEffect::Immediate);
                         }
 
-                        // Only show the list if the user explicitly requested it
                         if app.show_model_list {
                             app.show_model_list = false;
                             let hidden_count = co
@@ -2026,10 +1874,6 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                                     let n = m.get("name").and_then(|v| v.as_str()).unwrap_or("?");
                                     let provider =
                                         m.get("provider").and_then(|v| v.as_str()).unwrap_or("?");
-                                    // Show the provider-qualified upstream identity on
-                                    // every row: it keeps same-named models from
-                                    // different providers tellable apart, in the form
-                                    // `switch_model` accepts.
                                     let qualified = match m.get("model_id").and_then(|v| v.as_str())
                                     {
                                         Some(model_id) => format!("{provider}:{model_id}"),
@@ -2039,9 +1883,6 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                                         m.get("source").and_then(|v| v.as_str()).unwrap_or("");
                                     let hidden =
                                         m.get("hidden").and_then(|v| v.as_bool()).unwrap_or(false);
-                                    // Match on the switch name rather than the bare
-                                    // name so only the active provider's copy of a
-                                    // shared upstream id gets the marker.
                                     let marker = if model_switch_name(m)
                                         .is_some_and(|s| app.is_active_model_candidate(&s))
                                     {
@@ -2082,35 +1923,12 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     let pending_response = app.sampler_settings_rid_matches(co.rid.as_deref());
                     let snapshot = EffectiveSamplerSnapshot::from_model_settings(&co.data);
                     if pending_response {
-                        // Response to our own `:setting` request. We send it
-                        // with empty args, so the daemon resolves against its
-                        // own session active — that response is authoritative
-                        // for the model our next message will use. A matching
-                        // rid also guarantees no model switch intervened (a
-                        // switch clears the pending rid, orphaning the stale
-                        // response handled below). So trust the snapshot rather
-                        // than re-checking it against `app.model`, which is
-                        // often a surface form (e.g. the bare upstream id from
-                        // StreamEnd metadata) the match heuristic can't line up
-                        // with the daemon's label — the source of the
-                        // intermittent "sampler settings unavailable" flashes.
                         app.finish_sampler_settings_refresh();
                         if let Some(snapshot) = snapshot {
-                            // Remember the daemon's identifiers so later
-                            // unsolicited pushes / the model-list marker still
-                            // recognise this model without disturbing the
-                            // resolver-friendly `app.model`.
                             app.note_active_model_from_snapshot(&snapshot);
                             app.effective_sampler = Some(snapshot);
                         }
-                        // A response that carried no `effective_sampler` leaves
-                        // the previous snapshot in place rather than wiping it.
                     } else if co.rid.is_none() {
-                        // Rid-less response (the daemon doesn't always echo our
-                        // rid, and may also push proactively). We can't pin it
-                        // to a request, so only adopt it if it matches the model
-                        // we believe is active — a push for some other model
-                        // must not clobber our view.
                         if let Some(snapshot) = snapshot
                             .filter(|snapshot| app.sampler_snapshot_matches_active_model(snapshot))
                         {
@@ -2119,19 +1937,11 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                             app.effective_sampler = Some(snapshot);
                         }
                     }
-                    // A stale response (non-matching rid) is orphaned by a model
-                    // switch that was in flight — ignore it entirely so it can't
-                    // wipe a still-valid snapshot.
                     if app.is_setting_palette_open() {
                         app.update_completions();
                     }
                 }
                 "switch_model" => {
-                    // Daemon returns `active` (the user-supplied alias) and
-                    // `qualified_name` (provider/model_id). Prefer the
-                    // qualified name for the displayed status because
-                    // discovered models often only resolve under their
-                    // upstream id.
                     let name = co
                         .data
                         .get("active")
@@ -2244,8 +2054,6 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     app.set_status(format!("{}: {status}", co.name));
                 }
                 "usage" => {
-                    // Background budget poll — refresh the chip silently, no
-                    // conversation entry.
                     app.apply_usage_budgets(&co.data);
                 }
                 _ => {
@@ -2278,8 +2086,6 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         }
 
         ServerMessage::ConfigWarning(cw) => {
-            // The daemon is still running the last config that loaded, so this
-            // is the only sign the file on screen is not the one in effect.
             let what = cw.character.as_deref().unwrap_or("config");
             app.set_warning(format!("{what}: {} not applied — {}", cw.path, cw.message));
             RedrawEffect::Immediate
@@ -2292,9 +2098,6 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
 
         ServerMessage::UsageWarning(w) => {
             if app.usage_display != UsageDisplay::Off {
-                // Monitor is active: fold the warning into the chip (which
-                // escalates its color, and in warn-only mode reveals it)
-                // instead of pushing a notification.
                 let scope = if w.scope.as_deref() == Some("pace") {
                     UsageScope::Pace
                 } else {
@@ -2310,8 +2113,6 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     },
                 );
             } else {
-                // Monitor hidden: fall back to the notification so the user is
-                // never left without a signal.
                 app.set_warning(w.message.clone());
             }
             RedrawEffect::Immediate
@@ -2326,13 +2127,9 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             if let Some(selected) = hist.selected_character {
                 app.character_name = selected;
             }
-            // Re-sync history, preserving any in-flight streaming turn.
             app.image_cache.clear();
             reconcile_streaming_turn(app, hist.messages, hist.active_start);
             reset_history_paging(app);
-            // Bump so the conv-cache fingerprint changes even when the
-            // entry count and last-two summaries collide with the prior
-            // value (e.g. :edit on an earlier message).
             app.history_version = app.history_version.wrapping_add(1);
             transmit_entry_images(app);
             return UiEffect {
@@ -2341,7 +2138,6 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             };
         }
 
-        // Ignore unexpected messages
         _ => RedrawEffect::Immediate,
     };
     UiEffect::redraw(redraw)
@@ -2368,9 +2164,6 @@ mod redraw_tests {
         unsafe { std::env::remove_var(key) }
     }
 
-    /// A switch made here has to outlive the process, the way the CLI's does.
-    /// Issue #72: the TUI moved `character_name` and nothing else, so quitting
-    /// and restarting came back on whatever the CLI last wrote.
     #[test]
     fn a_switch_is_persisted_for_the_next_client() {
         let tmp = tempfile::TempDir::new().unwrap();
@@ -2396,8 +2189,6 @@ mod redraw_tests {
             );
             assert_eq!(resolve_character(None).as_deref(), Some("poppy"));
 
-            // An explicit --character stays terminal-local: it wins here and
-            // is never written back over the shared selection.
             assert_eq!(
                 resolve_character(Some("Yuna".into())).as_deref(),
                 Some("Yuna")
@@ -2413,8 +2204,6 @@ mod redraw_tests {
 
     #[test]
     fn sanitize_terminal_text_strips_escapes_and_flattens_lines() {
-        // Embedded escape sequence and newline payload that would otherwise
-        // rewrite scrollback when replayed to the real terminal.
         let dirty = "error\x1b[2Jspoofed\nsecond line\twith tab";
         let clean = sanitize_terminal_text(dirty);
         assert!(!clean.contains('\x1b'), "escape byte stripped");
@@ -2804,7 +2593,7 @@ mod redraw_tests {
 
     #[test]
     fn usage_warning_notifies_when_monitor_hidden() {
-        let mut app = App::default(); // usage_display defaults to Off
+        let mut app = App::default();
 
         let _ = handle_server_message(&mut app, usage_warning(0.82));
 
@@ -2882,14 +2671,11 @@ mod redraw_tests {
 
         assert_eq!(system_entry_count(&app), 0, "background poll is silent");
         assert_eq!(app.usage_budgets.len(), 2);
-        // The most-urgent (highest percent) budget is what the chip surfaces.
         assert_eq!(app.focused_budget().unwrap().name, "monthly");
     }
 
     #[test]
     fn budget_pace_outranks_a_cooler_period_cap() {
-        // Only a fifth into the week, but today's allowance is blown: the pace
-        // is the binding constraint, so it's what the chip reports.
         let mut app = App::default();
 
         let _ = handle_server_message(
@@ -2926,10 +2712,6 @@ mod redraw_tests {
 
     #[test]
     fn a_warning_pace_outranks_a_hotter_but_calm_cap() {
-        // `warn_at = [0.8]`, `pace_warn_at = [0.5]`: the 60% week has crossed
-        // nothing, the 55% pace has. Ranking on raw percent alone would pick
-        // the cap and silently swallow the pace warning — no yellow chip, and
-        // nothing shown at all in warn-only visibility mode.
         let mut app = App::default();
 
         let _ = handle_server_message(
@@ -2970,8 +2752,6 @@ mod redraw_tests {
 
     #[test]
     fn pace_warning_push_does_not_clobber_the_cached_cap() {
-        // Budget and pace warn independently, so folding one push in must
-        // leave the other scope's cached figures alone.
         let mut app = App {
             usage_budgets: vec![UsageBudget {
                 name: "weekly".into(),
@@ -3044,9 +2824,6 @@ mod redraw_tests {
         }));
     }
 
-    /// Two providers exposing the same upstream id must yield distinct,
-    /// provider-qualified completion entries — switching by the bare name
-    /// is rejected by the daemon as ambiguous.
     #[test]
     fn list_models_caches_provider_qualified_switch_names() {
         let mut app = App {
@@ -3084,7 +2861,6 @@ mod redraw_tests {
             app.model_names,
             vec!["deepseek:deepseek-v4-pro", "opencode-go:deepseek-v4-pro"]
         );
-        // The printed list shows the provider-qualified identity per row.
         let listing = app
             .entries
             .iter()
@@ -3286,11 +3062,6 @@ mod redraw_tests {
 
     #[test]
     fn pending_model_settings_response_is_trusted_even_for_drifted_model_label() {
-        // We request `:setting` with empty args, so the daemon resolves
-        // against its own session active. A matching rid means no model
-        // switch intervened, so even if the label differs from the surface
-        // form we track (`chat.test.current`), the response is authoritative.
-        // It must be adopted rather than discarded into "unavailable".
         let mut app = App::default();
         app.set_active_model(Some("chat.test.current"));
         let rid = app.begin_sampler_settings_refresh();
@@ -3320,17 +3091,11 @@ mod redraw_tests {
                 .and_then(|snapshot| snapshot.display_value("temperature")),
             Some("0.7")
         );
-        // The daemon's label is registered as a match key for later pushes.
         assert!(app.is_active_model_candidate("chat.test.previous"));
     }
 
     #[test]
     fn pending_model_settings_response_adopts_daemons_current_model() {
-        // Our pending request (matching rid) comes back labelled for a
-        // different model than the surface form we track. Because the request
-        // carried empty args, the daemon resolved against its own session
-        // active — that is now the model our next message will use, so we
-        // adopt its fresh values instead of clinging to the stale snapshot.
         let mut app = App::default();
         app.set_active_model(Some("chat.test.current"));
         app.effective_sampler = Some(EffectiveSamplerSnapshot {
@@ -3369,10 +3134,6 @@ mod redraw_tests {
 
     #[test]
     fn orphaned_model_settings_response_does_not_wipe_effective_sampler() {
-        // Reproduces the intermittent "sampler settings unavailable" bug:
-        // a model_settings response orphaned by a model switch in flight
-        // arrives with a stale rid. It must not be treated as our own
-        // response and clear an otherwise-valid `effective_sampler`.
         let mut app = App::default();
         app.set_active_model(Some("chat.test.current"));
         app.effective_sampler = Some(EffectiveSamplerSnapshot {

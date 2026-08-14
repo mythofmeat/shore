@@ -28,15 +28,12 @@ pub(crate) struct Cli {
     pub command: CliCommand,
 }
 
-/// The flags that only parse ahead of the command name: how they can be
-/// spelled, and what to call each one when saying so.
 const LEADING_FLAGS: [(&str, &str); 3] = [
     ("--character", "--character"),
     ("-c", "--character"),
     ("--addr", "--addr"),
 ];
 
-/// Flags that used to exist and now have one obvious replacement each.
 const RETIRED_FLAGS: [(&str, &str); 8] = [
     (
         "--config",
@@ -63,21 +60,12 @@ const RETIRED_FLAGS: [(&str, &str); 8] = [
     ("-g", GUIDANCE_WAS_NEVER_READ),
 ];
 
-/// The daemon decoded `guidance` off the wire and built the generation body
-/// without it — in this daemon and in the Rust one before it. Naming a
-/// replacement would be wrong; there was never a behaviour to replace.
 const GUIDANCE_WAS_NEVER_READ: &str = "it never reached the model, so `shore regen` is the same call";
 
-/// The commands that used to take a bare name and now want `use`.
 const NAMED_BY_USE: [&str; 2] = ["model", "character"];
 
-/// Subcommands that grew up into commands of their own: where they used to
-/// live, and what they are called now.
 const PROMOTED: [(&str, &str); 1] = [("memory compact", "compact")];
 
-/// Flags retired from one command while still live on another, so they cannot
-/// be matched by spelling alone the way `--temperature` was. `--reset` left
-/// `config` but still clears a saved value under `model setting`.
 const RETIRED_UNDER: [(&str, &str, &str); 1] = [(
     "config",
     "--reset",
@@ -86,13 +74,9 @@ const RETIRED_UNDER: [(&str, &str, &str); 1] = [(
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum FlagProblem {
-    /// A leading flag written after the command name.
     Misplaced(&'static str),
-    /// A flag that no longer exists, and what to reach for instead.
     Retired(&'static str, &'static str),
-    /// `shore model opus`, which is now `shore model use opus`.
     BareName(&'static str, String),
-    /// `shore memory compact`, which is now `shore compact`.
     Promoted(&'static str, &'static str),
 }
 
@@ -110,15 +94,6 @@ fn retired_flag_named(spelled: &str) -> Option<FlagProblem> {
         .map(|&(name, instead)| FlagProblem::Retired(name, instead))
 }
 
-/// Read the raw arguments for a flag written where it cannot work.
-///
-/// This runs ahead of clap because clap cannot say either of these things
-/// well. For a leading flag written late it emits "unexpected argument",
-/// whose did-you-mean tip sends you hunting a typo you did not make — and
-/// worse, `log` and `alt` take message references that are allowed to start
-/// with a hyphen, so `shore log --character ada` parses clean and asks the
-/// daemon for a message named `--character`. For a retired flag it has
-/// nothing at all to say, having never heard of it.
 pub(crate) fn flag_problem<I, S>(argv: I) -> Option<FlagProblem>
 where
     I: IntoIterator<Item = S>,
@@ -162,9 +137,6 @@ where
         .or_else(|| bare_name(&words, flagged))
 }
 
-/// A flag retired from the command it is written under. Matched on the pair
-/// rather than the spelling, so `shore model setting --reset temperature`,
-/// where the flag still means something, is left alone.
 fn retired_under(words: &[String], flags: &[String]) -> Option<FlagProblem> {
     let command = words.first()?;
     RETIRED_UNDER
@@ -173,9 +145,6 @@ fn retired_under(words: &[String], flags: &[String]) -> Option<FlagProblem> {
         .map(|&(_, flag, instead)| FlagProblem::Retired(flag, instead))
 }
 
-/// `shore memory compact` used to fold the conversation into memory. With
-/// `memory` itself gone, clap has nothing to say beyond "unrecognized
-/// subcommand", which does not mention where compaction went.
 fn promoted(words: &[String]) -> Option<FlagProblem> {
     let command = words.first()?;
     let sub = words.get(1)?;
@@ -186,17 +155,6 @@ fn promoted(words: &[String]) -> Option<FlagProblem> {
         .map(|&(old, now)| FlagProblem::Promoted(old, now))
 }
 
-/// `shore model opus` switched models and `shore character qifei` switched
-/// characters. Both are `use` now.
-///
-/// The bare name shared a tab-completion list with the subcommand names, so
-/// pressing tab after `shore model` offered `opus` and `setting` in one
-/// undifferentiated list with no way to tell which kind of thing you were
-/// picking. Clap answers the retired spelling with "unrecognized subcommand",
-/// which describes the parser's problem rather than the user's.
-///
-/// Silent when any flag is in play: `shore model --info opus` is a different
-/// request and pointing it at `use` would be wrong.
 fn bare_name(words: &[String], flagged: bool) -> Option<FlagProblem> {
     if flagged {
         return None;
@@ -213,8 +171,6 @@ fn bare_name(words: &[String], flagged: bool) -> Option<FlagProblem> {
     Some(FlagProblem::BareName(known, name.clone()))
 }
 
-/// Whether `word` names a subcommand of `command`. Asked of clap rather than
-/// listed here, so adding a subcommand cannot make this start misreporting it.
 fn names_a_subcommand(command: &str, word: &str) -> bool {
     use clap::CommandFactory;
     Cli::command()
@@ -250,11 +206,6 @@ pub(crate) fn report_flag_problem(problem: &FlagProblem) -> std::process::ExitCo
     std::process::ExitCode::FAILURE
 }
 
-/// A message reference — `last`, `-1`, `3`, a message ID.
-///
-/// Hyphens are legal here so `-1` reaches the daemon instead of being read as
-/// a flag, which is exactly why a mistyped flag would otherwise sail through
-/// as the name of a message.
 fn message_ref(raw: &str) -> Result<String, String> {
     if raw.starts_with("--") {
         Err(format!("'{raw}' is not a message reference"))
@@ -960,12 +911,6 @@ fn pairs_object(pairs: &[(String, String)]) -> serde_json::Value {
     )
 }
 
-/// Generate and print shell completions to stdout.
-///
-/// For fish we append dynamic completion lines that shell out to the
-/// hidden `shore __complete` helper, so `shore model <TAB>` and
-/// `shore character <TAB>` expand to the daemon's live lists instead
-/// of leaving the positional argument uncompleted.
 pub(crate) fn print_completions(shell: Shell) {
     use clap::CommandFactory;
     let mut generated: Vec<u8> = Vec::new();
@@ -979,9 +924,6 @@ pub(crate) fn print_completions(shell: Shell) {
 
 const INTERNAL_HELPER_HELP: &str = "Emit plain names for shell completion helpers (internal)";
 
-/// How a retired-but-working flag describes itself. `hide = true` keeps those
-/// out of `--help`, but clap_complete emits them regardless, so tab-completion
-/// would keep teaching the spelling the help no longer documents.
 const SUPERSEDED_HELP: &str = "Superseded by";
 
 pub(crate) fn suppress_noise_completions(shell: Shell, script: &str) -> String {
@@ -1000,14 +942,7 @@ pub(crate) fn suppress_noise_completions(shell: Shell, script: &str) -> String {
     out
 }
 
-/// Fish completions for the positional `name` arguments of `shore model`,
-/// `shore character`, and `shore provider {models,refresh}`. Kept as a
-/// plain string so unit tests can assert exact content without depending
-/// on the clap-generated output above.
 pub(crate) fn fish_dynamic_completions_footer() -> &'static str {
-    // `shore complete <kind> 2>/dev/null` swallows daemon-down errors so
-    // fish silently falls back to no suggestions rather than printing a
-    // wall of error messages at every tab press.
     "\n\
 # ── Dynamic completions (populated by the daemon) ────────────────────\n\
 complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from use info\" -f -a \"(shore complete models 2>/dev/null)\"\n\
@@ -1015,25 +950,6 @@ complete -c shore -n \"__fish_shore_using_subcommand character; and __fish_seen_
 complete -c shore -n \"__fish_shore_using_subcommand provider; and __fish_seen_subcommand_from models refresh\" -f -a \"(shore complete providers 2>/dev/null)\"\n"
 }
 
-/// Parse a CLI-supplied sampler value into the JSON shape the daemon
-/// expects. The daemon validates types per-key, so this only needs to
-/// decide between number/bool/string/null without losing information.
-///
-/// - `reasoning_effort`: pass through as a string. Synonyms for
-///   "disable" ("none"/"disable"/"disabled"/"unset"/"") collapse to the
-///   sentinel "off"; the daemon's overlay then explicitly suppresses
-///   `reasoning_effort` on the resolved model. JSON null is reserved
-///   for *clearing* a saved preference (handled by `unset` flows).
-/// - `replay_prior_thinking` (#191). The strings "all"/"none" pass through
-///   verbatim (as does the retired "last_turn", which the daemon reads as
-///   "all"); the legacy bool words
-///   "true"/"yes"/"on" (→ all) and "false"/"no"/"off" (→ none) still coerce to
-///   a bool the daemon maps for back-compat.
-/// - `temperature`, `top_p`: parse as f64.
-/// - `budget_tokens`, `max_output_tokens`, `max_tool_iterations`: parse as
-///   integer.
-/// - `cache_ttl`, `cache_keepalive`: pass through as a string (the daemon
-///   parses `cache_keepalive`'s `off`/duration domain).
 fn parse_setting_value(key: &str, raw: &str) -> serde_json::Value {
     use serde_json::Value;
     let trimmed = raw.trim();
@@ -1060,12 +976,8 @@ fn parse_setting_value(key: &str, raw: &str) -> serde_json::Value {
             "off" | "none" | "disable" | "disabled" | "unset" | "" => Value::String("off".into()),
             _ => Value::String(trimmed.to_owned()),
         },
-        // `openrouter_provider` is a routing object — accept a JSON object string
-        // (e.g. `{"order":["Anthropic"]}`); fall through to a string otherwise so
-        // the daemon reports a clear type error.
         "openrouter_provider" => serde_json::from_str::<Value>(trimmed)
             .unwrap_or_else(|_| Value::String(trimmed.to_owned())),
-        // Any unknown key: raw string.
         _ => Value::String(trimmed.to_owned()),
     }
 }
@@ -1094,17 +1006,12 @@ pub(crate) fn alt_command_to_swp(
     }
 }
 
-/// Map a CLI command to its SWP command name and JSON args.
-///
-/// Returns `None` for `Send` and `Regen` which use dedicated SWP message types
-/// rather than the generic `command` type.
 pub(crate) fn to_swp_command(
     cmd: &CliCommand,
     character: Option<&str>,
 ) -> Option<(&'static str, serde_json::Value)> {
     use serde_json::json;
     match cmd {
-        // These use dedicated SWP message types or are handled locally.
         CliCommand::Send { system: false, .. }
         | CliCommand::Regen { .. }
         | CliCommand::Completions { .. }
@@ -1129,7 +1036,6 @@ pub(crate) fn to_swp_command(
             selector, msg_ref, ..
         } => Some(alt_command_to_swp(selector.as_deref(), msg_ref.as_deref())),
 
-        // Character: list/switch/new handled locally, info goes to daemon.
         CliCommand::Character {
             subcommand: Some(CharacterCommand::Info),
             ..
@@ -1138,17 +1044,14 @@ pub(crate) fn to_swp_command(
             if *info {
                 Some(("character_info", json!({ "name": "" })))
             } else {
-                // list, switch, and new are handled in run.rs
                 None
             }
         }
 
-        // Log: subcommands (edit/delete), single message ref, or list.
         CliCommand::Log { .. } => log_to_swp(cmd),
         CliCommand::Trace { subcommand: None } => None,
         CliCommand::Trace { .. } => trace_to_swp(cmd),
 
-        // Status: diagnostics mode or normal status.
         CliCommand::Status {
             diagnostics: true,
             count,
@@ -1210,9 +1113,6 @@ pub(crate) fn to_swp_command(
     }
 }
 
-/// `log` subcommands (edit/delete), single message ref, the heartbeat
-/// transcript, the heartbeat event timeline, raw call payloads, or the message
-/// list.
 fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     use serde_json::{Map, Value, json};
     let CliCommand::Log {
@@ -1255,7 +1155,6 @@ fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     Some(("log", Value::Object(args)))
 }
 
-/// The observability views: raw call payloads, heartbeat activity, sub-agent runs.
 fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     use serde_json::{Map, Value, json};
     let CliCommand::Trace {
@@ -1310,7 +1209,6 @@ fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     }
 }
 
-/// `model` setting (show/set/clear) or model list/switch/info/reset.
 fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     use serde_json::{Map, Value, json};
     let CliCommand::Model {
@@ -1346,12 +1244,6 @@ fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         ..
     }) = subcommand
     {
-        // No key → show current effective sampler. With a key:
-        // value=Some → set; --reset → clear; otherwise → show one.
-        // The CLI dispatch in run.rs is what actually picks the
-        // right daemon command per case; keep this mapping aligned
-        // with the "show" path (model_settings). `--background <purpose>`
-        // retargets the read/write at that task's model via background_task.
         let scope = if *global { "global" } else { "character" };
         let bg = setting_background.map(BackgroundTarget::as_str);
         let with_bg = |mut obj: Map<String, Value>| -> Value {
@@ -1396,7 +1288,6 @@ fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     Some(("list_models", Value::Object(args)))
 }
 
-/// `provider` models listing / refresh, or provider listing.
 fn provider_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     use serde_json::json;
     let CliCommand::Provider { subcommand, .. } = cmd else {
@@ -1417,8 +1308,6 @@ fn provider_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)
     }
 }
 
-/// `compact`, with the turn count left off when it was not given so the
-/// daemon applies its own default.
 fn compact_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     use serde_json::{Map, Value, json};
     let CliCommand::Compact { keep_turns, .. } = cmd else {
@@ -1431,7 +1320,6 @@ fn compact_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)>
     Some(("compact", Value::Object(args)))
 }
 
-/// `usage` query with grouping / filter / export flags.
 fn usage_to_swp(
     cmd: &CliCommand,
     selected: Option<&str>,
@@ -1493,8 +1381,6 @@ fn usage_to_swp(
     ))
 }
 
-// ── Tests ────────────────────────────────────────────────────────────────
-
 #[cfg(test)]
 mod tests {
     use clap::Parser;
@@ -1510,7 +1396,6 @@ mod tests {
         }};
     }
 
-    /// Helper: parse a command line into a Cli.
     fn parse(args: &[&str]) -> Cli {
         let mut full = vec!["shore"];
         full.extend_from_slice(args);
@@ -1520,8 +1405,6 @@ mod tests {
     fn arg<'val>(args: &'val serde_json::Value, key: &str) -> &'val serde_json::Value {
         args.get(key).expect("expected command argument")
     }
-
-    // ── Send ─────────────────────────────────────────────────────────
 
     #[test]
     fn parse_send() {
@@ -1565,17 +1448,11 @@ mod tests {
         );
     }
 
-    // ── Regen ────────────────────────────────────────────────────────
-
     #[test]
     fn parse_regen() {
         assert_variant!(&parse(&["regen"]).command, CliCommand::Regen => {});
     }
 
-    /// `--guidance` reached the daemon, which decoded it and dropped it on the
-    /// floor — no daemon ever read the field, in this port or the Rust one it
-    /// replaced. It is retired rather than implemented, and the message says
-    /// so instead of naming a replacement that never existed.
     #[test]
     fn regen_guidance_no_longer_parses() {
         for flag in ["--guidance", "-g"] {
@@ -1590,8 +1467,6 @@ mod tests {
             clap::error::ErrorKind::UnknownArgument
         );
     }
-
-    // ── Alt ──────────────────────────────────────────────────────────
 
     #[test]
     fn parse_alt_defaults_to_list() {
@@ -1626,8 +1501,6 @@ mod tests {
             }
         );
     }
-
-    // ── Log ──────────────────────────────────────────────────────────
 
     #[test]
     fn parse_log_default() {
@@ -1823,8 +1696,6 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // ── Character ────────────────────────────────────────────────────
-
     #[test]
     fn parse_character_list() {
         let cli = parse(&["character"]);
@@ -1884,8 +1755,6 @@ mod tests {
         );
     }
 
-    // ── Status ───────────────────────────────────────────────────────
-
     #[test]
     fn parse_status() {
         let cli = parse(&["status"]);
@@ -1930,8 +1799,6 @@ mod tests {
         );
     }
 
-    // ── Debug ────────────────────────────────────────────────────────
-
     #[test]
     fn parse_debug_tick_now() {
         let cli = parse(&["debug", "heartbeat_tick_now"]);
@@ -1964,8 +1831,6 @@ mod tests {
             } => {}
         );
     }
-
-    // ── Model ────────────────────────────────────────────────────────
 
     #[test]
     fn parse_model_list() {
@@ -2095,8 +1960,6 @@ mod tests {
         );
     }
 
-    // ── Provider ─────────────────────────────────────────────────────
-
     #[test]
     fn parse_provider_list() {
         let cli = parse(&["provider"]);
@@ -2157,9 +2020,6 @@ mod tests {
         );
     }
 
-    // ── Compact ──────────────────────────────────────────────────────
-
-    /// `compact` used to live under `memory`, which is gone.
     #[test]
     fn parse_compact() {
         for (args, expected) in [
@@ -2177,8 +2037,6 @@ mod tests {
         }
     }
 
-    /// With `memory` itself gone, clap answers the old spelling with a bare
-    /// "unrecognized subcommand 'memory'" and no hint about compaction.
     #[test]
     fn compact_is_no_longer_under_memory() {
         for args in [&["memory", "compact"][..], &["memory", "compact", "8"][..]] {
@@ -2189,8 +2047,6 @@ mod tests {
             );
         }
     }
-
-    // ── Config ───────────────────────────────────────────────────────
 
     #[test]
     fn parse_config_no_args() {
@@ -2265,7 +2121,6 @@ mod tests {
 
     #[test]
     fn config_reload_maps_to_none() {
-        // Handled by a dedicated two-phase flow in run.rs, not the generic path.
         let cmd = CliCommand::Config {
             subcommand: Some(ConfigCommand::Reload {
                 yes: false,
@@ -2292,8 +2147,6 @@ mod tests {
             }
         );
     }
-
-    // ── Leading flags ────────────────────────────────────────────────
 
     #[test]
     fn parse_leading_addr_flag() {
@@ -2343,9 +2196,6 @@ mod tests {
         );
     }
 
-    /// Clap has never heard of these, so left to itself it answers `--config`
-    /// with "tip: 'status --count' exists". Naming the replacement is the
-    /// whole point of removing a flag.
     #[test]
     fn a_retired_flag_names_what_replaced_it() {
         for args in [
@@ -2379,10 +2229,6 @@ mod tests {
         );
     }
 
-    /// A one-message sampling override left no trace anywhere — not in the
-    /// transcript, not in `shore model info` — so a reply that came out wrong
-    /// could not be told apart from one the settings would have produced. The
-    /// model settings are the durable, inspectable version of the same knobs.
     #[test]
     fn a_retired_sampling_flag_points_at_the_model_settings() {
         for (flag, instead) in [
@@ -2407,9 +2253,6 @@ mod tests {
         }
     }
 
-    /// The value of a leading flag is not the command, so a command name that
-    /// happens to also be one — `shore --character status status` — must not
-    /// make the scan think it is already past the command.
     #[test]
     fn a_leading_flag_in_its_own_place_is_fine() {
         for args in [
@@ -2424,9 +2267,6 @@ mod tests {
         }
     }
 
-    /// `log` and `alt` take message references that may start with a hyphen,
-    /// so a mistyped flag lands in the reference rather than being rejected.
-    /// Asking the daemon for a message named `--conten` is not an answer.
     #[test]
     fn a_mistyped_flag_is_not_read_as_a_message_reference() {
         for args in [
@@ -2448,9 +2288,6 @@ mod tests {
         );
     }
 
-    /// A bare name shared its completion list with the subcommand names, so
-    /// tab after `shore model` offered `opus` and `setting` side by side with
-    /// nothing to say which kind of thing you were choosing.
     #[test]
     fn a_bare_name_points_at_use() {
         assert_eq!(
@@ -2463,8 +2300,6 @@ mod tests {
         );
     }
 
-    /// The redirect must not fire on the real subcommands, on their arguments,
-    /// or on commands that legitimately take a positional.
     #[test]
     fn a_real_subcommand_is_not_mistaken_for_a_name() {
         for args in [
@@ -2478,22 +2313,12 @@ mod tests {
             &["provider", "models", "openrouter"][..],
             &["memory", "what did we decide"][..],
             &["log", "last"][..],
-            // A flag in play means a different request; pointing it at `use`
-            // would be wrong, so the redirect stays quiet and clap answers.
             &["model", "--info", "opus"][..],
         ] {
             assert_eq!(misplaced(args), None, "{args:?}");
         }
     }
 
-    /// `shore config --reset` dropped the three runtime overrides, all of
-    /// which were written and never read. Clap answers the retired spelling
-    /// with "unexpected argument" and a tip about quoting it as a value, which
-    /// is advice for a different problem.
-    ///
-    /// It cannot join `RETIRED_FLAGS`: `shore model setting --reset <key>`
-    /// still clears a saved value, and matching on spelling alone would take
-    /// that away too.
     #[test]
     fn reset_is_retired_under_config_and_nowhere_else() {
         assert_eq!(
@@ -2512,11 +2337,6 @@ mod tests {
         }
     }
 
-    /// `--config` selected a daemon instance by id or config directory;
-    /// `--addr` names the same daemon by the thing the client actually
-    /// connects to. Two ways to say one thing is one too many. Colour is an
-    /// environment decision, not a per-invocation one, and NO_COLOR is
-    /// honoured by everything else in the terminal already.
     #[test]
     fn retired_flags_no_longer_parse() {
         for flag in ["--config", "--no-color"] {
@@ -2534,8 +2354,6 @@ mod tests {
             );
         }
     }
-
-    // ── SWP mapping tests ────────────────────────────────────────────
 
     #[test]
     fn send_maps_to_none() {
@@ -2878,13 +2696,10 @@ mod tests {
 
     #[test]
     fn model_background_flag_conflicts_with_selectors() {
-        // `--background` shows the resolved table; combining it with a model
-        // selector or its flags must be rejected, not silently ignored.
         assert!(Cli::try_parse_from(["shore", "model", "--background", "somemodel"]).is_err());
         assert!(Cli::try_parse_from(["shore", "model", "--background", "--info"]).is_err());
         assert!(Cli::try_parse_from(["shore", "model", "--background", "--reset"]).is_err());
         assert!(Cli::try_parse_from(["shore", "model", "--background", "--all"]).is_err());
-        // Bare `--background` still parses.
         assert!(Cli::try_parse_from(["shore", "model", "--background"]).is_ok());
     }
 
@@ -2940,11 +2755,6 @@ mod tests {
 
     #[test]
     fn model_setting_reasoning_off_sends_off_sentinel() {
-        // `shore model setting reasoning_effort off` must send the
-        // string "off" (not JSON null). The daemon's overlay maps
-        // Some("off") → unset reasoning_effort on the resolved model,
-        // while null clears the saved override and lets the model's
-        // intrinsic value leak through.
         let cmd = CliCommand::Model {
             subcommand: Some(ModelCommand::Setting {
                 key: Some("reasoning_effort".into()),
@@ -2990,20 +2800,16 @@ mod tests {
     #[test]
     fn parse_setting_value_coerces_vendor_knobs() {
         use serde_json::json;
-        // bool-typed vendor knobs.
         assert_eq!(
             parse_setting_value("zai_clear_thinking", "false"),
             json!(false)
         );
         assert_eq!(parse_setting_value("zai_subscription", "yes"), json!(true));
-        // u64-typed.
         assert_eq!(parse_setting_value("gemini_generation", "3"), json!(3));
-        // openrouter_provider parses a JSON object.
         assert_eq!(
             parse_setting_value("openrouter_provider", r#"{"order":["Anthropic"]}"#),
             json!({"order": ["Anthropic"]})
         );
-        // non-JSON falls back to a string (daemon then reports a type error).
         assert_eq!(
             parse_setting_value("openrouter_provider", "Anthropic"),
             json!("Anthropic")
@@ -3281,8 +3087,6 @@ mod tests {
         assert!(args.get("keep_turns").is_none());
     }
 
-    /// Zero is a real answer — keep nothing — so it has to reach the daemon
-    /// rather than being folded in with "not given".
     #[test]
     fn compact_with_keep_turns_includes_field() {
         let cmd = CliCommand::Compact {
@@ -3296,8 +3100,6 @@ mod tests {
 
     #[test]
     fn all_non_message_commands_map() {
-        // Every variant except Send, Regen, Character (no --info),
-        // Config --path, and Completions should produce Some.
         let mut commands = log_status_debug_samples();
         commands.extend(model_samples());
         commands.extend(provider_memory_config_samples());
@@ -3485,8 +3287,6 @@ mod tests {
         ]
     }
 
-    // ── Completions tests ────────────────────────────────────────────
-
     #[test]
     fn parse_completions_fish() {
         let cli = parse(&["completions", "fish"]);
@@ -3519,8 +3319,6 @@ mod tests {
             }
         );
     }
-
-    // ── Usage ────────────────────────────────────────────────────────
 
     #[test]
     fn usage_export_defaults_to_csv_and_switches_on_tsv() {
@@ -3663,7 +3461,6 @@ mod tests {
 
     #[test]
     fn completions_generates_output() {
-        // Verify that completion generation produces non-empty output for each shell.
         use clap::CommandFactory;
         for shell in [Shell::Fish, Shell::Bash, Shell::Zsh] {
             let mut buf = Vec::new();
@@ -3722,9 +3519,6 @@ mod tests {
         );
     }
 
-    /// A hidden flag still works, but tab-completion must stop teaching it —
-    /// otherwise the surface `--help` documents and the surface the shell
-    /// offers disagree, and the retired spelling never dies.
     #[test]
     fn superseded_flags_are_not_offered_by_the_shell() {
         for shell in [Shell::Fish, Shell::Zsh] {
@@ -3756,14 +3550,9 @@ mod tests {
         }
     }
 
-    // ── Dynamic completions (regression #3 followup) ────────────────
-
     #[test]
     fn fish_footer_has_dynamic_lines_for_model_and_character() {
         let footer = fish_dynamic_completions_footer();
-        // Each line must bind the positional for its subcommand to
-        // the `complete` helper — anything else means fish will
-        // silently not expand `shore model <TAB>` again.
         assert!(
             footer.contains("__fish_shore_using_subcommand model"),
             "footer must gate the model completion on the model subcommand",
@@ -3780,8 +3569,6 @@ mod tests {
             footer.contains("shore complete characters"),
             "footer must shell out to `shore complete characters`",
         );
-        // Errors from `complete` (daemon down, stale registry) must
-        // not propagate to fish, or the user sees red at every tab.
         assert!(
             footer.contains("2>/dev/null"),
             "footer must swallow stderr from the helper",
@@ -3790,8 +3577,6 @@ mod tests {
 
     #[test]
     fn parse_complete_models() {
-        // The `complete` helper must parse cleanly so fish can call
-        // it at completion time without triggering a clap error.
         let cli = parse(&["complete", "models"]);
         assert_variant!(
             &cli.command,
@@ -3814,8 +3599,6 @@ mod tests {
 
     #[test]
     fn complete_maps_to_none_swp() {
-        // `complete` is handled entirely client-side; it must not leak
-        // into the generic SWP dispatch path.
         let cmd = CliCommand::Complete {
             kind: CompleteKind::Models,
         };

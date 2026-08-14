@@ -1,9 +1,3 @@
-//! Shared connection manager for SWP clients.
-//!
-//! Provides a `spawn_connection()` function that spawns a background task
-//! managing the daemon connection with automatic reconnect and exponential
-//! backoff. Used by shore-tui.
-
 use crate::protocol::client_msg::ClientMessage;
 use crate::protocol::server_msg::ServerMessage;
 use crate::swp_client::sync::{SyncDecision, SyncState};
@@ -12,7 +6,6 @@ use tokio::sync::mpsc;
 use tokio::time::{Duration, sleep};
 use tracing::{debug, error, info, warn};
 
-/// Events sent from the connection task to the application loop.
 #[derive(Debug)]
 pub enum ConnEvent {
     Connected {
@@ -27,23 +20,12 @@ pub enum ConnEvent {
     Disconnected(String),
 }
 
-/// Commands sent from the application loop to the connection task.
 #[derive(Debug)]
 pub enum ConnCommand {
     Send(ClientMessage),
     Shutdown,
 }
 
-/// Spawn a connection manager task.
-///
-/// Returns channels for bidirectional communication. The task automatically
-/// reconnects on disconnection with exponential backoff (500ms → 15s).
-///
-/// - `addr`: optional explicit TCP address (`host:port`)
-/// - `config`: optional config path for service discovery
-/// - `client_id`: protocol-level client type (e.g. `"tui"`, `"bridge"`)
-/// - `app_name`: human-readable application name (e.g. `"shore-tui"`)
-/// - `character`: optional character to select on connect
 pub fn spawn_connection(
     addr: Option<String>,
     config: Option<String>,
@@ -64,7 +46,6 @@ pub fn spawn_connection(
     (cmd_tx, event_rx)
 }
 
-/// Compute next backoff duration, doubling each time up to the cap.
 fn next_backoff(current: Duration, max: Duration) -> Duration {
     current.saturating_mul(2).min(max)
 }
@@ -76,12 +57,6 @@ fn resolve_addr(addr: Option<&str>, config: Option<&str>) -> crate::swp_client::
     discover_or_default(config)
 }
 
-/// The character the next connect attempt should ask for.
-///
-/// An in-session `switch_character` is only visible to the connection task as
-/// the `History` snapshot the daemon pushes back, which is what [`SyncState`]
-/// tracks. Reconnecting with the startup argument instead would silently put a
-/// user who switched Yuna → poppy back on Yuna.
 fn reconnect_target(sync_state: &SyncState, previous: Option<String>) -> Option<String> {
     sync_state
         .selected_character()
@@ -89,7 +64,6 @@ fn reconnect_target(sync_state: &SyncState, previous: Option<String>) -> Option<
         .or(previous)
 }
 
-/// Whether a connected session ended for good or should trigger a reconnect.
 enum SessionOutcome {
     Exit,
     Reconnect,
@@ -150,7 +124,6 @@ async fn connection_loop(
                     })
                     .await;
 
-                // Main receive/send loop
                 let outcome =
                     run_connected_session(&mut conn, &event_tx, &mut cmd_rx, &mut sync_state).await;
 
@@ -169,7 +142,6 @@ async fn connection_loop(
             }
         }
 
-        // Exponential backoff before reconnect
         info!(
             backoff_ms = backoff.as_millis(),
             "reconnecting after backoff"
@@ -179,10 +151,6 @@ async fn connection_loop(
     }
 }
 
-/// Drive one connected session's receive/send select loop. Returns
-/// [`SessionOutcome::Exit`] when the manager should stop entirely (shutdown or
-/// closed channels) or [`SessionOutcome::Reconnect`] when the connection
-/// dropped and a reconnect should be attempted.
 async fn run_connected_session(
     conn: &mut SWPConnection,
     event_tx: &mpsc::Sender<ConnEvent>,
@@ -223,7 +191,6 @@ async fn run_connected_session(
                         return SessionOutcome::Reconnect;
                     }
                     Ok(ServerMessage::Ping(_)) => {
-                        // Keepalive — ignore
                     }
                     Ok(server_msg) => {
                         if matches!(sync_state.observe(&server_msg), SyncDecision::DropStale) {
@@ -297,7 +264,6 @@ mod tests {
         assert_eq!(addr.0, "127.0.0.1:9090");
     }
 
-    /// A switch that happened mid-session is what the next connect asks for.
     #[test]
     fn reconnect_target_follows_the_session() {
         let sync = SyncState::new(3, Some("poppy"));
@@ -307,8 +273,6 @@ mod tests {
         );
     }
 
-    /// Nothing selected on this connection leaves the startup argument alone —
-    /// dropping it would turn a `--character` launch into an unpinned one.
     #[test]
     fn reconnect_target_keeps_the_startup_character_when_none_was_selected() {
         let sync = SyncState::new(0, None);

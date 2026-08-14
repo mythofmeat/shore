@@ -5,6 +5,10 @@ import { Glob } from "bun";
 
 const ROOT = join(import.meta.dir, "..");
 const ROOTS = [join(ROOT, "src"), join(ROOT, "tests"), join(ROOT, "scripts")];
+const CLIENT = join(ROOT, "..", "client");
+
+const CLAP_FILES = new Set(["shore-cli/src/cli.rs", "shore-tui/src/main.rs"]);
+const RUST_DIRECTIVE = /^\/\/\s*(SAFETY:|rustfmt|clippy|allow-)/i;
 
 const DIRECTIVE =
   /^(\/\/|\/\*)[\s*]*(@ts-|eslint|biome|prettier|deno-|c8 |v8 |istanbul|#__|@__|<reference|<amd)/;
@@ -53,6 +57,49 @@ for (const rel of new Glob("**/*.ts").scanSync(root)) {
   }
 }
 
+function rustCommentStart(line: string): number {
+  let inString = false;
+  let inChar = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (inString || inChar) {
+      if (c === "\\") i++;
+      else if (inString && c === '"') inString = false;
+      else if (inChar && c === "'") inChar = false;
+      continue;
+    }
+    if (c === '"') {
+      inString = true;
+    } else if (c === "'") {
+      if (line[i + 2] === "'" || line[i + 1] === "\\") inChar = true;
+    } else if (c === "/" && line[i + 1] === "/") {
+      return i;
+    }
+  }
+  return -1;
+}
+
+let rustScanned = 0;
+for (const rel of new Glob("**/*.rs").scanSync(CLIENT)) {
+  if (rel.startsWith("target/") || rel.includes("/target/")) continue;
+  const abs = join(CLIENT, rel);
+  const text = readFileSync(abs, "utf8");
+  if (GENERATED.test(text)) continue;
+  rustScanned++;
+
+  const clap = CLAP_FILES.has(rel);
+  text.split("\n").forEach((raw, i) => {
+    const at = rustCommentStart(raw);
+    if (at === -1) return;
+    const body = raw.slice(at);
+    const doc = body.startsWith("///") || body.startsWith("//!");
+    if (doc && clap) return;
+    if (!doc && RUST_DIRECTIVE.test(body.trim())) return;
+    const why = doc ? "doc comments outside a clap file" : "line comments";
+    offenders.push(`client/${rel}:${i + 1}  ${body.trim().slice(0, 80)}   (${why})`);
+  });
+}
+
 if (offenders.length > 0) {
   console.error(`Comments are not allowed in daemon/. Found ${offenders.length}:\n`);
   for (const o of offenders) console.error(`  ${o}`);
@@ -61,4 +108,4 @@ if (offenders.length > 0) {
   process.exit(1);
 }
 
-console.log(`no comments in ${scanned} files (${generated} generated files skipped)`);
+console.log(`no comments in ${scanned} ts and ${rustScanned} rust files (${generated} generated skipped)`);

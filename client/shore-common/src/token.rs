@@ -1,43 +1,11 @@
-//! The shared secret every SWP client presents, and where it comes from.
-//!
-//! This is the Rust counterpart of `daemon/src/config/token.ts`. The two must
-//! agree on the resolution order and on the file's name, because they are the
-//! two halves of one credential — and, as with [`crate::dirs`], a client has to
-//! find it *before* it has a daemon to ask.
-//!
-//! # Why a token at all
-//!
-//! SWP carries no authentication of its own, and passing the connection check
-//! grants a full session: every character's history, the ability to send as the
-//! user, and the whole tool surface. So the check is all-or-nothing, and the
-//! only question is what it should be.
-//!
-//! It used to be an IP allowlist plus a flag acknowledging that remote access
-//! was unauthenticated. Both are gone. An address is not a credential — a
-//! container bridge hands out addresses from ranges indistinguishable from an
-//! ordinary LAN, so "allow my containers" and "allow my whole network" were the
-//! same config — and a flag that asks you to accept a risk is a worse answer
-//! than not having the risk. One mechanism, always on.
-//!
-//! # This side only ever reads
-//!
-//! Generation belongs to the daemon, which owns the config directory. A client
-//! that minted its own credential would not be authenticating, so an absent
-//! token here is an error with somewhere to go, never a fresh secret.
-
 use std::path::{Path, PathBuf};
 
-/// Environment override, and the way a client on another host or in another
-/// container is told the secret.
 pub const TOKEN_ENV: &str = "SHORE_TOKEN";
 
-/// The daemon-written file, under the config directory.
 pub(crate) const TOKEN_FILE: &str = "token";
 
-/// Why no token could be found.
 #[derive(Debug, Clone)]
 pub(crate) struct TokenError {
-    /// Where the file was looked for, for the message.
     pub path: PathBuf,
 }
 
@@ -55,40 +23,16 @@ impl std::fmt::Display for TokenError {
 
 impl std::error::Error for TokenError {}
 
-/// The token to present to the daemon at `daemon_config_dir`.
-///
-/// `None` means discovery could not say where that daemon keeps its config, so
-/// this client's own resolution is used — which is right whenever the daemon
-/// runs with default directories, and is the best guess available otherwise.
-///
-/// The distinction exists because `--config` re-homes a daemon's config
-/// directory: it writes its token beside the file it was pointed at, not where
-/// an unrelated client would look. Passing the daemon's own directory is what
-/// makes `shore-daemon --config /elsewhere/shore.toml` work with a local client
-/// and no `SHORE_TOKEN`.
 pub(crate) fn resolve_client_token(
     daemon_config_dir: Option<PathBuf>,
 ) -> Result<String, TokenError> {
     resolve_token(&daemon_config_dir.unwrap_or_else(crate::dirs::config_dir))
 }
 
-/// The token for this client: `$SHORE_TOKEN`, else `<config_dir>/token`.
-///
-/// An empty or whitespace-only value counts as unset in both sources.
-/// `SHORE_TOKEN=""` means "I have not set this", which is what an unset
-/// variable in a compose `.env` expands to — treating it as a real (empty)
-/// secret would send an empty token and produce a confusing rejection instead
-/// of a clear "you have not set this".
 pub(crate) fn resolve_token(config_dir: &Path) -> Result<String, TokenError> {
     resolve_token_with(std::env::var(TOKEN_ENV).ok().as_deref(), config_dir)
 }
 
-/// [`resolve_token`] with the environment supplied rather than read.
-///
-/// Injectable for the same reason `resolveShoreDirs` takes its env on the
-/// TypeScript side: the process environment is global and the test binary is
-/// parallel, so a test that sets `SHORE_TOKEN` to exercise one branch would
-/// otherwise decide the answer for every test running beside it.
 pub(crate) fn resolve_token_with(
     env_token: Option<&str>,
     config_dir: &Path,
@@ -104,11 +48,6 @@ pub(crate) fn resolve_token_with(
         .ok_or(TokenError { path })
 }
 
-/// The value with surrounding whitespace removed, or `None` if nothing is left.
-///
-/// The trim matters for the file: an editor that adds a trailing newline, or a
-/// `docker exec cat` piped into a shell variable, must not produce a token that
-/// differs from the daemon's by one byte.
 fn non_blank(raw: &str) -> Option<String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -122,7 +61,6 @@ fn non_blank(raw: &str) -> Option<String> {
 mod tests {
     use super::*;
 
-    /// Env wins over the file, and the file answers when env is absent.
     #[test]
     fn resolution_order() {
         let tmp = tempfile::tempdir().unwrap();
@@ -135,9 +73,6 @@ mod tests {
         assert_eq!(from_file.unwrap(), "from-file");
     }
 
-    /// A trailing newline in the file is not part of the secret. An editor adds
-    /// one; `docker exec cat` piped into a variable keeps one; a token that
-    /// differs from the daemon's by one byte fails with no clue why.
     #[test]
     fn the_file_is_trimmed() {
         let tmp = tempfile::tempdir().unwrap();
@@ -145,8 +80,6 @@ mod tests {
         assert_eq!(resolve_token_with(None, tmp.path()).unwrap(), "abc123");
     }
 
-    /// An empty `SHORE_TOKEN` is what an unset compose variable expands to, so
-    /// it must mean "unset" and fall through rather than send an empty secret.
     #[test]
     fn an_empty_env_value_falls_through_to_the_file() {
         let tmp = tempfile::tempdir().unwrap();
@@ -161,8 +94,6 @@ mod tests {
         );
     }
 
-    /// Nothing anywhere is an error naming the path that was tried — never a
-    /// generated secret, which is the daemon's job alone.
     #[test]
     fn nothing_anywhere_is_an_error_that_says_where_to_look() {
         let tmp = tempfile::tempdir().unwrap();

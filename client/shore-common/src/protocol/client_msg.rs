@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-/// Client hello — sent once after connect.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ClientHello {
@@ -8,21 +7,12 @@ pub struct ClientHello {
     pub client_name: String,
     #[serde(default)]
     pub capabilities: Vec<String>,
-    /// Which character this client wants to talk to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub character: Option<String>,
-    /// The shared secret, from `SHORE_TOKEN` or `<config_dir>/token`.
-    ///
-    /// `Option` on the wire and required in practice: the daemon rejects a
-    /// hello without one. It is optional here so that a client too old to send
-    /// it is refused by the *authentication* check with a message saying so,
-    /// rather than by the deserializer with a parse error that explains
-    /// nothing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
 }
 
-/// One-shot parameter overrides for a single message.
 #[derive(Serialize, Deserialize, Debug, Clone, Default, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct MessageOverrides {
@@ -30,28 +20,19 @@ pub struct MessageOverrides {
     pub temperature: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub top_p: Option<f64>,
-    /// Enable extended thinking with the given budget (in tokens).
-    /// `Some(n)` enables thinking with budget `n`; omitted = use model default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thinking_budget: Option<u32>,
 }
 
-/// A base64-encoded image uploaded by the client.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ImageUpload {
     pub filename: String,
-    /// Base64-encoded image file bytes.
     pub data: String,
-    /// Declared media type (e.g. `image/png`). Optional: bridges whose source
-    /// protocol carries a media type but no reliable filename extension
-    /// (Matrix `info.mimetype`) should set it. The daemon also sniffs magic
-    /// bytes, so this is a fallback, not a requirement.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mime_type: Option<String>,
 }
 
-/// Send a user message.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ClientMessageBody {
@@ -60,10 +41,8 @@ pub struct ClientMessageBody {
     pub text: String,
     #[serde(default)]
     pub stream: bool,
-    /// Legacy: file paths (only works when client and server share a filesystem).
     #[serde(default)]
     pub images: Vec<String>,
-    /// Preferred: base64-encoded image data (works across machines).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub image_data: Vec<ImageUpload>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -73,7 +52,6 @@ pub struct ClientMessageBody {
     pub overrides: Option<MessageOverrides>,
 }
 
-/// Regenerate last response.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct Regen {
@@ -83,7 +61,6 @@ pub struct Regen {
     pub stream: bool,
 }
 
-/// Execute a server command.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct Command {
@@ -95,12 +72,10 @@ pub struct Command {
     pub args: serde_json::Value,
 }
 
-/// Cancel an in-progress generation.
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct Cancel {}
 
-/// All client → server message types, tagged by "type".
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 #[serde(tag = "type", rename_all = "snake_case")]

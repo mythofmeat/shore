@@ -1,14 +1,3 @@
-//! System clipboard image paste support.
-//!
-//! Uses the platform clipboard command to retrieve a PNG image, then writes
-//! the bytes to a temp file. The
-//! resulting path is fed into shore-tui's existing pending-image flow.
-//!
-//! On Linux this requires `wl-clipboard` and a Wayland session; macOS uses
-//! the built-in `osascript`. The earlier arboard-based implementation was
-//! dropped because its Wayland backend fails to negotiate `image/png` on
-//! compositors that advertise Qt-flavored MIME types first (notably KDE/KWin).
-
 use std::io;
 use std::path::PathBuf;
 use std::process::Command;
@@ -32,7 +21,6 @@ impl std::fmt::Display for ClipboardError {
 
 impl std::error::Error for ClipboardError {}
 
-/// Generate a unique temp-file path under the OS temp dir.
 fn fresh_temp_path() -> PathBuf {
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -41,7 +29,6 @@ fn fresh_temp_path() -> PathBuf {
     let mut path = std::env::temp_dir();
     path.push(format!("shore_paste_{ts}.png"));
     if path.exists() {
-        // Vanishingly rare at ms resolution; one retry with a counter.
         for n in 1..1000 {
             let mut alt = std::env::temp_dir();
             alt.push(format!("shore_paste_{ts}_{n}.png"));
@@ -53,12 +40,6 @@ fn fresh_temp_path() -> PathBuf {
     path
 }
 
-/// Read an image from the Wayland clipboard via `wl-paste --type image/png`
-/// and write the PNG bytes to a temp file. Returns the path on success.
-///
-/// Synchronous and blocking — designed to be invoked via
-/// `tokio::task::spawn_blocking`. The caller is expected to wrap this in
-/// a timeout in case `wl-paste` stalls on a wedged compositor.
 pub(crate) fn read_image_to_temp() -> Result<PathBuf, ClipboardError> {
     #[cfg(target_os = "macos")]
     {

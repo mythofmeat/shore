@@ -31,7 +31,6 @@ pub(crate) fn density_to_block(normalized: f64) -> char {
     }
 }
 
-/// Color for an hour classification label.
 pub(crate) fn classification_color(class: &str) -> Tone {
     match class {
         "peak" => Tone::Active,
@@ -70,7 +69,6 @@ pub(crate) fn write_activity_section(out: &mut impl Write, activity: &serde_json
     let suffix = if sufficient { "" } else { "sparse" };
     write_section_header(out, "activity", suffix, width);
 
-    // -- bar chart row --
     let max_val = histogram.iter().copied().fold(0.0_f64, f64::max);
     paint(out, Tone::Muted, &format!("{:<15}", ""));
     for (&density, classification) in histogram.iter().zip(classifications.iter()) {
@@ -79,19 +77,15 @@ pub(crate) fn write_activity_section(out: &mut impl Write, activity: &serde_json
         } else {
             0.0
         };
-        // Log scale: ln(1 + x*k) / ln(1+k) -- spreads low values, compresses peaks.
         let normalized = (1.0 + linear * 9.0).ln() / 10.0_f64.ln();
         let ch = density_to_block(normalized);
         paint(out, classification_color(classification), &ch.to_string());
     }
     _ = writeln!(out);
 
-    // -- hour labels row --
-    //    0  3  6  9  12 15 18 21
     paint(out, Tone::Muted, &format!("  {:<13}0  3  6  9  12 15 18 21", ""));
     _ = writeln!(out);
 
-    // -- stats row --
     let engagement = activity["engagement_score"].as_f64().unwrap_or(0.0);
     let sessions = activity["sessions_per_day"].as_f64().unwrap_or(0.0);
     let turn_count = activity["turn_count"].as_u64().unwrap_or(0);
@@ -118,8 +112,6 @@ fn checked_rem_u64(value: u64, divisor: u64) -> u64 {
     value.checked_rem(divisor).unwrap_or_default()
 }
 
-/// Format a duration in seconds into a compact label like "1h 8m" or "32m".
-/// Negative inputs render with a leading "-".
 fn format_duration_compact(secs: i64) -> String {
     let neg = secs < 0;
     let mut remaining_seconds = secs.unsigned_abs();
@@ -142,7 +134,6 @@ fn format_duration_compact(secs: i64) -> String {
     if neg { format!("-{body}") } else { body }
 }
 
-/// Format a duration in seconds for "threshold" rows like "100m" or "48h".
 fn format_threshold(secs: u64) -> String {
     if secs >= SECONDS_PER_HOUR && secs.is_multiple_of(SECONDS_PER_HOUR) {
         format!("{}h", checked_div_u64(secs, SECONDS_PER_HOUR))
@@ -162,8 +153,6 @@ fn format_threshold(secs: u64) -> String {
     }
 }
 
-/// Format an RFC3339 timestamp as "YYYY-MM-DD HH:MM" in local time, or the
-/// raw string on parse failure.
 fn format_local_timestamp(rfc3339: &str) -> String {
     parse_timestamp(rfc3339).map_or_else(
         || rfc3339.to_owned(),
@@ -171,9 +160,6 @@ fn format_local_timestamp(rfc3339: &str) -> String {
     )
 }
 
-/// Render the autonomy block of `shore status`. Reads the `AutonomyStatus`
-/// JSON snapshot from the daemon and renders state, schedule, thresholds,
-/// and the most recent heartbeat events.
 pub(crate) fn write_autonomy_section(out: &mut impl Write, autonomy: &serde_json::Value, width: usize) {
     let paused = autonomy["paused"].as_bool().unwrap_or(false);
     let suffix = if paused { "paused" } else { "" };
@@ -186,7 +172,6 @@ pub(crate) fn write_autonomy_section(out: &mut impl Write, autonomy: &serde_json
         .unwrap_or(0);
     let description = heartbeat_description(int_state, ticks, max_ticks);
 
-    // Heartbeat row: description + state label.
     paint(out, Tone::Muted, &format!("  {:<13}", "heartbeat"));
     _ = write!(out, "{description}  ");
     paint(out, Tone::Muted, &format!("({int_state})"));
@@ -196,8 +181,6 @@ pub(crate) fn write_autonomy_section(out: &mut impl Write, autonomy: &serde_json
     write_autonomy_events(out, autonomy);
 }
 
-/// Render the autonomy schedule rows (interval, next wake, last user, idle
-/// ticks, latency thresholds).
 fn write_autonomy_schedule(
     out: &mut impl Write,
     autonomy: &serde_json::Value,
@@ -259,9 +242,6 @@ fn write_autonomy_schedule(
     }
 }
 
-/// Render the recent autonomy events list. Emits nothing beyond a blank line
-/// when the daemon included no events — the schedule rows already tell the
-/// story.
 fn write_autonomy_events(out: &mut impl Write, autonomy: &serde_json::Value) {
     let events: Vec<serde_json::Value> = autonomy
         .get("recent_events")
@@ -307,7 +287,6 @@ fn write_autonomy_events(out: &mut impl Write, autonomy: &serde_json::Value) {
     _ = writeln!(out);
 }
 
-/// Translate a heartbeat state string to a human-readable description.
 fn heartbeat_description(state: &str, ticks: u64, max_ticks: u64) -> String {
     match state {
         "Active" if ticks == 0 => "active \u{2014} in conversation".to_owned(),
@@ -331,11 +310,11 @@ mod tests {
 
     #[test]
     fn density_to_block_ranges() {
-        assert_eq!(density_to_block(0.0), '\u{2591}'); // below threshold
-        assert_eq!(density_to_block(0.04), '\u{2591}'); // below threshold
-        assert_eq!(density_to_block(0.06), '\u{2581}'); // 0.06 * 7 = 0.42 -> round 0 -> first block
-        assert_eq!(density_to_block(0.5), '\u{2585}'); // 0.5 * 7 = 3.5 -> round 4 -> fifth block
-        assert_eq!(density_to_block(1.0), '\u{2588}'); // 1.0 * 7 = 7.0 -> index 7 -> full block
+        assert_eq!(density_to_block(0.0), '\u{2591}');
+        assert_eq!(density_to_block(0.04), '\u{2591}');
+        assert_eq!(density_to_block(0.06), '\u{2581}');
+        assert_eq!(density_to_block(0.5), '\u{2585}');
+        assert_eq!(density_to_block(1.0), '\u{2588}');
     }
 
     #[test]
@@ -356,7 +335,6 @@ mod tests {
 
     #[test]
     fn heartbeat_description_unknown_state() {
-        // Unknown states pass through as-is.
         assert_eq!(heartbeat_description("CustomState", 0, 8), "CustomState");
     }
 }

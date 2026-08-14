@@ -9,28 +9,20 @@ use crate::connection::ConnCommand;
 
 const HISTORY_PAGE_TURNS: u32 = 64;
 
-/// Action resulting from a key press.
 pub(crate) enum Action {
     None,
     Send(ConnCommand),
-    /// Send multiple commands at once.
     SendMulti(Vec<ConnCommand>),
-    /// Graceful quit (Ctrl+Q).
     Quit,
-    /// SIGINT-equivalent quit (Ctrl+C). Same graceful shutdown, but exits 130.
     Interrupt,
     Redraw,
-    /// Redraw and persist view preferences to disk (a pref was toggled).
     SavePrefs,
     SendAndSavePrefs(Vec<ConnCommand>),
     OpenInEditor,
-    /// Open external file picker to select an image.
     PickImage(Option<String>),
-    /// Read an image from the system clipboard and attach it.
     PasteImage,
 }
 
-/// Handle a crossterm input event and return the resulting action.
 pub(crate) fn handle_event(app: &mut App, event: Event) -> Action {
     match event {
         Event::Key(key) => handle_key(app, key),
@@ -40,7 +32,6 @@ pub(crate) fn handle_event(app: &mut App, event: Event) -> Action {
     }
 }
 
-/// Handle a bracketed paste event — insert all text without triggering send.
 fn handle_paste(app: &mut App, text: String) -> Action {
     if app.input.mode != InputMode::Insert {
         app.input.mode = InputMode::Insert;
@@ -50,25 +41,19 @@ fn handle_paste(app: &mut App, text: String) -> Action {
 }
 
 fn handle_key(app: &mut App, key: KeyEvent) -> Action {
-    // Close help overlay on any keypress
     if app.show_help {
         app.show_help = false;
         return Action::Redraw;
     }
 
-    // Fullscreen image viewer handles its own keys
     if app.fullscreen.is_some() {
         return handle_fullscreen(app, key);
     }
 
-    // Global shortcuts (work in any mode)
     match (key.modifiers, key.code) {
-        // Ctrl+C is reserved for SIGINT-style termination; it never cancels
-        // a generation. Use Alt+C or :cancel for that.
         (KeyModifiers::CONTROL, KeyCode::Char('c')) => return Action::Interrupt,
         (KeyModifiers::CONTROL, KeyCode::Char('q')) => return Action::Quit,
         (KeyModifiers::CONTROL, KeyCode::Char('v')) => return Action::PasteImage,
-        // Alt+C cancels an in-flight generation from any mode.
         (KeyModifiers::ALT, KeyCode::Char('c')) => {
             if app.stream.active {
                 app.stream.reset();
@@ -115,9 +100,6 @@ fn redraw_or_load_older_history(app: &mut App) -> Action {
 
 fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
     match (key.modifiers, key.code) {
-        // Esc dismisses the newest toast, so an intrusive notification can be
-        // cleared without typing. Only consumes the key when a toast was
-        // present; otherwise it's a no-op in Normal mode.
         (KeyModifiers::NONE, KeyCode::Esc) => {
             if app.dismiss_latest_notification() {
                 Action::Redraw
@@ -126,7 +108,6 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
             }
         }
 
-        // Enter insert mode
         (KeyModifiers::NONE, KeyCode::Char('i')) => {
             debug!("Input: Normal → Insert");
             app.input.mode = InputMode::Insert;
@@ -151,7 +132,6 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::Redraw
         }
 
-        // Navigation
         (KeyModifiers::NONE, KeyCode::Char('h') | KeyCode::Left) => {
             app.input.move_left();
             Action::Redraw
@@ -169,7 +149,6 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::Redraw
         }
 
-        // Scroll conversation
         (KeyModifiers::NONE, KeyCode::Char('k') | KeyCode::Up) => {
             app.scroll_up(1);
             redraw_or_load_older_history(app)
@@ -191,34 +170,28 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::Redraw
         }
 
-        // Toggle thinking blocks
         (KeyModifiers::NONE, KeyCode::Char('t')) => {
             app.show_thinking = !app.show_thinking;
             Action::SavePrefs
         }
 
-        // Toggle tool-use blocks in history
         (KeyModifiers::SHIFT, KeyCode::Char('T')) => {
             app.show_tools = !app.show_tools;
             Action::SavePrefs
         }
 
-        // Toggle nested sub-agent sections
         (KeyModifiers::NONE, KeyCode::Char('s')) => {
             app.show_subagent = !app.show_subagent;
             Action::SendAndSavePrefs(crate::subagent_trace_fetch(app))
         }
 
-        // Toggle inline images in history
         (KeyModifiers::NONE, KeyCode::Char('p')) => {
             app.show_images = !app.show_images;
             Action::SavePrefs
         }
 
-        // Open input in $EDITOR
         (KeyModifiers::CONTROL, KeyCode::Char('g')) => Action::OpenInEditor,
 
-        // Regen
         (KeyModifiers::NONE, KeyCode::Char('r')) => {
             app.begin_regen_optimistic();
             let msg = ClientMessage::Regen(Regen {
@@ -228,16 +201,11 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::Send(ConnCommand::Send(msg))
         }
 
-        // Fullscreen image viewer
         (KeyModifiers::NONE, KeyCode::Char('o')) => {
             if app.image_index.is_empty() {
                 return Action::None;
             }
-            // Find image closest to the center of the visible viewport.
-            // scroll_offset is distance from bottom. We estimate which
-            // lines are visible and pick the nearest image.
             let term_height = crossterm::terminal::size().map(|(_, h)| h).unwrap_or(24);
-            // Approximate conversation area as ~80% of terminal height
             let visible_h = (term_height * 80 / 100).max(1) as usize;
             let last_line = app.image_index.last().map(|e| e.line).unwrap_or(0);
             let total_approx = last_line + visible_h;
@@ -248,7 +216,6 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
                     .saturating_sub(app.scroll_offset as usize)
                     .saturating_sub(visible_h / 2)
             };
-            // Find the image with line position closest to center
             let best = app
                 .image_index
                 .iter()
@@ -260,7 +227,6 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::Redraw
         }
 
-        // Command palette
         (KeyModifiers::SHIFT, KeyCode::Char(':')) | (KeyModifiers::NONE, KeyCode::Char(':')) => {
             debug!("Input: Normal → Command");
             app.input.enter_command_mode();
@@ -274,12 +240,10 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
 
 fn handle_fullscreen(app: &mut App, key: KeyEvent) -> Action {
     match (key.modifiers, key.code) {
-        // Exit fullscreen
         (KeyModifiers::NONE, KeyCode::Esc) | (KeyModifiers::NONE, KeyCode::Char('o')) => {
             app.fullscreen = None;
             Action::Redraw
         }
-        // Next image
         (KeyModifiers::NONE, KeyCode::Char('j') | KeyCode::Down) => {
             if let Some(ref mut idx) = app.fullscreen {
                 let total = app.image_index.len();
@@ -289,7 +253,6 @@ fn handle_fullscreen(app: &mut App, key: KeyEvent) -> Action {
             }
             Action::Redraw
         }
-        // Previous image
         (KeyModifiers::NONE, KeyCode::Char('k') | KeyCode::Up) => {
             if let Some(ref mut idx) = app.fullscreen {
                 let total = app.image_index.len();
@@ -305,8 +268,6 @@ fn handle_fullscreen(app: &mut App, key: KeyEvent) -> Action {
 
 fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
     match (key.modifiers, key.code) {
-        // Exit insert mode (cancels an in-progress edit, but never a generation;
-        // Ctrl+C terminates the program and Alt+C / :cancel stop a generation).
         (KeyModifiers::NONE, KeyCode::Esc) => {
             debug!("Input: Insert → Normal");
             app.input.mode = InputMode::Normal;
@@ -318,14 +279,12 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::Redraw
         }
 
-        // Send message (or submit edit): Enter (without Shift)
         (KeyModifiers::NONE, KeyCode::Enter) => {
             let text = app.input.take_text();
             if text.trim().is_empty() && app.pending_images.is_empty() {
                 return Action::None;
             }
 
-            // If editing, send an edit command instead of a new message.
             if let Some(edit_ref) = app.editing_ref.take() {
                 app.set_status(format!("edited message ({edit_ref})"));
                 return Action::SendMulti(vec![
@@ -345,7 +304,6 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
             }
 
             let images = std::mem::take(&mut app.pending_images);
-            // Read and base64-encode images for wire transfer.
             let mut image_uploads: Vec<shore_common::protocol::client_msg::ImageUpload> =
                 Vec::new();
             let mut image_refs: Vec<shore_common::protocol::types::ImageRef> = Vec::new();
@@ -366,9 +324,6 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
                         image_uploads.push(shore_common::protocol::client_msg::ImageUpload {
                             filename,
                             data: b64,
-                            // The daemon sniffs magic bytes and falls back to the
-                            // filename extension; a declared mime type is only for
-                            // bridges without reliable filenames (e.g. Matrix).
                             mime_type: None,
                         });
                     }
@@ -377,18 +332,13 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
                     }
                 }
             }
-            // Fresh conversational turn — drop stale notification toasts
-            // (reconnect chatter, command acknowledgments, etc.) from the
-            // previous turn before we show the new User entry.
             app.dismiss_notifications();
-            // Optimistic: show user's message in conversation immediately
             app.entries.push(crate::app::ConversationEntry::user(
                 text.clone(),
                 image_refs,
                 String::new(),
             ));
             app.scroll_to_bottom();
-            // Show typing indicator immediately (don't wait for StreamStart)
             app.stream.active = true;
             let msg = ClientMessage::Message(ClientMessageBody {
                 rid: None,
@@ -403,13 +353,11 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::Send(ConnCommand::Send(msg))
         }
 
-        // Newline: Shift+Enter or Alt+Enter
         (KeyModifiers::SHIFT, KeyCode::Enter) | (KeyModifiers::ALT, KeyCode::Enter) => {
             app.input.insert_newline();
             Action::Redraw
         }
 
-        // Word deletion
         (KeyModifiers::ALT, KeyCode::Backspace) => {
             app.input.backspace_word();
             Action::Redraw
@@ -419,19 +367,16 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::Redraw
         }
 
-        // Backspace
         (_, KeyCode::Backspace) => {
             app.input.backspace();
             Action::Redraw
         }
 
-        // Delete
         (_, KeyCode::Delete) => {
             app.input.delete();
             Action::Redraw
         }
 
-        // Navigation
         (_, KeyCode::Left) => {
             app.input.move_left();
             Action::Redraw
@@ -449,7 +394,6 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::Redraw
         }
 
-        // Scroll conversation from insert mode
         (KeyModifiers::CONTROL, KeyCode::Char('u')) => {
             app.scroll_up(10);
             redraw_or_load_older_history(app)
@@ -459,10 +403,8 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::Redraw
         }
 
-        // Open input in $EDITOR
         (KeyModifiers::CONTROL, KeyCode::Char('g')) => Action::OpenInEditor,
 
-        // Regular character input
         (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(c)) => {
             app.input.insert_char(c);
             Action::Redraw
@@ -481,7 +423,6 @@ fn handle_command_mode(app: &mut App, key: KeyEvent) -> Action {
     }
 
     match (key.modifiers, key.code) {
-        // Cancel
         (KeyModifiers::NONE, KeyCode::Esc) => {
             debug!("Input: Command → Normal (cancelled)");
             app.input.exit_command_mode();
@@ -489,33 +430,26 @@ fn handle_command_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::Redraw
         }
 
-        // Tab completes the selected candidate; submenu parents open
-        // their picker immediately.
         (KeyModifiers::NONE, KeyCode::Tab) => {
             app.next_completion();
             enter_completed_submenu(app).unwrap_or(Action::Redraw)
         }
 
-        // Ctrl+J / Down — next completion without accepting it as a command.
         (KeyModifiers::CONTROL, KeyCode::Char('j')) | (KeyModifiers::NONE, KeyCode::Down) => {
             app.next_completion();
             Action::Redraw
         }
 
-        // Shift+Tab / BackTab accepts the previous completion.
         (KeyModifiers::SHIFT, KeyCode::BackTab) | (KeyModifiers::NONE, KeyCode::BackTab) => {
             app.prev_completion();
             enter_completed_submenu(app).unwrap_or(Action::Redraw)
         }
 
-        // Ctrl+K / Up — previous completion without accepting it as a command.
         (KeyModifiers::CONTROL, KeyCode::Char('k')) | (KeyModifiers::NONE, KeyCode::Up) => {
             app.prev_completion();
             Action::Redraw
         }
 
-        // Execute command — or, if cmd_text is a submenu parent name,
-        // open the submenu picker instead of submitting.
         (KeyModifiers::NONE, KeyCode::Enter) => {
             let trimmed = app.input.cmd_text.trim().to_string();
             if let Some(parent) = App::canonical_submenu_parent(&trimmed) {
@@ -528,8 +462,6 @@ fn handle_command_mode(app: &mut App, key: KeyEvent) -> Action {
             }
         }
 
-        // Space — if cmd_text is a submenu parent, enter the submenu;
-        // otherwise insert the space normally.
         (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(' ')) => {
             let trimmed = app.input.cmd_text.trim().to_string();
             if let Some(parent) = App::canonical_submenu_parent(&trimmed) {
@@ -542,7 +474,6 @@ fn handle_command_mode(app: &mut App, key: KeyEvent) -> Action {
             }
         }
 
-        // Backspace — if empty, cancel
         (_, KeyCode::Backspace) => {
             if app.input.cmd_text.is_empty() {
                 app.input.exit_command_mode();
@@ -554,7 +485,6 @@ fn handle_command_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::Redraw
         }
 
-        // Character input
         (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(c)) => {
             app.input.cmd_insert_char(c);
             app.update_completions();
@@ -574,17 +504,13 @@ fn enter_completed_submenu(app: &mut App) -> Option<Action> {
     Some(submenu_fetch_action(app, parent))
 }
 
-/// Submenu picker keys: filter typing, navigation, and Enter to apply
-/// the selected candidate. Esc / empty-Backspace pops back to Top.
 fn handle_submenu_mode(app: &mut App, key: KeyEvent) -> Action {
     match (key.modifiers, key.code) {
-        // Pop back to top-level palette.
         (KeyModifiers::NONE, KeyCode::Esc) => {
             app.exit_submenu();
             Action::Redraw
         }
 
-        // Tab / Ctrl+J / Down — next candidate.
         (KeyModifiers::NONE, KeyCode::Tab)
         | (KeyModifiers::CONTROL, KeyCode::Char('j'))
         | (KeyModifiers::NONE, KeyCode::Down) => {
@@ -592,7 +518,6 @@ fn handle_submenu_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::Redraw
         }
 
-        // Shift+Tab / Ctrl+K / Up — previous candidate.
         (KeyModifiers::SHIFT, KeyCode::BackTab)
         | (KeyModifiers::NONE, KeyCode::BackTab)
         | (KeyModifiers::CONTROL, KeyCode::Char('k'))
@@ -601,17 +526,10 @@ fn handle_submenu_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::Redraw
         }
 
-        // Apply selected candidate via parse_command.
         (KeyModifiers::NONE, KeyCode::Enter) => {
-            // If nothing is explicitly selected, fall to the first
-            // candidate so Enter is always actionable when the list
-            // is non-empty.
             if app.completion.selected.is_none() && !app.completion.candidates.is_empty() {
                 app.completion.selected = Some(0);
             }
-            // The `view` submenu toggles a local pref in-place and returns
-            // None (it stays open for more toggles), so it never reaches
-            // parse_command. Persist explicitly in that case.
             let in_view_submenu = app.is_view_submenu();
             if let Some(cmd) = app.apply_submenu() {
                 parse_command(app, &cmd)
@@ -622,8 +540,6 @@ fn handle_submenu_mode(app: &mut App, key: KeyEvent) -> Action {
             }
         }
 
-        // Backspace pops out of the submenu when the filter is empty;
-        // otherwise it deletes a filter character.
         (_, KeyCode::Backspace) => {
             if app.input.cmd_text.is_empty() {
                 app.exit_submenu();
@@ -634,7 +550,6 @@ fn handle_submenu_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::Redraw
         }
 
-        // Filter input.
         (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(c)) => {
             app.input.cmd_insert_char(c);
             app.update_completions();
@@ -724,8 +639,6 @@ fn handle_alt_picker_mode(app: &mut App, key: KeyEvent) -> Action {
     }
 }
 
-/// Fetch the candidate list for a submenu so the picker isn't empty
-/// the first time the user opens it (and to refresh stale entries).
 fn submenu_fetch_action(app: &mut App, parent: &str) -> Action {
     let (name, rid) = match parent {
         "model" => ("list_models", None),
@@ -741,7 +654,6 @@ fn submenu_fetch_action(app: &mut App, parent: &str) -> Action {
     })))
 }
 
-/// Parse a command string and return the appropriate action.
 fn parse_command(app: &mut App, input: &str) -> Action {
     let input = input.trim();
     if input.is_empty() {
@@ -786,8 +698,6 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                 );
                 return Action::Redraw;
             }
-            // Usage is value-typed (off|always|warn), so it takes its own path
-            // rather than the boolean on/off handling below.
             if key == "usage" {
                 let lowered = value.to_ascii_lowercase();
                 let mode = if lowered == "toggle" {
@@ -803,8 +713,6 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                 app.set_status(format!("view usage: {}", mode.as_str()));
                 return Action::SavePrefs;
             }
-            // Likewise value-typed: which budget (and which of its limits) the
-            // chip follows.
             if key == "budget" {
                 let focus = if value.eq_ignore_ascii_case("toggle") {
                     app.cycle_budget_focus()
@@ -816,9 +724,6 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                     return Action::Redraw;
                 };
                 app.update_completions();
-                // A name is accepted even when no such budget is known — the
-                // daemon may not have replied yet — but say so, since a typo
-                // otherwise just makes the chip disappear.
                 let unknown = focus.name.is_some() && app.focused_budget().is_none();
                 let token = focus.as_token();
                 app.set_status(if unknown {
@@ -855,7 +760,6 @@ fn parse_command(app: &mut App, input: &str) -> Action {
 
         "character" | "characters" => {
             if arg.is_empty() {
-                // List characters
                 Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
                     rid: None,
 
@@ -873,9 +777,6 @@ fn parse_command(app: &mut App, input: &str) -> Action {
         }
 
         "model" => {
-            // Recognize `:model all` (include hidden in the list) and
-            // `:model all <name>` (switch to a possibly-hidden model)
-            // before falling through to the normal switch path.
             let (include_hidden, rest) = match arg.split_once(' ') {
                 Some(("all", rest)) => (true, rest.trim()),
                 _ if arg == "all" => (true, ""),
@@ -911,9 +812,6 @@ fn parse_command(app: &mut App, input: &str) -> Action {
             }
         }
 
-        // `:setting` shows effective sampler; `:setting <key> <value>`
-        // sets it on the active character; `:setting reset <key>`
-        // clears the saved override.
         "setting" => {
             let trimmed = arg.trim();
             if trimmed.is_empty() {
@@ -979,7 +877,6 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                 app.set_status("usage: :delete <ref>  (e.g. last, -1, -2)");
                 Action::Redraw
             } else {
-                // Support space-separated refs or a single ref
                 let refs: Vec<&str> = arg.split_whitespace().collect();
                 let args = if refs.len() == 1 {
                     serde_json::json!({ "refs": refs[0] })
@@ -1063,10 +960,8 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                 app.set_status(format!("cleared {count} pending image(s)"));
                 Action::Redraw
             } else if arg.is_empty() {
-                // Open external file picker
                 Action::PickImage(None)
             } else {
-                // Direct path — resolve tilde and relative paths
                 let expanded = if arg.starts_with('~') {
                     if let Ok(home) = std::env::var("HOME") {
                         arg.replacen('~', &home, 1)
@@ -1112,15 +1007,6 @@ fn parse_command(app: &mut App, input: &str) -> Action {
         }
 
         "reasoning" => {
-            // Thin sugar over `:setting reasoning_effort …`. All routes go
-            // through the same `set_model_setting` / `model_settings`
-            // path the rest of the sampler uses, so reasoning_effort
-            // behaves like temperature/top_p with no special storage.
-            //
-            // :reasoning                 → show effective sampler
-            // :reasoning reset           → clear saved value (revert to config)
-            // :reasoning off|none|…      → store the "off" sentinel
-            // :reasoning <value>         → force value ("low", "medium", "high", …)
             let cmd = if arg.is_empty() {
                 Command {
                     rid: None,
@@ -1158,17 +1044,10 @@ fn parse_command(app: &mut App, input: &str) -> Action {
     }
 }
 
-/// Map a TUI-supplied sampler value to the JSON shape the daemon's
-/// `set_model_setting` expects. Mirror of `cli::parse_setting_value`.
 fn parse_setting_value_str(key: &str, raw: &str) -> serde_json::Value {
     use serde_json::Value;
     let trimmed = raw.trim();
     match key {
-        // `replay_prior_thinking` (`all`/`none`, plus the retired `last_turn`,
-        // which passes through for the daemon to fold into `all`) and the
-        // boolean vendor knobs share a coercion: the bool words collapse to a
-        // JSON bool (the daemon maps the legacy form), anything else passes
-        // through as a string so the daemon validates it.
         "replay_prior_thinking" | "zai_clear_thinking" | "zai_subscription" => {
             match trimmed.to_ascii_lowercase().as_str() {
                 "true" | "yes" | "on" => Value::Bool(true),
@@ -1189,19 +1068,11 @@ fn parse_setting_value_str(key: &str, raw: &str) -> serde_json::Value {
                 .unwrap_or_else(|_| Value::String(trimmed.to_string()))
         }
         "reasoning_effort" => match trimmed.to_ascii_lowercase().as_str() {
-            // Send the literal "off" sentinel (not null) so the daemon's
-            // overlay explicitly suppresses reasoning_effort. Null would
-            // *clear* the saved override, letting the model's default
-            // value leak through.
             "off" | "none" | "disable" | "disabled" | "unset" | "" => Value::String("off".into()),
             _ => Value::String(trimmed.to_string()),
         },
-        // `openrouter_provider` is a routing object — accept a JSON object
-        // string (e.g. `{"order":["Anthropic"]}`) and fall through to a string
-        // otherwise, so the daemon reports a clear type error.
         "openrouter_provider" => serde_json::from_str::<Value>(trimmed)
             .unwrap_or_else(|_| Value::String(trimmed.to_string())),
-        // Any unknown key: raw string.
         _ => Value::String(trimmed.to_string()),
     }
 }
@@ -1214,8 +1085,6 @@ mod tests {
 
     #[test]
     fn parse_setting_value_coerces_daemon_sampler_keys() {
-        // Tri-state replay_prior_thinking: the string variants pass through,
-        // the legacy bool words coerce to a JSON bool.
         assert_eq!(
             parse_setting_value_str("replay_prior_thinking", "last_turn"),
             json!("last_turn")
@@ -1225,7 +1094,6 @@ mod tests {
             json!(false)
         );
 
-        // Boolean vendor knobs.
         assert_eq!(
             parse_setting_value_str("zai_clear_thinking", "false"),
             json!(false)
@@ -1235,11 +1103,8 @@ mod tests {
             json!(true)
         );
 
-        // Integer vendor knob.
         assert_eq!(parse_setting_value_str("gemini_generation", "3"), json!(3));
 
-        // max_tool_iterations coerces to an integer; cache_keepalive's
-        // `off`/duration domain passes through as a string for the daemon.
         assert_eq!(
             parse_setting_value_str("max_tool_iterations", "16"),
             json!(16)
@@ -1253,7 +1118,6 @@ mod tests {
             json!("off")
         );
 
-        // openrouter_provider accepts a JSON routing object, else a string.
         assert_eq!(
             parse_setting_value_str("openrouter_provider", r#"{"order":["Anthropic"]}"#),
             json!({"order": ["Anthropic"]})
@@ -1263,7 +1127,6 @@ mod tests {
             json!("Anthropic")
         );
 
-        // reasoning_effort disable synonyms collapse to the "off" sentinel.
         assert_eq!(
             parse_setting_value_str("reasoning_effort", "none"),
             json!("off")
@@ -1289,9 +1152,6 @@ mod tests {
         let mut app = App::default();
         assert_eq!(app.usage_display, UsageDisplay::Off);
 
-        // Explicit modes, including the warn-only mode that the boolean
-        // on/off path can't express. (parse_command receives the command with
-        // its leading colon already stripped.)
         let _ = parse_command(&mut app, "view usage warn");
         assert_eq!(app.usage_display, UsageDisplay::Warn);
         let _ = parse_command(&mut app, "view usage always");
@@ -1299,7 +1159,6 @@ mod tests {
         let _ = parse_command(&mut app, "view usage off");
         assert_eq!(app.usage_display, UsageDisplay::Off);
 
-        // `on` is an alias for `always`; `toggle` cycles off → always → warn.
         let _ = parse_command(&mut app, "view usage on");
         assert_eq!(app.usage_display, UsageDisplay::Always);
         let _ = parse_command(&mut app, "view usage toggle");
@@ -1307,7 +1166,6 @@ mod tests {
         let _ = parse_command(&mut app, "view usage toggle");
         assert_eq!(app.usage_display, UsageDisplay::Off);
 
-        // A bogus mode is rejected without changing state.
         let _ = parse_command(&mut app, "view usage sometimes");
         assert_eq!(app.usage_display, UsageDisplay::Off);
     }
@@ -1324,25 +1182,21 @@ mod tests {
         };
         assert_eq!(app.budget_focus, BudgetFocus::default());
 
-        // Scope pins, the case the pace exists for.
         let _ = parse_command(&mut app, "view budget pace");
         assert_eq!(app.budget_focus.as_token(), "pace");
         let _ = parse_command(&mut app, "view budget cap");
         assert_eq!(app.budget_focus.as_token(), "cap");
 
-        // Name and name:scope pins.
         let _ = parse_command(&mut app, "view budget brainwife:pace");
         assert_eq!(app.budget_focus.as_token(), "brainwife:pace");
         let _ = parse_command(&mut app, "view budget brainwife");
         assert_eq!(app.budget_focus.as_token(), "brainwife");
 
-        // Back to following the most urgent budget; toggle then cycles on.
         let _ = parse_command(&mut app, "view budget auto");
         assert_eq!(app.budget_focus, BudgetFocus::default());
         let _ = parse_command(&mut app, "view budget toggle");
         assert_eq!(app.budget_focus.as_token(), "cap");
 
-        // A bogus scope is rejected without changing state.
         let _ = parse_command(&mut app, "view budget brainwife:yearly");
         assert_eq!(app.budget_focus.as_token(), "cap");
     }
@@ -1493,8 +1347,6 @@ mod tests {
         assert!(app.is_view_submenu());
         assert!(!app.completion.candidates.is_empty());
 
-        // Enter applies the selected view toggle in-place and returns None
-        // from apply_submenu; the handler must still persist the change.
         let action = handle_key(&mut app, make_key(KeyModifiers::NONE, KeyCode::Enter));
         assert!(matches!(action, Action::SavePrefs));
     }
@@ -1671,7 +1523,6 @@ mod tests {
         }
         let action = handle_key(&mut app, make_key(KeyModifiers::NONE, KeyCode::Enter));
         assert!(matches!(action, Action::Send(_)));
-        // Sending a message dismisses stale toasts but keeps the new user turn.
         assert!(app.notifications.is_empty());
         assert!(app.entries.iter().any(|e| matches!(
             e.as_turn(),

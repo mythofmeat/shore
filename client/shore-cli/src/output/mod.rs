@@ -27,28 +27,16 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use chrono::{DateTime, FixedOffset, Local};
 
-// ---------------------------------------------------------------------------
-// Color control (NO_COLOR)
-// ---------------------------------------------------------------------------
-
 static COLOR_STDOUT: AtomicBool = AtomicBool::new(true);
 static COLOR_STDERR: AtomicBool = AtomicBool::new(true);
 static DECORATE_STDOUT: AtomicBool = AtomicBool::new(true);
 
-/// Set whether color output is enabled on both streams. Tests pin it; the
-/// binary decides with [`detect_color`].
 #[cfg(test)]
 pub(crate) fn set_color_enabled(enabled: bool) {
     COLOR_STDOUT.store(enabled, Ordering::Relaxed);
     COLOR_STDERR.store(enabled, Ordering::Relaxed);
 }
 
-/// Decide color and decoration from the environment and the two streams.
-/// Call once at startup.
-///
-/// Each stream decides its color separately, so `shore log | less` sends plain
-/// text down the pipe while an error raised on the way still reaches the
-/// terminal in red.
 pub(crate) fn detect_color() {
     let vetoed = env_flag_set("NO_COLOR");
     let forced = env_flag_set("FORCE_COLOR");
@@ -68,8 +56,6 @@ fn env_flag_set(name: &str) -> bool {
     std::env::var(name).is_ok_and(|v| !v.is_empty())
 }
 
-/// A terminal gets color; a pipe or a file does not, unless FORCE_COLOR asks
-/// for it — which is what `| less -R` needs. NO_COLOR overrules both.
 fn color_for_stream(vetoed: bool, forced: bool, is_terminal: bool) -> bool {
     !vetoed && (forced || is_terminal)
 }
@@ -85,11 +71,6 @@ pub(crate) fn use_color_on_stderr() -> bool {
     COLOR_STDERR.load(Ordering::Relaxed)
 }
 
-/// Whether stdout gets the drawn transcript — rules, gutters, box characters —
-/// or the flat `name [HH:MM]:` rendering. A pipe or a file gets the flat one.
-///
-/// Distinct from [`use_color`] because the two answers differ: NO_COLOR on a
-/// terminal means an uncolored *drawn* transcript, not a flattened one.
 pub(crate) fn use_decoration() -> bool {
     DECORATE_STDOUT.load(Ordering::Relaxed)
 }
@@ -117,7 +98,6 @@ pub(crate) fn write_stderr_line(args: fmt::Arguments<'_>) {
     let _ignored = writeln!(out, "{args}");
 }
 
-/// Strip trailing date suffix (`-YYYYMMDD`) from a model ID.
 pub(crate) fn abbreviate_model(model_id: &str) -> &str {
     if let Some(i) = model_id.rfind('-') {
         let suffix = i.checked_add(1).and_then(|start| model_id.get(start..));
@@ -128,19 +108,8 @@ pub(crate) fn abbreviate_model(model_id: &str) -> &str {
     model_id
 }
 
-/// Max characters to display for a tool result before truncating.
 pub(crate) const MAX_TOOL_OUTPUT: usize = 500;
 
-/// Get terminal width, falling back to 80 columns.
-///
-/// Under `cfg(test)` the terminal is never consulted and the fallback is used
-/// directly. `crossterm::terminal::size()` reads `/dev/tty` rather than stdout,
-/// so redirecting `cargo test` does not detach it: a run in an interactive
-/// shell picks up that shell's width while a piped or CI run gets 80, and every
-/// width-sensitive assertion quietly changes meaning between the two. Pinning
-/// the value keeps the rendering tests hermetic. Tests that care about a
-/// specific width pass one in — the wrapping helpers all take it as an
-/// argument, so nothing needs to override this.
 pub(crate) fn term_width() -> usize {
     if cfg!(test) {
         return 80;
@@ -148,7 +117,6 @@ pub(crate) fn term_width() -> usize {
     crossterm::terminal::size().map_or(80, |(w, _)| usize::from(w))
 }
 
-/// Parse an RFC 3339 timestamp to local time.
 pub(crate) fn parse_timestamp(ts: &str) -> Option<DateTime<Local>> {
     DateTime::<FixedOffset>::parse_from_rfc3339(ts)
         .map(|dt| dt.with_timezone(&Local))
@@ -166,8 +134,6 @@ mod tests {
         assert!(!color_for_stream(false, false, false));
     }
 
-    /// `shore log | less -R` wants the escapes kept; NO_COLOR wants them gone
-    /// whatever else is set, which is the rule no-color.org asks for.
     #[test]
     fn force_color_overrides_the_pipe_and_no_color_overrides_everything() {
         assert!(color_for_stream(false, true, false));
@@ -201,7 +167,6 @@ mod tests {
 
     #[test]
     fn wrap_line_breaks_at_word_boundaries() {
-        // width 10: greedy packing, break before a word that would overflow.
         assert_eq!(
             wrap_line("the quick brown fox jumps", 10),
             vec!["the quick", "brown fox", "jumps"]
@@ -215,7 +180,6 @@ mod tests {
 
     #[test]
     fn wrap_line_long_word_is_not_split() {
-        // A word longer than width gets its own line rather than a hard split.
         assert_eq!(
             wrap_line("a supercalifragilistic b", 8),
             vec!["a", "supercalifragilistic", "b"]
@@ -234,7 +198,6 @@ mod tests {
         let mut buf = Vec::new();
         write_thinking_content_line(&mut buf, "the quick brown fox jumps", 10);
         let out = String::from_utf8(buf).unwrap();
-        // Every wrapped row is gutter-barred, text at column 4.
         assert_eq!(
             out,
             " \u{2502}   the quick\n \u{2502}   brown fox\n \u{2502}   jumps\n"
@@ -270,7 +233,6 @@ mod tests {
     #[test]
     fn process_body_wraps_long_lines_keeping_the_gutter() {
         set_color_enabled(false);
-        // A line far longer than any sane terminal width, with a 2-space indent.
         let long = "word ".repeat(80);
         let mut buf = Vec::new();
         write_process_body(&mut buf, &format!("  {}", long.trim_end()));
@@ -278,7 +240,6 @@ mod tests {
         let lines: Vec<&str> = out.lines().collect();
         assert!(lines.len() > 1, "a very long line must wrap to many rows");
         for l in &lines {
-            // Every row — including wrapped continuations — keeps the gutter.
             assert!(l.starts_with(" \u{2502}   "), "row lost the gutter: {l:?}");
         }
     }

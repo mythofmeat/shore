@@ -14,25 +14,14 @@ use super::{
     write_thinking_content_line,
 };
 
-// ---------------------------------------------------------------------------
-// Log formatter -- human-readable chat transcript (Option B)
-// ---------------------------------------------------------------------------
-
-/// Which auxiliary channels a transcript view includes. Speech (text) and
-/// images are always shown; these gate the inset "process" channel so
-/// `shore log` defaults to message text only and opts into the rest.
 #[derive(Clone, Copy, Default)]
 pub(crate) struct LogFilter {
-    /// Show `thinking` reasoning blocks (`--reasoning`).
     pub reasoning: bool,
-    /// Show `tool_use` calls and `tool_result` outputs (`--tools`).
     pub tools: bool,
-    /// Show a sub-agent's nested tool activity in `--follow` (`--subagent-tools`).
     pub subagent_tools: bool,
 }
 
 impl LogFilter {
-    /// Show every channel — the full, unfiltered transcript.
     #[cfg(test)]
     pub(crate) fn all() -> Self {
         Self {
@@ -42,21 +31,16 @@ impl LogFilter {
         }
     }
 
-    /// Whether a single content block produces visible output under this filter.
     fn block_renders(self, block: &serde_json::Value) -> bool {
         match block["type"].as_str().unwrap_or("text") {
             "text" => !block["text"].as_str().unwrap_or("").is_empty(),
             "thinking" => self.reasoning && !block["thinking"].as_str().unwrap_or("").is_empty(),
             "tool_use" | "tool_result" => self.tools,
-            // redacted_thinking and unknown types are content-free placeholders.
             _ => false,
         }
     }
 }
 
-/// Whether a message produces any visible output under `filter` — used to skip
-/// headers and spacing for messages whose only content is filtered out (e.g. a
-/// tool-result-only turn when `--tools` is off).
 fn message_renders(
     content_blocks: Option<&Vec<serde_json::Value>>,
     content: &str,
@@ -69,9 +53,7 @@ fn message_renders(
     }
     match content_blocks {
         Some(blocks) if !blocks.is_empty() => blocks.iter().any(|b| filter.block_renders(b)),
-        // Empty content_blocks falls back to the plain content string.
         Some(_) => !content.is_empty(),
-        // Legacy message (no content_blocks): show unless it's an empty tool result.
         None => !content.is_empty() || !is_tool_result_msg,
     }
 }
@@ -80,19 +62,16 @@ pub(crate) fn character_color(name: &str) -> Tone {
     super::vocab::speaker_tone(name)
 }
 
-/// Format a timestamp for display. Uses "HH:MM" normally,
-/// "Mon DD . HH:MM" if the date differs from `prev_date`.
 pub(crate) fn format_time(dt: &DateTime<Local>, prev_date: Option<&str>) -> String {
     let date = dt.format("%Y-%m-%d").to_string();
     let time = dt.format("%H:%M").to_string();
     match prev_date {
         Some(prev) if prev == date => time,
-        None => time, // first message, just show time
+        None => time,
         Some(_) => dt.format("%b %d \u{00b7} %H:%M").to_string(),
     }
 }
 
-/// Write a colored header line: `-- Name . HH:MM --------------------`
 pub(crate) fn write_header(
     out: &mut impl Write,
     name: &str,
@@ -100,7 +79,6 @@ pub(crate) fn write_header(
     color: Tone,
     width: usize,
 ) {
-    // "-- Name . HH:MM " = 4 + name.len() + 3 + time.len() + 1
     let prefix = format!("\u{2500}\u{2500} {name} \u{00b7} {time_str} ");
     let prefix_len = prefix.chars().count();
     let trail = width.saturating_sub(prefix_len);
@@ -148,8 +126,6 @@ fn count_user_turn_values(messages: &[serde_json::Value]) -> usize {
         .count()
 }
 
-/// Render a thinking block into the process channel: a colored `◌ Thinking`
-/// header, then the thought as dim, word-wrapped, inset content.
 fn write_thinking(out: &mut impl Write, thinking: &str) {
     write_sigil_header(out, SIGIL_THINKING, "Thinking", COLOR_THINKING);
     let width = process_wrap_width();
@@ -158,7 +134,6 @@ fn write_thinking(out: &mut impl Write, thinking: &str) {
     }
 }
 
-/// Render the content of a single message: content blocks if present, plain text fallback otherwise.
 fn render_message_content(
     out: &mut impl Write,
     content_blocks: Option<&Vec<serde_json::Value>>,
@@ -168,33 +143,23 @@ fn render_message_content(
 ) {
     if let Some(blocks) = content_blocks {
         if blocks.is_empty() {
-            // Empty content_blocks -- fall back to content string.
             if !content.is_empty() {
                 let _ignored = writeln!(out, "{content}");
             }
         } else {
-            // Speech (text) is the primary, flush-left voice; thinking, tool
-            // calls, and results form one inset, gutter-barred "process"
-            // channel. Consecutive process blocks are joined by a bar-only rule
-            // so the gutter runs unbroken; a blank line separates the channel
-            // from speech on either side. `redacted_thinking` is hidden.
             let mut prev_process: Option<bool> = None;
             for block in blocks {
                 let block_type = block["type"].as_str().unwrap_or("text");
                 let is_process = block_type != "text";
-                // Whether this block will actually emit any visible output under
-                // the active filter (reasoning/tools gated; redacted_thinking and
-                // unknown types are content-free placeholders).
                 if !filter.block_renders(block) {
                     continue;
                 }
                 if let Some(prev) = prev_process {
                     if prev && is_process {
-                        write_channel_rule(out); // keep the gutter unbroken
+                        write_channel_rule(out);
                     } else if prev || is_process {
-                        let _ignored = writeln!(out); // channel ↔ speech boundary
+                        let _ignored = writeln!(out);
                     } else {
-                        // Speech ↔ speech: no separator needed.
                     }
                 }
                 prev_process = Some(is_process);
@@ -231,7 +196,6 @@ fn render_message_content(
                             (SIGIL_OK, "result", COLOR_RESULT)
                         };
                         write_sigil_header(out, sigil, label, color);
-                        // Bodies stay dim; the colored header carries the status.
                         let formatted = format_tool_output(output);
                         write_process_body(out, &formatted);
                     }
@@ -240,22 +204,16 @@ fn render_message_content(
             }
         }
     } else {
-        // No content_blocks field -- legacy message, show content string.
         if !content.is_empty() || !is_tool_result_msg {
             let _ignored = writeln!(out, "{content}");
         }
     }
 }
 
-/// Print the conversation log as a human-readable chat transcript.
-///
-/// `character_name` is used for assistant messages; pass the active character
-/// name or a fallback like "Assistant".
 pub(crate) fn print_log(messages: &[serde_json::Value], character_name: &str, filter: LogFilter) {
     print_log_with_boundary(messages, 0, character_name, filter);
 }
 
-/// Print the conversation log with an optional archive/current-context boundary.
 pub(crate) fn print_log_with_boundary(
     messages: &[serde_json::Value],
     active_start: usize,
@@ -301,7 +259,6 @@ fn write_log_with_boundary(
         let images = msg["images"].as_array();
         let content_blocks = msg["content_blocks"].as_array();
 
-        // Detect tool-result-only "user" messages (from tool loop).
         let is_tool_result_msg = role_str == "user"
             && content_blocks.is_some_and(|blocks| {
                 !blocks.is_empty()
@@ -310,9 +267,6 @@ fn write_log_with_boundary(
                         .all(|b| b["type"].as_str() == Some("tool_result"))
             });
 
-        // Skip messages that render nothing under the active filter (e.g. a
-        // thinking-only or tool-only turn when those channels are hidden) so
-        // they leave no orphan header or blank line.
         if !message_renders(content_blocks, content, is_tool_result_msg, images, filter) {
             continue;
         }
@@ -323,12 +277,10 @@ fn write_log_with_boundary(
             .map(|dt| format_time(dt, prev_date.as_deref()))
             .unwrap_or_default();
 
-        // Update prev_date for next iteration
         if let Some(dt) = &parsed_ts {
             prev_date = Some(dt.format("%Y-%m-%d").to_string());
         }
 
-        // Write header (skip for tool result messages -- they're continuations).
         if !is_tool_result_msg {
             match role_str {
                 "user" => write_header(out, "You", &time_str, Tone::Active, width),
@@ -350,11 +302,9 @@ fn write_log_with_boundary(
 
         render_message_content(out, content_blocks, content, is_tool_result_msg, filter);
 
-        // System messages: close dimming.
         if role_str == "system" && use_color() {
         }
 
-        // Images
         if let Some(imgs) = images {
             for img in imgs {
                 let label = img["caption"]
@@ -369,7 +319,6 @@ fn write_log_with_boundary(
             }
         }
 
-        // Blank line between messages
         let _ignored = writeln!(out);
     }
 
@@ -378,7 +327,6 @@ fn write_log_with_boundary(
     }
 }
 
-/// Print only the text content of a single message — no role, no timestamp, no decoration.
 pub(crate) fn print_message_content(data: &serde_json::Value) {
     let content = data["content"].as_str().unwrap_or("");
     let content_blocks = data["content_blocks"].as_array();
@@ -401,8 +349,6 @@ pub(crate) fn print_message_content(data: &serde_json::Value) {
     }
 }
 
-/// Print the conversation log as plain text — no colors, no box-drawing.
-/// Format: `role [HH:MM]: content` with blank lines between messages.
 pub(crate) fn print_log_plain(
     messages: &[serde_json::Value],
     character_name: &str,
@@ -411,7 +357,6 @@ pub(crate) fn print_log_plain(
     print_log_plain_with_boundary(messages, 0, character_name, filter);
 }
 
-/// Plain-text transcript with an optional archive/current-context boundary.
 pub(crate) fn print_log_plain_with_boundary(
     messages: &[serde_json::Value],
     active_start: usize,
@@ -423,7 +368,6 @@ pub(crate) fn print_log_plain_with_boundary(
     write_log_plain_with_boundary(&mut out, messages, active_start, character_name, filter);
 }
 
-/// Render plain-text content blocks (or fallback to the plain `content` string).
 fn write_plain_message_content(
     out: &mut impl Write,
     content_blocks: Option<&Vec<serde_json::Value>>,
@@ -446,7 +390,6 @@ fn write_plain_message_content(
                             _ = writeln!(out, "[thinking] {t}");
                         }
                     }
-                    // redacted_thinking is a content-free placeholder — hide it.
                     "tool_use" if filter.tools => {
                         let tool_name = block["name"].as_str().unwrap_or("?");
                         _ = writeln!(out, "[tool: {tool_name}]");
@@ -468,12 +411,10 @@ fn write_plain_message_content(
         } else if !content.is_empty() {
             _ = writeln!(out, "{content}");
         } else {
-            // No blocks and no plain content: nothing to print.
         }
     } else if !content.is_empty() {
         _ = writeln!(out, "{content}");
     } else {
-        // No content_blocks field and no plain content: nothing to print.
     }
 }
 
@@ -501,8 +442,6 @@ fn write_log_plain_with_boundary(
         let images = msg["images"].as_array();
         let content_blocks = msg["content_blocks"].as_array();
 
-        // Tool-result-only turns count as such only when tools are hidden, but
-        // the predicate handles every empty-under-filter case uniformly.
         let is_tool_result_msg = role_str == "user"
             && content_blocks.is_some_and(|blocks| {
                 !blocks.is_empty()
@@ -511,7 +450,6 @@ fn write_log_plain_with_boundary(
                         .all(|b| b["type"].as_str() == Some("tool_result"))
             });
 
-        // Skip messages with nothing visible under the active filter.
         if !message_renders(content_blocks, content, is_tool_result_msg, images, filter) {
             continue;
         }
@@ -541,7 +479,6 @@ fn write_log_plain_with_boundary(
     }
 }
 
-/// Print a push NewMessage in the transcript format (used in follow mode).
 pub(crate) fn print_new_message(msg: &NewMessage, character_name: &str) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
@@ -573,11 +510,9 @@ pub(crate) fn print_new_message(msg: &NewMessage, character_name: &str) {
     let _ignored = writeln!(out, "{}", msg.message.content);
     _ = writeln!(out);
 
-    // Render any attached images.
     print_image_refs(&msg.message.images);
 }
 
-/// Print a transcript header for the assistant before streaming begins.
 pub(crate) fn print_follow_stream_start(character_name: &str) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
@@ -591,21 +526,12 @@ pub(crate) fn print_follow_stream_start(character_name: &str) {
     write_speaker_line(&mut out, &speaker, &time_str, width);
 }
 
-/// How a speaker is named in each of the two renderings. The drawn rule says
-/// `You`; the flat line says `you`, matching what the batch renderer writes so
-/// a pipe reading both sees one spelling.
 struct Speaker<'name> {
     drawn: &'name str,
     flat: &'name str,
     tone: Tone,
 }
 
-/// The speaker header for live frames: a rule on a terminal, the flat
-/// `name [HH:MM]:` line into a pipe.
-///
-/// `--follow` streams messages one frame at a time rather than through the
-/// batch renderer, so it never saw `--plain` and would otherwise keep drawing
-/// rules down a pipe that the rest of `shore log` no longer draws.
 fn write_speaker_line(out: &mut impl Write, speaker: &Speaker<'_>, time_str: &str, width: usize) {
     if crate::output::use_decoration() {
         write_header(out, speaker.drawn, time_str, speaker.tone, width);
@@ -614,7 +540,6 @@ fn write_speaker_line(out: &mut impl Write, speaker: &Speaker<'_>, time_str: &st
     }
 }
 
-/// Print a single message in the same transcript format as print_log.
 pub(crate) fn print_single_message(
     data: &serde_json::Value,
     character_name: &str,
@@ -623,7 +548,6 @@ pub(crate) fn print_single_message(
     print_log(std::slice::from_ref(data), character_name, filter);
 }
 
-/// Print heartbeat event log returned by `shore trace events`.
 pub(crate) fn print_heartbeat_log(data: &serde_json::Value) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
@@ -658,7 +582,6 @@ pub(crate) fn print_heartbeat_log(data: &serde_json::Value) {
             },
         );
 
-        // Kind label with color
         let kind_color = match kind {
             "tick_fired" => Tone::Active,
             "message_sent" | "wake" | "recap_written" => Tone::Good,
@@ -681,14 +604,6 @@ mod tests {
     use super::*;
     use crate::output::set_color_enabled;
 
-    /// Visual preview harness (not an assertion). Renders a representative
-    /// assistant turn with interleaved thinking via the real renderer, color
-    /// ON, and dumps the raw bytes (ANSI escapes included) so a terminal shows
-    /// it exactly as `shore log` / `shore get` would.
-    ///
-    /// Run it: `cargo test -p shore-cli render_preview_log
-    ///          -- --ignored --nocapture --test-threads=1`
-    /// (or via `.claude/skills/run-shore-cli/preview.sh`).
     #[test]
     #[ignore = "visual preview; run explicitly with --ignored --nocapture"]
     fn render_preview_log() {
@@ -698,8 +613,6 @@ mod tests {
             serde_json::json!({"type": "text", "text": "Here's the first part of my answer."}),
             serde_json::json!({"type": "tool_use", "name": "edit", "input": {"path": "src/main.rs", "new_string": "a deliberately long replacement line so the tool body has to word-wrap and we can see the gutter bar continue down every wrapped row of the body too"}}),
             serde_json::json!({"type": "tool_result", "content": "fn main() { ... }", "is_error": false}),
-            // redacted_thinking is hidden — should produce no output and not
-            // disturb the breathing room around the real thinking block.
             serde_json::json!({"type": "redacted_thinking", "data": "AAAA"}),
             serde_json::json!({"type": "thinking", "thinking": "Now that I've read the file, I can refine my answer with the concrete details I just learned."}),
             serde_json::json!({"type": "text", "text": "And here's the refined conclusion."}),
@@ -813,8 +726,6 @@ mod tests {
         render_message_content(&mut buf, Some(&blocks), "", false, LogFilter::all());
         let output = String::from_utf8(buf).unwrap();
 
-        // Each thinking block is a `◌ Thinking` header + gutter-barred content,
-        // with a blank line straddling each thinking/speech boundary.
         assert_eq!(
             output,
             " \u{2502} \u{25cc} Thinking\n \u{2502}   T1\n\nA1\n\n \u{2502} \u{25cc} Thinking\n \u{2502}   T2\n\nA2\n"
@@ -829,7 +740,6 @@ mod tests {
         let mut buf = Vec::new();
         render_message_content(&mut buf, Some(&blocks), "", false, LogFilter::all());
         let output = String::from_utf8(buf).unwrap();
-        // Header line, then each content line gutter-barred under it.
         assert_eq!(
             output,
             " \u{2502} \u{25cc} Thinking\n \u{2502}   line one\n \u{2502}   line two\n"
@@ -857,14 +767,12 @@ mod tests {
         set_color_enabled(false);
         let blocks = vec![
             serde_json::json!({"type": "thinking", "thinking": "T1"}),
-            // Empty text block must not break the channel on its own.
             serde_json::json!({"type": "text", "text": ""}),
             serde_json::json!({"type": "thinking", "thinking": "T2"}),
         ];
         let mut buf = Vec::new();
         render_message_content(&mut buf, Some(&blocks), "", false, LogFilter::all());
         let output = String::from_utf8(buf).unwrap();
-        // Two adjacent process blocks are joined by a bar-only rule, not a blank.
         assert_eq!(
             output,
             " \u{2502} \u{25cc} Thinking\n \u{2502}   T1\n \u{2502}\n \u{2502} \u{25cc} Thinking\n \u{2502}   T2\n"
@@ -883,8 +791,6 @@ mod tests {
         let mut buf = Vec::new();
         render_message_content(&mut buf, Some(&blocks), "", false, LogFilter::all());
         let output = String::from_utf8(buf).unwrap();
-        // Speech flush-left; the tool call + result share one unbroken gutter
-        // (joined by a bar rule), with a blank line to the speech on each side.
         assert_eq!(
             output,
             "let me check\n\n \u{2502} \u{2192} edit \u{00b7} a.md\n \u{2502}   path: a.md\n \u{2502}\n \u{2502} \u{2713} result\n \u{2502}   done\n\nfixed\n"
@@ -902,11 +808,9 @@ mod tests {
         let mut buf = Vec::new();
         render_message_content(&mut buf, Some(&blocks), "", false, LogFilter::all());
         let output = String::from_utf8(buf).unwrap();
-        // Redacted block produces nothing and leaves no breathing room.
         assert_eq!(output, "A1\nA2\n");
     }
 
-    /// A mixed assistant turn: thinking + speech + tool call/result + speech.
     fn mixed_blocks() -> Vec<serde_json::Value> {
         vec![
             serde_json::json!({"type": "thinking", "thinking": "reasoning"}),
@@ -924,7 +828,6 @@ mod tests {
         let mut buf = Vec::new();
         render_message_content(&mut buf, Some(&blocks), "", false, LogFilter::default());
         let output = String::from_utf8(buf).unwrap();
-        // Thinking and tool call/result are gone; only speech remains.
         assert_eq!(output, "before\nafter\n");
     }
 
@@ -973,7 +876,6 @@ mod tests {
                 "content_blocks": [{"type": "text", "text": "hi"}],
                 "timestamp": "",
             }),
-            // Tool-result-only user turn — nothing to show without --tools.
             serde_json::json!({
                 "role": "user",
                 "content_blocks": [{"type": "tool_result", "content": "ok", "is_error": false}],
@@ -983,15 +885,12 @@ mod tests {
         let mut buf = Vec::new();
         write_log_with_boundary(&mut buf, &messages, 0, "Sable", 72, LogFilter::default());
         let output = String::from_utf8(buf).unwrap();
-        // Only the assistant's speech renders; the tool-result turn leaves no
-        // orphan header, "result" marker, or extra blank-line gap.
         assert!(
             output.contains("Sable"),
             "assistant header shown: {output:?}"
         );
         assert!(output.contains("hi"), "speech shown: {output:?}");
         assert!(!output.contains("result"), "tool result hidden: {output:?}");
-        // Exactly one header line (the assistant's) and one trailing blank line.
         assert_eq!(
             output.matches('\u{2502}').count(),
             0,
@@ -1014,8 +913,6 @@ mod tests {
     fn character_color_varies_by_name() {
         let c1 = character_color("Sable");
         let c2 = character_color("Atlas");
-        // Different names should usually get different colors
-        // (not guaranteed but very likely with distinct names)
         assert_ne!(format!("{c1:?}"), format!("{c2:?}"));
     }
 
@@ -1024,7 +921,6 @@ mod tests {
         let dt = Local::now();
         let date = dt.format("%Y-%m-%d").to_string();
         let result = format_time(&dt, Some(&date));
-        // Should be just HH:MM
         assert!(result.len() <= 5, "expected HH:MM, got: {result}");
     }
 
@@ -1039,7 +935,6 @@ mod tests {
     fn format_time_different_day_shows_date() {
         let dt = Local::now();
         let result = format_time(&dt, Some("1999-01-01"));
-        // Should contain month abbreviation
         assert!(result.len() > 5, "expected date + time, got: {result}");
     }
 
@@ -1092,8 +987,6 @@ mod tests {
         );
     }
 
-    /// A pipe reads batch output and `--follow` output as one stream, so a
-    /// reader keying on `you [HH:MM]:` has to match both halves.
     #[test]
     fn the_flat_speaker_line_matches_what_the_batch_renderer_writes() {
         let _guard = crate::output::COLOR_TEST_LOCK
@@ -1116,7 +1009,6 @@ mod tests {
         let batch = String::from_utf8(batch_bytes).unwrap_or_default();
         let batch_header = batch.lines().next().unwrap_or_default().to_owned();
 
-        // The batch renderer shows local time; take its clock, compare the line.
         let time_str = batch_header.split(['[', ']']).nth(1).unwrap_or_default();
 
         let mut live_bytes = Vec::new();
@@ -1167,7 +1059,6 @@ mod tests {
         write_header(&mut buf, "X", "00:00", Tone::Active, 60);
         let output = String::from_utf8(buf).unwrap();
         let line = output.trim_end_matches('\n');
-        // Width should roughly match requested width (all ASCII/box-drawing).
         assert!(
             line.chars().count() >= 50,
             "header should pad to fill width, got {} chars",
@@ -1177,10 +1068,8 @@ mod tests {
 
     #[test]
     fn format_time_date_boundary() {
-        // When prev_date differs, should include month abbreviation.
         let dt = Local::now();
         let result = format_time(&dt, Some("2020-01-01"));
-        // Should contain something like "Apr 04" (month day).
         assert!(
             result.contains("\u{00b7}"),
             "cross-day format should contain middle dot"

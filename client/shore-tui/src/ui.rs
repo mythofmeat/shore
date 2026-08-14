@@ -14,11 +14,9 @@ use crate::app::{
 use crate::images;
 use crate::markdown;
 
-/// Render the full TUI layout.
 pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
     let size = frame.area();
 
-    // Main layout: conversation | input | picker (only when active)
     let input_content_width = size.width as usize;
     let input_height = (app.input.visual_line_count(input_content_width) as u16 + 1).min(8);
 
@@ -50,8 +48,8 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
     };
 
     let mut constraints = vec![
-        Constraint::Min(3),               // conversation
-        Constraint::Length(input_height), // input
+        Constraint::Min(3),
+        Constraint::Length(input_height),
     ];
     if show_value_editor || show_completions {
         constraints.push(Constraint::Length(completion_height));
@@ -66,8 +64,6 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
 
     draw_conversation(frame, &mut *app, chunks[0]);
 
-    // Transient toasts float over the conversation's top-right corner so
-    // they never reflow or interleave with the message log.
     draw_notifications(frame, app, chunks[0]);
 
     draw_input(frame, app, chunks[1]);
@@ -89,26 +85,18 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
     }
 }
 
-/// Render active toasts as floating, rounded boxes stacked down from the
-/// top-right of the conversation area. Newest sits at the top; older ones
-/// stack below it. The overlay never reflows the conversation — it
-/// paints on top via `Clear`. Toasts auto-expire (see `App::expire_notifications`).
 fn draw_notifications(frame: &mut Frame, app: &App, area: Rect) {
     if app.notifications.is_empty() || area.width < 16 || area.height < 3 {
         return;
     }
 
-    // Box geometry: right-aligned with a 1-col margin, capped to roughly half
-    // the conversation width so long messages wrap rather than dominate.
     let margin = 1u16;
     let box_w = (area.width / 2)
         .clamp(24, 56)
         .min(area.width.saturating_sub(margin));
-    // Inner text width: borders (2) + one space of left padding.
     let inner_w = box_w.saturating_sub(3) as usize;
     let box_x = area.x + area.width - box_w - margin;
 
-    // Place from the top down, newest first.
     let mut next_top = area.y;
     for notif in app.notifications.iter().rev() {
         let (icon, color) = match notif.level {
@@ -117,14 +105,13 @@ fn draw_notifications(frame: &mut Frame, app: &App, area: Rect) {
             crate::app::NotificationLevel::Error => ("✖", Color::Red),
         };
 
-        // First text line carries the icon; wrapped continuations align under it.
         let suffix = if notif.count > 1 {
             format!(" (×{})", notif.count)
         } else {
             String::new()
         };
         let body = format!("{}{}", notif.content, suffix);
-        let wrap_w = inner_w.saturating_sub(2); // leave room for "icon "
+        let wrap_w = inner_w.saturating_sub(2);
         let mut wrapped: Vec<String> = body
             .lines()
             .flat_map(|l| word_wrap(l, wrap_w.max(1)))
@@ -132,13 +119,10 @@ fn draw_notifications(frame: &mut Frame, app: &App, area: Rect) {
         if wrapped.is_empty() {
             wrapped.push(String::new());
         }
-        // Cap each toast to 3 visible lines; mark truncation with an ellipsis.
         const MAX_LINES: usize = 3;
         if wrapped.len() > MAX_LINES {
             wrapped.truncate(MAX_LINES);
             if let Some(last) = wrapped.last_mut() {
-                // Reserve one display cell for the ellipsis so it isn't clipped
-                // when the last line already fills the wrap width.
                 truncate_to_width(last, wrap_w.saturating_sub(1));
                 last.push('…');
             }
@@ -155,14 +139,12 @@ fn draw_notifications(frame: &mut Frame, app: &App, area: Rect) {
                         Span::styled(text, style),
                     ])
                 } else {
-                    // Align continuation text under the first line's text.
                     Line::from(vec![Span::raw("   "), Span::styled(text, style)])
                 }
             })
             .collect();
 
-        let box_h = lines.len() as u16 + 2; // borders
-        // Stop stacking once we'd overflow the bottom of the conversation area.
+        let box_h = lines.len() as u16 + 2;
         if next_top + box_h > area.y + area.height {
             break;
         }
@@ -180,7 +162,6 @@ fn draw_notifications(frame: &mut Frame, app: &App, area: Rect) {
     }
 }
 
-/// Word-wrap text and push it as bar-indented lines (`  │ content`).
 fn push_bar_wrapped(
     lines: &mut Vec<Line<'static>>,
     text: &str,
@@ -198,8 +179,6 @@ fn push_bar_wrapped(
     }
 }
 
-/// Render a run of consecutive thinking blocks as dimmed text under a single
-/// "◆ thinking" header.
 fn render_thinking_group(lines: &mut Vec<Line<'static>>, thoughts: &[String], wrap_width: u16) {
     if thoughts.is_empty() {
         return;
@@ -212,20 +191,15 @@ fn render_thinking_group(lines: &mut Vec<Line<'static>>, thoughts: &[String], wr
         .add_modifier(Modifier::ITALIC);
     let bar_style = Style::default().fg(Color::DarkGray);
     lines.push(Line::from(Span::styled("  ◆ thinking", header_style)));
-    let text_width = wrap_width.saturating_sub(4) as usize; // "  │ " = 4 cols
+    let text_width = wrap_width.saturating_sub(4) as usize;
     for thought in thoughts {
         push_bar_wrapped(lines, thought, bar_style, content_style, text_width);
     }
     lines.push(Line::from(""));
 }
 
-/// Color of the `◆`/`»` sub-agent section markers and the nested tool blocks
-/// inside it. Mirrors the CLI's `COLOR_SUBAGENT`.
 const SUBAGENT_COLOR: Color = Color::Cyan;
 
-/// Render a single tool-call or tool-result block. When `subagent` is set the
-/// header is tinted in [`SUBAGENT_COLOR`] so a nested `ask_<name>` tool reads
-/// differently from the primary model's Magenta/Cyan tool blocks.
 fn render_tool_block(
     lines: &mut Vec<Line<'static>>,
     block: &TurnBlock,
@@ -233,7 +207,7 @@ fn render_tool_block(
     wrap_width: u16,
 ) {
     let bar_style = Style::default().fg(Color::DarkGray);
-    let text_width = wrap_width.saturating_sub(4) as usize; // "  │ " = 4 cols
+    let text_width = wrap_width.saturating_sub(4) as usize;
     match block {
         TurnBlock::ToolUse {
             tool_name, input, ..
@@ -297,11 +271,6 @@ fn render_tool_block(
     }
 }
 
-/// Render a turn's blocks in their authoritative order (think → call →
-/// result → text → …). Consecutive thinking blocks collapse under one header;
-/// text blocks render as markdown. Hidden categories are skipped. Because the
-/// blocks carry the true order, interleaved `text → tool_use → text` renders
-/// faithfully under the single turn header — no deferral, no reconcile.
 fn render_blocks(
     lines: &mut Vec<Line<'static>>,
     blocks: &[TurnBlock],
@@ -310,9 +279,6 @@ fn render_blocks(
     show_subagent: bool,
     wrap_width: u16,
 ) {
-    // Whether the cursor is inside a `SubagentBegin`…`SubagentEnd` section.
-    // While inside, content visibility is gated by `show_subagent` rather than
-    // the per-category thinking/tools toggles, and tool blocks render tinted.
     let mut in_subagent = false;
     let mut i = 0;
     while i < blocks.len() {
@@ -353,8 +319,6 @@ fn render_blocks(
                 while i < blocks.len() && matches!(blocks[i], TurnBlock::Thinking(_)) {
                     i += 1;
                 }
-                // Inside a sub-agent section the whole nested loop hides/shows as
-                // one unit under `show_subagent`; outside, the thinking toggle.
                 let visible = if in_subagent {
                     show_subagent
                 } else {
@@ -408,7 +372,6 @@ fn plural(n: usize) -> &'static str {
     if n == 1 { "" } else { "s" }
 }
 
-/// Squeeze runs of >1 consecutive blank lines down to at most 1.
 fn squeeze_blank_lines(lines: &mut Vec<Line<'static>>) {
     let mut consecutive_blanks = 0u32;
     let mut squeezed = Vec::with_capacity(lines.len());
@@ -432,8 +395,6 @@ fn visual_line_count(lines: &[Line<'static>], _width: u16) -> u16 {
     lines.len().min(u16::MAX as usize) as u16
 }
 
-/// Truncate `s` in place so its display width is at most `max_width` columns,
-/// dropping whole characters from the end (keeps multi-cell graphemes intact).
 fn truncate_to_width(s: &mut String, max_width: usize) {
     use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
@@ -453,7 +414,6 @@ fn truncate_to_width(s: &mut String, max_width: usize) {
     s.truncate(end);
 }
 
-/// Word-wrap a single line of text to fit within `max_width` columns.
 fn word_wrap(text: &str, max_width: usize) -> Vec<String> {
     use unicode_width::UnicodeWidthStr;
 
@@ -489,7 +449,6 @@ fn word_wrap(text: &str, max_width: usize) -> Vec<String> {
     result
 }
 
-/// Prepend 2-space indent to each line (for content under a name header).
 fn indent_lines(src: Vec<Line<'static>>) -> Vec<Line<'static>> {
     src.into_iter()
         .map(|line| {
@@ -503,9 +462,6 @@ fn indent_lines(src: Vec<Line<'static>>) -> Vec<Line<'static>> {
         .collect()
 }
 
-/// Render the assistant name header for an in-progress streamed turn.
-/// A single turn can span multiple phases (tool_use → final), so this
-/// header is emitted exactly once by the caller.
 fn render_streaming_header(lines: &mut Vec<Line<'static>>, app: &App) {
     let name = if app.character_name.is_empty() {
         "Assistant"
@@ -531,11 +487,7 @@ fn render_streaming_header(lines: &mut Vec<Line<'static>>, app: &App) {
     lines.push(Line::from(""));
 }
 
-/// Render the live-stream footer: just the compact spinner / activity
-/// indicator. The streamed content itself now lives in `app.entries` and is
-/// rendered by `flush_pending` before this is called.
 fn render_streaming_content(lines: &mut Vec<Line<'static>>, app: &App, _content_width: u16) {
-    // Compact spinner — always visible during streaming
     let indicator_style = Style::default()
         .fg(Color::DarkGray)
         .add_modifier(Modifier::ITALIC);
@@ -615,13 +567,6 @@ fn push_entry_header(
     lines.push(Line::from(spans));
 }
 
-/// Render the scrollable conversation log.
-///
-/// Building the full line list from `app.entries` is expensive — markdown
-/// rendering and word-wrap run for every text entry. To keep keystroke
-/// latency flat as the conversation grows, the lines are cached in
-/// `app.conv_cache` and reused on frames where a cheap fingerprint of
-/// rendering-relevant state matches the previous build.
 fn draw_conversation(frame: &mut Frame, app: &mut App, area: Rect) {
     let content_width = area.width;
 
@@ -651,9 +596,6 @@ fn draw_conversation(frame: &mut Frame, app: &mut App, area: Rect) {
         max_scroll.saturating_sub(app.scroll_offset)
     };
 
-    // Bottom-anchor short conversations by shifting the render rect rather
-    // than allocating padding lines — saves an O(n_lines) clone every frame
-    // and keeps the cache reusable across resizes that fit inline.
     let render_area = if content_visual < visible_height {
         let top_pad = visible_height - content_visual;
         Rect {
@@ -672,15 +614,11 @@ fn draw_conversation(frame: &mut Frame, app: &mut App, area: Rect) {
 
     frame.render_widget(paragraph, render_area);
 
-    // Swap U+2800 stand-in → U+10EEEE kitty placeholder in rendered cells.
     if !app.image_index.is_empty() {
         images::fixup_placeholder_cells(frame.buffer_mut(), render_area);
     }
 }
 
-/// Render one turn: a role header followed by its blocks in order, then any
-/// images and (for a finalized assistant turn) the metadata footer. A turn in
-/// `Streaming` state uses the live header and a spinner footer instead.
 fn render_turn(
     lines: &mut Vec<Line<'static>>,
     app: &App,
@@ -749,7 +687,6 @@ fn render_turn(
                 image_index,
             );
             if turn.is_streaming() {
-                // Live spinner / activity footer (includes its own trailing blank).
                 render_streaming_content(lines, app, content_width);
             } else {
                 if app.show_metadata {
@@ -770,8 +707,6 @@ fn render_turn(
                 lines.push(Line::from(""));
             }
         }
-        // System turns don't arise here (System is a separate entry variant),
-        // but render their text defensively rather than panicking.
         Role::System => {
             render_blocks(
                 lines,
@@ -785,9 +720,6 @@ fn render_turn(
     }
 }
 
-/// Build the full `Vec<Line>` for the conversation pane from `app.entries`,
-/// the live stream state, and the active image cache. Returns the lines,
-/// the rebuilt image index, and the visual line count.
 fn build_conversation_lines(
     app: &App,
     content_width: u16,
@@ -795,9 +727,6 @@ fn build_conversation_lines(
     let mut lines: Vec<Line<'static>> = Vec::new();
     let mut image_index: Vec<crate::app::ImageEntry> = Vec::new();
 
-    // Each turn renders its own header followed by its blocks in order, so
-    // thinking/tools/text interleave faithfully under one header. System and
-    // archive markers render inline.
     for entry in app.entries.iter() {
         match entry {
             ConversationEntry::Turn(turn) => {
@@ -839,9 +768,6 @@ fn build_conversation_lines(
         }
     }
 
-    // A stream that has started but produced no turn yet (pre-first-chunk, or
-    // regen before StreamStart) still shows the header + spinner. Once deltas
-    // arrive the trailing `Streaming` turn renders this itself.
     let trailing_streaming = matches!(
         app.entries.last().and_then(ConversationEntry::as_turn),
         Some(turn) if turn.is_streaming()
@@ -851,7 +777,6 @@ fn build_conversation_lines(
         render_streaming_content(&mut lines, app, content_width);
     }
 
-    // Empty state: show a welcome hint
     if lines.is_empty() && !app.stream.active {
         let hint_style = Style::default().fg(Color::DarkGray);
         lines.push(Line::from(vec![
@@ -864,7 +789,6 @@ fn build_conversation_lines(
         ]));
     }
 
-    // Squeeze runs of blank lines (max 2 consecutive)
     squeeze_blank_lines(&mut lines);
 
     let content_visual = visual_line_count(&lines, content_width);
@@ -906,7 +830,6 @@ fn push_archive_boundary(
     lines.push(Line::from(""));
 }
 
-/// Render the fullscreen image viewer overlay.
 fn draw_fullscreen_image(frame: &mut Frame, app: &App, area: Rect) {
     let idx = match app.fullscreen {
         Some(i) if i < app.image_index.len() => i,
@@ -918,19 +841,17 @@ fn draw_fullscreen_image(frame: &mut Frame, app: &App, area: Rect) {
         None => return,
     };
 
-    // Layout: image area + 1-row status bar
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(1),    // image
-            Constraint::Length(1), // status bar
+            Constraint::Min(1),
+            Constraint::Length(1),
         ])
         .split(area);
 
     let img_area = chunks[0];
     let status_area = chunks[1];
 
-    // Compute fullscreen cell dimensions preserving aspect ratio
     let (fs_cols, fs_rows) = app.image_cache.calculate_cells(
         transmitted.pw,
         transmitted.ph,
@@ -938,7 +859,6 @@ fn draw_fullscreen_image(frame: &mut Frame, app: &App, area: Rect) {
         img_area.height,
     );
 
-    // Center the image vertically in the image area
     let v_pad = img_area.height.saturating_sub(fs_rows) / 2;
     let mut img_lines: Vec<Line<'static>> = Vec::new();
     for _ in 0..v_pad {
@@ -953,7 +873,6 @@ fn draw_fullscreen_image(frame: &mut Frame, app: &App, area: Rect) {
     let paragraph = Paragraph::new(Text::from(img_lines));
     frame.render_widget(paragraph, img_area);
 
-    // Status bar: "  3/7 — filename.png"
     let total = app.image_index.len();
     let status_text = format!("  {}/{} \u{2014} {}", idx + 1, total, entry.display_name);
     let status = Paragraph::new(Line::from(Span::styled(
@@ -962,12 +881,9 @@ fn draw_fullscreen_image(frame: &mut Frame, app: &App, area: Rect) {
     )));
     frame.render_widget(status, status_area);
 
-    // Fix up placeholder cells in the image area
     images::fixup_placeholder_cells(frame.buffer_mut(), img_area);
 }
 
-/// Render image entries — kitty placeholders when available, text fallback otherwise.
-/// Populates `index` with the line position of each transmitted image.
 fn render_images(
     lines: &mut Vec<Line<'static>>,
     img_refs: &[shore_common::protocol::types::ImageRef],
@@ -979,11 +895,9 @@ fn render_images(
         return;
     }
 
-    // Blank line before images for visual separation
     lines.push(Line::from(""));
 
     for img in img_refs {
-        // Extract display name: caption, filename, or full path
         let display = img.caption.as_deref().unwrap_or_else(|| {
             std::path::Path::new(&img.path)
                 .file_name()
@@ -1008,7 +922,6 @@ fn render_images(
             }
         }
 
-        // Text fallback (no kitty, or inline images toggled off)
         lines.push(Line::from(Span::styled(
             format!("  [image: {display}]"),
             Style::default().fg(Color::Magenta),
@@ -1016,20 +929,12 @@ fn render_images(
     }
 }
 
-/// Render the input area.
-/// Build the usage-budget chip shown on the input border: a 10-cell progress
-/// bar plus the percentage, colored by proximity to the limit (grey normal,
-/// yellow once a warning threshold is crossed, red over limit).
 fn usage_chip(
     budget: &crate::app::UsageBudget,
     focus: &crate::app::BudgetFocus,
 ) -> (String, Color) {
     const CELLS: usize = 10;
-    // The limit `:view budget` follows — by default whichever binds first, the
-    // pace when it's running hotter than the period cap. See `UsageBudget::level`.
     let level = budget.level(focus.scope);
-    // Label the pace, since a pace percentage read as a period percentage is
-    // misleading in either direction.
     let prefix = if budget.level_is_pace(focus.scope) {
         "pace "
     } else {
@@ -1038,9 +943,6 @@ fn usage_chip(
     let filled = ((level.percent_used.clamp(0.0, 1.0)) * CELLS as f64).round() as usize;
     let bar: String = "█".repeat(filled) + &"░".repeat(CELLS - filled);
     let pct = (level.percent_used * 100.0).round() as i64;
-    // Yellow keys off the budget-wide signal rather than the headline's own
-    // state, so it stays tied to the same union that decides whether the chip
-    // is visible at all in warn-only mode.
     let color = if level.over_limit {
         Color::Red
     } else if budget.in_warning() {
@@ -1053,7 +955,6 @@ fn usage_chip(
 
 fn draw_input(frame: &mut Frame, app: &App, area: Rect) {
     if app.input.mode == InputMode::Command {
-        // Top vs. submenu: title and prefix differ.
         let (title, prefix): (String, &str) = match &app.completion.mode {
             PaletteMode::Top => (" [COMMAND] ".to_string(), ":"),
             PaletteMode::Submenu(s) => (format!(" [{}] ", s.parent), ""),
@@ -1070,7 +971,6 @@ fn draw_input(frame: &mut Frame, app: &App, area: Rect) {
 
         frame.render_widget(paragraph, area);
 
-        // Cursor after the prefix + cmd_cursor.
         let prefix_w = unicode_width::UnicodeWidthStr::width(prefix) as u16;
         let cursor_x = prefix_w
             + unicode_width::UnicodeWidthStr::width(&app.input.cmd_text[..app.input.cmd_cursor])
@@ -1079,11 +979,9 @@ fn draw_input(frame: &mut Frame, app: &App, area: Rect) {
         return;
     }
 
-    // Word-wrap the input text — shared offsets drive rendering AND cursor calc.
     let content_width = area.width as usize;
     let line_starts = crate::app::word_wrap_offsets(&app.input.text, content_width);
 
-    // Cursor visual position: find which visual line it lands on.
     let cy_idx = line_starts
         .partition_point(|&s| s <= app.input.cursor)
         .saturating_sub(1);
@@ -1094,7 +992,6 @@ fn draw_input(frame: &mut Frame, app: &App, area: Rect) {
         .map(|c| unicode_width::UnicodeWidthChar::width(c).unwrap_or(0))
         .sum();
 
-    // If cursor lands exactly at the right edge, wrap to next line
     let cy = if content_width > 0 && cx >= content_width {
         cx = 0;
         cy + 1
@@ -1102,7 +999,6 @@ fn draw_input(frame: &mut Frame, app: &App, area: Rect) {
         cy
     };
 
-    // Scroll input so cursor line is always visible
     let content_height = area.height.saturating_sub(1);
     let input_scroll = if cy >= content_height {
         cy - content_height + 1
@@ -1110,7 +1006,6 @@ fn draw_input(frame: &mut Frame, app: &App, area: Rect) {
         0
     };
 
-    // Show placeholder when input is empty in insert mode
     let show_placeholder = app.input.text.is_empty() && app.input.mode == InputMode::Insert;
     let input_content: Text = if show_placeholder {
         Text::from(Line::from(Span::styled(
@@ -1118,7 +1013,6 @@ fn draw_input(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(Color::DarkGray),
         )))
     } else {
-        // Build visual lines from the word-wrap offsets.
         let text = &app.input.text;
         let lines: Vec<String> = line_starts
             .iter()
@@ -1184,13 +1078,11 @@ fn draw_input(frame: &mut Frame, app: &App, area: Rect) {
 
     frame.render_widget(paragraph, area);
 
-    // Show cursor in insert mode
     if app.input.mode == InputMode::Insert {
         frame.set_cursor_position((area.x + cx as u16, area.y + 1 + cy - input_scroll));
     }
 }
 
-/// Render the keyboard shortcuts help overlay.
 fn draw_help(frame: &mut Frame, area: Rect) {
     let lines = vec![
         Line::from(""),
@@ -1341,10 +1233,6 @@ fn draw_help(frame: &mut Frame, area: Rect) {
     frame.render_widget(popup, popup_area);
 }
 
-/// Render completion candidates inline in their own layout chunk below
-/// the input. Uses the chunk's full width; selected row gets a yellow
-/// highlight; an optional dim header labels the current submenu context
-/// (e.g. "model", "setting key").
 fn completion_window_start(
     selected: Option<usize>,
     visible_rows: usize,
@@ -1375,18 +1263,10 @@ fn draw_completions_inline(frame: &mut Frame, app: &App, area: Rect) {
         )));
     }
 
-    // Two-column layout: name left-aligned to `name_col`, optional
-    // description after a >=2-space gap. Width pads to area.width so
-    // the selected-row highlight reaches the right edge.
     let candidate_rows = (area.height as usize).saturating_sub(lines.len());
     let row_width = area.width as usize;
-    // 3-space prefix + longest command name (9: "character") + 6-space gap.
-    // Keeps descriptions in a single column aligned across all rows.
     let name_col: usize = 18;
 
-    // In a submenu picker, the candidate matching the daemon's active
-    // model / character gets a dim "(active)" marker so the user can
-    // see what's currently in effect.
     const ACTIVE_MARKER: &str = "  ● active";
 
     let window_start = completion_window_start(
@@ -1443,14 +1323,12 @@ fn draw_completions_inline(frame: &mut Frame, app: &App, area: Rect) {
         };
 
         if selected {
-            // One span so the yellow bg fills the entire row uniformly.
             let full = format!("{name_text}{gap}{desc_text}{trailing}");
             lines.push(Line::from(Span::styled(
                 full,
                 Style::default().fg(Color::Black).bg(Color::Yellow),
             )));
         } else if desc.is_some() {
-            // Two-tone: bright name, dim description.
             lines.push(Line::from(vec![
                 Span::styled(name_text, Style::default().fg(Color::White)),
                 Span::raw(gap),
@@ -1458,14 +1336,12 @@ fn draw_completions_inline(frame: &mut Frame, app: &App, area: Rect) {
                 Span::raw(trailing),
             ]));
         } else if is_active {
-            // Submenu candidate that matches the active value — dim marker.
             lines.push(Line::from(vec![
                 Span::styled(name_text, Style::default().fg(Color::White)),
                 Span::styled(desc_text, Style::default().fg(Color::DarkGray)),
                 Span::raw(trailing),
             ]));
         } else {
-            // Argument candidate (no description) — single span.
             lines.push(Line::from(Span::styled(
                 format!("{name_text}{trailing}"),
                 Style::default().fg(Color::White),
@@ -1659,8 +1535,6 @@ fn draw_alt_picker_inline(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(Paragraph::new(Text::from(lines)), area);
 }
 
-// ── Test harness ────────────────────────────────────────────────────────────
-
 #[cfg(test)]
 mod scenario_tests {
     use super::*;
@@ -1668,15 +1542,12 @@ mod scenario_tests {
 
     #[test]
     fn truncate_to_width_leaves_room_and_keeps_graphemes() {
-        // ASCII: trimmed to the requested width so an appended marker fits.
         let mut s = "abcdef".to_string();
         truncate_to_width(&mut s, 3);
         assert_eq!(s, "abc");
-        // Wide (2-cell) chars are dropped whole rather than split.
-        let mut w = "古池や".to_string(); // each char is 2 display cells
+        let mut w = "古池や".to_string();
         truncate_to_width(&mut w, 3);
-        assert_eq!(w, "古"); // second char would overflow 3 cells
-        // Already short enough: untouched.
+        assert_eq!(w, "古");
         let mut short = "hi".to_string();
         truncate_to_width(&mut short, 10);
         assert_eq!(short, "hi");
@@ -1695,7 +1566,6 @@ mod scenario_tests {
     const W: u16 = 80;
     const H: u16 = 30;
 
-    /// Build a completed assistant turn from an ordered list of blocks.
     fn assistant_turn(blocks: Vec<Block>) -> ConversationEntry {
         ConversationEntry::Turn(Turn {
             role: Role::Assistant,
@@ -1725,8 +1595,6 @@ mod scenario_tests {
         }
     }
 
-    // ── Harness ─────────────────────────────────────────────────────────────
-
     struct Harness {
         terminal: Terminal<TestBackend>,
         app: App,
@@ -1748,7 +1616,6 @@ mod scenario_tests {
             }
         }
 
-        /// Render current app state and return the frame as text.
         fn render(&mut self, label: &str) -> String {
             let _ = self
                 .terminal
@@ -1762,7 +1629,6 @@ mod scenario_tests {
                     let cell = &buf[(x, y)];
                     text.push_str(cell.symbol());
                 }
-                // trim trailing whitespace per line for readability
                 let trimmed_len = text.trim_end().len();
                 text.truncate(trimmed_len);
                 text.push('\n');
@@ -1772,7 +1638,6 @@ mod scenario_tests {
             text
         }
 
-        /// Render current app state and preserve empty rows in the frame text.
         fn render_with_blank_rows(&mut self, label: &str) -> String {
             let _ = self
                 .terminal
@@ -1795,7 +1660,6 @@ mod scenario_tests {
             text
         }
 
-        /// Press a key with no modifiers.
         fn press(&mut self, code: KeyCode) {
             let _ = self.press_action(code);
         }
@@ -1804,7 +1668,6 @@ mod scenario_tests {
             self.press_mod_action(KeyModifiers::NONE, code)
         }
 
-        /// Press a key with modifiers.
         fn press_mod(&mut self, mods: KeyModifiers, code: KeyCode) {
             let _ = self.press_mod_action(mods, code);
         }
@@ -1819,7 +1682,6 @@ mod scenario_tests {
             input::handle_event(&mut self.app, ev)
         }
 
-        /// Type a string (handles shift for uppercase automatically).
         fn type_str(&mut self, s: &str) {
             for c in s.chars() {
                 let mods = if c.is_ascii_uppercase() {
@@ -1831,14 +1693,11 @@ mod scenario_tests {
             }
         }
 
-        /// Simulate StreamStart.
         fn stream_start(&mut self) {
             self.app.stream.reset();
             self.app.stream.active = true;
         }
 
-        /// Simulate a text StreamChunk — appends straight into entries, like
-        /// the real handler.
         fn stream_chunk(&mut self, text: &str) {
             self.app.stream_append_text(text);
             self.app.stream.phase = "responding".into();
@@ -1847,15 +1706,11 @@ mod scenario_tests {
             }
         }
 
-        /// Simulate a thinking StreamChunk.
         fn thinking_chunk(&mut self, text: &str) {
             self.app.stream_append_thinking(text);
             self.app.stream.phase = "thinking".into();
         }
 
-        /// Simulate StreamEnd (finalise response into entries): mark the
-        /// in-flight turn Complete, replacing streamed text with the
-        /// authoritative content while keeping any thinking/tool blocks.
         fn stream_end(&mut self, content: &str) {
             let finalized = self
                 .app
@@ -1883,7 +1738,6 @@ mod scenario_tests {
             self.app.stream.reset();
         }
 
-        /// Lines changed between the last two frames.
         fn changed_lines(&self) -> Vec<(usize, String, String)> {
             if self.frames.len() < 2 {
                 return vec![];
@@ -1898,7 +1752,6 @@ mod scenario_tests {
                 .collect()
         }
 
-        /// Get a horizontal slice of the last rendered frame (row range).
         fn rows(&self, from: usize, to: usize) -> String {
             self.frames
                 .last()
@@ -1978,8 +1831,6 @@ mod scenario_tests {
         }
     }
 
-    // ── Scenario: empty state ───────────────────────────────────────────────
-
     #[test]
     fn scenario_empty_state() {
         let mut h = Harness::new();
@@ -1989,15 +1840,12 @@ mod scenario_tests {
 
         let f = h.render("empty state: connected, no messages");
 
-        // Input area shows INSERT mode
         assert!(f.contains("[INSERT]"), "default mode is INSERT");
         assert!(
             !f.contains("model:"),
             "active model should stay out of the input border"
         );
     }
-
-    // ── Scenario: type, send, stream, complete ──────────────────────────────
 
     #[test]
     fn scenario_full_message_cycle() {
@@ -2006,44 +1854,35 @@ mod scenario_tests {
         h.app.character_name = "Narrator".into();
         h.app.model = "claude-3".into();
 
-        // 1. Initial
         let _ = h.render("initial");
 
-        // 2. Type a message
         h.type_str("Hello, world!");
         let f = h.render("after typing");
         assert!(f.contains("Hello, world!"), "typed text visible in input");
 
-        // 3. Send (Enter)
         h.press(KeyCode::Enter);
-        // Manually add the user entry (normally the daemon echoes it back)
         h.app.entries.push(ConversationEntry::user(
             "Hello, world!".into(),
             vec![],
             "t1".into(),
         ));
         let f = h.render("after send");
-        // Input should be cleared
         assert!(
             !h.rows(H as usize - 4, H as usize - 1)
                 .contains("Hello, world!"),
             "input area should be cleared after send"
         );
-        // User message should appear in conversation
         assert!(f.contains("You"), "user label visible");
         assert!(f.contains("Hello, world!"), "user message in conversation");
 
-        // 4. Stream starts
         h.stream_start();
         let _ = h.render("stream started");
 
-        // 5. First chunk
         h.stream_chunk("Hi there");
         let f = h.render("first chunk");
         assert!(f.contains("Hi there"), "streamed text visible");
         assert!(f.contains("Narrator"), "assistant name visible");
 
-        // 6. More chunks
         h.stream_chunk(", how are you today?");
         let f = h.render("more chunks");
         assert!(
@@ -2051,15 +1890,12 @@ mod scenario_tests {
             "accumulated text visible"
         );
 
-        // Check layout stability: only conversation content should change,
-        // not the input area or status bar structure
         let diffs = h.changed_lines();
         eprintln!("Lines changed from chunk 1→2: {}", diffs.len());
         for (i, prev, curr) in &diffs {
             eprintln!("  L{i}: {prev:?} → {curr:?}");
         }
 
-        // 7. Stream ends
         h.stream_end("Hi there, how are you today?");
         let f = h.render("stream ended");
         assert!(
@@ -2135,14 +1971,11 @@ mod scenario_tests {
         assert!(f.contains("outside current context"));
     }
 
-    // ── Scenario: inline thinking toggle ────────────────────────────────────
-
     #[test]
     fn scenario_thinking_toggle() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
 
-        // Start a stream with thinking then text
         h.app.entries.push(ConversationEntry::user(
             "Think about this".into(),
             vec![],
@@ -2152,12 +1985,10 @@ mod scenario_tests {
         h.thinking_chunk("Let me consider...\nFirst, I need to...\nThen...");
         h.stream_chunk("Here's my answer");
 
-        // Render with thinking visible (show_thinking defaults to true)
         let f1 = h.render("thinking visible inline");
         assert!(f1.contains("thinking"), "inline thinking header visible");
         assert!(f1.contains("Here's my answer"), "streaming text visible");
 
-        // Toggle thinking off via show_thinking (t key in normal mode)
         h.app.show_thinking = false;
         let f2 = h.render("thinking hidden");
         assert!(
@@ -2169,7 +2000,6 @@ mod scenario_tests {
             "streaming text still visible after toggle"
         );
 
-        // Toggle back
         h.app.show_thinking = true;
         let f3 = h.render("thinking re-enabled");
         assert!(
@@ -2188,8 +2018,6 @@ mod scenario_tests {
             "2026-01-15T10:30:00Z".into(),
         ));
 
-        // Derive the expected display in the host's local timezone — asserting
-        // on the literal UTC date would flake where it maps to another day.
         let expected =
             format_timestamp("2026-01-15T10:30:00Z").expect("test timestamp should format");
 
@@ -2233,8 +2061,6 @@ mod scenario_tests {
         );
     }
 
-    // ── Scenario: command palette ───────────────────────────────────────────
-
     #[test]
     fn scenario_command_palette() {
         let mut h = Harness::new();
@@ -2243,20 +2069,15 @@ mod scenario_tests {
 
         let _ = h.render("normal mode");
 
-        // Open command palette with ':'
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
         let f = h.render("command palette open");
         assert!(f.contains("COMMAND"), "command mode title visible");
 
-        // Type a partial command
         h.type_str("mod");
         let f = h.render("typing 'mod'");
         assert!(f.contains(":mod"), "command text visible");
-        // Should show completion for 'model'
         assert!(f.contains("model"), "model completion visible");
 
-        // The input row should sit *above* the candidate row — i.e.
-        // [COMMAND] line index < line containing the "model" candidate.
         let cmd_line = f
             .lines()
             .position(|l| l.contains("[COMMAND]"))
@@ -2273,12 +2094,10 @@ mod scenario_tests {
             "completion list renders below input row"
         );
 
-        // Tab completes a submenu parent by entering the picker directly.
         h.press(KeyCode::Tab);
         let f = h.render("after tab completion");
         assert!(f.contains("[model]"), "model submenu opened");
 
-        // Escape first pops back to the top-level command palette.
         h.press(KeyCode::Esc);
         let f = h.render("after escape");
         assert!(
@@ -2287,7 +2106,6 @@ mod scenario_tests {
         );
         assert!(f.contains(":model"), "parent command restored");
 
-        // Escape again cancels command mode.
         h.press(KeyCode::Esc);
         let f = h.render("after second escape");
         assert!(
@@ -2296,16 +2114,12 @@ mod scenario_tests {
         );
     }
 
-    /// When the menu closes, the input area must return to the bottom of
-    /// the terminal (collapse back to the 2-chunk layout).
     #[test]
     fn scenario_command_palette_input_returns_to_bottom() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.input.mode = InputMode::Normal;
 
-        // Fill conversation so blank rows aren't trimmed by the harness —
-        // we need stable row indices to compare layout positions.
         for i in 0..20 {
             h.app.entries.push(ConversationEntry::user(
                 format!("hello {i}"),
@@ -2314,9 +2128,6 @@ mod scenario_tests {
             ));
         }
 
-        // Read the underlying backend buffer directly so empty rows
-        // remain enumerable. We look for the row containing the input
-        // border title on the right side.
         fn input_row(h: &mut Harness, label: &str) -> u16 {
             let _ = h.terminal.draw(|frame| draw(frame, &mut h.app)).unwrap();
             let buf = h.terminal.backend().buffer();
@@ -2337,7 +2148,6 @@ mod scenario_tests {
 
         let baseline = input_row(&mut h, "baseline normal mode");
 
-        // Open command mode and type to populate candidates.
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
         h.type_str("mod");
         let raised = input_row(&mut h, "command mode with candidates");
@@ -2347,7 +2157,6 @@ mod scenario_tests {
              (raised={raised}, baseline={baseline})"
         );
 
-        // Close with Esc — input should snap back to baseline row.
         h.press(KeyCode::Esc);
         let restored = input_row(&mut h, "after esc");
         assert_eq!(
@@ -2356,8 +2165,6 @@ mod scenario_tests {
         );
     }
 
-    /// Ctrl+J / Ctrl+K (and Down / Up) cycle the candidate selection
-    /// forward and backward.
     #[test]
     fn scenario_command_palette_navigation_keys() {
         let mut h = Harness::new();
@@ -2369,46 +2176,34 @@ mod scenario_tests {
         let total = h.app.completion.candidates.len();
         assert!(total >= 3, "need >=3 candidates for cycle test");
 
-        // Ctrl+J advances forward (None → 0).
         h.press_mod(KeyModifiers::CONTROL, KeyCode::Char('j'));
         assert_eq!(h.app.completion.selected, Some(0));
 
-        // Ctrl+J again → 1.
         h.press_mod(KeyModifiers::CONTROL, KeyCode::Char('j'));
         assert_eq!(h.app.completion.selected, Some(1));
 
-        // Ctrl+K reverses → 0.
         h.press_mod(KeyModifiers::CONTROL, KeyCode::Char('k'));
         assert_eq!(h.app.completion.selected, Some(0));
 
-        // Ctrl+K from 0 wraps to the last candidate.
         h.press_mod(KeyModifiers::CONTROL, KeyCode::Char('k'));
         assert_eq!(h.app.completion.selected, Some(total - 1));
 
-        // Down acts like Ctrl+J (wraps back to 0 from last).
         h.press(KeyCode::Down);
         assert_eq!(h.app.completion.selected, Some(0));
 
-        // Up acts like Ctrl+K.
         h.press(KeyCode::Up);
         assert_eq!(h.app.completion.selected, Some(total - 1));
     }
 
-    /// Each top-level command renders alongside its description; the
-    /// argument candidates (e.g. `model` submenu) do NOT pick up a
-    /// description because they aren't top-level command names.
     #[test]
     fn scenario_command_palette_descriptions() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.input.mode = InputMode::Normal;
 
-        // Open palette — every top-level command appears with its desc.
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
         let f = h.render("palette open");
 
-        // Spot-check several commands have both name and description on
-        // the same row of the framebuffer.
         for (cmd, desc) in [
             ("compact", "Summarize and shrink the conversation"),
             ("regen", "Regenerate the last assistant reply"),
@@ -2421,7 +2216,6 @@ mod scenario_tests {
                 .unwrap_or_else(|| {
                     panic!("expected row with `{cmd}` + `{desc}`; full frame:\n{f}")
                 });
-            // Description should appear after the command name on the row.
             let cmd_pos = row.find(cmd).unwrap();
             let desc_pos = row.find(desc).unwrap();
             assert!(
@@ -2430,11 +2224,8 @@ mod scenario_tests {
             );
         }
 
-        // Now switch into the model submenu — argument candidates should
-        // NOT carry a description (e.g. nothing like "Switch the active
-        // model" appearing next to the candidate text).
         h.app.model_names = vec!["alpha-1".into(), "beta-2".into()];
-        h.press_mod(KeyModifiers::NONE, KeyCode::Backspace); // close
+        h.press_mod(KeyModifiers::NONE, KeyCode::Backspace);
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
         h.type_str("model ");
         let f = h.render("model submenu");
@@ -2448,9 +2239,6 @@ mod scenario_tests {
         );
     }
 
-    /// Pressing Enter on `:model` opens the model submenu picker:
-    /// title becomes `[model]`, candidates are bare model names with
-    /// no `model ` prefix, and cmd_text is empty (filter starts fresh).
     #[test]
     fn scenario_command_palette_submenu_enter() {
         let mut h = Harness::new();
@@ -2471,7 +2259,6 @@ mod scenario_tests {
             f.contains("[model]"),
             "input title should show [model] breadcrumb; frame:\n{f}"
         );
-        // Candidates are bare names — no "model " prefix.
         assert!(
             h.app.completion.candidates.iter().any(|c| c == "alpha-1"),
             "submenu candidates contain bare model name"
@@ -2538,14 +2325,12 @@ mod scenario_tests {
             pace: None,
         }];
 
-        // Off (default): no chip.
         let hidden = h.render("usage off");
         assert!(
             !hidden.contains("82%"),
             "chip should be hidden while usage_display is Off; frame:\n{hidden}"
         );
 
-        // Always: surfaces the bar + percent on the input border.
         h.app.usage_display = crate::app::UsageDisplay::Always;
         let shown = h.render("usage always");
         assert!(
@@ -2565,7 +2350,6 @@ mod scenario_tests {
         h.app.input.mode = InputMode::Insert;
         h.app.usage_display = crate::app::UsageDisplay::Warn;
 
-        // Below any warning threshold: hidden even though data is known.
         h.app.usage_budgets = vec![crate::app::UsageBudget {
             name: "monthly".into(),
             percent_used: 0.23,
@@ -2579,7 +2363,6 @@ mod scenario_tests {
             "warn mode hides the chip before a threshold; frame:\n{calm}"
         );
 
-        // Once a threshold is crossed, the chip appears.
         h.app.usage_budgets = vec![crate::app::UsageBudget {
             name: "monthly".into(),
             percent_used: 0.82,
@@ -2593,8 +2376,6 @@ mod scenario_tests {
             "warn mode reveals the chip past a threshold; frame:\n{warned}"
         );
 
-        // A pace past its own (lower) threshold under a hotter-but-calm cap
-        // still reveals the chip, and shows the pace figure.
         h.app.usage_budgets = vec![crate::app::UsageBudget {
             name: "weekly".into(),
             percent_used: 0.6,
@@ -2631,14 +2412,12 @@ mod scenario_tests {
             }),
         }];
 
-        // Auto: the hotter cap wins, unlabelled.
         let auto = h.render("focus auto");
         assert!(
             auto.contains("71%") && !auto.contains("pace"),
             "auto follows the leading limit; frame:\n{auto}"
         );
 
-        // Pinned to the pace: the calmer daily figure, labelled as a pace.
         h.app.budget_focus = crate::app::BudgetFocus {
             name: None,
             scope: Some(crate::app::UsageScope::Pace),
@@ -2649,8 +2428,6 @@ mod scenario_tests {
             "pinned pace shows the pace figure; frame:\n{paced}"
         );
 
-        // Pinned by name to a budget the daemon hasn't reported: no chip
-        // rather than another budget's numbers.
         h.app.budget_focus = crate::app::BudgetFocus {
             name: Some("gone".into()),
             scope: None,
@@ -2741,8 +2518,6 @@ mod scenario_tests {
         );
     }
 
-    /// Space on a parent name also opens the submenu (does not insert
-    /// a literal space into cmd_text).
     #[test]
     fn scenario_command_palette_submenu_space_trigger() {
         let mut h = Harness::new();
@@ -2765,8 +2540,6 @@ mod scenario_tests {
         );
     }
 
-    /// Inside a submenu, typing filters candidates; Esc pops back to
-    /// Top with cmd_text restored to the parent command name.
     #[test]
     fn scenario_command_palette_submenu_filter_and_esc() {
         let mut h = Harness::new();
@@ -2779,7 +2552,6 @@ mod scenario_tests {
         h.press(KeyCode::Enter);
         let _ = h.render("submenu opened");
 
-        // Filter to "alpha".
         h.type_str("alpha");
         let _ = h.render("filtered");
 
@@ -2801,7 +2573,6 @@ mod scenario_tests {
             "both alpha-* models survive the filter"
         );
 
-        // Esc → pop back to Top, cmd_text restored to "model".
         h.press(KeyCode::Esc);
         let _ = h.render("after esc");
         assert!(
@@ -2814,8 +2585,6 @@ mod scenario_tests {
         );
     }
 
-    /// `apply_submenu` returns the full command string for a selected
-    /// candidate and resets palette state.
     #[test]
     fn submenu_apply_returns_full_command() {
         let mut app = App {
@@ -2828,9 +2597,7 @@ mod scenario_tests {
         app.input.cmd_cursor = 5;
 
         app.enter_submenu("model");
-        // Pre: candidates rebuilt to bare model names + reset.
         assert!(app.completion.candidates.contains(&"gpt-4o".to_string()));
-        // Cycle to first candidate.
         app.next_completion();
         let chosen = app.completion.candidates[app.completion.selected.unwrap()].clone();
 
@@ -2841,15 +2608,12 @@ mod scenario_tests {
         assert_ne!(app.input.mode, InputMode::Command, "command mode exited");
     }
 
-    /// Argument-completion contexts render a dim header above the
-    /// candidate list so the user knows what they're picking.
     #[test]
     fn scenario_command_palette_submenu_header() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.input.mode = InputMode::Normal;
 
-        // Type `:setting ` (with trailing space) → header "setting key".
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Char(':'));
         h.type_str("setting ");
         let f = h.render("setting submenu");
@@ -2858,7 +2622,6 @@ mod scenario_tests {
             f.contains("setting key"),
             "submenu header 'setting key' visible above candidates"
         );
-        // The request has not returned yet, so the picker stays disabled.
         assert!(
             f.contains("loading sampler settings..."),
             "loading row visible until settings arrive"
@@ -2887,11 +2650,6 @@ mod scenario_tests {
 
     #[test]
     fn setting_submenu_request_does_not_pin_model_name() {
-        // Regression: pinning `name = app.model` made `model_settings` fail
-        // with NotFound when the active model identifier we tracked (e.g. the
-        // bare upstream id from stream metadata or History config) was not a
-        // name the daemon's catalog/discovered-model resolver recognized.
-        // The request must let the daemon resolve to its session active.
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.input.mode = InputMode::Normal;
@@ -3137,14 +2895,11 @@ mod scenario_tests {
         assert_set_model_setting(action, "temperature", serde_json::Value::Null);
     }
 
-    // ── Scenario: scroll during stream ──────────────────────────────────────
-
     #[test]
     fn scenario_scroll_during_stream() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
 
-        // Fill with enough messages to require scrolling
         for i in 0..20 {
             h.app.entries.push(ConversationEntry::user(
                 format!("Message {i}"),
@@ -3162,7 +2917,6 @@ mod scenario_tests {
 
         let _ = h.render("many messages - auto scroll");
 
-        // Start streaming
         h.stream_start();
         h.stream_chunk("New streaming response...");
         let f = h.render("streaming with auto_scroll");
@@ -3171,18 +2925,13 @@ mod scenario_tests {
             "latest content visible with auto_scroll"
         );
 
-        // Scroll up (exit auto_scroll)
         h.press_mod(KeyModifiers::CONTROL, KeyCode::Char('u'));
         let _ = h.render("scrolled up");
         assert!(!h.app.auto_scroll, "auto_scroll disabled after scroll up");
 
-        // New chunk arrives while scrolled up
         h.stream_chunk(" More text arrives.");
         let _f = h.render("chunk while scrolled up");
-        // The viewport should NOT jump — the user scrolled away intentionally
-        // (The content is still being buffered, just not forced into view)
 
-        // Shift+G to go back to bottom
         h.app.input.mode = InputMode::Normal;
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Char('G'));
         let f = h.render("back to bottom");
@@ -3193,29 +2942,23 @@ mod scenario_tests {
         );
     }
 
-    // ── Scenario: mode switching ────────────────────────────────────────────
-
     #[test]
     fn scenario_mode_switching() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
 
-        // Default is Insert
         let f = h.render("insert mode");
         assert!(f.contains("[INSERT]"), "starts in INSERT mode");
 
-        // Esc → Normal
         h.press(KeyCode::Esc);
         let f = h.render("normal mode");
         assert!(f.contains("[NORMAL]"), "shows NORMAL after Esc");
         assert!(!f.contains("[INSERT]"), "INSERT label gone");
 
-        // i → back to Insert
         h.press(KeyCode::Char('i'));
         let f = h.render("back to insert");
         assert!(f.contains("[INSERT]"), "shows INSERT after 'i'");
 
-        // The only changes should be the mode label and placeholder.
         let diffs = h.changed_lines();
         assert!(
             diffs
@@ -3225,12 +2968,8 @@ mod scenario_tests {
         );
     }
 
-    // ── Scenario: connection status changes ─────────────────────────────────
-
     #[test]
     fn scenario_connection_states() {
-        // Connection status indicators were in the removed status bar.
-        // Just verify the layout renders without panic across all states.
         let mut h = Harness::new();
 
         h.app.connection_status = ConnectionStatus::Disconnected;
@@ -3243,14 +2982,11 @@ mod scenario_tests {
         let _ = h.render("connected");
     }
 
-    // ── Scenario: long message wrapping ─────────────────────────────────────
-
     #[test]
     fn scenario_long_message_wrapping() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
 
-        // Add a message longer than terminal width
         let long_msg = "This is a very long message that should wrap properly across multiple lines in the conversation area without clipping or causing layout issues.";
         h.app.entries.push(ConversationEntry::user(
             long_msg.into(),
@@ -3259,23 +2995,18 @@ mod scenario_tests {
         ));
 
         let f = h.render("long message");
-        // The message should be present (may be split across lines)
         assert!(
             f.contains("This is a very long message"),
             "start of message visible"
         );
 
-        // Type a long input — word wrap should keep words intact
         h.type_str("Another really long input message that should cause the input area to grow taller as the text wraps to accommodate");
         let f = h.render("long input");
-        // "taller" must NOT be split across lines (word-level wrap)
         assert!(
             f.lines().any(|l| l.contains("taller")),
             "word 'taller' should stay intact on one visual line"
         );
     }
-
-    // ── Scenario: tool call display ─────────────────────────────────────────
 
     #[test]
     fn scenario_tool_calls() {
@@ -3308,8 +3039,6 @@ mod scenario_tests {
         assert!(f.contains("◀"), "tool result arrow present");
     }
 
-    // ── Scenario: tool calls render under assistant name ─────────────────────
-
     #[test]
     fn scenario_tool_calls_under_assistant_name() {
         let mut h = Harness::new();
@@ -3321,7 +3050,6 @@ mod scenario_tests {
             vec![],
             "t1".into(),
         ));
-        // One assistant turn whose blocks interleave tools then text, in order.
         h.app.entries.push(assistant_turn(vec![
             tool_use("tc1", "web_search", serde_json::json!({"query": "foo"})),
             tool_result("tc1", "web_search", "Result: foo page", false),
@@ -3330,7 +3058,6 @@ mod scenario_tests {
 
         let f = h.render("tools under assistant name");
 
-        // Find line positions
         let lines: Vec<&str> = f.lines().collect();
         let alice_line = lines
             .iter()
@@ -3363,18 +3090,12 @@ mod scenario_tests {
         );
     }
 
-    // ── Scenario: a nested sub-agent section renders bracketed and gated ─────
-    //
-    // The `» <name> (sub-agent)` … `» <name> done` headers frame the nested
-    // loop, and its content is gated by `show_subagent` alone — independent of
-    // the primary `show_tools`/`show_thinking` toggles.
     #[test]
     fn scenario_subagent_section_visible() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.character_name = "Alice".into();
         h.app.show_subagent = true;
-        // Off, to prove the nested tool is gated by show_subagent, not show_tools.
         h.app.show_tools = false;
 
         h.app.entries.push(ConversationEntry::user(
@@ -3476,17 +3197,16 @@ mod scenario_tests {
         );
     }
 
-    // ── Unit: tag transitions bracket exactly once, and close on return ──────
     #[test]
     fn subagent_tag_transitions_bracket_blocks() {
         let mut app = App::default();
         app.stream.active = true;
 
-        app.sync_subagent_section(Some("research")); // open
+        app.sync_subagent_section(Some("research"));
         app.stream_append_thinking("hmm");
-        app.sync_subagent_section(Some("research")); // unchanged — no new marker
+        app.sync_subagent_section(Some("research"));
         app.stream_append_text("nested out");
-        app.sync_subagent_section(None); // back to primary — close
+        app.sync_subagent_section(None);
         app.stream_append_text("primary");
 
         let turn = app.entries.last().and_then(|e| e.as_turn()).unwrap();
@@ -3504,11 +3224,6 @@ mod scenario_tests {
         assert_eq!(kinds, ["begin", "think", "text", "end", "text"]);
     }
 
-    // ── Scenario: thinking and tools render interleaved, not grouped ─────────
-    //
-    // Regression for the bug where the renderer bucketed all thinking before
-    // all tools, collapsing a real `think → call → result → think → call`
-    // sequence into `[all thinking][all tools]`. Entry order must be preserved.
     #[test]
     fn scenario_thinking_tools_interleaved_order() {
         let mut h = Harness::new();
@@ -3522,8 +3237,6 @@ mod scenario_tests {
             vec![],
             "t1".into(),
         ));
-        // One assistant turn whose blocks interleave think → call → result in
-        // true source order, as expand_msg produces from content_blocks.
         h.app.entries.push(assistant_turn(vec![
             Block::Thinking("FIRST_THOUGHT".into()),
             tool_use("tc1", "ALPHA_TOOL", serde_json::json!({"q": "x"})),
@@ -3543,8 +3256,6 @@ mod scenario_tests {
                 .unwrap_or_else(|| panic!("{needle:?} must appear\n{f}"))
         };
 
-        // The true source order must be preserved end to end — not grouped as
-        // [FIRST_THOUGHT, SECOND_THOUGHT][ALPHA_TOOL, BETA_TOOL].
         let order = [
             pos("FIRST_THOUGHT"),
             pos("ALPHA_TOOL"),
@@ -3558,12 +3269,6 @@ mod scenario_tests {
         );
     }
 
-    // ── Scenario: streaming thinking survives a tool-use phase boundary ──────
-    //
-    // Regression for the bug where StreamEnd(finish_reason="tool_use") cleared
-    // the live blocks outright, so a phase's thinking vanished the instant the
-    // tool call arrived. It must instead be committed to the log, interleaved
-    // above the tool call.
     #[test]
     fn scenario_streaming_thinking_committed_before_tool_call() {
         use shore_common::protocol::server_msg::{
@@ -3594,7 +3299,6 @@ mod scenario_tests {
             .entries
             .push(ConversationEntry::user("hi".into(), vec![], "t1".into()));
 
-        // Phase 1: model thinks, then decides to call a tool.
         let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
@@ -3626,7 +3330,6 @@ mod scenario_tests {
             }),
         );
 
-        // The thinking must have been committed, not dropped.
         assert!(
             h.app
                 .entries
@@ -3650,7 +3353,6 @@ mod scenario_tests {
             }),
         );
 
-        // Mid-turn: thinking still visible and above the tool call, exactly once.
         let f = h.render("mid tool-use turn");
         let lines: Vec<&str> = f.lines().collect();
         assert_eq!(
@@ -3674,16 +3376,6 @@ mod scenario_tests {
             "phase-1 thinking must render above the tool call\n{f}"
         );
     }
-
-    // ── Scenario: multi-phase tool-use stream ───────────────────────────────
-    //
-    // Regression for the bug where an intermediate StreamEnd(finish_reason="tool_use")
-    // would push a premature empty Assistant entry with per-call metadata, producing
-    // a duplicate character header and a misleading stats line mid-turn.
-    //
-    // Real sequence:
-    //   StreamStart → StreamEnd(tool_use) → ToolCall → ToolResult
-    //   → StreamStart → chunks → StreamEnd(end_turn)
 
     #[test]
     fn scenario_tool_use_multi_phase_single_header() {
@@ -3729,7 +3421,6 @@ mod scenario_tests {
             "t1".into(),
         ));
 
-        // Phase 1: the model decides to call a tool; no text chunks.
         let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
@@ -3762,8 +3453,6 @@ mod scenario_tests {
             }),
         );
 
-        // Mid-turn frame: exactly one "qifei" header, no premature stats line.
-        // Headers are flush-left; the user's "hi qifei." is indented by two spaces.
         let f_mid = h.render("mid tool-use turn");
         let mid_header_count = f_mid.lines().filter(|l| l.trim_end() == "qifei").count();
         assert_eq!(
@@ -3787,7 +3476,6 @@ mod scenario_tests {
             }),
         );
 
-        // Phase 2: model emits the real response.
         let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
@@ -3821,20 +3509,17 @@ mod scenario_tests {
 
         let f = h.render("after multi-phase turn");
 
-        // Exactly one "qifei" header for the whole turn.
         let header_count = f.lines().filter(|l| l.trim_end() == "qifei").count();
         assert_eq!(
             header_count, 1,
             "exactly one 'qifei' header after turn; got {header_count}\n{f}"
         );
 
-        // Final content present.
         assert!(
             f.contains("hey! what's up?"),
             "final response text missing\n{f}"
         );
 
-        // Stats line: tokens summed across both phases.
         let expected_input = meta_phase_1.tokens.input + meta_phase_2.tokens.input;
         let expected_output = meta_phase_1.tokens.output + meta_phase_2.tokens.output;
         let expected_cache = meta_phase_1.tokens.cache_read + meta_phase_2.tokens.cache_read;
@@ -3850,12 +3535,10 @@ mod scenario_tests {
             "expected summed timing '{expected_total_ms}ms' in frame\n{f}"
         );
 
-        // Stream should be idle after end_turn.
         assert!(
             !h.app.stream.active,
             "stream must be inactive after end_turn"
         );
-        // The finalized turn carries the summed metadata.
         let last_turn = h
             .app
             .entries
@@ -3874,10 +3557,6 @@ mod scenario_tests {
         );
     }
 
-    // ── Scenario: interleaved text → tool → text under one header ────────────
-    //
-    // Acceptance: a turn with `text → tool_use → text` renders in true order
-    // under a single header (the Turn/Block model's headline capability).
     #[test]
     fn scenario_interleaved_text_tool_text_single_header() {
         let mut h = Harness::new();
@@ -3919,10 +3598,6 @@ mod scenario_tests {
         );
     }
 
-    // ── Scenario: pre-tool text streams live and survives the phase boundary ──
-    //
-    // Acceptance: partial assistant text emitted before a tool call streams
-    // live and is *not* dropped when the tool-use phase ends.
     #[test]
     fn scenario_pre_tool_text_streams_live_and_persists() {
         use shore_common::protocol::server_msg::{
@@ -3968,14 +3643,12 @@ mod scenario_tests {
                 content_type: "text".into(),
             }),
         );
-        // Pre-tool text is visible live, before any tool call.
         let f1 = h.render("pre-tool streaming text");
         assert!(
             f1.contains("PRETOOL_LIVE"),
             "pre-tool text must stream live\n{f1}"
         );
 
-        // The tool-use phase ends, then the tool call arrives.
         let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamEnd(StreamEnd {
@@ -4000,7 +3673,6 @@ mod scenario_tests {
             }),
         );
 
-        // Pre-tool text must persist across the boundary, above the tool call.
         let f2 = h.render("after tool call");
         let lines: Vec<&str> = f2.lines().collect();
         let text_line = lines
@@ -4017,8 +3689,6 @@ mod scenario_tests {
         );
     }
 
-    // ── Scenario: narrow terminal ───────────────────────────────────────────
-
     #[test]
     fn scenario_narrow_terminal() {
         let mut h = Harness::with_size(40, 20);
@@ -4033,13 +3703,9 @@ mod scenario_tests {
         ));
 
         let f = h.render("narrow terminal");
-        // Everything should still be visible, just tighter
         assert!(f.contains("You"), "user label visible in narrow");
         assert!(f.contains("Hi there!"), "message visible in narrow");
-        // Status bar might truncate but shouldn't crash
     }
-
-    // ── Scenario: stream→end content consistency ────────────────────────────
 
     #[test]
     fn scenario_stream_to_final_transition() {
@@ -4056,13 +3722,9 @@ mod scenario_tests {
         h.stream_chunk("Once upon a time, there was a brave knight.");
         let f_streaming = h.render("during stream");
 
-        // End stream with same content
         h.stream_end("Once upon a time, there was a brave knight.");
         let f_final = h.render("after stream end");
 
-        // The conversation content should be visually identical
-        // (minus the [streaming...] indicator)
-        // Check that the story text is in the same position
         let story_line_streaming = f_streaming
             .lines()
             .enumerate()
@@ -4082,16 +3744,6 @@ mod scenario_tests {
         }
     }
 
-    // ── Scenario: History-before-StreamEnd must not duplicate the reply ─────
-    //
-    // Regression for the bug where the daemon's `History` broadcast (emitted
-    // by `engine.append_message` during `persist_and_notify`) arrives at the
-    // TUI *before* the deferred `StreamEnd` (see `task.rs` — StreamEnd is held
-    // until after persistence). The History handler rebuilds `app.entries`
-    // from the persisted message, and the StreamEnd handler used to push the
-    // assistant reply a second time, producing an in-memory duplicate that
-    // vanished on reconnect. Fix: StreamEnd now annotates the existing
-    // assistant entry with streaming metadata instead of pushing a new one.
     #[test]
     fn scenario_history_then_stream_end_no_duplicate() {
         use shore_common::protocol::server_msg::{
@@ -4130,8 +3782,6 @@ mod scenario_tests {
             }),
         );
 
-        // Daemon persists the assistant turn, which broadcasts History BEFORE
-        // the deferred StreamEnd lands at the client.
         let persisted_assistant = Message {
             msg_id: "m_1".into(),
             role: Role::Assistant,
@@ -4216,7 +3866,6 @@ mod scenario_tests {
             h.app.entries
         );
 
-        // The StreamEnd metadata should be attached to the History-rendered entry.
         let attached_meta = h
             .app
             .entries
@@ -4233,7 +3882,6 @@ mod scenario_tests {
         assert_eq!(attached.tokens.input, meta.tokens.input);
         assert_eq!(attached.tokens.output, meta.tokens.output);
 
-        // And only one copy of the text is rendered on screen.
         let f = h.render("after history + stream_end");
         assert_eq!(
             f.matches(reply).count(),
@@ -4242,12 +3890,6 @@ mod scenario_tests {
         );
     }
 
-    // ── Scenario: History during stream, before the new reply persists ──────
-    //
-    // A History snapshot can land while the stream is active but before the new
-    // assistant reply is materialized — so it still ends on the user's message.
-    // Reconciliation must NOT reopen the *previous* completed assistant reply
-    // and pin this stream's spinner/metadata onto it.
     #[test]
     fn scenario_history_during_stream_does_not_reopen_prior_reply() {
         use shore_common::protocol::server_msg::{History, ServerMessage, StreamStart};
@@ -4272,8 +3914,6 @@ mod scenario_tests {
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.character_name = "qifei".into();
 
-        // A completed prior exchange, then the user sends a new message and the
-        // stream starts before the daemon has persisted any new reply.
         let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::StreamStart(StreamStart {
@@ -4283,7 +3923,6 @@ mod scenario_tests {
             }),
         );
 
-        // The snapshot the daemon broadcasts ends on the user's new message.
         let _ = crate::handle_server_message(
             &mut h.app,
             ServerMessage::History(History {
@@ -4300,8 +3939,6 @@ mod scenario_tests {
             }),
         );
 
-        // The prior assistant reply must stay Complete; nothing should be
-        // re-marked Streaming when the snapshot ends on a user turn.
         let prior = h
             .app
             .entries
@@ -4522,14 +4159,11 @@ mod scenario_tests {
         );
     }
 
-    // ── Scenario: rapid send + stream (the "popin" feel) ────────────────────
-
     #[test]
     fn scenario_send_to_stream_latency() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
 
-        // Type and send
         h.type_str("Quick question");
         h.press(KeyCode::Enter);
         h.app.entries.push(ConversationEntry::user(
@@ -4539,22 +4173,17 @@ mod scenario_tests {
         ));
         let f_sent = h.render("just sent");
 
-        // The typing indicator (···) should appear immediately after send,
-        // before StreamStart arrives from the daemon.
         assert!(
             f_sent.contains("···"),
             "typing indicator should appear immediately after send"
         );
 
-        // Stream starts (but no text yet)
         h.stream_start();
         let _ = h.render("stream started, no text yet");
 
-        // First chunk arrives
         h.stream_chunk("The answer is...");
         let _f_first = h.render("first chunk arrives");
 
-        // Check the transition from "stream started, no text" to "first chunk"
         let diffs = h.changed_lines();
         eprintln!("Lines changed on first chunk arrival: {}", diffs.len());
         for (i, _prev, curr) in &diffs {
@@ -4562,18 +4191,14 @@ mod scenario_tests {
         }
     }
 
-    // ── Scenario: multi-line input growth ───────────────────────────────────
-
     #[test]
     fn scenario_input_growth() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
 
-        // Single line
         h.type_str("line 1");
         let _ = h.render("1 line input");
 
-        // Add lines
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Enter);
         h.type_str("line 2");
         let _ = h.render("2 line input");
@@ -4582,34 +4207,25 @@ mod scenario_tests {
         h.type_str("line 3");
         let _ = h.render("3 line input");
 
-        // The input area should have grown, eating into conversation space
-
-        // Keep adding lines up to the max (8 - 2 borders = 6 content lines)
         for i in 4..=7 {
             h.press_mod(KeyModifiers::SHIFT, KeyCode::Enter);
             h.type_str(&format!("line {i}"));
         }
         let _f = h.render("7 line input (near max)");
 
-        // Add one more — should cap at 8 total height
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Enter);
         h.type_str("line 8");
         let _f = h.render("8 line input (at max)");
 
-        // And another — shouldn't grow past 8
         h.press_mod(KeyModifiers::SHIFT, KeyCode::Enter);
         h.type_str("line 9");
         let f = h.render("9 line input (past max)");
 
-        // The input area should be capped at 8 rows total
-        // Conversation area must still have at least 3 rows (Min constraint)
         assert!(
             f.contains("Press i"),
             "conversation still visible at max input height"
         );
     }
-
-    // ── Scenario: empty state welcome ───────────────────────────────────────
 
     #[test]
     fn scenario_empty_state_welcome() {
@@ -4623,7 +4239,6 @@ mod scenario_tests {
         );
         assert!(f.contains("for commands"), "command hint should appear");
 
-        // Hint should disappear once we have messages
         h.app
             .entries
             .push(ConversationEntry::user("Hello".into(), vec![], "t1".into()));
@@ -4634,15 +4249,12 @@ mod scenario_tests {
         );
     }
 
-    // ── Scenario: scrolling ──────────────────────────────────────────────────
-
     #[test]
     fn scenario_scroll_indicator() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.character_name = "Alice".into();
 
-        // Fill conversation
         for i in 0..20 {
             h.app.entries.push(ConversationEntry::user(
                 format!("Msg {i}"),
@@ -4651,11 +4263,9 @@ mod scenario_tests {
             ));
         }
 
-        // At bottom — latest messages visible
         let f = h.render("at bottom");
         assert!(f.contains("Msg 19"), "latest message visible at bottom");
 
-        // Scroll up — earlier messages visible
         h.app.scroll_up(5);
         let f = h.render("scrolled up");
         assert!(
@@ -4663,7 +4273,6 @@ mod scenario_tests {
             "latest message not visible when scrolled up"
         );
 
-        // Scroll back to bottom
         h.app.scroll_to_bottom();
         let f = h.render("back at bottom");
         assert!(
@@ -4722,21 +4331,17 @@ mod scenario_tests {
         assert_no_duplicate_rows(&h.render("scroll repaint page down"));
     }
 
-    // ── Scenario: input placeholder ─────────────────────────────────────────
-
     #[test]
     fn scenario_input_placeholder() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
 
-        // Empty insert mode shows placeholder
         let f = h.render("empty insert mode");
         assert!(
             f.contains("Type a message"),
             "placeholder should show when input is empty"
         );
 
-        // Typing removes placeholder
         h.type_str("h");
         let f = h.render("after typing one char");
         assert!(
@@ -4744,7 +4349,6 @@ mod scenario_tests {
             "placeholder should disappear when typing"
         );
 
-        // Normal mode with empty input — no placeholder
         h.press(KeyCode::Backspace);
         h.press(KeyCode::Esc);
         let f = h.render("normal mode empty");
@@ -4754,25 +4358,19 @@ mod scenario_tests {
         );
     }
 
-    // ── Scenario: phase display ─────────────────────────────────────────────
-
     #[test]
     fn scenario_phase_display() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
 
-        // Stream with no phase — typing indicator visible
         h.stream_start();
         let f = h.render("streaming, no phase");
         assert!(f.contains("···"), "typing indicator visible during stream");
 
-        // Stream text appears
         h.stream_chunk("Hello!");
         let f = h.render("streaming with text");
         assert!(f.contains("Hello!"), "streamed text visible");
     }
-
-    // ── Scenario: very short terminal ───────────────────────────────────────
 
     #[test]
     fn scenario_very_short_terminal() {
@@ -4792,11 +4390,9 @@ mod scenario_tests {
         ));
 
         let f = h.render("short terminal with messages");
-        // Should not panic and should show something useful
         assert!(f.contains("Bob"), "character name in assistant entry");
         assert!(f.contains("[INSERT]"), "input mode indicator visible");
 
-        // Streaming in short terminal
         h.stream_start();
         h.stream_chunk("Response text");
         let f = h.render("streaming in short terminal");
@@ -4805,8 +4401,6 @@ mod scenario_tests {
             "streamed content visible in short terminal"
         );
     }
-
-    // ── Scenario: multiple tool calls ───────────────────────────────────────
 
     #[test]
     fn scenario_multiple_tool_calls() {
@@ -4819,7 +4413,6 @@ mod scenario_tests {
             "t1".into(),
         ));
 
-        // One assistant turn carrying three tool call/result pairs in order.
         h.app.entries.push(assistant_turn(vec![
             tool_use(
                 "tc1",
@@ -4852,34 +4445,23 @@ mod scenario_tests {
         ]));
 
         let f = h.render("multiple tool calls");
-        // All tool calls should be visible
         assert!(f.contains("web_search"), "first tool call visible");
         assert!(f.contains("read_page"), "second tool call visible");
-        // Error should be distinguishable (we can't check color, but content is there)
         assert!(f.contains("404 Not Found"), "error result visible");
-        // Tool calls should have the arrows
         let arrow_count = f.matches('▶').count();
         assert_eq!(arrow_count, 3, "should have 3 tool call arrows");
         let result_count = f.matches('◀').count();
         assert_eq!(result_count, 3, "should have 3 result arrows");
     }
 
-    // ── Scenario: cursor position with wrapping ─────────────────────────────
-
     #[test]
     fn scenario_cursor_wrapping() {
-        // Use a narrow terminal to force wrapping
         let mut h = Harness::with_size(30, 15);
         h.app.connection_status = ConnectionStatus::Connected;
 
-        // Type enough text to cause wrapping (28 content chars per line)
         h.type_str("abcdefghijklmnopqrstuvwxyz12345678");
         let f = h.render("wrapped input text");
 
-        // The text should visually wrap across multiple lines.
-        // With 30-wide terminal and no side borders, 34 chars wraps after col 30:
-        //   line 1: "abcdefghijklmnopqrstuvwxyz1234" (30 chars)
-        //   line 2: "5678" (4 chars)
         let input_lines: Vec<&str> = f
             .lines()
             .filter(|l| l.contains("abcdef") || l.contains("5678"))
@@ -4892,20 +4474,15 @@ mod scenario_tests {
         );
     }
 
-    // ── Scenario: cursor at exact boundary ────────────────────────────────
-
     #[test]
     fn scenario_cursor_at_exact_boundary() {
-        // Use 30-wide terminal → input content_width = 30 (Borders::TOP has no side borders)
         let mut h = Harness::with_size(30, 15);
         h.app.connection_status = ConnectionStatus::Connected;
 
-        // Type exactly 30 characters to fill the first line
         let exact_line = "a".repeat(30);
         h.type_str(&exact_line);
         let _f = h.render("cursor at exact boundary");
 
-        // Type one more character — it should appear on its own wrapped line
         h.type_str("x");
         let f = h.render("one char past boundary");
         let has_wrapped_x = f.lines().any(|l| l.starts_with('x'));
@@ -4915,36 +4492,26 @@ mod scenario_tests {
         );
     }
 
-    // ── Scenario: optimistic user message echo ──────────────────────────────
-
     #[test]
     fn scenario_optimistic_user_echo() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
 
-        // Type and send a message
         h.type_str("hello world");
         h.press(KeyCode::Enter);
         let f = h.render("after send");
 
-        // User's message should appear immediately in conversation
         assert!(
             f.contains("hello world"),
             "user's message should be visible immediately after send"
         );
         assert!(f.contains("You"), "user label should be visible");
-        // Typing indicator should also show
         assert!(
             f.contains("···"),
             "typing indicator should show alongside user message"
         );
     }
 
-    // ── Scenario: thinking is a single source of truth while streaming ──────
-    //
-    // With streaming deltas appended straight into `entries` (no parallel live
-    // buffer), there's nothing to dedup against: multiple deltas of one thought
-    // merge into one entry and render exactly once.
     #[test]
     fn scenario_thinking_not_duplicated() {
         let mut h = Harness::new();
@@ -4956,12 +4523,10 @@ mod scenario_tests {
             .entries
             .push(ConversationEntry::user("hi".into(), vec![], "t1".into()));
 
-        // Stream one thought as two deltas — they must merge, not stack.
         h.stream_start();
         h.thinking_chunk("thinking about ");
         h.thinking_chunk("response");
 
-        // Exactly one Thinking entry holds the merged text.
         let thinking_blocks = h
             .app
             .entries
@@ -4983,14 +4548,11 @@ mod scenario_tests {
         );
     }
 
-    // ── Scenario: regeneration flow ─────────────────────────────────────────
-
     #[test]
     fn scenario_regeneration() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
 
-        // Set up a conversation
         h.app.entries.push(ConversationEntry::user(
             "Tell me a joke".into(),
             vec![],
@@ -5007,11 +4569,9 @@ mod scenario_tests {
         let f = h.render("before regen");
         assert!(f.contains("chicken"), "original response visible");
 
-        // Simulate regeneration: remove last assistant, start stream
         h.app.stream.reset();
         h.app.stream.active = true;
         h.app.stream.regen = true;
-        // Remove last assistant entry (as StreamStart handler does)
         if let Some(pos) = h
             .app
             .entries
@@ -5027,13 +4587,11 @@ mod scenario_tests {
             "original response should be removed during regen"
         );
 
-        // New response streams in
         h.stream_chunk("A better joke: ");
         let f = h.render("regen streaming");
         assert!(f.contains("(regenerating)"), "should show regen indicator");
         assert!(f.contains("A better joke"), "new response streaming");
 
-        // Complete regen
         h.stream_end("A better joke: Why do programmers prefer dark mode?");
         let f = h.render("regen complete");
         assert!(f.contains("dark mode"), "regenerated response visible");
@@ -5042,8 +4600,6 @@ mod scenario_tests {
             "regen indicator gone after completion"
         );
     }
-
-    // ── Scenario: markdown code block in conversation ───────────────────────
 
     #[test]
     fn scenario_code_blocks() {
@@ -5144,8 +4700,6 @@ mod scenario_tests {
         );
     }
 
-    // ── Scenario: status messages appear as system entries ──────────────────────
-
     #[test]
     fn scenario_status_bar_populated() {
         let mut h = Harness::new();
@@ -5159,7 +4713,6 @@ mod scenario_tests {
             "status message visible as system entry"
         );
 
-        // Narrow terminal — should not panic
         let mut h2 = Harness::with_size(50, 20);
         h2.app = App {
             connection_status: ConnectionStatus::Connected,
@@ -5170,14 +4723,11 @@ mod scenario_tests {
         let _ = h2.render("narrow terminal with status");
     }
 
-    // ── Scenario: character name shows in assistant responses ─────────────────
-
     #[test]
     fn scenario_dynamic_title() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;
 
-        // With character name set, assistant entries use it
         h.app.character_name = "Luna".into();
         h.app.entries.push(ConversationEntry::assistant(
             None,
@@ -5192,8 +4742,6 @@ mod scenario_tests {
             "character name shown in assistant entry"
         );
     }
-
-    // ── Scenario: system messages ───────────────────────────────────────────
 
     #[test]
     fn scenario_system_messages() {
@@ -5217,8 +4765,6 @@ mod scenario_tests {
         assert!(f.contains("You"), "user message after system");
     }
 
-    // ── Scenario: deduped system messages show (×N) in header ───────────────
-
     #[test]
     fn scenario_system_message_count_suffix() {
         let mut h = Harness::new();
@@ -5238,8 +4784,6 @@ mod scenario_tests {
         );
     }
 
-    // ── Scenario: notification toasts float over the conversation ───────────
-
     #[test]
     fn scenario_notification_toast_overlay() {
         let mut h = Harness::new();
@@ -5254,10 +4798,8 @@ mod scenario_tests {
 
         h.app.set_error("error: rate_limit - too many requests");
         let f = h.render("error toast");
-        // Toast content + its severity icon paint over the conversation.
         assert!(f.contains("rate_limit"), "toast content visible");
         assert!(f.contains('✖'), "error icon visible");
-        // The conversation underneath is not reflowed away.
         assert!(f.contains("long answer"), "conversation still visible");
     }
 
@@ -5283,8 +4825,6 @@ mod scenario_tests {
         h.app.set_error("error: second notice");
         assert_eq!(h.app.notifications.len(), 2);
 
-        // First Esc clears the newest toast (drawn at the top of the stack)
-        // and consumes the keypress.
         let action = h.press_action(KeyCode::Esc);
         assert!(matches!(action, input::Action::Redraw));
         assert_eq!(h.app.notifications.len(), 1);
@@ -5292,11 +4832,9 @@ mod scenario_tests {
         assert!(f.contains("first notice"), "older toast still visible");
         assert!(!f.contains("second notice"), "newest toast dismissed");
 
-        // Second Esc clears the remaining toast.
         h.press(KeyCode::Esc);
         assert!(h.app.notifications.is_empty(), "all toasts dismissed");
 
-        // With no toasts left, Esc is a no-op in Normal mode.
         let action = h.press_action(KeyCode::Esc);
         assert!(matches!(action, input::Action::None));
     }
@@ -5309,7 +4847,6 @@ mod scenario_tests {
         h.app.set_error("error: second notice");
         assert_eq!(h.app.notifications.len(), 1);
 
-        // Esc in Insert mode exits to Normal and does NOT touch the toast.
         h.press(KeyCode::Esc);
         assert_eq!(h.app.input.mode, crate::app::InputMode::Normal);
         assert_eq!(
@@ -5318,8 +4855,6 @@ mod scenario_tests {
             "toast untouched by insert-mode Esc"
         );
     }
-
-    // ── Scenario: error in streaming ────────────────────────────────────────
 
     #[test]
     fn scenario_error_during_stream() {
@@ -5332,12 +4867,10 @@ mod scenario_tests {
             "t1".into(),
         ));
 
-        // Stream starts
         h.stream_start();
         h.stream_chunk("Starting to respond...");
         let _ = h.render("streaming");
 
-        // Error arrives — stream aborts, error in status
         h.app.abort_stream();
         h.app.set_status("error: rate_limit - Too many requests");
 
@@ -5347,14 +4880,11 @@ mod scenario_tests {
             "streaming indicator gone after error"
         );
         assert!(f.contains("rate_limit"), "error visible as system entry");
-        // The partial response is lost — this is the current behavior
         assert!(
             !f.contains("Starting to respond"),
             "partial stream text gone after reset"
         );
     }
-
-    // ── Scenario: reconnection during streaming ─────────────────────────────
 
     #[test]
     fn scenario_reconnect_during_stream() {
@@ -5371,7 +4901,6 @@ mod scenario_tests {
         h.stream_chunk("Partial response that gets cut off because");
         let _ = h.render("streaming before disconnect");
 
-        // Connection drops — stream state is cleared by disconnect handler
         h.app.connection_status = ConnectionStatus::Connecting;
         h.app.abort_stream();
         h.app.set_status("reconnecting: connection lost");
@@ -5381,19 +4910,15 @@ mod scenario_tests {
             f.contains("reconnecting"),
             "reconnection status visible as system entry"
         );
-        // Streaming indicator should be gone (stream was reset)
         assert!(
             !f.contains("[streaming...]"),
             "streaming indicator cleared on disconnect"
         );
-        // Partial stream text is lost on disconnect
         assert!(
             !f.contains("Partial response"),
             "partial stream text cleared on disconnect"
         );
     }
-
-    // ── Scenario: rapid message exchange ────────────────────────────────────
 
     #[test]
     fn scenario_rapid_exchange() {
@@ -5401,7 +4926,6 @@ mod scenario_tests {
         h.app.connection_status = ConnectionStatus::Connected;
         h.app.character_name = "Bot".into();
 
-        // Simulate rapid back-and-forth
         for i in 0..5 {
             h.app.entries.push(ConversationEntry::user(
                 format!("Q{i}: What about this?"),
@@ -5418,11 +4942,9 @@ mod scenario_tests {
         }
 
         let f = h.render("rapid exchange");
-        // Most recent messages should be visible (bottom-anchored)
         assert!(f.contains("Q4"), "most recent user message visible");
         assert!(f.contains("A4"), "most recent response visible");
 
-        // Check layout stability: render again, nothing should change
         let _f2 = h.render("same state re-render");
         let diffs = h.changed_lines();
         assert_eq!(

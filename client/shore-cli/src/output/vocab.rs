@@ -108,9 +108,6 @@ pub(crate) fn paint<W: Write>(out: &mut W, tone: Tone, text: &str) {
     paint_when(use_color(), out, tone, text);
 }
 
-/// [`paint`] for the five printers that write to stderr, which decides colour
-/// separately: `shore log | less` must not colour the pipe, but an error on
-/// the way is still going to the terminal.
 pub(crate) fn paint_on_stderr<W: Write>(out: &mut W, tone: Tone, text: &str) {
     paint_when(crate::output::use_color_on_stderr(), out, tone, text);
 }
@@ -222,10 +219,6 @@ struct Row {
 }
 
 impl Row {
-    /// A label is a dim key when it names a value beside it, and the content
-    /// itself when the row carries a mark — a marked row is a list entry, and
-    /// dimming the entry the mark points at says "inactive" about the thing
-    /// just flagged as active.
     fn label_tone(&self) -> Tone {
         match self.mark {
             Mark::None => Tone::Muted,
@@ -548,55 +541,28 @@ pub(crate) fn money(value: f64) -> String {
     format!("${value:.2}")
 }
 
-// ---------------------------------------------------------------------------
-// Process channel: thinking, tool calls, and tool results render as one
-// cohesive secondary channel — inset, each block opened by a colored sigil +
-// label header with a four-column hanging indent and a dim body. Response text
-// (speech) stays flush-left and plain; the channels are separated by blank
-// lines.
-// ---------------------------------------------------------------------------
+pub(crate) const SIGIL_THINKING: char = '\u{25cc}';
+pub(crate) const SIGIL_TOOL: char = '\u{2192}';
+pub(crate) const SIGIL_OK: char = '\u{2713}';
+pub(crate) const SIGIL_ERROR: char = '\u{2717}';
+pub(crate) const SIGIL_SUBAGENT: char = '\u{00bb}';
 
-/// Sigil marking a thinking block.
-pub(crate) const SIGIL_THINKING: char = '\u{25cc}'; // ◌
-/// Sigil marking a tool call. Single-width (a wide glyph like ⚙ misaligns the
-/// text after it in many terminals).
-pub(crate) const SIGIL_TOOL: char = '\u{2192}'; // →
-/// Sigil marking a successful tool result.
-pub(crate) const SIGIL_OK: char = '\u{2713}'; // ✓
-/// Sigil marking a failed tool result.
-pub(crate) const SIGIL_ERROR: char = '\u{2717}'; // ✗
-/// Sigil marking the boundary of a sub-agent's nested tool loop. Single-width.
-pub(crate) const SIGIL_SUBAGENT: char = '\u{00bb}'; // »
-
-/// Header color for a thinking block.
 pub(crate) const COLOR_THINKING: Tone = Tone::Thinking;
-/// Header color for a tool call.
 pub(crate) const COLOR_TOOL: Tone = Tone::Warn;
-/// Header color for a successful tool result.
 pub(crate) const COLOR_RESULT: Tone = Tone::Good;
-/// Header color for a sub-agent section boundary.
 pub(crate) const COLOR_SUBAGENT: Tone = Tone::Active;
-/// Header color for a failed tool result.
 pub(crate) const COLOR_ERROR: Tone = Tone::Bad;
 
-/// The left-gutter bar that runs down the process channel.
-pub(crate) const CHANNEL_BAR: char = '\u{2502}'; // │
-/// Total visible width of a process line's prefix (one leading space + `"│ "`
-/// gutter + two-space inset), so header labels and body text both land at
-/// column 5.
+pub(crate) const CHANNEL_BAR: char = '\u{2502}';
 pub(crate) const PROCESS_INDENT_WIDTH: usize = 5;
-/// Floor for the process text column so a very narrow terminal still wraps.
 pub(crate) const MIN_PROCESS_WIDTH: usize = 24;
 
-/// Width available for wrapped process text after the gutter + inset.
 pub(crate) fn process_wrap_width() -> usize {
     term_width()
         .saturating_sub(PROCESS_INDENT_WIDTH)
         .max(MIN_PROCESS_WIDTH)
 }
 
-/// Write the dim left gutter (`"│ "`) without a trailing newline. The bar is
-/// always dim — it marks the channel; per-block color lives in the header.
 fn write_gutter(out: &mut impl Write) {
     if use_color() {
         let _ignored = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
@@ -607,9 +573,6 @@ fn write_gutter(out: &mut impl Write) {
     }
 }
 
-/// Write a bar-only channel line (`"│"`) — used to keep the gutter continuous
-/// across the blank line between two process blocks, and for blank lines within
-/// a thought.
 pub(crate) fn write_channel_rule(out: &mut impl Write) {
     if use_color() {
         let _ignored = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
@@ -620,22 +583,14 @@ pub(crate) fn write_channel_rule(out: &mut impl Write) {
     }
 }
 
-/// Write a process-block header line: dim `"│ "` gutter, then a colored
-/// `"⟨sigil⟩ ⟨text⟩"` (label at column 4).
 pub(crate) fn write_sigil_header(out: &mut impl Write, sigil: char, text: &str, tone: Tone) {
     write_gutter(out);
     paint(out, tone, &format!("{sigil} {text}"));
     let _ignored = writeln!(out);
 }
 
-/// Smallest content column a wrapped tool-body line keeps after its own indent,
-/// so a deeply-indented line still has room to wrap rather than overflowing.
 const MIN_BODY_WRAP: usize = 16;
 
-/// Write a tool body inset into the process channel: dim and gutter-barred,
-/// text at column 5. Each line is word-wrapped to the terminal width with its
-/// leading indentation preserved on continuation rows, so long lines stay in
-/// the gutter instead of soft-wrapping back to column 0.
 pub(crate) fn write_process_body(out: &mut impl Write, body: &str) {
     if body.is_empty() {
         return;
@@ -646,7 +601,6 @@ pub(crate) fn write_process_body(out: &mut impl Write, body: &str) {
             write_channel_rule(out);
             continue;
         }
-        // Preserve the line's own indentation; wrap only the content after it.
         let indent_len = line.chars().take_while(|c| *c == ' ').count();
         let content = line.get(indent_len..).unwrap_or("");
         let avail = base.saturating_sub(indent_len).max(MIN_BODY_WRAP);
@@ -663,9 +617,6 @@ pub(crate) fn write_process_body(out: &mut impl Write, body: &str) {
     }
 }
 
-/// Write one logical line of thinking *content* (everything below the
-/// `◌ Thinking` header): dim, gutter-barred, word-wrapped to `width`, text at
-/// column 4. Blank lines render as a bar-only line.
 pub(crate) fn write_thinking_content_line(out: &mut impl Write, line: &str, width: usize) {
     if line.trim().is_empty() {
         write_channel_rule(out);
@@ -682,8 +633,6 @@ pub(crate) fn write_thinking_content_line(out: &mut impl Write, line: &str, widt
     }
 }
 
-/// Extract a short, human-meaningful "primary argument" from a tool input
-/// object (the path/command/query/… most worth showing on the sigil line).
 pub(crate) fn primary_tool_arg(input: &serde_json::Value) -> Option<String> {
     const KEYS: &[&str] = &[
         "path",
@@ -708,7 +657,6 @@ pub(crate) fn primary_tool_arg(input: &serde_json::Value) -> Option<String> {
     None
 }
 
-/// Truncate `s` to at most `max` chars, appending `…` when shortened.
 fn truncate_chars(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         s.to_owned()
@@ -718,10 +666,6 @@ fn truncate_chars(s: &str, max: usize) -> String {
     }
 }
 
-/// Greedy word-wrap of a single logical line to `width` columns (counted in
-/// chars). Whitespace runs collapse to single spaces. A word longer than
-/// `width` is emitted on its own line rather than hard-split. An empty/blank
-/// input yields a single empty line so callers can still emit a gutter for it.
 pub(crate) fn wrap_line(text: &str, width_in: usize) -> Vec<String> {
     let width = width_in.max(1);
     let mut lines = Vec::new();
@@ -746,17 +690,14 @@ pub(crate) fn wrap_line(text: &str, width_in: usize) -> Vec<String> {
     lines
 }
 
-/// Write text in a specific foreground color (respects use_color()).
 pub(crate) fn write_fg(out: &mut impl Write, color: Tone, text: &str) {
     paint(out, color, text);
 }
 
-/// Write text in dim (DarkGrey) color.
 pub(crate) fn write_dim(out: &mut impl Write, text: &str) {
     write_fg(out, Tone::Muted, text);
 }
 
-/// Print a dimmed line (for empty states).
 pub(crate) fn print_dim_line(out: &mut impl Write, text: &str) {
     if use_color() {
         let _ignored = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
@@ -767,7 +708,6 @@ pub(crate) fn print_dim_line(out: &mut impl Write, text: &str) {
     }
 }
 
-/// Write a section header: `-- Title ----------------------`
 pub(crate) fn write_section_header(out: &mut impl Write, title: &str, suffix: &str, width: usize) {
     let prefix = if suffix.is_empty() {
         format!("\u{2500}\u{2500} {title} ")
@@ -790,7 +730,6 @@ pub(crate) fn write_section_header(out: &mut impl Write, title: &str, suffix: &s
 
 const ROW_LABEL_WIDTH: usize = 13;
 
-/// Write a label-value row, optionally coloring the value.
 pub(crate) fn write_row_with(out: &mut impl Write, label: &str, value: &str, color: Option<Tone>) {
     let gap = if label.chars().count() >= ROW_LABEL_WIDTH {
         " "
@@ -807,16 +746,13 @@ pub(crate) fn write_row_with(out: &mut impl Write, label: &str, value: &str, col
     let _ignored = writeln!(out);
 }
 
-/// Write a label-value row: `  Label        Value`
 pub(crate) fn write_row(out: &mut impl Write, label: &str, value: &str) {
     write_row_with(out, label, value, None);
 }
 
-/// Write a label-value row with the value in a specific color.
 pub(crate) fn write_row_colored(out: &mut impl Write, label: &str, value: &str, color: Tone) {
     write_row_with(out, label, value, Some(color));
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -878,9 +814,6 @@ mod tests {
         );
     }
 
-    /// The `*` said "this is the active one" while the name beside it was
-    /// painted the same grey as every inactive name, so the row read as
-    /// flagged and disabled at once.
     #[test]
     fn a_marked_row_paints_its_name_the_way_the_mark_does() {
         let _guard = crate::output::COLOR_TEST_LOCK

@@ -4,18 +4,8 @@ pub mod server_msg;
 pub mod tool_display;
 pub mod types;
 
-/// SWP protocol version.
 pub const SWP_V1: u32 = 1;
 
-/// Maximum newline-delimited SWP frame size in bytes.
-///
-/// Sized to accommodate image attachments after base64 expansion (~33% over
-/// the raw byte size) plus headroom for history snapshots that include
-/// multiple inline images. A 16MB cap, the previous value, was tight enough
-/// that a single ~12MB phone photo encoded to base64 would exceed it and the
-/// server would terminate the connection mid-upload with "Message exceeds
-/// maximum size". 128MB gives plenty of margin for any practical chat-image
-/// workload while still bounding worst-case memory use per frame.
 pub(crate) const MAX_WIRE_MESSAGE_SIZE: usize = 128 * 1024 * 1024;
 
 #[cfg(test)]
@@ -28,7 +18,6 @@ mod tests {
     use crate::protocol::types::*;
     use crate::protocol::{MAX_WIRE_MESSAGE_SIZE, SWP_V1};
 
-    /// Helper: serialize then deserialize, return the intermediate JSON.
     fn round_trip<T: serde::Serialize + serde::de::DeserializeOwned + std::fmt::Debug>(
         val: &T,
     ) -> (serde_json::Value, T) {
@@ -45,8 +34,6 @@ mod tests {
         items.get(index).expect("expected item")
     }
 
-    // ── Protocol version ──────────────────────────────────────────────
-
     #[test]
     fn protocol_version_constant() {
         assert_eq!(SWP_V1, 1);
@@ -56,8 +43,6 @@ mod tests {
     fn wire_message_size_constant() {
         assert_eq!(MAX_WIRE_MESSAGE_SIZE, 128 * 1024 * 1024);
     }
-
-    // ── Client messages ───────────────────────────────────────────────
 
     #[test]
     fn client_hello_round_trip() {
@@ -74,9 +59,6 @@ mod tests {
         assert_eq!(field(&json, "token"), "s3cret");
     }
 
-    /// A hello with no token still parses, so the daemon can refuse it with an
-    /// `unauthorized` message rather than a deserialization error that says
-    /// nothing about what to do.
     #[test]
     fn a_tokenless_hello_still_parses() {
         let json = serde_json::json!({
@@ -133,8 +115,6 @@ mod tests {
         assert_eq!(field(&json, "name"), "switch_character");
         assert_eq!(field(field(&json, "args"), "name"), "alice");
     }
-
-    // ── Server messages ───────────────────────────────────────────────
 
     #[test]
     fn server_hello_round_trip() {
@@ -371,7 +351,6 @@ mod tests {
         assert_eq!(field(&json, "rid"), "msg_01");
         let input = field(&json, "input");
         assert_eq!(field(input, "query"), "rust serde");
-        // Verify input is a JSON object, not a string
         assert!(input.is_object());
     }
 
@@ -438,8 +417,6 @@ mod tests {
         assert_eq!(field(&json, "rid"), "msg_01");
         assert_eq!(field(&json, "budget"), "daily total");
     }
-
-    // ── Types ─────────────────────────────────────────────────────────
 
     #[test]
     fn message_with_all_fields() {
@@ -594,8 +571,6 @@ mod tests {
         assert_eq!(serde_json::to_value(Role::System).unwrap(), "system");
     }
 
-    // ── ContentBlock serde round-trip ─────────────────────────────────
-
     #[test]
     fn content_block_text_round_trip() {
         let block = ContentBlock::Text {
@@ -649,7 +624,6 @@ mod tests {
 
     #[test]
     fn content_block_thinking_without_signature_compat() {
-        // Simulate old JSON without signature field — should deserialize with None.
         let json = json!({"type": "thinking", "thinking": "old block"});
         let block: ContentBlock = serde_json::from_value(json).unwrap();
         let ContentBlock::Thinking {
@@ -690,7 +664,6 @@ mod tests {
         assert_eq!(field(&json, "type"), "tool_result");
         assert_eq!(field(&json, "tool_use_id"), "tu_123");
         assert_eq!(field(&json, "content"), "2026-03-27T12:00:00Z");
-        // is_error defaults to false, verify it round-trips
         let back: ContentBlock = serde_json::from_value(json).unwrap();
         assert_eq!(back, block);
     }
@@ -710,7 +683,6 @@ mod tests {
 
     #[test]
     fn content_block_tool_result_is_error_defaults_false() {
-        // Simulate old JSON without is_error field
         let json = json!({"type": "tool_result", "tool_use_id": "tu_1", "content": "ok"});
         let block: ContentBlock = serde_json::from_value(json).unwrap();
         let ContentBlock::ToolResult { is_error, .. } = block else {
@@ -749,13 +721,11 @@ mod tests {
             timestamp: "2026-01-01T00:00:00Z".into(),
         };
         let json = serde_json::to_value(&msg).unwrap();
-        // content_blocks should be present in serialized form
         let blocks = field(&json, "content_blocks").as_array().unwrap();
         assert_eq!(blocks.len(), 3);
         assert_eq!(field(item(blocks, 0), "type"), "thinking");
         assert_eq!(field(item(blocks, 1), "type"), "tool_use");
         assert_eq!(field(item(blocks, 2), "type"), "text");
-        // Round-trip
         let back: Message = serde_json::from_value(json).unwrap();
         assert_eq!(back.content_blocks.len(), 3);
         assert_eq!(back.content_blocks, msg.content_blocks);
@@ -786,7 +756,6 @@ mod tests {
 
     #[test]
     fn old_message_json_without_content_blocks_deserializes() {
-        // Simulate V1/old JSONL that has no content_blocks field
         let json = json!({
             "msg_id": "m_legacy",
             "role": "assistant",

@@ -6,34 +6,23 @@ use tracing::{debug, warn};
 use crate::swp_client::connection::ServerAddr;
 use crate::swp_client::error::{ClientError, DiscoveryKind, Result};
 
-/// One entry in `$XDG_RUNTIME_DIR/shore/instances.json`.
 #[derive(Deserialize, Debug, Clone)]
 pub(crate) struct InstanceEntry {
-    /// Instance ID.
     #[serde(default)]
     pub id: Option<String>,
-    /// TCP address where the daemon listens.
     pub addr: String,
-    /// PID of the daemon process.
     #[serde(default)]
     pub pid: Option<u32>,
-    /// Resolved config directory (written by daemon at registration).
     #[serde(default)]
     pub config_dir: Option<String>,
 }
 
-/// The instances file is a JSON array of `InstanceEntry`.
 type InstancesFile = Vec<InstanceEntry>;
 
-/// Return the default path to the Shore instances file.
-///
-/// Uses `crate::dirs::runtime_dir()` so that `SHORE_RUNTIME_DIR`,
-/// `XDG_RUNTIME_DIR`, and platform defaults are respected consistently.
 pub(crate) fn instances_path() -> PathBuf {
     crate::dirs::runtime_dir().join("instances.json")
 }
 
-/// Read the instances file and return all live entries (dead PIDs are skipped).
 pub(crate) fn read_instances() -> Result<Vec<InstanceEntry>> {
     read_instances_from_path(&instances_path())
 }
@@ -67,11 +56,10 @@ fn read_instances_from_path(path: &Path) -> Result<Vec<InstanceEntry>> {
     Ok(live)
 }
 
-/// Check whether an instance entry's PID is still running.
 fn entry_alive(entry: &InstanceEntry) -> bool {
     match entry.pid {
         Some(pid) => !matches!(pid_state(pid), ProcessState::Dead),
-        None => true, // no PID recorded — can't prune, assume alive
+        None => true,
     }
 }
 
@@ -88,13 +76,10 @@ enum ProcessState {
     reason = "process liveness probe uses libc::kill(pid, 0), which has no safe std wrapper"
 )]
 fn pid_state(pid: u32) -> ProcessState {
-    // The kernel's pid_t is i32; real PIDs fit far below i32::MAX. A value that
-    // doesn't fit can't name a live process, so treat it as dead.
     let Ok(pid_t) = libc::pid_t::try_from(pid) else {
         return ProcessState::Dead;
     };
     // SAFETY: signal 0 performs permission/existence checking only. `pid_t`
-    // was range-checked for this platform's pid_t above.
     let rc = unsafe { libc::kill(pid_t, 0) };
     if rc == 0 {
         return ProcessState::Alive;
@@ -160,7 +145,6 @@ fn discover_from_path(path: &Path, selector: Option<&str>) -> Result<ServerAddr>
     Ok(ServerAddr(entry.addr.clone()))
 }
 
-/// How the ambiguity error names the daemons the caller has to choose between.
 fn describe_instances(entries: &[InstanceEntry]) -> String {
     entries
         .iter()
@@ -172,14 +156,6 @@ fn describe_instances(entries: &[InstanceEntry]) -> String {
         .join(", ")
 }
 
-/// Discover the config directory from the one live daemon instance.
-///
-/// Lets clients read the same `config.toml` the daemon is using without
-/// requiring the caller to set `SHORE_CONFIG_DIR` in their environment.
-/// Returns `Ok(None)` if no instance is registered, if several are and none
-/// was named — guessing between them is how a client ends up reading one
-/// daemon's config while talking to another — or if the entry lacks
-/// `config_dir` (older daemons that predate the field).
 pub fn discover_config_dir() -> Result<Option<PathBuf>> {
     let entries = read_instances()?;
     let [only] = entries.as_slice() else {
@@ -188,21 +164,6 @@ pub fn discover_config_dir() -> Result<Option<PathBuf>> {
     Ok(only.config_dir.as_deref().map(PathBuf::from))
 }
 
-/// The config directory of the daemon listening on `addr`, when one is
-/// registered there.
-///
-/// Used to find that daemon's **token**, which is why it matches on the address
-/// rather than taking the first entry the way its neighbours do. `--config`
-/// re-homes a daemon's config directory, so its token is not where a client's
-/// own XDG resolution would look — and with two daemons running, the first
-/// entry is as likely to be the wrong one as the right one. The address is the
-/// thing the client actually chose, so it is the thing to match on.
-///
-/// Every failure answers `None`: an absent, unreadable or corrupt registry
-/// means "I cannot tell you", and the caller falls back to its own config
-/// directory. A daemon whose address is spelled differently here than the
-/// client spelled it (`localhost` versus `127.0.0.1`) also lands here, which is
-/// no worse than the behaviour before there were tokens.
 pub(crate) fn config_dir_for_addr(addr: &str) -> Option<PathBuf> {
     match read_instances() {
         Ok(entries) => config_dir_of(&entries, addr),
@@ -213,8 +174,6 @@ pub(crate) fn config_dir_for_addr(addr: &str) -> Option<PathBuf> {
     }
 }
 
-/// The matching half of [`config_dir_for_addr`], split out so it is testable
-/// without a registry file on disk.
 fn config_dir_of(entries: &[InstanceEntry], addr: &str) -> Option<PathBuf> {
     entries
         .iter()
@@ -225,11 +184,6 @@ fn config_dir_of(entries: &[InstanceEntry], addr: &str) -> Option<PathBuf> {
 
 pub(crate) const DEFAULT_ADDR: &str = "127.0.0.1:7320";
 
-/// Convenience: check client.toml, then discover, then fall back to the
-/// default TCP address when discovery is simply absent.
-///
-/// Corrupt or unreadable registry state is returned as an error instead of
-/// being flattened into the default address.
 pub fn discover_or_default(config_path: Option<&str>) -> Result<ServerAddr> {
     let client_default =
         crate::swp_client::client_config::load_client_config().and_then(|cfg| cfg.default_address);
@@ -271,8 +225,6 @@ fn should_fallback_to_default(err: &ClientError) -> bool {
 mod tests {
     use super::*;
 
-    // ── config_dir_of ────────────────────────────────────────────────
-
     fn entry(addr: &str, config_dir: Option<&str>) -> InstanceEntry {
         InstanceEntry {
             id: None,
@@ -282,10 +234,6 @@ mod tests {
         }
     }
 
-    /// The address decides, not the position. With two daemons running, taking
-    /// the first entry would hand a client the *other* daemon's token
-    /// directory — which is why this matches rather than taking `.first()`
-    /// the way its neighbours do.
     #[test]
     fn config_dir_of_matches_on_address() {
         let entries = [
@@ -302,9 +250,6 @@ mod tests {
         );
     }
 
-    /// No match, or an entry from a daemon too old to record the field, is
-    /// `None` — the caller falls back to its own config directory, which is
-    /// what every client did before there were tokens.
     #[test]
     fn config_dir_of_is_none_when_it_cannot_tell() {
         let entries = [
@@ -315,8 +260,6 @@ mod tests {
         assert_eq!(config_dir_of(&entries, "[::1]:7320"), None);
         assert_eq!(config_dir_of(&[], "127.0.0.1:7320"), None);
     }
-
-    // ── entry_alive ──────────────────────────────────────────────────
 
     #[test]
     fn entry_alive_no_pid_assumes_alive() {
@@ -350,8 +293,6 @@ mod tests {
         };
         assert!(!entry_alive(&entry));
     }
-
-    // ── InstanceEntry deserialization ─────────────────────────────────
 
     #[test]
     fn instance_entry_full_fields() {
@@ -403,9 +344,6 @@ mod tests {
         assert_eq!(addr.0, DEFAULT_ADDR);
     }
 
-    /// Two live daemons and nothing said which: the command has to stop, not
-    /// pick. Taking `.first()` here is how `shore send` lands in the wrong
-    /// character's conversation on a machine running a second instance.
     #[test]
     fn discovery_refuses_to_choose_between_live_daemons() {
         let tmp = tempfile::tempdir().unwrap();
@@ -425,8 +363,6 @@ mod tests {
         assert!(message.contains("play at 127.0.0.1:7321"), "{message}");
     }
 
-    /// The ambiguity is not the missing-registry case, so it must not be
-    /// flattened into the default address the way an absent registry is.
     #[test]
     fn ambiguity_is_not_flattened_to_the_default_address() {
         let tmp = tempfile::tempdir().unwrap();
@@ -448,7 +384,6 @@ mod tests {
         ));
     }
 
-    /// Naming one still works, which is the escape hatch the message points at.
     #[test]
     fn an_explicit_selector_resolves_among_several() {
         let tmp = tempfile::tempdir().unwrap();

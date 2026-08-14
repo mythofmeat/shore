@@ -9,18 +9,12 @@ use crate::protocol::{MAX_WIRE_MESSAGE_SIZE, SWP_V1};
 
 use crate::swp_client::error::{ClientError, Result};
 
-/// Address to connect to — a TCP host:port.
 #[derive(Debug, Clone)]
 pub struct ServerAddr(pub String);
 
-/// Internal trait to unify read/write halves across transport types.
 trait AsyncReadWrite: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin {}
 impl<T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin> AsyncReadWrite for T {}
 
-/// A connection to a Shore daemon over the SWP protocol.
-///
-/// Sends and receives JSON-Lines framed messages. The connection is `Send`
-/// so it can be moved across tokio tasks.
 pub struct SWPConnection {
     reader: BufReader<Box<dyn AsyncReadWrite>>,
     writer: BufWriter<Box<dyn AsyncReadWrite>>,
@@ -33,7 +27,6 @@ impl std::fmt::Debug for SWPConnection {
 }
 
 impl SWPConnection {
-    /// Open a raw transport to `addr` without performing the handshake.
     async fn open(addr: &ServerAddr) -> Result<Self> {
         debug!(addr = %addr.0, "connecting via tcp");
         let stream = TcpStream::connect(&addr.0).await.map_err(|e| {
@@ -48,14 +41,6 @@ impl SWPConnection {
         })
     }
 
-    /// Connect to the daemon and perform the SWP handshake.
-    ///
-    /// The handshake sequence is:
-    /// 1. Receive `ServerMessage::Hello` from daemon
-    /// 2. Send `ClientMessage::Hello`
-    /// 3. Receive `ServerMessage::History`
-    ///
-    /// Returns the connection along with the server hello and initial history.
     pub async fn connect<T: Into<String>, N: Into<String>>(
         addr: &ServerAddr,
         client_type: T,
@@ -74,7 +59,6 @@ impl SWPConnection {
         Ok((conn, server_hello, history))
     }
 
-    /// Perform the 3-step SWP handshake on an already-open connection.
     async fn do_handshake(
         &mut self,
         client_type: String,
@@ -84,17 +68,6 @@ impl SWPConnection {
     ) -> Result<(ServerHello, History)> {
         debug!(client_type = %client_type, client_name = %client_name, character = ?character, "starting SWP handshake");
 
-        // Resolved here rather than passed in, so that neither the CLI nor the
-        // TUI has to know a token exists: both reach the daemon through this
-        // one function. There is one way to authenticate and no caller-side
-        // plumbing that could get it wrong.
-        //
-        // The directory is the *daemon's*, found by matching the address being
-        // connected to against the instance registry — not this client's own
-        // XDG resolution. `--config` re-homes a daemon's config directory, so
-        // its token sits beside the file it was pointed at; guessing from the
-        // client's environment would look in the wrong place and reject every
-        // local client of a `--config` daemon.
         let token = crate::token::resolve_client_token(
             addr.and_then(crate::swp_client::discovery::config_dir_for_addr),
         )
@@ -102,7 +75,6 @@ impl SWPConnection {
 
         let server_hello = self.recv_server_hello().await?;
 
-        // Step 2: send client hello
         let hello = ClientMessage::Hello(ClientHello {
             client_type,
             client_name,
@@ -119,12 +91,6 @@ impl SWPConnection {
         Ok((server_hello, history))
     }
 
-    /// Handshake step 1: receive the server hello, skipping any unknown
-    /// frames a newer daemon may emit ahead of the hello.
-    ///
-    /// Forward-compatibility rule: a frame this client does not recognise is
-    /// skipped, not an error, so a newer daemon can add message types without
-    /// breaking an older client mid-handshake.
     async fn recv_server_hello(&mut self) -> Result<ServerHello> {
         let server_hello = loop {
             match self.recv().await? {
@@ -177,10 +143,6 @@ impl SWPConnection {
         Ok(server_hello)
     }
 
-    /// Handshake step 3: receive the history, skipping any unknown frames.
-    ///
-    /// Same forward-compatibility rule as `recv_server_hello`: an unrecognised
-    /// frame is skipped rather than treated as a protocol error.
     async fn recv_history(&mut self) -> Result<History> {
         let history = loop {
             match self.recv().await? {
@@ -191,12 +153,6 @@ impl SWPConnection {
                 ServerMessage::Unknown => {
                     debug!("skipping unknown frame during handshake");
                 }
-                // The daemon's refusal, surfaced as itself. Falling through to
-                // the arm below would render it as `expected history, got:
-                // Error(..)` — a `{:?}` dump of the frame, in which the actual
-                // sentence explaining what to do is buried. This is the one
-                // handshake failure a person is expected to fix, so it arrives
-                // as the daemon wrote it.
                 ServerMessage::Error(e) => {
                     error!(code = ?e.code, "daemon refused the handshake");
                     return Err(match e.code {
@@ -236,7 +192,6 @@ impl SWPConnection {
         Ok(history)
     }
 
-    /// Send a client message as a JSON line.
     pub async fn send(&mut self, msg: &ClientMessage) -> Result<()> {
         let line = serde_json::to_string(msg).map_err(|e| {
             error!(error = %e, "failed to serialize client message");
@@ -255,9 +210,6 @@ impl SWPConnection {
         Ok(())
     }
 
-    /// Receive the next server message (one JSON line).
-    ///
-    /// Returns `Err(ClientError::Disconnected)` on EOF.
     pub async fn recv(&mut self) -> Result<ServerMessage> {
         let line = read_json_line_bounded(&mut self.reader).await?;
         let msg: ServerMessage = serde_json::from_str(line.trim()).map_err(|e| {
@@ -268,7 +220,6 @@ impl SWPConnection {
         Ok(msg)
     }
 
-    /// Send a user message. Returns the `rid` used.
     pub async fn send_message<T: Into<String>>(
         &mut self,
         text: T,
@@ -277,7 +228,6 @@ impl SWPConnection {
         self.send_message_with_images(text, stream, vec![]).await
     }
 
-    /// Send a user message with image attachments. Returns the `rid` used.
     pub async fn send_message_with_images<T: Into<String>>(
         &mut self,
         text: T,
@@ -287,10 +237,6 @@ impl SWPConnection {
         self.send_message_full(text, stream, images, None).await
     }
 
-    /// Send a user message with image attachments and parameter overrides.
-    ///
-    /// Reads each image path, base64-encodes the data, and sends both
-    /// `images` (paths, for legacy daemons) and `image_data` (base64, preferred).
     pub async fn send_message_full<T: Into<String>>(
         &mut self,
         text: T,
@@ -331,7 +277,6 @@ impl SWPConnection {
         Ok(rid)
     }
 
-    /// Send a regen request. Returns the `rid` used.
     pub async fn send_regen(&mut self, stream: bool) -> Result<Option<String>> {
         use crate::protocol::client_msg::Regen;
         let rid = Some(uuid_v4());
@@ -343,7 +288,6 @@ impl SWPConnection {
         Ok(rid)
     }
 
-    /// Send a command. Returns the `rid` used.
     pub async fn send_command<N: Into<String>>(
         &mut self,
         name: N,
@@ -361,8 +305,6 @@ impl SWPConnection {
     }
 }
 
-/// Build an `SWPConnection` from an already-connected async stream.
-/// Useful for testing or when the caller manages the transport.
 impl SWPConnection {
     pub fn from_raw_stream<S>(stream: S) -> Self
     where
@@ -375,10 +317,6 @@ impl SWPConnection {
         }
     }
 
-    /// Connect using an already-established stream and perform the SWP handshake.
-    ///
-    /// This is useful for testing (with `tokio::io::duplex`) or when the caller
-    /// manages transport setup.
     pub async fn connect_raw<S, T: Into<String>, N: Into<String>>(
         stream: S,
         client_type: T,
@@ -389,8 +327,6 @@ impl SWPConnection {
         S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin + 'static,
     {
         let mut conn = Self::from_raw_stream(stream);
-        // No address, so no daemon to look up: the token comes from this
-        // client's own config directory. Tests drive this path.
         let (server_hello, history) = conn
             .do_handshake(client_type.into(), client_name.into(), character, None)
             .await?;
@@ -453,10 +389,6 @@ where
         .map_err(|e| ClientError::Protocol(format!("server sent invalid UTF-8 framing: {e}")))
 }
 
-/// Generate a unique request ID using timestamp + atomic counter.
-///
-/// The counter ensures uniqueness even when multiple IDs are generated
-/// within the same nanosecond (e.g., concurrent threads).
 fn uuid_v4() -> String {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -474,14 +406,10 @@ fn uuid_v4() -> String {
 mod tests {
     use super::*;
 
-    /// `uuid_v4()` uses only nanosecond timestamps for IDs. Under high
-    /// concurrency (multiple threads calling simultaneously), identical
-    /// nanosecond timestamps produce duplicate IDs.
     #[test]
     fn uuid_v4_unique_under_concurrent_calls() {
         let mut handles = Vec::new();
 
-        // Spawn 8 threads each generating 100 IDs concurrently.
         for _ in 0..8 {
             handles.push(std::thread::spawn(move || {
                 let mut local = Vec::with_capacity(100);

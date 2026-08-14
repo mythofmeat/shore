@@ -1,8 +1,5 @@
-//! Re-exports the shared connection manager from shore-common.
-
 pub(crate) use shore_common::swp_client::conn_manager::{ConnCommand, ConnEvent};
 
-/// Spawn the TUI connection manager.
 pub(crate) fn spawn_connection(
     addr: Option<String>,
     config: Option<String>,

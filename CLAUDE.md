@@ -6,16 +6,23 @@ No comments in code you write. Not headers, not section banners, not JSDoc, not
 a trailing note on a tricky line. If you are about to explain code, rename
 something or split a function instead.
 
-This is enforced. `daemon/scripts/check_no_comments.ts` fails CI on any comment
-in `daemon/src`. Run it with `bun run lint:comments` from `daemon/`.
+This is enforced everywhere. `daemon/scripts/check_no_comments.ts` fails CI on
+any comment in `daemon/src`, `daemon/tests`, `daemon/scripts` and `client/`. Run
+it with `bun run lint:comments` from `daemon/`.
 
-Two narrow exceptions, both machine-read rather than human-read:
+Three narrow exceptions, all machine-read rather than human-read:
 
 - Compiler and linter directives: `@ts-expect-error`, `@ts-ignore`, `@ts-nocheck`,
-  `eslint-*`, `biome-ignore`, `prettier-ignore`, `<reference ...>`.
+  `eslint-*`, `biome-ignore`, `prettier-ignore`, `<reference ...>`, and in Rust
+  `// SAFETY:` on an `unsafe` block, which is a soundness obligation the
+  compiler cannot check for you.
 - Generated files, which their generator owns. `daemon/src/protocol/*.ts` is
   ts-rs output; do not hand-edit it, and do not strip its header. If a comment
   there is wrong, fix the Rust doc comment it came from.
+- Clap help text. In `client/shore-cli/src/cli.rs` and
+  `client/shore-tui/src/main.rs` a `///` on a command, flag or variant *is* the
+  string printed by `--help`. It is user interface that happens to use comment
+  syntax. Nowhere else in `client/` may carry a doc comment.
 
 ## Why
 
@@ -42,11 +49,19 @@ usually asserted more precisely than the prose managed.
   not.
 - Put design in the issue. That is what the tracker is for.
 
-## Existing comments
+## The fixtures
 
-`daemon/tests` keeps its comments. In a frozen parity fixture the deleted Rust
-*is* the specification, so `"Generated from crates/... at 9023b46d. FROZEN."` is
-what makes a 50k-line blob auditable. Do not add new ones there.
+`daemon/tests/**/*.json` holds recorded cases from the deleted Rust. Keep the
+cases; their inputs are hard to re-derive. Do not give them a prose header.
 
-`client/` (Rust) is unswept. Do not add comments; do not bulk-remove them either
-without being asked.
+They used to have one. Sixty-four fixtures carried about 9,600 words asserting
+provenance and freezing policy, on the theory that the deleted Rust was the
+specification and a header was what made a 50k-line blob auditable. It was not.
+Two of those headers came to contradict each other, and the disagreement cost a
+whole session and still had to be settled by asking. A recorded case is
+auditable because a test replays it and fails, not because a paragraph above it
+claims authority.
+
+So: when a recorded case disagrees with what shore should do, correct the case
+and say why in the commit. Do not stop to ask which header wins. Where a fixture
+came from belongs in the commit that added it.

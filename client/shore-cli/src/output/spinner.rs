@@ -18,10 +18,6 @@ fn lock_state(state: &Mutex<SpinnerState>) -> MutexGuard<'_, SpinnerState> {
     state.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// Live-updating status line shown during LLM streaming.
-///
-/// Displays elapsed time and current phase (e.g. `(thinking... 2.3s)`),
-/// updated every 200ms. Automatically disabled when stdout is not a terminal.
 pub(crate) struct StreamSpinner {
     state: Arc<Mutex<SpinnerState>>,
     handle: Option<JoinHandle<()>>,
@@ -29,7 +25,6 @@ pub(crate) struct StreamSpinner {
     cleared: bool,
 }
 
-/// Format the spinner display line from current state.
 fn format_spinner_line(phase: &str, model: Option<&str>, elapsed_secs: f64) -> String {
     let label = match phase {
         "thinking" => "thinking...",
@@ -57,7 +52,6 @@ impl StreamSpinner {
         }
     }
 
-    /// Start the spinner render loop. No-op if stdout is not a terminal.
     pub(crate) fn start(&mut self) {
         if !self.is_terminal {
             return;
@@ -107,12 +101,10 @@ impl StreamSpinner {
         s.model = model;
     }
 
-    /// Whether the spinner render loop is running.
     pub(crate) fn is_active(&self) -> bool {
         lock_state(&self.state).active
     }
 
-    /// Clear the spinner line and stop the render task.
     pub(crate) async fn clear(&mut self) {
         if self.cleared {
             return;
@@ -134,12 +126,10 @@ impl StreamSpinner {
         }
     }
 
-    /// Stop the spinner (alias for clear). Use when streaming ends without chunks.
     pub(crate) async fn stop(&mut self) {
         self.clear().await;
     }
 
-    /// Restart the spinner for a new LLM round (e.g. after tool execution).
     pub(crate) fn restart(&mut self) {
         self.cleared = false;
         self.start();

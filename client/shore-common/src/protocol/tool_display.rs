@@ -1,13 +1,9 @@
 use serde_json::Value;
 
-/// Format a tool input for human-facing clients.
-///
-/// Empty object inputs are omitted because they add noise without information.
 pub fn format_tool_input(input: &Value) -> Option<String> {
     format_tool_input_with_limit(input, None)
 }
 
-/// Format a tool input, truncating the rendered text when `max_bytes` is set.
 pub fn format_tool_input_with_limit(input: &Value, max_bytes: Option<usize>) -> Option<String> {
     if input.as_object().is_some_and(serde_json::Map::is_empty) {
         return None;
@@ -17,16 +13,10 @@ pub fn format_tool_input_with_limit(input: &Value, max_bytes: Option<usize>) -> 
     Some(truncate_with_notice(formatted, max_bytes))
 }
 
-/// Format tool output for human-facing clients.
-///
-/// When the output is a JSON value serialized into a string, it is rendered with
-/// the same compact, label-oriented shape as tool inputs. Plain text output is
-/// preserved.
 pub fn format_tool_output(output: &str) -> String {
     format_tool_output_with_limit(output, None)
 }
 
-/// Format tool output, truncating the rendered text when `max_bytes` is set.
 pub fn format_tool_output_with_limit(output: &str, max_bytes: Option<usize>) -> String {
     let trimmed = output.trim_end();
     let formatted = match serde_json::from_str::<Value>(trimmed) {
