@@ -37,7 +37,7 @@ const LEADING_FLAGS: [(&str, &str); 3] = [
 ];
 
 /// Flags that used to exist and now have one obvious replacement each.
-const RETIRED_FLAGS: [(&str, &str); 3] = [
+const RETIRED_FLAGS: [(&str, &str); 6] = [
     (
         "--config",
         "name the daemon with --addr, or set SHORE_ADDR",
@@ -46,6 +46,18 @@ const RETIRED_FLAGS: [(&str, &str); 3] = [
     (
         "--plain",
         "output is already plain when it is not going to a terminal",
+    ),
+    (
+        "--temperature",
+        "set it on the model: shore model setting temperature <value>",
+    ),
+    (
+        "--top-p",
+        "set it on the model: shore model setting top_p <value>",
+    ),
+    (
+        "--thinking",
+        "set it on the model: shore model setting budget_tokens <tokens>",
     ),
 ];
 
@@ -207,18 +219,6 @@ pub(crate) enum CliCommand {
         /// Attach image file(s) to the message
         #[arg(short = 'i', long = "image")]
         images: Vec<String>,
-
-        /// Override sampling temperature for this message
-        #[arg(long)]
-        temperature: Option<f64>,
-
-        /// Override nucleus sampling top-p for this message
-        #[arg(long)]
-        top_p: Option<f64>,
-
-        /// Enable extended thinking with optional budget (tokens)
-        #[arg(long, num_args = 0..=1, default_missing_value = "10240")]
-        thinking: Option<u32>,
 
         /// Inject as a system instruction instead of a user message
         #[arg(long)]
@@ -2383,6 +2383,34 @@ mod tests {
         );
     }
 
+    /// A one-message sampling override left no trace anywhere — not in the
+    /// transcript, not in `shore model info` — so a reply that came out wrong
+    /// could not be told apart from one the settings would have produced. The
+    /// model settings are the durable, inspectable version of the same knobs.
+    #[test]
+    fn a_retired_sampling_flag_points_at_the_model_settings() {
+        for (flag, instead) in [
+            (
+                "--temperature",
+                "set it on the model: shore model setting temperature <value>",
+            ),
+            (
+                "--top-p",
+                "set it on the model: shore model setting top_p <value>",
+            ),
+            (
+                "--thinking",
+                "set it on the model: shore model setting budget_tokens <tokens>",
+            ),
+        ] {
+            assert_eq!(
+                misplaced(&["send", flag, "0.8", "hello"]),
+                Some(FlagProblem::Retired(flag, instead)),
+                "{flag}"
+            );
+        }
+    }
+
     /// The value of a leading flag is not the command, so a command name that
     /// happens to also be one — `shore --character status status` — must not
     /// make the scan think it is already past the command.
@@ -2476,6 +2504,13 @@ mod tests {
                 "{flag}"
             );
         }
+        for flag in ["--temperature", "--top-p", "--thinking"] {
+            assert_eq!(
+                parse_error(&["send", flag, "0.8", "hi"]).kind(),
+                clap::error::ErrorKind::UnknownArgument,
+                "{flag}"
+            );
+        }
     }
 
     // ── SWP mapping tests ────────────────────────────────────────────
@@ -2485,9 +2520,6 @@ mod tests {
         let cmd = CliCommand::Send {
             message: vec!["hi".into()],
             images: vec![],
-            temperature: None,
-            top_p: None,
-            thinking: None,
             system: false,
         };
         assert!(to_swp_command(&cmd, None).is_none());

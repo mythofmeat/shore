@@ -661,9 +661,6 @@ async fn handle_send_command(
     let CliCommand::Send {
         message,
         images,
-        temperature,
-        top_p,
-        thinking,
         system,
     } = cmd
     else {
@@ -687,17 +684,8 @@ async fn handle_send_command(
         let data = recv_command_data(conn).await?;
         output::format_command("inject_system", &data);
     } else {
-        let overrides = if temperature.is_some() || top_p.is_some() || thinking.is_some() {
-            Some(shore_common::protocol::client_msg::MessageOverrides {
-                temperature: *temperature,
-                top_p: *top_p,
-                thinking_budget: *thinking,
-            })
-        } else {
-            None
-        };
         _ = conn
-            .send_message_full(&text, true, images.clone(), overrides)
+            .send_message_with_images(&text, true, images.clone())
             .await?;
         recv_streaming_response(conn).await?;
     }
@@ -1714,9 +1702,6 @@ mod tests {
         let cli = test_cli(CliCommand::Send {
             message: vec!["hello".into(), "world".into()],
             images: vec![],
-            temperature: None,
-            top_p: None,
-            thinking: None,
             system: false,
         });
         let received = execute_with_mock(cli, streaming_response("Hi there!")).await;
@@ -1919,9 +1904,6 @@ mod tests {
         let cli = test_cli(CliCommand::Send {
             message: vec!["test".into()],
             images: vec![],
-            temperature: None,
-            top_p: None,
-            thinking: None,
             system: false,
         });
         let received = execute_with_mock(cli, responses).await;
