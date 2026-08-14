@@ -232,8 +232,8 @@ describe("the tool backends a character's turn gets", () => {
       const stubbed = {
         ...runtime,
         autonomy: {
-          activityStats: (character: string) => {
-            asked.push(character);
+          activityStats: (character: string, _localAt: number, days: number) => {
+            asked.push(`${character}:${String(days)}`);
             return character === "ada"
               ? { stats: { hour_histogram: [1] } as never, messageCount: 12 }
               : undefined;
@@ -243,12 +243,16 @@ describe("the tool backends a character's turn gets", () => {
 
       // `messageCount` on this side is the Rust's `turn_count`: one number, two
       // names, and the tool reads the second.
-      expect(chatToolDeps(assemblyFor(stubbed), "ada", turnFor()).activityStats?.()).toEqual({
+      expect(chatToolDeps(assemblyFor(stubbed), "ada", turnFor()).activityStats?.(30)).toEqual({
         stats: { hour_histogram: [1] } as never,
         turnCount: 12,
       });
-      expect(chatToolDeps(assemblyFor(stubbed), "nova", turnFor()).activityStats?.()).toBeUndefined();
-      expect(asked).toEqual(["ada", "nova"]);
+      expect(
+        chatToolDeps(assemblyFor(stubbed), "nova", turnFor()).activityStats?.(7),
+      ).toBeUndefined();
+      // The window the tool was asked for has to survive the hop, or `days`
+      // goes back to meaning nothing.
+      expect(asked).toEqual(["ada:30", "nova:7"]);
     } finally {
       await runtime.shutdown();
       await rm(root, { recursive: true, force: true });
