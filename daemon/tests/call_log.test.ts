@@ -206,7 +206,17 @@ function withoutWire(value: unknown): unknown {
   return rest;
 }
 
-test("dumping one call returns the raw HTTP exchanges recorded under it", () => {
+const SSE = [
+  { type: "message_start", message: { model: "claude-x", usage: { input_tokens: 10 } } },
+  { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+  { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "one " } },
+  { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "wall" } },
+  { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 42 } },
+]
+  .map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`)
+  .join("");
+
+test("dumping one call coalesces the streamed HTTP exchange recorded under it", () => {
   const store = CallStore.openInMemory();
   const id = store.recordCall({
     call_id: "wire-1",
@@ -232,7 +242,7 @@ test("dumping one call returns the raw HTTP exchanges recorded under it", () => 
     request_headers: [["content-type", "application/json"]],
     request_body: Buffer.from(`{"thinking":{"type":"enabled"}}`, "utf8"),
     response_headers: [["content-type", "text/event-stream"]],
-    response_body: Buffer.from("event: message_start\n", "utf8"),
+    response_body: Buffer.from(SSE, "utf8"),
   });
 
   const out = callLog({ characterName: "poppy", callStore: store }, { id }) as {
@@ -245,7 +255,14 @@ test("dumping one call returns the raw HTTP exchanges recorded under it", () => 
   expect(out.wire[0]?.url).toBe("https://api.anthropic.com/v1/messages");
   expect(out.wire[0]?.status).toBe(200);
   expect(out.wire[0]?.request_body).toEqual({ thinking: { type: "enabled" } });
-  expect(out.wire[0]?.response_body).toBe("event: message_start\n");
+  expect(out.wire[0]?.response_body).toEqual({
+    stream: "sse",
+    model: "claude-x",
+    content: "one wall",
+    finish_reason: "end_turn",
+    usage: { input_tokens: 10, output_tokens: 42 },
+    chunk_count: 5,
+  });
 });
 
 test("a call with no recorded exchange dumps an empty wire list", () => {

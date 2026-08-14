@@ -145,8 +145,45 @@
             "classification": "normal"
           }
         ],
+        "weekdays": [
+          {
+            "weekday": "Mon",
+            "message_count": 0,
+            "density": 0.0
+          },
+          {
+            "weekday": "Tue",
+            "message_count": 0,
+            "density": 0.0
+          },
+          {
+            "weekday": "Wed",
+            "message_count": 0,
+            "density": 0.0
+          },
+          {
+            "weekday": "Thu",
+            "message_count": 0,
+            "density": 0.0
+          },
+          {
+            "weekday": "Fri",
+            "message_count": 0,
+            "density": 0.0
+          },
+          {
+            "weekday": "Sat",
+            "message_count": 0,
+            "density": 0.0
+          },
+          {
+            "weekday": "Sun",
+            "message_count": 0,
+            "density": 0.0
+          }
+        ],
         "total_messages": 0,
-        "total_turns": 0,
+        "messages_in_window": 0,
         "has_sufficient_data": false,
         "engagement_score": 0.0,
         "sessions_per_day": 0.0

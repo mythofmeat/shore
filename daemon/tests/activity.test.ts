@@ -147,6 +147,62 @@ describe("the hour histogram", () => {
     expect(thu[10]).toBeGreaterThan(0);
     expect(thu[14]).toBeGreaterThan(0);
   });
+
+  test("the pooled one never narrows to a weekday", () => {
+    const t = new ActivityTracker();
+    for (let i = 0; i < 5; i += 1) t.recordMessage(at(2026, 3, 25, 10, i * 5)); // Wednesday
+    for (let i = 0; i < 4; i += 1) t.recordMessage(at(2026, 3, 26, 14, i * 5)); // Thursday
+
+    const pooled = t.computeStats("Wed").pooledHourHistogram;
+    expect(pooled[10]).toBeCloseTo(5 / 9, 12);
+    expect(pooled[14]).toBeCloseTo(4 / 9, 12);
+    expect(t.computeStats("Thu").pooledHourHistogram).toEqual(pooled);
+  });
+
+  test("weekday counts are of the window, not of all time", () => {
+    const t = new ActivityTracker();
+    t.recordMessage(at(2026, 3, 4, 10)); // Wednesday, five weeks back
+    t.recordMessage(at(2026, 4, 6, 10)); // Monday
+    t.recordMessage(at(2026, 4, 7, 10)); // Tuesday
+
+    const localNow = at(2026, 4, 8, 10);
+    const all = t.computeStats("Wed");
+    expect(all.weekdayCounts.Wed).toBe(1);
+    expect(all.windowMessageCount).toBe(3);
+
+    const week = t.computeStats("Wed", { localNow, days: 7 });
+    expect(week.weekdayCounts.Wed, "the March Wednesday is outside the window").toBe(0);
+    expect(week.weekdayCounts.Mon).toBe(1);
+    expect(week.windowMessageCount).toBe(2);
+  });
+});
+
+describe("the window", () => {
+  const localNow = at(2026, 4, 8, 12);
+  const tracker = (): ActivityTracker => {
+    const t = new ActivityTracker();
+    for (let day = 1; day <= 8; day += 1) t.recordMessage(at(2026, 4, day, 10));
+    return t;
+  };
+
+  test("keeps a message exactly on the boundary", () => {
+    const stats = tracker().computeStats("Wed", { localNow, days: 7 });
+    // The cutoff is April 1st at noon, so April 1st at 10am falls outside it.
+    expect(stats.windowMessageCount).toBe(7);
+  });
+
+  test("a window nobody asked for is all of history", () => {
+    expect(tracker().computeStats("Wed").windowMessageCount).toBe(8);
+  });
+
+  test("changing the window busts the cache the TTL would have served", () => {
+    const t = tracker();
+    const week = t.stats(0, "Wed", { localNow, days: 7 });
+    const day = t.stats(1, "Wed", { localNow, days: 1 });
+    expect(week.windowMessageCount).toBe(7);
+    expect(day.windowMessageCount, "not the cached seven-day answer").toBe(1);
+    expect(t.stats(2, "Wed", { localNow, days: 1 }).computedAt, "same window, cached").toBe(1);
+  });
 });
 
 describe("the anomaly score", () => {

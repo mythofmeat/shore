@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { HISTORY_DB_FILE } from "../src/engine/history_store.ts";
 import { MarkdownMemoryStore } from "../src/memory/markdown_store.ts";
 import { conversationManager } from "../src/memory/compaction/archive.ts";
 import { compact } from "../src/memory/compaction/manager.ts";
@@ -145,6 +146,80 @@ test("the tool-round ceiling pauses work in resumable slices instead of making t
   await expect(readFile(join(characterDir, "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
 });
 
+test("a durable archive that lost its checkpoint to a crash is recognised instead of re-run", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shore-compact-crash-"));
+  cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const dataDir = join(root, "data");
+  const characterDir = join(dataDir, "ada");
+  const workspace = join(root, "workspace");
+  await mkdir(join(workspace, "memory"), { recursive: true });
+  await mkdir(characterDir, { recursive: true });
+  const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
+  const checkpointFile = join(characterDir, "compaction-checkpoint.json");
+
+  const messages = conversation();
+  const activeContent = messages.map(activeLine).join("\n") + "\n";
+  await writeFile(join(characterDir, "active.jsonl"), activeContent, "utf8");
+
+  const tools: CompactionTools = {
+    workspaceDir: workspace,
+    configDir: "",
+    dispatch: async (_name, input) => {
+      const edit = input as { path: string; content: string };
+      const path = join(workspace, edit.path);
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, edit.content, "utf8");
+      return { output: "written", isError: false };
+    },
+    ensureWorkspaceGitRepo: async () => {},
+    gitCommitAll: async () => false,
+  };
+  const run = (msgs: ConversationMessage[], content: string, llm: CompactionLlm) =>
+    compact(options(dataDir, workspace, memoryStore, msgs, content, tools, llm, true), {
+      keepRecentTurns: 1,
+    });
+
+  const paused = await run(
+    messages,
+    activeContent,
+    scripted([
+      response("tool_use", [
+        {
+          type: "tool_use",
+          id: "write-1",
+          name: "edit",
+          input: { path: "memory/fact.md", content: "remembered\n" },
+        },
+      ]),
+      new Error("provider unavailable"),
+    ]),
+  );
+  expect(paused.kind).toBe("paused");
+  const crashed = JSON.parse(await readFile(checkpointFile, "utf8")) as Record<string, unknown>;
+  crashed.state = "running";
+  delete crashed.pauseReason;
+
+  const archived = await run(
+    messages,
+    activeContent,
+    scripted([response("end_turn", [{ type: "text", text: "done" }])]),
+  );
+  expect(archived.kind).toBe("compacted");
+  const retainedContent = await readFile(join(characterDir, "active.jsonl"), "utf8");
+  await writeFile(checkpointFile, JSON.stringify(crashed), "utf8");
+
+  const grown = conversation();
+  const grownContent = retainedContent + grown.map(activeLine).join("\n") + "\n";
+  await writeFile(join(characterDir, "active.jsonl"), grownContent, "utf8");
+
+  const afterCrash = scripted([]);
+  const resumed = await run([...messages.slice(2), ...grown], grownContent, afterCrash);
+
+  expect(resumed.kind).toBe("compacted");
+  expect(afterCrash.calls).toBe(0);
+  await expect(readFile(checkpointFile, "utf8")).rejects.toThrow();
+});
+
 function options(
   dataDir: string,
   workspace: string,
@@ -153,6 +228,7 @@ function options(
   activeContent: string,
   tools: CompactionTools,
   llm: CompactionLlm,
+  durable = false,
 ) {
   return {
     conversationId: "ada",
@@ -163,7 +239,12 @@ function options(
     charName: "ada",
     userName: "user",
     llm,
-    conversationMgr: conversationManager(join(dataDir, "ada")),
+    conversationMgr: conversationManager(
+      join(dataDir, "ada"),
+      () => new Date().toISOString(),
+      () => crypto.randomUUID(),
+      durable ? { dbPath: join(dataDir, HISTORY_DB_FILE), character: "ada" } : undefined,
+    ),
     markdownStore: memoryStore,
     dryRun: false,
     retainTrailingAutonomous: false,

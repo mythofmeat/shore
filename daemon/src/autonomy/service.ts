@@ -167,8 +167,8 @@ export class AutonomyService {
     this.#entries.get(character)?.runner.backfillActivity(localTimestamps, latestUserAt);
   }
 
-  activityStats(character: string, localAt: number): ActivityReport | undefined {
-    return this.#entries.get(character)?.runner.activityStats(this.#now(), localAt);
+  activityStats(character: string, localAt: number, days?: number): ActivityReport | undefined {
+    return this.#entries.get(character)?.runner.activityStats(this.#now(), localAt, days);
   }
 
   onAssistantMessage(character: string, turnCount: number): void {

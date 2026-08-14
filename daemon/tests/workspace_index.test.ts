@@ -9,6 +9,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:net";
@@ -32,15 +33,19 @@ import {
   hybridSearch,
   indexPath,
   lexicalScore,
-  loadIndex,
   refreshIndexEntries,
-  serializeIndex,
   skipTag,
   WorkspaceIndexError,
   type HybridMode,
   type RetrievalConfig,
-  type WorkspaceIndex,
 } from "../src/memory/workspace_index";
+import {
+  documentHash,
+  WORKSPACE_INDEX_DB_FILE,
+  WorkspaceIndexStore,
+  type FileRow,
+} from "../src/memory/workspace_store";
+import { LEGACY_INDEX_FILE, migrateLegacyIndex } from "../src/memory/workspace_legacy";
 import { tokenizeQuery } from "../src/memory/lines";
 import {
   resolveEmbedder,
@@ -58,8 +63,13 @@ function f32(value: number | null): number | undefined {
   return value === null ? undefined : toF32(value);
 }
 
-function f32s(values: number[]): number[] {
-  return values.map(toF32);
+function f32s(values: ArrayLike<number>): number[] {
+  return Array.from(values, toF32);
+}
+
+/** Vectors come back off the store as f32 views, not boxed arrays. */
+function vec(v: Float32Array | undefined): number[] | undefined {
+  return v === undefined ? undefined : Array.from(v);
 }
 
 // ── the embedder the generator used ─────────────────────────────────────
@@ -138,11 +148,22 @@ function configOf(raw: Record<string, unknown>): RetrievalConfig {
 
 // ── end-to-end scripts ──────────────────────────────────────────────────
 
+/**
+ * Cases the move off the JSON file deliberately settles differently. Both are
+ * consequences of keying freshness on the hash of the embedded document rather
+ * than on a size + mtime tuple, and both are restated as their own tests below
+ * rather than left in the corpus asserting the old answer.
+ */
+const CORRECTED = new Set([
+  "a same-size same-mtime rewrite is missed by design",
+  "an entry recorded as not embedded is stale even when the tuple matches",
+]);
+
 describe("hybridSearch", () => {
-  for (const c of fixture.cases) {
+  for (const c of fixture.cases.filter((c: any) => !CORRECTED.has(c.name))) {
     test(c.name, async () => {
       const ws = join(root, "workspace");
-      const idx = join(root, "cache/workspace_index.json");
+      const idx = join(root, "cache/workspace_index.db");
       if (!c.missing_root) await mkdir(ws, { recursive: true });
 
       const embedder = new TopicEmbedder(
@@ -195,7 +216,7 @@ describe("hybridSearch", () => {
             break;
           case "seed_index":
             await mkdir(dirname(idx), { recursive: true });
-            await writeFile(idx, step.raw);
+            await writeFile(join(dirname(idx), "workspace_index.json"), step.raw);
             break;
           case "config":
             config = configOf(step.config);
@@ -253,7 +274,7 @@ async function replayRun(run: Record<string, any>, ctx: RunContext): Promise<voi
     expect((error as WorkspaceIndexError).message).toBe(run.outcome.error);
     // The prune and the skip records are written *before* the embed call, so a
     // failed search still has to have left them behind.
-    await expectIndexOnDisk(ctx.indexFile, run.index_after);
+    await expectIndexOnDisk(ctx.indexFile, run.index_after, ctx.embedder.modelId);
     return;
   }
   if (error !== undefined) throw error;
@@ -298,43 +319,142 @@ async function replayRun(run: Record<string, any>, ctx: RunContext): Promise<voi
   // happened at all, which is the missing-root case's whole point.
   if (calls.length > 0) expect(calls.at(-1)).toEqual([run.query]);
 
-  await expectIndexOnDisk(ctx.indexFile, run.index_after);
+  await expectIndexOnDisk(ctx.indexFile, run.index_after, ctx.embedder.modelId);
 }
 
-async function expectIndexOnDisk(path: string, expected: unknown): Promise<void> {
+async function expectIndexOnDisk(
+  path: string,
+  expected: unknown,
+  model: string,
+): Promise<void> {
   if (expected === null) {
-    // Either nothing was ever written, or the path was deliberately blocked.
-    const text = await Bun.file(path)
-      .text()
-      .catch(() => undefined);
-    expect(text).toBeUndefined();
+    // The JSON index only existed once something had been written to it, so
+    // the fixture spells "nothing was recorded" as an absent file. A SQLite
+    // store is created by opening it, so the same claim is now that it holds
+    // no rows — including when the path was blocked and the store fell back
+    // to memory, which leaves nothing on disk at all.
+    if (!(await Bun.file(path).exists())) return;
+    expectIndexMatches(storedEntries(path, model), {});
     return;
   }
-  const onDisk = JSON.parse(await Bun.file(path).text());
-  expect(normalizeIndexJson(onDisk)).toEqual(normalizeIndexJson(expected));
+  expectIndexMatches(storedEntries(path, model), expectedEntries(expected));
 }
 
 /**
- * Compare the persisted index by value, not byte for byte.
- *
- * The two runtimes print the same f32 differently — Rust writes the shortest
- * decimal that round-trips an f32, JavaScript the shortest that round-trips a
- * double — so `0.33333334` and `0.3333333432674408` are the same number
- * written two ways. Rounding both sides to f32 compares what the file *means*,
- * which is also what either runtime reads back out of it.
+ * What the store holds, projected onto the fields the fixture can still speak
+ * about. `hash` and `model_id` were columns of the JSON file, not claims about
+ * behaviour: the first was a size+mtime tag the freshness check no longer
+ * consults, and the second is now the embeddings table's own key. Everything
+ * the fixture asserts *about the search* — which files were recorded, their
+ * size and mtime, whether they carry a vector, why they were skipped, and the
+ * vector itself — is compared exactly.
  */
-function normalizeIndexJson(index: any): any {
-  const entries: Record<string, unknown> = {};
-  for (const [path, e] of Object.entries(index.entries as Record<string, any>)) {
-    entries[path] = { ...e, ...(e.embedding !== undefined ? { embedding: f32s(e.embedding) } : {}) };
+function storedEntries(path: string, model: string): Record<string, unknown> {
+  const store = WorkspaceIndexStore.open(path);
+  try {
+    const out: Record<string, unknown> = {};
+    for (const [displayPath, row] of store.files()) {
+      const vector = row.embedded
+        ? store.vectorsFor(model, [row.document_hash]).get(row.document_hash)
+        : undefined;
+      out[displayPath] = {
+        size: row.size,
+        modified_at_secs: row.modified_at_secs,
+        embedded: row.embedded,
+        reason: row.reason ?? null,
+        ...(vector === undefined ? {} : { embedding: f32s(vector) }),
+      };
+    }
+    return out;
+  } finally {
+    store.close();
   }
-  return { entries };
+}
+
+/**
+ * Every entry the fixture names must match exactly. An entry it does not name
+ * is allowed only if it is a file recorded as seen but not yet embedded — the
+ * one thing the store says that the JSON index could not. That file only ever
+ * gained an entry once its vector existed, so a pending file was invisible
+ * until something walked the workspace again; the row is what lets the
+ * background indexer and `shore workspace index` report outstanding work.
+ */
+function expectIndexMatches(
+  got: Record<string, any>,
+  want: Record<string, unknown>,
+): void {
+  const named = Object.fromEntries(Object.keys(want).map((k) => [k, got[k]]));
+  expect(named).toEqual(want);
+  for (const [path, row] of Object.entries(got)) {
+    if (path in want) continue;
+    expect({ path, ...row }).toMatchObject({ path, embedded: false, reason: null });
+  }
+}
+
+function expectedEntries(expected: any): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [path, e] of Object.entries(expected.entries as Record<string, any>)) {
+    out[path] = {
+      size: e.size,
+      modified_at_secs: e.modified_at_secs,
+      embedded: e.embedded,
+      reason: e.reason ?? null,
+      ...(e.embedding === undefined ? {} : { embedding: f32s(e.embedding) }),
+    };
+  }
+  return out;
+}
+
+/**
+ * The document hash a seeded entry would have if it were genuinely fresh.
+ *
+ * The JSON index keyed freshness on size + mtime + model + cap; the store keys
+ * it on the hash of the document that was actually embedded. Seeding therefore
+ * has to compute that hash from the file on disk, which is what the real
+ * migration does too.
+ */
+function seededHash(fsPath: string, displayPath: string, cap: number): string {
+  let text: string;
+  try {
+    text = readFileSync(fsPath, "utf8");
+  } catch {
+    // The vanished-file cases delete the file between the walk and the read,
+    // so there is no document to hash and no way the entry could be fresh.
+    return `absent:${displayPath}`;
+  }
+  return documentHash(documentForEmbedding(displayPath, text, cap));
+}
+
+function indexShape(rows: Map<string, FileRow>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [path, row] of rows) {
+    out[path] = {
+      size: row.size,
+      modified_at_secs: row.modified_at_secs,
+      embedded: row.embedded,
+      reason: row.reason ?? null,
+    };
+  }
+  return out;
+}
+
+function expectedIndexShape(index: any): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [path, e] of Object.entries(index.entries as Record<string, any>)) {
+    out[path] = {
+      size: e.size,
+      modified_at_secs: e.modified_at_secs,
+      embedded: e.embedded,
+      reason: e.reason ?? null,
+    };
+  }
+  return out;
 }
 
 // ── the refresh phase on its own ────────────────────────────────────────
 
 describe("refreshIndexEntries", () => {
-  for (const c of fixture.refresh_index_entries) {
+  for (const c of fixture.refresh_index_entries.filter((c: any) => !CORRECTED.has(c.name))) {
     test(c.name, async () => {
       const ws = join(root, "workspace");
       await mkdir(ws, { recursive: true });
@@ -346,20 +466,33 @@ describe("refreshIndexEntries", () => {
       candidates.sort((a, b) => (a.displayPath < b.displayPath ? -1 : 1));
       for (const rel of c.delete_after_walk) await rm(join(ws, rel));
 
-      const index: WorkspaceIndex = { entries: new Map() };
+      const existing = new Map<string, FileRow>();
+      const vectors = new Set<string>();
       for (const [path, raw] of Object.entries(c.pre_index.entries as Record<string, any>)) {
-        index.entries.set(path, {
-          ...raw,
-          embedding: raw.embedding === undefined ? [] : f32s(raw.embedding),
+        const embedded = raw.embedded === true && raw.model_id === "topic-v1";
+        const hash =
+          embedded && raw.max_embed_chars_per_file === config.maxEmbedCharsPerFile
+            ? seededHash(join(ws, path), path, config.maxEmbedCharsPerFile)
+            : `stale:${path}`;
+        existing.set(path, {
+          display_path: path,
+          size: raw.size,
+          modified_at_secs: raw.modified_at_secs,
+          document_hash: hash,
+          embed_chars: raw.max_embed_chars_per_file ?? 0,
+          embedded: raw.embedded,
+          reason: raw.reason ?? undefined,
         });
+        if (embedded && hash !== undefined) vectors.add(hash);
       }
 
-      const out = await refreshIndexEntries(candidates, index, config, "topic-v1");
+      const out = await refreshIndexEntries(candidates, existing, config, (h) => vectors.has(h));
 
-      expect(out.stale).toEqual(c.out.stale);
+      expect(out.stale.map((s) => s.row.display_path)).toEqual(
+        c.out.stale.map((s: any[]) => s[0]),
+      );
       expect(out.staleDocs).toEqual(c.out.stale_docs);
       expect(out.skippedBinaryOrLarge).toBe(c.out.skipped_binary_or_large);
-      expect(out.dirty).toBe(c.out.dirty);
       expect(
         candidates.map((f) => ({
           display_path: f.displayPath,
@@ -369,9 +502,9 @@ describe("refreshIndexEntries", () => {
           skip_reason: f.skipReason ?? null,
         })),
       ).toEqual(c.out.candidates);
-      expect(normalizeIndexJson(JSON.parse(serializeIndex(index)))).toEqual(
-        normalizeIndexJson(c.out.index),
-      );
+      for (const path of out.removed) existing.delete(path);
+      for (const row of out.rows) existing.set(row.display_path, row);
+      expectIndexMatches(indexShape(existing), expectedIndexShape(c.out.index));
     });
   }
 
@@ -484,7 +617,12 @@ describe("skipTag", () => {
 describe("indexPath", () => {
   for (const c of fixture.index_path) {
     test(`${c.cache_dir} / ${c.character}`, () => {
-      expect(indexPath(c.cache_dir, c.character)).toBe(c.out);
+      // The cases pin how the cache dir, the character and the filename are
+      // joined — trailing slashes, relative roots, spaces in a name. Only the
+      // filename moved when the index stopped being a JSON document.
+      expect(indexPath(c.cache_dir, c.character)).toBe(
+        c.out.replace(/workspace_index\.json$/, WORKSPACE_INDEX_DB_FILE),
+      );
     });
   }
 });
@@ -716,27 +854,307 @@ function splitOnce(s: string, sep: string): [string, string] {
 // ── index file round trip ───────────────────────────────────────────────
 
 describe("index persistence", () => {
-  test("every persisted index in the fixture round-trips through load and save", async () => {
-    // The file format is the contract with the Rust half for as long as it is
-    // still reading it: field order, omitted optionals, and byte-ordered keys.
-    let checked = 0;
-    for (const c of fixture.cases) {
-      for (const run of c.runs) {
-        if (run.index_after === null || run.index_after === undefined) continue;
-        const path = join(root, `idx-${checked}.json`);
-        await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, JSON.stringify(run.index_after, null, 2));
-        const loaded = await loadIndex(path);
-        expect(normalizeIndexJson(JSON.parse(serializeIndex(loaded)))).toEqual(
-          normalizeIndexJson(run.index_after),
-        );
-        checked += 1;
-      }
-    }
-    expect(checked).toBeGreaterThan(20);
+  test("a file row round-trips through the store", () => {
+    const path = join(root, "rt.db");
+    const store = WorkspaceIndexStore.open(path);
+    const row: FileRow = {
+      display_path: "a.md",
+      size: 8,
+      modified_at_secs: 1000,
+      document_hash: "abc",
+      embed_chars: 4000,
+      embedded: true,
+      reason: undefined,
+    };
+    store.putFiles([row]);
+    store.close();
+
+    const reopened = WorkspaceIndexStore.open(path);
+    expect(reopened.files().get("a.md")).toEqual(row);
+    reopened.close();
   });
 
-  test("a malformed index loads as empty rather than throwing", async () => {
+  test("a vector round-trips as f32 without going through decimal text", () => {
+    const store = WorkspaceIndexStore.open(join(root, "vec.db"));
+    const vector = [1 / 3, -0.5, 0, 1e-8];
+    store.putEmbeddings("topic-v1", [{ hash: "h", vector }]);
+    expect(vec(store.vectorsFor("topic-v1", ["h"]).get("h"))).toEqual(f32s(vector));
+    store.close();
+  });
+
+  test("the same document under two models keeps both vectors", () => {
+    const store = WorkspaceIndexStore.open(join(root, "models.db"));
+    store.putEmbeddings("old", [{ hash: "h", vector: [1, 0] }]);
+    store.putEmbeddings("new", [{ hash: "h", vector: [0, 1] }]);
+    expect(vec(store.vectorsFor("old", ["h"]).get("h"))).toEqual([1, 0]);
+    expect(vec(store.vectorsFor("new", ["h"]).get("h"))).toEqual([0, 1]);
+    expect(store.hasVector("other", "h")).toBe(false);
+    store.close();
+  });
+
+  test("re-embedding one file rewrites one row, not the whole index", () => {
+    const store = WorkspaceIndexStore.open(join(root, "one.db"));
+    store.putEmbeddings("m", [
+      { hash: "a", vector: [1, 0] },
+      { hash: "b", vector: [0, 1] },
+    ]);
+    store.putEmbeddings("m", [{ hash: "a", vector: [0.5, 0.5] }]);
+    expect(vec(store.vectorsFor("m", ["a"]).get("a"))).toEqual(f32s([0.5, 0.5]));
+    expect(vec(store.vectorsFor("m", ["b"]).get("b"))).toEqual([0, 1]);
+    store.close();
+  });
+
+  test("pruning drops vectors no live file points at", () => {
+    const store = WorkspaceIndexStore.open(join(root, "prune.db"));
+    store.putFiles([
+      {
+        display_path: "a.md",
+        size: 1,
+        modified_at_secs: 1,
+        document_hash: "a",
+        embed_chars: 10,
+        embedded: true,
+        reason: undefined,
+      },
+    ]);
+    store.putEmbeddings("m", [
+      { hash: "a", vector: [1] },
+      { hash: "orphan", vector: [2] },
+    ]);
+    expect(store.pruneEmbeddings()).toBe(1);
+    expect(store.hasVector("m", "a")).toBe(true);
+    expect(store.hasVector("m", "orphan")).toBe(false);
+    store.close();
+  });
+
+  test("a store whose schema version moved on is rebuilt, not read", () => {
+    const path = join(root, "ver.db");
+    const store = WorkspaceIndexStore.open(path);
+    store.putEmbeddings("m", [{ hash: "h", vector: [1] }]);
+    store.close();
+
+    const raw = new Database(path, { readwrite: true });
+    raw.exec("PRAGMA user_version = 9999");
+    raw.close();
+
+    const reopened = WorkspaceIndexStore.open(path);
+    expect(reopened.hasVector("m", "h")).toBe(false);
+    expect(reopened.files().size).toBe(0);
+    reopened.close();
+  });
+});
+
+// ── what content hashing settles differently ────────────────────────────
+
+describe("freshness keyed on the document, not the tuple", () => {
+  const config: RetrievalConfig = {
+    maxFileBytes: 1_000_000,
+    maxIndexedFiles: 100,
+    maxTotalIndexedBytes: 1_000_000,
+    maxEmbedCharsPerFile: 4000,
+    binary: "skip",
+  };
+
+  test("a rewrite with the same size and mtime is caught", async () => {
+    // The JSON index compared size and mtime, so a file rewritten to the same
+    // length and stamped back to the same second kept its old vector for ever.
+    // The corpus recorded that as "missed by design"; hashing the document
+    // catches it, because the document is what changed.
+    const ws = join(root, "ws-rewrite");
+    await writeAt(join(ws, "a.md"), "tea aaa", 1000);
+
+    const first = await enumerateFiles(ws, config);
+    const before = await refreshIndexEntries(first, new Map(), config, () => false);
+    expect(before.staleDocs).toEqual(["path: a.md\n\ntea aaa"]);
+
+    const embedded = new Map<string, FileRow>(
+      before.rows.map((r) => [r.display_path, { ...r, embedded: true }]),
+    );
+    const vectors = new Set(before.stale.map((s) => s.hash));
+
+    await writeAt(join(ws, "a.md"), "tea bbb", 1000);
+    const second = await enumerateFiles(ws, config);
+    expect(second[0]!.size).toBe(first[0]!.size);
+    expect(second[0]!.modifiedAtSecs).toBe(first[0]!.modifiedAtSecs);
+
+    const after = await refreshIndexEntries(second, embedded, config, (h) => vectors.has(h));
+    expect(after.staleDocs).toEqual(["path: a.md\n\ntea bbb"]);
+  });
+
+  test("a skip record for a file that is now readable is replaced, not kept", async () => {
+    // The JSON index left a stale entry untouched until its replacement vector
+    // existed, so a file recorded as non-utf8 kept saying so after it became
+    // readable text. The row is now rewritten to what the file actually is:
+    // seen, readable, and waiting on an embedding.
+    const ws = join(root, "ws-reason");
+    await writeAt(join(ws, "a.md"), "tea", 1000);
+    const candidates = await enumerateFiles(ws, config);
+    const existing = new Map<string, FileRow>([
+      [
+        "a.md",
+        {
+          display_path: "a.md",
+          size: 3,
+          modified_at_secs: 1000,
+          document_hash: "",
+          embed_chars: 4000,
+          embedded: false,
+          reason: "non-utf8",
+        },
+      ],
+    ]);
+
+    const out = await refreshIndexEntries(candidates, existing, config, () => false);
+
+    expect(out.staleDocs).toEqual(["path: a.md\n\ntea"]);
+    expect(out.rows).toEqual([
+      {
+        display_path: "a.md",
+        size: 3,
+        modified_at_secs: 1000,
+        document_hash: documentHash("path: a.md\n\ntea"),
+        embed_chars: 4000,
+        embedded: false,
+        reason: undefined,
+      },
+    ]);
+  });
+
+  test("a file that comes back unchanged is not re-embedded", async () => {
+    const ws = join(root, "ws-stable");
+    await writeAt(join(ws, "a.md"), "tea", 1000);
+    const candidates = await enumerateFiles(ws, config);
+    const first = await refreshIndexEntries(candidates, new Map(), config, () => false);
+    const vectors = new Set(first.stale.map((s) => s.hash));
+    const embedded = new Map<string, FileRow>(
+      first.rows.map((r) => [r.display_path, { ...r, embedded: true }]),
+    );
+
+    const again = await enumerateFiles(ws, config);
+    const out = await refreshIndexEntries(again, embedded, config, (h) => vectors.has(h));
+
+    expect(out.staleDocs).toEqual([]);
+    expect(out.rows).toEqual([]);
+  });
+});
+
+// ── the one-time migration off the JSON file ────────────────────────────
+
+describe("legacy JSON migration", () => {
+  async function seed(raw: string, files: Record<string, string>): Promise<string> {
+    const dir = await mkdtemp(join(root, "mig-"));
+    const ws = join(dir, "workspace");
+    for (const [path, text] of Object.entries(files)) {
+      await writeAt(join(ws, path), text, 1000);
+    }
+    await writeFile(join(dir, LEGACY_INDEX_FILE), raw);
+    return dir;
+  }
+
+  function legacyJson(entries: Record<string, unknown>): string {
+    return JSON.stringify({ entries });
+  }
+
+  test("a vector is carried over and the file is not re-embedded", async () => {
+    const dir = await seed(
+      legacyJson({
+        "a.md": {
+          hash: "mtime:1000:5",
+          size: 5,
+          modified_at_secs: 1000,
+          model_id: "topic-v1",
+          max_embed_chars_per_file: 4000,
+          embedded: true,
+          embedding: [0.25, 0.5],
+        },
+      }),
+      { "a.md": "hello" },
+    );
+    const store = WorkspaceIndexStore.open(join(dir, "workspace_index.db"));
+    const out = await migrateLegacyIndex(
+      store,
+      join(dir, LEGACY_INDEX_FILE),
+      join(dir, "workspace"),
+      documentForEmbedding,
+    );
+
+    expect(out).toEqual({ files: 1, vectors: 1, stale: 0 });
+    const hash = seededHash(join(dir, "workspace", "a.md"), "a.md", 4000);
+    expect(store.hasVector("topic-v1", hash)).toBe(true);
+    expect(vec(store.vectorsFor("topic-v1", [hash]).get(hash))).toEqual(f32s([0.25, 0.5]));
+    expect(store.files().get("a.md")?.embedded).toBe(true);
+    store.close();
+  });
+
+  test("the JSON file is deleted once it has been drained", async () => {
+    const dir = await seed(legacyJson({}), {});
+    const store = WorkspaceIndexStore.open(join(dir, "workspace_index.db"));
+    await migrateLegacyIndex(
+      store,
+      join(dir, LEGACY_INDEX_FILE),
+      join(dir, "workspace"),
+      documentForEmbedding,
+    );
+    store.close();
+    expect(await Bun.file(join(dir, LEGACY_INDEX_FILE)).exists()).toBe(false);
+  });
+
+  test("a vector whose file has changed underneath it is dropped, not trusted", async () => {
+    const dir = await seed(
+      legacyJson({
+        "a.md": {
+          hash: "mtime:1000:5",
+          size: 999,
+          modified_at_secs: 1000,
+          model_id: "topic-v1",
+          max_embed_chars_per_file: 4000,
+          embedded: true,
+          embedding: [0.25, 0.5],
+        },
+      }),
+      { "a.md": "hello" },
+    );
+    const store = WorkspaceIndexStore.open(join(dir, "workspace_index.db"));
+    const out = await migrateLegacyIndex(
+      store,
+      join(dir, LEGACY_INDEX_FILE),
+      join(dir, "workspace"),
+      documentForEmbedding,
+    );
+    expect(out).toEqual({ files: 0, vectors: 0, stale: 1 });
+    store.close();
+  });
+
+  test("skip records survive the move with their reason", async () => {
+    const dir = await seed(
+      legacyJson({
+        "big.bin": {
+          hash: "mtime:1000:9",
+          size: 9,
+          modified_at_secs: 1000,
+          model_id: "topic-v1",
+          max_embed_chars_per_file: 4000,
+          embedded: false,
+          reason: "oversize",
+        },
+      }),
+      {},
+    );
+    const store = WorkspaceIndexStore.open(join(dir, "workspace_index.db"));
+    await migrateLegacyIndex(
+      store,
+      join(dir, LEGACY_INDEX_FILE),
+      join(dir, "workspace"),
+      documentForEmbedding,
+    );
+    expect(store.files().get("big.bin")).toMatchObject({
+      embedded: false,
+      reason: "oversize",
+    });
+    store.close();
+  });
+
+  test("a malformed legacy file migrates to nothing rather than throwing", async () => {
     for (const raw of [
       "not json at all { [ }",
       "[1, 2, 3]",
@@ -749,90 +1167,31 @@ describe("index persistence", () => {
       '{"entries": {"a.md": {"hash": "h", "size": 1, "modified_at_secs": 1, "model_id": "m", "embedded": true, "embedding": ["x"]}}}',
       "{}",
     ]) {
-      const path = join(root, "bad.json");
-      await writeFile(path, raw);
-      const loaded = await loadIndex(path);
-      expect(loaded.entries.size).toBe(0);
+      const dir = await seed(raw, {});
+      const store = WorkspaceIndexStore.open(join(dir, "workspace_index.db"));
+      const out = await migrateLegacyIndex(
+        store,
+        join(dir, LEGACY_INDEX_FILE),
+        join(dir, "workspace"),
+        documentForEmbedding,
+      );
+      expect(out).toEqual({ files: 0, vectors: 0, stale: 0 });
+      expect(store.files().size).toBe(0);
+      store.close();
     }
   });
 
-  test("a missing index file loads as empty", async () => {
-    const loaded = await loadIndex(join(root, "nope", "missing.json"));
-    expect(loaded.entries.size).toBe(0);
-  });
-
-  test("entries serialize in UTF-8 byte order", () => {
-    // The Rust wrote a BTreeMap<String, _>, which orders by UTF-8 bytes; a JS
-    // object would enumerate in insertion order and a plain sort would use
-    // UTF-16 code units, which disagree above the BMP.
-    const index: WorkspaceIndex = { entries: new Map() };
-    for (const path of ["\u{1f30a}.md", ".md", "b.md", "a.md"]) {
-      index.entries.set(path, {
-        hash: "h",
-        size: 1,
-        modified_at_secs: 1,
-        model_id: "m",
-        embedded: false,
-        embedding: [],
-      });
-    }
-    expect(Object.keys(JSON.parse(serializeIndex(index)).entries)).toEqual([
-      "a.md",
-      "b.md",
-      ".md",
-      "\u{1f30a}.md",
-    ]);
-  });
-
-  test("an entry serializes to exactly the bytes the Rust wrote", () => {
-    // Compared as text, which the fixture cases cannot do: they carry f32
-    // embeddings, and the two runtimes print the same f32 with different
-    // digits. Everything else about the format — two-space indent, field
-    // order, and the three optionals omitted rather than written as null — is
-    // the contract with the Rust half for as long as it still reads this file.
-    const index: WorkspaceIndex = { entries: new Map() };
-    index.entries.set("a.md", {
-      hash: "mtime:1000:8",
-      size: 8,
-      modified_at_secs: 1000,
-      model_id: "topic-v1",
-      embedded: false,
-      embedding: [],
-    });
-    index.entries.set("b.md", {
-      hash: "mtime:1001:2",
-      size: 2,
-      modified_at_secs: 1001,
-      model_id: "topic-v1",
-      max_embed_chars_per_file: 4000,
-      embedded: false,
-      reason: "non-utf8",
-      embedding: [],
-    });
-    expect(serializeIndex(index)).toBe(
-      [
-        "{",
-        '  "entries": {',
-        '    "a.md": {',
-        '      "hash": "mtime:1000:8",',
-        '      "size": 8,',
-        '      "modified_at_secs": 1000,',
-        '      "model_id": "topic-v1",',
-        '      "embedded": false',
-        "    },",
-        '    "b.md": {',
-        '      "hash": "mtime:1001:2",',
-        '      "size": 2,',
-        '      "modified_at_secs": 1001,',
-        '      "model_id": "topic-v1",',
-        '      "max_embed_chars_per_file": 4000,',
-        '      "embedded": false,',
-        '      "reason": "non-utf8"',
-        "    }",
-        "  }",
-        "}",
-      ].join("\n"),
+  test("no legacy file at all is not a migration", async () => {
+    const dir = await mkdtemp(join(root, "none-"));
+    const store = WorkspaceIndexStore.open(join(dir, "workspace_index.db"));
+    const out = await migrateLegacyIndex(
+      store,
+      join(dir, LEGACY_INDEX_FILE),
+      dir,
+      documentForEmbedding,
     );
+    expect(out).toBeUndefined();
+    store.close();
   });
 });
 

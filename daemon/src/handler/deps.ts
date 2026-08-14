@@ -1,3 +1,4 @@
+import { localWallClock } from "../autonomy/activity.ts";
 import { compactionGenerate } from "../autonomy/in_process.ts";
 import type { InvalidationReason, LastRequestCache } from "../cache/last_request.ts";
 import type { TurnAutonomyBridge } from "../autonomy/registration.ts";
@@ -49,6 +50,7 @@ import type {
 } from "./router.ts";
 import type { SessionTokens } from "./persistence.ts";
 import type { ToolContextDeps } from "./tool_context.ts";
+import { indexPath as workspaceIndexPath } from "../memory/workspace_index.ts";
 
 export interface GenerationAssembly {
   runtime: ShoreRuntime;
@@ -162,8 +164,12 @@ export function chatToolDeps(
       characterDataDir(runtime.config.dirs.data, charName),
       queueDeferredEdit,
     ),
-    activityStats: () => {
-      const report = runtime.autonomy.activityStats(charName, Date.now());
+    activityStats: (days: number) => {
+      const report = runtime.autonomy.activityStats(
+        charName,
+        localWallClock(Date.now()),
+        days,
+      );
       return report === undefined
         ? undefined
         : { stats: report.stats, turnCount: report.messageCount };
@@ -295,7 +301,7 @@ class ProcessSessionCache implements SessionCache {
   readonly #models = new Map<string, string>();
 
   static #key(sessionId: number, character: string | undefined): string {
-    return `${sessionId} ${character ?? ""}`;
+    return `${sessionId}\0${character ?? ""}`;
   }
 
   activeModel(sessionId: number, character: string | undefined): string | undefined {
@@ -553,6 +559,14 @@ function commandDeps(a: CommandAssembly): CommandDeps {
     runTool: {
       tools: (charName, turn) => chatToolDeps(a, charName, turn),
       mcpTools: () => runtime.mcp.current.allTools(),
+    },
+    workspaceIndex: {
+      indexPathFor: (character) => {
+        if (!runtime.registry.hasCharacter(character)) return undefined;
+        return workspaceIndexPath(runtime.registry.effectiveConfig(character).dirs.cache, character);
+      },
+      progressFor: (character) => runtime.workspaceIndex.progress(character),
+      characters: () => [...runtime.registry.availableCharacters()],
     },
   };
 }

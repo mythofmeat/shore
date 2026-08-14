@@ -18,6 +18,7 @@ import {
   parseDiceNotation,
 } from "../src/tools/basic.ts";
 import { handleActivityHeatmap } from "../src/tools/activity.ts";
+import type { ActivityStats, HourClassification } from "../src/autonomy/activity.ts";
 import { handleModelHistory, kindFor, utcBound } from "../src/tools/model_history.ts";
 
 const fx = fixture as unknown as {
@@ -212,51 +213,111 @@ describe("handleActivityHeatmap", () => {
     expect(handleActivityHeatmap(c.input, () => undefined)).toEqual(c.output as never);
   });
 
+  const statsWith = (over: Partial<ActivityStats>): ActivityStats => ({
+    engagementScore: 0,
+    consistency: 0,
+    tempoScore: 0,
+    sessionCount: 0,
+    sessionsPerDay: 0,
+    hourHistogram: new Array<number>(24).fill(0),
+    hourClassifications: new Array<HourClassification>(24).fill("normal"),
+    pooledHourHistogram: new Array<number>(24).fill(0),
+    pooledHourClassifications: new Array<HourClassification>(24).fill("normal"),
+    weekdayCounts: { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 },
+    windowMessageCount: 0,
+    hasSufficientData: false,
+    hasSufficientHeatmap: false,
+    medianSessionGap: undefined,
+    anomalyZScore: undefined,
+    computedAt: 0,
+    ...over,
+  });
+
   test("a wired tracker is reshaped, not recomputed", () => {
-    const stats = {
+    const stats = statsWith({
       engagementScore: 0.75,
       consistency: 0.5,
       tempoScore: 0.9,
       sessionCount: 4,
       sessionsPerDay: 1.25,
-      hourHistogram: Array.from({ length: 24 }, (_u, h) => (h === 9 ? 1.0 : 0.0)),
-      hourClassifications: Array.from({ length: 24 }, (_u, h) =>
+      pooledHourHistogram: Array.from({ length: 24 }, (_u, h) => (h === 9 ? 1.0 : 0.0)),
+      pooledHourClassifications: Array.from({ length: 24 }, (_u, h) =>
         h === 9 ? ("peak" as const) : ("normal" as const),
       ),
+      weekdayCounts: { Mon: 3, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 1, Sun: 0 },
+      windowMessageCount: 4,
       hasSufficientData: true,
       hasSufficientHeatmap: true,
       medianSessionGap: 3600,
-      anomalyZScore: undefined,
-      computedAt: 0,
-    };
+    });
     const out = handleActivityHeatmap({ days: 7 }, () => ({ stats, turnCount: 42 }));
     expect(out.days).toBe(7);
     expect(out.hours[9]).toEqual({ hour: 9, density: 1.0, classification: "peak" });
     expect(out.hours[0]).toEqual({ hour: 0, density: 0.0, classification: "normal" });
     expect(out.total_messages).toBe(42);
-    expect(out.total_turns).toBe(42);
+    expect(out.messages_in_window).toBe(4);
     expect(out.has_sufficient_data).toBe(true);
     expect(out.engagement_score).toBe(0.75);
     expect(out.sessions_per_day).toBe(1.25);
   });
 
+  test("the hours it reports are the pooled ones, not today's weekday slice", () => {
+    const stats = statsWith({
+      hourHistogram: Array.from({ length: 24 }, (_u, h) => (h === 9 ? 1.0 : 0.0)),
+      hourClassifications: Array.from({ length: 24 }, (_u, h) =>
+        h === 9 ? ("peak" as const) : ("normal" as const),
+      ),
+      pooledHourHistogram: Array.from({ length: 24 }, (_u, h) => (h === 2 ? 1.0 : 0.0)),
+      pooledHourClassifications: Array.from({ length: 24 }, (_u, h) =>
+        h === 2 ? ("peak" as const) : ("normal" as const),
+      ),
+      windowMessageCount: 1,
+    });
+    const out = handleActivityHeatmap({}, () => ({ stats, turnCount: 1 }));
+    expect(out.hours[2]).toEqual({ hour: 2, density: 1.0, classification: "peak" });
+    expect(out.hours[9]).toEqual({ hour: 9, density: 0.0, classification: "normal" });
+  });
+
+  test("weekday densities are shares of the window", () => {
+    const stats = statsWith({
+      weekdayCounts: { Mon: 1, Tue: 1, Wed: 0, Thu: 0, Fri: 0, Sat: 2, Sun: 0 },
+      windowMessageCount: 4,
+    });
+    const out = handleActivityHeatmap({}, () => ({ stats, turnCount: 4 }));
+    expect(out.weekdays.map((w) => w.weekday)).toEqual([
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat",
+      "Sun",
+    ]);
+    expect(out.weekdays[5]).toEqual({ weekday: "Sat", message_count: 2, density: 0.5 });
+    expect(out.weekdays.reduce((a, w) => a + w.density, 0)).toBeCloseTo(1, 12);
+  });
+
+  test("the window a caller asked for is the window the tracker is given", () => {
+    const asked: number[] = [];
+    handleActivityHeatmap({ days: 7 }, (days) => {
+      asked.push(days);
+      return undefined;
+    });
+    handleActivityHeatmap({}, (days) => {
+      asked.push(days);
+      return undefined;
+    });
+    expect(asked).toEqual([7, 30]);
+  });
+
   // `.get(h)` with a default in the Rust: a short histogram degrades rather
   // than failing the tool.
   test("a truncated histogram degrades to zero and normal", () => {
-    const stats = {
-      engagementScore: 0,
-      consistency: 0,
-      tempoScore: 0,
-      sessionCount: 0,
-      sessionsPerDay: 0,
-      hourHistogram: [0.5],
-      hourClassifications: ["peak" as const],
-      hasSufficientData: false,
-      hasSufficientHeatmap: false,
-      medianSessionGap: undefined,
-      anomalyZScore: undefined,
-      computedAt: 0,
-    };
+    const stats = statsWith({
+      pooledHourHistogram: [0.5],
+      pooledHourClassifications: ["peak" as const],
+      windowMessageCount: 1,
+    });
     const out = handleActivityHeatmap({}, () => ({ stats, turnCount: 1 }));
     expect(out.hours.length).toBe(24);
     expect(out.hours[0]).toEqual({ hour: 0, density: 0.5, classification: "peak" });

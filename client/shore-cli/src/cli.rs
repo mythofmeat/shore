@@ -631,6 +631,14 @@ pub(crate) enum UsageCommand {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum TraceCommand {
+    /// What the workspace search index holds: files seen, embedded, skipped,
+    /// and whether the background pass still has work outstanding
+    Index {
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Raw model call payloads. Bare lists recent calls; pass an id to dump
     /// that call's full request and response
     Calls {
@@ -1244,6 +1252,7 @@ fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
             json!({ "source": "heartbeat", "count": count }),
         )),
         TraceCommand::Events { count, .. } => Some(("heartbeat_log", json!({ "count": count }))),
+        TraceCommand::Index { .. } => Some(("workspace_index", Value::Object(Map::new()))),
         TraceCommand::Subagent { id, count, .. } => {
             let mut args = Map::new();
             match id {

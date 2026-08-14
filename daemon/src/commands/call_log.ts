@@ -6,6 +6,7 @@ import type {
   TranscriptRow,
 } from "../call_store.ts";
 import { invalidRequest, internalError } from "./errors.ts";
+import { decodeBody } from "./decode_body.ts";
 import type { Args, Json } from "./conversation.ts";
 
 export interface CallLogContext {
@@ -28,28 +29,19 @@ function countArg(args: Args, fallback: number): number {
 
 const CALL_STORE_FAILED = "call store query failed";
 
-function decodeJsonBody(body: string | null): unknown {
-  if (body === null) return null;
-  try {
-    return JSON.parse(body) as unknown;
-  } catch {
-    return body;
-  }
-}
-
 function presentCall(call: CallPayload): Json {
   return {
     ...call,
-    request: decodeJsonBody(call.request),
-    response: decodeJsonBody(call.response),
+    request: decodeBody(call.request),
+    response: decodeBody(call.response),
   };
 }
 
 function presentWire(exchanges: readonly HttpExchangeRow[]): Json {
   return exchanges.map((exchange) => ({
     ...exchange,
-    request_body: decodeJsonBody(exchange.request_body),
-    response_body: decodeJsonBody(exchange.response_body),
+    request_body: decodeBody(exchange.request_body),
+    response_body: decodeBody(exchange.response_body),
   }));
 }
 
