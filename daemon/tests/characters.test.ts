@@ -173,13 +173,6 @@ function loadFrom(path: string): LoadedConfig {
 // ── Replay ──────────────────────────────────────────────────────────────
 
 describe("the fixture is real", () => {
-  const header = (fixture._header as string[]).join(" ");
-
-
-  test("it names the worktree it came from", () => {
-    expect(header).toContain("9023b46d");
-  });
-
   test("every scenario is a run, not a call", () => {
     // One-step scenarios would mean the caching this module exists for was
     // never exercised.

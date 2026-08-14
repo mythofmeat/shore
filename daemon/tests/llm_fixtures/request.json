@@ -1,13 +1,4 @@
 {
-  "_header": [
-    "Cross-language parity fixture for outbound LLM request construction.",
-    "",
-    "GENERATED from crates/daemon/src/llm/mod.rs by driving the real Rust",
-    "in a throwaway worktree at 9023b46d — the last commit where the daemon",
-    "crate still compiles. This file is FROZEN: nothing regenerates this file.",
-    "A later diff against it is a defect in the TypeScript, not a fixture that",
-    "needs updating."
-  ],
   "provider_tables": [
     {
       "provider_key": "anthropic",

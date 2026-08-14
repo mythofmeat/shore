@@ -1,6 +1,4 @@
 {
-  "_generated_by": "crates/daemon/tests/gen_tool_registry_fixture.rs at 9023b46d, driving the real registry. FROZEN: the generator is not committed and nothing regenerates this. A later diff against this file is a defect in the TypeScript, not a fixture to update.",
-  "_note": "One case is deliberately absent. Rendering a tool description with a character or user name that itself contains {{...}} is nondeterministic in the Rust: render_template walks a HashMap and substitutes sequentially, so text one variable writes can be matched by a later one, and HashMap order is randomized per process. Eight generator runs of char=\"{{user}}\", user=\"{{char}}\" gave two different answers. The TypeScript is single-pass and deterministic (see engine/prompt.ts, which made the same call for the system prompt); tool_registry_parity.test.ts asserts that behaviour directly instead.",
   "all_tools": [
     {
       "name": "generate_image",

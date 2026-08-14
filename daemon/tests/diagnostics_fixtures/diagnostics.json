@@ -1,10 +1,4 @@
 {
-  "_header": [
-    "Generated from crates/common/src/diagnostics/mod.rs at 9023b46d. FROZEN.",
-    "A diff against this file is a defect in the TypeScript, not a fixture to regenerate.",
-    "The entries behind each `seed` are declared in the generator and re-declared in",
-    "the replay, so what went in is what the assertions are about."
-  ],
   "ring": [
     {
       "case": "empty",

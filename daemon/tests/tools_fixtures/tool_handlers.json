@@ -1,6 +1,4 @@
 {
-  "_generated_by": "crates/daemon/tests/gen_tool_handlers_fixture.rs at 9023b46d, driving the real handlers. FROZEN: the generator is not committed and nothing regenerates this. A later diff against this file is a defect in the TypeScript, not a fixture to update.",
-  "_note": "roll_dice's roll is random, so nothing here pins a rolled value. What is pinned is the parser (every branch and integer boundary), and the roll's invariants sampled over 500 draws per case: one roll per die, each in 1..=sides, and a total that saturates rather than wrapping. observed_min/observed_max are the span the Rust actually covered over those draws, which is what stops a constant implementation passing.",
   "parse_dice_notation": [
     {
       "input": "2d6",

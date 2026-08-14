@@ -1,6 +1,4 @@
 {
-  "_generated_by": "crates/daemon/tests/gen_dispatch_fixture.rs at 9023b46d (uncommitted)",
-  "_note": "FROZEN. Produced by driving the real dispatch_tool. Nothing regenerates this; a diff is a defect.",
   "routing": {
     "search_chat_logs": {
       "err": "invalid args: conversation history is not configured"

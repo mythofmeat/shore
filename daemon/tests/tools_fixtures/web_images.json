@@ -1,6 +1,4 @@
 {
-  "_generated_by": "crates/daemon/tests/gen_web_images_fixture.rs at 9023b46d, driving the real strip_html / truncate_to_bytes / decode_data_url. FROZEN: the generator is not committed and nothing regenerates this. A later diff against this file is a defect in the TypeScript, not a fixture to update.",
-  "_note": "The HTTP is not covered: both handlers call fixed remote hosts. What is driven here is everything around the wire — strip_html, the byte-accurate fetch_url truncation, and decode_data_url including the base64 crate's exact rejection messages, which reach the model through the tool result. The handler shells (argument validation, response reshaping) are asserted directly in web_images_parity.test.ts against the Rust read side by side, and are marked as such there.",
   "strip_html": [
     {
       "label": "empty",

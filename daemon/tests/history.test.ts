@@ -36,7 +36,6 @@ import { testTmp } from "./support/tmp.ts";
 type Json = Record<string, unknown>;
 
 interface Fixture {
-  _header: string[];
   constants: Record<string, number>;
   tool_def: { name: string; parameters: Json };
   normalize_model: { input: string; expect: string }[];

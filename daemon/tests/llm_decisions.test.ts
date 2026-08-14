@@ -44,7 +44,6 @@ interface PolicyJson {
 }
 
 interface Fixture {
-  _header: string[];
   default_api_key_env: { provider_key: string; expect: string }[];
   classify_credential_failure: {
     error: EncodedError;

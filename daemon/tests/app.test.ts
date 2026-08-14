@@ -353,10 +353,6 @@ const BUN_CANNOT_SEE = new Set([
 
 describe("the fixture is real", () => {
 
-  test("it names `main` as its source, not a worktree", () => {
-    expect(fixture._header.join(" ")).toContain("GENERATED from `main`");
-  });
-
   test("the trimmed daemon fields really are ones it had", () => {
     // The trim above is only honest if the fixture genuinely carries these.
     // If one ever stops appearing, the replay is hiding a real disagreement

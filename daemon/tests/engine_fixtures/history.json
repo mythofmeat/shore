@@ -1,13 +1,4 @@
 {
-  "_header": [
-    "Cross-language parity fixture for the conversation-history search tool.",
-    "",
-    "GENERATED from crates/daemon/src/tools/history.rs by driving the real Rust",
-    "in a throwaway worktree at 9023b46d — the last commit where the daemon",
-    "crate still compiles. This file is FROZEN: nothing regenerates this file.",
-    "A later diff against it is a defect in the TypeScript, not a fixture that",
-    "needs updating."
-  ],
   "constants": {
     "DEFAULT_MAX_RESULTS": 20,
     "MAX_RESULTS": 100,

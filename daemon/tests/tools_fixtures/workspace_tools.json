@@ -1,5 +1,4 @@
 {
-  "_generated_by": "crates/daemon/src/tools/workspace.rs `fixture_gen` at 9023b46d, driving the real handlers. Frozen: a later diff against this file is a defect, not a fixture to update.",
   "read": [
     {
       "name": "root listing via absent path",

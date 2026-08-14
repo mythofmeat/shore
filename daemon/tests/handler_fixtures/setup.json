@@ -1,6 +1,4 @@
 {
-  "_generated_by": "crates/daemon/src/handler/gen_setup_fixture.rs at 9023b46d (uncommitted), driving the real resolve_generation_model and build_generation_request",
-  "_note": "FROZEN. Driven against the real resolve_generation_model and build_generation_request in a worktree at 9023b46d. Nothing regenerates this; a later diff is a defect. Generated under TZ=America/New_York; the replay passes that zone explicitly.",
   "timezone": "America/New_York",
   "resolve_generation_model": [
     {

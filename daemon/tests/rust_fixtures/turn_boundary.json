@@ -1,21 +1,4 @@
 {
-  "_comment": [
-    "Shared fixture pinning the most-recent-assistant-turn boundary across the",
-    "two implementations that must agree on it:",
-    "  - `most_recent_assistant_turn_start` in crates/daemon/src/content_util.rs",
-    "    (the boundary `replay_prior_thinking` strips against), and",
-    "  - `mostRecentAssistantTurnStart` in",
-    "    daemon/src/llm/providers/anthropic.ts (the boundary the",
-    "    Anthropic cache breakpoint is anchored just before).",
-    "If they drift, the anchor lands inside the region the strip rewrites, both",
-    "message breakpoints miss, and every committed turn silently re-caches the",
-    "whole conversation. That failure has no other automated guard: the",
-    "end-to-end check is an #[ignore] live provider probe.",
-    "Consumed by content_util.rs::tests::turn_boundary_matches_shared_fixture and",
-    "daemon/tests/turn_boundary_parity.test.ts.",
-    "`expected` is the 0-based index at which the trailing assistant turn begins,",
-    "or messages.length when there is no assistant message at all."
-  ],
   "cases": [
     {
       "name": "no messages",

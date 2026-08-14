@@ -1,6 +1,4 @@
 {
-  "_generated_by": "crates/daemon/src/handler/gen_fixture.rs at 9023b46d (uncommitted), driving the real build_llm_messages and prepare_chat_context",
-  "_note": "FROZEN. Driven against the real build_llm_messages and prepare_chat_context in a worktree at 9023b46d. Nothing regenerates this; a later diff is a defect. Time markers render in local wall-clock, so the whole file is generated under TZ=America/New_York and the replay passes that zone explicitly rather than reading the host's.",
   "timezone": "America/New_York",
   "build_llm_messages": [
     {

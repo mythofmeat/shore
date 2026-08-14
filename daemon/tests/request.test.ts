@@ -59,7 +59,6 @@ interface ModelJson {
 }
 
 interface Fixture {
-  _header: string[];
   provider_tables: {
     provider_key: string;
     default_api_key_env: string;

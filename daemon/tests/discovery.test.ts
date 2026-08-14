@@ -97,7 +97,6 @@ interface ReadCase {
 }
 
 interface Fixture {
-  _header: string[];
   cache_version: number;
   refresh_interval_secs: number;
   anthropic_version_header: string;

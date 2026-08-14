@@ -1,6 +1,4 @@
 {
-  "_generated_by": "crates/daemon/tests/gen_images_fixture.rs at 9023b46d (uncommitted)",
-  "_note": "FROZEN. Driven against the real handler::images. Nothing regenerates this; a diff is a defect.",
   "media_type_for_path": [
     {
       "path": "a.png",

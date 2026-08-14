@@ -174,13 +174,6 @@ function run(src: string): {
 // ── The fixture itself ──────────────────────────────────────────────────
 
 describe("the fixture is real", () => {
-  const header = (fixture._header as string[]).join(" ");
-
-
-  test("it names `main` as its source, not a worktree", () => {
-    expect(header).toContain("GENERATED from `main`");
-  });
-
   test("it covers both outcomes, and warnings on both sides of them", () => {
     // An outcome-only fixture, or one with no multi-fault documents, would
     // pass against a port that got every ordering and severity wrong.

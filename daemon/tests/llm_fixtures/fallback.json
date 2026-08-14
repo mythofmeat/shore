@@ -1,14 +1,4 @@
 {
-  "_header": [
-    "Cross-language parity fixture for credential rotation and retry backoff.",
-    "",
-    "GENERATED from crates/daemon/src/handler/key_fallback.rs and",
-    "handler/generation.rs by driving the real Rust in a throwaway worktree at",
-    "9023b46d — the last commit where the daemon crate still compiles. This",
-    "file is FROZEN: nothing regenerates this file. A later diff against it is",
-    "a defect in the TypeScript, not a fixture that needs updating.",
-    "REMOVED by #16, not lost: the `refusal` error_projection case. `LlmError::Refusal` was deleted from both languages — nothing ever constructed it — so there is no error left for sanitizeReason to project. Every other case is still the frozen 9023b46d recording and is still untouched."
-  ],
   "default_max_retries": 2,
   "default_backoff_base_ms": 500,
   "error_projection": [

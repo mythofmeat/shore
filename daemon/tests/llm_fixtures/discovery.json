@@ -1,13 +1,4 @@
 {
-  "_header": [
-    "Cross-language parity fixture for provider model discovery.",
-    "",
-    "GENERATED from crates/daemon/src/llm/discovery.rs by driving the real Rust",
-    "in a throwaway worktree at 9023b46d — the last commit where the daemon",
-    "crate still compiles. This file is FROZEN: nothing regenerates this file.",
-    "A later diff against it is a defect in the TypeScript, not a fixture that",
-    "needs updating."
-  ],
   "cache_version": 1,
   "refresh_interval_secs": 86400,
   "anthropic_version_header": "2023-06-01",

@@ -68,13 +68,6 @@ afterAll(() => {
 
 const passwdHome = () => fixture.passwd_home as string;
 
-describe("the fixture is real", () => {
-
-  test("it names `main` as its source, not the worktree", () => {
-    expect(fixture._header.join(" ")).toContain("GENERATED from `main`");
-  });
-});
-
 describe("ShoreDirs.resolve", () => {
   for (const c of fixture.shore_dirs) {
     test(c.name, () => {

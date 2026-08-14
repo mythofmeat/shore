@@ -35,7 +35,6 @@ import type { CredentialFailureKind, KeyCandidate } from "../src/llm/credentials
 import { describeLlmError, type LlmError } from "../src/llm/errors";
 
 interface Fixture {
-  _header: string[];
   default_max_retries: number;
   default_backoff_base_ms: number;
   error_projection: {

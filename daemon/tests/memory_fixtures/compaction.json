@@ -1,5 +1,4 @@
 {
-  "_generated_by": "crates/daemon/tests/gen_compaction_fixture.rs at 9023b46d, driving the real CompactionManager. Frozen: a later diff against this file is a defect, not a fixture to update.",
   "write_allowed_path": [
     {
       "path": "MEMORY.md",

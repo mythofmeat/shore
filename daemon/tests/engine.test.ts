@@ -60,7 +60,6 @@ interface WalkCase {
 }
 
 interface Fixture {
-  _header: string[];
   segment_reader: SegmentCase[];
   engine_walk: WalkCase[];
 }

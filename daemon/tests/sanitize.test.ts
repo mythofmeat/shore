@@ -28,7 +28,6 @@ interface Case {
 }
 
 interface Fixture {
-  _header: string[];
   sanitize_tool_pairs: Case[];
 }
 

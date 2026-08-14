@@ -1,33 +1,4 @@
 {
-  "_header": [
-    "Parity fixture for the stream accumulator, the persistence phase, and the",
-    "notification service - everything between the last provider event and",
-    "durable history.",
-    "",
-    "GENERATED from the surviving half of crates/daemon/src/llm/stream.rs,",
-    "handler/persistence.rs, notifications.rs, and the [notifications] subtree",
-    "of crates/common/src/config/app.rs, by driving the real Rust in a detached",
-    "worktree at 9023b46d - the last commit where shore-daemon builds. All four",
-    "files are byte-identical from there to HEAD. The generator is not",
-    "committed.",
-    "",
-    "This file is FROZEN: nothing regenerates this file. A later diff against it is a defect in the TypeScript, not a fixture that needs updating.",
-    "",
-    "u64 fields are written as strings. JSON.parse rounds 18446744073709551615",
-    "to a double, and the first version of this fixture disagreed with a port",
-    "that was right.",
-    "",
-    "The other half of stream.rs is not represented and does not move.",
-    "StreamConsumer's NDJSON reader is the daemon-sidecar process boundary and",
-    "goes away with it; only the fold into a StreamResult is behaviour. The",
-    "line decoding lives in the replay, where these inputs still exercise it.",
-    "",
-    "Mutation-checked at 96 of 101. Four survivors each mirror a redundancy the",
-    "Rust carries and are documented at their sites: the zero test in the",
-    "generation threshold, the started guard on the reported model, the",
-    "assistant filter on which messages raise events, and the quote pass's",
-    "position in shell_escape."
-  ],
   "truncate_summary": [
     {
       "input": "",

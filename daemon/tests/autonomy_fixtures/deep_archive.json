@@ -1,6 +1,4 @@
 {
-  "_frozen": "FROZEN. Generated once from the Rust at 9023b46d by an uncommitted crates/daemon/src/autonomy/gen_deep_archive_fixture.rs, which is not in the tree and is not coming back. Nothing regenerates this file. A later diff against it is a defect in the TypeScript, not a fixture to refresh.",
-  "_generated_by": "crates/daemon/src/autonomy/gen_deep_archive_fixture.rs at 9023b46d (uncommitted), driving the real deep_archive_plan, RealConversationManager::archive_and_retain and deep_archive_notification",
   "timezone": "America/New_York",
   "plan": [
     {

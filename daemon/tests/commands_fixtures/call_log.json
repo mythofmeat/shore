@@ -1,10 +1,4 @@
 {
-  "_header": [
-    "Generated from crates/daemon/src/commands/state/status.rs at 9023b46d, with",
-    "1573409a's narrowing of the transcript source list applied. FROZEN.",
-    "A diff against this file is a defect in the TypeScript, not a fixture to regenerate.",
-    "The store's contents are declared in the generator and re-declared in the replay."
-  ],
   "cases": [
     {
       "case": "default",

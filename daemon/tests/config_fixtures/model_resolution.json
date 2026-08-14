@@ -1,11 +1,4 @@
 {
-  "_header": [
-    "Case data for the model catalog.",
-    "",
-    "Captured from the deleted Rust port, then corrected where the port was",
-    "wrong: cache_keepalive no longer defaults to 55m (#47). This file is",
-    "shore's declared behaviour \u2014 edit it when an answer here is wrong."
-  ],
   "sdk_parse_wire": [
     {
       "raw": "anthropic",
