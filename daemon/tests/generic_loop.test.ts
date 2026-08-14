@@ -1,21 +1,3 @@
-/**
- * The tool loop for every dialect that is not Anthropic.
- *
- * Driven against a fake `SidecarProvider` rather than a fake HTTP server,
- * because that interface is exactly what the loop consumes — the adapters
- * below it already have their own suites, and going through one of them would
- * test its wire parsing again rather than the loop.
- *
- * The bar is `anthropic_loop.test.ts`: the caller parses one stream shape and
- * must not be able to tell which loop produced it. Several cases here are
- * deliberate mirrors of one there.
- *
- * Tools are a {@link ToolPhase} rather than a Unix socket. That is the whole of
- * what the rewiring changed here — the loop's decisions are identical, and the
- * cases that used to assert them through a fake daemon assert them through a
- * fake phase.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import { genericToolLoopEvents } from "../src/llm/providers/generic_loop.ts";
@@ -29,14 +11,12 @@ import type {
   GenerateResponse,
 } from "../src/llm/types.ts";
 
-/** Reasoning a turn thought before it said or did anything. */
 interface Reasoning {
   thinking?: string;
   signature?: string;
   reasoning?: string;
 }
 
-/** One turn the fake provider should produce. */
 type Turn =
   | ({
       kind: "tools";
@@ -53,7 +33,6 @@ const USAGE = {
   cache_creation_tokens: 0,
 };
 
-/** Answers each `stream()` with the next scripted turn. */
 class FakeProvider implements SidecarProvider {
   requests: SidecarRequest[] = [];
   private next = 0;
@@ -61,8 +40,6 @@ class FakeProvider implements SidecarProvider {
   constructor(private readonly turns: Turn[]) {}
 
   async *stream(req: SidecarRequest): AsyncIterable<StreamEvent> {
-    // Snapshot: the loop mutates `req.messages` in place between calls, so
-    // holding the reference would show every request the final conversation.
     this.requests.push(structuredClone(req));
     const turn = this.turns[this.next++] ?? { kind: "text" as const, text: "(exhausted)" };
 
@@ -109,17 +86,6 @@ class FakeProvider implements SidecarProvider {
   }
 }
 
-/**
- * A tool phase that answers every call, optionally slowly.
- *
- * `delays` keyed by tool name lets a round's results land out of the order the
- * model asked for them, which is the only way to prove the loop reorders.
- *
- * `order` interleaves recorded turns and dispatched tools, because the
- * relationship between the two is a real invariant: the generated-image side
- * channel hangs its ref off the assistant turn that asked for the tool, so a
- * turn recorded after its tools dispatched would have nothing to attach to.
- */
 function fakePhase(
   opts: {
     output?: (name: string) => string;
@@ -198,7 +164,6 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
 
     const events = await collect(genericToolLoopEvents(provider, request(), tools.phase));
 
-    // One start, one done, no matter how many calls happened.
     expect(typesOf(events).filter((t) => t === "start")).toEqual(["start"]);
     expect(typesOf(events).filter((t) => t === "done")).toEqual(["done"]);
     expect(provider.requests.length).toBe(2);
@@ -211,7 +176,6 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
     if (done?.type !== "done") throw new Error("unreachable");
     expect(done.content).toBe("the file says hello");
     expect(done.finish_reason).toBe("end_turn");
-    // Summed across both calls.
     expect(done.usage.input_tokens).toBe(USAGE.input_tokens * 2);
     expect(done.usage.output_tokens).toBe(USAGE.output_tokens * 2);
   });
@@ -233,8 +197,6 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
       true,
       true,
     ]);
-    // Each row carries one call's usage, not the running sum — a summed row is
-    // the shape that misreports the cache.
     for (const c of completes) {
       if (c.type !== "call_complete") throw new Error("unreachable");
       expect(c.usage.input_tokens).toBe(USAGE.input_tokens);
@@ -252,7 +214,6 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
     const done = events.at(-1);
     if (done?.type !== "done") throw new Error("expected done");
 
-    // Not the whole loop replayed: the first turn's text and tool_use are absent.
     expect(done.content_blocks).toEqual([{ type: "text", text: "the answer" }]);
   });
 
@@ -266,15 +227,11 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
 
     await collect(genericToolLoopEvents(provider, req, tools.phase));
 
-    // The second request the provider saw: original user turn, the assistant
-    // turn that asked, then the results.
     const second = provider.requests[1];
     expect(second?.messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
     expect(second?.messages[2]?.content).toEqual([
       { type: "tool_result", tool_use_id: "tu_1", content: "ran read", is_error: false },
     ]);
-    // And the caller's own request object ends up holding the same thing —
-    // this is what keeps `last_request` equal to what actually went out.
     expect(req.messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
   });
 
@@ -287,15 +244,11 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
 
     await collect(genericToolLoopEvents(provider, request(), tools.phase));
 
-    // Ordering, not just presence: `executeToolUse` hangs a generated image off
-    // the assistant turn that requested the tool, so a turn recorded after the
-    // dispatch would have nothing to attach to.
     expect(tools.order).toEqual(["record:assistant", "run:read", "record:user"]);
     expect(tools.messages[0]?.role).toBe("assistant");
   });
 
   test("a round's results are stored in ask order, not completion order", async () => {
-    // `read` finishes last despite being asked for first.
     const tools = fakePhase({ delays: { read: 40 } });
     const provider = new FakeProvider([
       {
@@ -311,7 +264,6 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
 
     await collect(genericToolLoopEvents(provider, req, tools.phase));
 
-    // The race actually happened, otherwise this proves nothing.
     expect(tools.completionOrder).toEqual(["grep", "read"]);
 
     const results = req.messages[2]?.content;
@@ -331,11 +283,6 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
 
     const events = await collect(genericToolLoopEvents(provider, req, tools.phase));
 
-    // There is no second failure channel any more. Over the socket, a call the
-    // daemon could not attempt ended the turn without telling the model — a
-    // distinction that only existed because there was a transport that could
-    // fail separately from the tool. In one process every tool answers, and a
-    // failure answers with `is_error`.
     expect(req.messages[2]?.content).toEqual([
       { type: "tool_result", tool_use_id: "tu_1", content: "ran read", is_error: true },
     ]);
@@ -354,7 +301,6 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
     const last = events.at(-1);
     if (last?.type !== "error") throw new Error("expected error");
     expect(last.message).toBe("upstream exploded");
-    // The first call's usage plus the partial the failing call reported.
     expect(last.usage.input_tokens).toBe(USAGE.input_tokens * 2);
   });
 
@@ -370,8 +316,6 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
       genericToolLoopEvents(provider, request({ max_tool_iterations: 1 }), tools.phase),
     );
 
-    // One dispatch round, then a closing call. `stopWhen: stepCountIs(1)` would
-    // have made one call and handed the user a tool request as their reply.
     expect(tools.runs.length).toBe(1);
     expect(provider.requests.length).toBe(2);
   });
@@ -406,9 +350,6 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
 
     await collect(genericToolLoopEvents(provider, request(), tools.phase));
 
-    // DeepSeek and Kimi hard-require prior-turn reasoning across a tool loop,
-    // and the carriers are what the adapters replay from. Dropping any of them
-    // when rebuilding the turn is silent — the model just gets worse.
     const appended = provider.requests[1]?.messages[1];
     expect(appended?.role).toBe("assistant");
     expect(appended?.content[0]).toEqual({
@@ -417,7 +358,6 @@ describe("driving a tool loop for a non-Anthropic dialect", () => {
       signature: "sig_1",
       reasoning_content: "raw chain",
     });
-    // Canonical order: thinking, then the tools it asked for.
     expect(appended?.content[1]).toEqual({
       type: "tool_use",
       id: "tu_1",

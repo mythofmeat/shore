@@ -1,11 +1,3 @@
-/**
- * OpenRouter stream-mapping tests. Drive `openRouterStreamEvents` with hand-built
- * chunks + a fake clock. Pins the contract ordering — `start` first; a single
- * `thinking_signature` (the opaque reasoning_details carrier) emitted at the
- * close of the thinking run, before any text/tool_use; consolidated `tool_use`;
- * `done` last — plus usage/cost extraction.
- */
-
 import { describe, expect, test } from "bun:test";
 import type { ChatStreamChunk } from "@openrouter/sdk/models";
 
@@ -42,8 +34,6 @@ describe("openRouterStreamEvents", () => {
     expect(types(out)).toEqual(["start", "thinking", "reasoning_details", "text", "tool_use", "done"]);
     expect(out[1]).toEqual({ type: "thinking", text: "thinking..." });
 
-    // Its own event, carrying the array as-is — not a prefixed string on the
-    // signature slot.
     expect(out[2]).toEqual({ type: "reasoning_details", details });
 
     expect(out[4]).toEqual({ type: "tool_use", id: "tc_1", name: "search", input: { q: "x" } });

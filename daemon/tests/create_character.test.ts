@@ -1,13 +1,3 @@
-/**
- * `create_character`, which the CLI used to do for itself.
- *
- * It scaffolded into the *client's* config directory, so pointing SHORE_ADDR at
- * a daemon with a different config dir created the character in the wrong
- * place — silently, with a success message naming a path the daemon would never
- * read. The scaffolding lives here now, and these tests pin the directory it
- * lands in as well as what it writes.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readFile, writeFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -82,10 +72,6 @@ describe("what the scaffold contains", () => {
   });
 
   test("AGENTS.md is a copy of the built-in system prompt, taken at scaffold time", async () => {
-    // AGENTS.md *replaces* the built-in template rather than adding to it, so a
-    // placeholder here would silently become the whole system prompt. A copy
-    // means a new character starts from the current default and an existing one
-    // never moves when that default does.
     const config = await tempRoot();
     const out = (await createCharacter(config, { name: "ada" })) as Created;
 
@@ -95,8 +81,6 @@ describe("what the scaffold contains", () => {
   });
 
   test("USER.md and TOOLS.md are empty, so an unedited scaffold adds nothing", async () => {
-    // Both are additive blocks. Anything in them — including an explanatory
-    // comment — would be handed to the model verbatim on the first turn.
     const config = await tempRoot();
     const dataDir = await tempRoot();
     const out = (await createCharacter(config, { name: "ada" })) as Created;

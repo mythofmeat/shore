@@ -1,13 +1,3 @@
-/**
- * Recorded cases for ledger budget.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { Database } from "bun:sqlite";
 import { copyFileSync } from "node:fs";
 import { afterAll, expect, test } from "bun:test";
@@ -42,8 +32,6 @@ const doc = fixture as unknown as {
 };
 
 const opts = { localZone: doc.timezone };
-
-// ── The configs, mirroring `configs()` in the deleted port's budget tests ───────────────────
 
 const budget = (
   name: string,
@@ -80,21 +68,18 @@ const filtered: UsageBudgetConfig = {
   limit: "warn",
 };
 
-/** Over limit, pausing only background work. */
 const backgroundPause: UsageBudgetConfig = {
   ...budget("aria-background", "month", 2.0),
   character: "aria",
   limit: "pause_background",
 };
 
-/** Spend lands exactly on the limit — the `>=` boundary. */
 const exactLimit: UsageBudgetConfig = {
   ...budget("kai-exact", "month", 0.4),
   character: "kai",
   limit: "block",
 };
 
-/** Matches only calls with no configured key name. */
 const unknownKey: UsageBudgetConfig = {
   ...budget("unknown-key", "month", 0.5),
   api_key: "unknown",
@@ -131,7 +116,6 @@ const CONFIGS: Record<string, UsageConfig> = {
   },
 };
 
-/** The call contexts, mirroring `calls()` in the deleted port's budget tests. */
 const CALLS: Record<string, BudgetCallContext> = {
   foreground_aria: {
     provider: "anthropic",
@@ -174,7 +158,6 @@ const CALLS: Record<string, BudgetCallContext> = {
     call_type: "message",
     character: "aria",
   },
-  // No key name, which `budgetMatchesCall` reads as "unknown".
   no_key_name: {
     provider: "anthropic",
     model: "claude-opus-4-6",
@@ -183,8 +166,6 @@ const CALLS: Record<string, BudgetCallContext> = {
   },
 };
 
-// ── Ledger plumbing ──────────────────────────────────────────────────────────
-
 const cleanups: Array<() => void> = [];
 afterAll(() => {
   for (const c of cleanups) c();
@@ -192,17 +173,10 @@ afterAll(() => {
 
 let template: string | undefined;
 
-/** A fresh copy of a daemon-made ledger, seeded with the fixture's rows.
- *
- *  One per case, because `newlyCrossedBudgetWarnings` writes dedup rows — a
- *  shared ledger would make each case depend on the ones before it, which is
- *  exactly the coupling the Rust generator avoids. Booting the daemon 21 times
- *  would be slow, so it boots once for the schema and each case copies the file. */
 function caseLedger(index: number): Database {
   if (template === undefined) {
     const f = freshLedger();
     cleanups.push(f.cleanup);
-    // Fold the WAL back into the main file so a plain copy carries the schema.
     const db = openLedger(f.path);
     db.run("PRAGMA wal_checkpoint(TRUNCATE)");
     db.close();
@@ -259,15 +233,9 @@ test("the recorded budget cases still hold outside the changed pace policy", () 
       budgetStatuses(db, config!, now, opts).map(withoutChangedPolicy),
       at("statuses"),
     ).toEqual(c.statuses.map(fixtureWithoutPace) as never);
-    // Enforcement before the warning calls, matching the generator: the
-    // warnings write rows, and enforcement reads none of them, but ordering is
-    // kept identical so any hidden coupling shows up as a diff rather than as
-    // a flake.
     for (const [name, call] of Object.entries(CALLS)) {
       const block = enforceBudgetForCall(db, config!, call, now, opts);
       const expected = c.enforce[name]!;
-      // Pace decisions intentionally changed from the frozen Rust fixture.
-      // Direct rollover tests below this suite now own those decisions.
       if (expected.scope === "pace" || block?.scope === "pace") continue;
       if (expected.allowed) {
         expect(block, at(`enforce ${name} (expected allow)`)).toBeUndefined();

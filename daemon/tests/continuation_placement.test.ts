@@ -1,22 +1,3 @@
-/**
- * What the tool loop's placement pass buys over leaving the turn's anchors
- * alone — issue #75, which asked for this to be written down or the second
- * schedule collapsed.
- *
- * It is collapsed. There is one schedule: `applyDefaultPlacement`, used by the
- * initial request and by every continuation. The continuation adds exactly one
- * thing, `clearCacheMarkers`, and it is not an optimisation — the SDK's
- * toolRunner mutates one params object across iterations, so without the clear
- * the markers from round one are still on blocks that round two also marks, and
- * a loop of three rounds sends more than the four cache_control blocks the API
- * accepts.
- *
- * opencode uses a single anchor at the latest user message for the same
- * underlying reason: within one turn that message stays put while the round
- * trips pile up. Shore's anchors move with the array, so the clear is what
- * keeps re-anchoring from accumulating.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import { ANTHROPIC_CACHE_CONTROL_LIMIT } from "../src/cache/forensics.ts";

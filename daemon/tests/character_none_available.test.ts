@@ -1,17 +1,3 @@
-/**
- * The message a fresh install sees first (#41).
- *
- * `no characters available` is what every command answers before a character
- * exists, so its path is the one piece of a new user's setup that has to be
- * unambiguous. The Rust wrote `characters/<name>/workspace/SOUL.md` — relative
- * to the config directory, and saying so nowhere.
- *
- * Not fixture-driven: the frozen captures in `characters.json` and
- * `command_path.json` record the Rust's string, and their replays
- * rewrite it into this shape rather than being edited. This is where the shape
- * itself is pinned.
- */
-
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -62,9 +48,6 @@ describe("CharacterError.noneAvailable", () => {
     );
   });
 
-  // The other half of #41: under a workspace root the old string named a
-  // location that does not exist in that layout at all, so resolving the path
-  // is what makes the message true rather than merely longer.
   test("follows SHORE_WORKSPACE_DIR when one is set", () => {
     const err = CharacterError.noneAvailable("/home/user/.config/shore", "/srv/workspaces");
     expect(err.message).toBe(
@@ -86,8 +69,6 @@ describe("an empty registry", () => {
     );
   });
 
-  // The registry reads the workspace root from the config it is holding *now*,
-  // so the message has to follow a reload rather than a construction-time copy.
   test("follows the workspace root through setGlobalConfig", async () => {
     const root = makeRoot();
     const plain = config(root);

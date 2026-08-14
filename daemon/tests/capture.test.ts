@@ -1,14 +1,3 @@
-/**
- * Recording provider calls into the payload store.
- *
- * The bug this exists for was not a wrong row, it was *no* rows: the port
- * defined `recordCall`, opened the store, logged "call payload store enabled",
- * and never wired a caller. `calls.db` silently stopped growing at the moment
- * the TypeScript daemon took over, so `shore log` had nothing for exactly the
- * window a cache regression needed it. The first test here is the one that
- * would have caught that — everything else pins the row's shape.
- */
-
 import { afterEach, describe, expect, test } from "bun:test";
 
 import {
@@ -68,7 +57,6 @@ function req(overrides: Partial<SidecarRequest> = {}): SidecarRequest {
   };
 }
 
-/** A provider that emits a fixed script, then optionally dies. */
 function fake(events: StreamEvent[], thenThrow = false): SidecarProvider {
   return {
     async *stream() {
@@ -116,7 +104,6 @@ describe("call capture", () => {
 
     const seen = await drain(p.stream(req()));
 
-    // The caller still gets every event — capture is a passthrough.
     expect(seen.map((e) => e.type)).toEqual(["start", "done"]);
 
     expect(store.rows).toHaveLength(1);
@@ -128,8 +115,6 @@ describe("call capture", () => {
     expect(row.rid).toBe("r_1");
     expect(row.finish_reason).toBe("end_turn");
     expect(row.error).toBeNull();
-    // The store indexes three of the four counts; `cache_creation` is the
-    // ledger's business, not this one's.
     expect(row.usage).toEqual({ input_tokens: 11, output_tokens: 22, cache_read_tokens: 33 });
   });
 
@@ -151,20 +136,14 @@ describe("call capture", () => {
     await drain(p.stream(req()));
 
     const body = JSON.parse(store.rows[0]!.request_body) as Record<string, unknown>;
-    // `calls.db` outlives the key and gets read by `shore log`, `shore diff`
-    // and anyone the file is handed to. The field stays, so the row's shape
-    // does not move and two calls made under different keys do not diff.
     expect(body["api_key"]).toBe(REDACTED);
     expect(store.rows[0]!.request_body).not.toContain("sk-ant-super-secret");
-    // `context` carries the resolved `[usage]` budget config and never reaches
-    // a provider; its useful fields are already the row's own columns.
     expect(body["context"]).toBeUndefined();
     expect(body["model"]).toBe("claude-opus-4-6");
   });
 
   test("a stream that throws still records, with what it had", async () => {
     const store = recorder();
-    // Two events land, then the provider dies before the terminal `done`.
     const p = withCallCapture(
       fake(
         [
@@ -181,8 +160,6 @@ describe("call capture", () => {
     expect(store.rows).toHaveLength(1);
     const row = store.rows[0]!;
     expect(row.error).toBe("upstream exploded");
-    // A partial stream is still evidence — the events that did arrive are kept,
-    // and the usage already billed is not reported as zero.
     expect((row.response_body ?? "").split("\n")).toHaveLength(2);
     expect(row.usage.cache_read_tokens).toBe(33);
     expect(row.finish_reason).toBe("tool_use");
@@ -245,10 +222,6 @@ describe("call capture", () => {
   });
 
   test("the row survives a real store and reads back through `shore log`", async () => {
-    // The stub above pins what capture *builds*; this pins that the store
-    // actually takes it. A shape the store rejects would fail only at runtime,
-    // and — because capture swallows its own errors so a call never dies for a
-    // diagnostic — it would fail exactly as silently as the missing wiring did.
     const store = CallStore.openInMemory();
     try {
       const p = withCallCapture(fake([{ type: "start", model: "m" }, DONE]), store);

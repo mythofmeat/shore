@@ -1,13 +1,3 @@
-/**
- * Recorded cases for merge.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import { mergeToolLoopMessages } from "../src/engine/merge";
@@ -21,18 +11,10 @@ interface MergeCase {
   expect: Message[];
 }
 
-/**
- * Rust omits empty/absent fields on the wire, so a fixture message may arrive
- * without `images` or `content_blocks`. `Message::normalize` is what fills them
- * in on load; this stands in for it, and only for the two array fields the
- * merge actually reads.
- */
 function hydrate(m: Message): Message {
   return { ...m, images: m.images ?? [], content_blocks: m.content_blocks ?? [] };
 }
 
-/** Compare the way the wire does: an absent field and an undefined one are the
- *  same thing, so strip undefineds before matching. */
 function wire(m: Message): unknown {
   return JSON.parse(JSON.stringify(m));
 }
@@ -56,9 +38,6 @@ describe("merge parity", () => {
 });
 
 describe("the two asymmetries, stated on their own", () => {
-  // Both fall out of the closing message being appended raw rather than through
-  // `collectRound`. They are pinned inside the fixture too; these say what they
-  // are, so a future reader meets the intent and not just a block count.
   const loop = (closing: Message["content_blocks"]): Message[] => [
     {
       msg_id: "a1",
@@ -89,7 +68,6 @@ describe("the two asymmetries, stated on their own", () => {
   test("a whitespace-only text block survives only in the closing message", () => {
     const merged = mergeToolLoopMessages(loop([{ type: "text", text: "   " }]));
     expect(merged[0]!.content_blocks.filter((b) => b.type === "text")).toHaveLength(1);
-    // It contributes nothing to `content`, which trims and drops empties.
     expect(merged[0]!.content).toBe("");
   });
 
@@ -98,7 +76,6 @@ describe("the two asymmetries, stated on their own", () => {
       loop([{ type: "tool_use", id: "t2", name: "read", input: {} }]),
     );
     const kinds = merged[0]!.content_blocks.map((b) => b.type);
-    // t1 paired inside the loop; t2 appended alone.
     expect(kinds).toEqual(["tool_use", "tool_result", "tool_use"]);
   });
 });

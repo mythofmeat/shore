@@ -1,13 +1,3 @@
-/**
- * Recorded cases for compact command.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -35,8 +25,6 @@ import {
 import { CommandError } from "../src/commands/errors.ts";
 import { testTmp } from "./support/tmp.ts";
 
-// ── harness ─────────────────────────────────────────────────────────────
-
 const SEEDED = [
   ["m_1", "user", "first question"],
   ["m_2", "assistant", "first answer"],
@@ -58,15 +46,6 @@ interface World {
   charDataDir: string;
 }
 
-/**
- * The generator's world: one character, a workspace with a `SOUL.md`, and
- * `messages` on disk.
- *
- * `run` is deliberately unusable. Every case in this file is meant to answer
- * before a pass could start, so a case that reaches the assembly fails loudly
- * rather than making a provider call — which is what "the guard comes first"
- * has to mean to be worth recording.
- */
 async function world(messages: unknown[]): Promise<World> {
   const root = await mkdtemp(testTmp("shore-compact-"));
   const dirs = {
@@ -117,7 +96,6 @@ async function world(messages: unknown[]): Promise<World> {
   };
 }
 
-/** The character's data directory, with autonomy's own file filtered out. */
 async function listing(dir: string): Promise<string[]> {
   const entries = await readdir(dir, { withFileTypes: true });
   return entries
@@ -126,7 +104,6 @@ async function listing(dir: string): Promise<string[]> {
     .sort();
 }
 
-/** The thrown `CommandError` as the fixture recorded a refusal. */
 async function refusal(call: () => Promise<unknown>): Promise<Record<string, unknown>> {
   try {
     const data = await call();
@@ -137,29 +114,21 @@ async function refusal(call: () => Promise<unknown>): Promise<Record<string, unk
   }
 }
 
-// ── 1. the argument parse ───────────────────────────────────────────────
-
 describe("parseCompactArgs", () => {
   for (const c of fixture.parse_args) {
     test(c.note, () => {
       const got = parseCompactArgs(c.args as Record<string, unknown>);
       expect(got.dryRun).toBe(c.dry_run);
-      // `null` in the fixture is serde's `Option::None`: absent and rejected
-      // are the same answer, which is the point of recording the rejections.
       expect(got.keepTurnsOverride).toBe((c.keep_turns ?? undefined) as never);
     });
   }
 });
-
-// ── 2. the two guards ───────────────────────────────────────────────────
 
 describe("the refusals compact makes before the assembly", () => {
   for (const c of fixture.guards) {
     test(c.note, async () => {
       const w = await world(c.messages === 0 ? [] : SEEDED);
 
-      // The generator's fourth case calls twice: the first call is what proves
-      // the slot is given back, so the recorded answer is the second one's.
       const twice = c.note.startsWith("a second call");
       const held = c.guard_held ? tryBeginCompaction(w.config.dirs.data, "ada") : undefined;
       expect(c.guard_held).toBe(held !== undefined);
@@ -173,18 +142,6 @@ describe("the refusals compact makes before the assembly", () => {
   }
 });
 
-// ── 3. the error mapping ────────────────────────────────────────────────
-
-/**
- * Which constructor produces each recorded message.
- *
- * `parse` has none. `parse_compaction_response` was the only thing in the Rust
- * that ever built a `CompactionError::Parse`, and it went with the XML parser,
- * so there is no code path on this side that can reach that arm. The case stays
- * in the fixture as the record of what the Rust answered, and the assertion it
- * gets here is the one that is still true: anything that is not
- * `insufficient_messages` or `busy` is an internal error.
- */
 const CONSTRUCTORS: Record<string, ((detail: string) => CompactionError) | undefined> = {
   "llm: ": (d) => CompactionError.llm(d),
   "conversation: ": (d) => CompactionError.conversationManager(d),
@@ -203,12 +160,9 @@ describe("compactionError", () => {
             : CONSTRUCTORS[prefix]?.(c.message.slice(prefix.length));
 
       if (built === undefined) {
-        // The `parse` case: no constructor, so only the mapping is checkable.
         expect(c.code).toBe("internal_error");
         return;
       }
-      // The message is rebuilt from the detail, so the prefix is under test
-      // rather than copied out of the fixture.
       expect(built.message).toBe(c.message);
       const mapped = compactionError(built);
       expect(mapped.code).toBe(c.code as never);
@@ -229,9 +183,6 @@ describe("compactionError", () => {
   });
 });
 
-// ── 4. the three renderings ─────────────────────────────────────────────
-
-/** The `CompactionOutcome` behind a recorded response. */
 function outcomeFor(data: Record<string, unknown>): CompactionOutcome {
   const n = (k: string): number => data[k] as number;
   const s = (k: string): string[] => data[k] as string[];
@@ -266,9 +217,6 @@ function outcomeFor(data: Record<string, unknown>): CompactionOutcome {
   return {
     kind: "dry_run",
     wouldWriteFiles: n("would_write_files"),
-    // Rebuilt from the recorded previews, expanded back past the truncation
-    // boundary so the truncation is what is under test rather than a copy of
-    // its own answer. See {@link expand}.
     fileOpsPreview: (data["file_ops_preview"] as { path: string; content_preview: string }[]).map(
       (p) => ({ path: p.path, content: expand(p.content_preview) }),
     ),
@@ -282,16 +230,6 @@ function outcomeFor(data: Record<string, unknown>): CompactionOutcome {
   };
 }
 
-/**
- * The content a recorded preview was truncated from.
- *
- * A preview that came back at exactly 200 characters was cut, so the input has
- * to be longer than that or the case tests nothing: feeding the fixture's own
- * answer back in would pass under any truncation length at all, including none.
- * Repeating the last character 50 times restores an over-long input whose first
- * 200 characters are unchanged — which is the only property the assertion
- * needs.
- */
 function expand(preview: string): string {
   const chars = [...preview];
   if (chars.length < 200) return preview;
@@ -312,9 +250,6 @@ describe("buildCompactionResponse", () => {
       expect(got).toEqual(data as never);
       expect(await listing(w.charDataDir)).toEqual(c.data_dir_after);
 
-      // Autonomy is told only by the arm that archived, and it is told the
-      // retained turns rather than the compacted ones — the two differ in the
-      // fixture's full case, which is what makes swapping them a failure.
       expect(w.completed).toEqual(
         data["status"] === "compacted" ? [["ada", data["retained_turns"] as number]] : [],
       );
@@ -349,15 +284,12 @@ describe("buildCompactionResponse", () => {
       code: "internal_error",
       message: "active.jsonl: permission denied",
     });
-    // The queue survives and autonomy is never told: an engine out of step with
-    // the files is worse to edit on top of than to leave alone.
     expect(await listing(w.charDataDir)).toContain("deferred_edits.jsonl");
     expect(w.completed).toEqual([]);
   });
 
   test("a deferred-edit failure only warns; the pass still succeeded", async () => {
     const w = await world(SEEDED);
-    // A config directory that is a file makes the snapshot refresh fail.
     w.ctx.config.dirs.config = join(w.charDataDir, "active.jsonl");
 
     const got = await buildCompactionResponse(w.engine, w.ctx, "ada", outcomeFor({
@@ -376,8 +308,6 @@ describe("buildCompactionResponse", () => {
     expect(w.completed).toEqual([["ada", 2]]);
   });
 });
-
-// ── the kinds, so a new one cannot be added without a mapping ────────────
 
 test("every error kind maps to a code", () => {
   const kinds: CompactionErrorKind[] = [

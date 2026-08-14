@@ -1,11 +1,3 @@
-/**
- * OpenRouter reasoning-parameter tests (issue #164). Pin how `buildCall` maps
- * Shore's reasoning provider-options onto the OpenRouter `reasoning` field:
- *   - reasoning_effort → reasoning.effort (folded to the model's domain)
- *   - thinking_enabled=false (from `reasoning_effort = "off"`) → reasoning.effort
- *     = "none", which disables reasoning even on always-on models.
- */
-
 import { expect, test } from "bun:test";
 
 import { buildCall } from "../src/llm/providers/openrouter.ts";

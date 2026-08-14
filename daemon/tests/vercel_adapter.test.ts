@@ -1,9 +1,3 @@
-/**
- * Vercel AI SDK adapter tests (issue #164) — DeepSeek / Moonshot native path.
- * Pure functions only (no network): provider-option reasoning mapping and
- * canonical-turn → AI SDK `ModelMessage` conversion.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import { buildCall, buildProviderOptions, toUsage, turnToVercel } from "../src/llm/providers/vercel.ts";
@@ -52,7 +46,6 @@ describe("buildProviderOptions", () => {
   test("no reasoning options → undefined", () => {
     expect(buildProviderOptions(req("deepseek"))).toBeUndefined();
     expect(buildProviderOptions(req("moonshot"))).toBeUndefined();
-    // deepseek ignores budget; moonshot ignores effort — each → undefined.
     expect(buildProviderOptions(req("deepseek", { budget_tokens: 4096 }))).toBeUndefined();
     expect(buildProviderOptions(req("moonshot", { reasoning_effort: "high" }))).toBeUndefined();
   });
@@ -143,10 +136,6 @@ describe("buildMessages tool-name causality", () => {
 });
 
 describe("toUsage", () => {
-  // The AI SDK's inputTokens is the TOTAL prompt, inclusive of cache reads.
-  // Our ledger convention is disjoint (input + cache_read + cache_creation),
-  // so input_tokens must carry only the cache-miss remainder. Regression for
-  // the DeepSeek overcost: cached tokens were billed at the full input rate.
   test("subtracts cache read/write from inputTokens (disjoint buckets)", () => {
     expect(
       toUsage({

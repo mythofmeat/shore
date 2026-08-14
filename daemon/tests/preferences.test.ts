@@ -1,20 +1,9 @@
-/**
- * Recorded cases for preferences.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import fixture from "./config_fixtures/preferences.json" with { type: "json" };
-
 
 import { catalogFromSections, type ResolvedModel } from "../src/config/models.ts";
 import {
@@ -55,8 +44,6 @@ import {
   findEffectiveModel,
   listEffectiveModels,
 } from "../src/config/effective_catalog.ts";
-
-// ── fixture shapes ───────────────────────────────────────────────────────────
 
 interface GlobRow {
   pattern: string;
@@ -140,8 +127,6 @@ const fx = fixture as unknown as {
   background_model: BackgroundRow[];
 };
 
-// ── temp dirs ────────────────────────────────────────────────────────────────
-
 const roots: string[] = [];
 function tempRoot(): string {
   const dir = mkdtempSync(join(tmpdir(), "prefs-parity-"));
@@ -152,15 +137,11 @@ afterAll(() => {
   for (const dir of roots) rmSync(dir, { recursive: true, force: true });
 });
 
-// ── helpers ──────────────────────────────────────────────────────────────────
-
 function parseToml(text: string): Record<string, unknown> | undefined {
   if (text.trim() === "") return undefined;
   return Bun.TOML.parse(text) as Record<string, unknown>;
 }
 
-/** The Rust `Serialize` writes every absent field as `null`; the port omits
- *  them, so normalize to the Rust shape before comparing. */
 function samplerToWire(s: SamplerSettings): Record<string, unknown> {
   return {
     temperature: s.temperature ?? null,
@@ -220,25 +201,12 @@ function prefsToWire(p: ModelPreferences): Record<string, unknown> {
   };
 }
 
-/**
- * The semantic tail of a Rust error message.
- *
- * A `toml::de::Error` renders as a multi-line diagnostic — `TOML parse error
- * at line N, column M`, a source excerpt, a caret rule, then the actual
- * message. Only that last line is written by Shore (or by serde); the frame
- * around it is the TOML crate's presentation, and reproducing it would be
- * pinning a foreign library's formatting rather than this port's behaviour.
- */
 function semanticTail(message: string): string {
   const lines = message.split("\n").filter((l) => l.trim() !== "");
   const last = lines[lines.length - 1] as string;
-  // Rust's diagnostic frame pushes the real message onto its own final line,
-  // so the `failed to parse <path>: ` prefix is already gone by then; the
-  // port's single-line message still carries it. Strip it from both.
   return last.replace(/^failed to parse .*?: /, "");
 }
 
-/** Rust's `{:?}` for `SamplerScopes`, as a field → scope map. */
 function parseScopes(debug: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [, field, scope] of debug.matchAll(/(\w+): Some\((\w+)\)/g)) {
@@ -313,9 +281,6 @@ function catchError<T extends Error>(ctor: new (...args: never[]) => T, fn: () =
   throw new Error(`expected a ${ctor.name}`);
 }
 
-
-// ── glob and visibility ──────────────────────────────────────────────────────
-
 describe("globMatches", () => {
   for (const row of fx.glob) {
     test(`${JSON.stringify(row.pattern)} vs ${JSON.stringify(row.input)}`, () => {
@@ -324,12 +289,6 @@ describe("globMatches", () => {
   }
 
   test("the length guard counts bytes, not UTF-16 units", () => {
-    // `ab*` against `é`: the Rust compares `first.len() + last.len()` (2 bytes)
-    // against `s.len()` (2 bytes for é in UTF-8) — but `starts_with` already
-    // failed. The case that matters is a pattern whose literal edges are
-    // longer in UTF-16 terms than the subject looks: counting UTF-16 units
-    // would make `edge_len > s.len()` fire where the Rust's byte count does
-    // not.
     expect(globMatches("*", "🎵")).toBe(true);
     expect("🎵".length).toBe(2);
     expect(Buffer.from("🎵", "utf8").length).toBe(4);
@@ -354,8 +313,6 @@ describe("isVisible", () => {
   });
 });
 
-// ── provider registry ────────────────────────────────────────────────────────
-
 describe("ProviderRegistry.fromSection", () => {
   for (const row of fx.registry) {
     test(row.name, () => {
@@ -376,8 +333,6 @@ describe("ProviderRegistry.fromSection", () => {
         expect(got.enabled).toBe(want["enabled"] as boolean);
         expect(got.sdk ?? null).toBe((want["sdk"] ?? null) as never);
         expect(got.baseUrl ?? null).toBe((want["base_url"] ?? null) as never);
-        // The compact form is folded into `keys` at parse time and must not
-        // survive on the entry.
         expect(got.apiKeyEnv).toBeUndefined();
         expect(want["api_key_env"]).toBeNull();
         expect(
@@ -399,9 +354,6 @@ describe("ProviderRegistry.fromSection", () => {
   }
 
   test("entry.enabled defaults true but discovery.enabled defaults false", () => {
-    // The two blocks disagree, and the reason is entirely a serde detail:
-    // `ProviderEntry.enabled` carries `default = "default_provider_enabled"`,
-    // while `ProviderDiscovery` just derives `Default`, giving `false`.
     const registry = ProviderRegistry.fromSection(Bun.TOML.parse("[p]\n[p.discovery]\n") as never);
     const entry = registry.get("p") as ProviderEntry;
     expect(entry.enabled).toBe(true);
@@ -419,8 +371,6 @@ describe("ProviderRegistry.fromSection", () => {
     expect(entry.apiKeyEnv).toBeUndefined();
   });
 });
-
-// ── preference files ─────────────────────────────────────────────────────────
 
 describe("loadPreferences", () => {
   for (const row of fx.preference_files) {
@@ -443,12 +393,6 @@ describe("loadPreferences", () => {
       expect(selectionKey(prefs.selected) ?? null).toBe(row.selected_key ?? null);
       expect(selectionIsSet(prefs.selected)).toBe(row.selected_key != null);
 
-      // `openrouter_provider` is the one value whose TOML rendering the port
-      // does not reproduce: `to_string_pretty` promotes it to its own
-      // sub-table with a multi-line array, which is the crate's presentation
-      // rather than this file's schema. An inline table is written instead —
-      // still valid TOML, still round-tripping, which is what the next
-      // assertion checks.
       const hasNestedValue =
         prefs.defaults.sampler.openrouterProvider !== undefined ||
         [...prefs.models.values()].some((m) => m.sampler.openrouterProvider !== undefined);
@@ -468,24 +412,17 @@ describe("loadPreferences", () => {
   });
 
   test("an empty file still serializes the whole schema", () => {
-    // `to_string_pretty` emits every top-level header so `cat models.toml`
-    // shows the shape even before anything is set.
     expect(serializePreferences(emptyPreferences())).toBe(
       "[selected]\n\n[defaults.sampler]\n\n[models]\n",
     );
   });
 
   test("a float keeps its decimal point", () => {
-    // `temperature = 1` re-reads as a TOML integer, which the Rust `f64` field
-    // rejects — so a round trip through the port would corrupt the file for
-    // the daemon.
     const prefs = emptyPreferences();
     prefs.defaults.sampler.temperature = 1;
     expect(serializePreferences(prefs)).toContain("temperature = 1.0");
   });
 });
-
-// ── resolution ───────────────────────────────────────────────────────────────
 
 describe("resolveSamplerSettings", () => {
   const staticCatalog = catalogFromSections(
@@ -535,17 +472,12 @@ describe("resolveSamplerSettings", () => {
   }
 
   test("an unparseable sdk is dropped from the effective view", () => {
-    // `applySamplerOverlay` would keep the catalog's sdk for a value it cannot
-    // parse. If the inspection path did not drop it too, `shore model setting`
-    // would report an sdk no request will ever use.
     const global = prefsFrom('[defaults.sampler]\nsdk = "nope"\n');
     expect(resolveSamplerSettings(global, undefined, "p", "m", undefined).sdk).toBeUndefined();
     expect(resolveSamplerSettings(global, undefined, "p", "m", undefined)).toEqual({});
   });
 
   test("a zero iteration cap is treated as unset", () => {
-    // Absent already means unlimited. Left intact, `0` reads as "cap reached
-    // before the first round", which silently disables every tool loop.
     const global = prefsFrom("[defaults.sampler]\nmax_tool_iterations = 0\n");
     expect(
       resolveSamplerSettings(global, undefined, "p", "m", undefined).maxToolIterations,
@@ -567,9 +499,6 @@ describe("resolveSamplerSettings", () => {
   });
 
   test("applySamplerOverlay keeps the catalog sdk for an unparseable one", () => {
-    // `resolveSamplerSettings` strips a bad sdk before it gets here, so this
-    // guard is only reachable by calling the overlay directly — which the
-    // request path does, with settings that did not come through sanitization.
     const catalog = catalogFromSections(
       Bun.TOML.parse(STATIC_CHAT) as Record<string, unknown>,
       undefined,
@@ -581,9 +510,6 @@ describe("resolveSamplerSettings", () => {
   });
 
   test('reasoning_effort "off" survives the overlay', () => {
-    // It is the explicit-disable sentinel, not an absence: the request builder
-    // turns it into an explicit thinking-off signal, which is the only thing
-    // that stops an always-on reasoning model from reasoning.
     const catalog = catalogFromSections(
       Bun.TOML.parse(STATIC_CHAT) as Record<string, unknown>,
       undefined,
@@ -601,8 +527,6 @@ describe("preferenceKey", () => {
     });
   }
 });
-
-// ── effective catalog ────────────────────────────────────────────────────────
 
 describe("findEffectiveModel", () => {
   for (const row of fx.effective_catalog) {
@@ -641,9 +565,6 @@ describe("findEffectiveModel", () => {
   }
 
   test("a disabled provider hides its static entries too", () => {
-    // The gate runs before the static-by-upstream check, so disabling a
-    // provider makes it uniformly unreferenceable — but the short-name path
-    // never consults the registry, so `opus` still resolves.
     const root = tempRoot();
     mkdirSync(join(root, "cache"), { recursive: true });
     const config = buildConfig(
@@ -664,7 +585,6 @@ describe("findEffectiveModel", () => {
     writeFileSync(join(cacheDir, "providers", "openrouter", "models.json"), "{ not json");
     const config = buildConfig("", "[openrouter]\n[openrouter.discovery]\nenabled = true\n", root);
 
-    // Falls through to the trusted path rather than throwing.
     expect(findEffectiveModel(config, cacheDir, "openrouter:some/model", false).modelId).toBe(
       "some/model",
     );
@@ -672,8 +592,6 @@ describe("findEffectiveModel", () => {
   });
 
   test("the canonical identity round-trips back through the lookup", () => {
-    // A discovered model's `qualified_name` is `provider:model_id`, unlike the
-    // retired `chat.<provider>.<model>` form, so feeding it back in resolves.
     const root = tempRoot();
     mkdirSync(join(root, "cache"), { recursive: true });
     const config = buildConfig("", "[openrouter]\n", root);
@@ -682,8 +600,6 @@ describe("findEffectiveModel", () => {
     expect(modelToWire(again)).toEqual(modelToWire(first));
   });
 });
-
-// ── active model chain ───────────────────────────────────────────────────────
 
 describe("resolveActiveForCharacter", () => {
   for (const row of fx.active_model) {
@@ -814,9 +730,6 @@ describe("resolveBackgroundModel", () => {
         join(root, "data", "ashe", "preferences", "models.toml"),
         row.character_prefs,
       );
-      // Step 3 of the chain — the legacy runtime-state file — is only
-      // reachable when it exists on disk, so the generator plants it for the
-      // matching case and this mirrors that.
       if (row.name.includes("legacy")) {
         writeFileSync(
           join(root, "data", "ashe", "runtime_state.json"),
@@ -855,9 +768,6 @@ describe("resolveBackgroundModel", () => {
   }
 
   test("the per-character overlay reaches the background model", () => {
-    // This is the bug the helper exists for: every background site used to
-    // re-implement the chain, and a missing overlay silently capped responses
-    // at the catalog default, truncating compaction output mid-element.
     const root = tempRoot();
     mkdirSync(join(root, "cache"), { recursive: true });
     mkdirSync(join(root, "data", "ashe", "preferences"), { recursive: true });

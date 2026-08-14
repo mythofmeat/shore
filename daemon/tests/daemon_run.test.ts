@@ -1,26 +1,3 @@
-/**
- * The daemon, started for real.
- *
- * A real socket, real directories, a real instance registry file. Almost
- * nothing in `run.ts` is a computation, so what is asserted here is the *order*
- * — and every one of these is silent when it is wrong:
- *
- * - **The registry records the resolved port.** `--addr 127.0.0.1:0` asks the
- *   kernel to choose. A daemon that wrote back what it was asked for would put
- *   a literal `:0` in `instances.json` and send every discovery client to a
- *   port nobody opened.
- * - **The handshake answers from the character registry.** Wire it to the
- *   wrong thing and a client still connects, still gets a frame, and sees one
- *   character called `default`.
- * - **The handler starts before the server serves.** Reverse them and a client
- *   that hand-shakes fast enough is answered by nobody, forever.
- * - **A history change reaches connected clients.** The engine's listener is
- *   the server's broadcast. Miss it and the conversation still persists; it
- *   just stops appearing until something reconnects.
- * - **A refused bind opens nothing and registers nothing.** The remote-access
- *   policy is only worth anything if it runs before the socket does.
- */
-
 import { afterEach, describe, expect, test } from "bun:test";
 import { connect, createServer, type Socket } from "node:net";
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
@@ -41,16 +18,7 @@ import { StartupError } from "../src/daemon/startup.ts";
 import type { InstanceInfo } from "../src/daemon/instances.ts";
 import type { SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 
-/** Every daemon a test started, stopped after it whatever happened. */
 const running: RunningDaemon[] = [];
-/**
- * Every temp root, removed after it.
- *
- * Not tidiness: a mutation harness runs this whole suite once per mutant, so a
- * root left behind is multiplied by the mutant count. `/tmp` is a tmpfs with a
- * fixed inode budget, and exhausting it fails every test in the repository
- * with `ENOSPC` — which looks nothing like the leak that caused it.
- */
 const roots: string[] = [];
 
 afterEach(async () => {
@@ -61,7 +29,6 @@ afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 
-/** The shared secret this file's daemon and clients both use. */
 const TEST_TOKEN = "test-token";
 
 interface Layout {
@@ -71,14 +38,6 @@ interface Layout {
   env: NodeJS.ProcessEnv;
 }
 
-/**
- * A config directory with `characters/<name>/` on disk, and XDG pointed at it.
- *
- * The file is `shore.toml` rather than `config.toml` on purpose. `--config`
- * re-homes the config directory to the file's parent, so with the usual name
- * the path the daemon was *given* and the path it would *guess* are the same
- * string — and a runtime that guessed would pass unnoticed.
- */
 async function layout(config = "", characters: readonly string[] = ["ada"]): Promise<Layout> {
   const root = await mkdtemp(join(tmpdir(), "shore-daemon-"));
   roots.push(root);
@@ -102,10 +61,6 @@ async function layout(config = "", characters: readonly string[] = ["ada"]): Pro
       XDG_RUNTIME_DIR: join(root, "runtime"),
       HOME: root,
       SHORE_TEST_KEY: "sk-test",
-      // Supplied rather than left to be generated, so the client below can
-      // present the same value without reading the daemon's config directory.
-      // This is the deployment shape too: one secret in the environment, given
-      // to the daemon and its clients alike.
       SHORE_TOKEN: TEST_TOKEN,
     },
   };
@@ -126,12 +81,10 @@ async function start(
   return daemon;
 }
 
-/** A config naming a model this test can answer for. */
 const MODEL_CONFIG =
   `[defaults]\nmodel = "anthropic:claude-opus-4-8"\n\n` +
   `[providers.anthropic]\napi_key_env = "SHORE_TEST_KEY"\n`;
 
-/** One assistant turn, streamed. */
 function scriptedProvider(text: string): SidecarProvider {
   return {
     async *stream(req: SidecarRequest) {
@@ -160,7 +113,6 @@ async function instances(place: Layout): Promise<InstanceInfo[]> {
   return JSON.parse(await readFile(place.instancesPath, "utf8")) as InstanceInfo[];
 }
 
-/** A connected client that buffers every frame the daemon sends it. */
 class Client {
   readonly frames: Record<string, unknown>[] = [];
   #buffered = "";
@@ -203,7 +155,6 @@ class Client {
     this.socket.write(`${JSON.stringify(message)}\n`);
   }
 
-  /** The first frame of a type, waiting up to `timeoutMs` for one to arrive. */
   async awaitFrame(type: string, timeoutMs = 5_000): Promise<Record<string, unknown>> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
@@ -237,8 +188,6 @@ describe("coming up", () => {
     expect(entry?.addr).toBe(`127.0.0.1:${daemon.port}`);
     expect(entry?.id).toBe(daemon.instanceId);
     expect(entry?.pid).toBe(process.pid);
-    // Carried so a CLI can read the same ledger and the same config.toml
-    // without being told where they are.
     expect(entry?.data_dir).toBe(daemon.runtime.config.dirs.data);
     expect(entry?.config_dir).toBe(join(place.root, "config"));
   });
@@ -255,8 +204,6 @@ describe("coming up", () => {
     const place = await layout();
     const daemon = await start(place);
 
-    // Every reload re-reads exactly this. A daemon that re-resolved XDG on
-    // reload could read a different file than it started from.
     expect(daemon.runtime.configPath).toBe(place.configPath);
   });
 });
@@ -269,7 +216,6 @@ describe("what a client gets", () => {
     try {
       const hello = await client.awaitFrame("hello");
       const names = (hello["characters"] as { name: string }[]).map((c) => c.name);
-      // Not `["default"]`, which is what an unattached handshake answers.
       expect(names.sort()).toEqual(["ada", "nova"]);
     } finally {
       client.close();
@@ -301,9 +247,6 @@ describe("what a client gets", () => {
 
       client.send({ type: "command", name: "switch_character", args: { name: "nova" } });
 
-      // Answered by the same provider the handshake uses. Give the command
-      // path its own and this still replies — with an empty snapshot that
-      // names nobody, and a client rendering the wrong window.
       const history = await client.awaitFrame("history");
       expect(history["selected_character"]).toBe("nova");
     } finally {
@@ -321,15 +264,9 @@ describe("what a client gets", () => {
 
       client.send({ type: "message", text: "hi", stream: true, images: [] });
 
-      // The whole wiring in one assertion: the router resolved the character,
-      // the generation deps reached the provider table, and the frames came
-      // back out over the broadcast this daemon built the runtime with.
       await client.awaitFrame("stream_start");
       const end = await client.awaitFrame("stream_end");
       expect(JSON.stringify(end)).toContain("hello back");
-      // The stream frames go to the issuing session directly; `new_message` is
-      // the *broadcast*, so this is the half that proves the runtime was built
-      // with this server's event channel and not with nothing.
       expect(await client.awaitFrame("new_message")).toBeDefined();
 
       const engine = await daemon.runtime.registry.getOrCreate("ada");
@@ -349,10 +286,6 @@ describe("what a client gets", () => {
       client.send({ type: "message", text: "hi", stream: true, images: [] });
       await client.awaitFrame("stream_end");
 
-      // `run.ts` built the generation deps from its own `options.providers`
-      // while the runtime wrapped a *separate* copy for the call store. The
-      // conversation persisted either way; `calls.db` just stayed empty, which
-      // is invisible until the day a cache regression needs the payloads.
       const store = daemon.runtime.callStore;
       expect(store).toBeDefined();
       expect(store!.callCount()).toBe(1);
@@ -370,8 +303,6 @@ describe("what a client gets", () => {
       await client.awaitFrame("hello");
       client.frames.length = 0;
 
-      // The engine's history listener is this server's broadcast. Unwired, the
-      // message still persists and simply stops appearing.
       const engine = await daemon.runtime.registry.getOrCreate("ada");
       await engine.appendMessage({
         msg_id: "m_test",
@@ -391,7 +322,6 @@ describe("what a client gets", () => {
 });
 
 describe("hot reload", () => {
-  /** Wait for a condition the watcher will bring about, or give up. */
   async function until(check: () => boolean, timeoutMs = 5_000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (!check()) {
@@ -423,9 +353,6 @@ describe("hot reload", () => {
       () => daemon.runtime.registry.globalConfig().app.tools.max_result_chars === 4242,
     );
 
-    // Half-typed TOML reaches the watcher as often as finished TOML does. A
-    // daemon that adopted every intermediate state would spend an edit
-    // flapping between configurations.
     await writeFile(place.configPath, "[tools]\nmax_result_chars = ");
     await new Promise((resolve) => setTimeout(resolve, 900));
 
@@ -440,10 +367,6 @@ describe("hot reload", () => {
       () => daemon.runtime.registry.globalConfig().app.tools.max_result_chars === 4242,
     );
 
-    // `loadConfig` only parses the global file, so an overlay that does not
-    // parse would be discovered later, one character at a time, as a silent
-    // fall back to the global config. Every overlay is checked against the new
-    // global before any of it is committed.
     await writeFile(
       join(place.root, "config", "characters", "ada", "config.toml"),
       "[behavior]\nnot_a_field = ",
@@ -459,10 +382,6 @@ describe("hot reload", () => {
     const daemon = await start(place);
     expect(daemon.runtime.registry.availableCharacters()).toEqual(["ada"]);
 
-    // Staged and renamed in, rather than built in place. A character is only
-    // discovered once its `SOUL.md` exists, and building it in place races the
-    // debounce: the directory is what fires the watcher, and the file that
-    // completes it does not fire anything.
     const staged = join(place.root, "staged", "workspace");
     await mkdir(staged, { recursive: true });
     await writeFile(join(staged, "SOUL.md"), "# nova\n");
@@ -484,8 +403,6 @@ describe("going down", () => {
       daemon.stop();
       await daemon.done;
 
-      // Broadcast before the listener closes, so a client learns the daemon is
-      // going away rather than seeing a bare EOF.
       await client.awaitFrame("shutdown");
       expect(await instances(place)).toEqual([]);
     } finally {
@@ -504,9 +421,6 @@ describe("going down", () => {
     await daemon.done;
     running.length = 0;
 
-    // A call store left open is a SQLite handle and an MCP registry left
-    // connected is a child process; neither shows up as a failure, only as
-    // something still holding a file or a pid after the daemon has "stopped".
     expect(() => store?.rotate(new Date(0), 1)).toThrow();
   });
 
@@ -516,8 +430,6 @@ describe("going down", () => {
 
     await bounded(never, "wedged", { warn: (msg) => warnings.push(msg) }, 20);
 
-    // The sequence is racing whatever is about to SIGKILL the process; the
-    // next step is more likely to matter than this one is to finish.
     expect(warnings).toEqual(["Shutdown step timed out"]);
   });
 
@@ -529,8 +441,6 @@ describe("going down", () => {
     await daemon.done;
     running.length = 0;
 
-    // Rebinding the same port is the only proof the listener really closed;
-    // a daemon that left it open makes the next start fail.
     const probe = createServer();
     await new Promise<void>((resolve, reject) => {
       probe.once("error", reject);
@@ -542,10 +452,6 @@ describe("going down", () => {
 
 describe("refusing to start", () => {
   test("a non-loopback bind is now ordinary, because the token is the boundary", async () => {
-    // This used to be the headline refusal: `0.0.0.0` needed
-    // `unsafe_allow_remote_access` to acknowledge that the protocol had no
-    // authentication. It has one now, so a bind address is just a bind address
-    // and this starts like any other.
     const place = await layout(`
 [daemon]
 addr = "0.0.0.0:0"
@@ -589,8 +495,6 @@ addr = "0.0.0.0:0"
 
     expect((caught as StartupError).kind).toBe("server_run");
     expect((caught as StartupError).message).toContain(`127.0.0.1:${port}`);
-    // Binding first is what keeps this cheap: no ledger, no MCP servers, and
-    // nothing in the registry to clean up.
     expect(existsSync(place.instancesPath)).toBe(false);
   });
 });

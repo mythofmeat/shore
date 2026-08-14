@@ -1,26 +1,3 @@
-/**
- * `resolveActiveModelAndOverlay`: the model a chat turn runs on, and the
- * sampler overlay kept beside it rather than folded in.
- *
- * Ported from `resolve_active_model_and_overlay` in
- * `the deleted port`, which had no Rust test of its own — it
- * was only ever reached through a live `MessageHandler`.
- *
- * **Not fixture-derived, and it does not need to be.** Every step of the chain
- * it runs is already pinned by the frozen `preferences.json`
- * (`resolveActiveForCharacter`, `resolveSamplerSettings`,
- * `applySamplerOverlay`) and by `setup.json` (`resolveGenerationModel`).
- * What is unpinned is the composition: which preferences feed the chain, where
- * the legacy file is read from, and the one argument that makes this function
- * different from {@link resolveChatModelForCharacter}. So that is what is
- * asserted here.
- *
- * The last section is the one that matters most: the split into
- * `(model, overlay)` must not change the model a request ends up with. It is
- * checked by running both variants over the same preferences and demanding the
- * same answer.
- */
-
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -40,8 +17,6 @@ import { resolveGenerationModel } from "../src/handler/setup.ts";
 
 const CHARACTER = "ashe";
 
-/** Two models, one of which carries sampler values of its own — which is what
- *  makes "the catalog's settings stay out of the overlay" observable. */
 const CATALOG = `
 [anthropic.opus]
 model_id = "claude-opus-4-6"
@@ -59,11 +34,8 @@ afterAll(() => {
 
 interface World {
   config: LoadedConfig;
-  /** Write `<data>/preferences/models.toml`. */
   globalPrefs(toml: string): void;
-  /** Write `<data>/<character>/preferences/models.toml`. */
   charPrefs(toml: string): void;
-  /** Write the legacy `<data>/<character>/runtime_state.json`. */
   legacy(model: string): void;
 }
 
@@ -138,8 +110,6 @@ describe("which model", () => {
   });
 
   test("the legacy runtime_state file is still read, from the character's own directory", () => {
-    // Preferences superseded it; it stays as a migration fallback for installs
-    // that have not written preferences yet.
     const w = world({ defaultModel: "opus" });
     w.legacy("sonnet");
 
@@ -160,8 +130,6 @@ describe("which model", () => {
 
   test("an empty catalog resolves to no model and no overlay", () => {
     const w = world({ catalog: "" });
-    // Not an error here: `resolveGenerationModel` is what decides whether a
-    // turn without a model can proceed, and it has its own fallbacks.
     expect(resolve(w)).toEqual({ model: undefined, overlay: {} });
   });
 
@@ -169,7 +137,6 @@ describe("which model", () => {
     const w = world({ defaultModel: "sonnet" });
     w.charPrefs("this is not toml = = =");
 
-    // A file that only holds overrides must not take the character's chat down.
     expect(resolve(w).model?.name).toBe("sonnet");
   });
 });
@@ -215,12 +182,6 @@ describe("the overlay", () => {
   });
 
   test("leaves the catalog's own settings out of it", () => {
-    // The load-bearing difference from `resolveChatModelForCharacter`, which
-    // passes the resolved model as the static default and so gets an overlay
-    // holding the catalog's `temperature`, `max_output_tokens` and `sdk` too.
-    // Those change no field — they are the model's own values, at the lowest
-    // layer, going back onto the model — but they would make the overlay
-    // permanently non-empty, and emptiness is what the next test is about.
     const w = world({ defaultModel: "opus" });
     w.charPrefs("[defaults.sampler]\nmax_tool_iterations = 4\n");
 
@@ -230,11 +191,6 @@ describe("the overlay", () => {
   });
 
   test("an empty overlay leaves the catalog entry itself as the request's model", () => {
-    // `resolveGenerationModel` skips the patch when nothing is set, so the
-    // model a request runs on is the catalog's own object. This is the reason
-    // the static default is left out: `samplerFromResolvedModel` always
-    // contributes `sdk`, so folding it in would make the overlay non-empty
-    // every time, and every turn would copy the entry for nothing.
     const w = world({ defaultModel: "opus" });
 
     const { model, overlay } = resolve(w);
@@ -270,9 +226,6 @@ describe("the split does not change the answer", () => {
       setup(w);
 
       const { model, overlay } = resolve(w);
-      // The heartbeat's variant of the same chain, which merges instead of
-      // splitting. Both must land on the same model, or the cold rebuild it
-      // exists for would miss chat's cache prefix.
       const merged = resolveChatModelForCharacter(
         configView(w.config),
         CHARACTER,

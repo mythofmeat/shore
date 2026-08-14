@@ -1,13 +1,3 @@
-/**
- * Recorded cases for tool handlers.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import fixture from "./tools_fixtures/tool_handlers.json" with { type: "json" };
@@ -52,18 +42,11 @@ describe("parseDiceNotation", () => {
     },
   );
 
-  // Spelled out because they are the three details a rewrite gets wrong, and
-  // the table above would still pass if two of them cancelled out.
-  // `d-6` fails as *sides* `-6` rather than parsing as a modifier, and `d+6`
-  // is a plain `1d6` — because the sides parser accepts the leading `+` that
-  // the modifier scan declined to claim. The two spellings land in different
-  // places for the same reason.
   test("a sign at position 0 belongs to the sides, not the modifier", () => {
     expect(() => parseDiceNotation("d-6")).toThrow("Invalid sides: -6");
     expect(parseDiceNotation("d+6")).toEqual({ count: 1, sides: 6, modifier: 0 });
   });
 
-  // `Number("-0")` is `-0`, a value Rust's `i32` has no spelling for.
   test("a negative zero modifier is plain zero", () => {
     const parsed = parseDiceNotation("2d6-0");
     expect(parsed.modifier).toBe(0);
@@ -73,7 +56,6 @@ describe("parseDiceNotation", () => {
   test("Rust's integer parsers accept a leading + and reject everything else", () => {
     expect(parseDiceNotation("+2d6")).toEqual({ count: 2, sides: 6, modifier: 0 });
     expect(() => parseDiceNotation("-2d6")).toThrow("Invalid dice count: -2");
-    // Number("") is 0 and parseInt("2.5") is 2; both are parse failures here.
     expect(() => parseDiceNotation("2.5d6")).toThrow("Invalid dice count: 2.5");
     expect(() => parseDiceNotation("2d6.5")).toThrow("Invalid sides: 6.5");
   });
@@ -95,8 +77,6 @@ describe("parseDiceNotation", () => {
 });
 
 describe("executeDiceRoll", () => {
-  // The roll is random, so the fixture records invariants and the observed
-  // span rather than values. 500 draws per case, same as the generator.
   test.each(
     fx.execute_dice_roll.map((c): [string, typeof c] => [
       `${c.count}d${c.sides}${c.modifier >= 0 ? "+" : ""}${c.modifier}`,
@@ -120,8 +100,6 @@ describe("executeDiceRoll", () => {
       }
       expect(total).toBe(expected);
     }
-    // The Rust saw the whole range over 500 draws of a die this small; so
-    // should this, which is what stops a constant implementation passing.
     expect(lo).toBe(c.observed_min);
     expect(hi).toBe(c.observed_max);
   });
@@ -137,9 +115,6 @@ describe("handleRollDice", () => {
     expect(() => handleRollDice({})).toThrow(fx.handle_roll_dice["missing_notation"]?.err as string);
   });
 
-  // `as_str()` returns None for a non-string, which lands on the same arm as
-  // an absent key — so a numeric notation reports as *missing*, not as a type
-  // error. Reproduced rather than tidied.
   test("a non-string notation reports as missing", () => {
     expect(() => handleRollDice({ notation: 6 })).toThrow(
       fx.handle_roll_dice["notation_not_a_string"]?.err as string,
@@ -185,7 +160,6 @@ describe("utcBound", () => {
     },
   );
 
-  // The two spellings `Date.toISOString()` gets wrong.
   test("UTC is written +00:00, never Z", () => {
     expect(utcBound({ start_time: "2026-05-13T09:00:00Z" }, "start_time")).toBe(
       "2026-05-13T09:00:00+00:00",
@@ -310,8 +284,6 @@ describe("handleActivityHeatmap", () => {
     expect(asked).toEqual([7, 30]);
   });
 
-  // `.get(h)` with a default in the Rust: a short histogram degrades rather
-  // than failing the tool.
   test("a truncated histogram degrades to zero and normal", () => {
     const stats = statsWith({
       pooledHourHistogram: [0.5],
@@ -367,8 +339,6 @@ describe("handleModelHistory", () => {
     ).rejects.toThrow("invalid args: start_time must be before or equal to end_time");
   });
 
-  // The comparison runs after the UTC rebase, so a range that only looks
-  // reversed in its written offsets is accepted.
   test("the range check runs on the rebased bounds", async () => {
     const out = await handleModelHistory(
       { start_time: "2026-05-13T09:00:00+10:00", end_time: "2026-05-13T00:00:00Z" },
@@ -397,8 +367,6 @@ describe("handleModelHistory", () => {
       last_seen: "2026-05-02T00:00:00+00:00",
       calls: 3,
     });
-    // A row for a deleted feature still classifies rather than throwing: the
-    // ledger keeps historical rows and they do not stop existing.
     expect(out.models[1]?.kind).toBe("background");
   });
 

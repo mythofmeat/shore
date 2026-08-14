@@ -1,13 +1,3 @@
-/**
- * Recorded cases for memory command.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -17,8 +7,6 @@ import fixture from "./commands_fixtures/memory_command.json" with { type: "json
 import { CommandError } from "../src/commands/errors.ts";
 import { memory } from "../src/commands/memory.ts";
 import { testTmp } from "./support/tmp.ts";
-
-// ── fixture shapes ──────────────────────────────────────────────────────
 
 interface Row {
   name: string;
@@ -34,9 +22,6 @@ const row = (section: "status" | "query", name: string): Row => {
   return found;
 };
 
-// ── the tree ────────────────────────────────────────────────────────────
-
-/** A path ending in `/` is a directory; anything else is a file. */
 type Entry = [path: string, text?: string];
 
 async function build(entries: Entry[]): Promise<string> {
@@ -62,10 +47,6 @@ const isDir = async (path: string): Promise<boolean> => {
   }
 };
 
-/**
- * Everything up to and including the last `io: `, which is what the command
- * contributed. The OS text after it is the part the two runtimes disagree on.
- */
 function commandPrefix(message: string): string {
   const at = message.lastIndexOf("io: ");
   return at === -1 ? message : message.slice(0, at + "io: ".length);
@@ -86,17 +67,12 @@ async function check(r: Row, root: string, run: () => Promise<unknown>): Promise
     expect(commandPrefix((thrown as CommandError).message), r.name).toBe(
       commandPrefix(r.err.message),
     );
-    // The recorded rows are all `io:` ones; if that ever stops being true the
-    // comparison above silently becomes a full-message one, which is fine, but
-    // this is what says the OS half was actually elided.
     expect(r.err.message.includes("io: "), r.name).toBe(true);
   } else {
     expect(thrown, r.name).toBeUndefined();
     expect(result, r.name).toEqual(r.ok as never);
   }
 }
-
-// ── shared trees ────────────────────────────────────────────────────────
 
 const furnished = (): Entry[] => [
   [
@@ -126,8 +102,6 @@ const furnished = (): Entry[] => [
 
 const memoryDirOf = (root: string, character: string): string =>
   join(root, "config", "characters", character, "workspace", "memory");
-
-// ── the cases ───────────────────────────────────────────────────────────
 
 type Case = [name: string, active: string, args: Record<string, unknown>, entries: Entry[]];
 
@@ -176,8 +150,6 @@ for (const [section, cases] of [
         const root = await build(entries);
         const r = row(section, name);
         await check(r, root, () => memory(join(root, "config"), active, args));
-        // Opening the store creates the directory, so this is a real side
-        // effect and not a restatement of the tree the case laid down.
         expect(await isDir(memoryDirOf(root, active)), `${name} (memory_dir_after)`).toBe(
           r.memory_dir_after,
         );

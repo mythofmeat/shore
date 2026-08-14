@@ -1,13 +1,3 @@
-/**
- * Recorded cases for app.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import fixture from "./config_fixtures/app.json" with { type: "json" };
@@ -43,17 +33,6 @@ import {
 } from "../src/config/app.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
 
-// ── Canonicalizing to the serde JSON the fixture holds ──────────────────
-
-/**
- * Render a parsed value the way `serde_json::to_value` rendered the Rust one.
- *
- * `ConfigDuration` serializes through its `Display`, `Option::None` becomes
- * `null`, and a `BTreeMap` becomes an object. The map conversion walks the
- * `Map` in *its own* iteration order rather than sorting again — so if the
- * parser built it in the wrong order, {@link mapOrderOf} catches it below
- * instead of this function quietly repairing it.
- */
 function canonical(value: unknown): unknown {
   if (value === undefined) return null;
   if (value instanceof ConfigDuration) return value.toString();
@@ -71,7 +50,6 @@ function canonical(value: unknown): unknown {
   return value;
 }
 
-/** Every map-valued path in a parsed config, as `[label, keys-in-order]`. */
 function mapOrderOf(config: AppConfig): [string, string[]][] {
   const out: [string, string[]][] = [
     ["subagents", [...config.subagents.keys()]],
@@ -88,24 +66,8 @@ function parseToml(src: string): unknown {
   return Bun.TOML.parse(src);
 }
 
-// ── Fields the fixture predates ─────────────────────────────────────────
-
-/**
- * `[daemon]` keys the fixture has and the schema no longer does.
- *
- * `unsafe_allow_remote_access` and `allowed_hosts` were deleted when every
- * client started presenting a token: an address is not a credential, and a flag
- * asking you to acknowledge a risk is worse than not having the risk. The
- * fixture is a frozen capture of a Rust that still had them, and it cannot be
- * regenerated — so the *expectation* is trimmed here, the mirror of what
- * {@link withoutAddedBudgetFields} does for keys the fixture never had.
- *
- * Asserted below to really be present in the fixture, so this cannot quietly
- * start hiding a key that was supposed to survive.
- */
 const DAEMON_FIELDS_REMOVED_SINCE = ["unsafe_allow_remote_access", "allowed_hosts"] as const;
 
-/** The fixture's expected value with the deleted `[daemon]` keys dropped. */
 function withoutRemovedDaemonFields(value: unknown): unknown {
   const daemon = (value as { daemon?: unknown } | null)?.daemon;
   if (typeof daemon !== "object" || daemon === null) return value;
@@ -114,7 +76,6 @@ function withoutRemovedDaemonFields(value: unknown): unknown {
   return { ...(value as object), daemon: copy };
 }
 
-/** Drop `[usage]` fields that no longer exist from the frozen Rust value. */
 function withoutRemovedUsageFields(value: unknown): unknown {
   const usage = (value as { usage?: unknown } | null)?.usage;
   if (typeof usage !== "object" || usage === null) return value;
@@ -125,21 +86,8 @@ function withoutRemovedUsageFields(value: unknown): unknown {
 const withoutRemovedFields = (value: unknown): unknown =>
   withoutRemovedUsageFields(withoutRemovedDaemonFields(value));
 
-/**
- * `[[usage.budgets]]` keys added after the fixture was frozen (#35).
- *
- * The fixture is a capture of a Rust that no longer exists, so it cannot grow
- * a field — and regenerating it is not possible. The technique is the one
- * `tool_surface` used for the frozen export strings: **cut the new keys back
- * out of our own answer before comparing**, so every field the Rust really
- * wrote stays compared literally, and only the additions are exempt.
- *
- * Both are asserted below to be genuinely absent from the fixture, so this
- * cannot quietly start hiding a field the Rust did have.
- */
 const BUDGET_FIELDS_ADDED_SINCE = ["warn_action", "pace_warn_action"] as const;
 
-/** The same value with the added keys dropped from every budget. */
 function withoutAddedBudgetFields(value: unknown): unknown {
   const budgets = (value as { usage?: { budgets?: unknown } } | null)?.usage?.budgets;
   if (!Array.isArray(budgets)) return value;
@@ -156,10 +104,6 @@ function withoutAddedBudgetFields(value: unknown): unknown {
   };
 }
 
-/**
- * The Rust's field count for `UsageBudgetConfig`, which the positional-array
- * error message interpolates and which the added keys move.
- */
 const RUST_BUDGET_FIELD_COUNT = 18;
 
 function withRustBudgetFieldCount(err: string): string {
@@ -169,17 +113,8 @@ function withRustBudgetFieldCount(err: string): string {
   );
 }
 
-/**
- * `[mcp.<name>]` keys added after the fixture was frozen, exactly as
- * {@link BUDGET_FIELDS_ADDED_SINCE} above — same reason, same technique.
- *
- * `headers` carries the bearer token an HTTP MCP server gates `/mcp` behind.
- * The Rust never had it: when this fixture was captured the only HTTP servers
- * anyone pointed shore at were unauthenticated.
- */
 const MCP_FIELDS_ADDED_SINCE = ["headers"] as const;
 
-/** The same value with the added keys dropped from every `[mcp.*]` server. */
 function withoutAddedMcpFields(value: unknown): unknown {
   const mcp = (value as { mcp?: unknown } | null)?.mcp;
   if (mcp === null || typeof mcp !== "object") return value;
@@ -192,19 +127,8 @@ function withoutAddedMcpFields(value: unknown): unknown {
   return { ...(value as object), mcp: servers };
 }
 
-/** The Rust's field count for `McpServerConfig`, moved by the same addition. */
 const RUST_MCP_FIELD_COUNT = 5;
 
-/**
- * The Rust's accepted-field list for `McpServerConfig`, which serde spells out
- * in the `unknown field` error and which the added key extends.
- *
- * Anchored on the two fields `headers` was appended after, rather than
- * replacing the bare `` , `headers` ``: if the struct's declaration order ever
- * changes, this stops matching and the case fails loudly, which is the point.
- * A floating replace would keep passing while the port and the Rust disagreed
- * about what order serde reports.
- */
 function withRustMcpFields(err: string): string {
   return err.replace("`cwd`, `url`, `headers`", "`cwd`, `url`");
 }
@@ -218,20 +142,6 @@ function withRustMcpFieldCount(err: string): string {
   );
 }
 
-/**
- * The two cache keys this schema moved out of `[behavior.autonomy]` and
- * `[advanced]` into a `[cache]` section of their own.
- *
- * Neither is autonomy: the keepalive ceiling bounds what shore spends holding a
- * prompt cache warm, and it applied whether or not autonomy was ever switched
- * on. The fixture is a frozen capture of a Rust that filed them elsewhere, so
- * the *expectation* is rewritten into the new shape here — the same key, the
- * same reader, the same value, reached by a different path. Both sides of the
- * replay get this, so the delta a case's TOML sets is still computed against a
- * matching default.
- *
- * Asserted below to really be present in the fixture.
- */
 const CACHE_KEYS_MOVED_SINCE = {
   keepalive_max: ["behavior", "autonomy", "cache_keepalive_max"],
   forensics: ["advanced", "cache_forensics"],
@@ -260,7 +170,6 @@ function withCacheSectionMoved(value: unknown): unknown {
   };
 }
 
-/** A case's TOML with the keepalive ceiling written at its new path. */
 function tomlWithCacheSectionMoved(src: string): string {
   const assignment = /^cache_keepalive_max = (.+)$/m;
   const match = assignment.exec(src);
@@ -279,18 +188,9 @@ function withoutReintroducedConnectionsFields(value: unknown): unknown {
   return { ...(value as object), connections: copy };
 }
 
-/** Every exemption above, applied in one pass. */
 const withoutAddedFields = (value: unknown): unknown =>
   withoutReintroducedConnectionsFields(withoutAddedMcpFields(withoutAddedBudgetFields(value)));
 
-/**
- * The Rust's accepted-field lists that the `[cache]` move changed, anchored on
- * their neighbours for the same reason {@link withRustMcpFields} is: a list
- * that reorders should fail here, not keep matching a floating replace.
- *
- * `AutonomyConfig` is down to two fields, and serde spells a two-field list
- * `` `a` or `b` `` rather than `one of`.
- */
 function withRustCacheFields(err: string): string {
   return err
     .replace("`memory`, `cache`, `connections`", "`memory`, `connections`")
@@ -303,23 +203,6 @@ function withRustCacheFields(err: string): string {
 const withRustFieldCounts = (err: string): string =>
   withRustCacheFields(withRustMcpFieldCount(withRustBudgetFieldCount(err)));
 
-// ── Cases the TypeScript deliberately cannot match ──────────────────────
-
-/**
- * Cases whose Rust answer depends on something `Bun.TOML.parse` destroys — or
- * refuses — before `app.ts` runs. Each is asserted explicitly below; they are
- * skipped in the bulk replay rather than expected to pass. The fixture header
- * spells out all four categories.
- */
-/**
- * The one case whose Rust answer this schema deliberately no longer gives.
- *
- * Its TOML *sets* `unsafe_allow_remote_access` and `allowed_hosts`, which the
- * Rust parsed and this schema now rejects as unknown fields. Trimming the
- * expectation is not enough and would be dishonest — the outcome changed from
- * a parse to an error, not just its contents. Skipped in the bulk replay and
- * asserted on its own below, where the new behaviour is the subject.
- */
 const DELIBERATELY_DIVERGENT = new Set([
   "the daemon section",
   "the removed matrix connection is rejected",
@@ -337,26 +220,16 @@ const DELIBERATELY_DIVERGENT = new Set([
 ]);
 
 const BUN_CANNOT_SEE = new Set([
-  // Datetime literals: rejected outright by Bun.
   "datetime where a string is expected",
-  // Integer vs float: `20000.0` and `1e3` arrive as plain JS numbers.
   "a float that happens to be whole is still a float",
   "exponent notation is a float too",
-  // u64 past 2^53.
   "u64 fields hold values a double cannot",
-  // Nested array literals: rejected outright by Bun.
   "seq: UsageBudgetConfig, at its minimum",
   "a required field supplied positionally",
 ]);
 
-// ── The fixture itself ──────────────────────────────────────────────────
-
 describe("the fixture is real", () => {
-
   test("the trimmed daemon fields really are ones it had", () => {
-    // The trim above is only honest if the fixture genuinely carries these.
-    // If one ever stops appearing, the replay is hiding a real disagreement
-    // rather than a key this schema deliberately dropped.
     const daemon = (fixture.defaults as { daemon: Record<string, unknown> }).daemon;
     for (const key of DAEMON_FIELDS_REMOVED_SINCE) {
       expect(Object.keys(daemon)).toContain(key);
@@ -369,9 +242,6 @@ describe("the fixture is real", () => {
   });
 
   test("the exempted budget fields really are ones it never had", () => {
-    // The exemption above is only honest if these keys are absent from every
-    // budget the Rust recorded. If one ever appears, the replay is hiding a
-    // real disagreement rather than a field that postdates the capture.
     const text = JSON.stringify(fixture);
     for (const key of BUDGET_FIELDS_ADDED_SINCE) {
       expect(text).not.toContain(`"${key}"`);
@@ -400,9 +270,6 @@ describe("the fixture is real", () => {
   });
 
   test("the moved keys kept the values the Rust defaulted them to", () => {
-    // The replay compares an unset default against itself, so a section the
-    // fixture never had would otherwise pin nothing. These two are read
-    // straight off the recorded defaults instead.
     const recorded = fixture.defaults as {
       behavior: { autonomy: { cache_keepalive_max: string } };
       advanced: { cache_forensics: boolean };
@@ -420,16 +287,12 @@ describe("the fixture is real", () => {
   });
 
   test("it records both parse paths, and they genuinely differ somewhere", () => {
-    // A fixture whose two columns were identical everywhere would pass against
-    // a port that walked the document instead of the table.
     const disagreements = fixture.parse.filter(
       (c) => "doc_err" in c && c.doc_err !== c.table_err,
     );
     expect(disagreements.length).toBeGreaterThan(0);
   });
 });
-
-// ── Defaults ────────────────────────────────────────────────────────────
 
 describe("AppConfig::default", () => {
   test("an empty document parses to exactly the defaults", () => {
@@ -438,8 +301,6 @@ describe("AppConfig::default", () => {
     expect(canonical(parsed.ok)).toEqual(canonical(defaultAppConfig()));
   });
 });
-
-// ── Parsing ─────────────────────────────────────────────────────────────
 
 function expectationFor(want: unknown, toml: string): unknown {
   return replayOntoCurrentDefaults(
@@ -458,9 +319,6 @@ describe("parsing config.toml", () => {
       const toml = tomlWithCacheSectionMoved(c.toml);
       const parsed = parseAppConfig(parseToml(toml));
 
-      // Three fixture shapes, all reduced to "what does the table path say":
-      // `ok` (both paths agreed), `doc_err`/`table_err` (both failed, possibly
-      // differently), and `doc`/`table` (the paths reached different outcomes).
       const want: { ok: unknown } | { err: string } =
         "ok" in c
           ? { ok: c.ok }
@@ -473,9 +331,6 @@ describe("parsing config.toml", () => {
         expect(withRustFieldCounts(parsed.err)).toBe(want.err);
       } else {
         if ("err" in parsed) throw new Error(`expected a parse, got: ${parsed.err}`);
-        // Both directions at once, which is what the two halves of this file
-        // are for: keys the fixture never had come off *our* answer, keys it
-        // had and the schema dropped come off *its* expectation.
         expect(withoutAddedFields(canonical(parsed.ok))).toEqual(
           expectationFor(want.ok, toml),
         );
@@ -484,10 +339,6 @@ describe("parsing config.toml", () => {
   }
 
   test("a config still setting the deleted [daemon] keys is now rejected", () => {
-    // The fixture's `the daemon section` case, asserted as what it became. An
-    // old config does not silently keep an inert key: it fails at load, naming
-    // the key, which is the only way someone learns their allowlist stopped
-    // being consulted. `addr` is all that is left of the section.
     const c = fixture.parse.find((x) => x.name === "the daemon section");
     expect(c).toBeDefined();
 
@@ -497,7 +348,6 @@ describe("parsing config.toml", () => {
       "unknown field `allowed_hosts`, expected `addr`",
     );
 
-    // And the surviving key still parses on its own.
     const ok = parseAppConfig(parseToml(`[daemon]\naddr = "0.0.0.0:9999"\n`));
     if ("err" in ok) throw new Error(ok.err);
     expect(ok.ok.daemon).toEqual({ addr: "0.0.0.0:9999" });
@@ -542,10 +392,6 @@ describe("parsing config.toml", () => {
   });
 
   test("a config still setting the moved cache keys at the old paths is rejected", () => {
-    // Both moved to `[cache]`, and an old config is told so by name rather than
-    // keeping a key nothing reads. The keepalive ceiling is a spend limit, not
-    // an autonomy switch — it bounded what the pings cost whether or not
-    // autonomy was ever enabled.
     const stale = parseAppConfig(parseToml(`[behavior.autonomy]\ncache_keepalive_max = "6h"\n`));
     expect("err" in stale).toBe(true);
     expect((stale as { err: string }).err).toBe(
@@ -563,8 +409,6 @@ describe("parsing config.toml", () => {
   });
 
   test("[behavior.autonomy] lost a positional slot when the ceiling moved out", () => {
-    // The fixture's `a full positional sequence` case: three elements were the
-    // whole struct, and the third was the ceiling.
     const tooLong = parseAppConfig(
       parseToml(`[behavior]\nautonomy = [true, { enabled = false }, "6h"]\n`),
     );
@@ -681,9 +525,6 @@ describe("parsing config.toml", () => {
   });
 
   test("map-valued sections are built in code point order, not document order", () => {
-    // `subagents` and `mcp` decide the order tools reach the model, which is
-    // the head of the prompt cache key. A `Record` built from document order
-    // would pass every value assertion above and still reorder the cache.
     const src =
       '[subagents.zed]\ndescription = "z"\nprompt = "p"\n\n' +
       '[subagents."\u{1F3B5}drum"]\ndescription = "d"\nprompt = "p"\n\n' +
@@ -696,8 +537,6 @@ describe("parsing config.toml", () => {
     if ("err" in parsed) throw new Error(parsed.err);
 
     expect(Object.fromEntries(mapOrderOf(parsed.ok))).toEqual({
-      // `ﬀ` is U+FB00 and `🎵` is U+1F3B5, so code point order puts the
-      // emoji last where a UTF-16 sort would put it first.
       subagents: ["zed", "\u{FB00}ute", "\u{1F3B5}drum"],
       mcp: ["alpha", "zebra"],
       "tools.config": ["abacus", "zoom"],
@@ -708,7 +547,6 @@ describe("parsing config.toml", () => {
 });
 
 describe("the two parse paths, where they disagree", () => {
-  /** A fixture case that failed on *both* paths, with both messages. */
   const caseNamed = (name: string): { toml: string; doc_err: string; table_err: string } => {
     const found = fixture.parse.find((c) => c.name === name);
     if (found === undefined) throw new Error(`fixture case missing: ${name}`);
@@ -735,7 +573,6 @@ describe("the two parse paths, where they disagree", () => {
     const c = caseNamed("an unknown key and a bad type: which is reported depends on the path");
     const parsed = parseAppConfig(parseToml(c.toml));
     if ("ok" in parsed) throw new Error("expected a parse error");
-    // serde descends into `autonomy` first and never reaches `zzz_unknown`.
     expect(parsed.err).toBe('invalid type: string "yes", expected a boolean');
     expect(parsed.err).toBe(c.table_err);
     expect(parsed.err).not.toBe(c.doc_err);
@@ -746,8 +583,6 @@ describe("distinctions Bun's TOML parser destroys", () => {
   test("a datetime never reaches app.ts — Bun rejects the document", () => {
     const c = fixture.parse.find((x) => x.name === "datetime where a string is expected");
     if (c === undefined) throw new Error("fixture case missing");
-    // The Rust's table path accepts it as a string; its document path rejects
-    // it. Neither is reachable, because the parse fails first.
     expect(() => parseToml(c.toml)).toThrow();
     const table = c.table?.ok as { defaults: { model: string } } | undefined;
     if (table === undefined) throw new Error("expected a table-path success");
@@ -763,23 +598,17 @@ describe("distinctions Bun's TOML parser destroys", () => {
 
       const parsed = parseAppConfig(parseToml(c.toml));
       if ("err" in parsed) throw new Error(`expected the looser parse, got: ${parsed.err}`);
-      // Bun yields a JS number with no trace of the `.0` or the exponent.
       expect(parsed.ok.tools.max_result_chars).toBe(name.startsWith("exponent") ? 1000 : 20000);
     });
   }
 
   test("a nested array literal is rejected by Bun, whatever the Rust says", () => {
-    // Not a value-level rejection — the whole document fails. No field in this
-    // schema is a `Vec<Vec<_>>`, and `[[usage.budgets]]` is array-of-tables
-    // syntax rather than a nested array, so nothing real reaches it. A schema
-    // that later grows one would be unreadable here with no other warning.
     expect(() => parseToml("a = [[1]]")).toThrow();
     for (const name of ["seq: UsageBudgetConfig, at its minimum", "a required field supplied positionally"]) {
       const c = fixture.parse.find((x) => x.name === name);
       if (c === undefined) throw new Error(`fixture case missing: ${name}`);
       expect(() => parseToml(c.toml)).toThrow();
     }
-    // Array-of-tables, which is what a real budget list uses, is fine.
     expect(() =>
       parseToml('[[usage.budgets]]\ncost_usd = 1.0\nwarn_at = [0.5]\n'),
     ).not.toThrow();
@@ -807,8 +636,6 @@ describe("distinctions Bun's TOML parser destroys", () => {
     expect(parsed.ok.memory.retrieval.max_file_bytes).toBe(9007199254740992);
   });
 });
-
-// ── ToolsConfig ─────────────────────────────────────────────────────────
 
 describe("the tool allowlist and per-tool resolution", () => {
   const recorded = fixture.defaults.tools as { max_result_chars: number; timeout: string };
@@ -872,8 +699,6 @@ describe("the tool allowlist and per-tool resolution", () => {
   }
 
   test("no deadline is `undefined`, not a zero duration", () => {
-    // Distinguishing the two matters: a caller that treated a zero-millisecond
-    // deadline as a deadline would cancel every tool immediately.
     const parsed = parseAppConfig(parseToml("[tools]\ntimeout = 0\n"));
     if ("err" in parsed) throw new Error(parsed.err);
     expect(timeoutFor(parsed.ok.tools, "read")).toBeUndefined();
@@ -897,9 +722,6 @@ describe("tool_pattern_matches", () => {
   });
 });
 
-// ── DefaultsConfig ──────────────────────────────────────────────────────
-
-/** Rebuild a `DefaultsConfig` from the serde JSON the fixture recorded. */
 function defaultsFromJson(json: {
   model: string | null;
   background: { model: string | null; heartbeat: string | null; compaction: string | null };
@@ -956,7 +778,6 @@ describe("normalize_deprecated_aliases", () => {
   }
 
   test("a case where the alias actually moves is present", () => {
-    // Every case being a no-op would pass against a function body of `return`.
     const moved = fixture.normalize.filter(
       (c) => JSON.stringify(c.before) !== JSON.stringify(c.once),
     );
@@ -971,15 +792,11 @@ describe("resolve_display_name", () => {
         ...defaultAppConfig().defaults,
         display_name: c.display_name ?? undefined,
       };
-      // $USER is injected rather than read, so the result does not depend on
-      // the account running the suite.
       const env = c.user_env === null ? {} : { USER: c.user_env };
       expect(resolveDisplayName(defaults, env)).toBe(c.resolved);
     });
   }
 });
-
-// ── CompactionConfig::validate ──────────────────────────────────────────
 
 describe("compaction validation", () => {
   for (const c of fixture.compaction_validate) {
@@ -1007,14 +824,11 @@ describe("compaction validation", () => {
   });
 });
 
-/** Re-parse a duration out of its serialized form. */
 function durationFrom(display: string): ConfigDuration {
   const parsed = ConfigDuration.parse(display);
   if ("err" in parsed) throw new Error(`${display}: ${parsed.err}`);
   return parsed.ok;
 }
-
-// ── Usage budgets ───────────────────────────────────────────────────────
 
 describe("budget pace fallbacks", () => {
   for (const c of fixture.budget_pace) {
@@ -1062,8 +876,6 @@ describe("budget enum tables", () => {
   });
 });
 
-// ── ThinkingReplay ──────────────────────────────────────────────────────
-
 describe("parse_wire for replay_prior_thinking", () => {
   for (const c of fixture.thinking_replay) {
     test(JSON.stringify(c.input), () => {
@@ -1072,13 +884,9 @@ describe("parse_wire for replay_prior_thinking", () => {
   }
 
   test("the retired last_turn mode is accepted, not rejected", () => {
-    // Rejecting it would stop the daemon starting on any config still
-    // carrying it, which is the whole reason the branch exists.
     expect(parseThinkingReplay("last_turn")).toBe("all");
   });
 });
-
-// ── Map iteration helper ────────────────────────────────────────────────
 
 describe("mapKeysInOrder", () => {
   test("sorts by code point, not UTF-16 code unit", () => {

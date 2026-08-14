@@ -1,18 +1,3 @@
-/**
- * Recorded cases for heartbeat log.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- *
- * What a failure here means: `shore log --heartbeat` stops showing something.
- * The CLI skips any line it cannot parse, so a kind spelled differently on this
- * side does not raise an error — it produces a log with entries quietly
- * missing, which reads as "autonomy did nothing" rather than as a bug.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -41,7 +26,6 @@ function stamp(i: number): string {
   return `2026-04-30T00:00:${String(i % 60).padStart(2, "0")}+00:00`;
 }
 
-/** A scratch directory that outlives the callback's promise, not just its call. */
 async function inTempDir(fn: (dir: string) => Promise<void>): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "shore-hblog-"));
   try {
@@ -69,10 +53,6 @@ describe("the wire format", () => {
   });
 
   test("a kind this side does not know is dropped, not guessed at", () => {
-    // The direction that matters is the safe one: a future Rust adding a kind
-    // makes this side skip the line, exactly as the Rust skips one it cannot
-    // parse. Accepting it as some default kind would put a wrong label in
-    // front of the user.
     const line = JSON.stringify({
       timestamp: stamp(0),
       kind: "invented_later",
@@ -161,9 +141,6 @@ describe("persistence", () => {
   });
 
   test("an in-memory log clears its dirty bit without a file", async () => {
-    // Otherwise every flush stays dirty and rewrites nothing forever —
-    // harmless, but the flag is what the tick loop reads to decide whether to
-    // bother.
     const log = new HeartbeatLog();
     log.push("wake", "hello", stamp(0));
     expect(log.isDirty).toBe(true);
@@ -172,14 +149,10 @@ describe("persistence", () => {
   });
 
   test("a failed flush leaves the log dirty so the next one retries", async () => {
-    // Clearing the bit on failure loses the events silently: nothing errors,
-    // the tick loop sees a clean log, and the last hundred things the
-    // character did are simply not there afterwards.
     await inTempDir(async (dir) => {
       const blocker = join(dir, "blocker");
       await Bun.write(blocker, "not a directory");
 
-      // A path *under* a regular file: every write to it fails with ENOTDIR.
       const log = new HeartbeatLog(join(blocker, "heartbeat.jsonl"));
       log.push("wake", "kept", stamp(0));
       await log.flushIfDirty();
@@ -234,8 +207,6 @@ describe("persistence", () => {
   });
 
   test("flush truncates when the ring is smaller than the file", async () => {
-    // Whole-file, not append: the ring drops its oldest and the file has to
-    // drop them too, or a restart reads back events the ring had let go.
     await inTempDir(async (dir) => {
       const path = join(dir, "heartbeat.jsonl");
       const first = new HeartbeatLog(path);

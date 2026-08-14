@@ -1,13 +1,3 @@
-/**
- * Recorded cases for compaction.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { realpath } from "node:fs/promises";
@@ -59,8 +49,6 @@ type Json = Record<string, unknown>;
 const fx = fixture as unknown as Record<string, Json[] | string>;
 const section = (name: string): Json[] => fx[name] as Json[];
 
-// ── Pure functions ──────────────────────────────────────────────────────
-
 describe("writeAllowedPath", () => {
   for (const rec of section("write_allowed_path")) {
     const path = rec.path as string;
@@ -70,16 +58,6 @@ describe("writeAllowedPath", () => {
   }
 });
 
-/**
- * Not compaction's own code, but `writeAllowedPath` reaches it, and it is where
- * a defect in already-shipped TypeScript turned up: `normalizeWorkspacePath`
- * and `resolveRoots` both used JavaScript's `trim`, where the Rust uses its
- * own. The two disagree in both directions — JS strips U+FEFF and Rust does
- * not, Rust strips U+0085 and JS does not — so a model-supplied
- * `\uFEFFSOUL.md` was a protected, prompt-visible path to the port and an
- * ordinary unrecognised one to the Rust, and `resolvePath` then pointed it at
- * the real `SOUL.md`. Compaction would have accepted a write the Rust refuses.
- */
 describe("workspace path normalization", () => {
   for (const rec of section("workspace_paths")) {
     const path = rec.path as string;
@@ -95,13 +73,6 @@ describe("workspace path normalization", () => {
         rec.is_prompt_visible_path as boolean,
       );
 
-      // `pathComponents` counts `\` as a separator where the Rust's unix build
-      // treats it as an ordinary filename character. That divergence is
-      // deliberate and documented at its definition — it can only refuse more
-      // paths, never fewer — and it bites in exactly one place: a
-      // backslash-separated `..`, which the Rust carried through as part of a
-      // filename. Asserted as a refusal rather than skipped, so restoring the
-      // Rust's reading would fail here rather than pass quietly.
       const backslashTraversal = path.includes("\\") && path.split(/[/\\]/).includes("..");
       if (backslashTraversal) {
         expect(rec.resolve_path).toHaveProperty("ok");
@@ -138,13 +109,6 @@ describe("prompt rendering", () => {
     }
   });
 
-  /**
-   * The one input the fixture cannot carry, because the Rust never returns for
-   * it: a template whose first `{{/if}}` precedes its first `{{#if recap}}`
-   * makes the Rust splice a growing copy of its own middle back in forever. The
-   * port looks for the closer after the opener, so it terminates. Asserted
-   * here rather than in the fixture, with the value the rule implies.
-   */
   test("a stray closer before the opener terminates, where the Rust hung", () => {
     expect(buildFinalMessage("{{/if}} stray closer only", "C", "U")).toBe(
       "{{/if}} stray closer only",
@@ -210,16 +174,6 @@ describe("appending turns", () => {
 });
 
 describe("the prompt templates", () => {
-  /**
-   * This used to compare the templates byte for byte against the constants
-   * `include_prompt!` baked into the Rust, which pinned their wording as well
-   * as their plumbing. The wording is now live product text that gets tuned
-   * against real compaction traces, so that half was dropped; the fixture's
-   * `prompt_templates` entry is left in place as the record of what the Rust
-   * shipped. What survives is the plumbing: a bad import path is a build
-   * error rather than a silent pass, so reaching this assertion at all means
-   * the import resolved, and the strip has to have been applied.
-   */
   test("import as text with exactly one trailing newline removed", () => {
     expect(DEFAULT_COMPACT_SYSTEM.length).toBeGreaterThan(0);
     expect(DEFAULT_COMPACT_PROMPT.length).toBeGreaterThan(0);
@@ -227,13 +181,6 @@ describe("the prompt templates", () => {
     expect(DEFAULT_COMPACT_PROMPT.endsWith("\n")).toBe(false);
   });
 
-  /**
-   * "Exactly one" is not observable through the templates themselves — both
-   * shipped files end in a single newline, so stripping one and stripping all
-   * of them agree. Asserted against the rule instead, which is
-   * `include_prompt!`'s: it wraps `trim_trailing_newline`, which removes one
-   * `\n` and stops.
-   */
   test("stripping takes one trailing newline, not the run", () => {
     expect(stripOneTrailingNewline("a\n\n")).toBe("a\n");
     expect(stripOneTrailingNewline("a\n")).toBe("a");
@@ -282,10 +229,6 @@ describe("reporting an outcome", () => {
     });
   }
 
-  /**
-   * `pushAfterCompaction`'s rule, pinned from the Rust's own branch: only a
-   * `compacted` outcome, only when `[memory] git_push` is on.
-   */
   test("the post-compaction push fires only for a compacted outcome", async () => {
     for (const rec of section("outcome_mapping")) {
       const outcome = camelOutcome(rec.outcome as Json);
@@ -300,8 +243,6 @@ describe("reporting an outcome", () => {
   });
 });
 
-// ── End-to-end passes ───────────────────────────────────────────────────
-
 describe("compaction passes", () => {
   for (const pass of section("passes")) {
     test(pass.name as string, async () => {
@@ -310,12 +251,6 @@ describe("compaction passes", () => {
   }
 });
 
-/**
- * Every pass in the fixture reached dispatch for at least the calls it
- * recorded, and the meta-test below keeps that from silently becoming vacuous:
- * if the stub were never wired, every `dispatches` assertion would pass by
- * comparing two empty lists.
- */
 test("the fixture exercises dispatch, blocked tools, rejections and rollback", () => {
   const passes = section("passes");
   const dispatched = passes.filter((p) => (p.dispatches as Json[]).length > 0);
@@ -331,12 +266,8 @@ test("the fixture exercises dispatch, blocked tools, rejections and rollback", (
 
   const rolledBack = passes.filter((p) => p.archive_fails === true);
   expect(rolledBack.length).toBeGreaterThan(0);
-  // The rollback pass must actually have written something to roll back, or it
-  // proves nothing.
   for (const p of rolledBack) expect((p.dispatches as Json[]).length).toBeGreaterThan(0);
 
-  // Blocked-before-dispatch calls: more tool names in the outcome than reached
-  // the dispatch stub.
   const blocked = passes.filter((p) => {
     const outcome = p.outcome as Json | null;
     const called = (outcome?.tools_called as string[] | undefined) ?? [];
@@ -344,8 +275,6 @@ test("the fixture exercises dispatch, blocked tools, rejections and rollback", (
   });
   expect(blocked.length).toBeGreaterThan(2);
 });
-
-// ── Harness ─────────────────────────────────────────────────────────────
 
 function toConversationMessage(m: Json): ConversationMessage {
   return {
@@ -367,7 +296,6 @@ function twoMessages(): ConversationMessage[] {
   }));
 }
 
-/** The generator's `chat_request`: one text turn per message, one system block. */
 function chatRequest(messages: ConversationMessage[]): SidecarRequest {
   return {
     sdk: "anthropic",
@@ -385,7 +313,6 @@ function chatRequest(messages: ConversationMessage[]): SidecarRequest {
   };
 }
 
-/** The `push_turns` responses, by fixture case name. */
 function responseFor(name: string): GenerateResponse {
   const base = { usage: emptyUsage(), timing: { total_ms: 0, time_to_first_token_ms: 0 }, model: "mock" };
   switch (name) {
@@ -420,24 +347,8 @@ const emptyUsage = () => ({
   cache_creation_tokens: 0,
 });
 
-/**
- * Drop `is_error: false`, which the Rust omits, so two equivalent spellings of
- * a successful tool result compare equal.
- */
 const READ_FAILED = /^(\w+) failed to read existing file: .*$/;
 
-/**
- * Two normalizations, both about spellings rather than behaviour:
- *
- *   - `is_error: false` is absent from the Rust's JSON and present here.
- *   - An `io::Error`'s prose is the runtime's, not the port's. Rust renders
- *     `EISDIR` as `Is a directory (os error 21)` and Node as
- *     `EISDIR: illegal operation on a directory, read`. What compaction decides
- *     is that the read failed for a reason other than "no such file", that the
- *     call is reported as an error, and that no write is recorded — all of
- *     which the surrounding assertions still check. Only the errno prose is
- *     collapsed.
- */
 function normalizeMessages(messages: readonly WireMessage[]): unknown {
   return JSON.parse(
     JSON.stringify(messages, (key, value) => {
@@ -451,7 +362,6 @@ function normalizeMessages(messages: readonly WireMessage[]): unknown {
   );
 }
 
-/** Every regular file under `root`, relative path -> contents. `.git` skipped. */
 async function snapshotTree(root: string): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   const walk = async (dir: string): Promise<void> => {
@@ -466,10 +376,8 @@ async function snapshotTree(root: string): Promise<Record<string, string>> {
   return out;
 }
 
-/** The generator's scripted LLM: shift a response, and extend the chat prefix. */
 class ScriptedLlm implements CompactionLlm {
   built: Json | undefined;
-  /** The very object the manager mutates, so the loop's appends are visible. */
   request: SidecarRequest | undefined;
   readonly #responses: GenerateResponse[];
 
@@ -527,11 +435,6 @@ class RecordingMgr implements ConversationManager {
   }
 }
 
-/**
- * The dispatch oracle: assert the call, apply the recorded file changes,
- * return the recorded output. See the module note on why this is a replay
- * rather than a reimplementation.
- */
 class ReplayTools implements CompactionTools {
   readonly gitCalls: Json[] = [];
   readonly seen: Json[] = [];
@@ -661,8 +564,6 @@ async function runPass(pass: Json): Promise<void> {
         { keepRecentTurns: pass.keep_recent_turns as number },
       );
     } catch (e) {
-      // The mismatch error quotes absolute paths; the fixture recorded them
-      // against its own temp root.
       error = (e as Error).message.replaceAll(await realpath(root), "<root>");
     }
 
@@ -671,7 +572,6 @@ async function runPass(pass: Json): Promise<void> {
       pass.outcome as Json | null,
     );
 
-    // Every recorded dispatch happened, and no extra one did.
     expect(tools.dispatchCount).toBe((pass.dispatches as Json[]).length);
     expect(tools.gitCalls).toEqual(pass.git_calls as Json[]);
     expect(mgr.calls).toEqual(pass.archive_calls as Json[]);
@@ -682,16 +582,8 @@ async function runPass(pass: Json): Promise<void> {
     const built = pass.built_request as Json | null;
     expect(llm.built ?? null).toEqual(built);
 
-    // The whole conversation the loop assembled: the chat prefix, the
-    // compact-now turn, the inline system entry, then one assistant turn and
-    // one tool-result turn per round. This is what pins `pushAssistantTurn`
-    // and `appendToolResults` in situ rather than in isolation.
     const finalMessages = pass.final_request_messages as WireMessage[] | null;
     if (finalMessages === null) {
-      // The generator records the request when the tool loop ends, so a pass
-      // that failed before the loop started has none. The port builds its
-      // request at the same point the Rust does — before the workspace is
-      // prepared — so the check is that the loop appended nothing to it.
       const expectedLength = ((built?.built_message_count as number | undefined) ?? 0) + 1;
       expect(llm.request?.messages.length ?? expectedLength).toBe(expectedLength);
     } else {
@@ -720,7 +612,6 @@ async function queuedDeferredPaths(characterDir: string): Promise<string[]> {
     .map((l) => (JSON.parse(l) as { path: string }).path);
 }
 
-/** The fixture's snake_case outcome, in the port's field names. */
 function camelOutcome(outcome: Json): CompactionOutcome {
   const map: Record<string, string> = {
     memory_files_written: "memoryFilesWritten",
@@ -744,7 +635,6 @@ function camelOutcome(outcome: Json): CompactionOutcome {
   return out as unknown as CompactionOutcome;
 }
 
-/** The camelCase outcome, back in the Rust's field names, for comparison. */
 function snakeOutcome(outcome: Json): Json {
   const map: Record<string, string> = {
     memoryFilesWritten: "memory_files_written",
@@ -768,14 +658,6 @@ function snakeOutcome(outcome: Json): Json {
   return out;
 }
 
-/**
- * The scripted responses per pass, mirroring `pass_specs()` in the generator.
- *
- * Written out rather than derived: these are the *inputs* to the pass, and a
- * replay whose inputs are reconstructed from its own recorded outputs cannot
- * fail. The fixture's `final_request_messages` then checks the reconstruction
- * from the other end.
- */
 const pass_name_is_dry = (n: string) => n.startsWith("dry_run");
 
 function scriptFor(name: string): GenerateResponse[] {

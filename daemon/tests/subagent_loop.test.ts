@@ -1,25 +1,3 @@
-/**
- * The sub-agent's nested loop.
- *
- * `subagent.ts` decides what the sub-agent is told and is tested against its
- * own fixture. What is left for here is the driving, and four of its decisions
- * are worth pinning because each is silent when wrong:
- *
- * - **The recursion cap.** The nested context has no `runSubagent`, so a
- *   hallucinated `ask_*` is refused rather than recursing. The cap is not a
- *   depth counter — it is an absent field, and an absent field is easy to
- *   reintroduce by spreading the parent.
- * - **The system prompt is top-level.** Not the Rust's SDK fork; see the
- *   module doc for why the reason behind that fork does not reach a
- *   from-scratch request.
- * - **The model chain stops at `defaults.model`.** Falling through to the
- *   active chat model would invert the whole feature — delegation exists to
- *   land on something cheap — while looking like it worked.
- * - **Frames are tagged.** An untagged frame is rendered by the client as the
- *   *primary* model's output, so a sub-agent's working notes would appear to
- *   be the character talking.
- */
-
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -43,8 +21,6 @@ import type { ApiCallEntry } from "../src/diagnostics.ts";
 
 const KEY_ENV = "SHORE_SUBAGENT_TEST_KEY";
 
-/** Removed after each test: a harness runs this suite once per mutant, and
- *  `/tmp` is a tmpfs with a fixed inode budget. */
 const roots: string[] = [];
 afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
@@ -61,13 +37,8 @@ function spec(over: Partial<SubagentConfig> = {}): SubagentConfig {
   };
 }
 
-/** A catalog with one model under `[models.chat]`. */
 function catalogWith(name: string): ModelCatalog {
   const catalog = emptyCatalog();
-  // `openrouter` rather than `anthropic` on purpose: the Anthropic path runs
-  // through `anthropicToolLoopEvents`, which talks to the official SDK and
-  // ignores the provider table entirely. A test naming it would make a real
-  // network call. Everything asserted below is dialect-independent.
   catalog.chat.set(name, {
     name,
     qualifiedName: `openrouter:${name}`,
@@ -122,7 +93,6 @@ function contextIn(root: string): ToolContext {
   };
 }
 
-/** One turn, streamed: `start`, a little text, `done`. Records the request. */
 function scriptedProvider(text: string, seen: SidecarRequest[] = []): SidecarProvider {
   return {
     // eslint-disable-next-line @typescript-eslint/require-await
@@ -259,9 +229,6 @@ describe("resolution", () => {
       app.defaults.subagent_model = undefined;
     });
 
-    // Not "fall through to whatever the conversation is running on". The point
-    // of delegation is to land on something cheap, and inheriting the
-    // expensive model would invert the feature while looking like it worked.
     const err = await run(config, root, "researcher", scriptedProvider("x")).catch(
       (e: unknown) => e,
     );
@@ -276,8 +243,6 @@ describe("resolution", () => {
       app.defaults.model = "missing";
     });
 
-    // The middle link. Without it a sub-agent with no model of its own lands
-    // on `defaults.model` — the conversational model, and the expensive one.
     await run(config, root, "researcher", scriptedProvider("done", seen));
     expect(seen[0]?.model).toBe("cheap");
   });
@@ -302,9 +267,6 @@ describe("the request", () => {
     await run(config, root, "researcher", scriptedProvider("done", seen));
 
     const req = seen[0];
-    // Top-level, with the system role intact and before the question. Inline
-    // on Anthropic means the adapter wraps it in `<system_instruction>` and
-    // merges it into the user turn, which lands it *after* the query.
     expect(req?.system).toEqual([{ text: "You are ada's researcher.", label: "system" }]);
     expect(req?.messages).toHaveLength(1);
     expect(req?.messages[0]?.role).toBe("user");
@@ -330,8 +292,6 @@ describe("the request", () => {
     await run(config, root, "researcher", scriptedProvider("done", seen));
 
     const offered = (seen[0]?.tools ?? []).map((t) => t.name);
-    // `ask_*` is not in the static registry, so the recursion cap and the
-    // "no affordance" guarantee both fall out of one filter.
     expect(offered).toEqual(["search"]);
   });
 
@@ -505,9 +465,6 @@ describe("the recursion cap", () => {
 
     const nested = nestedContext(parent);
 
-    // Absent, not `undefined`-valued: `dispatch.ts` reads an absent field as
-    // "not wired here", and `exactOptionalPropertyTypes` makes those two
-    // different values.
     expect("runSubagent" in nested).toBe(false);
     expect(nested.characterName).toBe(parent.characterName);
     expect(nested.workspaceDir).toBe(parent.workspaceDir);
@@ -530,8 +487,6 @@ describe("the forwarder", () => {
     send({ type: "phase", phase: "thinking" } as unknown as ServerMessage);
 
     expect((out[0] as { subagent?: string }).subagent).toBe("researcher");
-    // A frame type a nested loop's tag has no meaning for is left alone,
-    // matching `ServerMessage::set_subagent`.
     expect((out[1] as { subagent?: string }).subagent).toBeUndefined();
   });
 
@@ -539,9 +494,6 @@ describe("the forwarder", () => {
     const { config, root } = await configWith({ researcher: spec() });
     await mkdir(join(root, "data", "ada"), { recursive: true });
 
-    // A background tick has no live turn to stream into. The Rust drained the
-    // frames off a bounded channel so the nested loop could not stall on a
-    // full buffer; there is no buffer here, so they are simply not forwarded.
     const answer = await runSubagent(
       {
         config,
@@ -594,8 +546,6 @@ describe("the prompt macros", () => {
     );
 
     const systemText = seen[0]?.system?.[0]?.text ?? "";
-    // Macro output is a terminal — inserted after the var pass and never
-    // re-scanned. The literal survives into the prompt as text.
     expect(systemText).toContain("{{file: secret.txt}}");
     expect(systemText).not.toContain("SHOULD NOT APPEAR");
   });

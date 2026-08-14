@@ -1,25 +1,3 @@
-/**
- * The idle-triggered compaction a tick runs, end to end against real files.
- *
- * There is no parity fixture here and that is deliberate — see the header of
- * `src/autonomy/idle_compaction.ts`. Everything the action delegates to is
- * pinned elsewhere (the pass by the compaction fixtures, the trigger by
- * `tick.json`, the state writes by `autonomy_runner.test.ts`), so what is
- * left to protect is which pieces it calls, with what, and in what order. A
- * generated fixture would have recorded nothing these doubles do not.
- *
- * The two assertions worth naming, because both failure modes look like working
- * code:
- *
- * - **No `keepTurnsOverride`.** The deep archive's LLM arm passes zero, which
- *   empties the conversation. Passing zero here would archive a conversation the
- *   user is still in the middle of, every idle window.
- * - **No `retainTrailingAutonomous`.** That flag belongs to the archive, which
- *   is emptying the file and has to leave an unread heartbeat message standing.
- *   An ordinary idle pass is not emptying anything, and the keep window already
- *   decides what stays.
- */
-
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
@@ -35,9 +13,6 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { testTmp } from "./support/tmp.ts";
 
-// ── harness ─────────────────────────────────────────────────────────────
-
-/** The background model the pass resolves to. */
 const FIXTURE_MODEL = {
   name: "fixture",
   qualifiedName: "chat.fixture",
@@ -64,7 +39,6 @@ function message(role: "user" | "assistant", id: string, text: string, autonomou
   return autonomous ? { ...base, origin: "autonomous" } : base;
 }
 
-/** Three exchanges: enough that a keep window leaves something behind. */
 function conversation(): Message[] {
   return [
     message("user", "m_1", "morning"),
@@ -76,7 +50,6 @@ function conversation(): Message[] {
   ];
 }
 
-/** A character directory with a conversation, a memory dir and a model. */
 async function world(
   messages: Message[] = conversation(),
 ): Promise<{ config: LoadedConfig; dataDir: string; characterDir: string }> {
@@ -109,14 +82,6 @@ async function world(
   };
 }
 
-/**
- * A model that writes one memory file and then stops.
- *
- * A pass whose model writes nothing takes the `no_memory_writes` branch and
- * archives nothing, so reaching the retention split at all needs a real write.
- * The generic tool loop only dispatches on `tool_use`, which is why the finish
- * reason changes on the second round.
- */
 function writingModel(seen: { messages: unknown[] }[] = []) {
   let round = 0;
   return async (req: { messages?: unknown[] }) => {
@@ -153,7 +118,6 @@ function deps(config: LoadedConfig, over: Partial<IdleCompactionDeps> = {}): Idl
   };
 }
 
-/** The message ids left in the active conversation, in order. */
 async function activeIds(characterDir: string): Promise<string[]> {
   const raw = await readFile(join(characterDir, "active.jsonl"), "utf8");
   return raw
@@ -179,11 +143,9 @@ function historySegmentCount(dataDir: string): number {
   }
 }
 
-/** A cached body good enough to be used as the pass's prefix. */
 const stale = () =>
   ({ model: "claude-fixture", messages: [{ role: "user", content: "before" }] }) as never;
 
-/** A cache whose keepalive records what it was told, rather than doing it. */
 function spyingCache(): { cache: LastRequestCache; armed: string[]; disarmed: string[] } {
   const armed: string[] = [];
   const disarmed: string[] = [];
@@ -201,8 +163,6 @@ function withKey<T>(fn: () => Promise<T>): Promise<T> {
   });
 }
 
-// ── 1. the pass it runs ─────────────────────────────────────────────────
-
 describe("runIdleCompaction: the pass", () => {
   test("keeps the configured retention, because it passes no keep-turns override", async () => {
     const { config, dataDir, characterDir } = await world();
@@ -210,9 +170,6 @@ describe("runIdleCompaction: the pass", () => {
 
     const result = await withKey(() => runIdleCompaction("ada", deps(config)));
 
-    // Two turns retained out of three. A `keepTurnsOverride: 0` — what the deep
-    // archive's LLM arm passes — would leave this empty and archive an exchange
-    // the user is still in.
     expect(await activeIds(characterDir)).toEqual(["m_3", "m_4", "m_5", "m_6"]);
     expect(result.turnCount).toBe(2);
     expect(await segmentNames(characterDir)).toEqual([]);
@@ -220,11 +177,6 @@ describe("runIdleCompaction: the pass", () => {
   });
 
   test("archives a trailing autonomous message rather than retaining it", async () => {
-    // `retainTrailingAutonomous` is the archive's flag: it is emptying the file
-    // and must leave an unread heartbeat message standing. Here the keep window
-    // already decides, so setting it would retain a message the split had
-    // placed on the archive side. Reaching that difference needs the keep window
-    // out of the way, which is what the zero is for.
     const { config, characterDir } = await world([
       ...conversation(),
       message("assistant", "m_7", "thinking of you", true),
@@ -255,8 +207,6 @@ describe("runIdleCompaction: the pass", () => {
   });
 });
 
-// ── 2. what it reports ──────────────────────────────────────────────────
-
 describe("runIdleCompaction: reporting", () => {
   test("a pass that worked reports the retained count and nothing else", async () => {
     const { config } = await world();
@@ -264,17 +214,11 @@ describe("runIdleCompaction: reporting", () => {
     const result = await withKey(() => runIdleCompaction("ada", deps(config)));
 
     expect(result).toEqual({ turnCount: 2, events: [] });
-    // Never the archive's field: an idle compaction is not the end of an idle
-    // period, and claiming it would stop the deep archive ever running.
     expect(result.deepArchiveDone).toBeUndefined();
     expect(result.failed).toBeUndefined();
   });
 
   test("a pass that threw reports failed and does not throw", async () => {
-    // No model configured for background work, which is what the assembly
-    // refuses on. The Rust's failure arm cleared the latch and stamped the
-    // activity clock without touching the turn counts; `failed` with no
-    // `turnCount` is what lands the runner on exactly that.
     const { config, characterDir } = await world();
     config.models.chat.delete("chat.fixture");
     const before = await readFile(join(characterDir, "active.jsonl"), "utf8");
@@ -289,9 +233,6 @@ describe("runIdleCompaction: reporting", () => {
   });
 
   test("no compaction dependencies is a failure, not a silent skip", async () => {
-    // The Rust returned here without touching state, which left the latch set
-    // and stopped that character compacting until a user message cleared it.
-    // Recorded in the module header as a deliberate difference.
     const { config, characterDir } = await world();
 
     const result = await runIdleCompaction("ada", { config, cache: new LastRequestCache() });
@@ -303,8 +244,6 @@ describe("runIdleCompaction: reporting", () => {
     expect(await segmentNames(characterDir)).toEqual([]);
   });
 });
-
-// ── 3. the bookkeeping afterwards ───────────────────────────────────────
 
 describe("runIdleCompaction: putting the world back in step", () => {
   test("runs the pass, then reloads the engine, then drains the deferred edits", async () => {
@@ -336,13 +275,7 @@ describe("runIdleCompaction: putting the world back in step", () => {
       ),
     );
 
-    // The reload comes after the pass, not before: reloading first would put
-    // the engine back in step with the conversation the pass is about to
-    // rewrite.
     expect(order).toEqual(["pass", "pass", "reload:ada"]);
-    // Drained — the queue file is removed once it has been applied. The reload
-    // comes first because it is what busts the cached prompt these edits would
-    // otherwise be written behind.
     expect(existsSync(join(characterDir, "deferred_edits.jsonl"))).toBe(false);
   });
 
@@ -356,7 +289,6 @@ describe("runIdleCompaction: putting the world back in step", () => {
       ),
     );
 
-    // The pass already happened; there is nobody to report a reload failure to.
     expect(result.failed).toBeUndefined();
     expect(result.turnCount).toBe(2);
     expect(await segmentNames(characterDir)).toEqual([]);
@@ -370,21 +302,13 @@ describe("runIdleCompaction: putting the world back in step", () => {
 
     await withKey(() => runIdleCompaction("ada", deps(config, { cache })));
 
-    // The pre-compaction body must not stay armed against a conversation that
-    // has just been rewritten — pinging a prefix the next turn will not reuse
-    // spends money warming the wrong thing. There is still a prefix worth
-    // protecting, so the answer is the rebuilt one rather than standing down.
-    // The disarming direction — a rebuild that produces nothing — is the same
-    // `repoint`, and `deep_archive.test.ts` is where it is pinned.
     expect(cache.get("ada")).toBeDefined();
     expect(cache.get("ada")).not.toEqual(stale());
     expect(armed).toEqual(["ada", "ada"]);
     expect(disarmed).toEqual([]);
   });
 
-
   test("a failed pass leaves the cached body alone", async () => {
-    // Nothing was rewritten, so the armed prefix is still the right one.
     const { config } = await world();
     config.models.chat.delete("chat.fixture");
     const cache = new LastRequestCache();

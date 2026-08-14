@@ -1,9 +1,3 @@
-/**
- * Z.ai adapter tests. These stay off-network and pin the dedicated Z.ai surface:
- * dual base URLs, documented thinking controls, no prior-thinking replay, Z.ai
- * `reasoning_content` intake, tool-call accumulation, finish reasons, and usage.
- */
-
 import { describe, expect, test } from "bun:test";
 import type { ChatCompletionChunk } from "openai/resources/chat/completions";
 
@@ -23,8 +17,6 @@ function req(over: Partial<SidecarRequest> = {}): SidecarRequest {
     sdk: "zai",
     model: "glm-5.1",
     api_key: "k",
-    // The daemon always sends this; the replay filter compares a turn's
-    // provenance against it to decide what is safe to replay.
     provider_key: "zai",
     messages: [],
     max_tokens: 4096,
@@ -126,8 +118,6 @@ describe("request construction", () => {
   });
 
   test("disabled thinking omits clear_thinking and never replays reasoning", () => {
-    // Even with clear_thinking:false present, disabling wins: no clear_thinking on
-    // the wire and no reasoning_content replayed into a non-thinking request.
     const params = buildZaiParams(
       req({ provider_options: { thinking_enabled: false, zai_clear_thinking: false } }),
       false,
@@ -153,8 +143,6 @@ describe("request construction", () => {
   });
 
   test("never replays a thinking block that lacks the reasoning carrier", () => {
-    // No carrier (e.g. display-only thinking text) → not replayed, so we never
-    // feed Z.ai unverified/mutated reasoning_content.
     const messages = buildZaiMessages(
       req({
         system: [{ text: "You are helpful.", label: "system" }],
@@ -185,8 +173,6 @@ describe("request construction", () => {
         messages: [
           {
             role: "assistant",
-            // Provenance is load-bearing: a `reasoning_content` carrier is only
-            // replayable to the exact model that minted it.
             provider_key: "zai",
             model: "glm-5.1",
             content: [
@@ -222,11 +208,9 @@ describe("request construction", () => {
         }),
       ) as unknown as Array<Record<string, unknown>>;
 
-    // Explicit clear_thinking: true.
     expect(stateless({ provider_options: { zai_clear_thinking: true } })[0]).not.toHaveProperty(
       "reasoning_content",
     );
-    // Omitted entirely (Z.ai default is true).
     expect(stateless({})[0]).not.toHaveProperty("reasoning_content");
   });
 
@@ -313,7 +297,6 @@ test("maps Z.ai stream chunks to StreamEvents", async () => {
 
   expect(events[0]).toEqual({ type: "start", model: "glm-5.1-plus" });
   expect(events[1]).toEqual({ type: "thinking", text: "think" });
-  // Reasoning carrier flushed while the thinking block is still open, before text.
   expect(events[2]).toEqual({ type: "reasoning_content", reasoning: "think" });
   expect(events[3]).toEqual({ type: "text", text: "Hello " });
   expect(events[4]).toEqual({ type: "text", text: "world" });
@@ -328,8 +311,6 @@ test("maps Z.ai stream chunks to StreamEvents", async () => {
     content: "Hello world",
     finish_reason: "tool_use",
     usage: {
-      // prompt_tokens (100) is inclusive of cached (80) + cache_write (12);
-      // input_tokens carries only the remaining 8 cache-miss tokens.
       input_tokens: 8,
       output_tokens: 20,
       cache_read_tokens: 80,
@@ -382,7 +363,6 @@ test("maps Z.ai non-streaming responses to GenerateResponse", () => {
     ],
     finish_reason: "content_filter",
     usage: {
-      // prompt_tokens (20) less cached (3) and cache_write (2) = 15 miss tokens.
       input_tokens: 15,
       output_tokens: 5,
       cache_read_tokens: 3,

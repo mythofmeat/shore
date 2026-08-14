@@ -1,12 +1,3 @@
-/**
- * The TypeScript writer, against a real `ledger.db`.
- *
- * The database is created by the *daemon* binary rather than by a schema
- * duplicated here — the whole point is that Rust owns the schema and this side
- * writes into it, so a test that made its own tables would prove nothing about
- * the pair. Skips when the daemon has not been built.
- */
-
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -58,8 +49,6 @@ describe("writing rows the daemon's schema accepts", () => {
       expect(row["call_type"]).toBe("message");
       expect(row["input_tokens"]).toBe(100);
       expect(row["cache_write_tokens"]).toBe(2_000);
-      // A write warms the tracker: the prefix now exists, whether or not
-      // this call got to read it.
       expect(row["cache_state"]).toBe("warm");
       expect(row["thinking_enabled"]).toBe(1);
     } finally {
@@ -134,8 +123,6 @@ describe("writing rows the daemon's schema accepts", () => {
         call({ provider: "opencode-go", model: "kimi-k3", usage: { ...call().usage, total_cost_usd: 9.99 } }),
       );
       ledger.close();
-      // Usage is kept for observability; cost is zeroed so it cannot accrue
-      // against a budget.
       expect(row.cost_source).toBe("subscription");
       expect(row.total_cost).toBe(0);
       expect(row.input_tokens).toBe(100);
@@ -162,7 +149,6 @@ describe("writing rows the daemon's schema accepts", () => {
       ledger.close();
 
       expect(rowsIn(path)).toHaveLength(5);
-      // The whole point of one row per call: no invented anomaly.
       expect(next.cache_anomaly).toBeNull();
       expect(next.cache_state).toBe("warm");
     } finally {
@@ -176,8 +162,6 @@ describe("writing rows the daemon's schema accepts", () => {
       const ledger = Ledger.open(path);
       const row = ledger.record(call({ finish_reason: "cancelled" }));
       ledger.close();
-      // Its usage is all zero; feeding it to the tracker would inject a bogus
-      // cold observation.
       expect(row.cache_state).toBeNull();
       expect(row.cache_anomaly).toBeNull();
     } finally {
@@ -207,14 +191,11 @@ describe("writing rows the daemon's schema accepts", () => {
   test("a tracker seeds from the rows already in the database", () => {
     const { path, cleanup } = freshLedger();
     try {
-      // First process warms the cache and goes away.
       const first = Ledger.open(path);
       first.record(call({ usage: { input_tokens: 10, output_tokens: 5, cache_read_tokens: 0, cache_creation_tokens: 5_000 } }));
       first.record(call({ usage: { input_tokens: 10, output_tokens: 5, cache_read_tokens: 5_000, cache_creation_tokens: 0 } }));
       first.close();
 
-      // A fresh one has no memory, and must not treat a healthy continuation
-      // as a cold start.
       const second = Ledger.open(path);
       const row = second.record(
         call({ usage: { input_tokens: 10, output_tokens: 5, cache_read_tokens: 5_200, cache_creation_tokens: 100 } }),
@@ -238,9 +219,6 @@ describe("writing rows the daemon's schema accepts", () => {
         cache_creation_tokens: w,
       });
 
-      // Six minutes apart. Under Anthropic's 1h TTL that prefix is still
-      // warm; under 5m it aged out, and the smaller read that follows is the
-      // TTL working rather than an anomaly.
       const ledger = Ledger.open(path);
       ledger.setCacheTtlSecs(300);
       ledger.record(call({ usage: read(0, 40_000) }), at("2026-04-05T10:00:00Z"));
@@ -263,7 +241,6 @@ describe("writing rows the daemon's schema accepts", () => {
         cache_read_tokens: r,
         cache_creation_tokens: w,
       });
-      // Same six minutes, TTL left at the 1h default: no expiry, no anomaly.
       const ledger = Ledger.open(path);
       ledger.record(call({ usage: read(0, 40_000) }), at("2026-04-05T10:00:00Z"));
       const still = ledger.record(call({ usage: read(0, 40_000) }), at("2026-04-05T10:06:00Z"));

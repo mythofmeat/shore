@@ -1,13 +1,3 @@
-/**
- * Recorded cases for turn boundary.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import { mostRecentAssistantTurnStart } from "../src/llm/providers/anthropic.ts";

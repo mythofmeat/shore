@@ -1,13 +1,3 @@
-/**
- * Recorded cases for ledger usage.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { afterAll, expect, test } from "bun:test";
 
 import fixture from "./ledger_fixtures/ledger_usage_cases.json";
@@ -41,7 +31,6 @@ const doc = fixture as unknown as {
 const NOW = Date.parse(doc.now);
 const opts = { localZone: doc.timezone, now: NOW };
 
-/** Mirrors `config()` in the deleted port's usage tests. */
 function config(timezone: string): UsageConfig {
   return {
     timezone,
@@ -60,7 +49,6 @@ function config(timezone: string): UsageConfig {
   };
 }
 
-/** Mirrors `modes()` in the deleted port's usage tests. */
 const MODES: Record<string, Record<string, unknown>> = {
   summary: {},
   budget: { budget: true },
@@ -72,7 +60,6 @@ const MODES: Record<string, Record<string, unknown>> = {
   anomalies: { anomalies: true },
 };
 
-/** Mirrors `filters()` in the deleted port's usage tests. */
 const FILTERS: Record<string, Record<string, unknown>> = {
   none: {},
   character: { character: "aria" },
@@ -82,25 +69,6 @@ const FILTERS: Record<string, Record<string, unknown>> = {
   call_type: { call_type: "tool_loop" },
 };
 
-/**
- * Remove the `tool_surface` column from an export before comparing it to the
- * frozen fixture.
- *
- * The column is #33's: a fingerprint of the tool definitions a call sent, so
- * the cache tracker can tell a config change from an anomaly. The Rust that
- * generated this fixture had no such column, and every seeded row here predates
- * it, so it renders as an empty field. Cutting it back out keeps the rest of
- * the export — column order, boolean rendering, float notation, CSV quoting —
- * compared literally, which is what these two modes are for.
- *
- * Position, not name: the header is only on the first line, and the value is
- * empty on every row, so there is nothing to match on further down. Index 12 is
- * pinned in `tool_surface.test.ts`.
- *
- * The CSV split has to honour quoting — one seeded character is literally
- * `ren, "the quiet one"` — so {@link splitCsvLine} is checked against the
- * fixture's own strings before it is used to remove anything.
- */
 const TOOL_SURFACE_INDEX = 12;
 
 function splitCsvLine(line: string): string[] {
@@ -132,7 +100,6 @@ function splitCsvLine(line: string): string[] {
   return fields;
 }
 
-/** The quoting rule `tsvToCsv` applies, so a split/join round-trips. */
 const joinCsvLine = (fields: string[]): string =>
   fields.map((f) => (/[",\n]/.test(f) ? `"${f.replaceAll('"', '""')}"` : f)).join(",");
 
@@ -157,12 +124,6 @@ afterAll(() => {
   for (const c of cleanups) c();
 });
 
-/**
- * A daemon-made ledger seeded with the fixture's rows.
- *
- * One for the whole suite: nothing in a `usage` payload writes, so the cases
- * cannot contaminate each other the way the budget fixture's warning dedup can.
- */
 function seededLedgerPath(): string {
   const f = freshLedger();
   cleanups.push(f.cleanup);
@@ -214,9 +175,6 @@ test("every recorded usage payload comes back the same", async () => {
     if (c.mode === "tsv" || c.mode === "csv") {
       const payload = actual as { mode: string; data: string };
       const expected = c.payload as { mode: string; data: string };
-      // The CSV splitter is validated against the recorded string first: if it
-      // cannot round-trip the Rust's own output, it has no business editing
-      // ours. This is the case with `ren, "the quiet one"` in it.
       if (c.mode === "csv") {
         for (const line of expected.data.split("\n")) {
           expect(joinCsvLine(splitCsvLine(line)), `${where}: csv round-trip`).toBe(line);

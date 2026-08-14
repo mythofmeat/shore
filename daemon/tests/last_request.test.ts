@@ -1,13 +1,3 @@
-/**
- * Recorded cases for last request.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -33,9 +23,6 @@ import { classify, keepalivePingNowCommand } from "../src/commands/keepalive.ts"
 import { CommandError } from "../src/commands/errors.ts";
 import { testTmp } from "./support/tmp.ts";
 
-// ── harness ─────────────────────────────────────────────────────────────
-
-/** The generator's model, as the TypeScript catalog spells it. */
 const FIXTURE_MODEL = {
   name: "fixture",
   qualifiedName: "chat.fixture",
@@ -49,7 +36,6 @@ const FIXTURE_MODEL = {
   maxToolIterations: 4,
 } as never;
 
-/** A message as the fixture's `shape` recorded it, rebuilt into a real one. */
 function fromShape(s: {
   role: string;
   msg_id: string;
@@ -71,14 +57,6 @@ function fromShape(s: {
   return s.autonomous ? { ...base, origin: "autonomous" } : base;
 }
 
-/**
- * The generator's world, with `messages` on disk for `ada`.
- *
- * `segments` is `[filesOnDisk, listedInTheManifest]`, and the two are separate
- * because the fixture's last rebuild case sets them apart: `SegmentReader`
- * counts the manifest and ignores the directory, so orphan files are not prior
- * context.
- */
 async function world(
   messages: Message[],
   segments: [number, number] = [0, 0],
@@ -131,7 +109,6 @@ async function world(
   };
 }
 
-/** The generator's normalisation, applied to what this side built. */
 function normalise(v: unknown): unknown {
   if (Array.isArray(v)) return v.map(normalise);
   if (v !== null && typeof v === "object") {
@@ -141,8 +118,6 @@ function normalise(v: unknown): unknown {
       ),
     );
   }
-  // 38 characters is `m_` plus a v4 UUID: the anchor's id and nothing else, as
-  // every other message here is seeded with a short one.
   if (typeof v === "string" && v.startsWith("m_") && v.length === 38) return "m_<uuid>";
   return v;
 }
@@ -155,15 +130,6 @@ afterEach(() => {
   delete process.env["SHORE_FIXTURE_API_KEY"];
 });
 
-// ── 1. which messages a rebuild runs on ─────────────────────────────────
-
-/**
- * The generator recorded `input` from the messages it constructed and
- * `selected` from the ones the store handed back, and the two differ: a
- * tool-result block's text becomes the message's `content` on load. So the
- * replay goes through the store too, rather than comparing against a
- * reconstruction that would have to reimplement that normalisation to agree.
- */
 async function loadThroughStore(shapes: Parameters<typeof fromShape>[0][]): Promise<Message[]> {
   const { dataDir } = await world(shapes.map(fromShape));
   const { MessageStore } = await import("../src/engine/message_store.ts");
@@ -177,7 +143,6 @@ describe("heartbeatRebuildMessages", () => {
       const messages = await loadThroughStore(c.input);
       expect(historyIsBetweenTurns(messages)).toBe(c.between_turns);
 
-      // A fixed anchor, so the selection is what is compared rather than a uuid.
       const selected = heartbeatRebuildMessages("ada", messages, () =>
         idleAnchorMessage(
           () => "m_anchor",
@@ -219,13 +184,6 @@ describe("heartbeatRebuildMessages", () => {
     expect(messages).toHaveLength(1);
   });
 
-  /**
-   * The Rust returned `messages.to_vec()` — a copy — and the copy is not
-   * incidental. The caller gets these from `MessageStore.messages()`, which
-   * hands back its own array, so returning it by reference would let a rebuild's
-   * caller mutate the store's conversation. Nothing does that today, which is
-   * exactly why it is worth an assertion rather than a comment.
-   */
   test("the has-user-turn path copies too — the store's array does not escape", () => {
     const messages = [
       fromShape({ role: "user", msg_id: "m_1", content: "hello", autonomous: false, tool_result_only: false }),
@@ -237,8 +195,6 @@ describe("heartbeatRebuildMessages", () => {
     expect(messages).toHaveLength(2);
   });
 });
-
-// ── 2. the anchor ───────────────────────────────────────────────────────
 
 describe("idleAnchorMessage", () => {
   const a = fixture.anchor;
@@ -252,7 +208,6 @@ describe("idleAnchorMessage", () => {
     expect(anchor.alternatives).toEqual(a.alternatives as never);
     expect(anchor.origin).toBeUndefined();
     expect(a.origin).toBeNull();
-    // The exported constant and the message must not drift apart.
     expect(IDLE_ANCHOR_TEXT).toBe(a.content);
   });
 
@@ -274,8 +229,6 @@ describe("idleAnchorMessage", () => {
   });
 });
 
-// ── 3. the rebuilt request ──────────────────────────────────────────────
-
 describe("rebuildRequestFromDisk", () => {
   for (const c of fixture.rebuild) {
     test(c.note, async () => {
@@ -286,9 +239,6 @@ describe("rebuildRequestFromDisk", () => {
       const request = await rebuildRequestFromDisk("ada", dataDir, config, {
         newId: () => "m_<uuid>",
         now: () => "2026-01-01T12:00:00-05:00",
-        // The generator ran under this zone and the time markers render in it.
-        // Without pinning it the segment cases pass on the generator's machine
-        // and nowhere else.
         timeZone: fixture.timezone,
       });
 
@@ -324,8 +274,6 @@ describe("rebuildRequestFromDisk", () => {
   });
 });
 
-// ── 4. the reprime choice ───────────────────────────────────────────────
-
 describe("reprimeDecision", () => {
   for (const c of fixture.reprime) {
     test(c.note, async () => {
@@ -345,7 +293,6 @@ describe("reprimeDecision", () => {
 });
 
 describe("LastRequestCache", () => {
-  /** A keepalive that only records what it was told. */
   function spy(): {
     armed: KeepalivePrefix[];
     disarmed: string[];
@@ -390,13 +337,6 @@ describe("LastRequestCache", () => {
     expect(k.armed[0]?.context?.call_type).toBe("message");
   });
 
-  /**
-   * The character is what keys the schedule, so a body carrying someone else's
-   * — a request cloned across characters, a context assembled before the
-   * character was known — must be corrected rather than trusted. Every real
-   * call already carries the right one, which is why this needs a case that
-   * does not.
-   */
   test("the character on the prefix is the one being armed, not the one on the body", () => {
     const k = spy();
     const stale = {
@@ -422,8 +362,6 @@ describe("LastRequestCache", () => {
     cache.invalidate("ada", "compaction");
 
     expect(cache.get("ada")).toBeUndefined();
-    // Deciding what to do about the schedule is `reprimeFromDisk`'s, and it is
-    // separate because it reads the file the invalidating write just changed.
     expect(k.disarmed).toEqual([]);
     expect(k.armed).toHaveLength(1);
   });
@@ -443,12 +381,6 @@ describe("LastRequestCache", () => {
     expect(k.disarmed).toEqual([]);
   });
 
-  /**
-   * #47: repriming is one of the three places a prefix is armed, and the only
-   * one whose cadence comes back off disk rather than out of the turn that is
-   * running. `rebuildRequestFromDisk` returns the whole `BuiltRequest` for
-   * exactly this — returning `built.request` alone is what dropped it.
-   */
   test("the cadence the rebuilt model asks for is armed with it", async () => {
     const k = spy();
     const cache = new LastRequestCache(k.service as never);
@@ -489,8 +421,6 @@ describe("LastRequestCache", () => {
     const decision = await cache.reprimeFromDisk("ada", dataDir, config);
     expect(decision.kind).toBe("disarm");
     expect(k.disarmed).toEqual(["ada"]);
-    // The stale body is still cached: only the *schedule* stands down. The
-    // Rust's `invalidate` is what drops it, and it is a separate call.
     expect(cache.get("ada")).toBeDefined();
   });
 
@@ -501,8 +431,6 @@ describe("LastRequestCache", () => {
     expect(b.get("ada")).toBeUndefined();
   });
 });
-
-// ── 5. the ping's decision table ────────────────────────────────────────
 
 describe("classify", () => {
   for (const c of fixture.ping_outcome) {
@@ -552,10 +480,7 @@ describe("classify", () => {
   });
 });
 
-// ── 6. the command ──────────────────────────────────────────────────────
-
 describe("keepalivePingNowCommand", () => {
-  /** A context whose ping answers from a script, one per call. */
   async function ctx(outcomes: PingNowOutcome[], messages: Message[] = []) {
     const { config, dataDir } = await world(messages);
     const calls: string[] = [];
@@ -585,8 +510,6 @@ describe("keepalivePingNowCommand", () => {
 
   for (const c of fixture.ping_command) {
     test(c.note, async () => {
-      // Each recorded case is a rendering; the outcome behind it is scripted so
-      // the command reaches exactly that branch.
       const data = c.output.kind === "ok" ? (c.output.data as Record<string, unknown>) : undefined;
       const rebuilt = data?.["source"] === "rebuilt_from_disk";
       const outcomes: PingNowOutcome[] =
@@ -646,12 +569,10 @@ describe("keepalivePingNowCommand", () => {
     const got = (await keepalivePingNowCommand("ada", world_.ctx)) as Record<string, unknown>;
     expect(world_.calls).toEqual(["ada", "ada"]);
     expect(got["source"]).toBe("rebuilt_from_disk");
-    // The rebuild is what filled the cache; that is the arming.
     expect(world_.cache.get("ada")).toBeDefined();
   });
 
   test("`no_prefix` with nothing rebuildable skips rather than asking again", async () => {
-    // A mid-turn conversation: nothing to rebuild.
     const world_ = await ctx(
       [{ status: "skipped", cold: false, reason: "no_prefix", detail: "no cached request" }],
       [fromShape({ role: "user", msg_id: "m_1", content: "hello", autonomous: false, tool_result_only: false })],

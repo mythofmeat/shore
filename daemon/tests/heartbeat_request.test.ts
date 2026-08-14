@@ -1,25 +1,3 @@
-/**
- * The body a heartbeat runs and the model it runs on.
- *
- * The four `heartbeat_override_*` tests in
- * `the deleted port` are carried across whole — they are
- * the specification for the override, and each one is a regression with a
- * commit behind it. Two more sit beside them for the paths the Rust asserted
- * about in prose but never drove: a pin that does not resolve, and a model with
- * no key.
- *
- * The `prepare` half has no Rust test at all, because in the Rust it could not
- * have one — it read a `Mutex<AutonomyState>` and wrote a prompt snapshot to
- * disk. What it decides is worth pinning anyway, and one of those decisions is
- * the most expensive mistake in this file:
- *
- * **The cached body is copied before anything is appended to it.** It is the
- * object chat's next turn extends and every keepalive ping refreshes. A tick
- * that pushed its inline system entry into that object would leave the cache
- * holding a body no real turn reuses, and the only symptom would be the
- * provider quietly charging cache-write prices from then on.
- */
-
 import { afterAll, describe, expect, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
@@ -42,12 +20,9 @@ import { testTmp } from "./support/tmp.ts";
 
 afterAll(restoreTestEnv);
 
-// ── harness ─────────────────────────────────────────────────────────────
-
 const CHAT_ENV = "SHORE_HB_TEST_CHAT";
 const OVERRIDE_ENV = "SHORE_HB_TEST_OVERRIDE";
 
-/** The two chat models the Rust's `loaded_config_with_two_chat_models` built. */
 function catalogWithTwoModels() {
   const models = emptyCatalog();
   models.chat.set("chat.anthropic.sonnet", {
@@ -98,7 +73,6 @@ async function baseConfig(heartbeat?: string): Promise<LoadedConfig> {
   };
 }
 
-/** The Rust's `minimal_request`, in wire shape. */
 function minimalRequest(modelId: string): SidecarRequest {
   return {
     sdk: "anthropic",
@@ -114,20 +88,10 @@ function minimalRequest(modelId: string): SidecarRequest {
 
 const ENV = { [CHAT_ENV]: "chat-secret", [OVERRIDE_ENV]: "slowthink-secret" };
 
-// The cold rebuild builds a chat request through the handler, which reads the
-// ambient environment rather than an injected one. `env` above stays injected
-// because the override tests need to control which keys are *missing*.
 setTestEnv(CHAT_ENV, "chat-secret");
 setTestEnv(OVERRIDE_ENV, "slowthink-secret");
 
-// ── the override, from the Rust ─────────────────────────────────────────
-
 describe("the heartbeat model override", () => {
-  /**
-   * Regression, verbatim from the Rust: `defaults.heartbeat` was silently
-   * ignored on the warm path because the tick reused the cached chat-turn
-   * request without rewriting the model.
-   */
   test("swaps the model and keeps the cacheable prefix intact", async () => {
     const config = await baseConfig("slowthink");
     const request = minimalRequest("claude-sonnet-chat");
@@ -142,8 +106,6 @@ describe("the heartbeat model override", () => {
     expect(override?.name).toBe("slowthink");
     expect(out.model).toBe("claude-opus-slowthink");
     expect(out.api_key).toBe("slowthink-secret");
-    // The three fields the prompt-cache hash covers. A swap that rebuilt any of
-    // them would cost the cache the swap exists to keep.
     expect(out.messages).toEqual(originalMessages);
     expect(out.system).toEqual(originalSystem);
     expect(out.tools).toEqual(originalTools);
@@ -175,13 +137,6 @@ describe("the heartbeat model override", () => {
     expect(out).toBe(request);
   });
 
-  /**
-   * Regression, verbatim from the Rust: a pin written `provider:model_id` with
-   * no static `[chat.*]` entry behind it resolves only through the effective
-   * catalog. The pre-check used the static lookup, so it rejected every such
-   * pin — and that is the only pin shape a modern config can express, so
-   * heartbeat silently never left the chat model at all.
-   */
   test("resolves a provider-prefixed pin with no static entry", async () => {
     const config = await baseConfig("testdyn:dyn-model");
     config.providers = ProviderRegistry.fromSection({
@@ -200,19 +155,8 @@ describe("the heartbeat model override", () => {
     expect(out.messages).toEqual(originalMessages);
   });
 
-  /**
-   * The pre-check's whole reason for existing. `resolveBackgroundModel` would
-   * fall back to the chat model here and report it as a resolution — which for
-   * compaction is right and here is not, because the user asked for a specific
-   * model and got a different one with no way to tell.
-   */
   test("keeps the chat model when the configured name does not resolve", async () => {
     const config = await baseConfig("no-such-model");
-    // The body is on a *different* model than `defaults.model` selects, which
-    // is what a `shore model` swap leaves behind mid-session. Without the
-    // pre-check, `resolveBackgroundModel`'s fallback resolves the chat model
-    // and the typo'd pin silently swaps the body onto it — a swap the user
-    // never asked for, reported as though the pin had worked.
     const request = minimalRequest("claude-opus-slowthink");
 
     const { request: out, override } = applyHeartbeatModelOverride(request, config, "alice", {
@@ -238,8 +182,6 @@ describe("the heartbeat model override", () => {
   });
 });
 
-// ── the fallback interval, as the prompt says it ────────────────────────
-
 describe("the fallback interval phrase", () => {
   test("whole hours read as hours", () => {
     expect(fallbackIntervalPhrase(3600n)).toBe("1 hour");
@@ -250,14 +192,10 @@ describe("the fallback interval phrase", () => {
   test("anything else reads as truncated minutes", () => {
     expect(fallbackIntervalPhrase(1800n)).toBe("30 minutes");
     expect(fallbackIntervalPhrase(5400n)).toBe("90 minutes");
-    // Truncating division, both faithful and only reachable from a config that
-    // asked for it.
     expect(fallbackIntervalPhrase(90n)).toBe("1 minutes");
     expect(fallbackIntervalPhrase(30n)).toBe("0 minutes");
   });
 });
-
-// ── preparing the body ──────────────────────────────────────────────────
 
 function message(role: "user" | "assistant", id: string, text: string): Message {
   return {
@@ -271,7 +209,6 @@ function message(role: "user" | "assistant", id: string, text: string): Message 
   };
 }
 
-/** A character with a conversation on disk, so the cold rebuild has something. */
 async function withConversation(config: LoadedConfig): Promise<void> {
   const characterDir = join(config.dirs.data, "alice");
   await mkdir(characterDir, { recursive: true });
@@ -300,9 +237,7 @@ describe("preparing a heartbeat body", () => {
     const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
 
     expect(prepared).toBeDefined();
-    // The prompt landed on the copy...
     expect(prepared?.request.messages.length).toBe(beforeLength + 1);
-    // ...and the cache still holds exactly what chat's next turn will extend.
     expect(cached.messages.length).toBe(beforeLength);
     expect(cache.get("alice")).toBe(cached);
   });
@@ -347,7 +282,6 @@ describe("preparing a heartbeat body", () => {
     const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
 
     expect(prepared?.request.context?.rid).toBeUndefined();
-    // The cached body keeps its own id — the copy is what was edited.
     expect(cached.context?.rid).toBe("r_1");
   });
 
@@ -359,11 +293,8 @@ describe("preparing a heartbeat body", () => {
     const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
 
     expect(prepared).toBeDefined();
-    // Cached, so a keepalive ping has a body to send before the next user
-    // message. Throwing the rebuild away means paying to rebuild it every tick.
     const now = cache.get("alice");
     expect(now).toBeDefined();
-    // What was cached is the chat-shape body, not the one carrying the prompt.
     expect(now?.messages.at(-1)?.role).not.toBe("system");
   });
 
@@ -371,9 +302,6 @@ describe("preparing a heartbeat body", () => {
     const config = await baseConfig();
     const characterDir = join(config.dirs.data, "alice");
     await mkdir(characterDir, { recursive: true });
-    // A user message still waiting on an answer. Anchoring a heartbeat onto one
-    // builds a request with two consecutive user turns, which the provider
-    // rejects — so the tick does not happen rather than failing at the wire.
     await writeFile(
       join(characterDir, "active.jsonl"),
       JSON.stringify(message("user", "m_1", "you there?")) + "\n",
@@ -391,16 +319,12 @@ describe("preparing a heartbeat body", () => {
   test("still ticks when the prompt snapshot cannot be written", async () => {
     const config = await baseConfig();
     await withConversation(config);
-    // A plain file where the snapshot directory belongs, so `mkdir` throws.
     await writeFile(join(config.dirs.data, "alice", "active_prompt"), "not a directory\n");
     const cache = new LastRequestCache();
     cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
 
     const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
 
-    // Degraded, not skipped. The tick can still think, still write files and
-    // still send a message; refusing to run because one snapshot is stale
-    // trades a slightly stale prompt for no heartbeat at all.
     expect(prepared).toBeDefined();
     expect(prepared?.request.messages.at(-1)?.role).toBe("system");
   });
@@ -413,8 +337,6 @@ describe("preparing a heartbeat body", () => {
 
     const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
 
-    // The override model's 9, not the chat model's 4. Re-resolving the cap
-    // independently is how those two come apart.
     expect(prepared?.override?.name).toBe("slowthink");
     expect(prepared?.maxToolIterations).toBe(9);
   });

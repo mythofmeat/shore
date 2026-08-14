@@ -1,13 +1,3 @@
-/**
- * The Anthropic mock, and the cache behaviour it exists to make testable.
- *
- * Two layers. {@link PrefixCache} is tested directly, because it is the part
- * that encodes a claim about how Anthropic behaves and is what the live-key
- * check validates. Everything else runs `AnthropicProvider` against the server,
- * so the breakpoints under assertion are the ones the real schedule placed —
- * asserting on hand-built requests would test the mock against itself.
- */
-
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { AnthropicProvider } from "../src/llm/providers/anthropic.ts";
@@ -35,7 +25,6 @@ const user = (text: string): WireMessage =>
 const assistant = (text: string): WireMessage =>
   ({ role: "assistant", content: [{ type: "text", text }] }) as WireMessage;
 
-/** A request with caching on — an empty `cache_ttl` disables the schedule. */
 function request(
   url: string,
   messages: WireMessage[],
@@ -60,8 +49,6 @@ async function drive(url: string, messages: WireMessage[], ...rest: any[]): Prom
   return out;
 }
 
-// ── the cache model, on its own ─────────────────────────────────────────────
-
 describe("PrefixCache", () => {
   const marked = (text: string) => ({ type: "text", text, cache_control: { type: "ephemeral" } });
 
@@ -83,7 +70,6 @@ describe("PrefixCache", () => {
     const cache = new PrefixCache(() => 1000);
     cache.account([marked("stable system prompt")], [user("hello")]);
 
-    // A single character, which is the whole failure mode.
     const second = cache.account([marked("stable system prompt.")], [user("hello")]);
     expect(second.usage.cache_read_input_tokens).toBe(0);
     expect(second.usage.cache_creation_input_tokens).toBeGreaterThan(0);
@@ -110,10 +96,10 @@ describe("PrefixCache", () => {
     const system = [marked("stable")];
 
     cache.account(system, [user("hello")]);
-    clock = 4 * 60 * 1000; // inside the 5m default
+    clock = 4 * 60 * 1000;
     expect(cache.account(system, [user("hello")]).usage.cache_read_input_tokens).toBeGreaterThan(0);
 
-    clock = 4 * 60 * 1000 + 6 * 60 * 1000; // past it
+    clock = 4 * 60 * 1000 + 6 * 60 * 1000;
     expect(cache.account(system, [user("hello")]).usage.cache_read_input_tokens).toBe(0);
   });
 
@@ -128,8 +114,6 @@ describe("PrefixCache", () => {
   });
 });
 
-// ── through the real adapter and its real breakpoint schedule ───────────────
-
 describe("the adapter's schedule, against the modelled cache", () => {
   test("a second turn on the same prefix reads it", async () => {
     const m = await mock();
@@ -139,8 +123,6 @@ describe("the adapter's schedule, against the modelled cache", () => {
     const cold = m.lastUsage;
     expect(cold.cache_read_input_tokens).toBe(0);
 
-    // Same conversation, one more exchange appended — the frozen prefix is
-    // untouched, so the read must cover it.
     await drive(m.url, [
       ...history,
       user("second question"),
@@ -148,7 +130,6 @@ describe("the adapter's schedule, against the modelled cache", () => {
       user("third question"),
     ]);
     expect(m.lastUsage.cache_read_input_tokens).toBeGreaterThan(0);
-    // And the write covers only what is new, not the whole prompt again.
     expect(m.lastUsage.cache_creation_input_tokens).toBeLessThan(
       cold.cache_creation_input_tokens,
     );
@@ -161,7 +142,6 @@ describe("the adapter's schedule, against the modelled cache", () => {
     const where = m.lastBreakpoints.map((b) => b.where);
     expect(where).toContain("system");
     expect(where).toContain("messages");
-    // Four is the provider limit and the schedule's ceiling.
     expect(m.lastBreakpoints.length).toBeLessThanOrEqual(4);
   });
 
@@ -178,17 +158,6 @@ describe("the adapter's schedule, against the modelled cache", () => {
   });
 
   test("a churning memory_index block leaves the system prefix readable", async () => {
-    // `memory_index` is rewritten by every dreaming and compaction pass, so the
-    // system anchor deliberately sits on the last block that is *not* it.
-    //
-    // The anchor surviving does not mean the whole read survives: a message
-    // breakpoint's prefix includes the system blocks, so rewriting any system
-    // block misses every message anchor downstream of it. What the label buys
-    // is that the read falls back to the system prefix instead of to zero —
-    // which is precisely what `providers/anthropic.ts` means by "those reads
-    // collapse to the system prefix". If the anchor ever moved onto
-    // `memory_index`, this would read 0 and every pass would re-pay for the
-    // whole system prompt.
     const m = await mock();
     const messages = [user("first"), assistant("answer"), user("second")];
     const withIndex = (index: string) => [
@@ -204,7 +173,6 @@ describe("the adapter's schedule, against the modelled cache", () => {
     await drive(m.url, messages, withIndex("index rev 2 — totally different content"));
     const afterChurn = m.lastUsage.cache_read_input_tokens;
 
-    // Still reading, and reading exactly the system anchor's prefix.
     const systemAnchor = m.lastBreakpoints.find((b) => b.where === "system");
     expect(systemAnchor).toBeDefined();
     expect(afterChurn).toBe(systemAnchor!.prefixTokens);
@@ -213,19 +181,6 @@ describe("the adapter's schedule, against the modelled cache", () => {
   });
 
   test("across three turns, each read equals every write before it", async () => {
-    // These are the invariants a live run against the real API produced, on
-    // 2026-08-07, with claude-haiku-4-5 and a ~4.3k-token system prompt:
-    //
-    //   turn 1   read      0   write 4259
-    //   turn 2   read   4259   write   12
-    //   turn 3   read   4271   write   12      (4259 + 12)
-    //
-    // Read equals the sum of every prior write, exactly, and the uncached tail
-    // stays constant. That is the whole model this mock encodes, so if the mock
-    // ever stops reproducing it, the mock is wrong rather than the test.
-    //
-    // The absolute numbers are Anthropic's tokeniser and are deliberately not
-    // asserted — only the relationships between them.
     const m = await mock();
     const messages: WireMessage[] = [user("Say the word: one")];
 
@@ -246,7 +201,6 @@ describe("the adapter's schedule, against the modelled cache", () => {
       t1.cache_creation_input_tokens + t2.cache_creation_input_tokens,
     );
 
-    // The tail after the last breakpoint is not cached and does not accumulate.
     expect(t3.input_tokens).toBe(t2.input_tokens);
   });
 
@@ -273,8 +227,6 @@ describe("the adapter's schedule, against the modelled cache", () => {
   });
 });
 
-// ── turn mechanics, so the mock is usable for more than the cache ───────────
-
 describe("stream mechanics", () => {
   test("text, thinking and its signature come back in order", async () => {
     const m = await mock({
@@ -289,8 +241,6 @@ describe("stream mechanics", () => {
       type: "thinking_signature",
       signature: "sig-abc",
     });
-    // The signature must follow its thinking and precede the text, or the
-    // consumer attaches it to the wrong block on flush.
     expect(events.findIndex((e) => e.type === "thinking_signature")).toBeLessThan(
       events.findIndex((e) => e.type === "text"),
     );

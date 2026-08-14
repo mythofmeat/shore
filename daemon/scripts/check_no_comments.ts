@@ -4,7 +4,7 @@ import { join, relative } from "node:path";
 import { Glob } from "bun";
 
 const ROOT = join(import.meta.dir, "..");
-const SRC = join(ROOT, "src");
+const ROOTS = [join(ROOT, "src"), join(ROOT, "tests"), join(ROOT, "scripts")];
 
 const DIRECTIVE =
   /^(\/\/|\/\*)[\s*]*(@ts-|eslint|biome|prettier|deno-|c8 |v8 |istanbul|#__|@__|<reference|<amd)/;
@@ -33,8 +33,9 @@ const offenders: string[] = [];
 let scanned = 0;
 let generated = 0;
 
-for (const rel of new Glob("**/*.ts").scanSync(SRC)) {
-  const abs = join(SRC, rel);
+for (const root of ROOTS)
+for (const rel of new Glob("**/*.ts").scanSync(root)) {
+  const abs = join(root, rel);
   const text = readFileSync(abs, "utf8");
   if (GENERATED.test(text)) {
     generated++;
@@ -53,7 +54,7 @@ for (const rel of new Glob("**/*.ts").scanSync(SRC)) {
 }
 
 if (offenders.length > 0) {
-  console.error(`Comments are not allowed in daemon/src. Found ${offenders.length}:\n`);
+  console.error(`Comments are not allowed in daemon/. Found ${offenders.length}:\n`);
   for (const o of offenders) console.error(`  ${o}`);
   console.error(`\nSee CLAUDE.md. Rename something or write a test instead.`);
   console.error(`Directives (@ts-expect-error, eslint-*) and generated files are exempt.`);

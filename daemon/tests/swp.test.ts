@@ -1,13 +1,3 @@
-/**
- * Recorded cases for swp.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -31,10 +21,7 @@ import {
 } from "../src/swp/routing";
 import { SessionRouter, type SessionMeta } from "../src/swp/session";
 
-/** Accept any token; authentication is `swp_auth.test.ts`'s subject, not this
- *  file's. `authenticate` is required so that opting out is written down. */
 const OPEN = (): boolean => true;
-
 
 interface Fixture {
   readonly constants: Record<string, number>;
@@ -86,12 +73,10 @@ const fixture = JSON.parse(
   readFileSync(join(import.meta.dir, "swp_fixtures", "swp.json"), "utf8"),
 ) as Fixture;
 
-/** Feed bytes in one chunk. Chunking must not change any answer. */
 async function* once(bytes: Uint8Array): AsyncGenerator<Uint8Array> {
   if (bytes.length > 0) yield bytes;
 }
 
-/** Feed the same bytes one at a time, to prove chunking is irrelevant. */
 async function* byteAtATime(bytes: Uint8Array): AsyncGenerator<Uint8Array> {
   for (const b of bytes) yield new Uint8Array([b]);
 }
@@ -106,21 +91,10 @@ function inputBytes(c: FramingCase): Uint8Array {
   return out;
 }
 
-/**
- * Add back the defaults Rust holds in memory but skips when serializing.
- *
- * The fixture records what `serde_json` *wrote*, and `ClientMessageBody` is
- * asymmetric about its two image fields: `images` carries `#[serde(default)]`
- * alone and is always written, while `image_data` also carries
- * `skip_serializing_if = "Vec::is_empty"` and vanishes when empty. Both are
- * `vec![]` in the struct the Rust handed downstream, so the reader is right to
- * produce both — the fixture just cannot show the second one.
- */
 function withSkippedDefaults(msg: ClientMessage): ClientMessage {
   return msg.type === "message" ? { image_data: [], ...msg } : msg;
 }
 
-/** Drive the reader the way the generator drove `read_message`. */
 async function driveFraming(
   source: AsyncIterable<Uint8Array>,
 ): Promise<({ ok: ClientMessage } | { eof: true } | { err: string })[]> {
@@ -165,13 +139,7 @@ describe("framing", () => {
         } else if ("eof" in expected) {
           expect(got).toEqual({ eof: true });
         } else {
-          // Both sides must reject, at the same point in the stream.
           expect(got).toHaveProperty("err");
-          // The size gate is this transport's own message, so it is exact —
-          // and, just as importantly, a frame the Rust rejected for some
-          // *other* reason must not be rejected by the size gate here. Without
-          // the negative case an off-by-one in the bound passes, because
-          // "some error" is true either way.
           const SIZE = "Message exceeds maximum size";
           expect((got as { err: string }).err === SIZE).toBe(expected.err === SIZE);
         }
@@ -179,8 +147,6 @@ describe("framing", () => {
     });
   }
 
-  // The Rust accumulates across `fill_buf` calls, so where reads split must not
-  // change the outcome. Skips the three cases whose inputs are 128 MiB.
   for (const c of fixture.framing.filter((x) => x.input_b64 !== undefined)) {
     test(`${c.name} — one byte per chunk`, async () => {
       const actual = await driveFraming(byteAtATime(inputBytes(c)));
@@ -190,19 +156,6 @@ describe("framing", () => {
   }
 });
 
-/**
- * Frames whose bytes differ from Rust's only in how whole floats are spelled.
- *
- * `serde_json` writes an `f64` of 8 as `8.0`; `JSON.stringify` writes `8`.
- * Both are legal JSON numbers and both parse back to the same `f64`, so a Rust
- * client cannot tell them apart — `serde` reads `8` into an `f64` field
- * without complaint. The divergence is in the bytes only, and it is confined
- * to `usage_warning`, the one server frame carrying floats.
- *
- * Recorded rather than worked around: forcing `8.0` out of `JSON.stringify` is
- * not possible without hand-rolling a serializer for every frame, which is a
- * lot of surface to get wrong for a difference no reader can observe.
- */
 const FLOAT_NOTATION_DIVERGES = new Set(["usage_warning"]);
 
 describe("write_message", () => {
@@ -212,13 +165,10 @@ describe("write_message", () => {
       await writeMessage({ write: (b) => void chunks.push(b) }, c.message);
       const line = Buffer.concat(chunks).toString("utf8");
 
-      // Values always agree, including key order and which keys are present.
       expect(JSON.parse(line)).toEqual(JSON.parse(c.line));
       expect(Object.keys(JSON.parse(line))).toEqual(Object.keys(JSON.parse(c.line)));
 
       if (FLOAT_NOTATION_DIVERGES.has(c.name)) {
-        // Pin the divergence so it cannot quietly become something a reader
-        // *can* observe, such as a dropped or reordered field.
         expect(line).not.toBe(c.line);
         expect(c.line).toContain('"current_cost":8.0');
         expect(line).toContain('"current_cost":8');
@@ -318,7 +268,6 @@ describe("msg_type_name", () => {
     test(c.variant, () => {
       const msg = { type: c.variant } as ClientMessage;
       expect(msgTypeName(msg)).toBe(c.type_name);
-      // The `{:?}` in the Rust's format! quotes the name.
       expect(`Expected hello, got ${JSON.stringify(msgTypeName(msg))}`).toBe(
         c.handshake_error_message,
       );
@@ -341,12 +290,6 @@ describe("route_client_message", () => {
 
   for (const c of fixture.route_client_message) {
     test(c.name, async () => {
-      // Recover the exact ClientMessage the generator routed. For the routed
-      // cases it is echoed back in the fixture; the duplicate-hello case routes
-      // nothing, so it is reconstructed from its written frame instead.
-      // `RoutedMessage::Command` carries the bare `Command` struct, so its
-      // serialization has no `type` tag; the engine arm carries a whole
-      // `ClientMessage` and does. Put the tag back for the command case.
       const routed = c.routed;
       const msg: ClientMessage =
         routed === null
@@ -386,7 +329,6 @@ describe("route_client_message", () => {
 
       expect(meta.rid).toBe(expectedMeta.rid);
       expect(meta.kind).toBe(expectedMeta.kind);
-      // The live character wins over the one captured at handshake.
       expect(meta.session.selectedCharacter).toBe(expectedMeta.session.selected_character);
       expect([...meta.session.capabilities]).toEqual(expectedMeta.session.capabilities);
     });
@@ -396,9 +338,6 @@ describe("route_client_message", () => {
 describe("handshake", () => {
   for (const c of fixture.handshake) {
     test(c.name, async () => {
-      // One case uses a provider whose snapshot names a character the client
-      // did not ask for, because `perform_handshake` registers the snapshot's
-      // answer rather than the one it resolved.
       const overrides = c.name === "history overrides the resolved character";
       const provider: HandshakeProvider = {
         hello: () => Promise.resolve({ characters: c.characters.map((name) => ({ name })) }),
@@ -413,11 +352,6 @@ describe("handshake", () => {
               })
           : (selected) =>
           Promise.resolve({
-            // The Rust's provider stamps the selected character into the text,
-            // using Rust's `{:?}` for an Option.
-            // Optional fields are omitted, not null — the Rust `Message` skips
-            // every `None`/empty one, so a message carrying explicit nulls is
-            // already off the wire format before the transport sees it.
             messages: [
               {
                 msg_id: "m1",
@@ -479,7 +413,6 @@ describe("handshake", () => {
         );
         expect(session?.clientType).toBe(c.result.client_type as string);
         expect(session?.clientName).toBe(c.result.client_name as string);
-        // The session is registered, with the character history resolved to.
         expect(router.sessions()).toEqual([[1, (c.result.selected_character ?? null) as string | null]]);
       }
     });

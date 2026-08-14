@@ -52,9 +52,6 @@ describe("withDynamicBlocksLast", () => {
       { label: "memory_index" },
       { label: "character" },
     ]);
-    // activity_stats is not yet declared dynamic, so it stays in the prefix;
-    // what the boundary guarantees is that every declared dynamic block is
-    // behind it, whatever order it arrived in.
     expect(labels(ordered).at(-1)).toBe("memory_index");
     expect(isDynamicSystemBlock("memory_index")).toBe(true);
   });

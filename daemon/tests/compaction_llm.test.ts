@@ -1,13 +1,3 @@
-/**
- * Recorded cases for compaction llm.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import fixture from "./memory_fixtures/compaction_llm.json";
@@ -30,18 +20,8 @@ type Json = Record<string, unknown>;
 const fx = fixture as unknown as Record<string, Json[] | string>;
 const section = (name: string): Json[] => fx[name] as Json[];
 
-/**
- * The fixture's error text with the `CONFIGURATION.md` pointer dropped (#52).
- *
- * The Rust cited a file that has never existed in this repository. The fixture
- * is frozen, so the citation cannot be taken out of it — it is cut out of the
- * expectation instead, the way `app` handles the deleted `[daemon]`
- * keys. Every other character of the message stays compared literally.
- */
 const withoutDeadCitation = (err: string): string =>
   err.replace(" (see CONFIGURATION.md).", ".");
-
-// ── The provider base-url column ────────────────────────────────────────
 
 describe("hardcodedProviderBaseUrl", () => {
   for (const rec of section("hardcoded_base_url")) {
@@ -54,9 +34,6 @@ describe("hardcodedProviderBaseUrl", () => {
   }
 });
 
-// ── Image generation config ─────────────────────────────────────────────
-
-/** Rebuild the fixture's `[providers.*]` section as this port models it. */
 function providersFrom(
   recs: Json[],
 ): Record<string, { entry?: ProviderEntry; baseUrl?: string }> {
@@ -79,7 +56,6 @@ function providersFrom(
   return out;
 }
 
-/** The fixture's `env` list as a lookup, with absent values genuinely absent. */
 function envFrom(recs: Json[]): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   for (const rec of recs) {
@@ -118,15 +94,11 @@ describe("resolveImageGenConfig", () => {
         expect(result).toEqual({ err: withoutDeadCitation(expected.err) });
         return;
       }
-      // The Rust struct writes every field; this port omits the absent ones,
-      // which is the same value with fewer keys. Compared with `null` filled
-      // back in so a dropped field cannot pass as an absent one.
       expect("ok" in result).toBe(true);
       const ok = (result as unknown as { ok: Record<string, unknown> }).ok;
       const filled: Record<string, unknown> = {};
       for (const key of Object.keys(expected.ok!)) filled[key] = ok[key] ?? null;
       expect(filled).toEqual(expected.ok!);
-      // …and no field the Rust did not have.
       expect(Object.keys(ok).sort()).toEqual(
         Object.keys(expected.ok!)
           .filter((k) => (expected.ok as Json)[k] !== null)
@@ -135,8 +107,6 @@ describe("resolveImageGenConfig", () => {
     });
   }
 });
-
-// ── The compaction request ──────────────────────────────────────────────
 
 function modelFrom(rec: Json): ResolvedModel {
   return {
@@ -158,13 +128,6 @@ function modelFrom(rec: Json): ResolvedModel {
   } as ResolvedModel;
 }
 
-/**
- * The chat-shape request as the port models it.
- *
- * The fixture's copy is the *serialized* `LlmRequest`, so its transient fields
- * (`api_key_name`, `rid`, `forensic_character`, `retain_long`) are already
- * absent — which is exactly why `SidecarRequest` does not carry them.
- */
 function chatFrom(rec: Json): SidecarRequest {
   return rec as unknown as SidecarRequest;
 }
@@ -205,18 +168,10 @@ describe("RealCompactionLlm.buildInitialRequest", () => {
         return;
       }
       expect(error).toBeUndefined();
-      // `JSON.parse(JSON.stringify(...))` drops `undefined`-valued keys, which
-      // is what serde's `skip_serializing_if` did on the other side.
       expect(JSON.parse(JSON.stringify(built))).toEqual(expected.ok!);
     });
   }
 
-  /**
-   * The invariant the whole shape exists for, asserted on the built request
-   * rather than trusted: the compaction tail is exactly two entries, the
-   * instruction is the second, and — because the loop appends after both — the
-   * bytes at and before the instruction's index never move.
-   */
   test("the tail is two entries and the instruction sits at a fixed index", () => {
     const rec = section("build_initial_request").find(
       (r) => r.name === "chat prefix carried, model rebuilt",
@@ -228,7 +183,6 @@ describe("RealCompactionLlm.buildInitialRequest", () => {
     expect(built.at(-2)!.role).toBe("user");
     expect(built.at(-1)!.role).toBe("system");
 
-    // Appending a round's turns leaves the prefix up to the instruction intact.
     const before = JSON.stringify(built);
     const request = { messages: [...built] } as unknown as SidecarRequest;
     request.messages.push({ role: "assistant", content: [{ type: "text", text: "ok" }] });
@@ -253,16 +207,6 @@ describe("RealCompactionLlm.buildInitialRequest", () => {
     expect(request.messages.length).toBe(COMPACTION_TAIL_ENTRY_COUNT);
   });
 
-  /**
-   * The Rust took `chat_request` by value, so its `messages` were moved into
-   * the rebuilt request and the caller had nothing left to alias. The port's
-   * caller keeps its object, and the first replay of this fixture caught the
-   * consequence: the compaction tail was being appended into the *chat*
-   * request's array. On the warm-cache path that array is the autonomy
-   * manager's cached `last_request`, so a compaction would have written its
-   * "compact now" turn, its instruction, and every tool-loop round into chat's
-   * own history.
-   */
   test("the caller's chat request is not appended to", () => {
     const chat: SidecarRequest = {
       sdk: "anthropic",

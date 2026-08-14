@@ -1,24 +1,3 @@
-/**
- * Replay of captured HTTP as test cassettes — issue #81.
- *
- * The recording half already existed: `http_calls` stores real request and
- * response bytes with headers. Nothing could replay them, so no test could
- * assert real provider behaviour and there was no automated answer to "is
- * caching working".
- *
- * The four pieces the issue asked to port from opencode's design are here: a
- * canonical request snapshot that key-orders the JSON body before comparing,
- * sequential selection when the same request repeats within one cassette, a
- * redaction config that allow-lists request headers rather than blanket
- * stripping, and `requestDiff`, which prints exactly which body field diverged
- * on a miss — the part that makes a cassette test maintainable rather than
- * infuriating.
- *
- * The last test is the one the issue was written for: issue the same request
- * twice, assert the second reports a non-zero cache read. It runs against
- * `startMockAnthropic`, recorded once and then replayed with nothing listening.
- */
-
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { CallStore } from "../src/call_store.ts";

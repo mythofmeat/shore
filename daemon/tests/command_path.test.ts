@@ -1,13 +1,3 @@
-/**
- * Recorded cases for command path.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -25,19 +15,12 @@ import { dispatchCommand, type CommandPathDeps } from "../src/handler/commands.t
 import type { RequestMeta } from "../src/swp/session.ts";
 import { testTmp } from "./support/tmp.ts";
 
-/**
- * The three names the Rust answered with a null rid, whatever the request
- * carried — its characterless path forgot `.with_rid(...)`.
- */
 const RID_DROPPED = new Set(["list_characters", "list_models", "list_providers"]);
 
-/** The one session every fixture case runs on — see {@link meta}. */
 const SESSION_ID = 1;
 
-/** What `defaults.model` resolves to when nothing is cached for the asker. */
 const DEFAULT_MODEL = "chat.fixture";
 
-/** The one model in the catalog, named as `defaults.model`. */
 const FIXTURE_MODEL = {
   name: "fixture",
   qualifiedName: "chat.fixture",
@@ -51,12 +34,9 @@ const FIXTURE_MODEL = {
   maxToolIterations: 4,
 } as never;
 
-// ── harness ─────────────────────────────────────────────────────────────
-
 interface Harness {
   deps: CommandPathDeps;
   activeModel(character: string | undefined): string | undefined;
-  /** Needed to rebuild the `none_available` message — see {@link RUST_NONE_AVAILABLE}. */
   configDir: string;
 }
 
@@ -99,9 +79,6 @@ async function harness(characters: readonly string[]): Promise<Harness> {
 
   const deps: CommandPathDeps = {
     registry: {
-      // The registry's own three-way resolution, reproduced here rather than
-      // reached for: `characters.ts` owns it and is pinned by its own fixture,
-      // and building a real registry would drag its config loading in too.
       resolveCharacter: (selected) => resolveCharacter(selected, characters, dirs.config),
       getOrCreate: async (name) => {
         const existing = engines.get(name);
@@ -165,10 +142,6 @@ async function harness(characters: readonly string[]): Promise<Harness> {
   };
 }
 
-/**
- * `CharacterRegistry.resolveCharacter`'s three answers, which is what the
- * fixture's three failure cases are about.
- */
 function resolveCharacter(
   selected: string | undefined,
   available: readonly string[],
@@ -183,14 +156,6 @@ function resolveCharacter(
   return available[0]!;
 }
 
-/**
- * The `none_available` message the Rust returned, verbatim, and the absolute
- * path the port answers with instead (#41).
- *
- * The reasoning lives in `characters.test.ts`, which owns the message;
- * this file replays a handler that only relays it. Both keyed on the exact old
- * string for the same reason.
- */
 const RUST_NONE_AVAILABLE =
   "no characters available — create one at characters/<name>/workspace/SOUL.md";
 
@@ -217,7 +182,6 @@ function meta(selected: string | null, rid: string | null): RequestMeta {
   } as RequestMeta;
 }
 
-/** The envelope the generator recorded. */
 function envelope(frame: Awaited<ReturnType<typeof dispatchCommand>>): Record<string, unknown> {
   if (frame.type === "command_output") {
     const data = frame.data;
@@ -238,8 +202,6 @@ function envelope(frame: Awaited<ReturnType<typeof dispatchCommand>>): Record<st
   }
   return { kind: "unexpected" };
 }
-
-// ── the cases ───────────────────────────────────────────────────────────
 
 describe("dispatchCommand", () => {
   for (const c of fixture.dispatch_command) {
@@ -270,8 +232,6 @@ describe("dispatchCommand", () => {
 
       expect(got["kind"]).toBe(want["kind"] as string);
 
-      // The rid: the same as recorded, except on the three names the Rust's
-      // characterless path dropped it for — there, this side must carry it.
       const requestRid = (input["rid"] as string | null) ?? null;
       if (RID_DROPPED.has(input["command"] as string) && want["rid"] === null) {
         expect(got["rid"]).toBe(requestRid);
@@ -286,12 +246,7 @@ describe("dispatchCommand", () => {
         expect(got["message"]).toBe(expectedMessage(want["message"] as string, h.configDir));
       } else {
         expect(got["name"]).toBe(want["name"] as string);
-        // Routing, not payload: the recorded keys must still be there, so a
-        // handler answering with someone else's reply fails, but a field added
-        // to a payload since does not. `status.test.ts` owns that envelope.
         expect(got["data_keys"]).toEqual(expect.arrayContaining(want["data_keys"] as string[]));
-        // The character that set it is not the character asking, so the answer
-        // is the configured default rather than the other character's pick.
         expect(got["data_active"]).toEqual(
           crossCharacter ? DEFAULT_MODEL : (want["data_active"] ?? null),
         );
@@ -314,17 +269,6 @@ describe("dispatchCommand", () => {
   }
 });
 
-// ── two decisions the fixture cannot reach, and why ─────────────────────
-
-/**
- * An engine that will not open is an internal error, not an invalid request.
- *
- * No recorded case has one: the Rust's `get_or_create` succeeded in every world
- * the generator could build, because it creates what it cannot find. The
- * distinction still matters — `invalid_request` tells a client to change
- * something and this is not something a client can change — so it is asserted
- * from this side.
- */
 test("a character whose engine will not open is an internal error", async () => {
   const h = await harness(["ada"]);
   h.deps.registry.getOrCreate = async () => {
@@ -382,15 +326,6 @@ test("switch_character establishes an ambiguous unpinned session", async () => {
   expect(sent[0]).toMatchObject({ type: "history", selected_character: "poppy" });
 });
 
-/**
- * The character path reads the character-*effective* config, not the global.
- *
- * Also not recorded, and the fixture's own note says why: making it observable
- * needs a per-character overlay, and a `LoadedConfig` built for a test carries
- * no raw table, so merging one over it re-derives an empty catalog and every
- * model command stops resolving. Here the registry is a stub, so the two
- * configs can simply be made to differ — which is the whole assertion.
- */
 test("the character path is given the character's effective config", async () => {
   const h = await harness(["ada"]);
   const global = h.deps.globalConfig();
@@ -408,21 +343,10 @@ test("the character path is given the character's effective config", async () =>
 
   expect(frame.type).toBe("command_output");
   if (frame.type === "command_output") {
-    // `status` reports the model the *effective* config resolves. Under the
-    // global one it would be `chat.fixture`.
     expect((frame.data as Record<string, unknown>)["active_model"]).toBe("chat.spare");
   }
 });
 
-/**
- * The post-processing sees the config the command produced, not the one it
- * started from.
- *
- * Not recorded: the annotation a reload adds is the same either way — what
- * moves is the config that gets *adopted*, which never reaches the frame. So
- * the adoption is what is asserted, through an applied `config_reload`, which
- * *replaces* its context's config rather than editing it in place.
- */
 test("config_reload adopts the config the command re-read, not the one it started from", async () => {
   const h = await harness(["ada"]);
   await writeFile(

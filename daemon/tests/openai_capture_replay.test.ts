@@ -1,27 +1,3 @@
-/**
- * The four captured OpenAI-compat conversations, replayed through the adapter.
- *
- * Each file is a real conversation with text redacted, taken from a provider
- * this repo ships an adapter for: `deepseek/deepseek-v4-pro`, `z-ai/glm-5.1`
- * and `moonshotai/kimi-k2.6`. #32 built a mock Anthropic provider so cache
- * integrity is testable there; the OpenAI-compat path had no equivalent, and
- * these sat unread in the tree for the whole life of the repository (#55).
- *
- * What they can check without a live provider is the conversion, and every
- * assertion below is a shape a real provider rejects with a 400:
- *
- * - **Textless tool calls.** An assistant turn that only calls tools must not
- *   carry `content: ""`. `deepseek_v4_textless_toolcalls` has three of them.
- * - **Tool-call pairing.** Every `tool_call` id is answered by exactly one
- *   `tool` message with that `tool_call_id`, and no `tool` message answers an
- *   id that was never issued.
- * - **Prefix stability.** Converting the first N turns of a conversation gives
- *   the same bytes as the first N turns of converting all of it. This is the
- *   cache-prefix property on this path: a conversion that reordered or rewrote
- *   an earlier turn as the conversation grew would invalidate the prefix on
- *   every request, and nothing else here would notice.
- */
-
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

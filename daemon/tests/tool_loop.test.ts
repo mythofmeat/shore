@@ -1,18 +1,3 @@
-/**
- * Recorded cases for tool loop.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- *
- * What a failure here means: the loop makes a different number of billed
- * provider calls than the daemon did, or hands back a different turn as the
- * reply. Both are quiet. An extra call per turn is money; a missing final turn
- * means the user reads the model's tool request instead of its answer.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -41,20 +26,8 @@ interface Case {
   user_turns_appended: number;
 }
 
-/**
- * A turn the fake driver hands back: does it ask for tools or not?
- *
- * `finishReason` is carried separately rather than derived, because the loop
- * checks *both* it and the block list and the two can disagree in production —
- * a provider may return tool_use blocks alongside `end_turn`, or claim
- * `tool_use` having asked for nothing. A fake that ties them together cannot
- * tell the two checks apart, which is exactly the hole the first version of
- * this fixture had.
- */
 interface FakeTurn {
   asksForTools: boolean;
-  // Explicit `| undefined` because `exactOptionalPropertyTypes` is on: the
-  // natural mode sets the key to undefined rather than omitting it.
   finishReason?: string | undefined;
   label: string;
 }
@@ -65,11 +38,6 @@ function overrideFor(mode: FinishReasonMode): string | undefined {
   return undefined;
 }
 
-/**
- * The TypeScript twin of the Rust `FakeDriver`. Same counters, same log
- * strings, same "n more turns ask for tools then the model gives up" rule —
- * the fixture's `log` column is only meaningful if these agree exactly.
- */
 class FakeDriver implements ToolLoopDriver<FakeTurn> {
   calls = 0;
   dispatches = 0;
@@ -123,7 +91,6 @@ const cases = fixture.cases as Case[];
 describe("tool loop parity", () => {
   test("the fixture covers every corner of the sweep", () => {
     expect(cases.length).toBe(450);
-    // A sweep that lost a dimension would still pass every case below.
     expect(new Set(cases.map((c) => c.initial)).size).toBe(3);
     expect(new Set(cases.map((c) => c.cap_behavior)).size).toBe(2);
     expect(new Set(cases.map((c) => c.max_iterations)).size).toBe(5);
@@ -134,9 +101,6 @@ describe("tool loop parity", () => {
   });
 
   test("a contradicting finish_reason stops the loop even with tool blocks present", () => {
-    // The specific hole the first cut of this fixture had: with the fake's
-    // finish_reason derived from its block list, dropping the loop's
-    // finish_reason check changed nothing anywhere in the sweep.
     const lying = cases.filter(
       (c) => c.finish_reason_mode === "always_end_turn" && c.tool_turns > 0,
     );

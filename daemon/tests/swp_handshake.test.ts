@@ -1,27 +1,3 @@
-/**
- * What a client is actually told on connect, now that something answers.
- *
- * The transport's own handshake is pinned by `swp.json`; this is the
- * provider behind it, and what it is worth pinning for is the set of answers
- * that are deliberately *not* errors:
- *
- * - **No character selected** is the normal state of a fresh connection, not a
- *   missing one. It still carries the config block, because the client renders
- *   its model name from it before it has chosen anything.
- * - **A character that is not there** answers the same way. The Rust used
- *   `.ok()` on `get_or_create` — a client naming a character that has been
- *   deleted gets an empty conversation rather than a refused handshake, which
- *   would lock it out of the daemon entirely. That leniency is scoped to
- *   `EngineCharacterNotFound` and nothing else: a character that exists but
- *   whose transcript will not load is an error, because an empty history there
- *   is a lie the next turn gets written on top of.
- *
- * And one that is an error nowhere and wrong everywhere: which *config* the
- * snapshot reads. A selected character reads its effective config, so a
- * per-character `[chat]` override is what the client is shown; reading the
- * global one instead shows a model the character will not use.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -77,7 +53,6 @@ function configFor(
   };
 }
 
-/** A stub engine: the one snapshot method the provider reaches for. */
 function engineWith(history: Partial<History>): ConversationEngine {
   return {
     historySnapshot: () => ({
@@ -112,8 +87,6 @@ describe("the hello snapshot", () => {
       registry({ globalConfig: () => config, availableCharacters: () => ["ada", "nova"] }),
     );
 
-    // The bytes travel rather than the path: a client is not assumed to be able
-    // to read the daemon's config directory, and may not be on this machine.
     expect(hello.characters).toEqual([
       { name: "ada", avatar: { mime_type: "image/png", data: btoa("PNGBYTES") } },
       { name: "nova" },
@@ -122,8 +95,6 @@ describe("the hello snapshot", () => {
 
   test("no characters is an empty list, not a placeholder", async () => {
     const root = await mkdtemp(testTmp("shore-handshake-none-"));
-    // `DEFAULT_HANDSHAKE` answers with one character called `default`, which is
-    // the stub. A real daemon with nothing configured says so.
     expect(helloSnapshot(registry({ globalConfig: () => configFor(root) })).characters).toEqual([]);
   });
 });
@@ -141,8 +112,6 @@ describe("the history snapshot", () => {
     expect(snapshot.messages).toEqual([]);
     expect(snapshot.selectedCharacter).toBeNull();
     expect(snapshot.revision).toBe(0);
-    // The client renders the model name from here before it has chosen a
-    // character, so an empty conversation still has to carry it.
     expect(snapshot.config).toEqual({ active_model: "chat.fixture" });
   });
 
@@ -158,8 +127,6 @@ describe("the history snapshot", () => {
       "ghost",
     );
 
-    // Throwing here would lock the client out of the daemon over a character it
-    // merely remembered from last time.
     expect(snapshot.messages).toEqual([]);
     expect(snapshot.selectedCharacter).toBeNull();
   });
@@ -176,8 +143,6 @@ describe("the history snapshot", () => {
       "yuna",
     );
 
-    // An empty history here would read as "yuna said nothing yet" and the next
-    // turn would be written on top of a conversation that was never loaded.
     await expect(attempt).rejects.toThrow(HistorySnapshotError);
     await expect(attempt).rejects.toThrow(/unexpected end of JSON input/);
   });
@@ -200,7 +165,6 @@ describe("the history snapshot", () => {
 
     expect(snapshot.messages).toEqual(messages);
     expect(snapshot.revision).toBe(7);
-    // The engine's own name, which is the one that has been resolved.
     expect(snapshot.selectedCharacter).toBe("ada");
   });
 
@@ -211,8 +175,6 @@ describe("the history snapshot", () => {
     const snapshot = await buildSessionHistorySnapshot(
       registry({
         globalConfig: () => config,
-        // `historySnapshot` leaves the field unset — only bounded log/history
-        // responses put archived messages in front of the index.
         getOrCreate: () => Promise.resolve(engineWith({ selected_character: "ada" })),
       }),
       "ada",
@@ -237,8 +199,6 @@ describe("the history snapshot", () => {
       null,
     );
 
-    // Asking with no name would create — or resurrect — an engine for a
-    // character called `null`, and answer the client with its revision.
     expect(asked).toEqual([]);
   });
 
@@ -254,18 +214,11 @@ describe("the history snapshot", () => {
       "ADA",
     );
 
-    // The engine's is the resolved one. Echoing the request back tells a client
-    // its own spelling was accepted when what it is looking at is another
-    // character's conversation.
     expect(snapshot.selectedCharacter).toBe("ada");
   });
 
   test("a selected character is read through its effective config", async () => {
     const root = await mkdtemp(testTmp("shore-handshake-effective-"));
-    // The two configs differ in the catalog rather than only in
-    // `defaults.model`, because the per-character resolver consults the
-    // catalog first — a name that resolves nowhere falls through and both
-    // configs would answer the same thing for the wrong reason.
     const global = configFor(root, { catalog: "chat.global" });
     const perCharacter = configFor(root, { catalog: "chat.override" });
 
@@ -278,8 +231,6 @@ describe("the history snapshot", () => {
       "ada",
     );
 
-    // Reading the global config here shows the client a model the character
-    // will not actually use — a discrepancy with no error attached to it.
     expect(snapshot.config).toEqual({ active_model: "chat.override" });
   });
 });
@@ -298,8 +249,6 @@ describe("which model the config block reports", () => {
       "chat.just-selected",
     );
 
-    // The character-switch and model-change callers have already set it. Going
-    // back to preferences would report the model they just replaced.
     expect(snapshot.config).toEqual({ active_model: "chat.just-selected" });
   });
 
@@ -312,15 +261,11 @@ describe("which model the config block reports", () => {
       null,
     );
 
-    // Better than a blank where the model name goes: a config with no
-    // `defaults.model` still has a model it would use.
     expect(snapshot.config).toEqual({ active_model: "chat.fixture" });
   });
 
   test("a character's saved pick outranks the config default", async () => {
     const root = await mkdtemp(testTmp("shore-handshake-prefs-"));
-    // Two chat models, and the config default is the other one — so only the
-    // saved preference can produce this answer.
     const config = configFor(root, { model: "chat.fixture" });
     config.models.chat.set("chat.picked", {
       ...(MODEL as object),

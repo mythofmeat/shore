@@ -1,22 +1,3 @@
-/**
- * Cross-adapter regression test for inlined image content blocks.
- *
- * The daemon does NOT populate a separate `images` field on the wire message.
- * It synthesizes base64 `image` blocks from a message's images and inlines
- * them into the `content` array (`encode_image_block` in the daemon's
- * `handler/images.rs`; the wire message is emitted as `{role, content}` only).
- *
- * Every non-Anthropic adapter used to read images exclusively off the legacy
- * `turn.images` field, which is therefore always `undefined` — and their
- * content loops ignored `type: "image"` blocks. The image was silently
- * dropped and the model saw text only, which read as "the model can't see
- * images" for every OpenAI-dialect model (notably `opencode-go:kimi-*`, since
- * opencode-go stamps every non-qwen/minimax model as `sdk = "openai"`).
- *
- * The Anthropic adapter is covered separately in anthropic_adapter.test.ts —
- * its canonical shape already matched, which is why the gap went unnoticed.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import { translateMessages } from "../src/llm/providers/gemini.ts";
@@ -28,7 +9,6 @@ import type { SidecarRequest, TurnMessage } from "../src/llm/types.ts";
 
 const PNG_B64 = "iVBORw0KGgo=";
 
-/** A user turn exactly as the daemon emits it: image block, then text. */
 function imageTurn(): TurnMessage {
   return {
     role: "user",
@@ -112,7 +92,6 @@ describe("an image that cannot travel is declared, not dropped in silence", () =
   });
 
   test("an oversized image says so, and says how big it was", () => {
-    // base64 expands 4/3, so 8 MiB of chars decodes to 6 MiB — past the 5 MiB cap.
     const huge = "A".repeat(8 * 1024 * 1024);
     const turn = {
       role: "user",

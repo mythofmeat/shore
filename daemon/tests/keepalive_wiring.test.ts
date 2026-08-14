@@ -1,25 +1,3 @@
-/**
- * The wire between the cadence and the scheduler (#47).
- *
- * Every piece of this already had tests and every one of them passed while the
- * keepalive had never pinged in this daemon's life. `request` checked
- * the cadence at the producer, against a fixture. `keepalive_service` and
- * `cache_keepalive` checked the scheduler from a prefix a test handed them.
- * `handler_deps` checked the chat turn with a stubbed cache. Between the
- * producer and the scheduler sat a `keepalive_interval_ms` that `BuiltRequest`
- * carried and nothing ever read: `toPrefix`'s third argument was optional and
- * no caller passed it, so every character armed with `setInterval(undefined)`
- * and `tick()` answered `"none"` forever.
- *
- * So these start at a TOML model and end at a ping leaving the service, and
- * they assert what the user is paying for — that a ping is or is not sent —
- * rather than that a function was called. Nothing here calls `cache.set`
- * itself: that call always accepted a cadence, and a test that hands it one
- * directly passes just as happily on the broken code. The turn has to walk
- * `persistAndNotify` → `turnAutonomy` → the cache, because the missing hop was
- * in that walk and nowhere else.
- */
-
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { KeepaliveService } from "../src/cache/keepalive.ts";
@@ -59,12 +37,6 @@ function response(): GenerateResponse {
   } as unknown as GenerateResponse;
 }
 
-/**
- * A chat turn, from the `[anthropic.main]` section a user would write down to
- * the two values `LastRequestCache.set` takes. This is `buildRequest`'s own
- * path — the same call `handler/setup.ts` makes — so a cadence that stops
- * being produced here stops being produced in production too.
- */
 function turnFor(chatToml: string): { request: SidecarRequest; intervalMs: number | undefined } {
   const catalog = catalogFromSections(
     Bun.TOML.parse(chatToml) as Record<string, unknown>,
@@ -88,7 +60,6 @@ function turnFor(chatToml: string): { request: SidecarRequest; intervalMs: numbe
   };
 }
 
-/** Just enough engine for `persistAndNotify` to write into and count. */
 class CountingEngine {
   readonly messages: unknown[] = [];
 
@@ -124,11 +95,6 @@ function streamResult(): StreamResult {
   } as unknown as StreamResult;
 }
 
-/**
- * One chat turn, taken the way `handler/generation.ts` takes it: the request
- * and its cadence come out of the builder together, and only `persistAndNotify`
- * puts them into the cache. Everything between is production code.
- */
 async function turnPersisted(
   chatToml: string,
   clock: ReturnType<typeof fakeClock>,
@@ -323,11 +289,6 @@ describe("the cadence reaches the schedule", () => {
     expect(sent).toHaveLength(0);
   });
 
-  /**
-   * `cache_ttl` still defaults to `1h` — it costs nothing on its own, and a
-   * character that opts into a cadence needs it already set to be worth it.
-   * Splitting them is the whole reason only the keepalive default moved.
-   */
   test("the ttl default survives the keepalive default going away", () => {
     const { request } = turnFor(DEFAULTED);
     expect(request.provider_options?.cache_ttl).toBe("1h");

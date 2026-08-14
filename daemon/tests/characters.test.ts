@@ -1,13 +1,3 @@
-/**
- * Recorded cases for characters.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -26,8 +16,6 @@ import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { compareByCodePoint } from "../src/util/sort.ts";
-
-// ── Fixture shape ───────────────────────────────────────────────────────
 
 interface Step {
   op: string;
@@ -49,7 +37,6 @@ interface Step {
 
 interface Scenario {
   name: string;
-  /** Exactly how the generator built the tree before the first step. */
   seed: {
     global_toml: string | null;
     raw_table: boolean;
@@ -59,8 +46,6 @@ interface Scenario {
 }
 
 const scenarios = fixture.scenarios as unknown as Scenario[];
-
-// ── Harness ─────────────────────────────────────────────────────────────
 
 const roots: string[] = [];
 
@@ -93,7 +78,6 @@ function isDir(path: string): boolean {
   }
 }
 
-/** The generator's `snapshot()`: which characters have an `active_prompt/`. */
 function snapshotsOnDisk(dataDir: string): string[] {
   let entries: string[];
   try {
@@ -106,24 +90,9 @@ function snapshotsOnDisk(dataDir: string): string[] {
     .sort(compareByCodePoint);
 }
 
-/**
- * The `none_available` message the Rust returned, verbatim.
- *
- * It cites `characters/<name>/workspace/SOUL.md` relative to the config
- * directory and says so nowhere, which is #41: it is the first error a fresh
- * install hits, from every command, and the reader's working directory is the
- * obvious wrong guess. The port resolves the path instead.
- *
- * The fixture keeps the Rust's string — that is the only thing it records —
- * and {@link withResolvedSoulPath} rewrites it into the run's absolute form
- * before comparing. The rewrite is deliberately keyed on the *exact* old
- * string, so the day the message changes again this stops matching and the
- * divergence has to be restated rather than silently widened.
- */
 const RUST_NONE_AVAILABLE =
   "no characters available — create one at characters/<name>/workspace/SOUL.md";
 
-/** The same failure, with the path resolved against `configDir` (#41). */
 function withResolvedSoulPath(result: unknown, configDir: string): unknown {
   if (typeof result !== "object" || result === null) return result;
   const record = result as Record<string, unknown>;
@@ -136,7 +105,6 @@ function withResolvedSoulPath(result: unknown, configDir: string): unknown {
   };
 }
 
-/** The generator's `config_marks()`. */
 function configMarks(config: LoadedConfig): unknown {
   return {
     stream: config.app.defaults.stream,
@@ -145,10 +113,6 @@ function configMarks(config: LoadedConfig): unknown {
   };
 }
 
-/**
- * A `LoadedConfig` built the way `LoadedConfig::new_for_test` does — no raw
- * table, so a character override merges over nothing.
- */
 function newForTest(configDir: string, dataDir: string, root: string): LoadedConfig {
   return {
     app: defaultAppConfig(),
@@ -165,17 +129,11 @@ function newForTest(configDir: string, dataDir: string, root: string): LoadedCon
 }
 
 function loadFrom(path: string): LoadedConfig {
-  // Warnings are the config layer's own parity subject; silence them here so a
-  // 22-scenario replay does not put a hundred advisory lines through the runner.
   return loadConfig(path, { onWarn: () => {} });
 }
 
-// ── Replay ──────────────────────────────────────────────────────────────
-
 describe("the fixture is real", () => {
   test("every scenario is a run, not a call", () => {
-    // One-step scenarios would mean the caching this module exists for was
-    // never exercised.
     for (const s of scenarios) expect(s.steps.length).toBeGreaterThan(1);
     expect(scenarios.length).toBeGreaterThan(15);
   });
@@ -196,8 +154,6 @@ describe("CharacterRegistry", () => {
       mkdirSync(configDir, { recursive: true });
       mkdirSync(dataDir, { recursive: true });
 
-      // Engine identity, assigned in first-seen order exactly as the generator
-      // assigned it from `Arc::as_ptr`.
       const engineIds: object[] = [];
       const engineId = (engine: object): number => {
         const seen = engineIds.indexOf(engine);
@@ -212,7 +168,6 @@ describe("CharacterRegistry", () => {
         const where = `${scenario.name} step ${String(index)} (${step.op})`;
 
         switch (step.op) {
-          // ── construction ───────────────────────────────────────────
           case "new": {
             writeFileSync(join(configDir, "config.toml"), scenario.seed.global_toml as string);
             seedCharacters(configDir, scenario);
@@ -233,7 +188,6 @@ describe("CharacterRegistry", () => {
             break;
           }
 
-          // ── filesystem mutations ───────────────────────────────────
           case "fs:add_character":
             writeCharacter(configDir, step.name as string, step.soul as boolean);
             break;
@@ -256,12 +210,9 @@ describe("CharacterRegistry", () => {
             break;
           }
           case "fs:block_data_dir":
-            // A regular file where a character's data directory belongs, so
-            // preparing its workspace cannot succeed.
             writeFileSync(join(dataDir, step.name as string), "not a directory");
             break;
 
-          // ── registry operations ────────────────────────────────────
           case "refresh":
             await required(registry, where).refresh();
             break;
@@ -290,11 +241,6 @@ describe("CharacterRegistry", () => {
             let got: unknown;
             try {
               const engine = await required(registry, where).getOrCreate(step.name as string);
-              // `root` is which of the two roots the engine was opened under,
-              // as a label rather than a machine-specific path. An engine
-              // opened against the config directory would read an empty
-              // conversation and silently lose the character's history —
-              // identity alone would not notice.
               got = {
                 ok: true,
                 engine: engineId(engine),
@@ -377,8 +323,6 @@ describe("CharacterRegistry", () => {
             throw new Error(`${where}: unhandled op`);
         }
 
-        // State after every step, including the pure filesystem ones — that is
-        // what shows a mutation is invisible until something re-scans.
         const reg = required(registry, where);
         expect(
           {
@@ -469,29 +413,18 @@ describe("the character a bare command lands on", () => {
   });
 });
 
-/**
- * The characters the generator created before constructing the registry.
- *
- * Recorded in the fixture rather than inferred from the first step's results:
- * whether a character was seeded with `workspace/SOUL.md` or the legacy
- * `character.md` changes what `characterDefinition` returns, and reconstructing
- * that from the answers would make the replay agree with itself instead of
- * with the Rust.
- */
 function seedCharacters(configDir: string, scenario: Scenario): void {
   for (const { name, soul } of scenario.seed.characters) {
     writeCharacter(configDir, name, soul);
   }
 }
 
-/** Which root a path sits under, matching the generator's `starts_with` order. */
 function rootOf(path: string, dataDir: string, configDir: string): string {
   if (path.startsWith(dataDir)) return "data";
   if (path.startsWith(configDir)) return "config";
   return "other";
 }
 
-/** Rust's `Path::file_name()`, for the paths this test produces. */
 function basename(path: string): string {
   const at = path.lastIndexOf("/");
   return at < 0 ? path : path.slice(at + 1);

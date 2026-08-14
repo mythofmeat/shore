@@ -1,20 +1,3 @@
-/**
- * The capability tables the model catalog answers from: whether a field means
- * anything for an sdk and model, and what an sdk starts that field at.
- *
- * This replaces the `applicability` and `default_value` halves of
- * `model_resolution`, which recorded 728 and 91 rows respectively — the cartesian
- * product of 7 sdks, 8 model ids and 13 fields, filled in by a Rust binary that
- * no longer builds. The rules are `applicability` and `defaultValue` in
- * `capabilities.ts`, about sixty lines between them.
- *
- * The sweep is regenerated here from `SDK_VARIANTS` and `FIELDS`, so a new sdk
- * or field is covered on the day it lands. What it asserts is the shape of the
- * table rather than 819 recorded cells: a vendor field belongs to one sdk, a
- * universal field belongs to all of them, and the two model-shaped rules key on
- * the model rather than the sdk.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -27,7 +10,6 @@ import {
 } from "../src/llm/capabilities.ts";
 import { SDK_VARIANTS } from "../src/config/models.ts";
 
-/** Model ids that land on each branch the rules take, plus the empty string. */
 const MODELS = [
   "",
   "claude-opus-4-6",
@@ -53,8 +35,6 @@ describe("applicability answers for every sdk, model and field", () => {
   });
 
   test("a vendor field is honored on its own sdk and ignored on every other", () => {
-    // The whole point of the table: setting `gemini_generation` on an Anthropic
-    // model is not an error, it just does nothing.
     for (const [field, owner] of [
       ["cache_ttl", "anthropic"],
       ["openrouter_provider", "openrouter"],
@@ -94,8 +74,6 @@ describe("applicability answers for every sdk, model and field", () => {
   });
 
   test("temperature and top_p are never split", () => {
-    // They are one decision. A model that rejects one and honors the other
-    // would be a rule someone wrote by hand and got half right.
     for (const sdk of SDK_VARIANTS) {
       for (const model of MODELS) {
         expect(applicability(sdk, model, "temperature"), `${sdk}/${model}`).toBe(
@@ -106,7 +84,6 @@ describe("applicability answers for every sdk, model and field", () => {
   });
 
   test("budget_tokens is honored only where a thinking budget exists", () => {
-    // Anthropic is model-shaped; the rest are flat per sdk.
     for (const model of MODELS) {
       expect(applicability("gemini", model, "budget_tokens")).toBe("honored");
       expect(applicability("moonshot", model, "budget_tokens")).toBe("honored");
@@ -139,9 +116,6 @@ describe("applicability answers for every sdk, model and field", () => {
 
 describe("defaultValue", () => {
   test("only Anthropic starts a field at anything, and only cache_ttl", () => {
-    // #47 moved the keepalive default to nothing. Two shapes save money against
-    // a 1h TTL — a 55m cadence, or off — and choosing for every character is a
-    // spend decision the config exists to make.
     for (const sdk of SDK_VARIANTS) {
       for (const field of FIELDS) {
         const want = sdk === "anthropic" && field === "cache_ttl" ? "1h" : undefined;

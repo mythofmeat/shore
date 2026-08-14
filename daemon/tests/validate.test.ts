@@ -1,13 +1,3 @@
-/**
- * Recorded cases for validate.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import fixture from "./config_fixtures/validate.json" with { type: "json" };
@@ -53,29 +43,10 @@ interface Case {
 
 const cases = fixture.cases as unknown as Case[];
 
-/**
- * Cases the sidecar cannot reproduce, because `Bun.TOML.parse` does not decode
- * TOML's non-finite floats.
- *
- * Not a defect in the port and not fixable inside it — the document is already
- * wrong by the time `parseConfigTable` sees it. Excluded here and asserted
- * exactly, in `Bun.TOML.parse non-finite floats` below, so the day Bun fixes
- * this the assertion fails and these come back rather than staying skipped
- * forever.
- */
 const BUN_TOML_NONFINITE = new Set([
   "NaN budget cost_usd passes",
 ]);
 
-/**
- * Cases whose TOML sets a `[daemon]` key this schema no longer has.
- *
- * `unsafe_allow_remote_access` and `allowed_hosts` went when every client
- * started presenting a token, so a document carrying them is now a rejection
- * rather than a load. Unlike {@link BUN_TOML_NONFINITE} this is not a gap to
- * be reclaimed later — it is the intended behaviour, asserted on its own in
- * `a config with the deleted [daemon] keys` below.
- */
 const USES_DELETED_DAEMON_KEYS = new Set(["unified config"]);
 
 const USES_DELETED_SPIKE_WARNINGS = new Set([
@@ -95,10 +66,6 @@ const replayable = cases.filter(
     !USES_DELETED_SPIKE_WARNINGS.has(c.name),
 );
 
-/**
- * Dirs are not what this layer decides — they are `dirs.json`'s subject
- * — and `parseConfigTable` only carries them through onto the result.
- */
 const DIRS: ShoreDirs = {
   config: "/nonexistent/config",
   data: "/nonexistent/data",
@@ -106,11 +73,6 @@ const DIRS: ShoreDirs = {
   cache: "/nonexistent/cache",
 };
 
-/**
- * The `[defaults]` block as `serde_json::to_value` rendered it: `Option::None`
- * is `null`, and the key order is the struct's declaration order rather than
- * the object's.
- */
 function canonicalDefaults(defaults: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(defaults)) {
@@ -126,9 +88,6 @@ function canonicalDefaults(defaults: Record<string, unknown>): Record<string, un
 
 function okDigest(loaded: LoadedConfig): Case["ok"] {
   return {
-    // `sdk` and `base_url` are recorded because they are what the provider
-    // registry cascades into a static entry — the only visible evidence that
-    // `parseConfigTable` passed the registry to the catalog builder.
     chat: [...loaded.models.chat].map(([name, model]) => ({
       name,
       sdk: model.sdk,
@@ -140,8 +99,6 @@ function okDigest(loaded: LoadedConfig): Case["ok"] {
       .entries()
       .map(([key, entry]) => ({ key, enabled: entry.enabled })),
     defaults: canonicalDefaults(loaded.app.defaults as unknown as Record<string, unknown>),
-    // The Rust reads these off a BTreeMap, so code-point order, not the
-    // UTF-16 order `Array.prototype.sort` defaults to.
     raw_table_keys: Object.keys(loaded.rawTable ?? {}).sort(compareByCodePoint),
     enabled_tools: loaded.app.tools.enabled_tools,
     enabled_subagents: loaded.app.tools.enabled_subagents,
@@ -151,7 +108,6 @@ function okDigest(loaded: LoadedConfig): Case["ok"] {
   };
 }
 
-/** Run one case, collecting warnings instead of printing them. */
 function run(src: string): {
   loaded?: LoadedConfig;
   error?: ConfigError;
@@ -171,33 +127,21 @@ function run(src: string): {
   }
 }
 
-// ── The fixture itself ──────────────────────────────────────────────────
-
 describe("the fixture is real", () => {
   test("it covers both outcomes, and warnings on both sides of them", () => {
-    // An outcome-only fixture, or one with no multi-fault documents, would
-    // pass against a port that got every ordering and severity wrong.
     const errs = replayable.filter((c) => c.err !== undefined);
     expect(replayable.filter((c) => c.err === undefined).length).toBeGreaterThan(30);
     expect(errs.filter((c) => c.err?.kind === "validation").length).toBeGreaterThan(35);
     expect(replayable.filter((c) => c.warnings.length > 0).length).toBeGreaterThan(15);
-    // Warnings emitted by a load that then fails: proof the advisory pass runs
-    // to completion before the first hard check.
     expect(
       errs.filter((c) => c.warnings.length > 0).length,
     ).toBeGreaterThan(0);
-    // More than one warning from a single load, which is what pins their order.
     expect(replayable.filter((c) => c.warnings.length > 1).length).toBeGreaterThan(0);
   });
 });
 
-// ── The loads ───────────────────────────────────────────────────────────
-
 describe("the deleted [daemon] keys", () => {
   test("a config that still sets them is rejected, naming the key", () => {
-    // The excluded `unified config` case, asserted as what it became. Failing
-    // at load is the point: an allowlist that stayed in a file and silently
-    // stopped being consulted is the one outcome worth avoiding.
     for (const name of USES_DELETED_DAEMON_KEYS) {
       const c = cases.find((x) => x.name === name);
       expect(c, name).toBeDefined();
@@ -242,9 +186,6 @@ describe("parseConfigTable + validateConfig", () => {
       } else {
         expect(loaded, "expected a rejection").toBeUndefined();
         expect(error?.kind).toBe(c.err.kind);
-        // Validation messages are reproduced exactly. A `toml` parse error's
-        // is not — only its semantic half is recorded, and Bun's wording for
-        // the same fault is its own. See the fixture header.
         if (c.err.kind === "validation") {
           expect(error?.message).toBe(withCurrentCompactionDefaults(c.err.message, c.toml));
         }
@@ -255,50 +196,26 @@ describe("parseConfigTable + validateConfig", () => {
   }
 });
 
-/**
- * `Bun.TOML.parse` does not implement TOML's non-finite floats, and gets them
- * wrong in three different ways rather than one.
- *
- * Two of them are the dangerous kind. `-inf` and `+inf` come back as signed
- * *zero*, so `min_cost_usd = -inf` — which the daemon rejects — silently
- * passes the sidecar's `< 0.0` guard with no error anywhere. `nan` and `inf`
- * come back as strings, which at least fails loudly as a type error. A float
- * that overflows to infinity takes the whole document down.
- *
- * Nothing in a plausible config writes any of these, and the sidecar has no
- * way to repair a value it never received. It is asserted rather than merely
- * noted because a silent wrong number is exactly the failure that goes
- * unnoticed. The remaining budget case is excluded through
- * {@link BUN_TOML_NONFINITE}; deleted spike-warning fields now fail before
- * their nested values are decoded.
- */
 describe("Bun.TOML.parse non-finite floats", () => {
   test("decodes them wrongly, in these specific ways", () => {
     const decode = (src: string): unknown => (Bun.TOML.parse(src) as { a: unknown }).a;
 
-    // Strings, not numbers. Loud: a type error at parse.
     expect(decode("a = nan")).toBe("nan");
     expect(decode("a = inf")).toBe("inf");
     expect(decode("a = [nan]")).toEqual(["nan"]);
 
-    // Signed zero, not infinity. Silent, and the wrong side of every guard.
     expect(Object.is(decode("a = -inf"), -0)).toBe(true);
     expect(Object.is(decode("a = +inf"), 0)).toBe(true);
     expect(Object.is(decode("a = +nan"), 0)).toBe(true);
 
-    // Overflow to infinity takes the document with it.
     expect(() => Bun.TOML.parse("a = 1e400")).toThrow();
 
-    // Finite floats are fine, negative zero included — which is why
-    // `cost_usd = -0.0` replays but `-inf` does not.
     expect(Object.is(decode("a = -0.0"), -0)).toBe(true);
     expect(decode("a = 1.5")).toBe(1.5);
   });
 });
 
 describe("warning sink", () => {
-  // The default sink is what an operator actually reads, so its rendering is
-  // asserted rather than left to whatever `console.warn` happened to receive.
   test("renders message then fields", async () => {
     const { consoleConfigWarn } = await import("../src/config/loader.ts");
     const lines: string[] = [];

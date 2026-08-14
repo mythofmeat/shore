@@ -1,20 +1,9 @@
-/**
- * Recorded cases for model commands.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import fixture from "./commands_fixtures/model_commands.json" with { type: "json" };
-
 
 import { CommandError } from "../src/commands/errors.ts";
 import {
@@ -48,8 +37,6 @@ import {
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { cachePath } from "../src/llm/discovery.ts";
 import { testTmp } from "./support/tmp.ts";
-
-// ── fixture shapes ──────────────────────────────────────────────────────
 
 interface WireError {
   code: string;
@@ -99,8 +86,6 @@ interface Scenario {
 const scenarios = fixture.scenarios as unknown as Scenario[];
 
 const parseToml = (src: string): unknown => Bun.TOML.parse(src);
-
-// ── rebuilding the world the generator built ────────────────────────────
 
 async function buildContext(setup: Setup): Promise<ModelsContext> {
   const root = await mkdtemp(testTmp("shore-modelcmd-"));
@@ -183,9 +168,6 @@ async function buildContext(setup: Setup): Promise<ModelsContext> {
   };
 }
 
-// ── reading back what a step left behind ────────────────────────────────
-
-/** `SamplerSettings` in the fixture's spelling: every field, absent as null. */
 function samplerWire(s: SamplerSettings): Record<string, unknown> {
   const keepalive = s.cacheKeepalive;
   return {
@@ -218,8 +200,6 @@ function prefsWire(prefs: ModelPreferences): unknown {
       model_id: prefs.selected.modelId ?? null,
     },
     defaults: { sampler: samplerWire(prefs.defaults.sampler) },
-    // `ModelPreference` flattens its sampler where `PreferenceDefaults` wraps
-    // it, so the two blocks are not the same shape on the wire.
     models: Object.fromEntries(
       [...prefs.models.entries()].map(([key, entry]) => [key, samplerWire(entry.sampler)]),
     ),
@@ -269,8 +249,6 @@ function runStep(ctx: ModelsContext, step: Step): unknown {
   }
 }
 
-// ── the replay ──────────────────────────────────────────────────────────
-
 describe("model commands", () => {
   for (const scenario of scenarios) {
     test(scenario.name, async () => {
@@ -313,14 +291,6 @@ describe("model commands", () => {
   }
 });
 
-/**
- * The session `active_model` used to steer display while generation resolved
- * from the preferences file, so `shore model` and `shore status` could name a
- * model no turn would ever use. Both sides read the preferences now.
- *
- * Driven with the session pointing somewhere else on purpose: if the override
- * came back, `active` would follow it and this would fail.
- */
 test("the active model is the one generation resolves, not the session's", async () => {
   const ctx = await buildContext({
     catalog: '[chat.anthropic.alpha]\nmodel_id = "alpha-id"\n' +

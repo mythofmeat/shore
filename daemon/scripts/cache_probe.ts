@@ -1,17 +1,3 @@
-/**
- * Live cache-behavior probe for `replay_prior_thinking`, Sonnet only.
- *
- * Drives multi-turn conversations against the real Anthropic API through the
- * production `buildAnthropicParams` (so the trailing-marker placement is
- * the actual code under test), mirroring the daemon's upstream thinking-strip
- * for each replay mode. Records per-turn `cache_creation` / `cache_read` so we
- * can quantify the per-turn cache bust `last_turn` introduces and confirm the
- * trailing marker contains it (no unexpected invalidation).
- *
- * Run from daemon/:  bun run scripts/cache_probe.ts
- *
- * NOT a unit test — it spends real Anthropic credits.
- */
 import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
@@ -23,23 +9,13 @@ import type { SidecarRequest, WireMessage } from "../src/llm/types.ts";
 import type { ContentBlock } from "../src/engine/types.ts";
 
 const MODEL = "claude-sonnet-4-5";
-const TURNS = 6; // turn 0 = warm-up (expect creation), turn 1 = read-confirm, 2+ = steady state
+const TURNS = 6;
 const BUDGET_TOKENS = 4096;
 const MAX_TOKENS = 8192;
 
 type Mode = "all" | "last_turn" | "none";
 type Shape = "plain" | "tool_loop";
 
-// `all` and `none` are append-only-stable and already proven in prod, so the
-// live test focuses on the only new behavior: `last_turn`'s moving boundary,
-// run over an IDENTICAL captured transcript with the trailing marker both on
-// and off — the controlled comparison that attributes any cache difference to
-// the marker rather than to per-conversation thinking-size variance.
-
-// ── env / client ─────────────────────────────────────────────────────────────
-
-/** Resolve the key from the process env first, then the shore config dir's
- * `.env` (`$SHORE_CONFIG_DIR` or `~/.config/shore`). */
 function loadApiKey(): string {
   const fromEnv = process.env["ANTHROPIC_API_KEY"];
   if (fromEnv) return fromEnv;
@@ -52,13 +28,7 @@ function loadApiKey(): string {
   throw new Error(`ANTHROPIC_API_KEY not in process env or ${envPath}`);
 }
 
-// ── large, stable system prompt with a per-cell nonce ─────────────────────────
-
 function buildSystem(nonce: string): NonNullable<SidecarRequest["system"]> {
-  // ~6k tokens, well above Sonnet's 2048 cache floor, so every breakpoint
-  // (system + all message anchors) clears the minimum from turn 0. The nonce
-  // sits at the top so this cell's cached prefix never collides with another
-  // run's cache entries.
   const para =
     "You are a meticulous research assistant operating under a strict caching " +
     "evaluation harness. For EVERY question you must reason extensively and " +
@@ -72,8 +42,6 @@ function buildSystem(nonce: string): NonNullable<SidecarRequest["system"]> {
     { type: "text" as const, text: `CACHE-PROBE-NONCE: ${nonce}\n\n${filler}`, _label: "system_base" },
   ];
 }
-
-// ── thinking-strip (mirrors the daemon's content_util.rs, applied upstream) ───
 
 function isThinking(b: ContentBlock): boolean {
   return b.type === "thinking" || b.type === "redacted_thinking";
@@ -91,7 +59,6 @@ function stripThinking(m: WireMessage): void {
     m.content = m.content.filter((b) => !isThinking(b));
   }
 }
-/** Index where the most-recent assistant turn begins within `msgs[0..len]`. */
 function mostRecentTurnStart(msgs: WireMessage[], len: number): number {
   let lastA = -1;
   for (let i = len - 1; i >= 0; i--) {
@@ -110,12 +77,6 @@ function mostRecentTurnStart(msgs: WireMessage[], len: number): number {
   return start;
 }
 
-/**
- * Apply the mode's strip to the COMPLETED history `[0, completedLen)`, leaving
- * the in-progress turn `[completedLen, ...]` untouched (its thinking is
- * required by the API mid-tool-loop and is always replayed in production).
- * Returns a deep-cloned message array safe to mutate.
- */
 function applyStrip(history: WireMessage[], mode: Mode, completedLen: number): WireMessage[] {
   const out: WireMessage[] = JSON.parse(JSON.stringify(history));
   if (mode === "all") return out;
@@ -125,8 +86,6 @@ function applyStrip(history: WireMessage[], mode: Mode, completedLen: number): W
   }
   return out;
 }
-
-// ── Anthropic response → our ContentBlock[] ───────────────────────────────────
 
 function toBlocks(content: Anthropic.ContentBlock[]): ContentBlock[] {
   return content.map((b): ContentBlock => {
@@ -168,8 +127,6 @@ interface Row extends Usage {
   step: string;
 }
 
-// ── one API call through the production param builder ─────────────────────────
-
 async function call(
   client: Anthropic,
   system: NonNullable<SidecarRequest["system"]>,
@@ -182,7 +139,7 @@ async function call(
   const req: SidecarRequest = {
     sdk: "anthropic" as SidecarRequest["sdk"],
     model: MODEL,
-    api_key: "", // client carries the key; params builder doesn't need it
+    api_key: "",
     messages,
     system,
     max_tokens: MAX_TOKENS,
@@ -205,10 +162,6 @@ async function call(
   };
 }
 
-// ── drive one cell ────────────────────────────────────────────────────────────
-
-// Reasoning-heavy prompts so each turn produces a substantial thinking block
-// — that is what makes the moving boundary (and the marker) actually matter.
 const PROMPTS = [
   "Two trains start 360 miles apart heading toward each other; one at 50 mph, the other at 70 mph. Reason step by step about exactly when and where they meet.",
   "Now suppose the faster train pauses for 20 minutes exactly when it has covered a third of its initial distance to the meeting point. Re-derive when they meet.",
@@ -218,17 +171,10 @@ const PROMPTS = [
   "Compound interest: $1000 at 5% annual, compounded monthly vs annually over 3 years. Reason through both and quantify the difference.",
 ];
 
-// A replayable transcript so marker on/off run over IDENTICAL content (the only
-// way to attribute a `create`/`read` difference to the marker rather than to
-// nondeterministic per-conversation thinking sizes). `completedLen` is the
-// history length at the turn's start (prior turns = completed history; the rest
-// is the in-progress turn whose thinking is always kept).
 type Event =
   | { kind: "append"; msg: WireMessage }
   | { kind: "measure"; label: string; turn: number; completedLen: number };
 
-/** Run the conversation live with the marker ON, recording both the marker-on
- * rows and a replayable script of the exact messages/measure-points. */
 async function captureRun(
   client: Anthropic,
   shape: Shape,
@@ -269,8 +215,6 @@ async function captureRun(
   return { rows, script };
 }
 
-/** Replay the captured script with the marker OFF (fresh nonce), measuring at
- * the same points over identical message content. */
 async function replayRun(client: Anthropic, shape: Shape, script: Event[]): Promise<Row[]> {
   process.env["SHORE_ANTHROPIC_TURN_MARKER"] = "0";
   const system = buildSystem(randomUUID());
@@ -286,8 +230,6 @@ async function replayRun(client: Anthropic, shape: Shape, script: Event[]): Prom
   }
   return rows;
 }
-
-// ── main ──────────────────────────────────────────────────────────────────────
 
 function printTable(label: string, rows: Row[]): void {
   process.stderr.write(`\n=== ${label} ===\n`);
@@ -308,12 +250,11 @@ async function main() {
   const results: Array<{ shape: Shape; markerOn: Row[]; markerOff: Row[] }> = [];
 
   for (const shape of shapes) {
-    const cap = await captureRun(client, shape); // marker ON, captures transcript
+    const cap = await captureRun(client, shape);
     printTable(`${shape} marker=ON`, cap.rows);
-    const off = await replayRun(client, shape, cap.script); // marker OFF, identical content
+    const off = await replayRun(client, shape, cap.script);
     printTable(`${shape} marker=OFF (same transcript)`, off);
 
-    // Side-by-side create delta at each measure point (off - on); >0 = marker saved writes.
     process.stderr.write(`  --- ${shape}: create(off) - create(on), identical content ---\n`);
     for (let i = 0; i < cap.rows.length; i++) {
       const on = cap.rows[i]!;

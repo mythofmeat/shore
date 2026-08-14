@@ -1,10 +1,3 @@
-/**
- * Ported from `the deleted port::tests`, with the same
- * numbers, while both implementations existed. The Rust is gone; these are now
- * this implementation's own tests, and the numbers are kept because they are
- * the published rates, not a copy of someone else's copy.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -61,7 +54,6 @@ describe("cost calculation", () => {
       cache_write_tokens: 20,
       cache_ttl: "1h",
     });
-    // 20 × 0.000_018_75 × 1.6
     close(cost.cache_write, 0.0006);
     close(cost.total, 0.0015 + 0.00375 + 0.00012 + 0.0006);
   });
@@ -79,9 +71,6 @@ describe("cost calculation", () => {
   });
 
   test("routed Anthropic bills OpenRouter's cache-write price, not Anthropic's", () => {
-    // The provider is the user's custom key and the model is a resolved
-    // OpenRouter id. OpenRouter bills its own catalog price, so the native
-    // 1h multiplier must not apply on top of it.
     const cost = calculateCost(anthropicPricing(), {
       provider: "openrouter-anthropic",
       model: "anthropic/claude-opus-4.6",
@@ -107,7 +96,6 @@ describe("model id mapping", () => {
 
   test("already-prefixed ids pass through", () => {
     expect(toOpenRouterId("openrouter", "google/gemini-3-pro")).toBe("google/gemini-3-pro");
-    // A custom provider key whose model column already holds an OpenRouter id.
     expect(toOpenRouterId("openrouter-anthropic", "anthropic/claude-opus-4.6")).toBe(
       "anthropic/claude-opus-4.6",
     );
@@ -162,8 +150,6 @@ describe("the engine", () => {
     engine.clearCache();
 
     expect(map.size, "the table").toBe(0);
-    // And the memory: re-price the model and ask again. An engine that cleared
-    // only the store would still be answering from what it read a moment ago.
     map.set("anthropic/claude-opus-4.6", { ...anthropicPricing(), input_per_token: 1 });
     expect(engine.cached("anthropic", "claude-opus-4-6")?.input_per_token).toBe(1);
   });
@@ -191,7 +177,6 @@ describe("the engine", () => {
 
     const found = await engine.getOrFetch("anthropic", "claude-opus-4-6");
     close(found!.cache_write_per_token, 0.000_018_75);
-    // The other model came along for free, and is served without a second fetch.
     expect(engine.cached("openai", "gpt-4o")).toBeDefined();
     expect(store.get("openai/gpt-4o")).toBeDefined();
     await engine.getOrFetch("openai", "gpt-4o");

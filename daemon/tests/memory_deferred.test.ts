@@ -1,13 +1,3 @@
-/**
- * Recorded cases for memory deferred.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, readdir, writeFile, rm } from "node:fs/promises";
@@ -60,11 +50,6 @@ async function snapshot(dir: string): Promise<Record<string, string>> {
   return out;
 }
 
-/**
- * Replace the wall-clock `timestamp` on each queue line, keeping `path` and
- * the line structure intact. A line that does not parse is left alone so a
- * malformed queue is still compared verbatim.
- */
 function normalizeQueue(raw: string): string {
   return raw
     .split("\n")
@@ -155,9 +140,6 @@ describe("deferred edits parity", () => {
         expect(c.err).toBeNull();
         expect(returned).toEqual(c.returns as never);
 
-        // A queueing op must leave a real timestamp on the line it appended.
-        // Checked here rather than inside the normaliser, which also sees
-        // seeded literals like "t" that the writer never produced.
         if (c.op.fn === "queue_deferred_edit" || c.op.fn === "note_memory_index_deferred") {
           const queued = (await snapshot(root))["data/deferred_edits.jsonl"];
           if (queued !== undefined) {
@@ -175,9 +157,6 @@ describe("deferred edits parity", () => {
           Object.entries(c.after).map(([k, v]) => [k, b64(v)]),
         );
 
-        // Same file set: catches a snapshot that stopped being written and a
-        // legacy file that stopped being cleaned up, both of which a
-        // content-only comparison would miss.
         expect(Object.keys(actual).sort()).toEqual(Object.keys(expected).sort());
 
         for (const [rel, want] of Object.entries(expected)) {

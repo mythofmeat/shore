@@ -1,24 +1,3 @@
-/**
- * Conversion regression test — the no-live-model proof that the deepseek/kimi
- * tool-loop bug is dead in the official-SDK adapter.
- *
- * Fixtures under tests/fixtures/ are STRUCTURE-preserving, text-redacted copies
- * of real failing requests pulled from production (`meat`): canonical
- * Anthropic-shape turns including thinking blocks, parallel tool_use, and
- * tool_result turns. We run them through the OpenAI adapter's `turnToOpenAI`
- * converter and assert the wire shape strict OpenAI-compatible backends
- * (deepseek, kimi, glm) actually accept.
- *
- * The retired Rust adapter failed these two ways — replaying prior thinking in
- * the wrong shape unconditionally, and emitting `"content": null` on
- * tool-call-only assistant turns. This test pins the faithful mapping instead:
- * an assistant turn's thinking blocks emit as `reasoning_content` exactly when
- * present (Kimi K2.5+/K3 preserved-thinking-history mode requires the replay;
- * the daemon's `replay_prior_thinking` setting decides what survives to this
- * converter), turns without thinking gain no reasoning field, the bare
- * `reasoning` key is never emitted, and `content: null` never appears.
- */
-
 import { describe, expect, test } from "bun:test";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -45,7 +24,6 @@ function loadFixtures(): Array<{ name: string; fx: Fixture }> {
     }));
 }
 
-/** Flatten a fixture's turns through the converter, as buildOpenAICall does. */
 function convert(fx: Fixture): Array<Record<string, unknown>> {
   return fx.messages.flatMap(
     (turn) => turnToOpenAI(turn) as unknown as Array<Record<string, unknown>>,
@@ -63,11 +41,7 @@ describe("OpenAI conversion regression (real production sequences)", () => {
     describe(name, () => {
       const out = convert(fx);
 
-      // ── The headline behavior: faithful thinking ⇄ reasoning_content ─────
       test("assistant thinking blocks emit reasoning_content; nothing else does", () => {
-        // Walk fixture turns and emitted messages in lockstep: each source
-        // turn maps to 1..n wire messages (tool_results fan out), and the
-        // assistant message for a turn is the only place reasoning may land.
         let cursor = 0;
         for (const turn of fx.messages) {
           const emitted = turnToOpenAI(turn) as unknown as Array<Record<string, unknown>>;
@@ -90,7 +64,6 @@ describe("OpenAI conversion regression (real production sequences)", () => {
         expect(cursor).toBe(out.length);
       });
 
-      // ── Secondary divergence: content:null on tool-call-only turns ───────
       test("never emits content:null (assistant tool-call turns omit content)", () => {
         for (const msg of out) {
           if (msg["role"] === "assistant" && "content" in msg) {
@@ -99,7 +72,6 @@ describe("OpenAI conversion regression (real production sequences)", () => {
         }
       });
 
-      // ── Tool pairing must be valid OpenAI ────────────────────────────────
       test("tool_use → assistant.tool_calls; tool_result → role:tool, ids paired", () => {
         const announced = new Set<string>();
         const srcToolUseIds: string[] = [];
@@ -125,17 +97,14 @@ describe("OpenAI conversion regression (real production sequences)", () => {
           if (msg["role"] === "tool") {
             const id = String(msg["tool_call_id"]);
             toolMsgIds.push(id);
-            // Every tool result must reference a tool_call announced earlier.
             expect(announced.has(id)).toBe(true);
           }
         }
 
-        // Nothing dropped or invented in either direction.
         expect(emittedToolCallIds.sort()).toEqual([...srcToolUseIds].sort());
         expect(toolMsgIds.sort()).toEqual([...srcToolResultIds].sort());
       });
 
-      // ── General OpenAI shape sanity ──────────────────────────────────────
       test("every emitted message has a valid role", () => {
         for (const msg of out) {
           expect(["system", "user", "assistant", "tool"]).toContain(

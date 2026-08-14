@@ -1,13 +1,3 @@
-/**
- * Recorded cases for deep archive.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -30,8 +20,6 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { testTmp } from "./support/tmp.ts";
 
-// ── harness ─────────────────────────────────────────────────────────────
-
 interface Shape {
   role: string;
   msg_id: string;
@@ -40,7 +28,6 @@ interface Shape {
   tool_result_only: boolean;
 }
 
-/** A message as the generator's `shape` recorded it, rebuilt into a real one. */
 function fromShape(s: Shape): Message {
   const base: Message = {
     msg_id: s.msg_id,
@@ -56,16 +43,6 @@ function fromShape(s: Shape): Message {
   return s.autonomous ? { ...base, origin: "autonomous" } : base;
 }
 
-/**
- * A character directory with a conversation on disk.
- *
- * `content` is either the fixture's recorded bytes or messages this side
- * serialized. The archive sections must use the recorded bytes: the split is by
- * *line* over them, and `serde` omits an empty `alternatives` where
- * `JSON.stringify` writes it — so a replay that re-encoded the messages would be
- * comparing its own encoder against the Rust's rather than the archive against
- * the archive.
- */
 async function world(
   content: Message[] | string,
   priorSegment = false,
@@ -110,8 +87,6 @@ async function world(
   const app = defaultAppConfig();
   const models = emptyCatalog();
   if (opts.backgroundModel === true) {
-    // `resolveBackgroundModel` falls back to the chat model when no
-    // `[defaults.background]` is set, so one entry gives the LLM arm a model.
     app.defaults.model = "fixture";
     models.chat.set("chat.fixture", FIXTURE_MODEL);
   }
@@ -123,7 +98,6 @@ async function world(
   };
 }
 
-/** The generator's model, as the TypeScript catalog spells it. */
 const FIXTURE_MODEL = {
   name: "fixture",
   qualifiedName: "chat.fixture",
@@ -137,14 +111,12 @@ const FIXTURE_MODEL = {
   maxToolIterations: 4,
 } as never;
 
-/** The messages as the store hands them back, which is what the plan reads. */
 async function loadThroughStore(shapes: Shape[]): Promise<Message[]> {
   const { characterDir } = await world(shapes.map(fromShape));
   const store = await MessageStore.load(join(characterDir, "active.jsonl"));
   return [...store.messages()];
 }
 
-/** The segment files, by name, as the generator recorded them. */
 async function segmentsAfter(characterDir: string): Promise<Record<string, string>> {
   let names: string[];
   try {
@@ -159,7 +131,6 @@ async function segmentsAfter(characterDir: string): Promise<Record<string, strin
   return out;
 }
 
-/** The manifest with its generated stamps replaced, as the generator did. */
 async function manifestAfter(characterDir: string): Promise<unknown> {
   let raw: string;
   try {
@@ -172,8 +143,6 @@ async function manifestAfter(characterDir: string): Promise<unknown> {
   return v;
 }
 
-// ── 1. which arm ────────────────────────────────────────────────────────
-
 describe("deepArchivePlan", () => {
   for (const [i, kase] of fixture.plan.entries()) {
     test(`case ${i}: ${kase.note}`, async () => {
@@ -183,16 +152,10 @@ describe("deepArchivePlan", () => {
   }
 
   test("the covered comparison is equality, not a floor", () => {
-    // The fixture's "covered count above the on-disk count" case is what pins
-    // this, and it is worth stating separately: a `>=` reads an *over*-count as
-    // full coverage and archives uncovered turns without ever showing them to
-    // the model.
     const above = fixture.plan.find((c) => c.note.startsWith("covered count above"));
     expect(above?.plan.arm).toBe("compaction");
   });
 });
-
-// ── 2. what the pure arm leaves on disk ─────────────────────────────────
 
 describe("the pure archive", () => {
   for (const [i, kase] of fixture.pure_archive.entries()) {
@@ -221,8 +184,6 @@ describe("the pure archive", () => {
   }
 });
 
-// ── 3. the notification ─────────────────────────────────────────────────
-
 describe("deepArchiveNotification", () => {
   for (const kase of fixture.notification) {
     test(`${kase.archivable} archivable`, () => {
@@ -231,16 +192,6 @@ describe("deepArchiveNotification", () => {
   }
 });
 
-// ── 4. the action end to end ────────────────────────────────────────────
-
-/**
- * The action's own reporting, which the fixture cannot hold.
- *
- * The Rust set state directly under a mutex; here it comes back as an
- * {@link AutonomyActionResult} for the runner to fold in, so what each arm
- * *reports* is behaviour this side invented and has to pin for itself. The
- * mapping to the Rust is one-to-one and is written out in the assertions.
- */
 function deps(config: LoadedConfig, over: Partial<DeepArchiveDeps> = {}): DeepArchiveDeps {
   return {
     config,
@@ -266,9 +217,6 @@ describe("runDeepIdleArchive", () => {
     );
 
     expect(result).toEqual({ events: [], deepArchiveDone: true });
-    // Not routed through the archive: no turn count, no notification, and the
-    // conversation byte-identical. An archive whose `keepLastN` happens to
-    // retain everything looks the same on disk and different in all three.
     expect(result.turnCount).toBeUndefined();
     expect(notes).toEqual([]);
     expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe(before);
@@ -296,8 +244,6 @@ describe("runDeepIdleArchive", () => {
     expect(result).toEqual({ turnCount: 0, events: [], deepArchiveDone: true });
     expect(notes).toEqual([[kase.notification.title, kase.notification.body]]);
     expect(reloaded).toEqual(["ada"]);
-    // The active bytes still match the fixture. Production archival itself is
-    // database-only, so no new JSONL segment is left behind.
     expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe(kase.active_after);
     const segments = await segmentsAfter(characterDir);
     if (kase.prior_segment) expect(segments).toEqual({ "0001.jsonl": "{}\n" });
@@ -319,12 +265,8 @@ describe("runDeepIdleArchive", () => {
 
     await runDeepIdleArchive("ada", deps(config, { cache }), kase.covered_turn_count);
 
-    // The rebuild finds no chat model, so the decision is `disarm` — which is
-    // the point: the pre-archive body must not stay armed against a
-    // conversation that no longer exists.
     expect(cache.get("ada")).toBeUndefined();
     expect(disarmed).toEqual(["ada"]);
-    // Armed once, by the `set` that seeded the stale body — and not again.
     expect(armed).toEqual(["ada"]);
   });
 
@@ -347,10 +289,6 @@ describe("runDeepIdleArchive", () => {
   });
 
   test("the LLM arm runs a keep-0 pass and does not finish the idle period", async () => {
-    // The case the Rust's comment is about, and the reason `deepArchiveDone`
-    // had to become a field: a pass that wrote no memory returns the same zero
-    // a successful one does, so declaring the period finished here would stop
-    // the next window retrying a conversation that is still fully intact.
     const kase = fixture.plan.find((c) => c.plan.arm === "compaction")!;
     const { config, characterDir } = await world((kase.input as Shape[]).map(fromShape), false, {
       backgroundModel: true,
@@ -363,8 +301,6 @@ describe("runDeepIdleArchive", () => {
       "ada",
       deps(config, {
         run: {
-          // A model that says nothing calls no memory tool, which is the
-          // `no_memory_writes` outcome: zero retained, conversation untouched.
           generate: async () => {
             seen.push({ keepTurns: 0 });
             return {
@@ -386,20 +322,14 @@ describe("runDeepIdleArchive", () => {
     expect(result.turnCount).toBe(0);
     expect(result.failed).toBeUndefined();
     expect(result.deepArchiveDone).toBe(false);
-    // Untouched, which is what makes the retry worth allowing.
     expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe(before);
   });
 
   test("the keep-0 pass retains the unanswered autonomous run", async () => {
-    // `retainTrailingAutonomous` is what stops the LLM arm archiving a
-    // heartbeat message the user has not read — the same loss the pure arm's
-    // `tail` prevents, on the other side of the coverage split. Reaching it
-    // needs a pass that actually writes memory, so the model here calls `edit`.
     const kase = fixture.plan.find(
       (c) => c.plan.arm === "compaction" && c.note.startsWith("uncovered"),
     )!;
     const messages = (kase.input as Shape[]).map(fromShape);
-    // An unanswered heartbeat run on the end, which the pass must leave alone.
     messages.push({
       msg_id: "m_9",
       role: "assistant",
@@ -451,7 +381,6 @@ describe("runDeepIdleArchive", () => {
 
     expect(result.failed).toBeUndefined();
     expect(result.deepArchiveDone).toBe(false);
-    // Keep-0 empties the conversation *except* the trailing autonomous run.
     const after = await readFile(join(characterDir, "active.jsonl"), "utf8");
     const ids = after
       .split("\n")
@@ -476,7 +405,6 @@ describe("runDeepIdleArchive", () => {
       kase.covered_turn_count,
     );
 
-    // No model resolves in this world, so the pass throws before it reaches one.
     expect(result.deepArchiveDone).toBe(false);
     expect(result.failed).toBeDefined();
   });
@@ -498,7 +426,6 @@ describe("runDeepIdleArchive", () => {
     const { config, dataDir, characterDir } = await world(kase.active_before);
     const before = await readFile(join(characterDir, "active.jsonl"), "utf8");
 
-    // The same single-flight slot every other compaction entry point takes.
     const held = tryBeginCompaction(dataDir, "ada")!;
     const refused = await runDeepIdleArchive("ada", deps(config), kase.covered_turn_count);
 
@@ -506,15 +433,11 @@ describe("runDeepIdleArchive", () => {
     expect(refused.deepArchiveDone).toBe(false);
     expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe(before);
 
-    // Released, so the next window actually gets its turn — a guard that is
-    // taken and never given back wedges every later pass for the process's life.
     held.release();
     const second = await runDeepIdleArchive("ada", deps(config), kase.covered_turn_count);
     expect(second.failed).toBeUndefined();
     expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe(kase.active_after);
 
-    // And this one released its own: a third attempt is refused only by having
-    // nothing left to archive, not by a slot nobody handed back.
     const third = tryBeginCompaction(dataDir, "ada");
     expect(third).toBeDefined();
     third?.release();
@@ -523,8 +446,6 @@ describe("runDeepIdleArchive", () => {
   test("a broken legacy segments path cannot block a database archive", async () => {
     const kase = fixture.pure_archive[0]!;
     const { config, characterDir } = await world(kase.active_before);
-    // A leftover legacy `segments` path is irrelevant to database-backed
-    // archiving and must not prevent the active window from being compacted.
     await writeFile(join(characterDir, "segments"), "not a directory");
 
     const result = await runDeepIdleArchive("ada", deps(config), kase.covered_turn_count);
@@ -535,9 +456,6 @@ describe("runDeepIdleArchive", () => {
   });
 
   test("a conversation with one unreadable line still opens, minus that line", async () => {
-    // Before #98 a single malformed line made the file unopenable and the
-    // archive failed outright. The good turns are now recovered and the bad
-    // line is quarantined; here every line is bad, so nothing is archivable.
     const { config, characterDir } = await world([]);
     await writeFile(join(characterDir, "active.jsonl"), "{not json\n");
 

@@ -1,13 +1,3 @@
-/**
- * Recorded cases for messages.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -23,8 +13,6 @@ import fixture from "./engine_fixtures/messages.json";
 
 const wire = (v: unknown): unknown => JSON.parse(JSON.stringify(v));
 
-/** Fill in the arrays serde omits when empty. Deliberately not `normalizeMessage`:
- *  `append` does not normalize, so a replayed append must not either. */
 const hydrate = (m: Message): Message => ({
   ...m,
   images: m.images ?? [],
@@ -50,11 +38,6 @@ describe("loading", () => {
       await inTemp(async (path) => {
         if (c.file !== null) await Bun.write(path, c.file);
         if (!c.expect.ok) {
-          // The Rust refused the whole file on one bad line, which is what the
-          // fixture records. Since #98 the good lines are kept and the bad ones
-          // are quarantined — losing a conversation to a single malformed line
-          // was the worse failure. What is pinned now is that the damage is
-          // counted and that no unparseable line is silently accepted.
           const store = await MessageStore.load(path);
           expect(store.quarantinedLines).toBeGreaterThan(0);
           expect(store.messages().length).toBe(countParsableLines(c.file ?? ""));
@@ -101,7 +84,6 @@ describe("attach_generated_alt", () => {
   }
 });
 
-/** Replay one trace: seed the file, then apply each op and check everything. */
 describe("operation traces", () => {
   interface Op {
     op: unknown;
@@ -117,12 +99,6 @@ describe("operation traces", () => {
     ops: Op[];
   }
 
-  /**
-   * Map a recorded op back onto a call. Explicit rather than reflective, so an
-   * unhandled shape fails loudly instead of silently skipping its assertions.
-   * Appends and inserts carry their message inline, so what is replayed is the
-   * message the Rust was given rather than one reconstructed from the result.
-   */
   async function apply(
     store: MessageStore,
     op: unknown,
@@ -199,8 +175,6 @@ describe("operation traces", () => {
   for (const t of fixture.traces as unknown as Trace[]) {
     test(t.name, async () => {
       await inTemp(async (path) => {
-        // The fixture records `select` by index only; the tail-branch trace is
-        // the one whose target is not `a1`.
         const target = t.name.includes("tail_branch") ? "a2" : "a1";
         if (t.seed_file !== "") await Bun.write(path, t.seed_file);
         const store = await MessageStore.load(path);

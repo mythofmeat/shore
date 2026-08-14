@@ -1,13 +1,3 @@
-/**
- * Recorded cases for generation.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { afterAll, describe, expect, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
@@ -44,12 +34,9 @@ import { testTmp } from "./support/tmp.ts";
 
 afterAll(restoreTestEnv);
 
-// ── normalisation, mirroring the generator ──────────────────────────────
-
 const MINTED_TS = "2026-01-01T00:00:00-05:00";
 const MINTED_ID_RE = /^m_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Timestamps a case seeded. Anything else on a message was minted by the run. */
 let seededTimestamps = new Set<string>();
 
 function normalise(v: unknown): unknown {
@@ -78,14 +65,6 @@ function normalise(v: unknown): unknown {
   return v;
 }
 
-/**
- * Drop keys the Rust omits via `skip_serializing_if`, so a TypeScript object
- * carrying an explicit `undefined` or `null` compares equal to a frame the Rust
- * simply did not write. Same treatment the other parity replays apply, and it
- * is what `subagent` needs: the Rust omits `None`, the generated `.d.ts` makes
- * the field required so this side sends `null`, and a client reads them the
- * same because the field is `#[serde(default)]` on the way back in.
- */
 function pruned(v: unknown): unknown {
   if (Array.isArray(v)) return v.map(pruned);
   if (v !== null && typeof v === "object") {
@@ -104,12 +83,9 @@ function pruned(v: unknown): unknown {
 
 const shaped = (v: unknown): unknown => pruned(normalise(v));
 
-/** Replace the per-run temp root with `<root>`, as the generator did. */
 function stripRoot(s: string, root: string): string {
   return s.startsWith(root) ? `<root>${s.slice(root.length)}` : s;
 }
-
-// ── config ──────────────────────────────────────────────────────────────
 
 interface Knobs {
   tools_enabled?: string[] | null;
@@ -119,11 +95,9 @@ interface Knobs {
   embedding_key_set?: boolean;
   search_depth?: string | null;
   max_retries?: number;
-  /** Seed the catalog with the fixture's model. Only the turn cases need one. */
   with_model?: boolean;
 }
 
-/** The generator's `loaded_config`, rebuilt on this side. */
 async function loadedConfig(root: string, knobs: Knobs): Promise<LoadedConfig> {
   const dirs = {
     config: join(root, "config"),
@@ -150,10 +124,6 @@ async function loadedConfig(root: string, knobs: Knobs): Promise<LoadedConfig> {
   if (knobs.max_retries !== undefined) app.advanced.max_retries = knobs.max_retries;
 
   const models = emptyCatalog();
-  // The generator handed `handle_generation` a `ResolvedModel` directly, as the
-  // Rust handler does. This side resolves the active model itself, so the same
-  // model goes in the catalog and is named as the default — the resolution is
-  // pinned separately by `handler_active_model.test.ts`.
   if (knobs.with_model === true) {
     models.chat.set("chat.fixture", model());
     app.defaults.model = "fixture";
@@ -178,7 +148,6 @@ const IMAGE_KEY_ENV = "SHORE_FIXTURE_IMAGE_KEY";
 const EMBED_KEY_ENV = "SHORE_FIXTURE_EMBED_KEY";
 const MODEL_KEY_ENV = "SHORE_FIXTURE_API_KEY";
 
-/** The generator's `model()`. Anthropic throughout — see the fixture note. */
 function model(): ResolvedModel {
   return {
     name: "fixture",
@@ -197,8 +166,6 @@ function model(): ResolvedModel {
 async function tempRoot(name: string): Promise<string> {
   return await mkdtemp(testTmp(`shore-gen-${name}-`));
 }
-
-// ── apply_intermediate_messages ─────────────────────────────────────────
 
 describe("applyIntermediateMessages", () => {
   for (const c of fixture.apply_intermediate_messages) {
@@ -222,8 +189,6 @@ describe("applyIntermediateMessages", () => {
   }
 });
 
-// ── build_tool_context ──────────────────────────────────────────────────
-
 describe("buildToolContext", () => {
   for (const c of fixture.build_tool_context) {
     test(c.name, async () => {
@@ -242,8 +207,6 @@ describe("buildToolContext", () => {
 
       const ctx = await buildToolContext(config, config.dirs.data, "ada", {
         mcpRegistry: { call: async () => undefined },
-        // Always passed, so what the fixture's `subagent_runtime` is recording
-        // — the `[subagents.*]` gate — is the only thing that can decide it.
         runSubagent: () => async () => undefined,
       });
 
@@ -252,8 +215,6 @@ describe("buildToolContext", () => {
       expect(stripRoot(ctx.characterDataDir, root)).toBe(out["character_data_dir"]);
       expect(stripRoot(ctx.configDir, root)).toBe(out["config_dir"]);
       expect(ctx.characterName).toBe(out["character_name"]);
-      // The workspace index stopped being a JSON document; where it sits is
-      // unchanged, so the recorded path is compared with the filename moved.
       expect(stripRoot(ctx.memoryIndexPath ?? "", root)).toBe(
         String(out["memory_index_path"]).replace(/workspace_index\.json$/, "workspace_index.db"),
       );
@@ -271,8 +232,6 @@ describe("buildToolContext", () => {
         expect(ctx.imageGenConfig?.size).toBe(cfg["size"] as string);
       }
 
-      // The search config crosses unchanged; the retrieval config is the same
-      // values under camelCase names.
       expect(ctx.searchConfig.search_depth).toBe(
         (input as Knobs).search_depth ?? defaultSearchConfig().search_depth,
       );
@@ -282,30 +241,24 @@ describe("buildToolContext", () => {
       );
       expect(ctx.retrievalMode).toBe(out["memory_retrieval_config"]["mode"]);
 
-      // The side effect: the snapshot the deferred-edit queue diffs against.
       const snapshot = readdirSync(join(config.dirs.data, "ada", "active_prompt")).sort();
       expect(snapshot).toEqual(out["active_prompt_snapshot"] as string[]);
     });
   }
 });
 
-// ── handle_generation ───────────────────────────────────────────────────
-
-/** Everything one replayed turn recorded. */
 interface Run {
   direct: ServerMessage[];
   broadcast: ServerMessage[];
   requests: SidecarRequest[];
   lastRequest: unknown;
   error?: string;
-  /** Where in `direct` the compaction gate was consulted, or -1. */
   compactionCheckedAfter: number;
   autonomyCalls: string[];
   dataDir: string;
   turnCount: number;
 }
 
-/** The generator's `ToolStep`s, played against the phase the driver built. */
 async function* scriptedLoop(
   steps: readonly Record<string, any>[],
   events: readonly StreamEvent[],
@@ -383,10 +336,6 @@ async function replayTurn(c: Record<string, any>): Promise<Run> {
     },
     shouldCompactNow: () => {
       autonomyCalls.push("shouldCompactNow");
-      // Not fixture-driven, and cannot be: the Rust spawned this check on a
-      // detached task, so how many frames had gone out when it ran was a race.
-      // What is recorded here is how much of the stream preceded it, which is
-      // the ordering the assertion below pins.
       compactionCheckedAfter = direct.length;
       return false;
     },
@@ -449,8 +398,6 @@ async function replayTurn(c: Record<string, any>): Promise<Run> {
         rid: input["rid"],
         kind: "message",
       } as never,
-      // The Rust omits empty vectors via `skip_serializing_if`, so a body with
-      // no images has neither key.
       body: {
         rid: input["rid"] ?? null,
         text: input["body"]["text"],
@@ -484,14 +431,12 @@ async function replayTurn(c: Record<string, any>): Promise<Run> {
   };
 }
 
-/** Drop the two fields the sidecar hop needed and this side has no use for. */
 function stripHopFields(cached: unknown): unknown {
   if (cached === null || typeof cached !== "object") return cached;
   const { tool_rpc: _hop, max_tool_iterations: _cap, ...rest } = cached as Record<string, unknown>;
   return rest;
 }
 
-/** Drop `is_error: false` from `tool_result` blocks — see the note at the call. */
 function dropFalseIsError(v: unknown): unknown {
   if (Array.isArray(v)) return v.map(dropFalseIsError);
   if (v !== null && typeof v === "object") {
@@ -505,12 +450,10 @@ function dropFalseIsError(v: unknown): unknown {
   return v;
 }
 
-/** A case's `input`, typed loosely — every field is fixture JSON. */
 function input(c: unknown): Record<string, any> {
   return (c as Record<string, any>)["input"] as Record<string, any>;
 }
 
-/** The conversation as it now stands on disk, read back through a fresh engine. */
 async function readBack(dataDir: string): Promise<readonly Message[]> {
   const engine = await ConversationEngine.load("ada", dataDir, undefined);
   return engine.messages();
@@ -522,50 +465,23 @@ describe("runGeneration", () => {
       const run = await replayTurn(c as Record<string, any>);
       const out = c.output as Record<string, any>;
 
-      // The frames the driver itself sends, in order.
       expect(shaped(run.direct)).toEqual(shaped(out["direct_frames"]));
 
-      // Only `new_message` is the driver's; `history` is the Rust engine's own
-      // push on append, and has no counterpart on this side.
       const expectedBroadcast = (out["broadcast_events"] as Record<string, unknown>[]).filter(
         (m) => m["type"] === "new_message",
       );
       expect(shaped(run.broadcast)).toEqual(shaped(expectedBroadcast));
 
-      // What the provider was actually sent, labels included. `tool_rpc` is
-      // dropped from the recorded side: it is the socket path and loop id the
-      // sidecar called back on, and it died with the hop.
       const expectedRequests = (out["sidecar_requests"] as Record<string, unknown>[]).map(
         ({ tool_rpc: _hop, ...rest }) => rest,
       );
       expect(shaped(run.requests)).toEqual(shaped(expectedRequests));
 
-      // The conversation as it now stands on disk, read back through a fresh
-      // engine rather than the one the turn held.
       expect(shaped(await readBack(run.dataDir))).toEqual(shaped(out["conversation"]));
       expect(run.turnCount).toBe(out["turn_count"] as number);
 
-      // The body every `last_request` reuse path clones. A turn's tool
-      // exchanges have to be in it or the keepalive ping rewrites the
-      // conversation it was meant to keep warm.
-      // `rid` is `#[serde(skip)]` on the Rust request, so it lived in memory
-      // and never reached the recorded JSON. It is dropped here for the same
-      // reason `pruned` drops the `skip_serializing_if` fields.
-      // Two fields on the recorded body belonged to the hop and have no
-      // counterpart: `tool_rpc` (the callback socket and loop id) and
-      // `max_tool_iterations`, which the Rust had to put on the shared request
-      // because that was the only way to tell the sidecar the cap. Here the cap
-      // rides on the call the loop is given and never on the conversation body.
-      //
-      // And `is_error: false` on a `tool_result`: the Rust's wire block omitted
-      // a false via `skip_serializing_if`, while this side's wire block *is*
-      // the stored block, so the field comes along. Inert either way — every
-      // dialect reads an explicit false as no error — and stable across turns,
-      // which is what the cache prefix needs.
       const expectedCached = stripHopFields(out["cached_last_request"]);
 
-      // A turn that failed never told autonomy anything, and the Rust recorded
-      // that as a null rather than an empty body.
       let cached: unknown = null;
       if (run.lastRequest !== undefined) {
         const copy = { ...(run.lastRequest as Record<string, unknown>) };
@@ -574,11 +490,6 @@ describe("runGeneration", () => {
       }
       expect(shaped(dropFalseIsError(cached))).toEqual(shaped(expectedCached));
 
-      // Not fixture-driven: the Rust's autonomy manager keeps its state in a
-      // file the generator would have had to read back turn by turn, and each
-      // of these calls is pinned on its own elsewhere (turn for the
-      // first two, persistence for the last two). What is unpinned without
-      // this is that the driver makes them, and in this order.
       const expectedCalls = ["ensureState"];
       const body = input(c)["body"] as Record<string, unknown>;
       const fresh =
@@ -594,33 +505,16 @@ describe("runGeneration", () => {
       const expectedError = (out["result"] as Record<string, unknown>)["error"];
       if (expectedError === undefined) {
         expect(run.error).toBeUndefined();
-        // Not fixture-driven — see the note on `shouldCompactNow`. The gate is
-        // consulted after every frame the turn sends, `stream_end` included,
-        // which is what makes it safe for it to read the engine.
         expect(run.compactionCheckedAfter).toBe(run.direct.length);
         expect(run.direct.at(-1)?.type).toBe("stream_end");
       } else {
         expect(run.error).toBeDefined();
-        // A turn that failed persists nothing and never reaches the gate.
         expect(run.compactionCheckedAfter).toBe(-1);
       }
     });
   }
 });
 
-// ── one turn that is not fixture-driven, and says why ───────────────────
-
-/**
- * A sampler preference reaches the request.
- *
- * Not from the fixture: the generator handed `handle_generation` a
- * `ResolvedModel` the Rust handler had already merged, so no recorded case has
- * an overlay to carry. What both halves are is pinned —
- * `handler_active_model.test.ts` for the resolution, `setup.json` for
- * the merge — and what is not is that the driver threads one into the other. A
- * dropped overlay is silent: the turn runs, on the catalog's defaults, and the
- * user's `shore model set temperature` did nothing.
- */
 test("a sampler preference set for the character reaches the outgoing request", async () => {
   const root = await tempRoot("overlay");
   const config = await loadedConfig(root, { with_model: true });
@@ -704,22 +598,8 @@ test("a sampler preference set for the character reaches the outgoing request", 
   expect(requests[0]?.temperature).toBe(0.25);
 });
 
-/**
- * A turn that cannot resolve a model writes nothing.
- *
- * Not from the fixture, and it could not be: the Rust appended the user turn
- * and resolved the model *after* it, so the recorded behaviour is the bug —
- * `send` into a config with no `[providers.*]` failed, and left the message in
- * `active.jsonl` with no assistant turn and nothing in the CLI output saying it
- * had been kept. Repeating the command stacked them up (#31).
- *
- * The assertion is the file, not the engine's in-memory list: the complaint was
- * about what `shore log` showed on the next run.
- */
 test("a turn with no model configured leaves the conversation untouched", async () => {
   const root = await tempRoot("nomodel");
-  // No `with_model`, so the catalog is empty and no default is named — the
-  // shape of a fresh install that has not configured a provider yet.
   const config = await loadedConfig(root, {});
   await mkdir(join(config.dirs.data, "ada"), { recursive: true });
 
@@ -786,8 +666,6 @@ test("a turn with no model configured leaves the conversation untouched", async 
 
   expect(existsSync(characterActiveJsonl(config.dirs.data, "ada"))).toBe(false);
   expect(engine.messages()).toEqual([]);
-  // And the turn was never announced: a `new_message` for a message that was
-  // not kept is the same lie from the other direction.
   expect(broadcast).toEqual([]);
   expect(direct).toEqual([]);
 });

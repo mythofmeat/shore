@@ -1,13 +1,3 @@
-/**
- * Recorded cases for heartbeat shape.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -68,7 +58,6 @@ const fixture = (await Bun.file(
   new URL("./autonomy_fixtures/heartbeat_shape.json", import.meta.url),
 ).json()) as Fixture;
 
-/** Rust `Option<String>` arrives as null; the port answers undefined. */
 const opt = (value: string | null): string | undefined => value ?? undefined;
 
 describe("what a heartbeat asked to send", () => {
@@ -119,9 +108,6 @@ describe("what a heartbeat asked to send", () => {
 
 describe("when the tool loop stops", () => {
   test("every combination the Rust was swept over", () => {
-    // 24 cases: two limits × three grace settings × nudged or not. The sweep is
-    // exhaustive on purpose — this is the only thing bounding a loop that bills
-    // a provider call per round.
     expect(fixture.budget.length).toBe(24);
     for (const c of fixture.budget) {
       const label = `deadline=${c.deadline_reached} cap=${c.normal_cap_reached} grace=${c.wrap_up_grace} nudged=${c.wrap_up_nudged}`;
@@ -133,8 +119,6 @@ describe("when the tool loop stops", () => {
   });
 
   test("the nudge text is byte-identical", () => {
-    // The model is being asked to write its unfinished work down before it
-    // loses the turn. Reworded, it still reads fine and quietly stops working.
     expect(WRAP_UP_NUDGE_TEXT).toBe(fixture.wrap_up_nudge_text);
   });
 
@@ -181,8 +165,6 @@ describe("the message it ends up sending", () => {
   });
 
   test("an image-only tick carries no empty text block", () => {
-    // Called out separately because it is the one the fixture would still pass
-    // with if `content_block_count` drifted alongside the implementation.
     const built = buildAutonomousMessage("", [{ path: "img/a.png" }], undefined, undefined);
     expect(built.contentBlocks).toEqual([]);
     expect(built.content).toBe("");

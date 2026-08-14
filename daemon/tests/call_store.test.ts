@@ -1,13 +1,3 @@
-/**
- * Recorded cases for call store.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -27,15 +17,12 @@ const root = mkdtempSync(join(tmpdir(), "call-store-parity-"));
 let seq = 0;
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
-/** Materialise a base64 SQLite file from the fixture and open it. */
 function openFrom(db_b64: string): CallStore {
   seq += 1;
   const path = join(root, `db${seq}.sqlite`);
   writeFileSync(path, Buffer.from(db_b64, "base64"));
   return CallStore.open(path);
 }
-
-// ── the canonical store, as Rust wrote it ───────────────────────────────────
 
 interface QueryCase {
   case: string;
@@ -78,8 +65,6 @@ function runQuery(store: CallStore, row: QueryCase): unknown {
   }
 }
 
-// ── rotate ──────────────────────────────────────────────────────────────────
-
 interface RotateCase {
   case: string;
   db_b64: string;
@@ -107,14 +92,11 @@ describe("rotate", () => {
   }
 });
 
-// ── migration ───────────────────────────────────────────────────────────────
-
 interface SchemaShape {
   transcript_columns: string[];
   indexes: { name: string; sql: string | null }[];
 }
 
-/** The same two `PRAGMA`/`sqlite_master` reads the generator recorded. */
 function schemaShape(store: CallStore): SchemaShape {
   const db = store.database;
   const columns = db.query("PRAGMA table_info(transcripts)").all() as { name: string }[];
@@ -129,12 +111,6 @@ function schemaShape(store: CallStore): SchemaShape {
   return { transcript_columns: columns.map((c) => c.name), indexes };
 }
 
-/**
- * Compare index DDL with runs of whitespace collapsed. SQLite stores the
- * `CREATE INDEX` statement verbatim, so the recorded SQL carries the Rust
- * source's own line breaks and indentation — which is formatting, not schema.
- * The index names, the columns and their order all still compare exactly.
- */
 function collapse(shape: SchemaShape): unknown {
   return {
     transcript_columns: shape.transcript_columns,
@@ -150,7 +126,6 @@ describe("migration", () => {
 
   test("a foundation DB gains transcripts.character and the covering index", () => {
     const store = openFrom(m.foundation_db_b64);
-    // Writing a character would have failed against the old schema.
     store.recordTranscript({
       ts: new Date("2026-01-15T12:00:00Z"),
       source: "dreaming",
@@ -178,12 +153,6 @@ describe("migration", () => {
   });
 });
 
-// ── the store written through its own API ───────────────────────────────────
-
-/**
- * The same contents the generator laid down, re-declared rather than read out
- * of the fixture, so what went in is what the assertions are about.
- */
 const BIG_REQUEST = "context line that repeats and compresses away\n";
 const UNICODE_RESPONSE = "réponse ✅ 你好 \u{1f600}";
 
@@ -257,12 +226,6 @@ function fillCanonical(store: CallStore): void {
       request_body: "",
       response_body: "",
     },
-    // Written last, and stamped three-quarters of a second into c1's second.
-    // That makes three things load-bearing at once: the sort key is the
-    // timestamp rather than the insertion order the ids follow; the second is
-    // truncated rather than rounded, which would push this row past c1; and
-    // the `(ts_unix, id)` tiebreak decides c1 vs c5 under every query plan,
-    // because the two rows also share a call type and a character.
     {
       call_id: "c5",
       ts: at(0, 750),
@@ -282,8 +245,6 @@ function fillCanonical(store: CallStore): void {
   ];
   for (const call of calls) store.recordCall(call);
 
-  // `call_type` is not the same thing as `source`: a compaction pass writes
-  // its transcript under the dreaming source.
   const transcripts: [number, string, string | null, string | null, number, string][] = [
     [0, "heartbeat", "poppy", "heartbeat", 0, JSON.stringify({ text: "hi" })],
     [0, "heartbeat", "poppy", "heartbeat", 1, JSON.stringify({ text: "tool result" })],
@@ -308,11 +269,6 @@ function fillCanonical(store: CallStore): void {
   }
 }
 
-/**
- * Drop the two compressed-size fields. They are the one place the compressor
- * shows through, and the two libzstd builds do not agree on them for every
- * input — see the file header. Everything else in the row still compares.
- */
 function withoutBytes(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(withoutBytes);
   if (value !== null && typeof value === "object") {
@@ -364,13 +320,6 @@ describe("round trip through the API", () => {
   });
 });
 
-// ── zstd interop ────────────────────────────────────────────────────────────
-
-/**
- * The property that makes an existing on-disk store readable: frames the Rust
- * compressed must decompress here, byte for byte, including empty input and
- * multi-byte UTF-8.
- */
 test("frames written by Rust decompress to the original text", () => {
   const store = openFrom(fixture.zstd.db_b64);
   const texts = (fixture.zstd.texts as { text: string }[]).map((t) => t.text);
@@ -380,13 +329,6 @@ test("frames written by Rust decompress to the original text", () => {
   store.close();
 });
 
-// ── filters, restated ───────────────────────────────────────────────────────
-
-/**
- * `CallFilter` is spelled with optional fields here where the Rust spells it
- * with `Option`, so the two ways of saying "no filter" have to mean the same
- * thing — an omitted key and an explicit `null` both match every row.
- */
 test("an omitted filter field matches everything, like an explicit null", () => {
   const store = openFrom(fixture.canonical.db_b64);
   const omitted: CallFilter = { limit: 0 };

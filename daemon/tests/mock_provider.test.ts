@@ -1,14 +1,3 @@
-/**
- * The mock provider, driven through the real adapter.
- *
- * `src/testing/mock_provider.ts` is only worth having if what it emits is what
- * `providers/openai.ts` expects, so nothing here hand-parses the mock's output:
- * every case runs `OpenAIProvider` against it and asserts on the
- * {@link StreamEvent}s that come out the other side. An adapter change that
- * broke the mock would break these, which is the point — a mock that drifts
- * from its adapter is worse than no mock, because tests keep passing.
- */
-
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { OpenAIProvider } from "../src/llm/providers/openai.ts";
@@ -22,7 +11,6 @@ afterEach(async () => {
   running = undefined;
 });
 
-/** Start a mock and remember it, so `afterEach` can close the port. */
 async function mock(...args: Parameters<typeof startMockProvider>): Promise<MockProvider> {
   running = await startMockProvider(...args);
   return running;
@@ -54,8 +42,6 @@ describe("streaming", () => {
     expect(events[0]).toEqual({ type: "start", model: "mock-model" });
 
     const text = events.filter((e) => e.type === "text");
-    // Fragmented, not delivered whole — this is what exercises the adapter's
-    // accumulator rather than just its passthrough.
     expect(text.length).toBeGreaterThan(1);
     expect(text.map((e) => (e as { text: string }).text).join("")).toBe("hello there, friend");
 
@@ -82,16 +68,9 @@ describe("streaming", () => {
     const events = await collect(new OpenAIProvider().stream(request(m.url)));
     const done = events.at(-1) as Extract<StreamEvent, { type: "done" }>;
 
-    // The mock speaks the OpenAI convention, where `prompt_tokens` is the whole
-    // prompt including the cached part. The ledger wants the Anthropic one,
-    // where the three counts are disjoint and summed, so the adapter subtracts:
-    // 100 prompt − 90 cached leaves 10 cache-miss input tokens. Getting this
-    // wrong bills the cached tokens twice, at the full input rate.
     expect(done.usage.input_tokens).toBe(10);
     expect(done.usage.cache_read_tokens).toBe(90);
     expect(done.usage.output_tokens).toBe(7);
-    // A stream whose last chunk carries no usage reports zeros and the ledger
-    // records a free call, so the sum mattering at all is the real assertion.
     expect(done.usage.input_tokens + done.usage.cache_read_tokens).toBe(100);
   });
 
@@ -101,8 +80,6 @@ describe("streaming", () => {
 
     const thinking = events.filter((e) => e.type === "thinking");
     expect(thinking.map((e) => (e as { text: string }).text).join("")).toBe("let me think about it");
-    // Ordering is load-bearing: the consumer flushes on a block-type change, so
-    // thinking arriving after text would persist the blocks the wrong way round.
     expect(events.findIndex((e) => e.type === "thinking")).toBeLessThan(
       events.findIndex((e) => e.type === "text"),
     );
@@ -119,8 +96,6 @@ describe("streaming", () => {
     const events = await collect(new OpenAIProvider().stream(request(m.url)));
 
     const toolUses = events.filter((e) => e.type === "tool_use");
-    // The mock sends the arguments as fragments; the adapter must hand back one
-    // event with the whole thing parsed, not the deltas it received.
     expect(toolUses).toHaveLength(1);
     expect(toolUses[0]).toMatchObject({
       type: "tool_use",
@@ -180,8 +155,6 @@ describe("non-streaming", () => {
 describe("failures", () => {
   test("a scripted status becomes a thrown error, not a done", async () => {
     const m = await mock({ script: [{ status: 429 }] });
-    // Rejects rather than yielding an `error` event: this is a pre-stream
-    // failure, which is the arm the retry policy keys off.
     expect(collect(new OpenAIProvider().stream(request(m.url)))).rejects.toThrow();
   });
 
@@ -215,7 +188,6 @@ describe("the harness itself", () => {
 
     expect((await provider.generate(request(m.url))).content).toBe("first");
     expect((await provider.generate(request(m.url))).content).toBe("second");
-    // Default fallback echoes, so an over-run does not look like an empty turn.
     expect((await provider.generate(request(m.url))).content).toBe("mock reply to: hello");
   });
 

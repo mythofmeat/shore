@@ -1,19 +1,3 @@
-/**
- * What a keepalive ping should do when it writes instead of reads — issue #96.
- *
- * The first attempt at this disarmed the keepalive on a writing ping, on the
- * theory that repeatedly rewriting is worse than not pinging. The ledger says
- * otherwise. Of 219 pings that wrote 1,000 tokens or more, 154 — 70% — were
- * followed by a ping that read. The write is not waste: it pays once to create
- * the entry the next ping then uses. Disarming throws that entry away and
- * hands the bill to the next real message.
- *
- * The 65 that wrote again are the real fault, and they are not identifiable
- * after the fact — they are identifiable *before* the send. A ping whose armed
- * prefix is already behind the conversation is guaranteed to miss: it writes an
- * entry for a prefix that has been superseded. That is what is guarded here.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -286,21 +270,6 @@ describe("the tracker gives read-and-write its own name", () => {
   });
 });
 
-/**
- * Two misses in a row with nothing between them is not a moved prefix — it is
- * the cache not holding what shore writes.
- *
- * The first miss *writes*. That write should leave an entry the second ping
- * reads. If the second also misses, no amount of re-arming will help and every
- * further ping pays full price for nothing.
- *
- * This is live, not hypothetical. The ledger at
- * /opt/docker/silvershore/data/shore-data/ledger.db has 13 such pairs, every
- * one at a ~55 minute gap — inside the 1h TTL, so expiry does not explain them
- * — and each pair wrote an identical token count both times (14144/14144), which
- * is the same bytes going out twice and reading nothing. One run for `poppy`
- * hits four in a row. Across the whole ledger, 120 pure-miss pings cost $18.72.
- */
 describe("two misses in a row halt everything", () => {
   test("one miss alone does not halt", async () => {
     const h = harness(0, 14_144);
@@ -378,10 +347,6 @@ describe("two misses in a row halt everything", () => {
     expect(service.halted).toBeUndefined();
   });
 
-  // A double miss means the cache is not holding what shore writes to it.
-  // Nothing at runtime causes that and nothing at runtime fixes it, so the halt
-  // has no clearing path at all: re-arming, a fresh prefix, and further ticks
-  // all leave it halted. The exit is a source fix and a new daemon.
   test("the halt has no runtime exit", async () => {
     const h = harness(0, 14_144);
     for (let i = 0; i < 2; i += 1) {

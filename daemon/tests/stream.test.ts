@@ -1,13 +1,3 @@
-/**
- * Recorded cases for stream.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import fixture from "./handler_fixtures/stream.json" with { type: "json" };
@@ -61,9 +51,6 @@ type Row = Record<string, unknown>;
 
 const f = fixture as unknown as Record<string, Row[]> & { append_in_place: Row };
 
-
-// ── truncate_summary ────────────────────────────────────────────────────
-
 describe("truncate_summary", () => {
   for (const c of f["truncate_summary"] as Row[]) {
     const input = c["input"] as string;
@@ -74,16 +61,12 @@ describe("truncate_summary", () => {
   }
 
   test("the cap is bytes, not characters", () => {
-    // 100 emoji is 400 UTF-8 bytes but only 200 UTF-16 units — a `.length`
-    // cap would pass the whole thing through untouched.
     const body = "🎵".repeat(100);
     expect(body.length).toBe(200);
     expect(truncateSummary(body, 200)).not.toBe(body);
     expect(truncateSummary(body, 200).endsWith("…")).toBe(true);
   });
 });
-
-// ── shell escaping ──────────────────────────────────────────────────────
 
 describe("shell_escape", () => {
   for (const c of f["shell_escape"] as Row[]) {
@@ -94,14 +77,11 @@ describe("shell_escape", () => {
   }
 
   test("every occurrence is replaced, not just the first", () => {
-    // `String.replace` with a string pattern would leave the second backtick.
     expect(shellEscape("`a`b`")).toBe("ab");
     expect(shellEscape("'a'b'")).toBe("'\\''a'\\''b'\\''");
   });
 
   test("shell operators survive — the template supplies the quoting", () => {
-    // Documented, inherited behaviour: this is defence in depth around the
-    // user's own single-quoted template, not the boundary itself.
     expect(shellEscape("; rm -rf / & id | cat")).toBe("; rm -rf / & id | cat");
   });
 });
@@ -115,8 +95,6 @@ describe("command_template", () => {
     });
   }
 });
-
-// ── notification gating ─────────────────────────────────────────────────
 
 function configWith(overrides: Partial<NotificationsConfig>): NotificationsConfig {
   return { ...defaultNotificationsConfig(), ...overrides };
@@ -266,8 +244,6 @@ describe("generation threshold", () => {
   });
 });
 
-// ── [notifications] parsing ─────────────────────────────────────────────
-
 function configToFixtureShape(config: NotificationsConfig): Row {
   return {
     enabled: config.enabled,
@@ -324,18 +300,8 @@ describe("[notifications] parsing", () => {
   }
 
   test("Bun's TOML parser mishandles the float literals nan/inf/-inf", () => {
-    // Not a defect in this port, but a hazard underneath it, recorded like the
-    // `\U` escape in `model_resolution.test.ts`.
-    //
-    // TOML spec has `nan`, `inf` and `-inf` as float literals; the Rust `toml`
-    // crate decodes all three. `Bun.TOML.parse` returns `nan` and `inf` as
-    // *strings* and `-inf` as the number `0`. The last is the dangerous one:
-    // `generation_threshold = -inf` reads as "always notify" here where the
-    // Rust rejects it. The three cases are absent from the fixture because no
-    // TypeScript running on this parser can see the value the Rust saw.
     expect(Bun.TOML.parse("a = nan")).toEqual({ a: "nan" });
     expect(Bun.TOML.parse("a = inf")).toEqual({ a: "inf" });
-    // Negative zero, no less: `Object.is` is the only way to see it.
     expect(Object.is((Bun.TOML.parse("a = -inf") as Row)["a"], -0)).toBe(true);
   });
 
@@ -365,8 +331,6 @@ describe("ntfy url", () => {
         events: { ...defaultNotificationEvents(), error: true },
       }),
     );
-    // The real sink throws; `notify` swallows it. Reach the sink directly so
-    // the refusal is observable.
     const { realSink } = await import("../src/notifications.ts");
     await expect(
       realSink.ntfy({ url: "https://ntfy.sh", topic: "", token: "" }, "t", "b"),
@@ -375,9 +339,6 @@ describe("ntfy url", () => {
   });
 });
 
-// ── stream accumulation ─────────────────────────────────────────────────
-
-/** Re-shape a block the way the fixture reports it, so the two compare. */
 function blockToFixtureShape(block: ContentBlock): Row {
   if (block.type === "thinking") {
     return {
@@ -439,12 +400,6 @@ function frameToFixtureShape(m: ServerMessage): Row {
   return { type: m.type };
 }
 
-/**
- * Decode the fixture's NDJSON lines the way the removed reader did — skipping
- * blanks, failing the stream on anything that will not parse. This is the half
- * of `stream.rs` that goes away with the process boundary; it lives in the test
- * so the fixture's own inputs stay usable against the half that stayed.
- */
 async function* decodeLines(lines: string[]): AsyncIterable<StreamEvent> {
   const KNOWN = new Set([
     "start",
@@ -475,7 +430,6 @@ async function* decodeLines(lines: string[]): AsyncIterable<StreamEvent> {
   }
 }
 
-/** Apply the `#[serde(default)]`s the wire format relies on. */
 function fillEventDefaults(event: Row): Row {
   if (event["type"] !== "error") return event;
   return {
@@ -533,8 +487,6 @@ describe("stream accumulation", () => {
 
       const expected = structuredClone(c["outcome"]) as Row;
       stripStoredSignature(expected);
-      // The Rust carries serde's message text; the decode that produces it is
-      // the part that goes away with the socket, so only the kind is pinned.
       if (
         typeof expected["err"] === "object" &&
         expected["err"] !== null &&
@@ -549,10 +501,6 @@ describe("stream accumulation", () => {
   }
 
   test("the carrier lands in its own field, never behind a prefix", () => {
-    // The Rust stores `orrd:<json>` and `zair:<text>` in the one signature slot
-    // and projects them back out at send time. Nothing on this side writes a
-    // prefix; the fixture's `stored_signature` records what the Rust wrote, and
-    // this asserts the payload underneath it is what arrives here.
     for (const c of f["streams"] as Row[]) {
       const blocks = ((c["outcome"] as Row)["ok"] as Row | undefined)?.["content_blocks"] as
         | Row[]
@@ -592,16 +540,6 @@ describe("stream accumulation", () => {
   });
 });
 
-/**
- * Drop the fixture's `stored_signature`, which has no counterpart here.
- *
- * The Rust folds all three reasoning carriers into one prefixed string
- * (`orrd:…`, `zair:…`, bare) because a stored thinking block has a single
- * signature slot. This side keeps three named fields — see `ReasoningCarrier`
- * in `llm/stream.ts` — so the fixture reports both the stored spelling and the
- * decoded carrier, and only the carrier is comparable. The prefix relationship
- * itself is asserted separately below.
- */
 function stripStoredSignature(node: unknown): void {
   if (Array.isArray(node)) {
     for (const item of node) stripStoredSignature(item);
@@ -616,8 +554,6 @@ function stripStoredSignature(node: unknown): void {
 function zeroUsage(): Usage {
   return { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 };
 }
-
-// ── emit_stream_end ─────────────────────────────────────────────────────
 
 describe("emit_stream_end", () => {
   for (const c of f["stream_end"] as Row[]) {
@@ -682,9 +618,6 @@ function fixtureResult(row: Row): StreamResult {
   };
 }
 
-// ── persistence ─────────────────────────────────────────────────────────
-
-/** The fixture reports blocks with every carrier slot spelled out. */
 function fixtureBlock(row: Row): ContentBlock {
   switch (row["type"]) {
     case "text":
@@ -789,22 +722,15 @@ describe("message_from_response", () => {
       expect(built.model ?? null).toBe((expected["model"] ?? null) as string | null);
       expect(built.images).toEqual([]);
       expect(built.alternatives).toEqual([]);
-      // `None` fields the Rust writes explicitly are absent keys here; both
-      // serialize to nothing.
       expect(Object.hasOwn(built, "origin")).toBe(false);
       expect(Object.hasOwn(built, "alt_index")).toBe(false);
       expect(Object.hasOwn(built, "alt_count")).toBe(false);
-      // The generated id's shape, since its value cannot be pinned.
       expect(built.msg_id.slice(0, 2)).toBe(expected["msg_id_prefix"] as string);
       expect(built.msg_id.length).toBe(expected["msg_id_len"] as number);
     });
   }
 });
 
-// ── last_request ────────────────────────────────────────────────────────
-
-/** The fixture serializes wire turns as the Rust does — carrier fields inline
- *  on the thinking block, absent when empty. */
 function wireTurnToFixtureShape(turn: {
   role: string;
   content: ContentBlock[];
@@ -858,8 +784,6 @@ describe("last_request_with_response", () => {
       expect(full.messages.map(wireTurnToFixtureShape)).toEqual(
         (c["messages_after"] as Row[]).map(normalizeWireRow),
       );
-      // The caller's own request must be untouched: the append happens on a
-      // copy, and every already-sent turn survives byte-identical.
       expect(request.messages).toHaveLength(before.length);
       expect(structuredClone(request.messages)).toEqual(before);
       expect(c["prefix_unchanged"]).toBe(true);
@@ -913,12 +837,9 @@ function fixtureWireBlock(row: Row): ContentBlock {
   return block;
 }
 
-/** The Rust nests the carrier under `carrier`; this side has it inline. */
 function normalizeWireRow(row: Row): Row {
   return wireTurnToFixtureShape(fixtureWireTurn(row));
 }
-
-// ── persist_and_notify ──────────────────────────────────────────────────
 
 class FakeEngine implements PersistEngine {
   messages: Message[] = [];
@@ -982,8 +903,6 @@ function makeContext(): {
       recordingSink(notified),
     ),
     sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
-    // The real ring only pushes, so the context's type says only that; the
-    // array behind it is what the assertions read.
     diagnostics: { api_calls: apiCalls },
     newlyCrossedUsageBudgetWarnings: () => Promise.resolve([]),
     now: () => "2026-08-03T00:00:00+00:00",
@@ -1058,8 +977,6 @@ describe("persist_and_notify", () => {
       wallClockMs: 1,
     });
     expect(apiCalls[0]?.total_cost_usd).toBe(0.0125);
-    // `skip_serializing_if = "Option::is_none"`: a provider that reports no
-    // cost leaves the key off rather than writing zero.
     expect(Object.hasOwn(apiCalls[1] as object, "total_cost_usd")).toBe(false);
   });
 
@@ -1077,10 +994,7 @@ describe("persist_and_notify", () => {
     });
     expect(engine.messages).toEqual([]);
     expect(events).toEqual([]);
-    // The notification still fires, with empty content — the Rust does not
-    // gate it on there being anything to say.
     expect(notified).toEqual(["notify_send:Shore — Alice:"]);
-    // And the diagnostics row is recorded regardless.
     expect(apiCalls).toHaveLength(1);
   });
 
@@ -1135,7 +1049,6 @@ describe("persist_and_notify", () => {
     expect(engine.replaced).toBeDefined();
     expect(events).toHaveLength(1);
     expect((events[0] as unknown as Row)["revision"]).toBe(engine.currentRevision());
-    // The prior response plus this one, with the new one selected.
     const stored = engine.messages[0] as Message;
     expect(stored.alt_count).toBe(2);
     expect(stored.alt_index).toBe(1);
@@ -1158,8 +1071,6 @@ describe("persist_and_notify", () => {
     const stored = engine.messages[0] as Message;
     const emitted = events[0] as unknown as Row;
     expect(emitted["content_blocks"]).not.toBe(stored.content_blocks);
-    // And the event carries the alt fields the replace stamped, not a copy
-    // taken before them.
     expect(emitted["alt_count"]).toBe(stored.alt_count);
   });
 
@@ -1220,8 +1131,6 @@ describe("persist_and_notify", () => {
       wallClockMs: 1,
     });
     expect(engine.messages[0]?.model).toBe("requested-model");
-    // The diagnostics row keeps the reported value, empty or not — it records
-    // what the provider said, not what was asked for.
     expect(apiCalls[0]?.model).toBe("");
   });
 
@@ -1266,8 +1175,6 @@ describe("persist_and_notify", () => {
       wallClockMs: 1,
     });
     expect(direct).toHaveLength(2);
-    // A cap warning omits `scope` so the frame stays byte-identical for
-    // clients that predate the pace split; a pace warning names it.
     expect((direct[0] as unknown as Row)["scope"]).toBeNull();
     expect((direct[1] as unknown as Row)["scope"]).toBe("pace");
     expect((direct[0] as unknown as Row)["rid"]).toBe("req-1");

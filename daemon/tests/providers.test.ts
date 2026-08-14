@@ -1,13 +1,3 @@
-/**
- * Recorded cases for providers.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -30,8 +20,6 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import { cachePath } from "../src/llm/discovery.ts";
 import { testTmp } from "./support/tmp.ts";
 
-// ── fixture shapes ──────────────────────────────────────────────────────
-
 interface WireError {
   code: string;
   message: string;
@@ -48,8 +36,6 @@ interface Row {
 
 const env = fixture.env as unknown as Record<string, string | null>;
 
-// ── the upstreams the generator recorded against ────────────────────────
-
 const OPENAI_BODY = JSON.stringify({
   data: [
     { id: "vendor/one", owned_by: "vendor" },
@@ -60,26 +46,16 @@ const ANTHROPIC_BODY = JSON.stringify({
   data: [{ id: "claude-fixture-1", display_name: "Claude Fixture 1" }],
 });
 
-/**
- * One fetch that answers by host, standing in for the generator's three
- * separate listeners. The scenario TOML in the fixture carries the *generator's*
- * ports, which no longer exist — so the URL is matched on its path and the
- * caller's declared intent instead.
- */
 function upstream(
   kind: "openai" | "anthropic" | "broken",
   requiredKey?: string,
 ): typeof fetch {
   return (async (input: unknown, init?: RequestInit) => {
-    // The configured base url is `<upstream>`; anything else means the code
-    // reached for a built-in default instead of what the provider declared.
     const url =
       typeof input === "string" ? input : input instanceof URL ? input.href : String(input);
     if (!url.includes("<upstream>") && !url.includes("<broken-upstream>")) {
       return new Response(JSON.stringify({ error: "wrong base url" }), { status: 502 });
     }
-    // The key value never appears in any payload, so the only way to see which
-    // key was chosen is to have the upstream care — as the generator's did.
     if (requiredKey !== undefined) {
       const headers = JSON.stringify(init?.headers ?? {});
       if (!headers.includes(requiredKey.toLowerCase())) {
@@ -99,11 +75,6 @@ function upstream(
   }) as typeof fetch;
 }
 
-/**
- * `refresh_all` needs a healthy and a failing upstream in one run, and the stub
- * only sees the URL — so the failing provider is given a base url of its own and
- * matched on it. Anything unmatched is healthy.
- */
 function byProviderGuarded(
   map: Record<string, "openai" | "anthropic" | "broken">,
   requiredKey: string,
@@ -121,8 +92,6 @@ function byProviderGuarded(
     return await upstream("openai", requiredKey)(url as string, init);
   }) as typeof fetch;
 }
-
-// ── building a context ──────────────────────────────────────────────────
 
 interface World {
   ctx: ProvidersContext;
@@ -171,11 +140,8 @@ async function build(
   return { ctx: { config, ...(fetchImpl === undefined ? {} : { fetchImpl }) }, cacheDir: dirs.cache };
 }
 
-// ── normalising a result back to the fixture's spelling ─────────────────
-
 const UTC_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?\+00:00$/;
 
-/** Replace the temp cache dir and the generated timestamps with their markers. */
 function scrub(value: unknown, cacheDir: string, stamps: string[]): unknown {
   if (Array.isArray(value)) return value.map((v) => scrub(v, cacheDir, stamps));
   if (value === null || typeof value !== "object") {
@@ -186,8 +152,6 @@ function scrub(value: unknown, cacheDir: string, stamps: string[]): unknown {
     if (
       (key === "fetched_at" || key === "discovered_at") &&
       typeof v === "string" &&
-      // Seeded caches are stamped 1999 so they stay compared as literals; only
-      // a timestamp this run generated is masked.
       v.startsWith("202")
     ) {
       stamps.push(v);
@@ -235,11 +199,8 @@ async function check(row: Row, world: World, run: () => unknown | Promise<unknow
     );
   }
 
-  // Every timestamp the fixture masked has to be a real one on this side too.
   for (const stamp of stamps) expect(stamp, `${row.name} — timestamp shape`).toMatch(UTC_RE);
 }
-
-// ── env ─────────────────────────────────────────────────────────────────
 
 const saved: Record<string, string | undefined> = {};
 
@@ -263,8 +224,6 @@ const KEY_BLANK = "SHORE_FIXTURE_KEY_BLANK";
 const KEY_UNSET = "SHORE_FIXTURE_KEY_UNSET";
 const KEY_SECOND = "SHORE_FIXTURE_KEY_SECOND";
 
-// The provider tables the generator used, re-declared here because the fixture
-// records what each case *answered*, not the TOML it was asked about.
 const RICH_PROVIDERS = `
 [alpha]
 sdk = "anthropic"
@@ -369,8 +328,6 @@ function cacheJson(provider: string, models: [string, string][]): unknown {
 const row = (section: keyof typeof fixture, name: string): Row =>
   (fixture[section] as unknown as Row[]).find((r) => r.name === name)!;
 
-// ── list_providers ──────────────────────────────────────────────────────
-
 describe("listProviders", () => {
   test("no providers configured", async () => {
     const world = await build("", "", []);
@@ -401,8 +358,6 @@ describe("listProviders", () => {
     );
   });
 });
-
-// ── list_provider_models ────────────────────────────────────────────────
 
 describe("listProviderModels", () => {
   const withCache = async (): Promise<World> =>
@@ -445,8 +400,6 @@ describe("listProviderModels", () => {
   });
 });
 
-// ── refresh, the guards ─────────────────────────────────────────────────
-
 describe("refreshProviderModels guards", () => {
   const cases: [string, Record<string, unknown>][] = [
     ["missing provider argument", {}],
@@ -469,8 +422,6 @@ describe("refreshProviderModels guards", () => {
   }
 });
 
-// ── refresh, against a socket ───────────────────────────────────────────
-
 describe("refreshProviderModels over the wire", () => {
   test("a successful refresh writes the cache", async () => {
     const world = await build(
@@ -485,8 +436,6 @@ describe("refreshProviderModels over the wire", () => {
     const r = row("refresh_provider_models", "a successful refresh writes the cache");
     await check(r, world, async () => await refreshProviderModels(world.ctx, { provider: "alpha" }));
 
-    // The listing after the refresh proves the cache is not merely on disk but
-    // readable, and that `discovery.ignore` applies to what was just fetched.
     const stamps: string[] = [];
     expect(
       scrub(listProviderModels(world.ctx, { provider: "alpha" }), world.cacheDir, stamps),
@@ -517,8 +466,6 @@ describe("refreshProviderModels over the wire", () => {
         `[anthropic.discovery]\nenabled = true\n`,
       "",
       [],
-      // The header the anthropic adapter sends and the openai one does not, so
-      // a wrong sdk 401s instead of parsing the same body by luck.
       upstream("anthropic", "x-api-key"),
     );
     await check(
@@ -576,15 +523,10 @@ describe("refreshProviderModels over the wire", () => {
   });
 });
 
-// ── refresh_all ─────────────────────────────────────────────────────────
-
 test("refreshAllProviderModels: one succeeds, one fails, two are skipped", async () => {
   const world = await build(
     `[good]\nbase_url = "<upstream>"\napi_key_env = "${KEY_SECOND}"\n` +
       `[good.discovery]\nenabled = true\n` +
-      // A distinct base url so the stub fetch can tell the two apart. Only
-      // the healthy provider's ends up in a cache file, so only that one
-      // has to match the marker the generator recorded.
       `[broken]\nbase_url = "<broken-upstream>"\napi_key_env = "${KEY_SET}"\n` +
       `[broken.discovery]\nenabled = true\n` +
       `[off]\nenabled = false\napi_key_env = "${KEY_SET}"\n` +

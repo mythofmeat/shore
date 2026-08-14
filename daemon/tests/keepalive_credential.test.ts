@@ -1,18 +1,3 @@
-/**
- * The credential half of the wire (#47's sibling).
- *
- * `keepalive_wiring` proved a ping leaves on time. It built its turn with
- * `buildRequestWithResolvedKey(model, "sk-test", ...)` while the production
- * caller — `handler/setup.ts` — passes `""`, because the chat path injects the
- * real key into a per-attempt copy and never into the request it caches. So
- * every prefix armed by a chat turn carried `api_key: ""`, the ping inherited
- * it, and the Anthropic SDK rejected the call before it reached the wire:
- * an empty string is not `undefined`, so its own env fallback never ran.
- *
- * Prefixes armed by `reprimeFromDisk` did carry a key, which is why the
- * keepalive worked until the first chat turn overwrote them.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import { KeepaliveService } from "../src/cache/keepalive.ts";
@@ -102,10 +87,6 @@ class CountingEngine {
   }
 }
 
-/**
- * The chat turn as `handler/setup.ts` actually builds it: an empty key, because
- * the real one only ever reaches the per-attempt copy in `handler/generation.ts`.
- */
 function chatTurn(): { request: SidecarRequest; intervalMs: number | undefined } {
   const catalog = catalogFromSections(
     Bun.TOML.parse(CHAT_TOML) as Record<string, unknown>,

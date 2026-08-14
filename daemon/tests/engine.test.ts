@@ -1,15 +1,3 @@
-/**
- * Recorded cases for engine.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- *
- * What a failure here means depends on which half fails:
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -72,7 +60,6 @@ async function scratch(): Promise<string> {
   return await mkdtemp(testTmp("shore-engine-"));
 }
 
-/** Lay a character directory out the way the generator's temp dir was. */
 async function layout(
   dir: string,
   manifest: unknown | null,
@@ -94,24 +81,17 @@ async function layout(
   }
 }
 
-/**
- * Recorded paths are the generator's temp dirs. Rewrite them onto this run's
- * so image embedding has a real file to find, and so a compared message's
- * `path` matches. Everything else in the value is untouched.
- */
 function rebase<T>(value: T, fromDir: string, toDir: string): T {
   const s = JSON.stringify(value);
   return JSON.parse(s.split(fromDir).join(toDir)) as T;
 }
 
-/** The temp-dir prefix the generator baked into a walk's recorded paths. */
 function recordedRoot(walk: WalkCase): string | undefined {
   const found = JSON.stringify(walk).match(/"(\/tmp\/[^/"]+)\/[^"]*"/);
   return found?.[1];
 }
 
 describe("the fixture is real", () => {
-
   test("a silently empty fixture must not pass", () => {
     expect(fixture.segment_reader.length).toBeGreaterThanOrEqual(4);
     expect(fixture.engine_walk.length).toBeGreaterThanOrEqual(3);
@@ -120,8 +100,6 @@ describe("the fixture is real", () => {
   });
 
   test("the walk actually exercises both counters moving independently", () => {
-    // A walk where revision and generation always moved together would pass
-    // against an implementation that bumped both on everything.
     const all = fixture.engine_walk.flatMap((w) => w.steps);
     const revOnly = all.filter((s, i) => {
       const prev = all[i - 1];
@@ -140,9 +118,6 @@ describe("the fixture is real", () => {
   });
 
   test("a case exists where archived history is non-empty", () => {
-    // `active_start` is only meaningful when something precedes the active
-    // tail; a fixture of empty archives would pass against a reader that
-    // returned nothing.
     const withArchive = fixture.engine_walk.filter((w) =>
       w.steps.some((s) => s.display_history.active_start > 0),
     );
@@ -166,8 +141,6 @@ describe("SegmentReader matches the Rust", () => {
           continue;
         }
         if (read.err !== undefined) {
-          // The Rust reused its message-not-found variant for a bad segment
-          // index; the text is part of what a client sees.
           let caught: unknown;
           try {
             await reader.readSegment(read.index);
@@ -178,8 +151,6 @@ describe("SegmentReader matches the Rust", () => {
           expect((caught as Error).message).toBe(read.err);
           continue;
         }
-        // A manifest entry whose file is gone: an I/O failure naming the file.
-        // The OS supplies the wording, so only the shape is pinned.
         expect(read.err_kind).toBe("io");
         let caught: unknown;
         try {
@@ -206,7 +177,6 @@ describe("ConversationEngine matches the Rust", () => {
           : `${walk.initial_active.map((m) => JSON.stringify(m)).join("\n")}\n`;
       await layout(charDir, walk.manifest, walk.segment_files, activeJsonl);
 
-      // Recreate any file an image ref points at, so embedding has real bytes.
       for (const [name, base64] of Object.entries(walk.image_files ?? {})) {
         await writeFile(join(charDir, name), Buffer.from(base64, "base64"));
       }
@@ -243,8 +213,6 @@ describe("ConversationEngine matches the Rust", () => {
           expected.display_history.active_start,
         );
 
-        // Compared through JSON so an omitted optional and an explicit
-        // `undefined` are the same thing — which is the wire question.
         expect(
           JSON.parse(JSON.stringify(engine.historySnapshot({ k: "v" }))),
           `${where} snapshot`,
@@ -263,9 +231,6 @@ async function applyOp(
     case "load":
       return;
     case "external_write": {
-      // Compaction rewriting the archive under a live engine. Nothing on the
-      // engine is called: the point is that its counters do NOT move until
-      // something asks it to reload.
       await mkdir(join(charDir, "segments"), { recursive: true });
       for (const [name, body] of Object.entries(
         (op["segment_files"] ?? {}) as Record<string, string>,

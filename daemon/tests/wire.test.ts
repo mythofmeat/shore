@@ -1,13 +1,3 @@
-/**
- * Recorded cases for wire.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import type { ContentBlock } from "../src/engine/types.ts";
@@ -25,25 +15,9 @@ import {
   type WireMessage,
 } from "../src/llm/types.ts";
 
-/** The `call_complete` member of the {@link StreamEvent} union. */
 type CallComplete = Extract<StreamEvent, { type: "call_complete" }>;
 
-/**
- * The census, typed as what this side *expects* to receive.
- *
- * Deliberately annotated with the mirror types rather than `unknown`: if the
- * daemon stops sending a `SystemBlock`-shaped `system_block`, the tests below
- * that feed it to real code stop compiling.
- */
 interface WireFixture {
-  /**
-   * Named for the socket these all shared, and no longer read.
-   *
-   * Every arm went the same way for the same reason: tools became function
-   * calls in the process that decides to make them, then autonomy actions did.
-   * The fixture is frozen, so the key stays where the Rust put it rather than
-   * being edited out of a recording.
-   */
   tool_rpc: unknown;
   wire_role: Array<WireMessage["role"]>;
   thinking_replay: Array<SidecarRequest["replay_prior_thinking"]>;
@@ -63,20 +37,17 @@ const fixturePath = new URL(
 );
 const wire = (await Bun.file(fixturePath).json()) as WireFixture;
 
-/** A named fixture entry, or a loud failure — never a silent `undefined`. */
 function pick<T>(map: Record<string, T>, key: string): T {
   const value = map[key];
   if (value === undefined) throw new Error(`fixture is missing "${key}"`);
   return value;
 }
 
-/** Narrow to an image block's source, failing loudly on the wrong variant. */
 function imageSource(block: ContentBlock): Extract<ContentBlock, { type: "image" }>["source"] {
   if (block.type !== "image") throw new Error(`expected an image block, got "${block.type}"`);
   return block.source;
 }
 
-/** Narrow to a tool result's content, which is text or blocks. */
 function toolResultContent(block: ContentBlock): string | ContentBlock[] {
   if (block.type !== "tool_result") {
     throw new Error(`expected a tool_result block, got "${block.type}"`);
@@ -84,15 +55,8 @@ function toolResultContent(block: ContentBlock): string | ContentBlock[] {
   return block.content;
 }
 
-/** Keys the daemon actually sent, for one fixture value. */
 const keysOf = (value: unknown): string[] => Object.keys(value as object).sort();
 
-/**
- * Assert a fixture value carries exactly the declared keys.
- *
- * `declared` is typed `Array<keyof T>`, so it cannot name a field the mirror
- * has not declared — that is the compile-time half of the lock.
- */
 function assertKeys<T>(value: unknown, declared: Array<keyof T & string>, what: string) {
   expect(keysOf(value), what).toEqual([...declared].sort());
 }
@@ -107,8 +71,6 @@ describe("the fixture is real", () => {
 describe("scalar mirrors carry exactly the declared fields", () => {
   test("SystemBlock", () => {
     assertKeys<SystemBlock>(wire.system_block, ["text", "label"], "SystemBlock");
-    // `label` is cache-load-bearing: the Anthropic adapter anchors the system
-    // breakpoint on the last block that is NOT memory_index.
     expect(systemToText([wire.system_block])).toBe("You are a character.");
   });
 
@@ -121,10 +83,6 @@ describe("scalar mirrors carry exactly the declared fields", () => {
   });
 
   test("CallContext", () => {
-    // These labels decide what a ledger row says and — since budget
-    // enforcement moved to this side — whether the call is made at all. A
-    // renamed `usage` would not fail a build on either side; it would just
-    // stop every budget matching, silently, in the allowing direction.
     assertKeys<CallContext>(
       wire.call_context.minimal,
       ["character", "call_type", "thinking_enabled"],
@@ -147,8 +105,6 @@ describe("scalar mirrors carry exactly the declared fields", () => {
       ],
       "CallContext (full)",
     );
-    // The budget the gate reads must survive the trip with its filters intact:
-    // these are the fields `budgetMatchesCall` compares against.
     const budget = wire.call_context.full.usage?.budgets?.[0];
     expect(budget, "the census carries a budget").toBeDefined();
     expect(budget!.period).toBe("week");
@@ -159,15 +115,6 @@ describe("scalar mirrors carry exactly the declared fields", () => {
   });
 
   test("call_complete", () => {
-    // Emitted per provider call in a loop this side drove, and the point at
-    // which the ledger row is written. Recording only at the end could write
-    // just their sum, and a summed row misreports the cache: its `cache_read`
-    // exceeds anything one call made and becomes a baseline the next ordinary
-    // message cannot meet.
-    //
-    // The daemon's copy is deserialize-only, so the census entry is a literal
-    // rather than a serialized value — which is exactly why it needs asserting
-    // from both ends. `call_complete_parses` is the Rust half.
     assertKeys<CallComplete>(
       wire.call_complete,
       ["type", "usage", "timing", "finish_reason", "continuation"],
@@ -187,8 +134,6 @@ describe("scalar mirrors carry exactly the declared fields", () => {
   });
 
   test("ProviderOptions declares a reader for every knob the daemon sends", () => {
-    // The point of typing this: it was `Record<string, unknown>` on both sides
-    // until it had accumulated three keys the daemon wrote and no adapter read.
     assertKeys<ProviderOptions>(
       wire.provider_options.full,
       [
@@ -206,7 +151,6 @@ describe("scalar mirrors carry exactly the declared fields", () => {
   });
 
   test("an unset knob is omitted, never sent as null", () => {
-    // What lets `undefined` mean "not configured" without ambiguity.
     expect(wire.provider_options.empty).toEqual({});
   });
 });
@@ -281,9 +225,6 @@ describe("ContentBlock variants", () => {
   });
 
   test("each reasoning carrier rides flattened onto the thinking block", () => {
-    // Not nested under a `carrier` key — Rust flattens it, so each carrier is a
-    // sibling of `thinking`. One stored signature projects to exactly one of
-    // these, named for the provider that reads it, so no adapter sniffs a prefix.
     type Thinking = Extract<ContentBlock, { type: "thinking" }>;
     assertKeys<Thinking>(block("thinking_uncarried"), ["type", "thinking"], "thinking (uncarried)");
     assertKeys<Thinking>(
@@ -321,9 +262,6 @@ describe("ContentBlock variants", () => {
       "tool_result (error)",
     );
 
-    // The block-shaped form is the generated-image replay path. This side typed
-    // it `string` for as long as it existed, so the flattening below silently
-    // produced "[object Object]" instead of the caption.
     const blocks = toolResultContent(block("tool_result_blocks"));
     expect(Array.isArray(blocks)).toBe(true);
     expect(toolResultText(blocks)).toBe("a cat");
@@ -331,16 +269,7 @@ describe("ContentBlock variants", () => {
 });
 
 describe("the census survives the real code paths", () => {
-  // Key-set assertions catch a renamed field. They do not catch a field this
-  // side declares but drops on the floor, so push the whole census through the
-  // paths that actually consume it.
   const everyBlock = Object.values(wire.wire_block) as ContentBlock[];
-  // A real assistant message's thinking blocks all come from one turn of one
-  // model, so they carry or fail to carry together. The census mixes a
-  // carrier-less block in with carried ones, which no model produces, and
-  // `replayableMessages` now drops a message's thinking all-or-nothing rather
-  // than partially. Split the census along that seam so both halves stay
-  // message-shaped and every variant still reaches the adapter.
   const uncarried = (b: ContentBlock): boolean =>
     b.type === "thinking" && b.signature === undefined && b.reasoning_details === undefined &&
     b.reasoning_content === undefined;
@@ -378,8 +307,6 @@ describe("the census survives the real code paths", () => {
   test("replay keeps the blocks minted by the active model", () => {
     const out = replayableMessages(req);
     const kept = out[1]?.content.map((b) => b.type) ?? [];
-    // Thinking minted by this exact model replays, and so does every carrier
-    // variant the census declares.
     expect(kept).toContain("thinking");
     expect(kept).toContain("redacted_thinking");
     expect(kept).toContain("tool_result");
@@ -387,9 +314,6 @@ describe("the census survives the real code paths", () => {
   });
 
   test("a message whose thinking carries nothing replayable loses all of it", () => {
-    // Not a partial drop: the whole message's thinking goes, because the API
-    // rejects a latest assistant message whose thinking sequence does not match
-    // what the model generated.
     const out = replayableMessages(req);
     const kept = out[3]?.content.map((b) => b.type) ?? [];
     expect(kept).toEqual(["text"]);

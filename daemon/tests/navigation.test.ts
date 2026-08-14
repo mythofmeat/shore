@@ -1,13 +1,3 @@
-/**
- * Recorded cases for navigation.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -24,8 +14,6 @@ import {
 } from "../src/commands/navigation.ts";
 import { testTmp } from "./support/tmp.ts";
 
-// ── fixture shapes ──────────────────────────────────────────────────────
-
 interface Row {
   name: string;
   note?: string;
@@ -39,9 +27,6 @@ const row = (section: keyof typeof fixture, name: string): Row => {
   return found;
 };
 
-// ── the tree ────────────────────────────────────────────────────────────
-
-/** A path ending in `/` is a directory; anything else is a file. */
 type Entry = [path: string, bytes?: string | Uint8Array];
 
 interface World {
@@ -61,13 +46,10 @@ async function build(entries: Entry[]): Promise<World> {
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, bytes ?? "");
   }
-  // The generator's harness creates the data directory unconditionally, before
-  // any case-specific entry.
   await mkdir(join(root, "data"), { recursive: true });
   return { root, config: join(root, "config"), data: join(root, "data") };
 }
 
-/** Put the temporary root back to the spelling the fixture recorded. */
 function scrub(value: unknown, root: string): unknown {
   if (Array.isArray(value)) return value.map((v) => scrub(v, root));
   if (value === null || typeof value !== "object") {
@@ -99,8 +81,6 @@ async function check(r: Row, root: string, run: () => unknown | Promise<unknown>
   }
 }
 
-// ── shared trees ────────────────────────────────────────────────────────
-
 const threeCharacters = (): Entry[] => [
   ["config/characters/alpha/workspace/SOUL.md", "Alpha"],
   ["config/characters/mid/workspace/SOUL.md", "Mid"],
@@ -110,8 +90,6 @@ const threeCharacters = (): Entry[] => [
 ];
 
 const longDefinition = (): string => "a".repeat(10) + "\u{1F600}".repeat(600);
-
-// ── list_characters ─────────────────────────────────────────────────────
 
 describe("listCharacters", () => {
   const cases: [name: string, active: string, entries: Entry[]][] = [
@@ -147,8 +125,6 @@ describe("listCharacters", () => {
     });
   }
 });
-
-// ── list_characters_standalone, including every avatar case ─────────────
 
 describe("listCharactersStandalone", () => {
   const PNG_BYTES = new Uint8Array([0xff, 0xfe, 0x00]);
@@ -228,8 +204,6 @@ describe("listCharactersStandalone", () => {
     });
   }
 });
-
-// ── character_info ──────────────────────────────────────────────────────
 
 describe("characterInfo", () => {
   const cases: [name: string, active: string, args: Record<string, unknown>, entries: Entry[]][] = [
@@ -351,8 +325,6 @@ describe("characterInfo", () => {
   }
 });
 
-// ── switch_character ────────────────────────────────────────────────────
-
 describe("switchCharacter", () => {
   const cases: [name: string, active: string, args: Record<string, unknown>, entries: Entry[]][] = [
     ["a different character that exists", "mid", { name: "alpha" }, threeCharacters()],
@@ -376,8 +348,6 @@ describe("switchCharacter", () => {
       );
     });
   }
-
-  // ── the two rows this side deliberately answers differently ───────────
 
   const REFUSED: [name: string, args: Record<string, unknown>, entries: Entry[], err: {
     code: string;
@@ -421,8 +391,6 @@ describe("switchCharacter", () => {
     });
   }
 });
-
-// ── character_metadata, called directly ─────────────────────────────────
 
 describe("characterMetadata", () => {
   const entries: Entry[] = [["config/characters/direct/avatar.jpeg", "abcd"]];

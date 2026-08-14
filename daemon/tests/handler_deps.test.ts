@@ -1,31 +1,3 @@
-/**
- * Supplying a chat turn from the runtime.
- *
- * `handler/generation.ts` takes every collaborator as an argument and has never
- * had one supplied. Almost all of this wiring is a name for a name, and what is
- * worth pinning is the handful of places where the wrong name produces no error
- * at all:
- *
- * - **The two per-character tool backends.** `deferEdit` writes into one
- *   character's queue and `activityStats` reads one character's tracker. Bound
- *   to the wrong character, an edit lands in someone else's conversation and a
- *   heatmap reports someone else's hours; bound to none, both silently do
- *   nothing.
- * - **The cached request behind a compaction.** One runner serves every
- *   character, so the body has to be looked up per pass. A fixed one would hand
- *   Ada's conversation to Nova's compaction — the same shape and entirely the
- *   wrong bytes.
- * - **The budget check.** It must not open the ledger when no budget is
- *   configured, because that is the common case and the answer is always the
- *   same.
- * - **What is read live, and off whose config.** The keepalive ceiling comes
- *   off the registry's global config per call, so a reload reaches it; copied
- *   into the deps at assembly it would be frozen at whatever the daemon
- *   started with, and nothing would say so. `[usage]` comes off the *speaking
- *   character's* effective config, so a budget written into one character's
- *   overlay governs that character's turns and no one else's.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -85,13 +57,6 @@ function configFor(
   };
 }
 
-/**
- * `config` with `[memory.compaction]` overridden.
- *
- * Spread all the way down rather than cloned: the config carries
- * `ConfigDuration` instances, and `structuredClone` reduces them to plain
- * objects that no longer answer `asSecs()`.
- */
 function withCompaction(
   config: LoadedConfig,
   overrides: Partial<LoadedConfig["app"]["memory"]["compaction"]>,
@@ -108,7 +73,6 @@ function withCompaction(
   };
 }
 
-/** A character on disk, which is what discovery looks for. */
 async function writeCharacter(root: string, name: string): Promise<void> {
   const workspace = join(root, "config", "characters", name, "workspace");
   await mkdir(workspace, { recursive: true });
@@ -127,13 +91,6 @@ async function runtimeUnder(
   return { root, config, runtime };
 }
 
-/**
- * Whether `view.call` dispatches to whatever the runtime's holder points at
- * *now*, rather than to the registry that existed when the view was made.
- *
- * Swaps in a stub, calls through the view, and puts the real one back — the
- * caller still has to shut the runtime down cleanly.
- */
 async function routesToCurrentRegistry(
   runtime: ShoreRuntime,
   view: Pick<McpRegistry, "call">,
@@ -154,7 +111,6 @@ async function routesToCurrentRegistry(
   return reached;
 }
 
-/** Records what reached the service, and when it was allowed to. */
 function recordingService(gate?: Promise<void>) {
   const calls: string[] = [];
   return {
@@ -173,7 +129,6 @@ function recordingService(gate?: Promise<void>) {
   };
 }
 
-/** The assembly slice `chatToolDeps` reads, over a runtime. */
 function assemblyFor(runtime: ShoreRuntime): Parameters<typeof chatToolDeps>[0] {
   return {
     runtime,
@@ -182,7 +137,6 @@ function assemblyFor(runtime: ShoreRuntime): Parameters<typeof chatToolDeps>[0] 
   } as unknown as Parameters<typeof chatToolDeps>[0];
 }
 
-/** A turn with nothing live behind it. `runSubagent` is the only reader. */
 function turnFor(): Parameters<typeof chatToolDeps>[2] {
   return {
     conversation: [],
@@ -200,9 +154,6 @@ describe("the tool backends a character's turn gets", () => {
       const ada = chatToolDeps(assemblyFor(runtime), "ada", turnFor());
       await ada.deferEdit?.("SOUL.md");
 
-      // Under `<data>/ada`, not `<data>` and not anyone else's. A queue written
-      // to the wrong root applies one character's self-edit to another's prompt
-      // at the next compaction.
       expect(await readdir(join(root, "data", "ada"))).toEqual(["deferred_edits.jsonl"]);
       expect(await readdir(join(root, "data"))).not.toContain("deferred_edits.jsonl");
     } finally {
@@ -241,8 +192,6 @@ describe("the tool backends a character's turn gets", () => {
         },
       } as unknown as ShoreRuntime;
 
-      // `messageCount` on this side is the Rust's `turn_count`: one number, two
-      // names, and the tool reads the second.
       expect(chatToolDeps(assemblyFor(stubbed), "ada", turnFor()).activityStats?.(30)).toEqual({
         stats: { hour_histogram: [1] } as never,
         turnCount: 12,
@@ -250,8 +199,6 @@ describe("the tool backends a character's turn gets", () => {
       expect(
         chatToolDeps(assemblyFor(stubbed), "nova", turnFor()).activityStats?.(7),
       ).toBeUndefined();
-      // The window the tool was asked for has to survive the hop, or `days`
-      // goes back to meaning nothing.
       expect(asked).toEqual(["ada:30", "nova:7"]);
     } finally {
       await runtime.shutdown();
@@ -263,16 +210,10 @@ describe("the tool backends a character's turn gets", () => {
     const { root, runtime } = await runtimeUnder("shore-deps-shared-");
     try {
       const ada = chatToolDeps(assemblyFor(runtime), "ada", turnFor());
-      // A live view rather than the registry object, so a `[mcp]` reload
-      // reaches a turn already in flight (#28). Asserted by behaviour, because
-      // identity is exactly what it no longer has.
       expect(ada.mcpRegistry).toBeDefined();
       expect(await routesToCurrentRegistry(runtime, ada.mcpRegistry!)).toBe(true);
       expect(ada.imageGenerator).toBeDefined();
       expect(ada.modelHistoryQuery).toBeDefined();
-      // A *binder*, not the runner: a sub-agent's nested loop runs against the
-      // built context minus its own `runSubagent`, so the runner cannot exist
-      // until the context does. `buildToolContext` is where the two meet.
       expect(ada.runSubagent).toBeDefined();
     } finally {
       await runtime.shutdown();
@@ -296,8 +237,6 @@ describe("the autonomy surface a turn drives", () => {
     autonomy.ensureState("ada", configFor("/tmp/shore-deps-none"));
     autonomy.notifyLastRequest("ada", { model: "m", messages: [] }, undefined);
 
-    // Arming the keepalive needs no runner. Queueing it would leave a live
-    // prefix unprotected for as long as the state read takes.
     expect(cached).toEqual(["ada"]);
     release();
   });
@@ -314,8 +253,6 @@ describe("the autonomy surface a turn drives", () => {
     autonomy.ensureState("ada", configFor("/tmp/shore-deps-none"));
     autonomy.notifyAssistantMessage("ada", 7);
 
-    // Dropped instead of queued, the heartbeat believes the character has been
-    // silent since before this turn and wakes to talk over it.
     expect(service.calls).toEqual(["register"]);
     release();
     await bridge.settled("ada");
@@ -373,8 +310,6 @@ describe("the budget check", () => {
       } finally {
         console.error = real;
       }
-      // An open per turn to be told there is nothing to say is a cost with no
-      // answer. A ledger that was reached and refused would have logged.
       expect(errors).toEqual([]);
     } finally {
       closeLedgers();
@@ -428,9 +363,6 @@ describe("what the assembly hands the driver", () => {
       expect(deps.dataDir).toBe(join(root, "data"));
       expect(deps.notifier).toBe(runtime.notifier);
       expect(await routesToCurrentRegistry(runtime, deps.mcpRegistry)).toBe(true);
-      // The other half of the split: the tool *surface* is read from the
-      // registry current when the turn was assembled, which is what keeps a
-      // turn's cache prefix stable across a reload.
       expect(deps.mcpRegistry.toolDefsFiltered(["*"])).toEqual([]);
     } finally {
       await runtime.shutdown();
@@ -454,9 +386,6 @@ describe("what the assembly hands the driver", () => {
 
       expect(deps.keepaliveMaxSecs?.()).toBe(3600);
 
-      // A reload replaces the registry's global config. Copied at assembly,
-      // this would still be answering with what the daemon started with and
-      // nothing would say so.
       runtime.registry.setGlobalConfig({
         ...config,
         app: {
@@ -526,9 +455,6 @@ describe("what the assembly hands the driver", () => {
         (await deps.newlyCrossedUsageBudgetWarnings("ada")).map((w) => w.budget),
       ).toEqual(["ada-only"]);
 
-      // Nova's config has no budgets. Read off the global config, ada's would
-      // apply to every character's turn — and nova would be told about a
-      // budget that is none of hers.
       expect(await deps.newlyCrossedUsageBudgetWarnings("nova")).toEqual([]);
     } finally {
       closeLedgers();
@@ -543,8 +469,6 @@ describe("what the assembly hands the driver", () => {
       const registry = generationRegistry(runtime.registry);
       const engine = await registry.getOrCreate("ada");
 
-      // The one method the adaptation exists for: `setup.ts` asks for
-      // `segmentCount()` and the engine exposes the reader that has it.
       expect(engine.segmentCount()).toBe(0);
       expect(registry.effectiveConfig("ada").dirs.data).toBe(runtime.config.dirs.data);
     } finally {
@@ -590,9 +514,6 @@ describe("the handler, whole", () => {
   test("each handler gets its own leases", async () => {
     const { root, runtime } = await runtimeUnder("shore-deps-leases-");
     try {
-      // A lease names a session id on one server, and two servers number their
-      // sessions from 1 independently — a shared map would hand one daemon's
-      // stream to the other's session.
       const first = buildMessageHandlerDeps(handlerAssembly(runtime));
       const second = buildMessageHandlerDeps(handlerAssembly(runtime));
       expect(first.leases).not.toBe(second.leases);
@@ -619,8 +540,6 @@ describe("resolving a character for the router", () => {
     });
     registry.resolveCharacter(null);
     registry.resolveCharacter("");
-    // An empty string is a *request* for a character named "", which the
-    // registry fails as not-found. `undefined` is "nobody chose".
     expect(seen).toEqual([undefined, ""]);
   });
 
@@ -633,8 +552,6 @@ describe("resolving a character for the router", () => {
 
     const answer = registry.resolveCharacter("zed");
     expect(answer).toHaveProperty("error");
-    // The client can fix this by choosing, so it needs to be told what there
-    // was to choose from.
     expect((answer as { error: string }).error).toContain("zed");
     expect((answer as { error: string }).error).toContain("ada");
   });
@@ -645,8 +562,6 @@ describe("resolving a character for the router", () => {
         throw new Error("the disk went away");
       },
     });
-    // A throw here takes down the loop draining every other session's messages,
-    // and the router's only move either way is to answer this one client.
     expect(registry.resolveCharacter("ada")).toEqual({ error: "Error: the disk went away" });
   });
 });
@@ -659,8 +574,6 @@ describe("the router's notifier", () => {
     });
 
     notifier.notify("error", "Shore - ada", "the model refused");
-    // Narrowed to one event so `[notifications.events].error` is the switch
-    // this obeys and cannot quietly become another.
     expect(filed).toEqual(["error:Shore - ada:the model refused"]);
   });
 });
@@ -683,8 +596,6 @@ describe("the command path", () => {
     const { root, runtime } = await runtimeUnder("shore-deps-cmd-path-");
     try {
       const deps = buildCommandPathDeps(commandAssembly(runtime));
-      // Not guessed from the environment on each reload: a re-resolve could
-      // land on a different file than startup read.
       expect(deps.configPath).toBe(join(root, "config", "config.toml"));
       expect(deps.dispatchRuntime.reloadGlobalConfig()).toBeDefined();
     } finally {
@@ -704,8 +615,6 @@ describe("the command path", () => {
       const real = console.warn;
       console.warn = (msg: unknown) => warned.push(String(msg));
       try {
-        // The command that asked has already succeeded; all this costs is the
-        // `restart_required` list.
         expect(deps.dispatchRuntime.reloadGlobalConfig()).toBeUndefined();
       } finally {
         console.warn = real;
@@ -737,9 +646,6 @@ describe("the command path", () => {
         console.warn = real;
       }
 
-      // The daemon is still on the config it started with; without this frame
-      // the only sign the saved file is not in effect is a log line nobody is
-      // reading.
       expect(emitted).toHaveLength(1);
       const warning = emitted[0] as Extract<ServerMessage, { type: "config_warning" }>;
       expect(warning.type).toBe("config_warning");
@@ -799,8 +705,6 @@ describe("the command path", () => {
       const summary = await deps.dispatchRuntime.applyReloadedConfig(config);
       await bridge.settled("ada");
 
-      // The registry re-scanned, so a character added while the daemon was up
-      // is discoverable without a restart.
       expect(summary.characterDiscoveryChanged).toBe(true);
       expect(runtime.registry.availableCharacters()).toEqual(["ada", "nova"]);
     } finally {
@@ -815,9 +719,6 @@ describe("the command path", () => {
       const deps = buildCommandPathDeps(commandAssembly(runtime));
       deps.sessions.setActiveModel(1, "ada", "anthropic:a");
 
-      // Same session, after a switch to nova. Keyed by session alone this
-      // answered "anthropic:a" — ada's model, reported as nova's, to every
-      // status/model/config command until nova's own ran.
       expect(deps.sessions.activeModel(1, "nova")).toBeUndefined();
       expect(deps.sessions.activeModel(1, "ada")).toBe("anthropic:a");
     } finally {
@@ -835,8 +736,6 @@ describe("the command path", () => {
 
       deps.runtime.notifyPromptSnapshotRefreshed("ada");
 
-      // The cached body still carries the pre-refresh system prompt bytes;
-      // replaying it for keepalive would keep a dead prefix warm.
       expect(runtime.cache.get("ada")).toBeUndefined();
     } finally {
       await runtime.shutdown();
@@ -854,16 +753,11 @@ describe("the command path", () => {
       bridge.ensureState("ada", config);
       await bridge.settled("ada");
 
-      // Spread rather than `structuredClone`: the config holds `ConfigDuration`
-      // instances, and a structured clone turns them into plain objects that no
-      // longer answer `asSecs()`.
       const overridden = withCompaction(config, { max_turns: 77 });
       await deps.dispatchRuntime.setEffectiveConfig("ada", overridden);
       deps.dispatchRuntime.reloadRuntimeConfig(overridden);
       await bridge.settled("ada");
 
-      // Read back through the registry rather than from the argument, so the
-      // override the set just installed is the one the loop adopts.
       expect(runtime.registry.effectiveConfig("ada").app.memory.compaction.max_turns).toBe(77);
       expect(service.calls).toContain("compaction");
     } finally {
@@ -876,9 +770,6 @@ describe("the command path", () => {
     const { root, runtime } = await runtimeUnder("shore-deps-cmd-noop-");
     try {
       const deps = buildCommandPathDeps(commandAssembly(runtime));
-      // `[usage]` and `cache_keepalive_max` are read off the registry's global
-      // config per call, which the same command replaces. A holder here would
-      // be a second copy of a value that already has one authority.
       expect(() => {
         deps.runtime.setUsageConfig(runtime.config);
         deps.runtime.setCacheKeepaliveCeiling(ConfigDuration.fromSecs(1));
@@ -907,15 +798,7 @@ describe("the command path", () => {
   });
 });
 
-/**
- * Reloading `[mcp]` (#28).
- *
- * Before this, servers added, removed or re-pointed kept their startup
- * connections until the daemon restarted, and the command reported success —
- * `matchesConfig` had already ported and had no caller.
- */
 describe("reloading [mcp]", () => {
-  /** The command-path assembly, which is all `applyReloadedConfig` reads. */
   function assemblyOf(runtime: ShoreRuntime): CommandAssembly {
     return {
       runtime,
@@ -928,7 +811,6 @@ describe("reloading [mcp]", () => {
     } satisfies CommandAssembly;
   }
 
-  /** A fake server offering one tool, so a surface change is observable. */
   function fakeServer(tool: string) {
     let shutdowns = 0;
     const connect = (spec: { name: string }) =>
@@ -972,13 +854,10 @@ describe("reloading [mcp]", () => {
         "mcp__hue__set_light",
       ]);
 
-      // The same server re-pointed at a different command: a real `[mcp]` edit.
       const fresh = configFor(root, (app) => withServer(app, "hue", "hue-server-v2"));
       await applyReloadedConfig(assemblyOf(runtime), fresh);
 
       expect(runtime.mcp.current.matchesConfig(mcpConfigView(fresh))).toBe(true);
-      // And the registry it replaced was shut down, so the old child is gone
-      // rather than left running for the life of the daemon.
       expect(server.shutdowns()).toBe(1);
     } finally {
       await runtime.shutdown();
@@ -987,9 +866,6 @@ describe("reloading [mcp]", () => {
   });
 
   test("an unrelated reload leaves the connections alone", async () => {
-    // The comparison is not an optimisation. Every rebuild respawns every stdio
-    // child *and* changes the tool surface, which is a cache prefix change —
-    // so an edit to a different section must not cause one.
     const server = fakeServer("set_light");
     const { root, runtime } = await runtimeWithMcp(server);
     try {
@@ -1024,8 +900,6 @@ describe("reloading [mcp]", () => {
   });
 
   test("removing every server on purpose does empty the surface", async () => {
-    // The other side of the guard above: with nothing declared, nothing
-    // connected is the correct answer rather than a failure.
     const server = fakeServer("set_light");
     const { root, runtime } = await runtimeWithMcp(server);
     try {
@@ -1039,10 +913,6 @@ describe("reloading [mcp]", () => {
   });
 
   test("a turn already in flight dispatches to the new registry", async () => {
-    // The decision this issue asked to be made rather than assumed. A turn
-    // holds the tool *definitions* it was assembled with — so its cache prefix
-    // is stable — but its calls follow the holder, which is what stops the rest
-    // of the turn's MCP calls dying with the old transports.
     const first = fakeServer("set_light");
     const { root, runtime } = await runtimeWithMcp(first);
     try {
@@ -1128,11 +998,6 @@ describe("reloading [mcp]", () => {
       } as ShoreRuntime;
       await applyReloadedConfig(assemblyOf(broken), fresh);
 
-      // `fromConfig` skips an unreachable server rather than failing, which is
-      // right at startup and wrong on a reload: it would swap in an empty
-      // surface and shut down the working connections, silently, for the rest
-      // of the session. Declared servers plus none connected is a failed
-      // rebuild, not an intentionally empty surface.
       expect(runtime.mcp.current).toBe(before);
       expect(server.shutdowns()).toBe(0);
     } finally {
@@ -1142,7 +1007,6 @@ describe("reloading [mcp]", () => {
   });
 });
 
-/** Kept honest: the request the cache is handed is the body, not a projection. */
 describe("the shape of what is cached", () => {
   test("the whole request reaches the cache", () => {
     const seen: SidecarRequest[] = [];
@@ -1158,8 +1022,6 @@ describe("the shape of what is cached", () => {
       messages: [{ role: "user", content: "hi" } as never],
     }, undefined);
 
-    // A ping rebuilt from `model` and `messages` alone drops the system blocks
-    // and the tool surface, which is what the cache prefix is keyed on.
     expect(seen[0]?.provider_key).toBe("anthropic");
     expect(seen[0]?.messages).toHaveLength(1);
   });

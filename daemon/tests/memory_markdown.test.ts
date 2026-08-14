@@ -1,13 +1,3 @@
-/**
- * Recorded cases for memory markdown.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import {
@@ -77,10 +67,8 @@ const fixture = JSON.parse(
 
 const b64 = (s: string) => Buffer.from(s, "base64").toString("utf8");
 
-/** RFC 3339 with a numeric offset, the fraction optional — chrono's `AutoSi`. */
 const RFC3339_LOCAL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?[+-]\d{2}:\d{2}$/;
 
-/** Recreate a recorded tree under `root`, rewriting the generator's root. */
 async function seed(root: string, before: Record<string, Node>, oldRoot: string) {
   const rewrite = (p: string) => join(root, relative(oldRoot, p));
   for (const [rel, node] of Object.entries(before)) {
@@ -101,7 +89,6 @@ async function seed(root: string, before: Record<string, Node>, oldRoot: string)
   }
 }
 
-/** The same shape the generator's `snapshot` recorded. */
 async function snapshot(root: string): Promise<Record<string, Node>> {
   const out: Record<string, Node> = {};
   async function walk(cur: string): Promise<void> {
@@ -124,7 +111,6 @@ async function snapshot(root: string): Promise<Record<string, Node>> {
   return out;
 }
 
-/** The recorded tree with contents decoded and the generator's root swapped. */
 function expectedTree(
   after: Record<string, Node>,
   root: string,
@@ -140,13 +126,6 @@ function expectedTree(
   return out;
 }
 
-/**
- * Compare a thrown error to the recorded one.
- *
- * `io:` messages carry OS strings that Rust and Node word differently, so only
- * the variant survives; everything else is compared in full, because the
- * traversal messages are the only way a caller tells a refusal from a miss.
- */
 function expectSameError(actual: unknown, recorded: string, root: string, oldRoot: string) {
   const message = (actual as Error).message;
   if (recorded.startsWith("io: ")) {
@@ -157,15 +136,6 @@ function expectSameError(actual: unknown, recorded: string, root: string, oldRoo
 }
 
 describe("markdown store parity", () => {
-  /**
-   * The generator was run three times under different `TZ` values, because
-   * `modified_at` is rendered in local time and a UTC-only table would leave
-   * the offset field — sign, hours and minutes alike — completely unpinned.
-   * Kolkata is in there for the half hour; nothing else exercises the minutes.
-   *
-   * `Date` re-reads `TZ` on every call, so the replay can walk the same zones
-   * in one process.
-   */
   test("the modified-at format matches chrono's AutoSi, truncated to milliseconds", () => {
     const originalTz = process.env.TZ;
     try {
@@ -175,10 +145,6 @@ describe("markdown store parity", () => {
 
         for (const stamp of group.stamps) {
           const ms = Math.floor(stamp.nanos / 1e6);
-          // What chrono printed, minus the sub-millisecond digits JavaScript's
-          // `Date` cannot represent — and with the fraction dropped entirely
-          // when nothing is left of it, which is the rule a hand-written port
-          // misses by always printing three digits.
           const truncated = stamp.formatted.replace(
             /\.\d+/,
             ms === 0 ? "" : `.${String(ms).padStart(3, "0")}`,
@@ -186,7 +152,6 @@ describe("markdown store parity", () => {
           expect(formatModifiedAt(new Date(stamp.unix_secs * 1000 + ms))).toBe(truncated);
         }
 
-        // The whole-second row must carry no fractional part at all.
         expect(group.stamps[0]!.formatted).not.toContain(".");
       }
     } finally {
@@ -290,13 +255,8 @@ describe("markdown query parity", () => {
   }
 });
 
-// ── helpers ──────────────────────────────────────────────────────────────
-
 async function mkdtempReal(): Promise<string> {
   const { mkdtemp, realpath } = await import("node:fs/promises");
-  // Resolved, because the store canonicalizes its base and the recorded
-  // symlink targets are absolute. An unresolved `/tmp` alias would make every
-  // containment check compare two different spellings of the same directory.
   return await realpath(await mkdtemp(join(tmpdir(), "markdown-store-")));
 }
 
@@ -309,17 +269,6 @@ const entryJson = (e: MarkdownEntry) => ({
 
 const entriesJson = (list: MarkdownEntry[]) => list.map(entryJson);
 
-/**
- * Compare a returned value to the recorded one, entry by entry.
- *
- * `size` is compared exactly except on a symlinked entry reached through
- * `list_all`. There the Rust read the *directory entry's* metadata, which does
- * not follow the link, and so reported the byte length of the link target's
- * path while returning the target's content. `read` stats through the link and
- * got it right, so it keeps the exact comparison. The assertion pins that the
- * difference is exactly and only that, by checking the recorded number against
- * the recorded link target.
- */
 function expectReturnsMatch(returned: unknown, c: StoreCase) {
   if (!Array.isArray(c.returns)) {
     if (isEntry(c.returns)) {
@@ -358,7 +307,6 @@ function expectEntryMatch(actual: ReturnedEntry, expected: ReturnedEntry, c: Sto
     expect(actual.size).toBe(expected.size);
   }
 
-  // Wall clock on both sides: the format is asserted, the instant is not.
   expect(expected.modified_at).toMatch(RFC3339_LOCAL);
   expect(actual.modified_at).toMatch(RFC3339_LOCAL);
   expect(Number.isNaN(Date.parse(actual.modified_at))).toBe(false);

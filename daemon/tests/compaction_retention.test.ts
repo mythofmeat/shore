@@ -1,19 +1,3 @@
-/**
- * Compaction retention as a share of the context budget — issue #82.
- *
- * The reserve is a *ceiling*, not the floor opencode uses, and that is the
- * finding rather than a shortcut. opencode compacts under context pressure, so
- * a quarter of usable context is how much to keep once you are already
- * compacting. Shore triggers on turn count and idle time, so making the reserve
- * a floor retains everything on a small conversation, compaction never runs,
- * and no archive ever forms — measured by running it that way, which broke
- * eight idle-compaction tests.
- *
- * As a ceiling it does the thing the issue actually wanted: a model with a
- * small window, or a run of enormous turns, retains fewer of them, while the
- * configured `keep_recent_turns` still governs the ordinary case.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import {

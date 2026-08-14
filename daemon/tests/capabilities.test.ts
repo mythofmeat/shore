@@ -12,10 +12,8 @@ import {
 test("openai/openrouter accept xhigh and max (both passthrough)", () => {
   for (const sdk of ["openai", "openrouter"] as const) {
     expect(reasoningDomain(sdk)).toEqual(["minimal", "low", "medium", "high", "xhigh", "max"]);
-    // xhigh/max are the ceiling — sent as-is, NOT folded to high.
     expect(foldEffort(sdk, "xhigh")).toBe("xhigh");
     expect(foldEffort(sdk, "high")).toBe("high");
-    // max is a valid level (OpenAI GPT-5.6+; OpenRouter remaps per-model).
     expect(foldEffort(sdk, "max")).toBe("max");
   }
 });
@@ -35,14 +33,10 @@ test("gemini thinking levels stop at high", () => {
 });
 
 test("gemini-3.1 Pro drops `minimal` via model_override (Flash keeps it)", () => {
-  // Issue #166, grounded in https://ai.google.dev/gemini-api/docs/gemini-3 —
-  // Pro exposes thinkingLevel low|medium|high; `minimal` is a Flash/Flash-Lite/
-  // Flash-Image level (their default). The override is Pro-specific on purpose.
   const pro = "google/gemini-3.1-pro-preview";
   expect(reasoningDomain("gemini", pro)).toEqual(["low", "medium", "high"]);
   expect(foldEffort("gemini", "minimal", pro)).toBeUndefined();
   expect(foldEffort("gemini", "low", pro)).toBe("low");
-  // The Pro-specific match must NOT catch Flash 3.1 ids — they keep `minimal`.
   for (const flash of [
     "google/gemini-3.1-flash-image-preview",
     "google/gemini-3.1-flash-lite",
@@ -53,19 +47,14 @@ test("gemini-3.1 Pro drops `minimal` via model_override (Flash keeps it)", () =>
 });
 
 test("OpenRouter per-vendor reasoning domains (issue #164)", () => {
-  // OR-routed vendors resolve effort by model id, not the generic openrouter set.
   expect(reasoningDomain("openrouter", "google/gemini-2.5-flash")).toEqual([
     "minimal",
     "low",
     "medium",
     "high",
   ]);
-  // Pro override still wins for Pro ids.
   expect(reasoningDomain("openrouter", "google/gemini-3.1-pro")).toEqual(["low", "medium", "high"]);
-  // Grok (enum effort): low|medium|high.
   expect(reasoningDomain("openrouter", "x-ai/grok-4.3")).toEqual(["low", "medium", "high"]);
-  // No-tier / budget-mapped OR vendors keep the generic set (OR maps
-  // effort→budget). Kimi is the issue's example but its reasoning is on/off (#166).
   const generic = ["minimal", "low", "medium", "high", "xhigh", "max"];
   expect(reasoningDomain("openrouter", "moonshotai/kimi-k2.6")).toEqual(generic);
   expect(reasoningDomain("openrouter", "z-ai/glm-5.1")).toEqual(generic);
@@ -79,6 +68,5 @@ test("OpenRouter o-series reject samplers; GPT-5 does not (issue #164)", () => {
   }
   expect(modelOverrideRejectsSampling("openai/gpt-5")).toBe(false);
   expect(rejectsSampling("openai/gpt-5")).toBe(false);
-  // Claude cutoff still flows through the combined helper.
   expect(rejectsSampling("claude-opus-4-8")).toBe(true);
 });

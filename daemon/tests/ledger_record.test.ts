@@ -1,14 +1,3 @@
-/**
- * The recording seam: which rows a stream leaves behind.
- *
- * These cover the ownership rule rather than the row shape (that is
- * `ledger_store.test.ts`): this side records **every call it attempted**, so a
- * loop leaves one row per provider call, a mid-stream failure leaves an `error`
- * row carrying whatever was already billed, and an abandoned stream leaves a
- * `cancelled` row. The daemon records nothing, so anything missed here is
- * missed everywhere.
- */
-
 import { afterEach, describe, expect, test } from "bun:test";
 
 import {
@@ -54,7 +43,6 @@ const usage = (read: number, write: number) => ({
 
 const TIMING = { total_ms: 900, time_to_first_token_ms: 100 };
 
-/** One provider call announcing itself, as a loop does per call. */
 const call = (read: number, continuation: boolean, finish: string): StreamEvent => ({
   type: "call_complete",
   usage: usage(read, 200),
@@ -67,7 +55,6 @@ async function* events(...list: StreamEvent[]): AsyncIterable<StreamEvent> {
   for (const e of list) yield e;
 }
 
-/** Drain a recording stream, returning the events the daemon would have seen. */
 async function drain(stream: AsyncIterable<StreamEvent>): Promise<StreamEvent[]> {
   const seen: StreamEvent[] = [];
   for await (const e of stream) seen.push(e);
@@ -126,7 +113,6 @@ describe("what a stream records", () => {
             type: "done",
             content: "done",
             finish_reason: "end_turn",
-            // The sum. Recording it too would double-count every call.
             usage: usage(2_000 + 2_200 + 2_400, 600),
             timing: TIMING,
           },
@@ -135,11 +121,7 @@ describe("what a stream records", () => {
 
       const rows = rowsIn(path);
       expect(rows.map((r) => r["cache_read_tokens"])).toEqual([2_000, 2_200, 2_400]);
-      // The opening call is the turn; the rest answer tool results. This is the
-      // sequence the cache tracker was built to read.
       expect(rows.map((r) => r["call_type"])).toEqual(["message", "tool_loop", "tool_loop"]);
-      // No row carries the sum — a summed read exceeds any single call's and
-      // poisons the tracker's baseline.
       expect(rows.some((r) => r["cache_read_tokens"] === 6_600)).toBe(false);
       expect(rows.every((r) => r["cache_anomaly"] === null)).toBe(true);
     });
@@ -147,11 +129,6 @@ describe("what a stream records", () => {
 
   test("a loop that fails partway keeps the rows it already billed", async () => {
     await withLedger(async (path) => {
-      // Two calls landed and were billed; the third died. The `error` frame
-      // carries the SUM of the first two — recording that as a row is the bug
-      // this design exists to prevent, because the sum exceeds any single
-      // call's read and the next ordinary message would look like a
-      // regression against it.
       await drain(
         recordingStream(ctx(path), REQ, events(
           call(2_000, false, "tool_use"),
@@ -163,8 +140,6 @@ describe("what a stream records", () => {
       const rows = rowsIn(path);
       expect(rows.map((r) => r["cache_read_tokens"])).toEqual([2_000, 2_200, 0]);
       expect(rows.map((r) => r["finish_reason"])).toEqual(["tool_use", "tool_use", "error"]);
-      // The failed call is recorded as having happened, but reports nothing —
-      // so it stays out of the tracker rather than reading as a cache loss.
       expect(rows[2]!["cache_state"]).toBeNull();
       expect(rows.every((r) => r["cache_anomaly"] === null)).toBe(true);
     });
@@ -177,7 +152,6 @@ describe("what a stream records", () => {
         call(2_200, true, "tool_use"),
         { type: "done", content: "x", finish_reason: "end_turn", usage: usage(4_200, 400), timing: TIMING },
       ));
-      // Read both completed calls, then walk away before `done`.
       let seen = 0;
       for await (const _e of stream) {
         seen += 1;
@@ -186,8 +160,6 @@ describe("what a stream records", () => {
 
       const rows = rowsIn(path);
       expect(rows.map((r) => r["cache_read_tokens"])).toEqual([2_000, 2_200]);
-      // No `cancelled` row on top: those two calls happened and were billed,
-      // and there is no evidence a third ever started.
       expect(rows.some((r) => r["finish_reason"] === "cancelled")).toBe(false);
     });
   });
@@ -200,7 +172,6 @@ describe("what a stream records", () => {
           { type: "done", content: "x", finish_reason: "end_turn", usage: usage(1_000, 200), timing: TIMING },
         )),
       );
-      // The call announced itself, so `done` adds nothing.
       expect(rowsIn(path)).toHaveLength(1);
     });
   });
@@ -213,8 +184,6 @@ describe("what a stream records", () => {
           {
             type: "error",
             message: "connection reset",
-            // Anthropic reports the cache write in `message_start`, before any
-            // output, and bills it whether or not the stream completes.
             usage: usage(0, 19_188),
             timing: TIMING,
           },
@@ -235,15 +204,12 @@ describe("what a stream records", () => {
         { type: "text", text: "partial" },
         { type: "done", content: "x", finish_reason: "end_turn", usage: usage(0, 1), timing: TIMING },
       ));
-      // Stop reading after the first event, as the server does when the daemon
-      // disconnects: the generator's `return()` runs its `finally`.
       for await (const _first of stream) break;
 
       const rows = rowsIn(path);
       expect(rows).toHaveLength(1);
       expect(rows[0]!["finish_reason"]).toBe("cancelled");
       expect(rows[0]!["input_tokens"]).toBe(0);
-      // Zero usage must not reach the tracker as a cold observation.
       expect(rows[0]!["cache_state"]).toBeNull();
     });
   });
@@ -270,8 +236,6 @@ describe("what a stream records", () => {
         usage: usage(0, 5),
         timing: TIMING,
       }));
-      // Take `done` and stop: the row is already written, and the `finally`
-      // must not add a cancelled one on top.
       for await (const _done of stream) break;
 
       expect(rowsIn(path).map((r) => r["finish_reason"])).toEqual(["end_turn"]);
@@ -293,7 +257,6 @@ describe("what a stream records", () => {
       await drain(recordingStream(ctx(path, { cache_ttl: "1h" }), REQ, events(done())));
       expect(ledgerFor(path)?.cacheTtlSecs).toBe(3600);
 
-      // An unrecognised value must not reset it to some guess.
       await drain(recordingStream(ctx(path, { cache_ttl: "90s" }), REQ, events(done())));
       expect(ledgerFor(path)?.cacheTtlSecs).toBe(3600);
     });
@@ -326,7 +289,6 @@ describe("what a stream records", () => {
       );
       const row = rowsIn(path)[0]!;
       expect(row["provider"]).toBe("opencode-go");
-      // Which is also what makes the subscription rule fire.
       expect(row["cost_source"]).toBe("subscription");
     });
   });
@@ -365,9 +327,6 @@ describe("what a non-streaming call records", () => {
 
   test("a failed generate leaves the warm baseline alone", async () => {
     await withLedger(async (path) => {
-      // Warm the cache, then fail a call before the provider answered. The
-      // failure reports nothing, so it must not read as a cache loss — the
-      // next real message would otherwise be judged against a zeroed baseline.
       recordGenerate(ctx(path), REQ, {
         content: "x",
         content_blocks: [],
@@ -404,12 +363,6 @@ describe("what a non-streaming call records", () => {
   });
 });
 
-/**
- * Pinned against `CallType::continuation` in
- * `the deleted port`, which has the same table as a test.
- * The two must agree or a delegated loop's rows stop matching the shape the
- * cache tracker expects.
- */
 describe("continuation types match the Rust copy", () => {
   test.each([
     ["message", "tool_loop"],
@@ -426,14 +379,6 @@ describe("continuation types match the Rust copy", () => {
   });
 });
 
-/**
- * The tracker's TTL, from the value the daemon already sends.
- *
- * Two halves, tested where each is observable: the mapping here, and what the
- * TTL actually does to the warm window in `ledger_store.test.ts` (which can
- * inject a clock, as the recorder cannot). The line joining them is
- * `record()` calling `setCacheTtlSecs` with this.
- */
 describe("cache TTL parsed from the model's setting", () => {
   test("Anthropic's two values map to seconds", () => {
     expect(cacheTtlSeconds("5m")).toBe(300);
@@ -441,9 +386,6 @@ describe("cache TTL parsed from the model's setting", () => {
   });
 
   test("an unset or unrecognised TTL leaves the default alone", () => {
-    // `cache_ttl` is free-form on the model profile. Guessing at an unknown
-    // value either invents expiries or hides them, and both surface as cache
-    // anomalies that are really a config problem.
     expect(cacheTtlSeconds(undefined)).toBeUndefined();
     expect(cacheTtlSeconds("90s")).toBeUndefined();
     expect(cacheTtlSeconds("")).toBeUndefined();

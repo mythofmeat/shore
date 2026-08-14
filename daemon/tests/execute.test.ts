@@ -1,13 +1,3 @@
-/**
- * Recorded cases for execute.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -26,8 +16,6 @@ import type { ImageGenerateResult } from "../src/tools/images.ts";
 import type { ContentBlock, Message, Role } from "../src/engine/types.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 
-/** `SearchConfig::default()` and `RetrievalConfig::default()`, which is what
- *  the generator's context carried. No case reaches either. */
 const SEARCH_CONFIG = {
   api_key_env: "TAVILY_API_KEY",
   result_limit: 5,
@@ -45,11 +33,8 @@ const RETRIEVAL_CONFIG = {
 const MINTED_ID = "m_00000000-0000-4000-8000-000000000000";
 const MINTED_TS = "2026-01-01T00:00:00-05:00";
 
-/** A 1×1 PNG — the same bytes the generator's fake sidecar returned. */
 const PNG_DATA_URL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
-
-// ── normalisation, mirroring the generator ──────────────────────────────
 
 function normalise(value: unknown, tmpRoot?: string): unknown {
   if (Array.isArray(value)) return value.map((v) => normalise(v, tmpRoot));
@@ -75,14 +60,6 @@ function normalise(value: unknown, tmpRoot?: string): unknown {
   return out;
 }
 
-/**
- * Drop keys whose value is absent, so an omitted optional compares equal to a
- * Rust field its `skip_serializing_if` left out.
- *
- * Applied to the whole recorded output rather than only to frames: a `Message`
- * omits `origin`, `alt_index` and the rest the same way, and this side never
- * sets them at all.
- */
 function stripAbsent(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stripAbsent);
   if (value === null || typeof value !== "object") return value;
@@ -93,18 +70,11 @@ function stripAbsent(value: unknown): unknown {
   );
 }
 
-/**
- * Drop the two fields #92 added to a diagnostics entry. The Rust that
- * generated this fixture recorded neither, so they are asserted in the
- * truncation tests in `dispatch.test.ts` rather than written in here.
- */
 function withoutTruncationFields(value: unknown): unknown {
   if (value === null || typeof value !== "object") return value;
   const { truncated: _t, result_chars: _c, ...rest } = value as Record<string, unknown>;
   return rest;
 }
-
-// ── the fixture's shapes ────────────────────────────────────────────────
 
 interface FixtureLimits {
   max_result_chars: number;
@@ -127,7 +97,6 @@ function limitsFrom(raw: FixtureLimits): ToolLimitsView {
   };
 }
 
-/** `ConfigDuration`'s serialized form, which is what the fixture recorded. */
 function durationMs(raw: string): number {
   const m = /^(\d+)(ms|s|m|h|d)?$/.exec(raw);
   if (m === null) throw new Error(`unparsed duration ${raw}`);
@@ -146,7 +115,6 @@ function durationMs(raw: string): number {
   }
 }
 
-/** A `ToolExecution` that records everything instead of sending it. */
 function harness(rid: string | null, limits: ToolLimitsView, ctx: ToolContext) {
   const frames: ServerMessage[] = [];
   const diagnostics: unknown[] = [];
@@ -163,18 +131,8 @@ function harness(rid: string | null, limits: ToolLimitsView, ctx: ToolContext) {
   return { exec, frames, diagnostics };
 }
 
-// ── execute_tool_use ────────────────────────────────────────────────────
-
-/** What the generator's `ScriptedContext` was told to answer with. */
 type Scripted = { ok: unknown } | { err: string } | { hang: true };
 
-/**
- * The `ToolContext` the generator's `ScriptedContext` was: `ask_<name>` returns
- * the case's value, fails with it, or never returns.
- *
- * `ToolIoError` because the generator's failure arm was `ToolError::Io`, and
- * the `io: ` prefix its `Display` adds is part of what the model reads.
- */
 function scriptedContext(name: string, scripted: Scripted): ToolContext {
   const base: ToolContext = {
     imageDir: "",
@@ -191,8 +149,6 @@ function scriptedContext(name: string, scripted: Scripted): ToolContext {
     ...base,
     runSubagent: async (_agent, _query, signal) => {
       if ("hang" in scripted) {
-        // Wedged: only the deadline can end this. Honouring the signal is what
-        // the ported `dispatchWithinDeadline` asks of a long-running handler.
         return await new Promise((_resolve, reject) => {
           signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
         });
@@ -216,13 +172,6 @@ interface ExecCase {
   output: unknown;
 }
 
-/**
- * The three cases whose recorded output is the Rust's head-only truncation
- * marker. #92 replaced it with a head+tail window carrying a recovery hint, so
- * their exact text is a deliberate divergence; what still has to hold is that
- * the result is capped, that both ends survive, and that the original length
- * is reported. That is asserted below instead of against the frozen fixture.
- */
 const TRUNCATION_FORMAT_DIVERGES = new Set([
   "a long result is truncated before anything sees it",
   "a per-tool cap outranks the global one",
@@ -268,10 +217,6 @@ describe("execute_tool_use", () => {
 
       const block = await executeToolUse(c.input.tool, exec, messages);
 
-      // `truncated` and `result_chars` are #92 additions to the diagnostics
-      // entry; the Rust that generated this fixture recorded neither, so they
-      // are asserted separately in the truncation tests rather than written
-      // into a frozen fixture.
       expect(
         normalise(
           stripAbsent({
@@ -285,8 +230,6 @@ describe("execute_tool_use", () => {
     });
   }
 });
-
-// ── generate_image, end to end ──────────────────────────────────────────
 
 interface ImageCase {
   name: string;
@@ -338,9 +281,6 @@ describe("generate_image", () => {
           messages,
         );
 
-        // The handler's own return value belongs to `tools/images.ts`; what
-        // this layer decided is whether it succeeded and what the side channel
-        // did with it.
         expect(
           normalise(
             stripAbsent({
@@ -356,8 +296,6 @@ describe("generate_image", () => {
           ),
         ).toEqual(c.output as never);
 
-        // The path the fixture normalised away is a real file under the
-        // character's image directory, named the way the Rust named it.
         const written = await readdir(join(root, "images", "generated"));
         expect(written).toHaveLength(1);
         expect(written[0]).toMatch(/^\d{8}_\d{6}\.png$/);
@@ -368,8 +306,6 @@ describe("generate_image", () => {
   }
 });
 
-// ── attach_generated_image ──────────────────────────────────────────────
-
 interface AttachCase {
   name: string;
   note: string;
@@ -377,19 +313,11 @@ interface AttachCase {
   output: unknown;
 }
 
-/**
- * Driven directly, as the generator drove it. `generate_image` only ever
- * returns the well-formed shape, so the malformed values here are unreachable
- * through the handler and are still what the attach path has to survive.
- */
 describe("attach_generated_image", () => {
   for (const c of fixture.attach_generated_image as unknown as AttachCase[]) {
     test(c.name, async () => {
       const root = await mkdtemp(join(tmpdir(), "shore-exec-attach-"));
       try {
-        // The one case with real bytes on disk. The fixture recorded its root
-        // as `<tmp>`, so the file has to exist under this run's root too — the
-        // point of that case is that the bytes reach the frame.
         await writeFile(join(root, "real.png"), Buffer.from("89504e470d0a1a0a", "hex"));
         const value = JSON.parse(
           JSON.stringify(c.input.value).replaceAll("<tmp>", root),
@@ -416,8 +344,6 @@ describe("attach_generated_image", () => {
   }
 });
 
-// ── record_reported_message ─────────────────────────────────────────────
-
 interface ReportedCase {
   name: string;
   note: string;
@@ -437,8 +363,6 @@ describe("record_reported_message", () => {
     });
   }
 });
-
-// ── the shapes the fixture normalised away ──────────────────────────────
 
 describe("minted values", () => {
   const observed = fixture._observed as Record<string, unknown>;

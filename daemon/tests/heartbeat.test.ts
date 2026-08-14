@@ -1,14 +1,3 @@
-/**
- * The heartbeat clock's own behaviour.
- *
- * `heartbeat_walks.test.ts` replays decision walks recorded from the Rust and
- * is the stronger check for anything a walk can reach. This file covers what a
- * randomised walk cannot: exact boundaries, and the two `force*` calls that read
- * the clock rather than taking a `now`, so they could not be recorded.
- *
- * Each test here mirrors one in `the deleted port`.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -23,7 +12,7 @@ const HOUR = 3_600_000;
 function config(overrides: Partial<HeartbeatClockConfig> = {}): HeartbeatClockConfig {
   return {
     defaultIntervalMs: HOUR,
-    maxIdleTicks: 100, // high, so the tick-count guard does not trip first
+    maxIdleTicks: 100,
     maxSilentMs: 48 * HOUR,
     minWakeIntervalMs: HOUR,
     ...overrides,
@@ -31,12 +20,6 @@ function config(overrides: Partial<HeartbeatClockConfig> = {}): HeartbeatClockCo
 }
 
 describe("the abandonment guards trip at the threshold, not past it", () => {
-  // Both guards are `>=`. The Rust's own `guard_trips_on_silent_duration` steps
-  // a second beyond the ceiling, and the parity walks advance by random amounts
-  // that essentially never land on an exact 48-hour mark — so relaxing either to
-  // `>` passed everything until these existed. Mirrors
-  // `silent_guard_trips_exactly_at_the_threshold`.
-
   test("silence: exactly at the ceiling is already too silent", () => {
     const maxSilentMs = 2 * HOUR;
     const clock = new HeartbeatClock(config({ maxSilentMs }), 0);
@@ -57,11 +40,6 @@ describe("the abandonment guards trip at the threshold, not past it", () => {
   });
 
   test("silence: the label and the bootstrap branch agree at the threshold", () => {
-    // `isAbandoned` holds a second copy of the silence check, for two callers
-    // the deadline path never reaches: the bootstrap branch, which must refuse
-    // to re-arm a dormant clock, and `stateAt`, which labels it. Relaxing only
-    // that copy leaves the test above green. Mirrors
-    // `silence_marks_dormant_exactly_at_the_threshold`.
     const maxSilentMs = 2 * HOUR;
     const clock = new HeartbeatClock(config({ maxSilentMs }), 0);
     clock.onUserMessage(0);
@@ -77,7 +55,7 @@ describe("the abandonment guards trip at the threshold, not past it", () => {
     let now = 0;
     const fire = () => {
       now += 61_000;
-      clock.tick(now); // bootstraps the next deadline
+      clock.tick(now);
       now += 61_000;
       return clock.tick(now);
     };
@@ -85,7 +63,6 @@ describe("the abandonment guards trip at the threshold, not past it", () => {
     expect(fire()).toBe("run_tick");
     expect(fire()).toBe("run_tick");
     expect(clock.ticksWithoutUser).toBe(2);
-    // ticksWithoutUser == maxIdleTicks, so the third is refused.
     expect(fire()).toBe("none");
     expect(clock.nextWakeAt).toBeUndefined();
   });
@@ -105,9 +82,6 @@ describe("the clamp", () => {
   });
 
   test("a wake in the past clamps to the floor rather than firing immediately", () => {
-    // `saturating_duration_since` on the Rust side, so a negative delta is zero
-    // and then clamped up. A character asking to wake yesterday gets an hour,
-    // not a tick on the next loop.
     const clock = new HeartbeatClock(config(), 10 * HOUR);
     clock.schedule(HOUR, 10 * HOUR);
     expect(clock.nextWakeAt).toBe(11 * HOUR);
@@ -123,8 +97,6 @@ describe("a user message", () => {
   });
 
   test("preserves a deadline the character set further out", () => {
-    // The floor is a minimum, not a reset. A character that asked for two days
-    // keeps them.
     const clock = new HeartbeatClock(config(), 0);
     clock.schedule(47 * HOUR, 0);
     const scheduled = clock.nextWakeAt;
@@ -145,9 +117,6 @@ describe("a user message", () => {
 });
 
 describe("the forced transitions", () => {
-  // Absent from the parity fixture: the Rust reads `Instant::now()` inside these
-  // rather than taking a `now`, so they cannot appear in a time-controlled walk.
-
   test("force dormant stops the clock until a user returns", () => {
     const clock = new HeartbeatClock(config({ maxIdleTicks: 5 }), 0);
     clock.schedule(HOUR, 0);
@@ -156,7 +125,6 @@ describe("the forced transitions", () => {
     expect(clock.ticksWithoutUser).toBe(5);
     expect(clock.nextWakeAt).toBeUndefined();
     expect(clock.stateAt(0)).toBe("Dormant");
-    // And it does not re-arm itself on the next loop.
     expect(clock.tick(10 * HOUR)).toBe("none");
     expect(clock.nextWakeAt).toBeUndefined();
   });
@@ -172,11 +140,9 @@ describe("the forced transitions", () => {
   });
 
   test("force wake fires without pretending the user came back", () => {
-    // Deliberately does NOT reset the abandonment counters: a forced wake is an
-    // operator action, not evidence of a user.
     const clock = new HeartbeatClock(config({ maxIdleTicks: 5 }), 0);
     clock.onUserMessage(0);
-    clock.tick(2 * HOUR); // fires, count -> 1
+    clock.tick(2 * HOUR);
     const before = clock.ticksWithoutUser;
 
     clock.forceWake(3 * HOUR);
@@ -215,8 +181,6 @@ describe("restore", () => {
 
 describe("seeding the silence anchor", () => {
   test("fills an empty anchor but never overwrites a real one", () => {
-    // `undefined` reads as "never silent", which would let dreaming run against
-    // a conversation idle for weeks. Backfill fills it; a real message wins.
     const fresh = new HeartbeatClock(config(), 0);
     fresh.seedLastUserAtIfUnset(HOUR);
     expect(fresh.lastUserAt).toBe(HOUR);

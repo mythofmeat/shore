@@ -1,13 +1,3 @@
-/**
- * Recorded cases for config commands.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -31,28 +21,17 @@ import { serializeConfigValue } from "../src/config/serialize.ts";
 import { pathsSetBy, replayOntoCurrentDefaults } from "./config_delta.ts";
 import { testTmp } from "./support/tmp.ts";
 
-// ── the deliberate divergence ───────────────────────────────────────────
-
-/**
- * Dotted paths the Rust at `9023b46d` serialised that the current schema either
- * does not have or spells differently. Stripped from both sides of every
- * `config` comparison.
- */
 const REMOVED = [
   "defaults.dreaming",
   "defaults.background.dreaming",
   "memory.dreaming",
   "tools.sandbox",
   "connections.matrix",
-  // Deleted when every client started presenting a token: an address is not a
-  // credential, and a flag asking you to acknowledge a risk is worse than not
-  // having the risk. `[daemon]` is `addr` alone now.
   "daemon.unsafe_allow_remote_access",
   "daemon.allowed_hosts",
   "usage.spike_warnings",
 ] as const;
 
-/** Drop `REMOVED` from a serialized `AppConfig` blob. */
 function stripRemoved(blob: unknown): unknown {
   if (blob === null || typeof blob !== "object") return blob;
   const out = structuredClone(blob) as Record<string, any>;
@@ -68,13 +47,10 @@ function stripRemoved(blob: unknown): unknown {
   return out;
 }
 
-/** A section blob, when the recorded row is one section rather than the whole. */
 function stripSection(section: string, blob: unknown): unknown {
   const wrapped = stripRemoved({ [section]: blob }) as Record<string, unknown>;
   return wrapped[section];
 }
-
-// ── fixture shapes ──────────────────────────────────────────────────────
 
 interface Row {
   name: string;
@@ -98,15 +74,12 @@ const row = (section: Section, name: string): Row => {
   return found;
 };
 
-// ── the world ───────────────────────────────────────────────────────────
-
 interface World {
   root: string;
   ctx: ConfigContext;
   calls: string[];
 }
 
-/** Records the runtime hooks in call order — the ordering rule is real. */
 function recorder(calls: string[]): ConfigRuntime {
   return {
     reloadRuntimeConfig: () => calls.push("reloadRuntimeConfig"),
@@ -160,7 +133,6 @@ async function build(
 const scrub = (value: unknown, root: string): unknown =>
   JSON.parse(JSON.stringify(value ?? null).split(root).join("<root>"));
 
-/** What the generator recorded as `state_after`. */
 const stateOf = (w: World): unknown =>
   scrub(
     {
@@ -174,15 +146,6 @@ const stateOf = (w: World): unknown =>
     w.root,
   );
 
-/**
- * TOML parse errors are worded by two different parsers, and `ConfigError`
- * already documents that only the semantic half is reproduced — three earlier
- * fixtures in this series stop at the same place.
- *
- * So a parse error is compared up to and including the `thiserror` wrapper:
- * the command's own prefix, which variant it was, and the path it names. Only
- * the parser's wording after that is dropped.
- */
 const PARSE_BOUNDARIES = [
   /^([\s\S]*failed to parse config\.toml: )[\s\S]*$/,
   /^([\s\S]*failed to parse include file [^:]*: )[\s\S]*$/,
@@ -223,8 +186,6 @@ async function check(
   expect(stateOf(w), `${r.name} (state_after)`).toEqual(r.state_after as never);
 }
 
-// ── shared configs, matching the generator ──────────────────────────────
-
 const FURNISHED = `
 [chat.anthropic.primary]
 model_id = "claude-primary"
@@ -259,10 +220,8 @@ tools = ["fetch_url", "idle_not_real"]
 
 const BARE = "";
 
-/** The api-key check reads the environment, so it is supplied rather than set. */
 const ENV = { SHORE_FIXTURE_KEY_SET: "sk-present", SHORE_FIXTURE_KEY_BLANK: "" } as NodeJS.ProcessEnv;
 
-/** Canonical prompt files plus the active snapshot, as the generator seeded. */
 async function seedPromptFiles(
   w: World,
   soul: string,
@@ -279,8 +238,6 @@ async function seedPromptFiles(
   if (soulSnapshot !== undefined) await writeFile(join(snapshot, "SOUL.md"), soulSnapshot);
   await writeFile(join(snapshot, "USER.md"), user);
 }
-
-// ── tools ───────────────────────────────────────────────────────────────
 
 describe("tools", () => {
   const cases: [name: string, toml: string][] = [
@@ -340,8 +297,6 @@ describe("tools", () => {
   });
 });
 
-// ── config_check ────────────────────────────────────────────────────────
-
 describe("configCheck", () => {
   const cases: [name: string, toml: string][] = [
     ["a config with a missing api key env var", FURNISHED],
@@ -382,8 +337,6 @@ describe("configCheck", () => {
     expect(result.warnings).toContain('Default model "ghost:whatever" not found in catalog');
   });
 });
-
-// ── config, read ────────────────────────────────────────────────────────
 
 describe("config read", () => {
   const liveDefaults = () => stripRemoved(serializeConfigValue(defaultAppConfig()));
@@ -472,20 +425,6 @@ describe("config read", () => {
   });
 });
 
-// ── config, read: the dotted keys the fixture has none of ───────────────
-
-/**
- * A dotted read resolves (#30).
- *
- * Not fixture-driven, and it cannot be: the Rust's read arm did one
- * `Value::get` against the serialized `AppConfig`, so every case the generator
- * could record used a top-level section name. The keys below are exactly the
- * ones it would have answered `not_found` for — including the three the *write*
- * arm has always accepted, which is what made the two grammars disjoint.
- *
- * `FURNISHED` sets each of these to a non-default value, so a walk that lost
- * its way and returned the default baseline instead would fail here.
- */
 describe("config read walks dots", () => {
   const cases: [key: string, value: unknown][] = [
     ["defaults.model", "primary"],
@@ -516,15 +455,6 @@ describe("config read walks dots", () => {
     expect(ok.config ?? null).toBeNull();
   });
 
-  /**
-   * The relationship the help text always claimed: everything settable can be
-   * read back. Not always at the same spelling — the bare aliases (`model`,
-   * `stream`, `autonomy.enabled`) are shorthands for the set arm, not paths —
-   * so a settable key either reads directly or names the path that does.
-   *
-   * Driven off `settableKeySpellings`, so a fourth settable key added without a
-   * read path fails here rather than reintroducing the split quietly.
-   */
   test("every settable key reads back, or says where it reads back from", async () => {
     const w = await build("mid", FURNISHED);
     for (const key of settableKeySpellings()) {
@@ -535,7 +465,6 @@ describe("config read walks dots", () => {
         redirect = (e as Error).message;
       }
       if (redirect === undefined) continue;
-      // A miss is only acceptable when it hands over a key that does resolve.
       const named = /read it as (\S+)$/.exec(redirect)?.[1];
       expect(named, `${key} missed without naming a readable path`).toBeDefined();
       expect(() => config(w.ctx, { key: named! })).not.toThrow();
@@ -545,7 +474,6 @@ describe("config read walks dots", () => {
   test("the set arm accepts exactly the spellings the table lists", async () => {
     const w = await build("mid", FURNISHED);
     for (const key of settableKeySpellings()) {
-      // Any value that parses for the key; what matters is that the arm exists.
       const value = key.endsWith("model") ? "primary" : "true";
       expect(() => config(w.ctx, { key, value })).not.toThrow();
     }
@@ -554,15 +482,10 @@ describe("config read walks dots", () => {
   test("the default baseline is scoped to the same key", async () => {
     const w = await build("mid", FURNISHED);
     const ok = config(w.ctx, { key: "defaults.stream" }) as { config: unknown; defaults: unknown };
-    // FURNISHED sets it false; the built-in default is true. Both halves of the
-    // answer walk, or the client renders "unchanged" for a changed value.
     expect(ok.config).toBe(false as never);
     expect(ok.defaults).toBe(true as never);
   });
 
-  // `null` is a value the config really holds, and it has to come back as an
-  // answer rather than as a miss — which is why the walk reports absence out of
-  // band instead of returning `undefined`.
   test("a key whose value is null is found, not missing", async () => {
     const w = await build("mid", FURNISHED);
     const ok = config(w.ctx, { key: "defaults.display_name" }) as { config: unknown };
@@ -584,8 +507,6 @@ describe("config read walks dots", () => {
   }
 });
 
-// ── config, set ─────────────────────────────────────────────────────────
-
 describe("config set", () => {
   const cases: [name: string, args: Record<string, unknown>][] = [
     ["defaults.model sets the session's active model", { key: "defaults.model", value: "secondary" }],
@@ -606,7 +527,6 @@ describe("config set", () => {
 
   test("a model change drops the pre-resolved selection", async () => {
     const w = await build("mid", FURNISHED);
-    // The pre-resolved selection the dispatcher would have supplied.
     w.ctx.activeModel = "primary";
     w.ctx.activeResolvedModel = findModel(w.ctx.config.models, "primary");
     await check(
@@ -616,8 +536,6 @@ describe("config set", () => {
     );
   });
 });
-
-// ── config_reload ───────────────────────────────────────────────────────
 
 describe("configReload", () => {
   test("check mode reports without applying", async () => {
@@ -703,8 +621,6 @@ describe("configReload", () => {
     const r = row("config_reload", "apply with refresh_prompts activates the pending edits");
     await check(r, w, () => configReload(w.ctx, { apply: true, refresh_prompts: true }));
 
-    // The snapshot really was rewritten, which is the whole difference between
-    // this case and the one below.
     const { changedPromptFiles } = await import("../src/memory/deferred_edits.ts");
     expect(
       await changedPromptFiles(
@@ -714,10 +630,6 @@ describe("configReload", () => {
       ),
     ).toEqual(r.changed_after as string[]);
 
-    // Prompts are refreshed *before* the config is adopted, so that an I/O
-    // failure at the refresh leaves the daemon wholly on the old state. The
-    // Rust harness had no observer for this, so the order is pinned here
-    // rather than by the fixture.
     expect(w.calls).toEqual([
       "notifyPromptSnapshotRefreshed:mid",
       "reloadRuntimeConfig",

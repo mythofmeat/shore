@@ -1,18 +1,3 @@
-/**
- * The config-local `.env`: the parser, and the loader wiring that applies it.
- *
- * The Rust delegated this to `dotenvy` and pinned only the two ends —
- * `dotenv_file_loaded_into_env` and `no_dotenv_file_is_fine` in
- * `the deleted port`. Both are reproduced at the bottom. The
- * grammar cases above them have no Rust counterpart to replay against, because
- * on that side they were the dependency's own tests; here the parser is ours,
- * so they are pinned here.
- *
- * The bug that motivated all of it: the TypeScript daemon never read this file.
- * Provider keys live in it and nowhere else in a container, so every generation
- * failed with no credentials at all — see the `provider keys` case.
- */
-
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -33,7 +18,6 @@ afterEach(() => {
   while (roots.length > 0) rmSync(roots.pop()!, { recursive: true, force: true });
 });
 
-/** Parse with a fixed lookup, so no case depends on the real environment. */
 const parse = (text: string, env: Record<string, string> = {}) =>
   parseDotenv(text, (name) => env[name]);
 
@@ -125,10 +109,6 @@ describe("parseDotenv", () => {
   });
 
   test("an escaped `$` is literal, and so is one that names nothing", () => {
-    // `B` is the trap: only the *first* `$` is literal, because the character
-    // after it cannot start a name. The second one does start `$word`, which is
-    // an ordinary substitution of an unset name and expands to nothing. A `$`
-    // in a secret has to be written `\$` or single-quoted to survive.
     expect(parse("A=\\$NOPE\nB=pa$$word\nC=100$\n", { NOPE: "x" })).toEqual([
       ["A", "$NOPE"],
       ["B", "pa$"],
@@ -151,8 +131,6 @@ describe("parseDotenv", () => {
   });
 
   test("a realistic secrets file parses as written", () => {
-    // Values shaped like real API keys: `-`, `_` and `#` inside them must not
-    // be treated as syntax.
     const text = [
       "# MOONSHOT_API_KEY=disabled",
       "ANTHROPIC_API_KEY=sk-ant-api03-AbC_dEf-123",
@@ -196,13 +174,11 @@ describe("applyDotenv", () => {
 
     const target: Record<string, string | undefined> = {};
     expect(() => applyDotenv(path, target)).toThrow(DotenvError);
-    // Deliberately unlike dotenvy, which would have left `GOOD` applied.
     expect(target.GOOD).toBeUndefined();
   });
 });
 
 describe("loadRawConfigTable", () => {
-  /** Load with the config dir pointed at `root`, capturing warnings. */
   function load(root: string, target: Record<string, string | undefined>) {
     const warnings: string[] = [];
     loadRawConfigTable(join(root, "config.toml"), {
@@ -224,9 +200,6 @@ describe("loadRawConfigTable", () => {
   });
 
   test("provider keys reach the environment the credential layer reads", () => {
-    // The regression this whole file exists for. `[providers.anthropic]
-    // api_key_env` names a variable; nothing but `.env` sets it in a container,
-    // and without it every generation fails before reaching the network.
     const root = tempDir();
     writeFileSync(join(root, "config.toml"), "");
     writeFileSync(

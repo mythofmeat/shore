@@ -1,13 +1,3 @@
-/**
- * Recorded cases for conversation.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -29,8 +19,6 @@ import { CommandError } from "../src/commands/errors.ts";
 import { ConversationEngine } from "../src/engine/conversation.ts";
 import type { Message } from "../src/engine/types.ts";
 import { testTmp } from "./support/tmp.ts";
-
-// ── fixture shapes ──────────────────────────────────────────────────────
 
 interface WireError {
   code: string;
@@ -69,17 +57,10 @@ interface Scenario {
 const refCases = fixture.resolve_ref as unknown as RefCase[];
 const scenarios = fixture.scenarios as unknown as Scenario[];
 
-// ── shape bridge ────────────────────────────────────────────────────────
-
-/** True for something that looks like a `Message`, not a payload that has one. */
 function isMessage(v: Record<string, unknown>): boolean {
   return "msg_id" in v && "role" in v && "content_blocks" in v;
 }
 
-/**
- * The port's value as serde would have written it: `undefined` fields dropped,
- * and an empty `alternatives` dropped from message objects only.
- */
 function serdeShape(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(serdeShape);
   if (value === null || typeof value !== "object") return value;
@@ -95,12 +76,9 @@ function serdeShape(value: unknown): unknown {
   return out;
 }
 
-// ── harness ─────────────────────────────────────────────────────────────
-
 const UUID_RE = /^m_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const LOCAL_RFC3339_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{2}:\d{2}$/;
 
-/** Injected into `injectSystem` so the body is pinned and the two generated fields are not. */
 const STUB_ID = "m_00000000-0000-4000-8000-000000000000";
 const STUB_NOW = "2026-01-02T03:04:05.678+00:00";
 
@@ -152,15 +130,10 @@ async function buildScenario(
   return { engine, pushes: () => count, root };
 }
 
-/** Rewrite a recorded value's `<tmp>` markers to this run's temp dir. */
 function expand(value: unknown, root: string): unknown {
   return JSON.parse(JSON.stringify(value).replaceAll("<tmp>", root)) as unknown;
 }
 
-/**
- * Put the generated fields back to the markers the fixture recorded, so the
- * engine snapshot after an `inject_system` compares as a whole.
- */
 function remask(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(remask);
   if (value === null || typeof value !== "object") return value;
@@ -203,8 +176,6 @@ async function runStep(engine: ConversationEngine, step: Step): Promise<unknown>
   }
 }
 
-// ── resolve_ref ─────────────────────────────────────────────────────────
-
 describe("resolveRef", () => {
   for (const c of refCases) {
     test(c.name, () => {
@@ -225,13 +196,6 @@ describe("resolveRef", () => {
   }
 });
 
-/**
- * The one thing the fixture cannot record, because the Rust never had it:
- * `Number("1.5")` and `Number(" 2")` both succeed where `parse::<i64>` does
- * not. The fixture pins `"1.5"`; these are the neighbours of that case, and
- * they are here so a port that reaches for `Number` fails loudly rather than
- * quietly reading a decimal as an index.
- */
 describe("resolveRef rejects what Rust's integer parse rejects", () => {
   const messages: Message[] = [
     { msg_id: "m1", role: "user", content: "A", images: [], content_blocks: [], timestamp: "t" },
@@ -247,15 +211,11 @@ describe("resolveRef rejects what Rust's integer parse rejects", () => {
   });
 });
 
-// ── scenarios ───────────────────────────────────────────────────────────
-
 describe("conversation commands", () => {
   for (const scenario of scenarios) {
     test(scenario.name, async () => {
       const { engine, pushes, root } = await buildScenario(scenario);
 
-      // The engine loaded the same conversation the Rust's did — content
-      // derivation included, since only `content_blocks` is on disk.
       expect(serdeShape(engine.messages())).toEqual(
         expand(scenario.initial_messages, root) as never,
       );
@@ -298,8 +258,6 @@ describe("conversation commands", () => {
     });
   }
 });
-
-// ── the generated fields ────────────────────────────────────────────────
 
 describe("injectSystem generates a uuid and a local timestamp", () => {
   test("the defaults produce the shapes the fixture masked", async () => {

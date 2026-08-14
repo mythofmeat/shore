@@ -1,13 +1,3 @@
-/**
- * Recorded cases for call log.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -27,13 +17,6 @@ function at(secs: number): Date {
   return new Date(Date.parse("2026-01-15T12:00:00Z") + secs * 1000);
 }
 
-// ── the store ───────────────────────────────────────────────────────────────
-
-/**
- * Calls across two characters and two call types, so every filter has both a
- * hit and a miss. `call_d` and `call_e` share a timestamp, so the ordering
- * tiebreak is load-bearing here too.
- */
 function fillCalls(store: CallStore): void {
   const rows: [string, number, string, string, string, string | null][] = [
     ["call_a", 0, "message", "poppy", "request a", "response a"],
@@ -42,11 +25,6 @@ function fillCalls(store: CallStore): void {
     ["call_d", 3, "heartbeat", "poppy", "request d", "response d"],
     ["call_e", 3, "heartbeat", "wren", "request e", "response e"],
   ];
-  // Filler, older than every row above, so the interesting rows stay at the
-  // head of a limited query. There has to be enough of it that the default
-  // limit of 20 is a boundary rather than a number nothing reaches: with five
-  // rows in the store, a default of 20, a default of 10 and no limit at all
-  // are the same query.
   for (let i = 0; i < 20; i += 1) {
     rows.push([
       `filler_${String(i).padStart(2, "0")}`,
@@ -78,12 +56,6 @@ function fillCalls(store: CallStore): void {
   }
 }
 
-/**
- * Transcript rows laid out so the reordering has something to do. A tick is a
- * run of strictly increasing iterations; anything that does not increase starts
- * a new one. Ticks come back newest-first but read chronologically *within*, so
- * the display order is neither the store's order nor its reverse.
- */
 function fillTranscripts(store: CallStore): void {
   const rows: [number, string, number, string][] = [
     [0, "poppy", 0, "t1-i0"],
@@ -93,11 +65,9 @@ function fillTranscripts(store: CallStore): void {
     [4, "poppy", 0, "t3-i0"],
     [5, "poppy", 1, "t3-i1"],
     [6, "wren", 0, "wren-i0"],
-    // An iteration that repeats rather than increases starts a new tick.
     [7, "poppy", 1, "t4-i1"],
     [8, "poppy", 1, "t5-i1"],
   ];
-  // Filler, as above: without it the default limit of 20 never bites.
   for (let i = 0; i < 20; i += 1) {
     rows.push([-1000 + i, "poppy", 0, `filler-${String(i).padStart(2, "0")}`]);
   }
@@ -126,25 +96,11 @@ beforeAll(() => {
   fillTranscripts(stocked);
 });
 
-/**
- * The generator built one context per character, plus one whose client has no
- * call store at all — which is how both commands answer when the debug store is
- * switched off.
- */
 function contextFor(caseName: string, character: string): CallLogContext {
   const off = caseName.startsWith("disabled");
   return { characterName: character, callStore: off ? undefined : stocked };
 }
 
-// ── the compressed sizes ────────────────────────────────────────────────────
-
-/**
- * Drop `request_bytes`/`response_bytes` wherever they appear.
- *
- * They are the one field the two libzstd builds disagree on, and they are
- * pinned against Rust's own bytes in `call_store.test.ts` rather than
- * here. Everything else in every row still compares exactly.
- */
 function withoutBytes(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(withoutBytes);
   if (value !== null && typeof value === "object") {
@@ -157,8 +113,6 @@ function withoutBytes(value: unknown): unknown {
   return value;
 }
 
-// ── replay ──────────────────────────────────────────────────────────────────
-
 interface Case {
   case: string;
   command: "call_log" | "transcript";
@@ -167,7 +121,6 @@ interface Case {
   err?: { code: ErrorCode; message: string };
 }
 
-/** The generator's third harness runs as a character with nothing recorded. */
 const CHARACTER_FOR = (name: string): string =>
   name === "no_rows_for_character" ? "nobody" : "poppy";
 
@@ -193,13 +146,6 @@ describe.each(["call_log", "transcript"])("%s", (command) => {
   }
 });
 
-// ── the raw HTTP exchanges ──────────────────────────────────────────────────
-
-/**
- * `wire` is newer than the fixture: the Rust daemon recorded no raw HTTP
- * exchanges, so no frozen row can carry the key. Strip it here and pin the
- * behaviour directly below instead.
- */
 function withoutWire(value: unknown): unknown {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
   const { wire: _wire, ...rest } = value as Record<string, unknown>;
@@ -282,48 +228,23 @@ test("a call with no recorded exchange dumps an empty wire list", () => {
   expect(out.wire).toEqual([]);
 });
 
-// ── the reordering, restated ────────────────────────────────────────────────
-
-/**
- * The display order the fixture pins, said out loud. Every case above compares
- * whole rows, which makes a reordering visible but not legible; this is the
- * same claim in the form the doc comment makes it.
- */
 test("ticks read newest-first, iterations chronologically within each", () => {
   const ctx: CallLogContext = { characterName: "poppy", callStore: stocked };
-  // Eight, which is exactly the rows the tick layout is about — the filler
-  // beneath them would otherwise fill the default limit.
   const result = transcript(ctx, { count: 8 }) as {
     entries: { entry: { marker: string } }[];
   };
   expect(result.entries.map((e) => e.entry.marker)).toEqual([
-    // Two single-iteration ticks, newest first…
     "t5-i1",
     "t4-i1",
-    // …then a two-iteration tick read 0 → 1…
     "t3-i0",
     "t3-i1",
-    // …a lone tick…
     "t2-i0",
-    // …and the oldest tick's tool loop, read 0 → 1 → 2.
     "t1-i0",
     "t1-i1",
     "t1-i2",
   ]);
 });
 
-// ── the failure wording ─────────────────────────────────────────────────────
-
-/**
- * The two commands word a store failure differently — `call store query
- * failed` and `transcript query failed` — and the fixture cannot pin that,
- * because the generator has no way to make SQLite fail on demand and the text
- * after the prefix would be Node's wording rather than Rust's either way.
- *
- * So only the prefix is asserted, read from the Rust rather than from a
- * recorded answer, and it is provoked the one way a healthy store can be made
- * to fail: by closing it underneath the command.
- */
 describe("a store that fails mid-query", () => {
   function closedStore(): CallStore {
     const store = CallStore.open(join(root, `closed-${Math.random()}.sqlite`));

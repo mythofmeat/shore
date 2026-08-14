@@ -1,24 +1,9 @@
-/**
- * The per-tick trigger decision.
- *
- * The named tests say what each answer means. The sweep at the bottom replaces
- * `tick_parity`, which replayed 400 combinations recorded from the Rust: the
- * decision is stateless boolean logic, so the inputs can be enumerated here
- * directly, and the properties asserted over all of them say more than 400
- * recorded answers did. The sweep below covers 23,040 combinations.
- *
- * What a failure means: the two triggers here spend an LLM call and rewrite the
- * conversation on disk. One that fires when it should not is money; one that
- * never fires lets the active conversation grow without bound.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import { backgroundRetryDelayMs, tickDecision, type TickInputs } from "../src/autonomy/tick.ts";
 
 const HOUR_MS = 3_600_000;
 
-/** A tick that fires nothing: every switch on, every threshold unmet. */
 function quietTick(overrides: Partial<TickInputs> = {}): TickInputs {
   return {
     autonomyEnabled: true,
@@ -71,15 +56,12 @@ describe("compaction", () => {
   });
 
   test("a conversation below min turns compacts on neither trigger", () => {
-    // Its safety net is the deep archive, which has no turn threshold.
     const short = quietTick({ activeTurnCount: 3, idleSecs: 10_000_000 });
     expect(tickDecision(short).compaction).toBeUndefined();
     expect(tickDecision(short).deepArchive).toBe(true);
   });
 
   test("max turns wins when both triggers are satisfied", () => {
-    // Only the log line distinguishes them, but the order decides which one a
-    // reader sees when a long conversation also goes quiet.
     expect(tickDecision(quietTick({ activeTurnCount: 50, idleSecs: 10_000 })).compaction).toBe(
       "max_turns",
     );
@@ -94,16 +76,12 @@ describe("the deep archive", () => {
   });
 
   test("yields to a compaction firing on the same tick", () => {
-    // They share one latch; running both would have the second work from what
-    // the first had already archived.
     const both = quietTick({ activeTurnCount: 50, idleSecs: 10_000_000, archiveAfterSecs: 5 });
     expect(tickDecision(both).compaction).toBe("max_turns");
     expect(tickDecision(both).deepArchive).toBe(false);
   });
 
   test("is suppressed by a latch taken on an earlier tick", () => {
-    // Checking only "nothing fired now" would miss this: when the latch was
-    // taken earlier, nothing fires now to block it.
     const latched = quietTick({
       compactionTriggered: true,
       activeTurnCount: 1,
@@ -121,8 +99,6 @@ describe("the deep archive", () => {
 
 describe("the master switches", () => {
   test("pausing stops the heartbeat and nothing else", () => {
-    // Easy to assume otherwise: a paused character still compacts and still
-    // archives. Pause is a switch on speaking, not on housekeeping.
     const d = tickDecision(
       quietTick({
         paused: true,
@@ -170,8 +146,6 @@ describe("the master switches", () => {
 
 describe("the background retry backoff", () => {
   test("doubles from a minute, then caps at an hour", () => {
-    // The first failure is one minute, not two: the exponent is `count - 1`,
-    // and the clamp at zero keeps counts 0 and 1 together.
     expect(backgroundRetryDelayMs(0)).toBe(60_000);
     expect(backgroundRetryDelayMs(1)).toBe(60_000);
     expect(backgroundRetryDelayMs(2)).toBe(120_000);
@@ -179,21 +153,12 @@ describe("the background retry backoff", () => {
     expect(backgroundRetryDelayMs(4)).toBe(480_000);
     expect(backgroundRetryDelayMs(5)).toBe(960_000);
     expect(backgroundRetryDelayMs(6)).toBe(1_920_000);
-    // 60s × 2^6 = 3840s, clamped to the hour ceiling.
     expect(backgroundRetryDelayMs(7)).toBe(HOUR_MS);
-    // And it stays there rather than shifting into overflow.
     expect(backgroundRetryDelayMs(50)).toBe(HOUR_MS);
     expect(backgroundRetryDelayMs(4_294_967_295)).toBe(HOUR_MS);
   });
 });
 
-// ── the exhaustive sweep ────────────────────────────────────────────────
-
-/**
- * Every combination of the six switches against threshold-adjacent numbers.
- * The value sets straddle each comparison in `tickDecision`, so `>=` versus `>`
- * and `> 0` versus `>= 0` are both reachable.
- */
 function* everyTick(): Generator<TickInputs> {
   const bools = [false, true];
   for (const autonomyEnabled of bools)
@@ -232,10 +197,6 @@ describe("the sweep", () => {
   });
 
   test("it reaches every outcome the decision can produce", () => {
-    // Compaction and the deep archive cannot both fire, so the reachable set
-    // is 2 heartbeat x 3 compaction x 2 archive minus the impossible pairs.
-    // A sweep that missed one would pass against an implementation that could
-    // not produce it at all.
     const seen = new Set<string>();
     for (const i of everyTick()) {
       const d = tickDecision(i);
@@ -254,9 +215,6 @@ describe("the sweep", () => {
   });
 
   test("compaction and the deep archive never both fire", () => {
-    // The invariant the whole ordering exists to hold: archiving a conversation
-    // that is about to be compacted loses the turns the compaction would have
-    // summarized.
     for (const i of everyTick()) {
       const d = tickDecision(i);
       expect(d.compaction !== undefined && d.deepArchive, JSON.stringify(i)).toBe(false);
@@ -282,8 +240,6 @@ describe("the sweep", () => {
   });
 
   test("pausing stops the heartbeat and nothing else", () => {
-    // Compaction and archiving are disk hygiene; they are not the character
-    // speaking, so a pause does not suspend them.
     for (const i of everyTick()) {
       if (i.paused) continue;
       const paused = tickDecision({ ...i, paused: true });
@@ -346,9 +302,6 @@ describe("the sweep", () => {
   });
 
   test("the thresholds are inclusive", () => {
-    // `>=`, not `>`. A turn count that exactly equals maxTurns compacts, and an
-    // idle time that exactly equals the trigger compacts; off by one here means
-    // a conversation that sits one turn over its cap forever.
     const base = quietTick({ minTurns: 4, maxTurns: 20, idleTriggerSecs: 100, idleSecs: 0 });
     expect(tickDecision({ ...base, activeTurnCount: 19 }).compaction).toBeUndefined();
     expect(tickDecision({ ...base, activeTurnCount: 20 }).compaction).toBe("max_turns");

@@ -1,20 +1,3 @@
-/**
- * The provider auto-discovery loop.
- *
- * `refreshOne` is tested where it lives; what is left for here is the loop's
- * three decisions, each of which is silent when it is wrong:
- *
- * - **Who.** Enabled *and* `discovery.enabled`. Discovery is off unless asked
- *   for, so a loop that ignored either flag would make unrequested outbound
- *   requests on the user's credentials.
- * - **When.** A cache inside its TTL is left alone. Without that check a
- *   daemon that restarts often makes one request per provider per restart and
- *   gains nothing.
- * - **What a failure costs.** Nothing. The previous cache stands, and the other
- *   providers still get their turn — which is the difference between a
- *   transient outage at one provider and a daemon with no model lists.
- */
-
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -30,14 +13,11 @@ import { cachePath, CACHE_VERSION, writeCache } from "../src/llm/discovery.ts";
 
 afterAll(restoreTestEnv);
 
-/** Removed after each test: a harness runs this suite once per mutant, and
- *  `/tmp` is a tmpfs with a fixed inode budget. */
 const roots: string[] = [];
 afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 
-/** A config whose `[providers]` section is the given table. */
 async function configWith(
   providers: Record<string, unknown>,
 ): Promise<{ config: LoadedConfig; cacheDir: string }> {
@@ -55,7 +35,6 @@ async function configWith(
   };
 }
 
-/** A `/v1/models` responder that counts what it was asked for. */
 function modelsFetch(asked: string[]): typeof fetch {
   return ((url: string | URL) => {
     asked.push(url.toString());
@@ -85,12 +64,7 @@ describe("who gets refreshed", () => {
       log: { warn: (msg) => warnings.push(msg) },
     });
 
-    // `gamma` has no `[discovery]` block at all, which leaves it off — an
-    // omitted block is not an opt-in.
     expect(asked).toEqual([]);
-    // Skipped, not attempted-and-refused. `refreshOne` would reject each of
-    // these on its own, so without the check here the only symptom would be a
-    // warning per provider per pass — forever, about a state the user chose.
     expect(warnings).toEqual([]);
   });
 
@@ -208,8 +182,6 @@ describe("what a failure costs", () => {
       log: { warn: (msg) => warnings.push(msg) },
     });
 
-    // A transient outage at one provider must not stop the others, and must
-    // not lose what was already known about the one that failed.
     expect(warnings).toEqual(["Auto-refresh failed; previous cache preserved"]);
     const kept = JSON.parse(await readFile(cachePath(cacheDir, "broken"), "utf8")) as {
       models: { model_id: string }[];
@@ -254,9 +226,6 @@ describe("the loop", () => {
       },
     });
 
-    // An interval no test could wait for, so only the boot pass can fire. A
-    // daemon restarted after a long gap should not wait a day for a list it
-    // already knows is stale.
     const loop = startAutoDiscovery({
       config: () => config,
       intervalMs: 60_000,
@@ -284,7 +253,6 @@ describe("the loop", () => {
       },
     });
 
-    // Fails slowly, so nothing is ever cached and every tick is eligible.
     const loop = startAutoDiscovery({
       config: () => config,
       intervalMs: 20,
@@ -301,8 +269,6 @@ describe("the loop", () => {
       loop.stop();
     }
 
-    // Serialized, so roughly one per 100ms rather than one per 20ms. Two
-    // concurrent passes would both fetch and both write the same cache file.
     expect(asked.length).toBeLessThanOrEqual(4);
   });
 
@@ -328,8 +294,6 @@ describe("the loop", () => {
     }
     loop.stop();
 
-    // The boot pass wrote a fresh cache, which later ticks would skip; break it
-    // so a tick that still ran would be visible.
     await writeFile(cachePath(cacheDir, "upstream"), "");
     await new Promise((resolve) => setTimeout(resolve, 200));
 

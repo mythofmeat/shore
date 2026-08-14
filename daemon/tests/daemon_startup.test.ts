@@ -1,22 +1,3 @@
-/**
- * What the daemon settles before it opens anything: arguments, the listen
- * address, and the config path.
- *
- * This file used to be mostly about a *refusal* — the remote-access policy,
- * and the ~200 lines of socket-address parsing behind it that decided whether
- * a bind was loopback. All of that is gone with `unsafe_allow_remote_access`
- * and `allowed_hosts`: the token is the boundary now, so where the daemon
- * binds no longer decides who can reach it, and there is no policy left to get
- * wrong. `swp_auth.test.ts` is where the equivalent stakes moved.
- *
- * Two things here are still covered beyond the Rust's own tests:
- *
- * - **Argument parsing.** clap rejected an unknown flag; a hand-rolled parser
- *   that skipped it would let a misspelled `--addr` bind somewhere else.
- * - **A blank `SHORE_ADDR`.** `Option::filter` in the Rust, and the case a
- *   container hits by exporting an empty variable.
- */
-
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -35,8 +16,6 @@ import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 
-/** Removed after each test: a harness runs this suite once per mutant, and
- *  `/tmp` is a tmpfs with a fixed inode budget. */
 const roots: string[] = [];
 afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
@@ -53,7 +32,6 @@ function configWith(daemon: Partial<LoadedConfig["app"]["daemon"]> = {}): Loaded
   };
 }
 
-/** A config directory holding `config.toml`, and an env pointed at it. */
 async function configRoot(
   contents: string,
 ): Promise<{ path: string; env: NodeJS.ProcessEnv }> {
@@ -166,9 +144,6 @@ addr = "127.0.0.1:7000"
     );
 
     expect(startup.configPath).toBe(path);
-    // A non-loopback bind resolves like any other now. It used to need
-    // `unsafe_allow_remote_access` and produce warnings; the token replaced
-    // both, so this is simply the address that was asked for.
     expect(startup.bindAddr).toBe("0.0.0.0:9000");
     expect(startup.bindAddrSource).toBe("cli");
   });
@@ -197,9 +172,6 @@ addr = "127.0.0.1:7000"
   test("with no --config, the path is the loader's own default", async () => {
     const { env } = await configRoot("");
     const startup = resolveStartup({}, env);
-    // `--config` re-homes the whole config directory, so this has to be
-    // resolved after the loader decides where `<config>` is — a reload that
-    // guessed could read a different file than startup did.
     expect(startup.configPath).toBe(join(startup.loaded.dirs.config, "config.toml"));
     expect(startup.bindAddrSource).toBe("config");
   });

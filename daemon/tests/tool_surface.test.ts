@@ -1,12 +1,3 @@
-/**
- * The tool-surface fingerprint, and the ledger column it lands in (#33).
- *
- * The fingerprint is what lets the cache tracker tell a config change from an
- * anomaly. Two properties matter and are tested separately: it changes when the
- * bytes the adapter sends change, and it survives the trip through the ledger
- * so the tracker's fourth transition has something to compare.
- */
-
 import { afterAll, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 
@@ -36,10 +27,6 @@ describe("the fingerprint", () => {
     expect(toolSurfaceFingerprint([])).not.toBe(one);
   });
 
-  // The reason this hashes the definitions rather than the names: an MCP server
-  // that changes a description or a schema moves the head of the prefix exactly
-  // as much as one that disappears, and a name-only fingerprint would miss it
-  // entirely — the anomaly would come back with no cause attached.
   test("changes when a tool's description or schema changes", () => {
     const base = toolSurfaceFingerprint([READ_TOOL]);
     expect(toolSurfaceFingerprint([{ ...READ_TOOL, description: "Read a file, twice." }])).not.toBe(
@@ -58,9 +45,6 @@ describe("the fingerprint", () => {
     );
   });
 
-  // `undefined` is *unknown* and must stay distinguishable from "no tools":
-  // the tracker skips the comparison on unknown, and a character whose tools
-  // were switched off really did move the prefix.
   test("no tools field is unknown, an empty list is a surface", () => {
     expect(toolSurfaceFingerprint(undefined)).toBeUndefined();
     expect(toolSurfaceFingerprint([])).toBeDefined();
@@ -105,8 +89,6 @@ describe("the ledger column", () => {
   });
 
   test("an unknown surface is null, not an empty string", () => {
-    // Null is what the tracker reads as "do not compare". An empty string would
-    // be a surface, and would report a change against the next real one.
     const { ledger: l, db } = ledger();
     l.record(call(undefined));
 
@@ -117,8 +99,6 @@ describe("the ledger column", () => {
   });
 
   test("a change is recorded without an anomaly", () => {
-    // End to end: two calls whose surfaces differ produce a cold row and no
-    // `unexpected_write`, which is the entire complaint in #33.
     const { ledger: l, db } = ledger();
     l.record({
       ...call(toolSurfaceFingerprint([READ_TOOL])),
@@ -137,10 +117,6 @@ describe("the ledger column", () => {
   });
 
   test("the TSV export carries the tool surface", () => {
-    // `reasoning_effort` set the precedent: a column that explains a cache miss
-    // belongs in the export a person reaches for when one happens. This also
-    // pins the *index*, which is what makes it safe for the parity replay to
-    // cut the column out by position before comparing to the frozen string.
     const { ledger: l, db } = ledger();
     const fingerprint = toolSurfaceFingerprint([READ_TOOL])!;
     l.record(call(fingerprint));
@@ -164,8 +140,6 @@ describe("the ledger column", () => {
   });
 
   test("without the fingerprint, that same pair is an anomaly", () => {
-    // The control. This is what the ledger recorded before #33, and it is the
-    // behaviour any row still carrying no surface keeps.
     const { ledger: l, db } = ledger();
     l.record({
       ...call(undefined),

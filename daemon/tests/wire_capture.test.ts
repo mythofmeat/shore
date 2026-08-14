@@ -65,9 +65,6 @@ describe("wire capture", () => {
     expect(exchange.status).toBe(200);
     expect(textOf(exchange.response_body)).toBe(`{"ok":true}`);
 
-    // The header is still recorded as *sent* — which one, and that it was
-    // there at all, is what a cache investigation needs. Only the value goes,
-    // because `calls.db` outlives the key and gets read and shared.
     const headers = new Map(exchange.request_headers);
     expect(headers.get("x-api-key")).toBe(REDACTED);
     expect(headers.get("anthropic-beta")).toBe("prompt-caching-2024-07-31");
@@ -283,8 +280,6 @@ describe("wire capture", () => {
     const headers = new Map(wire[0]!.request_headers);
     expect(headers.get("x-api-key")).toBe(REDACTED);
 
-    // End to end, through the real provider and the real store: neither the
-    // internal request row nor the wire row carries the key.
     const internal = store.getCall(calls[0]!.id);
     expect(internal?.request).not.toContain("sk-ant-super-secret");
     expect(wire[0]!.request_body).not.toContain("sk-ant-super-secret");

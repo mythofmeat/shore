@@ -1,32 +1,3 @@
-/**
- * The estimator's scale constant, fitted from shore's own captured wire.
- *
- * Measured over `/opt/docker/silvershore/data/shore-cache/calls.db` — the live
- * instance's capture, 177 successful exchanges — by recomputing what
- * `estimateMessageTokens` counts over each recorded request body and comparing
- * it to the input tokens the provider billed in the recorded response.
- *
- * ratio = estimate-at-four-bytes / billed. A ratio below 1 is an under-count.
- *
- *   api.anthropic.com   n=80   min 0.806  median 0.837  max 0.895
- *   opencode.ai         n=78   min 0.500  median 0.880  max 1.075
- *   openrouter.ai       n=8    min 0.808  median 0.956  max 1.000
- *
- * So four bytes per token under-counts by about 16% on Anthropic, and the
- * implied divisor is 3.35 at the median and 3.22 at the worst observed sample.
- * 3.2 sits just under that worst case, which is why it is the constant: on this
- * corpus it never under-counts on Anthropic or OpenRouter.
- *
- * The issue that prompted this quoted 0.762–0.769, a divisor near 3.07. That is
- * a tighter and lower band than measured here; the difference is which bytes
- * are counted. What both agree on is the direction and rough size, and the
- * numbers below are the ones re-derived rather than the ones quoted.
- *
- * opencode's 0.500 minimum is a genuine outlier — fitting to it would mean a
- * divisor of 2 and a permanently half-empty window — so the constant is fitted
- * to Anthropic, which is both the tightest band and the lowest.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import {

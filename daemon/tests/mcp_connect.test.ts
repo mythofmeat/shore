@@ -1,14 +1,3 @@
-/**
- * Startup connection policy for MCP servers: who gets retried, who does not,
- * and what the result looks like when servers come up out of order (#37).
- *
- * Not parity — the Rust had none of this. `mcp.test.ts` still owns
- * everything the port froze; this file owns the retry that was added on top.
- *
- * Sleep is injected throughout, so the tests assert the *schedule* rather than
- * spending it.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -21,17 +10,14 @@ import type { McpClient, McpServerSpec } from "../src/mcp/client.ts";
 
 const PLUGINS = "/plugins";
 
-/** An `[mcp.<name>]` entry reached over HTTP. */
 function httpServer(url = "http://mcp:8080"): McpServerConfigView {
   return { url };
 }
 
-/** An `[mcp.<name>]` entry spawned as a stdio child. */
 function stdioServer(command = "hue-server"): McpServerConfigView {
   return { command };
 }
 
-/** A connected client offering one tool, counting its own shutdowns. */
 function fakeClient(spec: McpServerSpec, tools: string[], shutdowns: { count: number }) {
   return {
     server: spec.name,
@@ -52,10 +38,6 @@ function fakeClient(spec: McpServerSpec, tools: string[], shutdowns: { count: nu
   } as unknown as McpClient;
 }
 
-/**
- * A `connect` that records every attempt and fails the first `failures` of
- * them per server, plus a `sleep` that records the delays instead of waiting.
- */
 function harness(options: {
   failures?: Record<string, number>;
   tools?: Record<string, string[]>;
@@ -97,9 +79,6 @@ const build = (
 
 describe("HTTP servers are retried", () => {
   test("a server that is not listening yet is waited for, not dropped", async () => {
-    // The case the issue is about: compose starts the container, shore reaches
-    // it before the process inside has bound, and today's single attempt loses
-    // that server — and its slice of the cache prefix — for the session.
     const h = harness({ failures: { hue: 3 } });
     const registry = await build({ hue: httpServer() }, h);
 
@@ -112,7 +91,6 @@ describe("HTTP servers are retried", () => {
     const h = harness({ failures: { hue: 3 } });
     await build({ hue: httpServer() }, h);
 
-    // Front-loaded: three failures cost 1.7s, not a flat three-second wait.
     expect(h.delays).toEqual([200, 500, 1000]);
   });
 
@@ -120,8 +98,6 @@ describe("HTTP servers are retried", () => {
     const h = harness({ failures: { hue: 99 } });
     const registry = await build({ hue: httpServer() }, h);
 
-    // Six attempts over ~7.7s, then give up. "A bad server never takes the
-    // daemon down" survives the retry.
     expect(h.attemptsFor("hue")).toBe(6);
     expect(h.delays).toEqual([200, 500, 1000, 2000, 4000]);
     expect(registry.connectedServers()).toBe(0);
@@ -139,8 +115,6 @@ describe("HTTP servers are retried", () => {
 
 describe("stdio servers are not retried", () => {
   test("a child that fails to spawn gets exactly one attempt", async () => {
-    // Deliberate asymmetry. A stdio child is shore's own to spawn: if it fails
-    // once it will keep failing, and retrying only respawns a broken process.
     const h = harness({ failures: { hue: 1 } });
     const registry = await build({ hue: stdioServer() }, h);
 
@@ -161,27 +135,18 @@ describe("stdio servers are not retried", () => {
 
 describe("servers are brought up concurrently", () => {
   test("N unavailable servers cost one backoff window, not N", async () => {
-    // The requirement that makes the retry safe to add at all: awaited one at
-    // a time, three dead servers would hold the daemon's startup for three
-    // full backoff windows.
     const h = harness({ failures: { a: 99, b: 99, c: 99 } });
     await build({ a: httpServer(), b: httpServer(), c: httpServer() }, h);
 
-    // Every server's first attempt happens before any server's second — which
-    // is only true if they are in flight together.
     expect(h.attempts.slice(0, 3).sort()).toEqual(["a", "b", "c"]);
     expect(h.attempts).toHaveLength(18);
 
-    // Three servers sharing one schedule, rather than serialising it.
     const window = 200 + 500 + 1000 + 2000 + 4000;
     expect(h.delays.reduce((a, b) => a + b, 0)).toBe(window * 3);
     expect(Math.max(...h.delays)).toBe(4000);
   });
 
   test("the surface is sorted by name, not by who answered first", async () => {
-    // Concurrency must not reach the tool list. `zulu` connects immediately and
-    // `alpha` only after retries, so completion order is the reverse of the
-    // order the registry has to pin.
     const h = harness({
       failures: { alpha: 2 },
       tools: { alpha: ["a_tool"], zulu: ["z_tool"] },
@@ -195,23 +160,15 @@ describe("servers are brought up concurrently", () => {
   });
 });
 
-/**
- * A server whose connection can be killed and whose process can be stopped
- * independently — the 3am compose restart, where the transport shore holds is
- * dead but the peer behind the URL is fine.
- */
 function revivableServer(options: { tools?: string[] } = {}) {
   const state = {
-    /** Whether a *new* connection can be established. */
     listening: true,
-    /** Tool names the next connection reports. */
     tools: options.tools ?? ["ping"],
     connects: 0,
     calls: 0,
     shutdowns: 0,
   };
 
-  /** Each connection carries its own liveness, so killing one is not global. */
   const makeClient = (spec: McpServerSpec): McpClient => {
     let dead = false;
     const client = {
@@ -253,7 +210,6 @@ function revivableServer(options: { tools?: string[] } = {}) {
   return {
     connect,
     state,
-    /** Sever the transport shore is holding, leaving the peer itself alone. */
     killConnection: () => live.at(-1)?.kill(),
   };
 }
@@ -262,8 +218,6 @@ const noSleep: Sleep = () => Promise.resolve();
 
 describe("a connection that dies mid-session is rebuilt", () => {
   test("the failed call reports the failure, and the next call works", async () => {
-    // The 3am compose restart. Before this, the server was gone until the
-    // daemon restarted.
     const hue = revivableServer({ tools: ["set_light"] });
     const registry = await McpRegistry.fromConfig(
       { hue: httpServer() },
@@ -279,9 +233,6 @@ describe("a connection that dies mid-session is rebuilt", () => {
   });
 
   test("the failed call is never retried", async () => {
-    // The correctness constraint on the whole design: a request can fail after
-    // the server acted on it, so re-sending could fire a non-idempotent tool
-    // twice. Exactly one call reaches the dead client.
     const hue = revivableServer({ tools: ["send_message"] });
     const registry = await McpRegistry.fromConfig(
       { hue: httpServer() },
@@ -296,10 +247,6 @@ describe("a connection that dies mid-session is rebuilt", () => {
   });
 
   test("the tool surface does not move, so cached prefixes still match", async () => {
-    // Why this is cheaper than the registry rebuild the issue proposed. The
-    // server comes back offering an extra tool; adopting it would change the
-    // tool array, which is part of the cache prefix, which would cost every
-    // character a full write.
     const hue = revivableServer({ tools: ["set_light"] });
     const registry = await McpRegistry.fromConfig(
       { hue: httpServer() },
@@ -313,8 +260,6 @@ describe("a connection that dies mid-session is rebuilt", () => {
     hue.killConnection();
     await expect(registry.call("mcp__hue__set_light", {})).rejects.toThrow(McpTransportError);
 
-    // Reconnected, and still offering exactly what it offered at startup. The
-    // pinning contract is unchanged: a reload is how a new surface is adopted.
     expect(registry.allTools().map((t) => t.full_name)).toEqual(before);
     await expect(registry.call("mcp__hue__set_light", {})).resolves.toBe("set_light ran");
   });
@@ -334,8 +279,6 @@ describe("a connection that dies mid-session is rebuilt", () => {
   });
 
   test("concurrent calls to a dead server share one reconnect", async () => {
-    // A tool loop can have several calls to the same server outstanding. One
-    // connection, not one per call.
     const hue = revivableServer({ tools: ["a", "b", "c"] });
     const registry = await McpRegistry.fromConfig(
       { hue: httpServer() },
@@ -369,17 +312,12 @@ describe("a connection that dies mid-session is rebuilt", () => {
     await expect(registry.call("mcp__hue__ping", {})).rejects.toThrow(McpTransportError);
     expect(hue.state.connects).toBe(2);
 
-    // Nothing is latched: the next call attempts a fresh reconnect, and when
-    // the peer is finally back it takes.
     hue.state.listening = true;
     await expect(registry.call("mcp__hue__ping", {})).rejects.toThrow(McpTransportError);
     await expect(registry.call("mcp__hue__ping", {})).resolves.toBe("ping ran");
   });
 
   test("a tool that returns an error does not touch the connection", async () => {
-    // The distinction `McpTransportError` exists for. A tool saying no is not
-    // a dead socket, and reconnecting on it would rebuild the transport on
-    // every failed tool call.
     let connects = 0;
     const connect = (spec: McpServerSpec): Promise<McpClient> => {
       connects += 1;
@@ -400,8 +338,6 @@ describe("a connection that dies mid-session is rebuilt", () => {
   });
 
   test("a stdio server is not revived", async () => {
-    // Same asymmetry as startup: reviving it means respawning a child that
-    // already exited, on every tool call.
     const hue = revivableServer();
     const registry = await McpRegistry.fromConfig(
       { hue: stdioServer() },
@@ -428,7 +364,6 @@ describe("a connection that dies mid-session is rebuilt", () => {
     hue.killConnection();
     await expect(registry.call("mcp__hue__ping", {})).rejects.toThrow(McpTransportError);
 
-    // No second connection: a registry on its way out does not acquire one.
     expect(hue.state.connects).toBe(1);
   });
 });
@@ -457,9 +392,6 @@ describe("the pre-existing skips are unchanged", () => {
 
     const registry = await McpRegistry.fromConfig({ hue: httpServer() }, PLUGINS, connect);
 
-    // Not left running with no tools, and not retried either — the connect
-    // succeeded, so this is a server that is up and unhappy, not one that lost
-    // a race.
     expect(shutdowns.count).toBe(1);
     expect(registry.connectedServers()).toBe(0);
   });

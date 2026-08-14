@@ -1,13 +1,3 @@
-/**
- * Recorded cases for mcp.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import fixture from "./tools_fixtures/mcp.json" with { type: "json" };
@@ -42,7 +32,6 @@ const fx = fixture as unknown as {
 
 const PLUGINS = fx.plugins_dir;
 
-/** The generator's `new_for_test`, so the replay builds the same surface. */
 function toolDef(server: string, tool: string): McpToolDef {
   return {
     full_name: `mcp__${server}__${tool}`,
@@ -72,8 +61,6 @@ describe("resolveUnder", () => {
     },
   );
 
-  // `path.join` normalizes and this must not: the difference decides which
-  // directory a server is launched in.
   test("`..` is left for the OS, not collapsed", () => {
     expect(resolveUnder("../sibling", PLUGINS)).toBe(`${PLUGINS}/../sibling`);
     expect(resolveUnder("a/../b", PLUGINS)).toBe(`${PLUGINS}/a/../b`);
@@ -161,7 +148,6 @@ describe("toSpec", () => {
       expect(spec.transport.command).toBe(stdio["command"] as string);
       expect(spec.transport.args).toEqual(stdio["args"] as string[]);
       expect(spec.transport.env).toEqual(stdio["env"] as Record<string, string>);
-      // The fixture spells an absent cwd as JSON null.
       expect(spec.transport.cwd ?? null).toBe((stdio["cwd"] ?? null) as string | null);
     } else {
       const http = expected["http"] as Record<string, unknown>;
@@ -171,8 +157,6 @@ describe("toSpec", () => {
     }
   });
 
-  // The command resolves against the *resolved* cwd, not the raw config value
-  // and not the plugins directory.
   test("a relative command follows the resolved cwd", () => {
     const spec = toSpec("hue", cfg("./bin/server", "hue-mcp"), PLUGINS);
     if (spec?.transport.kind !== "stdio") throw new Error("expected stdio");
@@ -191,9 +175,6 @@ describe("the pinned sort", () => {
     expect(registry.allTools().map((t) => t.full_name)).toEqual(fx.sorted_full_names);
   });
 
-  // Same trap as the sub-agent sort: JavaScript's default compares UTF-16 code
-  // units, Rust's `String::cmp` compares UTF-8 bytes, and they disagree across
-  // the BMP boundary.
   test("order follows UTF-8 bytes, not UTF-16 code units", () => {
     const names = registry.allTools().map((t) => t.full_name);
     const flute = names.indexOf("mcp__\u{fb00}ute__play");
@@ -201,12 +182,9 @@ describe("the pinned sort", () => {
     expect(flute).toBeGreaterThan(-1);
     expect(drum).toBeGreaterThan(-1);
     expect(flute).toBeLessThan(drum);
-    // A naive sort would put them the other way round.
     expect([...names].sort()).not.toEqual(names);
   });
 
-  // `mcp__hue__set` is a strict prefix of `mcp__hue__set_light`, so a
-  // comparator without its length tiebreak is observable here.
   test("a strict prefix sorts before the longer name", () => {
     const names = registry.allTools().map((t) => t.full_name);
     expect(names.indexOf("mcp__hue__set")).toBeLessThan(names.indexOf("mcp__hue__set_light"));
@@ -254,19 +232,12 @@ describe("call routing", () => {
     await expect(registry.call("mcp__nope__x", {})).rejects.toThrow("not yet implemented");
   });
 
-  // A registry built from tool defs alone has no clients, so even a known name
-  // has nowhere to go — the same arm the Rust used for a missing client.
   test("a known name with no live client is reported the same way", async () => {
     await expect(registry.call("mcp__hue__set_light", {})).rejects.toThrow(
       "not yet implemented",
     );
   });
 
-  // Both the config key and the server-side tool name may contain `__`, so the
-  // full name is not parseable — only lookup-able. Splitting `mcp__a__b` on
-  // `__` and taking [1] and [2] gets `multi`/`part` for a tool whose real
-  // server is `multi__part` and whose real tool is `tool__name`, and routes to
-  // nothing. This is why routing goes through the pinned list.
   test("a name with `__` inside both halves routes to the right tool", async () => {
     const calls: [string, unknown][] = [];
     const fake = {
@@ -278,7 +249,6 @@ describe("call routing", () => {
         return [];
       },
       async shutdown() {
-        /* nothing to close */
       },
       get server() {
         return "multi__part";
@@ -294,7 +264,6 @@ describe("call routing", () => {
     );
 
     await expect(wired.call("mcp__multi__part__tool__name", { a: 1 })).resolves.toBe("ok");
-    // The *bare* server-side name reaches the client, not the namespaced one.
     expect(calls).toEqual([["tool__name", { a: 1 }]]);
 
     await expect(wired.call("mcp__hue__set_light", {})).resolves.toBe("ok");
@@ -326,8 +295,6 @@ describe("matchesConfig", () => {
 });
 
 describe("childEnvironment", () => {
-  // MCP servers are third-party code and the daemon's environment holds every
-  // provider API key. This is the guard that keeps them apart.
   test("only PATH and HOME are inherited", () => {
     const env = childEnvironment(
       {},
@@ -365,8 +332,6 @@ describe("result flattening", () => {
     ).toBe("a\nb");
   });
 
-  // Non-text blocks are dropped rather than described, so an image-only result
-  // reads to the model as a tool that returned nothing.
   test("non-text blocks are dropped", () => {
     expect(
       flattenText({
@@ -379,10 +344,6 @@ describe("result flattening", () => {
     expect(flattenText({ content: [{ type: "image", data: "…" }] })).toBe("");
   });
 
-  // A block can carry a `text` field and still not be a text block — an
-  // embedded `resource` is the common case. The discriminator is `type`, so a
-  // filter that only checked for a string `text` would leak resource bodies
-  // into the model's view of the result.
   test("a non-text block carrying text is still dropped", () => {
     expect(
       flattenText({
@@ -399,8 +360,6 @@ describe("result flattening", () => {
     expect(flattenText({ content: "not an array" })).toBe("");
   });
 
-  // `structuredContent` of `null` is still present, and the Rust's
-  // `Option::Some(Value::Null)` returned it rather than falling through.
   test("a null structured content is still structured", () => {
     expect(flattenResult({ structuredContent: null, content: [] })).toBe(null);
   });

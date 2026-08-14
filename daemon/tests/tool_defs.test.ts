@@ -1,13 +1,3 @@
-/**
- * Recorded cases for tool defs.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { buildAnthropicParams } from "../src/llm/providers/anthropic.ts";
 import { buildGeminiParams } from "../src/llm/providers/gemini.ts";
@@ -35,7 +25,6 @@ function req(overrides: Partial<SidecarRequest> = {}): SidecarRequest {
   } as SidecarRequest;
 }
 
-/** Gemini types `config.tools` as a ToolUnion; we only send declaration groups. */
 function geminiDeclarations(
   r: SidecarRequest,
 ): Array<{ name?: string; parameters?: unknown }> | undefined {
@@ -45,7 +34,6 @@ function geminiDeclarations(
   return tools?.[0]?.functionDeclarations;
 }
 
-/** Z.ai's ChatCompletionTool is a union; every tool we send is a function tool. */
 function zaiFunctions(
   r: SidecarRequest,
 ): Array<{ name: string; parameters?: unknown }> | undefined {
@@ -57,8 +45,6 @@ function zaiFunctions(
 
 describe("tool definitions reach every adapter intact", () => {
   test("anthropic keeps name, description, and schema in offer order", () => {
-    // `tools` is a ToolUnion (custom + Anthropic-hosted); the daemon only ever
-    // sends custom ones, so narrow before asserting on custom-tool fields.
     const tools = buildAnthropicParams(req()).tools as
       | Array<{ name: string; description: string; input_schema: unknown }>
       | undefined;
@@ -81,14 +67,10 @@ describe("tool definitions reach every adapter intact", () => {
 
   test("vercel keys the ToolSet by tool name", () => {
     const call = buildVercelCall(req({ sdk: "deepseek", model: "deepseek-v4-pro" }));
-    // A ToolSet is keyed, not ordered — assert membership, not sequence.
     expect(Object.keys(call.tools ?? {}).sort()).toEqual([...EXPECTED_ORDER].sort());
   });
 
   test("a tool arriving without a schema gets an object schema, not {}", () => {
-    // The daemon always sends `input_schema`, but it is `serde_json::Value` and
-    // could serialize as null. `{}` is not a valid parameters schema for
-    // OpenAI or Gemini, so every adapter must fall back to `{type:"object"}`.
     const bare = [{ name: "x", description: "", input_schema: null }] as unknown as ToolDefinition[];
 
     const anthropicTools = buildAnthropicParams(req({ tools: bare })).tools as

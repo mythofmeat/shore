@@ -1,24 +1,3 @@
-/**
- * The heartbeat's tool loop, and the two tools it answers itself.
- *
- * The Rust had no test for this loop — it needed a `LedgerClient`, a tool
- * registry and a state mutex to run one round — so everything here is new. What
- * it protects is the handful of decisions that are invisible when they go wrong:
- *
- * - **A `sendMessage` is read off every response, not only the tool-use ones.**
- *   The tool-use extraction happens before the loop decides whether to dispatch,
- *   and the capture reads it either way. Gate the capture on `hasTools` and a
- *   model that asks to speak and then stops is silently ignored — the tick logs
- *   "no message sent" and the user never hears from their character.
- * - **The budget nudges before it breaks.** Reaching the round cap buys a grace
- *   window, not an ending. A loop that stops at the cap cuts the model off
- *   mid-task with nothing written down, and the work is gone: a heartbeat's
- *   conversation is thrown away when the tick ends.
- * - **`set_next_wake` leaves no ring-buffer line here.** The scheduler writes
- *   one, with the clamped value this side never sees. Writing a second is a
- *   duplicate in `shore log --heartbeat` for every wake the character schedules.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -30,8 +9,6 @@ import {
 } from "../src/autonomy/heartbeat_loop.ts";
 import type { ContentBlock } from "../src/engine/types.ts";
 import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
-
-// ── harness ─────────────────────────────────────────────────────────────
 
 function request(): SidecarRequest {
   return {
@@ -72,7 +49,6 @@ interface World {
   deps: HeartbeatLoopDeps;
 }
 
-/** A loop whose model plays out `rounds` and whose tools all succeed. */
 function world(
   rounds: GenerateResponse[],
   over: Partial<HeartbeatLoopDeps> = {},
@@ -112,8 +88,6 @@ function world(
   };
 }
 
-// ── what the tick comes away with ───────────────────────────────────────
-
 describe("what a tick asks to say", () => {
   test("takes the last <sendMessage> when the model writes several in one response", async () => {
     const w = world([
@@ -125,11 +99,6 @@ describe("what a tick asks to say", () => {
     expect(result.sendMessageText).toBe("on reflection, this");
   });
 
-  /**
-   * Last-wins *across rounds*, not only within one response. A model that
-   * drafts a message, goes and checks something, and then writes a better one
-   * meant the second — and a tick is long enough for that to be common.
-   */
   test("a later round's message replaces an earlier round's", async () => {
     const w = world([
       response(
@@ -144,7 +113,6 @@ describe("what a tick asks to say", () => {
     expect(result.sendMessageText).toBe("having read it, this");
   });
 
-  /** Some providers answer with `content` and no blocks at all. */
   test("reads the tag out of a response that carries no content blocks", async () => {
     const w = world([
       {
@@ -167,11 +135,6 @@ describe("what a tick asks to say", () => {
     expect(result.sendMessageText).toBe("from the flat string");
   });
 
-  /**
-   * The whole reason the tool-use extraction sits above the dispatch gate. A
-   * model that calls `sendMessage` and finishes on `end_turn` has still asked
-   * to speak.
-   */
   test("reads a sendMessage tool call from a response that does not finish on tool_use", async () => {
     const w = world([
       response([toolUse("t1", "sendMessage", { message: "I found something" })], "end_turn"),
@@ -180,7 +143,6 @@ describe("what a tick asks to say", () => {
     const result = await runHeartbeatToolLoop(request(), w.deps);
 
     expect(result.sendMessageText).toBe("I found something");
-    // No dispatch round happened, so the tool was never run — only read.
     expect(w.dispatched).toEqual([]);
   });
 
@@ -230,8 +192,6 @@ describe("what a tick asks to say", () => {
   });
 });
 
-// ── the budget ──────────────────────────────────────────────────────────
-
 describe("the round budget", () => {
   test("nudges at the cap and keeps going into the grace window", async () => {
     const rounds = Array.from({ length: 8 }, () =>
@@ -241,11 +201,8 @@ describe("the round budget", () => {
 
     await runHeartbeatToolLoop(request(), w.deps);
 
-    // Two normal rounds, then the nudge, then the grace rounds — five calls,
-    // not two. Stopping at the cap is what loses the model's unfinished work.
     expect(w.transcript.length).toBe(5);
     expect(w.notes).toContain("Wrap-up nudge: budget reached, model asked to summarize");
-    // Nudged exactly once, however many grace rounds follow.
     expect(w.notes.filter((n) => n.startsWith("Wrap-up nudge")).length).toBe(1);
   });
 
@@ -258,8 +215,6 @@ describe("the round budget", () => {
 
     await runHeartbeatToolLoop(req, w.deps);
 
-    // Anthropic rejects two consecutive user turns, and the request always ends
-    // on one here — the round's tool results.
     const userTurns = req.messages.filter((m) => m.role === "user");
     const nudged = userTurns.filter((m) =>
       m.content.some((b) => b.type === "text" && b.text.startsWith("[System nudge:")),
@@ -286,20 +241,14 @@ describe("the round budget", () => {
     );
     let clock = 0;
     const w = world(rounds, {
-      // Deliberately generous, so only the deadline can do anything here.
       maxToolIterations: 5,
       wrapUpGrace: 3,
       deadlineMs: 10,
-      // Calls: the deadline is computed, round 0's check passes, everything
-      // after that is past it.
       monotonicMs: () => (clock++ < 2 ? 0 : 1000),
     });
 
     await runHeartbeatToolLoop(request(), w.deps);
 
-    // Round 0 runs, the deadline trips and spends the nudge, the grace round
-    // runs, and the next check ends it — two rounds out of a cap of five. Only
-    // the wall clock is allowed to cut the grace window short.
     expect(w.transcript.length).toBe(2);
     expect(w.notes.filter((n) => n.startsWith("Wrap-up nudge")).length).toBe(1);
   });
@@ -313,8 +262,6 @@ describe("the round budget", () => {
 
     await runHeartbeatToolLoop(request(), w.deps);
 
-    // Seven rounds and no nudge. `undefined` is unlimited, not zero — read as
-    // zero, the very first check trips the cap and the tick is one nudged round.
     expect(w.transcript.length).toBe(7);
     expect(w.notes.filter((n) => n.startsWith("Wrap-up nudge"))).toEqual([]);
   });
@@ -337,8 +284,6 @@ describe("the round budget", () => {
     expect(w.notes.filter((n) => n.startsWith("Wrap-up nudge")).length).toBe(1);
   });
 });
-
-// ── the rounds themselves ───────────────────────────────────────────────
 
 describe("the loop's rounds", () => {
   test("stops as soon as the model finishes without asking for tools", async () => {
@@ -384,9 +329,6 @@ describe("the loop's rounds", () => {
 
     await runHeartbeatToolLoop(request(), w.deps);
 
-    // Two calls: the round that worked and the one that did not. Treating the
-    // failure as an empty round instead spends every remaining round of the
-    // budget calling a model that is not answering.
     expect(calls).toBe(2);
     expect(w.transcript.length).toBe(1);
   });
@@ -396,9 +338,6 @@ describe("the loop's rounds", () => {
 
     await runHeartbeatToolLoop(request(), w.deps);
 
-    // `finish_reason` is the provider saying whether it is waiting on results.
-    // Dispatching without it answers a question the model did not ask, and the
-    // results land in a request no round will ever send.
     expect(w.dispatched).toEqual([]);
     expect(w.transcript[0]?.captured).toEqual([]);
   });
@@ -427,15 +366,13 @@ describe("the loop's rounds", () => {
     await runHeartbeatToolLoop(req, w.deps);
 
     expect(req.messages.map((m) => m.role)).toEqual([
-      "user", // the seed
-      "assistant", // round 0 asked for a tool
-      "user", // its results
-      "assistant", // round 1 finished
+      "user",
+      "assistant",
+      "user",
+      "assistant",
     ]);
   });
 });
-
-// ── the two undeclared tools ────────────────────────────────────────────
 
 describe("the tools the loop answers itself", () => {
   const noop = {
@@ -466,8 +403,6 @@ describe("the tools the loop answers itself", () => {
     expect((out.results[0] as { content: string }).content).toBe(
       "Scheduled next moment in 6.0 hours.",
     );
-    // The scheduler writes the ring-buffer line, with the clamped value. A
-    // second one here is a duplicate for every wake the character schedules.
     expect(notes).toEqual([]);
   });
 
@@ -484,10 +419,6 @@ describe("the tools the loop answers itself", () => {
     expect(wakes).toEqual([{ hours: 1, reason: "" }]);
   });
 
-  /**
-   * The tool is undeclared, so the registry would answer `NotImplemented` and
-   * the model would learn that asking to speak does not work — and retry.
-   */
   test("sendMessage is acknowledged as delivered rather than refused", async () => {
     const dispatched: string[] = [];
     const out = await dispatchHeartbeatTools([["t1", "SendMessage", { message: "hi" }]], {
@@ -528,11 +459,6 @@ describe("the tools the loop answers itself", () => {
     expect(out.captured[0]?.isError).toBe(true);
   });
 
-  /**
-   * The value is well-formed and the call still failed — a partial write, or a
-   * tool that reported a path it then could not finish saving. Persisting a
-   * reference to it hangs a broken attachment off the tick's message.
-   */
   test("a failed generate_image contributes no image even when it named a path", async () => {
     const out = await dispatchHeartbeatTools([["t1", "generate_image", { prompt: "x" }]], {
       ...noop,

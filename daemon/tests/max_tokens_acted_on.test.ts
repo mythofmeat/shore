@@ -33,7 +33,6 @@ const REQ: SidecarRequest = {
 
 async function drain(events: AsyncIterable<StreamEvent>): Promise<void> {
   for await (const _event of events) {
-    // consume
   }
 }
 

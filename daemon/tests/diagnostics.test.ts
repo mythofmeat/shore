@@ -1,13 +1,3 @@
-/**
- * Recorded cases for diagnostics.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -20,8 +10,6 @@ import {
 } from "../src/diagnostics.ts";
 
 import fixture from "./diagnostics_fixtures/diagnostics.json" with { type: "json" };
-
-// ── the ring buffer ─────────────────────────────────────────────────────────
 
 interface RingCase {
   case: string;
@@ -48,12 +36,6 @@ describe("ring buffer", () => {
   }
 });
 
-// ── toJson ──────────────────────────────────────────────────────────────────
-
-/**
- * The seeds, re-declared rather than read out of the fixture, so what went in
- * is what the assertions are about.
- */
 function full(d: Diagnostics): void {
   const api: ApiCallEntry = {
     timestamp: "2026-01-01T00:00:00Z",
@@ -102,18 +84,6 @@ function full(d: Diagnostics): void {
   d.key_fallbacks.push(fallback);
 }
 
-/**
- * The same kinds again with every optional field absent. Those fields are
- * `skip_serializing_if` on the Rust side, so these objects are a different
- * *shape* — not the same shape with nulls in it.
- *
- * The absent fields are written as an explicit `undefined` rather than left
- * off, because that is the shape a call site produces: a cost or a request id
- * that the provider did not return arrives as a variable holding `undefined`,
- * and assigning it is what the interface's `| undefined` is for. Omitting the
- * key here instead would leave nothing for the serialiser to elide, and the
- * assertion below would hold no matter what the serialiser did.
- */
 function sparse(d: Diagnostics): void {
   d.api_calls.push({
     timestamp: "2026-01-01T00:01:00Z",
@@ -143,7 +113,6 @@ function sparse(d: Diagnostics): void {
   });
 }
 
-/** Enough entries to overflow the default capacity. */
 function overflowing(d: Diagnostics): void {
   for (let i = 0; i < 105; i += 1) {
     d.api_calls.push({
@@ -193,11 +162,6 @@ describe("toJson", () => {
   }
 });
 
-/**
- * `toEqual` treats a missing key and an explicit `undefined` as the same, so
- * the elision above would pass even if the keys were still there. This is the
- * assertion that actually holds serde's `skip_serializing_if`.
- */
 test("an absent optional field is omitted, not written as null", () => {
   const d = new Diagnostics();
   sparse(d);

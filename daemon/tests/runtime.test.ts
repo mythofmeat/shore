@@ -1,23 +1,3 @@
-/**
- * The assembly that runs once, before anything is served.
- *
- * Almost nothing here is a decision, so almost nothing here is worth asserting
- * for its own sake. What is worth asserting is the handful of places where
- * getting the assembly wrong produces no error at all:
- *
- * - **The ledger file.** `ledgerFor` memoises a failed open, so a ledger that
- *   was never created is not one lost row — it is every row for the life of the
- *   process, and the only symptom is `shore usage` reporting a quiet month.
- * - **The call store.** The opposite rule: it must *not* be fatal. A daemon
- *   that will not start because payload capture failed has traded a diagnostic
- *   for the service.
- * - **The keepalive's sender.** It has to be the same adapter table chat sends
- *   through. A ping through a different one warms a prefix nothing will read.
- * - **The refusing executor.** A handler built without a runtime can track the
- *   schedule and cannot act on it, and the difference between refusing and
- *   throwing is whether the latch releases.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -56,7 +36,6 @@ async function dirsUnder(prefix: string): Promise<{ root: string; config: Loaded
   };
 }
 
-/** A provider that records what it was asked to send and answers nothing real. */
 function recordingProvider(seen: string[]): SidecarProvider {
   return {
     generate: (req: { model: string }) => {
@@ -80,8 +59,6 @@ describe("what assembly creates", () => {
       for (const dir of [config.dirs.data, config.dirs.cache, config.dirs.runtime]) {
         expect(existsSync(dir)).toBe(true);
       }
-      // Not because anything writes to it, but because it is the root relative
-      // `[mcp.*]` paths resolve against — discoverable without the docs.
       expect(existsSync(join(config.dirs.data, "plugins"))).toBe(true);
 
       await runtime.shutdown();
@@ -98,8 +75,6 @@ describe("what assembly creates", () => {
       const path = join(config.dirs.data, "ledger.db");
       expect(existsSync(path)).toBe(true);
 
-      // Created, not merely touched: `Ledger.open` on a file without the schema
-      // is the same silent failure as no file at all.
       const { Ledger } = await import("../src/ledger/store.ts");
       const ledger = Ledger.open(path);
       expect(ledger.database.query("SELECT COUNT(*) AS n FROM calls").get()).toEqual({ n: 0 });
@@ -114,9 +89,6 @@ describe("what assembly creates", () => {
   test("a call store that will not open leaves the runtime up, without capture", async () => {
     const { root, config } = await dirsUnder("shore-runtime-store-");
     try {
-      // A directory where the store expects a file. SQLite cannot open it, and
-      // the daemon has to come up anyway — capture is a diagnostic, not the
-      // service.
       await mkdir(config.dirs.cache, { recursive: true });
       await mkdir(join(config.dirs.cache, "calls.db"), { recursive: true });
 
@@ -141,8 +113,6 @@ describe("what assembly wires together", () => {
         connectMcp: NO_MCP,
       });
 
-      // Arming takes the cadence beside the body, which is why the cache is
-      // built after the keepalive and holds it rather than the other way round.
       runtime.cache.set("ada", {
         model: "claude-fixture",
         sdk: "anthropic",
@@ -181,9 +151,6 @@ describe("what assembly wires together", () => {
   });
 
   test("a heartbeat's message is filed under autonomous_message, not another toggle", () => {
-    // The event name is the decision: every other toggle is a switch the user
-    // set for something else, and filing under one of those makes the setting
-    // they did reach for do nothing.
     const events: string[] = [];
     const notify = autonomousMessageNotifier({
       notify: (event: string) => events.push(event),
@@ -229,9 +196,6 @@ describe("the clocks", () => {
       const rotated: { cutoff: Date; max: number }[] = [];
       const store = runtime.callStore;
       expect(store).toBeDefined();
-      // Spy on the real store rather than a double: the immediate first pass is
-      // the behaviour, and a daemon restarted after a long gap should not carry
-      // a fortnight of stale rows until the next hour comes round.
       (store as unknown as { rotate: unknown }).rotate = (cutoff: Date, max: number) => {
         rotated.push({ cutoff, max });
         return { deleted_by_age: 0, deleted_by_size: 0 };
@@ -273,10 +237,6 @@ describe("MCP configuration crosses the two shapes intact", () => {
     const { root, config } = await dirsUnder("shore-runtime-mcp-");
     try {
       config.app.mcp.set("hue", {
-        // A path rather than a bare name, so the base it resolves against is
-        // observable: `[mcp.*]` paths are documented as relative to
-        // `<data>/plugins`, and resolving them anywhere else is a server that
-        // will not start with a config that looks right.
         command: "./hue/hue-mcp",
         args: ["--verbose"],
         env: new Map([["HUE_TOKEN", "secret"]]),
@@ -296,9 +256,6 @@ describe("MCP configuration crosses the two shapes intact", () => {
       });
 
       expect(specs.length).toBe(1);
-      // `env` is a Map on one side and a plain object on the other; a Map that
-      // arrives unconverted spreads to `{}` and the server starts without its
-      // token, which looks like an auth failure in the server's own logs.
       expect(JSON.parse(JSON.stringify(specs[0]))).toMatchObject({
         transport: {
           kind: "stdio",

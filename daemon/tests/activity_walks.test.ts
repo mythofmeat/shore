@@ -1,19 +1,3 @@
-/**
- * Recorded cases for activity.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- *
- * What a failure here means: the two implementations disagree about when the
- * user shows up. That is quieter than a wrong heartbeat and no less costly — a
- * skewed histogram sends a character's messages to the hours nobody is reading,
- * and a wrong engagement score changes how often it speaks at all. Treat a diff
- * as a defect until proven otherwise, not as a fixture that needs regenerating.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -68,14 +52,6 @@ const fixture = (await Bun.file(
 
 const WEEKDAYS: readonly Weekday[] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-/**
- * A naive local timestamp, as epoch ms.
- *
- * The `Z` is the whole trick: the fixture holds calendar readings with no zone,
- * and reading them as UTC is what keeps arithmetic on them free of DST. Parsing
- * without it would hand the suite the machine's own timezone and make the
- * result depend on where it ran.
- */
 function naive(iso: string): number {
   const at = Date.parse(`${iso}Z`);
   if (Number.isNaN(at)) throw new Error(`unparseable fixture timestamp: ${iso}`);
@@ -102,13 +78,8 @@ describe("the fixture is real", () => {
   });
 
   test("the streams exercise the paths worth pinning", () => {
-    // A fixture of nothing but short single-session walks would pass against
-    // almost any implementation. These counts are what make it an assertion.
     const all = fixture.cases.flatMap((c) => Object.values(c.by_weekday));
 
-    // The window binds on the median, the z-score and the tempo, and no longer
-    // shows up in `session_count` (#15) — so what proves it was exercised is a
-    // case with more sessions than the window, not one whose count equals it.
     const beyond = all.filter((s) => s.session_count > fixture.thresholds.session_medians_window);
     expect(beyond.length, "the session window must actually be reached").toBeGreaterThan(0);
 
@@ -126,7 +97,6 @@ describe("the fixture is real", () => {
       expect(classes.filter((c) => c === label).length, `${label} hours`).toBeGreaterThan(0);
     }
 
-    // Both doors into the tracker, and both sides of the weekday fallback.
     expect(fixture.cases.filter((c) => c.via === "backfill").length).toBeGreaterThan(0);
     expect(fixture.cases.filter((c) => c.via === "record").length).toBeGreaterThan(0);
     const weekdaySensitive = fixture.cases.filter(
@@ -166,8 +136,6 @@ describe("recorded streams replay identically", () => {
         const got = tracker.computeStats(weekday);
         const where = `${c.name} / ${weekday}`;
 
-        // Exact: every one of these is integer arithmetic, or a division and a
-        // square root, all of which IEEE 754 pins to the last bit.
         expect(got.consistency, `${where} consistency`).toBe(want.consistency);
         expect(got.sessionCount, `${where} session count`).toBe(want.session_count);
         expect(got.sessionsPerDay, `${where} sessions per day`).toBe(want.sessions_per_day);
@@ -183,10 +151,8 @@ describe("recorded streams replay identically", () => {
           want.median_session_gap,
         );
 
-        // Also exact, but null-bearing, so compared through the same coercion.
         expect(got.anomalyZScore ?? null, `${where} anomaly z`).toBe(want.anomaly_z_score);
 
-        // Through `exp`; see the note at the top of the file.
         expect(got.tempoScore, `${where} tempo`).toBeCloseTo(want.tempo_score, 12);
         expect(got.engagementScore, `${where} engagement`).toBeCloseTo(want.engagement_score, 12);
       }

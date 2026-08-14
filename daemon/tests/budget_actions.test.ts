@@ -1,19 +1,3 @@
-/**
- * `pause_heartbeat`, and `warn_at` thresholds that actually do something.
- *
- * `ledger_budget.test.ts` pins the decisions the Rust made; this covers
- * the two it never had. Both are about a budget being *wrong* in the expensive
- * direction rather than failing to enforce:
- *
- * - `pause_background` stopped the cache keepalive along with the heartbeat.
- *   Keepalive is spend to *avoid* spend, so pausing it can raise the bill: the
- *   prefix expires while the budget is quiet and the next real turn pays for a
- *   full cache write. `pause_heartbeat` cuts the discretionary half only.
- * - `warn_at` computed a threshold, printed it, and enforced nothing, so the
- *   only way to act at 80% was a second budget at 80% of the cost — which then
- *   double-counts everywhere budgets are listed.
- */
-
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
 
@@ -34,7 +18,6 @@ afterEach(() => {
 const NOW = Date.parse("2026-03-05T12:00:00Z");
 const opts = { localZone: "UTC" };
 
-/** A ledger holding one call of `cost` dollars, inside the current window. */
 function ledgerSpending(cost: number): Database {
   const f = freshLedger();
   cleanups.push(f.cleanup);
@@ -61,7 +44,6 @@ function call(callType: string): BudgetCallContext {
   };
 }
 
-/** Which of these call types the config stops, at this level of spend. */
 function blocked(config: unknown, db: Database): string[] {
   const types = [
     "message",
@@ -93,9 +75,6 @@ describe("pause_heartbeat", () => {
   });
 
   test("the keepalive keeps running, which is the whole point", () => {
-    // Under `pause_background` this ping is refused, the prefix dies during the
-    // quiet hour, and the next user turn pays a full cache write — the budget
-    // costs money instead of saving it.
     const db = ledgerSpending(12);
     const paused = budget({ limit: "pause_heartbeat", warn_at: [] });
     expect(blocked(paused, db)).not.toContain("keepalive");
@@ -121,7 +100,6 @@ describe("pause_heartbeat", () => {
 
 describe("warn_action", () => {
   test("a crossed threshold pauses heartbeats while the limit is still warn", () => {
-    // $8.50 of $10: past warn_at 0.8, nowhere near the limit.
     const db = ledgerSpending(8.5);
     const config = budget({ warn_at: [0.8], warn_action: "pause_heartbeat", limit: "warn" });
     expect(blocked(config, db)).toEqual(["heartbeat", "heartbeat_tool_loop"]);
@@ -139,8 +117,6 @@ describe("warn_action", () => {
   });
 
   test("a warn_action harsher than the limit still applies", () => {
-    // The limit check runs first and does not block, so this only works if a
-    // non-blocking limit falls through to the threshold check.
     const db = ledgerSpending(8.5);
     const config = budget({ warn_at: [0.8], warn_action: "block", limit: "warn" });
     expect(blocked(config, db)).toEqual([
@@ -160,7 +136,6 @@ describe("warn_action", () => {
     const config = budget({ warn_at: [0.8], warn_action: "block" }) as UsageConfig;
     const block = enforceBudgetForCall(db, config, call("message"), NOW, opts);
     expect(block?.warn_threshold).toBe(0.8);
-    // The real limit, so the number reconciles with `shore usage`.
     expect(block?.cost_limit).toBe(10);
     expect(block?.message).toContain("past its 80% warning threshold");
     expect(block?.message).toContain("$8.50 spent");
@@ -179,8 +154,6 @@ describe("warn_action", () => {
   });
 
   test("over the limit, the limit wins the message", () => {
-    // Both are crossed at this point; naming the cap is more useful than
-    // naming the 80% mark it passed on the way.
     const db = ledgerSpending(11);
     const config = budget({
       warn_at: [0.8],
@@ -209,8 +182,6 @@ describe("pace_warn_action", () => {
     });
 
   test("falls back to warn_action so one key covers both windows", () => {
-    // $0.50 spent against a daily pace allowance of ~$10/31 ≈ $0.32 — over the
-    // pace, far under the month.
     const db = ledgerSpending(0.5);
     const config = paced({ warn_at: [0.8], warn_action: "pause_heartbeat", limit: "warn" });
     expect(blocked(config, db)).toEqual(["heartbeat", "heartbeat_tool_loop"]);
@@ -224,7 +195,6 @@ describe("pace_warn_action", () => {
       pace_warn_action: "warn",
       limit: "warn",
     });
-    // The pace no longer acts; the month is nowhere near its own 80%.
     expect(blocked(config, db)).toEqual([]);
   });
 });

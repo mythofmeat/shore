@@ -1,13 +1,3 @@
-/**
- * Recorded cases for dispatch command.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -30,61 +20,21 @@ import {
 } from "../src/commands/dispatch.ts";
 import { testTmp } from "./support/tmp.ts";
 
-/**
- * The one arm this build does not wire, and what the fixture recorded for it.
- *
- * It is injected — see the module doc on `src/commands/dispatch.ts` — so what
- * the replay can check is that the name still *routes*: an unwired arm answers
- * with its own internal error rather than falling through to "unknown command",
- * which is what a client would see if the name were simply missing from the
- * table. The recorded Rust answer is kept beside it so the day the dependency
- * lands the case is already written down.
- *
- * `compact` was the other one and is not here any more: the harness passes a
- * real compaction runtime, so the recorded answer — the assembly failing on an
- * API key that is not set — is compared like every other case.
- */
 const UNWIRED: Record<string, string> = {
-  // Rust: command_output {character, reason, status} — the skip a daemon with
-  // no LLM client produces.
   keepalive_ping_now: "keepalive_ping_now is not available in this build",
 };
 
-/**
- * Names whose *message* the two sides spell differently, with the reason. The
- * code is still compared; only the text is let go.
- */
 const DIVERGENT: Record<string, string> = {
-  // The Rust reached the ledger and let its client report the missing file;
-  // this side refuses before the call, because a `usage` with no ledger path is
-  // a wiring fault rather than a query that failed.
   usage: "the missing-ledger refusal moved in front of the call",
 };
 
-/**
- * Names whose *outcome* changed, not just its wording.
- *
- * `config` is the only one. The recorded case reads `behavior.autonomy.enabled`
- * and the Rust answered `not_found`, because its read arm took a top-level
- * section name and nothing else — while its write arm took dotted keys and
- * nothing else. #30 made read walk dots, so the key the fixture recorded as
- * absent is now one of the ones that resolves.
- *
- * The fixture keeps the Rust's answer; what is asserted here is the new one,
- * and that the fixture still holds the old — so a regression that reinstates
- * the split grammar fails rather than passing quietly.
- */
 const NOW_RESOLVES: Record<string, { was: string; value: unknown }> = {
   config: {
     was: "Config section not found: behavior.autonomy.enabled",
-    // Read from the defaults rather than written down: the harness config is
-    // the default one, and the point of the case is that the walk reaches the
-    // leaf, not what the leaf happens to hold.
     value: defaultAppConfig().behavior.autonomy.enabled,
   },
 };
 
-/** The conversation every case runs against. */
 const SEEDED = [
   ["m_1", "user", "first question"],
   ["m_2", "assistant", "first answer"],
@@ -99,7 +49,6 @@ const SEEDED = [
   timestamp: "2026-01-01T10:00:00-05:00",
 }));
 
-/** The one model in the catalog, named as `defaults.model`. */
 const FIXTURE_MODEL = {
   name: "fixture",
   qualifiedName: "chat.fixture",
@@ -112,8 +61,6 @@ const FIXTURE_MODEL = {
   maxOutputTokens: 4096,
   maxToolIterations: 4,
 } as never;
-
-// ── harness ─────────────────────────────────────────────────────────────
 
 async function tempRoot(): Promise<string> {
   return await mkdtemp(testTmp("shore-dispatch-"));
@@ -135,8 +82,6 @@ async function harness(): Promise<{
   for (const d of Object.values(dirs)) await mkdir(d, { recursive: true });
   await mkdir(join(dirs.data, "ada"), { recursive: true });
 
-  // The same non-empty world the generator built, and for the same reason: on
-  // an empty one, half these commands answer identically to their neighbours.
   for (const name of ["aaron", "ada", "bob"]) {
     const workspace = join(dirs.config, "characters", name, "workspace");
     await mkdir(workspace, { recursive: true });
@@ -183,19 +128,12 @@ async function harness(): Promise<{
 
   const deps: CommandDeps = {
     sessionTokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 },
-    // No executor is reachable here: every autonomy-backed command in the
-    // fixture answers from the service's own state, and the ones that would
-    // run an action fail on "no autonomy state for character" first.
     autonomy: await autonomyWithState(dirs.data),
     diagnostics: new Diagnostics(),
     callStore: undefined,
     ledgerPath: undefined,
     now: () => 0,
     localNow: () => 0,
-    // A real compaction runtime, so `compact` reaches the assembly and fails
-    // where the Rust did: rebuilding the chat-shape prefix needs the fixture
-    // model's `SHORE_FIXTURE_API_KEY`, which is not set. `generate` is never
-    // called — the request is never built — and throws if it somehow is.
     compaction: {
       run: {
         generate: () => {
@@ -208,11 +146,6 @@ async function harness(): Promise<{
   return { engine, session, deps, config };
 }
 
-/**
- * An autonomy service that already has state for `ada`, as the generator's
- * manager did — without it the three heartbeat commands refuse before they
- * reach anything this table decides.
- */
 async function autonomyWithState(dataDir: string): Promise<AutonomyService> {
   const service = new AutonomyService(
     { run: async () => ({ ok: false, detail: "unwired" }) } as never,
@@ -241,7 +174,6 @@ async function autonomyWithState(dataDir: string): Promise<AutonomyService> {
   return service;
 }
 
-/** The envelope shape the generator recorded. */
 function envelope(frame: ReturnType<typeof commandFrame>): Record<string, unknown> {
   if (frame.type === "command_output" || frame.type === "error") {
     if (frame.type === "error") {
@@ -249,9 +181,6 @@ function envelope(frame: ReturnType<typeof commandFrame>): Record<string, unknow
     }
     const data = frame.data;
     const isObject = typeof data === "object" && data !== null && !Array.isArray(data);
-    // A stored message carries `alternatives` and the Rust omits it when empty
-    // (`skip_serializing_if`), so an answer that embeds one has a key the
-    // recorded side does not. Same treatment the other parity replays apply.
     const record = isObject
       ? Object.fromEntries(
           Object.entries(data as Record<string, unknown>).filter(
@@ -271,10 +200,6 @@ function envelope(frame: ReturnType<typeof commandFrame>): Record<string, unknow
   return { kind: "unexpected" };
 }
 
-/**
- * The generator's `type_name`, in serde_json's vocabulary rather than
- * JavaScript's, plus its four discriminators — see the fixture's own note.
- */
 function typeName(v: unknown, key?: string): string {
   if (v === null || v === undefined) return "null";
   if (key === "status" && typeof v === "string") return `status:${v}`;
@@ -288,7 +213,6 @@ function typeName(v: unknown, key?: string): string {
   return "object";
 }
 
-/** The `name` of every element, when every element has one. */
 function namesOf(items: unknown[]): string[] | undefined {
   if (items.length === 0) return undefined;
   const names: string[] = [];
@@ -317,8 +241,6 @@ async function run(
   return { frame, activeModelAfter: session.activeModel };
 }
 
-// ── dispatch ────────────────────────────────────────────────────────────
-
 describe("runCommand", () => {
   test("the fixture key is unset, which the compact arm's expected error depends on", () => {
     expect(process.env["SHORE_FIXTURE_API_KEY"]).toBeUndefined();
@@ -342,9 +264,6 @@ describe("runCommand", () => {
       if (resolves !== undefined) {
         expect(want["message"]).toBe(resolves.was);
         expect(got["kind"]).toBe("command_output");
-        // The value itself, not just the shape: what the read arm now returns
-        // for a dotted key is the point, and a shape check would pass on any
-        // scalar.
         const data = frame.type === "command_output" ? (frame.data as Record<string, unknown>) : {};
         expect(data["key"]).toBe(c.args?.["key"] as never);
         expect(data["config"]).toEqual(resolves.value as never);
@@ -359,34 +278,22 @@ describe("runCommand", () => {
         }
       } else {
         expect(got["name"]).toBe(want["name"] as string);
-        // This file pins routing: that the name reached the handler that owns
-        // it. The recorded keys have to still be there, because a handler
-        // answering with someone else's payload is the failure it exists to
-        // catch — but a field added since is not that failure, and each
-        // handler's own test owns its payload in full.
         expect(got["data_keys"]).toEqual(expect.arrayContaining(want["data_keys"] as string[]));
         expect(got["data_shape"]).toMatchObject(want["data_shape"] as object);
       }
 
-      // The four arms that write the active model back through the context.
       expect(activeModelAfter ?? null).toEqual(c.active_model_after ?? null);
     });
   }
 });
 
-// ── dispatch_characterless ──────────────────────────────────────────────
-
 describe("runCharacterlessCommand", () => {
   for (const c of fixture.dispatch_characterless) {
     test(c.name, async () => {
       const { session, deps } = await harness();
-      // The characterless path has no character, which is what makes
-      // `list_characters` list in discovery order rather than active-first.
       session.characterName = undefined;
 
       const want = c.output as Record<string, unknown>;
-      // The generator gave both sections the same arguments per name; only the
-      // dispatch section recorded them, so they are read back from there.
       const args = fixture.dispatch.find((d) => d.name === c.name)?.args ?? {};
       try {
         const data = runCharacterlessCommand(session, deps, {
@@ -415,12 +322,6 @@ describe("runCharacterlessCommand", () => {
   }
 
   test("the accepted names are exactly the ones isCharacterless reports", () => {
-    // Not fixture-driven: the Rust asked the question by falling through the
-    // match, so there was no predicate to record. The handler needs one — it
-    // routes before it has an engine — and the two lists agreeing is what
-    // stops a name being characterless in one place and not the other.
-    // Accepted means "not refused for wanting a character" — a name can be
-    // accepted and still fail, which `list_provider_models` does here.
     const refused = (c: (typeof fixture.dispatch_characterless)[number]): boolean => {
       const out = c.output as Record<string, unknown>;
       return (

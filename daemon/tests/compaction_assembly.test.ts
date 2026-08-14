@@ -1,13 +1,3 @@
-/**
- * Recorded cases for compaction assembly.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -45,9 +35,6 @@ async function tempRoot(): Promise<string> {
   return await mkdtemp(testTmp("shore-compaction-"));
 }
 
-// ── archive_and_retain ──────────────────────────────────────────────────
-
-/** A line reduced to its `msg_id`, the way the generator recorded it. */
 function msgIds(content: string): string[] {
   return content
     .split("\n")
@@ -70,8 +57,6 @@ describe("archiveAndRetain", () => {
       const characterDir = join(root, "ada");
       await mkdir(characterDir, { recursive: true });
 
-      // What is on disk may differ from what the pass read — that is one of
-      // the cases.
       await writeFile(
         join(characterDir, "active.jsonl"),
         input["on_disk_differs"] === true
@@ -94,8 +79,6 @@ describe("archiveAndRetain", () => {
       );
 
       expect(out["ok"]).toBe(true);
-      // The generator's id was a fresh uuid; what it recorded is that it parses
-      // as one, which is what this injected value has to satisfy too.
       expect(out["returns_uuid"]).toBe(true);
       expect(id).toBe(NEW_ID);
 
@@ -123,14 +106,11 @@ describe("archiveAndRetain", () => {
 
       const raw = await readFile(join(characterDir, "active.jsonl"), "utf8");
       expect(msgIds(raw)).toEqual(out["retained"] as string[]);
-      // And the exact bytes: an empty conversation is written empty rather than
-      // as a blank line, and a non-empty one keeps its trailing newline.
       expect(raw).toBe(out["retained_raw"] as string);
     });
   }
 });
 
-/** The turn that arrives mid-pass, in the one case that has one. */
 function extraLine(): string {
   return (
     JSON.stringify({
@@ -156,8 +136,6 @@ function normaliseStamps(v: unknown): unknown {
   }
   return v;
 }
-
-// ── the resolved dependencies ───────────────────────────────────────────
 
 describe("resolveCompactionDeps", () => {
   for (const c of fixture.resolve_compaction_deps) {
@@ -221,7 +199,6 @@ describe("resolveCompactionDeps", () => {
       );
       expect(model?.qualifiedName ?? null).toBe(out["model"]);
       expect(model?.maxToolIterations ?? null).toBe(out["max_tool_iterations"]);
-      // The wire shape the LLM half is built from carries the same cap.
       if (model !== undefined) {
         expect(toRequestModel(model).max_tool_iterations ?? null).toBe(out["max_tool_iterations"]);
       }
@@ -232,8 +209,6 @@ describe("resolveCompactionDeps", () => {
     });
   }
 });
-
-// ── the tool surface's rendering ────────────────────────────────────────
 
 describe("renderToolOutcome", () => {
   const answers: Record<string, () => unknown> = {

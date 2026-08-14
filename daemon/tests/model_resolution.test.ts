@@ -1,19 +1,3 @@
-/**
- * The model catalog: resolving a model from provider defaults, a `[providers]`
- * entry and a `[models."provider:id"]` override, and looking one up by name.
- *
- * The case data began life as a capture from the deleted Rust port. That is
- * where it came from, not what makes it right — these are shore's answers now,
- * and a case that turns out to be wrong gets corrected here rather than
- * shimmed. The corpus is worth keeping because the inputs are: precedence
- * between four layers, a provider that names a model that does not exist, an
- * empty catalog, and the qualified-vs-bare name grammar.
- *
- * Duration and keepalive parsing moved to `duration.test.ts`; the capability
- * tables moved to `model_catalog.test.ts`, where they are swept rather than
- * recorded.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import fixture from "./config_fixtures/model_resolution.json" with { type: "json" };
@@ -43,8 +27,6 @@ import {
   type ProviderRegistryView,
   type ResolvedModel,
 } from "../src/config/models.ts";
-
-// ── fixture shapes ───────────────────────────────────────────────────────────
 
 interface DurationRow {
   raw: string;
@@ -144,14 +126,6 @@ const fx = fixture as unknown as {
   lookup: LookupSection;
 };
 
-// ── helpers ──────────────────────────────────────────────────────────────────
-
-/**
- * The Rust `Serialize` impl writes every absent field as an explicit `null`;
- * the TypeScript leaves it off entirely, because `exactOptionalPropertyTypes`
- * makes "absent" and "present and undefined" different types. Normalize to the
- * Rust shape so a field that should be gone cannot pass by being `undefined`.
- */
 function toWire(model: ResolvedModel): Record<string, unknown> {
   const keepalive = model.cacheKeepalive;
   return {
@@ -180,7 +154,6 @@ function toWire(model: ResolvedModel): Record<string, unknown> {
   };
 }
 
-/** The same normalization for a bare field bag (`ModelConfigFields`). */
 function fieldsToWire(fields: ModelConfigFields): Record<string, unknown> {
   const keepalive = fields.cacheKeepalive;
   return {
@@ -207,9 +180,6 @@ function parseToml(text: string): Record<string, unknown> | undefined {
   return Bun.TOML.parse(text) as Record<string, unknown>;
 }
 
-/** A registry view backed by a parsed `[providers]` table, standing in until
- *  `providers.ts` lands. Only the two transport fields and `defaults` matter
- *  to the cascade. */
 function registryFromToml(text: string): ProviderRegistryView | undefined {
   const table = parseToml(text);
   if (table === undefined) return undefined;
@@ -238,17 +208,6 @@ function registryFromToml(text: string): ProviderRegistryView | undefined {
   return { get: (name) => entries.get(name) };
 }
 
-/**
- * The daemon-authored part of a catalog error.
- *
- * `CatalogError::ParseEntry` embeds a `toml::de::Error`, which appends its own
- * presentation — a trailing newline and, when the crate happens to have kept
- * the key in scope, an `in \`<key>\`` line. That decoration is the TOML
- * crate's, is inconsistent between otherwise identical failures (`model_id`
- * gets the key annotation; a flattened field does not), and is not something
- * a port should reproduce. Everything before the first newline is Shore's own
- * message and is pinned exactly.
- */
 function firstLine(message: string): string {
   return message.split("\n")[0] as string;
 }
@@ -264,8 +223,6 @@ function catchCatalogError(fn: () => unknown): CatalogError {
 }
 
 describe("the case data loaded", () => {
-  // A fixture that silently failed to load reads as a passing suite with no
-  // cases in it. Each block is named so a dropped one fails here.
   test("every block the tests read is present and non-empty", () => {
     for (const block of [
       "sdk_parse_wire",
@@ -281,14 +238,9 @@ describe("the case data loaded", () => {
   });
 
   test("nothing still carries the keepalive default the port removed", () => {
-    // #47 moved `cache_keepalive` from a 55m default to nothing. The recorded
-    // value was corrected in place rather than rewritten at read time, so a
-    // reappearing "55m" means someone restored a stale capture.
     expect(JSON.stringify(fixture)).not.toContain('"cache_keepalive": "55m"');
   });
 });
-
-// ── duration ─────────────────────────────────────────────────────────────────
 
 describe("Sdk", () => {
   for (const row of fx.sdk_parse_wire) {
@@ -311,8 +263,6 @@ describe("Sdk", () => {
   });
 });
 
-// ── capability matrix ────────────────────────────────────────────────────────
-
 describe("Field keys", () => {
   test("every field's key is its own name", () => {
     for (const row of fx.field_keys) expect(row.field).toBe(row.key);
@@ -325,8 +275,6 @@ describe("Field keys", () => {
   }
 });
 
-// ── provider defaults ────────────────────────────────────────────────────────
-
 describe("hardcodedProviderDefaults", () => {
   for (const row of fx.provider_defaults) {
     test(`${row.provider || "<empty>"}`, () => {
@@ -336,22 +284,15 @@ describe("hardcodedProviderDefaults", () => {
   }
 
   test("an unknown provider gets nothing, not the shared baseline", () => {
-    // Every known provider spreads `baseProviderDefaults()`; the catch-all arm
-    // does not, so an unrecognised key resolves with no temperature, no token
-    // limits, and no credential env name at all.
     expect(hardcodedProviderDefaults("whoknows").fields).toEqual({});
     expect(hardcodedProviderDefaults("anthropic").fields.maxContextTokens).toBe(200_000);
   });
 
   test("opencode-go deliberately leaves sdk unset", () => {
-    // It serves two wire dialects behind one key, so the per-model SDK that
-    // discovery stamps has to win over a blanket provider default.
     expect(hardcodedProviderDefaults("opencode-go").fields.sdk).toBeUndefined();
     expect(defaultSdk("opencode-go")).toBe("openai");
   });
 });
-
-// ── from_parts ───────────────────────────────────────────────────────────────
 
 describe("resolvedModelFromParts", () => {
   for (const [i, row] of fx.from_parts.entries()) {
@@ -378,7 +319,6 @@ describe("resolvedModelFromParts", () => {
       "m", "chat.p.m", "chat", "p", "anthropic/claude-opus-4-6", "openrouter", {},
     );
     expect(promoted.sdk).toBe("anthropic");
-    // Promotion is what turns caching on, so it has to reach the ttl default.
     expect(promoted.cacheTtl).toBe("1h");
 
     const pinned = resolvedModelFromParts(
@@ -409,10 +349,6 @@ describe("resolvedModelFromParts", () => {
     );
     expect(keepaliveToString(every.cacheKeepalive as never)).toBe("55m");
 
-    // #47: the Rust defaulted this to `55m` for every Anthropic model. Turning
-    // a cache keepalive on is a spend decision, and `off` is the only default
-    // that does not make it for the user. `cache_ttl` still defaults to `1h`,
-    // because a longer TTL costs nothing until something pings.
     const defaulted = resolvedModelFromParts(
       "m", "chat.p.m", "chat", "p", "claude-opus-4-6", "anthropic", {},
     );
@@ -421,9 +357,6 @@ describe("resolvedModelFromParts", () => {
   });
 
   test("the input fields are not mutated", () => {
-    // `from_parts` takes `mut fields` by value in Rust; the port takes an
-    // object by reference and has to copy before stripping, or a caller's
-    // provider-default bag would lose `temperature` for every later model.
     const fields: ModelConfigFields = { temperature: 1.0 };
     resolvedModelFromParts("m", "q", "chat", "p", "claude-opus-4-7", "anthropic", fields);
     expect(fields.temperature).toBe(1.0);
@@ -435,8 +368,6 @@ describe("resolvedModelFromParts", () => {
     expect("maxToolIterations" in model).toBe(false);
   });
 });
-
-// ── field merging ────────────────────────────────────────────────────────────
 
 describe("field merging", () => {
   test("mergeFrom overwrites only present overlay fields", () => {
@@ -458,14 +389,10 @@ describe("field merging", () => {
   });
 
   test("a false boolean is a value, not an absence", () => {
-    // `zai_clear_thinking = false` is the zai provider default; `??` would be
-    // correct here but `||` would silently fall through to the fallback.
     const merged = orFallback({ zaiClearThinking: false }, { zaiClearThinking: true });
     expect(merged.zaiClearThinking).toBe(false);
   });
 });
-
-// ── catalog ──────────────────────────────────────────────────────────────────
 
 describe("catalogFromSections", () => {
   for (const row of fx.catalogs) {
@@ -514,9 +441,6 @@ describe("catalogFromSections", () => {
   }
 
   test("catalog order is code point order, not UTF-16 order", () => {
-    // The fixture case pins this, but only a direct assertion says why: under
-    // JavaScript's default sort the emoji provider — a surrogate pair starting
-    // at 0xD83C — would sort below `ﬀute` at 0xFB00 instead of above it.
     const catalog = catalogFromSections(
       Bun.TOML.parse(
         '["🎵drum".m]\nmodel_id = "a"\n["ﬀute".m]\nmodel_id = "b"\n[zzz.m]\nmodel_id = "c"\n',
@@ -529,27 +453,16 @@ describe("catalogFromSections", () => {
       "chat.ﬀute.m",
       "chat.🎵drum.m",
     ]);
-    // What the naive sort would have produced, kept as the contrast.
     expect([...catalog.chat.keys()].sort()).not.toEqual([...catalog.chat.keys()]);
   });
 
   test("Bun's TOML parser mishandles the \\U escape Rust's handles", () => {
-    // Not a defect in this port, but a hazard underneath it, recorded here so
-    // it is not rediscovered from a corrupted character name.
-    //
-    // TOML spec escapes a non-BMP scalar as `\UXXXXXXXX` (8 hex digits). The
-    // Rust `toml` crate decodes it; `Bun.TOML.parse` drops the backslash and
-    // yields the *literal text* `U0001F3B5` — silently wrong data rather than
-    // a parse error. The 4-digit `\uXXXX` form works in both.
     expect(Bun.TOML.parse('a = "\\U0001F3B5"')).toEqual({ a: "U0001F3B5" });
     expect(Bun.TOML.parse('a = "\\u00e9"')).toEqual({ a: "é" });
     expect(Bun.TOML.parse('a = "🎵"')).toEqual({ a: "🎵" });
   });
 
   test("the retired-scalar error names the first offending key in BTreeMap order", () => {
-    // Rust iterates a `BTreeMap`, so `aaa` is reached before `zzz` even though
-    // the document lists `zzz` first. Walking the parsed object in insertion
-    // order would name the wrong key.
     const error = catchCatalogError(() =>
       catalogFromSections(
         Bun.TOML.parse('[anthropic]\nzzz = 1\naaa = 2\n[anthropic.opus]\nmodel_id = "x"\n') as Record<
@@ -595,16 +508,13 @@ describe("catalogFromSections", () => {
     const catalog = catalogFromSections(chat, undefined, undefined, registry);
     const model = catalog.chat.get("chat.custom.fast") as ResolvedModel;
 
-    expect(model.maxOutputTokens).toBe(111); // per-model wins over registry defaults
-    expect(model.temperature).toBe(0.7); // registry defaults win over nothing
-    expect(model.baseUrl).toBe("https://custom.example/v1"); // registry transport
+    expect(model.maxOutputTokens).toBe(111);
+    expect(model.temperature).toBe(0.7);
+    expect(model.baseUrl).toBe("https://custom.example/v1");
     expect(model.sdk).toBe("openai");
   });
 
   test("registry credentials deliberately do not cascade", () => {
-    // `api_key_env` is folded into the registry's `keys[]` list and read from
-    // there by the credential resolver; overlaying a single env name back onto
-    // the static model would defeat the multi-key fallback.
     const registry: ProviderRegistryView = {
       get: () => ({ sdk: "openai", defaults: {}, baseUrl: "https://x/v1" }),
     };
@@ -618,9 +528,6 @@ describe("catalogFromSections", () => {
   });
 
   test("the provider defaults are not shared between models", () => {
-    // One `hardcodedProviderDefaults` bag is built per provider and read by
-    // every model under it. If `from_parts` stripped in place, the first
-    // Claude 4.7 model would delete `temperature` for its siblings too.
     const catalog = catalogFromSections(
       Bun.TOML.parse(
         '[anthropic.new]\nmodel_id = "claude-opus-4-7"\n[anthropic.old]\nmodel_id = "claude-opus-4-6"\n',
@@ -633,10 +540,6 @@ describe("catalogFromSections", () => {
   });
 
   test("the final sort is load-bearing, not a formality", () => {
-    // `a` sorts before `a-b`, but `chat.a-b.m` sorts before `chat.a.m`,
-    // because `-` (0x2D) precedes `.` (0x2E). Walking providers in order and
-    // inserting as you go therefore does not produce a `BTreeMap`-ordered
-    // catalog; the sort at the end is what does.
     const catalog = catalogFromSections(
       Bun.TOML.parse('[a.m]\nmodel_id = "x"\n["a-b".m]\nmodel_id = "y"\n') as Record<
         string,
@@ -657,8 +560,6 @@ describe("catalogFromSections", () => {
     expect(catalog.chat.size).toBe(0);
   });
 });
-
-// ── lookup ───────────────────────────────────────────────────────────────────
 
 describe("findModel", () => {
   const catalog = catalogFromSections(
@@ -684,9 +585,6 @@ describe("findModel", () => {
   });
 
   test("a qualified name beats a short name", () => {
-    // Both providers define `opus`, so the short name is ambiguous — but the
-    // qualified form still resolves, which means the qualified pass has to run
-    // first rather than falling out of the ambiguity check.
     expect(findModel(catalog, "chat.openrouter.opus").providerKey).toBe("openrouter");
     expect(() => findModel(catalog, "opus")).toThrow(/ambiguous/);
   });

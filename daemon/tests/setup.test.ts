@@ -1,19 +1,8 @@
-/**
- * Recorded cases for setup.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import fixture from "./handler_fixtures/setup.json" with { type: "json" };
-
 
 import { defaultAppConfig, type AppConfig } from "../src/config/app.ts";
 import { characterDataDir, characterWorkspaceDir } from "../src/config/dirs.ts";
@@ -41,9 +30,6 @@ import { testTmp } from "./support/tmp.ts";
 
 const ZONE = fixture.timezone as string;
 
-// ── Fixture shapes ──────────────────────────────────────────────────────
-
-/** `ResolvedModel` as serde wrote it: snake_case, absent spelled `null`. */
 interface WireModel {
   name: string;
   qualified_name: string;
@@ -78,7 +64,6 @@ interface ResolveCase {
     with_catalog: boolean;
     discovery: {
       provider: string;
-      /** `visible: false` means the id is listed in `discovery.ignore`. */
       models: { model_id: string; visible: boolean }[];
     } | null;
     overlay: Record<string, unknown>;
@@ -106,18 +91,6 @@ interface BuildCase {
   request: Record<string, unknown>;
 }
 
-/**
- * The one message the port deliberately does not reproduce.
- *
- * The Rust said "No model configured" — true, and no use: a user whose config
- * has no `[providers.*]` at all is told the state and not the fix, on the path
- * they are most likely to hit first. `config --check` has always said it
- * properly, and #31 moved that sentence here so both come from one constant.
- *
- * The fixture keeps the Rust's string. Rewriting it here, keyed on the exact
- * old text, is what makes the divergence a decision rather than a drift — the
- * next change to this message stops matching and has to be restated.
- */
 const RUST_NO_MODEL = "No model configured";
 
 function expectedFailure(err: string): string {
@@ -127,7 +100,6 @@ function expectedFailure(err: string): string {
 const resolveCases = fixture.resolve_generation_model as unknown as ResolveCase[];
 const buildCases = fixture.build_generation_request as unknown as BuildCase[];
 
-/** The same two static models the generator's catalog had. */
 const CATALOG_TOML = {
   anthropic: {
     alpha: { model_id: "alpha-id", sdk: "anthropic", temperature: 0.1 },
@@ -135,9 +107,6 @@ const CATALOG_TOML = {
   },
 };
 
-// ── Conversions ─────────────────────────────────────────────────────────
-
-/** Drop a serde `null` back to an absent field. */
 function some<T>(value: T | null | undefined): T | undefined {
   return value === null ? undefined : value;
 }
@@ -146,7 +115,6 @@ function opt<K extends string, V>(key: K, value: V | null | undefined): { [P in 
   return (value === null || value === undefined ? {} : { [key]: value }) as { [P in K]?: V };
 }
 
-/** The fixture's model, in the catalog's spelling. */
 function toModel(w: WireModel): ResolvedModel {
   return {
     name: w.name,
@@ -170,9 +138,6 @@ function toModel(w: WireModel): ResolvedModel {
     ...opt("zaiSubscription", w.zai_subscription),
     ...opt("replayPriorThinking", w.replay_prior_thinking as ResolvedModel["replayPriorThinking"]),
     ...opt("maxToolIterations", w.max_tool_iterations),
-    // `cache_keepalive` is `"off"` or a duration string on the wire and a parsed
-    // union here. No case in this fixture sets it, so rather than reimplement
-    // the parser the replay asserts that.
     ...(() => {
       expect(w.cache_keepalive).toBeNull();
       return {};
@@ -180,7 +145,6 @@ function toModel(w: WireModel): ResolvedModel {
   };
 }
 
-/** The port's model, back in the fixture's spelling, for comparison. */
 function fromModel(m: ResolvedModel): WireModel {
   return {
     name: m.name,
@@ -213,7 +177,6 @@ function fromModel(m: ResolvedModel): WireModel {
   };
 }
 
-/** The overlay in the port's spelling. Only the fields these cases set. */
 function toOverlay(raw: Record<string, unknown>): SamplerSettings {
   return {
     ...opt("temperature", raw["temperature"] as number | null),
@@ -228,8 +191,6 @@ function toOverlay(raw: Record<string, unknown>): SamplerSettings {
 function baseConfig(dirs: ShoreDirs, app: AppConfig, models: ModelCatalog): LoadedConfig {
   return { app, models, providers: ProviderRegistry.empty(), dirs, rawTable: undefined };
 }
-
-// ── resolve_generation_model ────────────────────────────────────────────
 
 describe("resolveGenerationModel", () => {
   for (const c of resolveCases) {
@@ -275,14 +236,7 @@ describe("resolveGenerationModel", () => {
               provider_key: discovery.provider,
               model_id: m.model_id,
               sdk: "anthropic",
-              // Required, and its absence is not a soft failure: both sides
-              // swallow an unparseable cache into "no cache", so a record
-              // without it would leave these cases resolving off the provider
-              // entry alone and never touching the cache at all.
               discovered_at: "2026-07-01T00:00:00Z",
-              // Upstream metadata is why a cached record is preferred over the
-              // bare provider entry. Without it a cache hit and a cache miss
-              // build the same model, and the cache directory stops mattering.
               context_length: 250000,
               max_output_tokens: 32000,
             })),
@@ -307,16 +261,10 @@ describe("resolveGenerationModel", () => {
   }
 });
 
-// ── build_generation_request ────────────────────────────────────────────
-
-/** The two reads, straight off the fixture. */
 function engineFor(c: BuildCase): SetupEngine {
   const history = c.input.history;
   return {
     messages: () => history,
-    // `messages_through_last_user_turn`: everything up to and including the
-    // most recent user turn. The engine's own fixture pins this; here it is an
-    // input, so it is spelled out rather than imported.
     messagesThroughLastUserTurn: () => {
       const last = history.findLastIndex((m) => m.role === "user");
       return last < 0 ? [] : history.slice(0, last + 1);
@@ -338,9 +286,6 @@ describe("buildGenerationRequest", () => {
       const workspace = characterWorkspaceDir(dirs.config, "qifei");
       await mkdir(workspace, { recursive: true });
       await writeFile(join(workspace, "SOUL.md"), "I am qifei.\n");
-      // Under the *character's* directory, not the data dir: an AGENTS.md that
-      // only exists at the right path, so pointing the lookup one level up
-      // produces a visibly different system prompt rather than the same one.
       const activePrompt = join(characterDataDir(dirs.data, "qifei"), "active_prompt");
       await mkdir(activePrompt, { recursive: true });
       await writeFile(join(activePrompt, "AGENTS.md"), "Answer as qifei, tersely.\n");
@@ -365,16 +310,11 @@ describe("buildGenerationRequest", () => {
         ...(c.input.rich_model ? { topP: 0.77, reasoningEffort: "high" } : {}),
       };
 
-      // The real registry, not a stand-in: the allowlist match is a glob rule
-      // this module hands off rather than owns, and reimplementing it in the
-      // replay would test the replay.
       const registry = McpRegistry.fromTools(
         c.input.mcp_tools.map((t) => ({
           server: t.server,
           tool: t.tool,
           full_name: `mcp__${t.server}__${t.tool}`,
-          // What the generator's `McpToolDef::new_for_test` produced. The
-          // registry forwards both verbatim, so they are inputs here.
           description: `${t.tool} tool`,
           input_schema: { type: "object" },
         })),

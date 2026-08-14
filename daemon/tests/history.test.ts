@@ -1,20 +1,3 @@
-/**
- * Recorded cases for history.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- *
- * What a failure means: this tool is how a character recalls anything past its
- * context window. A ranking regression buries the relevant turn below noise; an
- * excerpt regression hands the model a window that omits the match it was
- * ranked for; a filter regression is worse than either, because a search that
- * silently returns nothing looks exactly like a conversation that never
- * happened.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -90,7 +73,6 @@ const fixture = (await Bun.file(
   new URL("./engine_fixtures/history.json", import.meta.url),
 ).json()) as Fixture;
 
-/** Write the fixture's corpus bytes into a fresh directory. */
 async function corpusDir(): Promise<string> {
   const dir = await mkdtemp(testTmp("history-parity-"));
   await mkdir(join(dir, "segments"), { recursive: true });
@@ -111,16 +93,12 @@ async function run(input: Json, dir: string): Promise<{ ok: Json } | { error: st
 }
 
 describe("the fixture is real", () => {
-
   test("the corpus spans segments and the active window", () => {
     expect(fixture.corpus.segments.length).toBeGreaterThan(1);
     expect(fixture.corpus["active.jsonl"].length).toBeGreaterThan(0);
   });
 
   test("the corpus contains content no search may reach", () => {
-    // Thinking and tool-result blocks. Without these in the corpus, a port that
-    // searched `Message.content` — which folds tool results in — would pass
-    // every case here.
     const all = fixture.corpus.segments.map((s) => s.body).join("");
     expect(all).toContain('"type":"thinking"');
     expect(all).toContain('"type":"tool_result"');
@@ -155,7 +133,6 @@ describe("the fixture is real", () => {
   });
 
   test("at least one case has more candidates than it returns", () => {
-    // Otherwise truncation and ranking order are both unobservable.
     const truncated = fixture.end_to_end.filter(
       (c) =>
         "ok" in c.expect &&
@@ -168,7 +145,6 @@ describe("the fixture is real", () => {
   test("the scoring table records both matches and non-matches", () => {
     expect(fixture.scoring.some((c) => c.score !== null)).toBe(true);
     expect(fixture.scoring.some((c) => c.score === null)).toBe(true);
-    // And more than one distinct score, or the weights are unpinned.
     const distinct = new Set(fixture.scoring.map((c) => c.score).filter((s) => s !== null));
     expect(distinct.size).toBeGreaterThan(2);
   });
@@ -201,9 +177,6 @@ describe("query tokenization", () => {
   }
 
   test("term length is measured in bytes, not characters", () => {
-    // A single CJK character is one character and three bytes, so it survives
-    // a `>= 2` test on bytes and dies on one that counts characters. Losing it
-    // means a one-character query silently matches nothing.
     const cjk = fixture.tokenization.find((c) => c.query === "茶");
     expect(cjk?.terms).toEqual(["茶"]);
     const ascii = fixture.tokenization.find((c) => c.query === "a");
@@ -211,7 +184,6 @@ describe("query tokenization", () => {
   });
 
   test("term characters are Unicode alphanumerics, not ASCII", () => {
-    // `🙂` is not alphabetic and separates; `茶` is and does not.
     expect(fixture.tokenization.find((c) => c.query === "🙂")?.terms).toEqual([]);
     expect(fixture.tokenization.find((c) => c.query === "tea 茶")?.terms).toEqual(["tea", "茶"]);
   });
@@ -226,9 +198,6 @@ describe("scoring", () => {
   }
 
   test("earliest match index resolves to the same character offset", () => {
-    // The Rust returned a byte offset and TypeScript returns a UTF-16 one, so
-    // the raw numbers differ by design. What must agree is the character count
-    // they convert to, since that is what positions the excerpt.
     for (const c of fixture.scoring) {
       const m = new QueryMatcher(c.query);
       const lower = c.content.toLowerCase();
@@ -254,8 +223,6 @@ describe("excerptFor", () => {
   }
 
   test("the window is measured in characters, not code units", () => {
-    // A run of astral-plane characters is twice as long in UTF-16 as in code
-    // points, so a `slice` implementation returns half the window.
     const content = "🙂".repeat(500);
     expect([...excerptFor(content, undefined, 80)].length).toBe(80 + "...".length);
   });
@@ -328,9 +295,6 @@ describe("time range membership", () => {
 
       const stats = { skipped: 0 };
       expect(matchesTimeRange(c.timestamp, range, stats)).toBe(c.expect);
-      // An unparseable timestamp is *counted*, not just rejected — the tool
-      // reports the total so a transcript quietly accumulating bad timestamps
-      // is visible rather than looking like a search that found nothing.
       expect(stats.skipped).toBe(c.skipped);
     });
   }
@@ -412,8 +376,6 @@ describe("end to end", () => {
   });
 
   test("result order is deterministic across runs", async () => {
-    // Ranking ties are broken by storage order via a stable sort. An unstable
-    // comparator would still satisfy the fixture on a lucky run.
     const dir = await corpusDir();
     const first = await run({ query: "tea" }, dir);
     for (let i = 0; i < 5; i += 1) {

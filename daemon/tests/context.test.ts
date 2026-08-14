@@ -1,13 +1,3 @@
-/**
- * Recorded cases for context.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { lstat, mkdtemp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -31,8 +21,6 @@ import {
   type AssistantImageMode,
 } from "../src/handler/wire_messages.ts";
 import { testTmp } from "./support/tmp.ts";
-
-// ── Fixture shapes ──────────────────────────────────────────────────────
 
 interface FixturePromptMessage {
   role: Role;
@@ -69,7 +57,6 @@ interface ContextCase {
     mcp_tool_defs: ToolDefinition[];
     has_prior_context: boolean;
     timestamps: "never" | "always" | "auto";
-    /** `active_prompt` is a regular file, so the snapshot step fails. */
     block_active_prompt: boolean;
     sdk: Sdk;
     max_context_tokens: number;
@@ -80,13 +67,11 @@ interface ContextCase {
   system: { text: string; label: string }[];
   tool_defs: ToolDefinition[] | null;
   prompt_messages: FixturePromptMessage[];
-  /** `null` when `active_prompt` is not a directory to list. */
   active_after: { name: string; content: string }[] | null;
 }
 
 const ZONE = fixture.timezone as string;
 
-/** Compare the bytes, not the object graph — see the module header. */
 function expectJson(got: unknown, want: unknown): void {
   expect(JSON.parse(JSON.stringify(got))).toEqual(want as never);
 }
@@ -99,19 +84,8 @@ const modeCases = fixture.assistant_image_mode as unknown as {
 }[];
 const contextCases = fixture.prepare_chat_context as unknown as ContextCase[];
 
-// ── Image materialization ───────────────────────────────────────────────
-
 const IMAGES_PLACEHOLDER = "{images}";
 
-/**
- * Every `(file name, bytes)` pair the fixture recorded, from the `base64` image
- * blocks in its expected output.
- *
- * A file appears once no matter how many cases use it, and the bytes are
- * identical across cases by construction — the generator wrote each image once.
- * A file that only ever appears in a *failing* encode (a `/nonexistent/` path)
- * never shows up here, which is exactly right: those cases need it absent.
- */
 function recordedImages(): Map<string, string> {
   const out = new Map<string, string>();
 
@@ -120,8 +94,6 @@ function recordedImages(): Map<string, string> {
     for (const block of blocks) {
       const b = block as { type?: string; source?: { data?: string }; content?: unknown };
       if (b.type === "image" && typeof b.source?.data === "string") {
-        // Blocks are emitted in image order within a turn, so the nth image
-        // block of a case corresponds to the nth `{images}` path it declared.
         const name = names.shift();
         if (name !== undefined) out.set(name, b.source.data);
       }
@@ -143,7 +115,6 @@ function recordedImages(): Map<string, string> {
 
 let imagesDir: string | undefined;
 
-/** The shared image directory, built once from the fixture's own bytes. */
 async function images(): Promise<string> {
   if (imagesDir !== undefined) return imagesDir;
   const dir = join(await mkdtemp(testTmp("shore-ctx-")), "images");
@@ -176,8 +147,6 @@ function promptMessage(m: FixturePromptMessage, dir: string): PromptMessage {
   };
 }
 
-// ── build_llm_messages ──────────────────────────────────────────────────
-
 describe("buildLlmMessages", () => {
   for (const c of buildCases) {
     test(c.name, async () => {
@@ -192,11 +161,6 @@ describe("buildLlmMessages", () => {
     });
   }
 
-  // Prompt-cache stability: identical history must render to identical JSON, so
-  // the synthetic tool_use ids derive from the image path and never from
-  // randomness or an unstable hash. Every case is replayed twice rather than
-  // one hand-picked one, since a single nondeterministic block anywhere is
-  // enough to lose the prefix.
   test("every case renders identically on a second call", async () => {
     const dir = await images();
     for (const c of buildCases) {
@@ -218,15 +182,10 @@ describe("assistantImageModeForRequest", () => {
   }
 
   test("covers every sdk", () => {
-    // A new SDK that nobody adds a row for would otherwise inherit
-    // `text_standin` silently, which is the safe answer but not a tested one.
     expect(new Set(modeCases.map((c) => c.sdk)).size).toBe(7);
   });
 });
 
-// ── prepare_chat_context ────────────────────────────────────────────────
-
-/** Rebuild one case's on-disk layout and the config that points at it. */
 async function contextFixture(c: ContextCase): Promise<{
   config: LoadedConfig;
   charDataDir: string;
@@ -324,12 +283,7 @@ describe("prepareChatContext", () => {
 
       expectJson(got.prompt.messages, c.prompt_messages.map((m) => promptMessage(m, dir)));
 
-      // The snapshot the call was supposed to have materialized. Checking only
-      // the return value would let a `prepare` that never seeded `active_prompt`
-      // pass every case whose files were already there.
       if (c.active_after === null) {
-        // The blocked case: `active_prompt` was a file going in and the failure
-        // was warned about rather than thrown, so it is still a file.
         expect((await lstat(activeDir)).isFile()).toBe(true);
       } else {
         const after = await Promise.all(

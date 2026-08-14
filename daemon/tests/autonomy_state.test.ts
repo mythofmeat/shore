@@ -1,20 +1,3 @@
-/**
- * Recorded cases for autonomy state.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- *
- * What a failure here means: a character forgets something across a restart,
- * silently. Every field on the Rust side is `serde(default)`, so a name that
- * differs between the two does not fail to parse — it reads as absent, the
- * keepalive stays unarmed and the heartbeat forgets its deadline. Nothing
- * errors. The user pays one cold cache write and one missed wake, and the only
- * evidence is a bill.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -77,9 +60,6 @@ describe("the bytes", () => {
   });
 
   test("a bare state renders exactly as the daemon writes it", () => {
-    // Absent values are `null`, not omitted. A file with keys missing would
-    // still load on the Rust side — every field is `serde(default)` — so this
-    // is about the two writing the same file, not about what parses.
     const state: AutonomyStateFile = {
       ticksWithoutUser: 0,
       nextWakeAt: undefined,
@@ -106,9 +86,6 @@ describe("the bytes", () => {
   });
 
   test("what the Rust writes, this side rewrites unchanged", () => {
-    // The round trip that matters: a file written by the daemon, loaded here,
-    // and saved again must be the same bytes. Anything else means a character
-    // that has been through both halves of the port drifts.
     for (const [name, raw] of [
       ["populated", fixture.populated],
       ["bare", fixture.bare],
@@ -122,8 +99,6 @@ describe("the bytes", () => {
 
 describe("refusing what cannot be trusted", () => {
   test("a version that is not this one is ignored, not migrated", () => {
-    // Restoring a deadline from a file written by a version that meant
-    // something different by it is worse than starting fresh.
     const future = JSON.stringify({ version: 99, ticks_without_user: 0 });
     expect(decodeState(future)).toBeUndefined();
 
@@ -135,9 +110,6 @@ describe("refusing what cannot be trusted", () => {
   });
 
   test("a version of the right value but the wrong type is ignored", () => {
-    // The Rust reads it as a `u32`, so `"4"` is a parse failure there and the
-    // whole file is dropped. A looser check here would restore a deadline the
-    // daemon itself would have refused.
     const stringly = JSON.stringify({ version: "4", ticks_without_user: 0 });
     expect(decodeState(stringly)).toBeUndefined();
   });
@@ -155,17 +127,12 @@ describe("refusing what cannot be trusted", () => {
   });
 
   test("a missing covered turn count reads as zero rather than refusing", () => {
-    // It is `serde(default)` on the Rust side, so a file without it is
-    // legitimate. Zero fails safe: the deep archive runs a pass rather than
-    // trusting coverage it cannot see.
     const raw = JSON.stringify({ version: STATE_VERSION, ticks_without_user: 1 });
     expect(decodeState(raw)?.coveredTurnCount).toBe(0);
   });
 });
 
 describe("the keepalive schedule is all-or-nothing", () => {
-  // Arming from a partial schedule would ping a cache that has already gone
-  // cold, at 20× the price of a read. Every field or none.
   const full = {
     version: STATE_VERSION,
     ticks_without_user: 0,
@@ -209,8 +176,6 @@ describe("timestamps", () => {
   });
 
   test("an offset other than UTC still parses", () => {
-    // `chrono::Local` writes the machine's offset, so a state file from a
-    // laptop in Melbourne says +11:00 and must mean the same instant here.
     expect(fromRfc3339("2026-04-30T20:00:00+11:00")).toBe(Date.parse("2026-04-30T09:00:00Z"));
   });
 
@@ -244,8 +209,6 @@ describe("reading and writing the file", () => {
   });
 
   test("a save that cannot land says so", async () => {
-    // The caller keeps its dirty flag and tries again rather than believing a
-    // write that never happened.
     await inTempDir(async (dir) => {
       const blocker = join(dir, "blocker");
       await Bun.write(blocker, "not a directory");

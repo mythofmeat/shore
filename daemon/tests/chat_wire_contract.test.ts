@@ -1,22 +1,3 @@
-/**
- * What actually leaves the building, for a conversation driven through real
- * user actions.
- *
- * Every other suite here is a parity suite: it pins that the TypeScript does
- * what the deleted Rust did. That cannot catch a defect both versions share,
- * and it has no fixture at all for code written after the port. Two shipped
- * bugs sat in exactly those blind spots — `alternative_from_message` filtered
- * thinking blocks out of every regenerated response (Rust, `f2084f82`, and
- * ported faithfully), and the Anthropic tool loop built its own client so no
- * tools-enabled turn was ever recorded (post-port, no fixture).
- *
- * So this file asserts nothing about a previous implementation. It drives the
- * real message store, the real request builder, the real Anthropic adapter and
- * the real tool loop against a fake api.anthropic.com, then asserts invariants
- * on the bytes that reached it. A new core-chat defect of this class should be
- * one more assertion here, not another archaeology session in `calls.db`.
- */
-
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -39,8 +20,6 @@ import { installWireCapture } from "../src/llm/wire_capture.ts";
 import type { ToolPhase } from "../src/tools/execute.ts";
 import type { ToolUseEvent } from "../src/engine/tool_loop.ts";
 import type { Role } from "../src/engine/types.ts";
-
-// ── the fake anthropic ──────────────────────────────────────────────────────
 
 type Scripted =
   | { kind: "thinking"; thinking: string; signature: string; text: string }
@@ -163,8 +142,6 @@ function serving(script: Scripted[]): Fake {
   teardown.push(fake.stop);
   return fake;
 }
-
-// ── the rest of the stack, for real ─────────────────────────────────────────
 
 const KEY_ENV = "SHORE_WIRE_CONTRACT_KEY";
 
@@ -292,8 +269,6 @@ async function runToDone(events: AsyncIterable<StreamEvent>): Promise<ContentBlo
   return outcome.ok.content_blocks;
 }
 
-// ── reading the wire ────────────────────────────────────────────────────────
-
 const assistantTurns = (req: WireRequest) => req.messages.filter((m) => m.role === "assistant");
 
 const thinkingIn = (m: { content: Array<Record<string, unknown>> }) =>
@@ -307,8 +282,6 @@ function breakpointCount(req: WireRequest): number {
   const inSystem = (req.system ?? []).filter((b) => b["cache_control"] !== undefined).length;
   return inMessages + inSystem;
 }
-
-// ── the invariants ──────────────────────────────────────────────────────────
 
 describe("what reaches the model", () => {
   test("thinking replays verbatim, with the signature the model minted", async () => {

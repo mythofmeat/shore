@@ -1,11 +1,3 @@
-/**
- * OpenRouter message-conversion tests. Pin `turnToOpenRouter`: canonical blocks →
- * OpenRouter chat messages. Load-bearing invariants: thinking TEXT is never sent
- * back as a reasoning field (the Rust deepseek/kimi 400/hang bug), and prior
- * `reasoning_details` round-trip ONLY via the block's own `reasoning_details`
- * field — never reconstructed, never read from another provider's carrier.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import { turnToOpenRouter } from "../src/llm/providers/openrouter.ts";
@@ -31,8 +23,6 @@ describe("turnToOpenRouter", () => {
       type: "function",
       function: { name: "search", arguments: '{"q":"x"}' },
     });
-    // thinking text must NOT be replayed as reasoning, and with no
-    // reasoning_details there is nothing to round-trip.
     expect(m).not.toHaveProperty("reasoning");
     expect(m).not.toHaveProperty("reasoningDetails");
   });

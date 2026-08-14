@@ -1,21 +1,3 @@
-/**
- * Recorded cases for fallback.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- *
- * What a failure means: this is the layer that decides whether a bad minute
- * costs one retry or every configured API key. Rotating on a transient 503
- * exhausts a user's whole key list and reports "all keys failed" when nothing
- * was wrong with any of them; retrying a dead credential three times burns the
- * turn with a working key still unused. And a reason string that keeps a
- * response body leaks provider payloads — which can contain partial
- * credentials — into a warning shown to the user.
- */
-
 import { describe, expect, test } from "bun:test";
 import { emptyTiming, emptyUsage } from "../src/llm/stream.ts";
 
@@ -56,7 +38,6 @@ const fixture = (await Bun.file(
 
 const byteLen = (s: string) => Buffer.byteLength(s, "utf8");
 
-/** The errors the fixture names, rebuilt in the TypeScript union. */
 const ERRORS: Record<string, LlmError> = {
   http_401: { kind: "http_status", status: 401, body: '{"error":"bad key sk-abc123"}' },
   http_429: { kind: "http_status", status: 429, body: "slow down" },
@@ -82,7 +63,6 @@ const cand = (name: string, env: string, warn = false): KeyCandidate => ({
 });
 
 describe("the fixture is real", () => {
-
   test("every fixture error is represented in the TypeScript union", () => {
     for (const c of fixture.error_projection) {
       expect(Object.hasOwn(ERRORS, c.name), c.name).toBe(true);
@@ -101,7 +81,6 @@ describe("the fixture is real", () => {
   });
 
   test("a truncation case cuts inside a multibyte character", () => {
-    // Without it, a code-unit implementation passes every other case.
     const multibyte = fixture.error_projection.find((c) => c.name === "provider_multibyte");
     const ascii = fixture.error_projection.find((c) => c.name === "provider_long");
     expect(multibyte?.reason_byte_len).toBeLessThan(ascii?.reason_byte_len as number);
@@ -139,9 +118,6 @@ describe("error projection", () => {
   });
 
   test("a response body never survives into a reason", () => {
-    // The reason is shown to the user. A 4xx body can echo part of a
-    // credential — the fixture's 401 body contains one — so only the status
-    // may cross this boundary.
     const reason = sanitizeReason(ERRORS.http_401 as LlmError);
     expect(reason).not.toContain("sk-abc123");
     expect(reason).toBe("HTTP 401");
@@ -175,8 +151,6 @@ describe("warning messages", () => {
   }
 
   test("a warning never contains an environment variable name", () => {
-    // Key *names* are friendly labels the user chose; env var names are a
-    // deployment detail, and the values behind them are secrets.
     for (const w of fixture.warning_messages) {
       const message = buildWarningMessage(
         "openrouter",
@@ -198,18 +172,11 @@ describe("backoff schedule", () => {
   }
 
   test("it saturates rather than wrapping", () => {
-    // A wrap would produce a near-zero delay and hammer a provider that just
-    // asked for a pause — the failure mode the Rust's saturating arithmetic
-    // exists to prevent.
     expect(backoffDelayMs(500, 64)).toBeGreaterThan(Number.MAX_SAFE_INTEGER);
     expect(backoffDelayMs(500, 64)).toBe(backoffDelayMs(500, 128));
   });
 });
 
-/**
- * The loop cases. Not fixture-generated — see the note at the top of the file.
- * They pin the structure `key_fallback.rs` documents as its invariants.
- */
 describe("credential rotation", () => {
   function harness(env: Record<string, string>) {
     const events: FallbackEvent[] = [];
@@ -260,8 +227,6 @@ describe("credential rotation", () => {
   });
 
   test("a non-credential failure does not rotate", async () => {
-    // The whole point of the split. A 500 is transient; burning the user's
-    // remaining keys on it leaves them with "all keys failed" and no cause.
     const h = harness({ A: "sk-a", B: "sk-b" });
     await expect(
       streamWithCredentialFallback(
@@ -276,8 +241,6 @@ describe("credential rotation", () => {
   });
 
   test("an interrupted stream does not rotate", async () => {
-    // By the time bytes flow the credential was accepted and the user may have
-    // seen partial output; a different key cannot help and would re-answer.
     const h = harness({ A: "sk-a", B: "sk-b" });
     await expect(
       streamWithCredentialFallback(
@@ -352,8 +315,6 @@ describe("credential rotation", () => {
       quiet.attempt({ first: { kind: "http_status", status: 401, body: "x" } }),
       quiet.hooks,
     );
-    // Recorded either way — diagnostics show the full picture even when the
-    // user did not ask to be told.
     expect(quiet.events).toHaveLength(1);
     expect(quiet.events[0]?.warning).toBeUndefined();
   });
@@ -373,8 +334,6 @@ describe("credential rotation", () => {
   });
 
   test("rotation is not sticky across calls", async () => {
-    // A previous rotation must not short-circuit the next call's resolution,
-    // or a key that recovers is never tried again.
     const candidates = [cand("first", "A"), cand("second", "B")];
     const env: Record<string, string> = { B: "sk-b" };
     const readEnv = (c: KeyCandidate) => env[c.env];
@@ -432,8 +391,6 @@ describe("transient retry", () => {
   });
 
   test("a credential failure fails fast so rotation can happen", async () => {
-    // Retrying here would spend the transient budget on a key that cannot
-    // work, and arrive at the rotation layer with the turn already over.
     let calls = 0;
     await expect(
       streamWithRetry(
@@ -472,8 +429,6 @@ describe("transient retry", () => {
       { record: () => {} },
     );
     expect(got).toBe("served by second");
-    // One attempt on the dead key — no transient budget wasted — then the
-    // second key gets its own full budget.
     expect(attempts).toEqual(["first", "second", "second"]);
   });
 });

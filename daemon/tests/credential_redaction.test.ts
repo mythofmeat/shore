@@ -1,19 +1,3 @@
-/**
- * No provider credential reaches `calls.db`.
- *
- * The store is a forensics file: it outlives the key that made the calls, it is
- * what `shore log --api` and `shore diff` print, and it is the file a person
- * attaches to a bug report about a cache regression. Issue #72 is what it held
- * before this — `SidecarRequest.api_key` serialized whole into every internal
- * request row, and every `authorization` / `x-api-key` header value recorded
- * verbatim beside it.
- *
- * The masking is deliberately narrow. Header *names* stay, request bodies stay
- * byte-identical, and `api_key` keeps its place in the JSON — so nothing a
- * cache investigation reads has moved, and two calls made under different keys
- * still diff as identical rather than as a changed prefix.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import { CallStore } from "../src/call_store.ts";
@@ -134,8 +118,6 @@ describe("the request rule", () => {
   });
 
   test("an empty key is left as it is, not turned into a fake one", () => {
-    // A provider that needs no key writes `""`. Masking it would claim a
-    // credential was sent where none was.
     expect(redactRequest(request({ api_key: "" })).api_key).toBe("");
   });
 });

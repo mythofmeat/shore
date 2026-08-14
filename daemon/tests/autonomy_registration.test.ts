@@ -1,23 +1,3 @@
-/**
- * Where a chat turn meets the autonomy loop.
- *
- * The turn is synchronous and registration is not — it reads
- * `autonomy_state.json` off disk — so the first turn for a character arrives
- * before the loop knows that character exists. Everything worth pinning here
- * follows from that:
- *
- * - **`ensureState` returns true exactly once.** It is the only signal the
- *   caller gets to walk the conversation and seed the activity tracker. Twice
- *   double-seeds a heatmap; never leaves it blank for a fortnight.
- * - **Writes queue behind the registration, in order.** An `onUserMessage`
- *   landing after the `onCompactionComplete` that followed it would restart an
- *   idle clock the compaction had just reset.
- * - **`shouldCompactNow` cannot queue.** It answers now and takes a
- *   single-flight latch when it says yes, so before registration it says no —
- *   a compaction one turn late, rather than a latch on a runner that does not
- *   exist and nothing to release it.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -44,7 +24,6 @@ function configWith(mutate: (app: ReturnType<typeof defaultAppConfig>) => void =
   };
 }
 
-/** Records what reached the service, and when it was allowed to. */
 function recordingService(registerDelay?: Promise<void>) {
   const calls: string[] = [];
   const stamps: number[] = [];
@@ -91,8 +70,6 @@ describe("reading the config a loop runs on", () => {
       app.memory.compaction.archive_after = ConfigDuration.fromSecs(86_400);
     });
 
-    // Autonomy as a whole and the heartbeat are separate switches: a character
-    // can compact on idle without ever speaking unprompted.
     expect(runnerConfigFor(config)).toEqual({
       autonomyEnabled: true,
       heartbeatEnabled: false,
@@ -114,8 +91,6 @@ describe("reading the config a loop runs on", () => {
       h.minimum_heartbeat_latency = ConfigDuration.fromSecs(600);
     });
 
-    // Four questions, four answers, and swapping any two is silent: a wake
-    // interval used as a dormancy bound just makes a character go quiet.
     expect(clockConfigFor(config)).toEqual({
       defaultIntervalMs: 1_800_000,
       maxIdleTicks: 4,
@@ -125,8 +100,6 @@ describe("reading the config a loop runs on", () => {
   });
 
   test("state lives under the character's own directory", () => {
-    // `autonomy_state.json` and `heartbeat.jsonl` are per character. Pointing
-    // at the data root would have every character share one file.
     expect(registrationFor("ada", configWith()).data_dir).toBe("/d/ada");
   });
 });
@@ -140,8 +113,6 @@ describe("taking up a character", () => {
     expect(bridge.ensureState("ada", config)).toBe(true);
     expect(bridge.ensureState("ada", config)).toBe(false);
     expect(bridge.ensureState("ada", config)).toBe(false);
-    // The return is the caller's only cue to seed the activity tracker, so a
-    // second yes re-seeds a heatmap that already has counts in it.
     expect(service.calls.filter((c) => c === "register")).toEqual(["register"]);
   });
 
@@ -155,8 +126,6 @@ describe("taking up a character", () => {
     const config = configWith();
 
     bridge.ensureState("ada", config);
-    // Still reading state off disk. A second registration here would replace
-    // the first, shutting down a runner mid-tick.
     expect(bridge.ensureState("ada", config)).toBe(false);
 
     release();
@@ -180,7 +149,6 @@ describe("taking up a character", () => {
     });
 
     expect(bridge.ensureState("ada", configWith())).toBe(true);
-    // The turn itself is fine; what is lost is autonomy for one character.
     await expect(bridge.settled("ada")).resolves.toBeUndefined();
   });
 });
@@ -197,7 +165,6 @@ describe("updates that can wait", () => {
     bridge.ensureState("ada", configWith());
     bridge.onUserMessage("ada", 3);
 
-    // Running early would notify a character the loop has not created.
     expect(service.calls).toEqual(["register"]);
     release();
     await bridge.settled("ada");
@@ -220,8 +187,6 @@ describe("updates that can wait", () => {
 
     release();
     await bridge.settled("ada");
-    // A user message landing after the compaction that followed it restarts an
-    // idle clock the compaction had just reset.
     expect(service.calls).toEqual([
       "register",
       "user:1:7",
@@ -242,9 +207,6 @@ describe("updates that can wait", () => {
     bridge.ensureState("ada", configWith());
     bridge.onAssistantMessage("ada", 9);
 
-    // It fires at the *end* of a turn, so the registration it waits on is the
-    // one the same turn started. Dropped, the heartbeat believes the character
-    // has been silent since before this turn and wakes to talk over it.
     expect(service.calls).toEqual(["register"]);
     release();
     await bridge.settled("ada");
@@ -266,7 +228,6 @@ describe("updates that can wait", () => {
 
     release();
     await bridge.settled("ada");
-    // Read after the await, this would be the moment a disk read finished.
     expect(service.calls).toEqual(["register", "user:1:100"]);
   });
 
@@ -324,10 +285,6 @@ describe("seeding the activity tracker", () => {
     const bridge = new TurnAutonomyBridge(service);
     bridge.ensureState("ada", configWith());
 
-    // The walk reads the active conversation first and the archived segments
-    // after it, so the list runs newest-block-then-older-blocks. Taking the
-    // last element seeds the silence clock from the oldest surviving turn and
-    // makes a busy character look abandoned.
     bridge.backfillActivity("ada", [new Date(5000), new Date(9000), new Date(1000)]);
 
     await bridge.settled("ada");
@@ -346,10 +303,6 @@ describe("a config reload", () => {
     bridge.reloadConfig((name) => {
       asked.push(name);
       return configWith((app) => {
-        // Each character is asked for its own effective config. Pushing one
-        // config to all of them is what the Rust did — its `[memory.compaction]`
-        // was shared — and it means a `config` set made against Ada governs
-        // Nova's compaction too.
         app.memory.compaction.max_turns = name === "ada" ? 11 : 22;
       });
     });
@@ -368,7 +321,6 @@ describe("a config reload", () => {
     const bridge = new TurnAutonomyBridge(service);
 
     bridge.reloadConfig(() => configWith());
-    // A character registered afterwards reads the fresh config at registration.
     expect(service.calls).toEqual([]);
   });
 
@@ -383,7 +335,6 @@ describe("a config reload", () => {
     bridge.ensureState("ada", configWith());
     bridge.reloadConfig(() => configWith((app) => (app.memory.compaction.max_turns = 3)));
 
-    // Pushing early would configure a runner the service has not built.
     expect(service.calls).toEqual(["register"]);
     release();
     await bridge.settled("ada");
@@ -396,8 +347,6 @@ describe("the question that cannot wait", () => {
     const bridge = new TurnAutonomyBridge(recordingService());
     bridge.ensureState("ada", configWith());
 
-    // A latch taken on a runner that does not exist is a latch nothing
-    // releases; a compaction one turn late is a compaction one turn late.
     expect(bridge.shouldCompactNow("ada", 20, 100_000)).toBe(false);
   });
 

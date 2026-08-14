@@ -1,10 +1,3 @@
-/**
- * The forensic log went unwritten for months because nothing asserted it wrote.
- * These pin the two properties that made it useless: that a row appears at all,
- * and that it carries the breakpoint placement (the only thing in the row the
- * daemon cannot determine for itself).
- */
-
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -38,7 +31,6 @@ const USAGE = {
   cache_creation_tokens: 0,
 };
 
-/** A context with forensics on, which is what makes `recordCacheCall` write. */
 const ctx = (over: Partial<CallContext> = {}): CallContext => ({
   character: "poppy",
   call_type: "message",
@@ -77,25 +69,20 @@ describe("cache forensics rows", () => {
       rid: "r-1",
       model: "claude-opus-5",
       outcome: "done",
-      // The reason this log exists: which breakpoints were actually placed.
       msg_breakpoints: [4, 6, 8],
       sys_breakpoints: [2],
       cache_read_tokens: 10_313,
       cache_creation_tokens: 0,
     });
-    // Placement and usage in one row — there is no call_id because there is
-    // nothing left to correlate.
     expect(row).not.toHaveProperty("call_id");
   });
 
   test("no context at all → nothing is written", () => {
     recordCacheCall(undefined, "claude-opus-5", PLACEMENT, USAGE, "done");
-    expect(() => rows()).toThrow(); // file never created
+    expect(() => rows()).toThrow();
   });
 
   test("a context with forensics off → nothing is written", () => {
-    // Every call carries a context now, so the presence of the *directory* is
-    // the switch, not the presence of the context.
     const { forensics_dir: _off, ...off } = ctx();
     recordCacheCall(off, "claude-opus-5", PLACEMENT, USAGE, "done");
     expect(() => rows()).toThrow();
@@ -109,7 +96,6 @@ describe("cache forensics rows", () => {
   });
 
   test("an unwritable directory does not throw into the call path", () => {
-    // Diagnostics must never fail a call that otherwise succeeded.
     expect(() =>
       recordCacheCall(
         ctx({ character: "p", forensics_dir: join(dir, "does", "not", "exist") }),
@@ -149,8 +135,6 @@ describe("placement reported matches placement applied", () => {
     expect(placement.cache_enabled).toBe(true);
     expect(placement.msg_breakpoints.length).toBeGreaterThan(0);
 
-    // A reported index that is not actually marked would make the log lie in
-    // exactly the direction that costs money to discover.
     const marked = params.messages
       .map((m, i) => ({ i, blocks: Array.isArray(m.content) ? m.content : [] }))
       .filter(({ blocks }) =>

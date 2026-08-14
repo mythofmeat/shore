@@ -1,18 +1,3 @@
-/**
- * The curated entry `shore log --heartbeat` reads.
- *
- * It looks redundant beside the raw `calls` rows and is not: a tool's *output*
- * lives in the next call's request, in whatever wire shape that provider wanted,
- * so reconstructing it on read means re-deriving one dialect from another. The
- * loop has it normalized at dispatch time, so it writes it down then.
- *
- * The two shapes worth pinning are both about what a person sees. Redacted
- * thinking becomes a visible placeholder rather than nothing, so the reasoning
- * list says "the model thought here and you may not see it" instead of looking
- * empty. And a write that fails is a warning, never a thrown heartbeat — a diary
- * entry is not worth a tick.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import { buildEntry, recordTranscript } from "../src/transcript_capture.ts";
@@ -44,8 +29,6 @@ describe("the curated entry", () => {
 
     expect(entry.reasoning).toEqual(["let me look"]);
     expect(entry.text).toBe("checking now");
-    // The tool's output comes from the loop, not the response — that is the
-    // whole reason this table exists.
     expect(entry.tool_calls).toEqual([
       { name: "read", input: { path: "a.md" }, output: "contents", is_error: false },
     ]);
@@ -72,8 +55,6 @@ describe("the curated entry", () => {
       [],
     );
 
-    // Not the same as no reasoning at all: the model thought, and the reader is
-    // told they cannot see it.
     expect(entry.reasoning).toEqual(["[redacted thinking]"]);
   });
 
@@ -81,8 +62,6 @@ describe("the curated entry", () => {
     const entry = buildEntry(
       response([
         { type: "text", text: "only this" },
-        // After the real text, which is the ordering that catches it: a leading
-        // empty block is absorbed by the "no separator yet" branch anyway.
         { type: "text", text: "" },
       ]),
       [],
@@ -148,8 +127,6 @@ describe("writing a row", () => {
       },
     );
 
-    // A blank column reads as "not reported"; an empty string reads as a name
-    // nobody set.
     expect(rows[0]?.model).toBeNull();
   });
 

@@ -1,20 +1,3 @@
-/**
- * Recorded cases for request.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- *
- * What a failure means: every provider call in the product is built here. A
- * wrong `max_tokens` truncates replies; a dropped `provider_options` silently
- * turns off extended thinking the user paid to enable; a credential resolved
- * from the wrong variable fails as a 401 that looks exactly like a bad key. The
- * shape is also the *cache key* for Anthropic prompt caching, so a field that
- * appears or disappears between turns costs a cache write on every message.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -93,7 +76,6 @@ const fixture = (await Bun.file(
   new URL("./llm_fixtures/request.json", import.meta.url),
 ).json()) as Fixture;
 
-/** `null` in the fixture is Rust's `None`; the TypeScript spells that `undefined`. */
 function model(m: ModelJson): ResolvedModel {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(m)) {
@@ -102,13 +84,11 @@ function model(m: ModelJson): ResolvedModel {
   return out as unknown as ResolvedModel;
 }
 
-/** Drop `undefined` so an absent key and an explicit undefined compare equal. */
 function plain(v: unknown): unknown {
   return JSON.parse(JSON.stringify(v));
 }
 
 describe("the fixture is real", () => {
-
   test("provider options are recorded present and absent", () => {
     expect(fixture.provider_options_for.some((c) => c.expect === null)).toBe(true);
     expect(fixture.provider_options_for.some((c) => c.expect !== null)).toBe(true);
@@ -148,8 +128,6 @@ describe("provider tables", () => {
   }
 
   test("an unknown provider gets a fallback key var but no base URL", () => {
-    // Different answers on purpose: a key var can be guessed, an endpoint
-    // cannot, and inventing one would send credentials somewhere arbitrary.
     expect(defaultApiKeyEnv("nobody-has-heard-of-this")).toBe("LLM_API_KEY");
     expect(defaultBaseUrl("nobody-has-heard-of-this")).toBeUndefined();
   });
@@ -188,9 +166,6 @@ describe("buildRequestWithResolvedKey", () => {
   }
 
   test("keepalive never reaches the serialized request", () => {
-    // It is a daemon-side scheduling hint. The Rust made that structural with
-    // `#[serde(skip)]`; here it lives outside the request object entirely, and
-    // this is the assertion that it stayed there.
     for (const c of fixture.build_request_with_resolved_key) {
       const built = buildRequestWithResolvedKey(model(c.model), "k", {
         messages: [],
@@ -210,7 +185,6 @@ describe("buildRequestWithResolvedKey", () => {
       replay: "all",
       providerOptions: { cache_ttl: "1h" },
     });
-    // Replaced wholesale, not merged: the caller has already decided.
     expect(built.request.provider_options).toEqual({ cache_ttl: "1h" });
   });
 });
@@ -230,8 +204,6 @@ describe("buildRequest", () => {
   }
 
   test("an empty environment value is not a credential", () => {
-    // `KEY=` is how a shell half-unsets something. Treated as a real value it
-    // sends an empty credential and the 401 reads as a rejected key.
     const m = model(fixture.build_request[0]!.model);
     expect(() => buildRequest({ ...m, api_key_env: "E" }, { messages: [], replay: "all" }, { E: "" })).toThrow(
       MissingApiKey,
@@ -251,12 +223,6 @@ describe("buildRequest", () => {
 });
 
 describe("buildRequestWithProviderKeys", () => {
-  /**
-   * The fixture carries the registry as TOML because that is what the Rust
-   * parsed. The TypeScript takes a normalized entry — the deliberate
-   * simplification recorded in `credentials.ts` — so the cases are mapped by
-   * hand here rather than by reimplementing a TOML parser inside a test.
-   */
   const entries: Record<string, ProviderEntry | undefined> = {
     "the first candidate whose env is set wins": {
       enabled: true,
@@ -320,8 +286,6 @@ describe("buildRequestWithProviderKeys", () => {
   }
 
   test("every fixture case is covered by a mapped registry entry", () => {
-    // Without this, adding a case to the fixture and forgetting the entry
-    // silently tests the `undefined` registry instead of the intended one.
     for (const c of fixture.build_request_with_provider_keys) {
       expect(Object.hasOwn(entries, c.name), c.name).toBe(true);
     }
@@ -334,8 +298,6 @@ describe("preprocessRequest", () => {
       const request = c.request as unknown as SidecarRequest;
       const got = preprocessRequest(request);
       expect(plain(got)).toEqual(c.expect);
-      // Identity is the observable that `Cow::Borrowed` was: a clean
-      // conversation is passed straight through, not copied.
       expect(got === request, "borrowed").toBe(c.borrowed);
     });
   }

@@ -1,13 +1,3 @@
-/**
- * Recorded cases for status.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -37,7 +27,6 @@ import fixture from "./commands_fixtures/status.json" with { type: "json" };
 const CHARACTER = "poppy";
 const TOLERANCE_SECS = fixture.tolerance_secs;
 
-/** The heartbeat knobs as `HeartbeatConfig::default()` resolves them. */
 const DEFAULT_CLOCK: HeartbeatClockConfig = {
   defaultIntervalMs: 3_600_000,
   maxIdleTicks: 3,
@@ -45,37 +34,23 @@ const DEFAULT_CLOCK: HeartbeatClockConfig = {
   minWakeIntervalMs: 3_600_000,
 };
 
-/** The non-default bounds `custom_bounds` registers with. */
 const CUSTOM_CLOCK: HeartbeatClockConfig = {
   defaultIntervalMs: 2_700_000,
   maxIdleTicks: 7,
   maxSilentMs: 90_000_000,
-  // Sub-second on purpose: `as_secs()` truncates it to 1.
   minWakeIntervalMs: 1500,
 };
 
-/**
- * A calendar reading for the activity tracker.
- *
- * Which day it is does not matter, and that is the point: the two activity
- * setups are built so the histogram is the same whatever weekday reads them —
- * one because every weekday carries identical hours, the other because no
- * weekday reaches the five-message threshold. See the generator.
- */
 const LOCAL_NOW = Date.UTC(2026, 7, 4, 14, 0, 0);
 
-/** Nothing here ticks, so the executor only has to exist. */
 const IDLE_EXECUTOR: AutonomyExecutor = {
   runHeartbeatTick: async (): Promise<AutonomyActionResult> => ({ events: [] }),
   runCompaction: async (): Promise<AutonomyActionResult> => ({ events: [] }),
   runDeepArchive: async (): Promise<AutonomyActionResult> => ({ events: [] }),
 };
 
-// ── the setups, re-declared ─────────────────────────────────────────────────
-
 interface Setup {
   registered?: boolean;
-  /** [ticks, wake offset, last-user offset, covered turns], seconds from now. */
   persisted?: [number, number | undefined, number | undefined, number];
   log?: boolean;
   dormant?: boolean;
@@ -111,13 +86,6 @@ const SETUPS: Record<string, Setup> = {
   diagnostics_seeded: { diag: true },
 };
 
-/**
- * The heartbeat events every log-seeded setup gets.
- *
- * Twenty-five, and the count matters: `heartbeat_log` defaults to a limit of 20
- * and `status` shows the last 5, so a shorter log would make the default limit,
- * a limit of 10 and no limit at all the same query.
- */
 const LOG_KINDS = [
   "tick_fired",
   "tool_use",
@@ -136,11 +104,6 @@ const LOG_LINES = Array.from({ length: 25 }, (_, i) => ({
   detail: `event ${i}`,
 }));
 
-/**
- * Queue lines for `deferred_edits.jsonl`: a duplicate, a path that is not
- * prompt-visible, a malformed line and one with no `path`. The answer is the
- * deduplicated, sorted set of the visible ones.
- */
 const DEFERRED_LINES = [
   JSON.stringify({ path: "SOUL.md", timestamp: "2026-01-15T09:00:00+00:00" }),
   JSON.stringify({ path: "MEMORY.md", timestamp: "2026-01-15T09:00:01+00:00" }),
@@ -152,13 +115,6 @@ const DEFERRED_LINES = [
   JSON.stringify({ path: "AGENTS.md", timestamp: "2026-01-15T09:00:05+00:00" }),
 ];
 
-/**
- * Four whole weeks of five messages a day, at the same five hours each day.
- *
- * Naive local readings carried as epoch ms in UTC, which is the encoding the
- * activity tracker is pinned on. Every weekday gets the identical multiset of
- * hours, so the histogram does not depend on which day reads it.
- */
 function evenWeeks(): number[] {
   const out: number[] = [];
   for (let day = 0; day < 28; day += 1) {
@@ -169,7 +125,6 @@ function evenWeeks(): number[] {
   return out;
 }
 
-/** Four messages on one afternoon — under the weekday threshold. */
 const THIN = [
   Date.UTC(2026, 0, 7, 13, 0, 0),
   Date.UTC(2026, 0, 7, 13, 10, 0),
@@ -177,7 +132,6 @@ const THIN = [
   Date.UTC(2026, 0, 7, 18, 30, 0),
 ];
 
-/** Twelve API calls, so the default count of 10 is a boundary the ring reaches. */
 function diagEntries(d: Diagnostics): void {
   for (let i = 0; i < 12; i += 1) {
     d.api_calls.push({
@@ -196,8 +150,6 @@ function diagEntries(d: Diagnostics): void {
     });
   }
 }
-
-// ── building one ────────────────────────────────────────────────────────────
 
 let root: string;
 beforeEach(() => {
@@ -218,7 +170,6 @@ async function build(name: string): Promise<StatusContext> {
   const charData = join(dirs.data, CHARACTER);
   mkdirSync(charData, { recursive: true });
 
-  // -- disk, before anything reads it ----------------------------------------
   const now = Date.now();
   const stamp = (offset: number): string =>
     new Date(now + offset * 1000).toISOString().replace(/\.\d{3}Z$/, "+00:00");
@@ -253,7 +204,6 @@ async function build(name: string): Promise<StatusContext> {
     writeFileSync(join(charData, "deferred_edits.jsonl"), DEFERRED_LINES.map((l) => `${l}\n`).join(""));
   }
 
-  // -- the scheduler ---------------------------------------------------------
   const autonomy = new AutonomyService(IDLE_EXECUTOR);
   if (s.registered !== false) {
     await autonomy.register({
@@ -273,11 +223,6 @@ async function build(name: string): Promise<StatusContext> {
     });
     if (s.activity !== undefined) {
       const stamps = s.activity === "even_weeks" ? evenWeeks() : THIN;
-      // The silence anchor is already restored from the state file above, and
-      // `seedLastUserAtIfUnset` leaves it alone — so what is passed here is
-      // never consulted. That is the same no-op the Rust performs, and it is
-      // deliberate: without it the anchor would be one of these fixed January
-      // dates, months of silence, and the guard would trip.
       autonomy.backfillActivity(CHARACTER, stamps, stamps[stamps.length - 1]);
     }
     if (s.dormant === true) {
@@ -310,11 +255,8 @@ async function build(name: string): Promise<StatusContext> {
   };
 }
 
-// ── comparison helpers ──────────────────────────────────────────────────────
-
 const VOLATILE = ["next_wake_at", "seconds_until_wake", "last_user_at", "seconds_since_user"];
 
-/** Rewrite the temporary root out of every string in the tree. */
 function detmp(value: unknown): unknown {
   if (typeof value === "string") return value.split(root).join("<tmp>");
   if (Array.isArray(value)) return value.map(detmp);
@@ -326,7 +268,6 @@ function detmp(value: unknown): unknown {
   return value;
 }
 
-/** Drop the four clock-derived leaves, which are checked separately. */
 function withoutVolatile(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(withoutVolatile);
   if (value !== null && typeof value === "object") {
@@ -346,13 +287,6 @@ interface Volatile {
   user_since_secs: number | null;
 }
 
-/**
- * Check one clock-derived pair against the offsets the setup arranged.
- *
- * The stamp and the count are checked against separate numbers, because they
- * are not always the same one: a `last_user_at` in the future is ten minutes
- * ahead *and* zero seconds ago, since `duration_since` saturates.
- */
 function expectVolatile(
   autonomy: Record<string, unknown>,
   now: number,
@@ -368,8 +302,6 @@ function expectVolatile(
   }
   const stamp = autonomy[stampKey];
   expect(typeof stamp).toBe("string");
-  // The spelling, not just the value: `+00:00` rather than `Z`, which is what
-  // `DateTime<Utc>::to_rfc3339` produces.
   expect(stamp as string).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?\+00:00$/);
   const drift = Math.abs((Date.parse(stamp as string) - now) / 1000 - atSecs);
   expect(drift).toBeLessThanOrEqual(TOLERANCE_SECS);
@@ -378,8 +310,6 @@ function expectVolatile(
     TOLERANCE_SECS,
   );
 }
-
-// ── status ──────────────────────────────────────────────────────────────────
 
 interface StatusCase {
   case: string;
@@ -418,15 +348,10 @@ describe("status", () => {
         );
       }
 
-      // The whole envelope, on purpose. This is the one file that owns its
-      // shape, so a field added or dropped shows up here rather than in three
-      // routing tests that never cared about the payload.
       expect(withoutVolatile(result)).toEqual(withoutVolatile(row.ok));
     });
   }
 });
-
-// ── diagnostics ─────────────────────────────────────────────────────────────
 
 interface ArgCase {
   case: string;
@@ -444,8 +369,6 @@ describe("diagnostics", () => {
   }
 });
 
-// ── heartbeat_log ───────────────────────────────────────────────────────────
-
 describe("heartbeat_log", () => {
   for (const row of fixture.heartbeat_log as ArgCase[]) {
     test(row.case, async () => {
@@ -455,15 +378,12 @@ describe("heartbeat_log", () => {
   }
 });
 
-// ── the three controls ──────────────────────────────────────────────────────
-
 interface ControlCase {
   case: string;
   command: "heartbeat_tick_now" | "heartbeat_set_dormant" | "heartbeat_set_active";
   setup: string;
   ok?: unknown;
   err?: { code: ErrorCode; message: string };
-  /** The scheduler state the command left behind; null when unregistered. */
   after: { heartbeat_state: string; ticks_without_user: number; wake_armed: boolean } | null;
 }
 
@@ -491,10 +411,6 @@ describe("heartbeat controls", () => {
         expect<unknown>(run()).toEqual(row.ok);
       }
 
-      // What the command did, as distinct from what it said. Two of the three
-      // answer with a constant — swap what `heartbeat_set_dormant` does to the
-      // clock and its reply is unchanged — so the reply alone pins almost
-      // nothing about them.
       const after = (await status(ctx)) as { autonomy: Record<string, unknown> | null };
       if (row.after === null) {
         expect(after.autonomy).toBeNull();
@@ -508,21 +424,6 @@ describe("heartbeat controls", () => {
   }
 });
 
-// ── the clock arithmetic, exactly ───────────────────────────────────────────
-
-/**
- * Two things about the four clock-derived fields the fixture cannot pin, both
- * for the same reason: it compares them against an offset with a couple of
- * seconds of slack, and both of these are sub-second effects.
- *
- * The values here are not recorded from a run — they are read off the Rust:
- * `duration_secs_i64` takes `Duration::as_secs()` of a magnitude and the
- * caller negates it, which truncates towards zero rather than flooring; and
- * `to_rfc3339` uses `SecondsFormat::AutoSi`, which prints 0, 3, 6 or 9
- * fractional digits and omits the point entirely at zero. Feeding
- * {@link autonomyWire} a fabricated status and an exact `now` is the only way
- * to say either out loud.
- */
 describe("the clock arithmetic", () => {
   const at = Date.UTC(2026, 0, 15, 12, 0, 0);
 
@@ -547,11 +448,7 @@ describe("the clock arithmetic", () => {
   }
 
   test("an overdue wake truncates towards zero rather than flooring", () => {
-    // 1.4 seconds overdue is −1 second away, not −2.
     expect(wireAt(at - 1400, undefined)["seconds_until_wake"]).toBe(-1);
-    // And under a second either side is zero, from both directions. Truncating
-    // downwards leaves a negative zero, which `JSON.stringify` writes as `0` —
-    // the sign never reaches the wire, but `toBe` can see it.
     expect(wireAt(at - 400, undefined)["seconds_until_wake"]).toBe(-0);
     expect(wireAt(at + 400, undefined)["seconds_until_wake"]).toBe(0);
     expect(wireAt(at + 1400, undefined)["seconds_until_wake"]).toBe(1);
@@ -559,52 +456,30 @@ describe("the clock arithmetic", () => {
 
   test("elapsed time truncates too, and saturates at zero", () => {
     expect(wireAt(undefined, at - 1900)["seconds_since_user"]).toBe(1);
-    // Saturating rather than flooring is what makes a future stamp read as
-    // "just now"; flooring would give −1.
     expect(wireAt(undefined, at + 1900)["seconds_since_user"]).toBe(0);
   });
 
   test("a zero fraction is omitted and a non-zero one is kept", () => {
     expect(wireAt(at, undefined)["next_wake_at"]).toBe("2026-01-15T12:00:00+00:00");
     expect(wireAt(at + 500, undefined)["next_wake_at"]).toBe("2026-01-15T12:00:00.500+00:00");
-    // Not `Z`, which is the other legal RFC3339 spelling of the same instant
-    // and the one `toISOString` reaches for.
     expect(wireAt(at, undefined)["next_wake_at"]).not.toContain("Z");
   });
 });
 
-// ── the two projections, restated ───────────────────────────────────────────
-
-/**
- * Two of the sidecar's fields never reach the wire, and a whole-object
- * comparison shows that as an absence rather than as a claim. This is the same
- * claim in the form the doc comment makes it: the CLI's vocabulary is not the
- * scheduler's, and `character` and `covered_turn_count` are not translated,
- * they are dropped.
- */
 test("the autonomy projection drops the fields the CLI does not read", async () => {
   const ctx = await build("restored");
   const result = (await status(ctx)) as { autonomy: Record<string, unknown> };
   const keys = Object.keys(result.autonomy);
   expect(keys).not.toContain("character");
   expect(keys).not.toContain("covered_turn_count");
-  // And the renames landed rather than the originals passing through.
   expect(keys).toContain("dormant_after_heartbeat_turns");
   expect(keys).not.toContain("max_idle_ticks");
   expect(keys).toContain("effective_interval_secs");
   expect(keys).not.toContain("default_interval_ms");
 });
 
-/**
- * `message_count` and `turn_count` are one number under two names, in two
- * places — the session envelope and the activity object — and the two places
- * do not read the same number. The envelope reports the conversation's turns;
- * the activity object reports what the tracker recorded. A case where they
- * differ is the only way to say that.
- */
 test("the envelope's turn count and the activity count are different numbers", async () => {
   const ctx = await build("activity_week");
-  // `activity_week` records nothing in the conversation and 140 in the tracker.
   const result = (await status({ ...ctx, turnCount: 7 })) as {
     message_count: number;
     turn_count: number;
@@ -616,13 +491,6 @@ test("the envelope's turn count and the activity count are different numbers", a
   expect(result.activity.turn_count).toBe(140);
 });
 
-/**
- * A halted keepalive is a defect that needs a source fix, so it has to reach a
- * surface someone reads. Before this it went only to the daemon log and a
- * `dormant_ping` note in the heartbeat log, where it could sit unseen while
- * every call paid full price. The halt has no clearing path by design, which is
- * exactly why hiding it is expensive.
- */
 describe("a halted keepalive reaches the status envelope", () => {
   async function haltedContext(): Promise<StatusContext> {
     const ctx = await build("restored");

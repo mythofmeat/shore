@@ -1,24 +1,3 @@
-/**
- * A heartbeat tick end to end, against real files.
- *
- * The two halves are pinned on their own — `heartbeat_request.test.ts` and
- * `heartbeat_loop.test.ts` — so what is left here is delivery, and delivery is
- * the part where a character's one chance to be heard goes quiet.
- *
- * Three things worth naming, because each looks like nothing when it breaks:
- *
- * - **An image-only tick still delivers.** `<sendMessage>` is not the only way
- *   to say something. A tick that generated an image and wrote no words has
- *   produced something for the user, and the message carries no empty text
- *   block beside it.
- * - **The notification fires even when the append failed.** The character did
- *   speak. A user told about a message they cannot find is better served than
- *   one who is never told.
- * - **A tick that could not build a body is a skip, not a failure.** Nothing
- *   ran, so there is nothing to log and nothing to retry differently — the
- *   clock tries again on its own schedule.
- */
-
 import { afterAll, describe, expect, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
@@ -48,8 +27,6 @@ afterAll(() => {
   closeLedgers();
   for (const c of cleanups) c();
 });
-
-// ── harness ─────────────────────────────────────────────────────────────
 
 const KEY_ENV = "SHORE_HB_TICK_KEY";
 setTestEnv(KEY_ENV, "secret");
@@ -118,7 +95,6 @@ function response(blocks: ContentBlock[], finishReason = "end_turn"): GenerateRe
   };
 }
 
-/** A conversation that records what was appended to it. */
 function recordingEngine(appended: Message[], revision = 7): HeartbeatEngine {
   return {
     appendMessage: async (msg) => {
@@ -141,8 +117,6 @@ function tickDeps(over: Partial<HeartbeatTickDeps> = {}): HeartbeatTickDeps {
     ...over,
   };
 }
-
-// ── delivery ────────────────────────────────────────────────────────────
 
 describe("delivering what a tick asked to say", () => {
   const request = (): SidecarRequest =>
@@ -174,11 +148,9 @@ describe("delivering what a tick asked to say", () => {
       role: "assistant",
       origin: "autonomous",
       content: "I read that paper you left open",
-      // The model that actually wrote it — the background one, not chat's.
       model: "claude-opus-bg",
       provider_key: "anthropic",
     });
-    // Persisted before pushed, so the revision announced is one that exists.
     expect(pushed).toEqual([{ revision: 7, msg: appended[0] as Message }]);
     expect(notified).toEqual([
       { title: "Shore — ada", body: "I read that paper you left open" },
@@ -200,8 +172,6 @@ describe("delivering what a tick asked to say", () => {
     );
 
     expect(appended.length).toBe(1);
-    // A blank `ContentBlock::Text` beside the image renders as a stray empty
-    // line in every client that shows the conversation.
     expect(appended[0]?.content_blocks).toEqual([]);
     expect(appended[0]?.content).toBe("");
     expect(appended[0]?.images).toEqual([{ path: "images/boat.png", caption: "a boat" }]);
@@ -257,9 +227,6 @@ describe("delivering what a tick asked to say", () => {
       (kind, detail) => notes.push({ kind, detail }),
     );
 
-    // The sink holding `""` and holding nothing are different states: the tag
-    // never yields an empty string, so this can only come from a tool call the
-    // model deliberately made.
     expect(notes[0]?.kind).toBe("message_sent");
     expect(appended.length).toBe(1);
   });
@@ -360,8 +327,6 @@ describe("delivering what a tick asked to say", () => {
   });
 });
 
-// ── the tick as a whole ─────────────────────────────────────────────────
-
 describe("running a tick", () => {
   test("runs the loop and delivers what it produced", async () => {
     const config = await world();
@@ -379,21 +344,15 @@ describe("running a tick", () => {
 
     expect(appended.length).toBe(1);
     expect(appended[0]?.content).toBe("the tide is out");
-    // Stamped from the request the loop actually ran against, so the
-    // conversation records which model wrote this turn.
     expect(appended[0]?.model).toBe("claude-fixture");
     expect(result.events).toEqual([
       { kind: "message_sent", detail: "Autonomous message sent: the tide is out" },
     ]);
-    // A heartbeat writes log lines and leaves the turn count alone.
     expect(result.turnCount).toBeUndefined();
     expect(result.failed).toBeUndefined();
   });
 
   test("a budget-paused tick is a logged skip, and spends nothing", async () => {
-    // The pre-flight keepalive has always had. Without it the tick builds its
-    // request, reaches the gate inside `generate`, and throws `BudgetBlocked`
-    // — once per tick, forever, which is not what "pause" means.
     const config = await world();
     let generated = 0;
 
@@ -511,12 +470,6 @@ describe("running a tick", () => {
     ]);
   });
 
-  /**
-   * The tick is where the two budget numbers come from: the round cap off the
-   * model the body runs on, and the grace rounds off config. Neither is the
-   * loop's to know, and getting either wrong changes how long a character has
-   * to finish what it was doing.
-   */
   test("hands the loop the cap from the model and the grace from config", async () => {
     const config = await world();
     config.app.behavior.autonomy.heartbeat.wrap_up_grace_rounds = 3;
@@ -526,9 +479,6 @@ describe("running a tick", () => {
       "ada",
       config,
       tickDeps({
-        // A model that never stops asking, so only the budget ends the tick.
-        // The hard stop is a backstop: an unlimited cap would otherwise run to
-        // the wall-clock deadline and hang this test for half an hour.
         generate: async () => {
           calls += 1;
           if (calls > 20) return undefined;
@@ -540,12 +490,10 @@ describe("running a tick", () => {
       }),
     );
 
-    // The model's four rounds, then the nudge, then three grace rounds.
     expect(calls).toBe(7);
   });
 
   test("a body that cannot be built is a silent skip", async () => {
-    // Mid-turn: a user message still waiting on an answer.
     const config = await world([message("user", "m_1", "you there?")]);
     let called = 0;
 
@@ -587,13 +535,8 @@ describe("running a tick", () => {
       }),
     );
 
-    // The rebuild was cached, and a whole tool round ran against a copy of it.
-    // Two model calls and a tool-result turn later, what the keepalive holds is
-    // still the body chat's next turn will extend.
     const cached = cache.get("ada");
     expect(cached).toBeDefined();
-    // The two turns it was rebuilt from, and nothing the tick added: no inline
-    // system entry, and no tool-result turn.
     expect(cached?.messages.length).toBe(2);
     expect(cached?.messages.some((m) => m.role === "system")).toBe(false);
     expect(

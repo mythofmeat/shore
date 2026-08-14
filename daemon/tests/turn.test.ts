@@ -1,13 +1,3 @@
-/**
- * Recorded cases for turn.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -30,8 +20,6 @@ import {
 const MINTED_ID = "m_00000000-0000-4000-8000-000000000000";
 const MINTED_TS = "2026-01-01T00:00:00-05:00";
 
-// ── normalisation, mirroring the generator ──────────────────────────────
-
 function normalisePath(p: string): string {
   const i = p.indexOf("/attachments/");
   if (i === -1) return p;
@@ -43,8 +31,6 @@ function normalisePath(p: string): string {
   return `<attachment>/${base}`;
 }
 
-/** `m_<uuid v4>` — a minted id, as opposed to one a case seeded. Only minted
- *  ids are normalised, so "the last message" and "the first" stay apart. */
 const MINTED_ID_RE = /^m_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function normalise(v: unknown): unknown {
@@ -55,8 +41,6 @@ function normalise(v: unknown): unknown {
       if (k === "msg_id" && typeof val === "string" && MINTED_ID_RE.test(val)) {
         out[k] = "<minted_id>";
       } else if (k === "timestamp" && val === MINTED_TS) {
-        // The generator normalised by proximity to its own clock; this side
-        // injects one fixed value, so equality is the same test.
         out[k] = "<minted_timestamp>";
       } else if (k === "path" && typeof val === "string") {
         out[k] = normalisePath(val);
@@ -69,11 +53,6 @@ function normalise(v: unknown): unknown {
   return v;
 }
 
-/**
- * Drop keys the Rust omits via `skip_serializing_if`, so a TypeScript object
- * carrying an explicit `undefined`/`null` compares equal to a frame the Rust
- * simply did not write. Same treatment the other parity replays apply.
- */
 function pruned(v: unknown): unknown {
   if (Array.isArray(v)) return v.map(pruned);
   if (v !== null && typeof v === "object") {
@@ -89,8 +68,6 @@ function pruned(v: unknown): unknown {
 }
 
 const shaped = (v: unknown): unknown => pruned(normalise(v));
-
-// ── harness ─────────────────────────────────────────────────────────────
 
 async function tempRoot(): Promise<string> {
   return await mkdtemp(join(tmpdir(), "shore-turn-"));
@@ -157,8 +134,6 @@ async function seedCharacter(root: string, history: unknown[]): Promise<string> 
   return dataDir;
 }
 
-/** The fixture stores history with the two minted fields already normalised;
- *  put concrete values back so the engine can load them. */
 function rehydrate(messages: unknown[]): unknown[] {
   return messages.map((m, i) => {
     const msg = m as Record<string, unknown>;
@@ -170,8 +145,6 @@ function rehydrate(messages: unknown[]): unknown[] {
   });
 }
 
-// ── append_user_turn ────────────────────────────────────────────────────
-
 describe("appendUserTurn", () => {
   for (const c of fixture.append_user_turn) {
     test(c.name, async () => {
@@ -180,8 +153,6 @@ describe("appendUserTurn", () => {
         const input = c.input as Record<string, any>;
         const dataDir = await seedCharacter(root, rehydrate(input["history"]));
 
-        // Legacy `images` are absolute client-side paths. The fixture records
-        // the bare names it was given; recreate the files and point at them.
         const srcDir = join(root, "client_files");
         await mkdir(srcDir, { recursive: true });
         const images: string[] = [];
@@ -219,13 +190,8 @@ describe("appendUserTurn", () => {
   }
 
   test("the minted id and timestamp match the shapes the Rust produced", () => {
-    // Normalisation hides these, so pin them against the real samples the
-    // generator kept rather than letting the sentinels stand in for anything.
     let checked = 0;
     for (const c of fixture.append_user_turn) {
-      // `_observed` reads the conversation's last message, so on a case that
-      // appended nothing it holds a *seeded* id rather than a minted one.
-      // Those cases have no `new_message` to their name; skip them.
       if (c.output.events.length === 0) continue;
       const observed = (c as Record<string, any>)["_observed"];
       checked += 1;
@@ -234,12 +200,9 @@ describe("appendUserTurn", () => {
       expect(Number.isNaN(new Date(observed.timestamp).getTime())).toBe(false);
       expect(observed.timestamp).toMatch(/[+-]\d{2}:\d{2}$/);
     }
-    // The skip above must not quietly empty this test out.
     expect(checked).toBeGreaterThan(0);
   });
 });
-
-// ── ensure_and_backfill_autonomy ────────────────────────────────────────
 
 describe("ensureAndBackfillAutonomy", () => {
   for (const c of fixture.ensure_and_backfill_autonomy) {
@@ -285,8 +248,6 @@ describe("ensureAndBackfillAutonomy", () => {
 
         const actual = rec.backfills.map((b) => ({
           character: b.character,
-          // The Rust records naive local datetimes; compare on the instant,
-          // which is what both sides actually selected.
           timestamps: b.timestamps.map((t) => t.getTime()).sort((a, b2) => a - b2),
         }));
         const expected = (c.output.backfill_calls as any[]).map((b) => ({
@@ -308,8 +269,6 @@ describe("ensureAndBackfillAutonomy", () => {
   }
 });
 
-// ── context token sum ───────────────────────────────────────────────────
-
 describe("contextTokensFor", () => {
   for (const c of fixture.context_tokens) {
     test(c.name, () => {
@@ -324,8 +283,6 @@ describe("contextTokensFor", () => {
     });
   }
 });
-
-// ── emit_post_persist_stream_end ────────────────────────────────────────
 
 describe("emitPostPersistStreamEnd", () => {
   for (const c of fixture.emit_post_persist_stream_end) {
@@ -362,7 +319,6 @@ describe("emitPostPersistStreamEnd", () => {
   }
 });
 
-/** The 1x1 red PNG the generator wrote for its legacy-path cases. */
 const PNG_BYTES = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
   "base64",

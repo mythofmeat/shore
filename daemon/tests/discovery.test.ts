@@ -1,15 +1,3 @@
-/**
- * Recorded cases for discovery.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- *
- * What a failure means, by section:
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -131,14 +119,9 @@ async function scratch(): Promise<string> {
 }
 
 describe("the fixture is real", () => {
-
   test("the truncation cases actually straddle the byte cap", () => {
-    // Every case where the input is longer than the cap but the *character*
-    // count is not would pass trivially against a code-unit implementation.
-    // At least one case must cut inside a multibyte character.
     const straddling = fixture.truncate_for_log.filter((c) => {
       if (c.input_byte_len <= 512) return false;
-      // The kept prefix is shorter than the cap: the cut walked backwards.
       return c.expect_byte_len - byteLen("…") < 512;
     });
     expect(straddling.length).toBeGreaterThan(0);
@@ -206,8 +189,6 @@ describe("truncateForLog", () => {
     test(c.name, () => {
       const got = truncateForLog(c.input);
       expect(got).toBe(c.expect);
-      // Pinned separately: an implementation could produce the right string by
-      // accident while measuring the wrong thing.
       expect(byteLen(got)).toBe(c.expect_byte_len);
     });
   }
@@ -238,16 +219,11 @@ describe("mapEntry", () => {
         expect(got).toBeUndefined();
         return;
       }
-      // Compared through JSON so an explicit `undefined` and an absent key are
-      // the same thing here — which is exactly the equivalence the cache file
-      // relies on.
       expect(JSON.parse(JSON.stringify(got))).toEqual(c.expect);
     });
   }
 
   test("keys absent in the Rust are absent here, not present-and-undefined", () => {
-    // `JSON.stringify` hides the difference; the cache file does not, and a
-    // consumer doing `"supports_tools" in model` would see the wrong answer.
     for (const c of fixture.map_entry.cases) {
       if (c.expect === null) continue;
       const got = mapEntry(c.provider_key, c.base_url, c.sdk, c.raw, now);
@@ -293,9 +269,6 @@ describe("cachePath", () => {
 describe("staleness", () => {
   for (const c of fixture.staleness) {
     test(c.name, () => {
-      // Offset cases rebuild the timestamp against a fixed instant so the case
-      // means the same thing whenever it runs; literal cases pass the string
-      // through unchanged.
       const now = Date.parse("2026-04-28T10:00:00Z");
       const fetchedAt =
         c.fetched_at ?? new Date(now - (c.offset_secs as number) * 1000).toISOString();
@@ -313,8 +286,6 @@ describe("staleness", () => {
   }
 
   test("an unparseable timestamp is stale rather than pinned fresh", () => {
-    // The failure this guards: `Date.parse` is looser than chrono, so a shape
-    // the Rust rejected could read as a valid — and possibly recent — date.
     for (const bad of ["2026-04-28", "Apr 28 2026", "not-a-timestamp", "", "2026"]) {
       expect(cacheAgeMs(bad), bad).toBeUndefined();
     }
@@ -372,9 +343,6 @@ describe("the cache file is byte-identical to the Rust's", () => {
   });
 
   test("a failed write leaves the previous catalog intact", async () => {
-    // The reason the tmp-then-rename dance exists. A cache that cannot be
-    // serialized must not take the last good one down with it — the user would
-    // lose their discovered models with no way to tell why.
     const dir = await scratch();
     const path = cachePath(dir, "openrouter");
     await writeCache(path, fixture.write_cache.full.cache);
@@ -386,9 +354,6 @@ describe("the cache file is byte-identical to the Rust's", () => {
           provider_key: "p",
           model_id: "m",
           sdk: "openai",
-          // `JSON.stringify` throws on a BigInt rather than encoding it, and
-          // `raw_provider_metadata` is the one field that carries whatever the
-          // provider sent through to the file unexamined.
           raw_provider_metadata: { bad: 1n },
           discovered_at: "t",
         },
@@ -402,12 +367,6 @@ describe("the cache file is byte-identical to the Rust's", () => {
   });
 
   test("the destination is untouched until the staged write has succeeded", async () => {
-    // The previous case only proves serialization is checked before anything is
-    // written — an in-place `writeFile` would pass it too. This one fails the
-    // write itself: a directory sits where the tmp sibling goes, so staging
-    // cannot succeed. Writing straight to the destination would open it with
-    // O_TRUNC and leave the user with an empty or half-written catalog; staging
-    // first means the destination is never opened at all.
     const dir = await scratch();
     const path = cachePath(dir, "openrouter");
     await writeCache(path, fixture.write_cache.full.cache);
@@ -428,10 +387,6 @@ describe("the cache file is byte-identical to the Rust's", () => {
 });
 
 describe("the fetchers", () => {
-  // Not fixture-driven — the Rust's HTTP calls could not be recorded without a
-  // live provider. What is pinned here is the part a port gets wrong silently:
-  // the two dialects authenticate differently, and sending the wrong header
-  // fails as a 401 that looks exactly like a bad key.
   function stub(status: number, body: string) {
     const calls: { url: string; headers: Record<string, string> }[] = [];
     const impl = (async (url: string | URL | Request, init?: RequestInit) => {
@@ -513,9 +468,6 @@ describe("readCache", () => {
   }
 
   test("a genuine I/O failure is not swallowed", async () => {
-    // Only the file's *contents* resolve to "no cache". Reading a directory as
-    // a file is EISDIR, and a caller that cannot tell that apart from an empty
-    // cache would refetch forever without ever reporting the problem.
     const dir = await scratch();
     await mkdir(join(dir, "providers", "openrouter", "models.json"), { recursive: true });
     await expect(readCache(cachePath(dir, "openrouter"))).rejects.toThrow();

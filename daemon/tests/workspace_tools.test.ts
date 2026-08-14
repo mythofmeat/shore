@@ -1,13 +1,3 @@
-/**
- * Recorded cases for workspace tools.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { mkdir, readdir, readlink, lstat, readFile, symlink, utimes, writeFile } from "node:fs/promises";
@@ -99,15 +89,6 @@ interface GitValidation {
   safety_flags: string[];
 }
 
-// ── Harness ─────────────────────────────────────────────────────────────
-
-/**
- * A fresh `<tmp>/workspace` + `<tmp>/char/data` pair, built from `tree`.
- *
- * `missing` leaves the workspace directory uncreated — the one state that
- * reaches the listing's "does not exist yet" answer, since every other route
- * resolves a path first and fails there instead.
- */
 async function makeCase(
   tree: TreeNode[],
   missing = false,
@@ -139,7 +120,6 @@ async function makeCase(
   return { workspace, data };
 }
 
-/** The whole tree under `root`, in the generator's shape and order. */
 async function snapshot(root: string): Promise<TreeNode[]> {
   const out: TreeNode[] = [];
   const pending = [root];
@@ -178,7 +158,6 @@ async function snapshot(root: string): Promise<TreeNode[]> {
   return out;
 }
 
-/** Run a handler and reduce it to the generator's `{ok}` / `{err}` shape. */
 async function outcome(run: () => Promise<unknown>): Promise<Outcome> {
   try {
     return { ok: await run() };
@@ -196,25 +175,6 @@ function syncOutcome(run: () => void): Outcome {
   }
 }
 
-// ── read ────────────────────────────────────────────────────────────────
-
-/**
- * The two cases where the port deliberately answers something the Rust did not.
- *
- * `read` on a bare `workspace` or `memory` returned "invalid args: path is
- * empty" at `9023b46d`, because the handler resolved through the strict
- * resolver — which refuses a prefix with nothing below it — before it decided
- * whether the target was a directory. The tool schema promised a listing, so
- * that was a bug, and #39 fixed it here.
- *
- * The fixture stays untouched: it records what the Rust returned, and that is
- * the only thing it is for. These two are checked against the listing the Rust
- * *did* produce for the same directory spelled `memory/.` — the workaround the
- * bug report found — so the new answer is still pinned to captured behaviour
- * rather than to a hand-written expectation. The `toEqual` on `c.result` keeps
- * the divergence honest: if the fixture is ever regenerated against a daemon
- * that lists, this list is what tells us to delete the exception.
- */
 const READ_DIVERGES_FROM_RUST = new Map([
   ["memory prefix directory", "invalid args: path is empty"],
   ["workspace prefix root", "invalid args: path is empty"],
@@ -239,12 +199,6 @@ describe("read", () => {
     });
   }
 
-  // What the blanking above gives up, taken back directly: the number is the
-  // filesystem's, but *which* number is the port's decision, and a listing that
-  // reported 0, or the target's size, or a recursive total would still pass a
-  // blanked comparison. Symlinks are unaffected — a link to a directory is
-  // reported as a file whose size is the length of its target, which is
-  // portable and stays pinned in the fixture.
   test("directory size is the filesystem's", async () => {
     const { workspace } = await makeCase([
       { path: "sub", kind: "dir" },
@@ -256,15 +210,6 @@ describe("read", () => {
   });
 });
 
-/**
- * Drop `size` from every `type: "directory"` entry in a listing outcome.
- *
- * See the third bullet in the module header: the value is the directory
- * inode's size, so it is the filesystem's answer rather than either
- * implementation's, and the frozen fixture carries the generator's ext4 4096.
- * Everything else about the entry — name, type, ordering, and every file's
- * size — still compares literally.
- */
 function blankDirectorySizes(o: Outcome): Outcome {
   if (!("ok" in o)) return o;
   const ok = o.ok as Record<string, unknown> | null;
@@ -275,21 +220,15 @@ function blankDirectorySizes(o: Outcome): Outcome {
   return { ok: { ...ok, entries } };
 }
 
-// ── edit ────────────────────────────────────────────────────────────────
-
 describe("edit", () => {
   for (const c of fixture.edit) {
     test(c.name, async () => {
       const { workspace } = await makeCase(c.tree);
       expect(await outcome(() => handleEdit(c.input, workspace))).toEqual(c.result);
-      // The tree after matters as much as the return value: a failed edit that
-      // wrote anyway would pass the first assertion and fail this one.
       expect(await snapshot(workspace)).toEqual(c.after);
     });
   }
 });
-
-// ── delete ──────────────────────────────────────────────────────────────
 
 describe("delete", () => {
   for (const c of fixture.delete) {
@@ -298,8 +237,6 @@ describe("delete", () => {
       const dataDir = c.with_data_dir ? data : "";
       const got = await outcome(() => handleDelete(c.input, workspace, dataDir));
 
-      // The trash directory's name is a timestamp, so the expected string is
-      // rebuilt around whichever one this run produced.
       const expected = await substituteStamp(c.result, data);
       expect(got).toEqual(expected);
 
@@ -316,15 +253,6 @@ describe("delete", () => {
     }
   });
 
-  // The assertion above cannot tell `getUTCHours` from `getHours` on a machine
-  // whose zone *is* UTC — which CI's is — so a stamp built from local time would
-  // pass it everywhere except on the operator's laptop. Run it once more under a
-  // zone that is not UTC.
-  //
-  // In a subprocess, because it cannot be done in this one: assigning
-  // `process.env.TZ` mid-run leaves the engine's cached zone in a state that
-  // restoring the variable does not undo, and the next test file to format a
-  // local timestamp fails instead.
   test("stamp is UTC regardless of the host zone", () => {
     const source = new URL("../src/tools/workspace", import.meta.url).pathname;
     const millis = fixture.trash_stamp.map((t) => t.millis);
@@ -340,20 +268,12 @@ describe("delete", () => {
   });
 });
 
-/** The `{stamp}` placeholder: 8 digits, `T`, 9 digits, `Z`. */
 const STAMP = /\d{8}T\d{9}Z/;
 
 function replaceStampInPath(path: string, replacement: string): string {
   return path.replace(STAMP, replacement);
 }
 
-/**
- * Rewrite the fixture's `trashed_to` around the stamp this run produced.
- *
- * The generator's stamp and the replay's are different instants by
- * construction, so the *value* cannot be compared — but everything around it
- * can, and the format is pinned separately against fixed instants.
- */
 async function substituteStamp(expected: Outcome, dataDir: string): Promise<Outcome> {
   if (!("ok" in expected)) return expected;
   const ok = expected.ok as Record<string, unknown> | null;
@@ -372,8 +292,6 @@ async function snapshotTrash(dataDir: string, withDataDir: boolean): Promise<Tre
   return nodes.map((n) => ({ ...n, path: replaceStampInPath(n.path, "{stamp}") }));
 }
 
-// ── search ──────────────────────────────────────────────────────────────
-
 describe("search", () => {
   for (const c of fixture.search) {
     test(c.name, async () => {
@@ -387,8 +305,6 @@ describe("search", () => {
     });
   }
 });
-
-// ── Excerpts ────────────────────────────────────────────────────────────
 
 describe("excerpt", () => {
   for (const c of fixture.excerpt) {
@@ -409,8 +325,6 @@ describe("best line excerpt", () => {
     });
   }
 });
-
-// ── git ─────────────────────────────────────────────────────────────────
 
 describe("git validation", () => {
   test("safety flags", () => {

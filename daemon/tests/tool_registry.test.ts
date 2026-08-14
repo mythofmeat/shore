@@ -1,13 +1,3 @@
-/**
- * Recorded cases for tool registry.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import fixture from "./tools_fixtures/tool_registry.json" with { type: "json" };
@@ -29,7 +19,6 @@ interface FixtureToolDef {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
-  /** Narrowed rather than left as `string`; the guard test below checks it. */
   category: ToolCategory;
 }
 interface FixtureToolDefinition {
@@ -48,12 +37,6 @@ const fx = fixture as unknown as {
     string,
     { char_name: string; user_name: string; defs: FixtureToolDefinition[] }
   >;
-  /**
-   * An array, not an object, and in the generator's insertion order rather
-   * than the `BTreeMap`'s sorted order. Building the replay's `Map` from this
-   * preserves that order, so a port that forgets to sort gets a wrong answer
-   * instead of being handed the right one by the fixture's own serialization.
-   */
   subagent_config: { name: string; description: string }[];
   subagent_tool_defs: Record<
     string,
@@ -87,9 +70,6 @@ describe("the registry itself", () => {
     expect(ALL_TOOLS.map((t) => t.name)).toEqual(fx.all_tools.map((t) => t.name));
   });
 
-  // Byte-for-byte on every field. The descriptions come from the same `.md`
-  // files the Rust compiled in, so this also pins that the trailing newline is
-  // stripped exactly once on the way through.
   test.each(fx.all_tools.map((t): [string, FixtureToolDef] => [t.name, t]))(
     "%s matches the Rust definition exactly",
     (name, expected) => {
@@ -108,8 +88,6 @@ describe("the registry itself", () => {
     }
   });
 
-  // The narrowing on FixtureToolDef.category is an assertion about the file,
-  // so check it rather than trusting it.
   test("every category is one of the two known values", () => {
     for (const t of fx.all_tools) {
       expect(["web", "other"]).toContain(t.category);
@@ -121,8 +99,6 @@ describe("the registry itself", () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  // The tools folded away in the tool-surface simplification, plus the
-  // heartbeat-only capability that must never reach the chat surface.
   test.each(["write", "list_files", "check_time", "exec", "memory_search", "set_next_wake"])(
     "%s is not offered",
     (name) => {
@@ -148,7 +124,6 @@ describe("availableTools — the allowlist", () => {
     expect(toolPatternMatches("read", "ready")).toBe(false);
     expect(toolPatternMatches("mcp__hue__*", "mcp__hue__set_light")).toBe(true);
     expect(toolPatternMatches("mcp__hue__*", "mcp__lifx__set")).toBe(false);
-    // A bare star is a zero-length prefix, so it matches everything.
     expect(toolPatternMatches("*", "anything")).toBe(true);
     expect(toolPatternMatches("*", "")).toBe(true);
   });
@@ -170,27 +145,9 @@ describe("renderToolDefs — description templating", () => {
     }
   });
 
-  // ── A deliberate divergence, and the one case the fixture cannot pin ──
-  //
-  // Substitution is a single pass over the template, and what it writes is
-  // never re-read.
-  //
-  // The Rust does not do this. `render_template` walks a `HashMap` and
-  // substitutes sequentially, so text one variable writes can be matched by a
-  // later one — and `HashMap` iteration order is randomized per process. Eight
-  // runs of the generator against `char="{{user}}", user="{{char}}"` produced
-  // "View {{char}}'s" seven times and "View {{user}}'s" once. The Rust does not
-  // agree with itself, so there is no answer to freeze, and the case was pulled
-  // from the fixture rather than recording a coin flip.
-  //
-  // That nondeterminism is not academic: it is a system prompt, and therefore a
-  // cache prefix, that changes across daemon restarts for a character whose
-  // name contains braces. `engine/prompt.ts` already made this call for the
-  // system prompt; this is the same rule applied to tool descriptions.
   test("rendered output is never re-scanned", () => {
     const [def0] = renderToolDefs(cfg(["activity_heatmap"]), "{{user}}", "{{char}}");
     expect(def0?.description.startsWith("View {{char}}'s activity heatmap")).toBe(true);
-    // The `{{user}}` slot was consumed, not left behind and not re-expanded.
     expect(def0?.description).not.toContain("{{user}}");
   });
 
@@ -205,10 +162,6 @@ describe("subagentToolDefs", () => {
     expect(actual).toEqual(c.defs as ToolDefinition[]);
   });
 
-  // The BTreeMap trap. JavaScript's default sort compares UTF-16 code units,
-  // so it puts the astral-plane name first; Rust's BTreeMap compares UTF-8
-  // bytes and puts it last. Asserting the two disagree means a regression to
-  // `.sort()` cannot pass this file.
   test("sub-agent order follows UTF-8 bytes, not UTF-16 code units", () => {
     const names = ["\u{1F3B5}drum", "ﬀute"];
     const naive = [...names].sort();
@@ -219,16 +172,11 @@ describe("subagentToolDefs", () => {
     expect(actual).not.toEqual(naive.map((n) => `ask_${n}`));
   });
 
-  // The fixture's insertion order is not sorted order, so this also proves the
-  // replay is not being handed the answer by its own input ordering.
   test("the config map arrives unsorted", () => {
     const asGiven = [...subagentConfig.keys()];
     expect(asGiven).not.toEqual([...asGiven].sort());
   });
 
-  // `music` is a strict prefix of `musicology`. A comparator that walks shared
-  // code points but drops the length tiebreak returns 0 for this pair, and the
-  // sort becomes order-dependent.
   test("a name that is a strict prefix of another sorts first", () => {
     const order = subagentToolDefs(
       subagentConfig,
@@ -239,8 +187,6 @@ describe("subagentToolDefs", () => {
     expect(order).toEqual(["ask_music", "ask_musicology"]);
   });
 
-  // No tool description uses `{{character_name}}`, so without a sub-agent that
-  // does, dropping the variable from `templateVars` is unobservable.
   test("{{character_name}} renders as its own variable", () => {
     const [archivist] = subagentToolDefs(subagentConfig, ["archivist"], "qifei", "ren");
     expect(archivist?.description).toBe("Search qifei's archive on behalf of ren.");
@@ -278,9 +224,6 @@ describe("assembleToolSurface — group order", () => {
     expect(actual.map((d) => d.name)).toEqual(c.order);
   });
 
-  // Enabling a sub-agent must extend the surface, never splice into it: the
-  // static prefix has to stay byte-identical or every downstream cache block
-  // is invalidated.
   test("enabling a sub-agent leaves the static prefix untouched", () => {
     const statics = [def("read"), def("edit")];
     const mcp = [def("mcp__hue__on")];

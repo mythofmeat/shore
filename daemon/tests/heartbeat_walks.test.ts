@@ -1,20 +1,3 @@
-/**
- * Recorded cases for heartbeat.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- *
- * What a failure here means: the two implementations disagree about when a
- * character wakes up, or about when it should stop waking up. Both directions
- * cost — a clock that fires when the Rust would not runs a tool loop nobody
- * asked for, and one that stays silent when the Rust would fire leaves the
- * character mute. Treat a diff as a defect until proven otherwise, not as a
- * fixture that needs regenerating.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -69,9 +52,6 @@ describe("the fixture is real", () => {
   });
 
   test("the walks exercise the paths worth pinning", () => {
-    // A fixture that never fires a tick, or never trips the guard, would pass
-    // against almost any implementation. These counts are what make it an
-    // assertion rather than a formality.
     const steps = fixture.walks.flatMap((w) => w.steps);
     expect(steps.filter((s) => s.action === "run_tick").length).toBeGreaterThan(20);
     expect(steps.filter((s) => s.state.label === "Dormant").length).toBeGreaterThan(20);
@@ -94,9 +74,6 @@ describe("the bounds match", () => {
 describe("replaying the Rust's decisions", () => {
   for (const walk of fixture.walks) {
     test(`walk ${walk.seed} (interval ${walk.config.default_interval_secs}s, ceiling ${walk.config.max_idle_ticks} ticks)`, () => {
-      // The origin is 0: the fixture records every instant as milliseconds from
-      // the start of the walk, so the clock can be built at 0 and driven with
-      // those offsets directly.
       const clock = new HeartbeatClock(
         {
           defaultIntervalMs: walk.config.default_interval_secs * 1000,

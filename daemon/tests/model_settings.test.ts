@@ -1,19 +1,3 @@
-/**
- * The pure half of `shore model set`: parsing a value for a settings key, and
- * deciding whether that key means anything for the sdk and model in play.
- *
- * This replaces `model_settings_parity`, which replayed a 1.5 MB fixture of
- * 4,760 `capability_check` rows — the cartesian product of 7 sdks, 10 model
- * ids, 15 keys and 5 value types, with the expected column filled in by a Rust
- * binary that no longer builds. The rule underneath is thirty lines of
- * `capabilities.ts`, so the product proved the same four things 4,760 times.
- *
- * What is asserted instead is the rule, swept over the real lists. `SDK_VARIANTS`
- * and `SAMPLER_KEYS` are read from source rather than copied, so an sdk or a
- * key added tomorrow is covered the day it lands — which the frozen fixture
- * could not do, having no generator any more.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import { CommandError } from "../src/commands/errors.ts";
@@ -28,11 +12,6 @@ import { applicability, fieldFromKey, supportsReasoningOff } from "../src/llm/ca
 import { SDK_VARIANTS, type Sdk } from "../src/config/models.ts";
 import { SAMPLER_FIELD_BY_KEY, type SamplerSettings } from "../src/config/preferences.ts";
 
-/**
- * Model ids chosen to land on each branch the capability rules actually take:
- * a Claude that accepts sampling and one that rejects it, the three
- * `model_override` families, and one id that matches no rule at all.
- */
 const MODELS = [
   "claude-3-5-sonnet-20241022",
   "claude-opus-4-8",
@@ -43,16 +22,10 @@ const MODELS = [
   "some-model",
 ] as const;
 
-/** One value of each shape a setting can arrive as, plus a parseable duration. */
 const PROBES: readonly unknown[] = [1, "x", true, 0.5, "55m", { order: ["a"] }];
-
-// ── the key table is complete ───────────────────────────────────────────
 
 describe("every settable key is wired end to end", () => {
   test("each key maps to a field", () => {
-    // Every key that reaches a parser needs somewhere to store what it parsed.
-    // The other half — that each key has a parser at all — is the KEY_CASES
-    // coverage check below, which uses a value of the key's own type.
     for (const key of SAMPLER_KEYS) {
       expect(SAMPLER_FIELD_BY_KEY.get(key), `${key} has no field`).toBeDefined();
     }
@@ -67,8 +40,6 @@ describe("every settable key is wired end to end", () => {
     expect(SAMPLER_KEYS.length).toBe(SAMPLER_FIELD_BY_KEY.size);
   });
 });
-
-// ── applySamplerValue ───────────────────────────────────────────────────
 
 interface KeyCase {
   key: string;
@@ -115,8 +86,6 @@ describe("applySamplerValue", () => {
 
         expect(() => applySamplerValue(sampler, c.key, bad), `${c.key} accepted ${String(bad)}`)
           .toThrow(CommandError);
-        // A parser that wrote on the way to failing would leave the block
-        // changed behind an error the caller reported as a no-op.
         expect(sampler, `${c.key} mutated while rejecting ${String(bad)}`).toEqual(before);
       }
     });
@@ -140,8 +109,6 @@ describe("applySamplerValue", () => {
     expect(sampler.replayPriorThinking).toBe("none");
   });
 });
-
-// ── capabilityCheck, swept over the real lists ──────────────────────────
 
 describe("capabilityCheck follows applicability, for every sdk and key", () => {
   test("a key that is not honored is refused whatever you pass it", () => {
@@ -200,8 +167,6 @@ describe("capabilityCheck follows applicability, for every sdk and key", () => {
   });
 });
 
-// ── the messages a user actually reads ──────────────────────────────────
-
 describe("the three refusals, spelled out", () => {
   test("not applicable names the field and the sdk", () => {
     expect(capabilityCheck("openai", "some-model", "cache_ttl", "1h")?.message).toBe(
@@ -230,8 +195,6 @@ describe("the three refusals, spelled out", () => {
   });
 });
 
-// ── reasoning effort ────────────────────────────────────────────────────
-
 describe("reasoning effort", () => {
   test("every sdk has a non-empty domain", () => {
     for (const sdk of SDK_VARIANTS) {
@@ -257,8 +220,6 @@ describe("reasoning effort", () => {
     }
   });
 });
-
-// ── keyApplicability ────────────────────────────────────────────────────
 
 describe("keyApplicability", () => {
   test("it answers for every settable key, on every sdk", () => {

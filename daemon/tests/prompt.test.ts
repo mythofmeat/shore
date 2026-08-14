@@ -1,13 +1,3 @@
-/**
- * Recorded cases for prompt.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -52,7 +42,6 @@ interface AssembleCase {
   };
 }
 
-/** The fixture writes absent optionals as JSON null; the port takes undefined. */
 const opt = (v: string | null): string | undefined => v ?? undefined;
 const optNum = (v: number | null): number | undefined => v ?? undefined;
 
@@ -67,8 +56,6 @@ function paramsOf(c: AssembleCase): PromptParams {
     user_definition: opt(p.user_definition),
     memory_index: opt(p.memory_index),
     has_prior_context: p.has_prior_context,
-    // Rust's `Message` omits empty/absent fields on the wire; the port's
-    // `Message` wants the arrays present, exactly as `normalize()` leaves them.
     messages: p.messages.map((m) => ({
       ...m,
       images: m.images ?? [],
@@ -119,17 +106,6 @@ describe("prompt parity: assemble_prompt", () => {
   }
 });
 
-/**
- * The two cases whose answer changed with #89, and by how much.
- *
- * The Rust estimated a token at four UTF-8 bytes. Measured against what
- * Anthropic actually billed on captured requests the true figure is near
- * three, so the Rust's budget was about 30% too generous and both of these
- * cases kept one message more than fits. The fixture still records what the
- * Rust answered — it is frozen and this is a deliberate divergence, not drift
- * — so the corrected count is pinned here instead, alongside the rule that
- * trimming always drops from the front.
- */
 const KEPT_UNDER_CORRECTED_ESTIMATOR = new Map<string, number>([
   ["budget_drops_oldest", 2],
   ["multibyte_counts_utf8_bytes_not_chars", 1],
@@ -160,11 +136,6 @@ describe("prompt parity: render_template", () => {
 });
 
 describe("render_template: the one deliberate divergence", () => {
-  // The Rust substituted by iterating a HashMap, so a value containing another
-  // key's tag was re-scanned or not depending on an unspecified, per-map
-  // reseeded order — `{a: "{{b}}", b: "B"}` rendered "{{a}}" as either "B" or
-  // "{{b}}" across runs. That is a nondeterministic cache prefix. The port does
-  // one pass and never re-scans, so it always produces the second reading.
   test("a substituted value is never re-scanned", () => {
     const vars = new Map([
       ["a", "{{b}}"],
@@ -231,13 +202,11 @@ describe("timezone is a parameter, not the host's", () => {
   test("the same instant reads differently in two zones", () => {
     const instant = "2026-04-04T12:00:00+00:00";
     expect(at(instant, "America/New_York")).toStartWith("[Saturday 2026-04-04 · 8:00 AM]");
-    // Sydney is still on DST here: it ends the first Sunday in April, the 5th.
     expect(at(instant, "Australia/Sydney")).toStartWith("[Saturday 2026-04-04 · 11:00 PM]");
     expect(at(instant, "UTC")).toStartWith("[Saturday 2026-04-04 · 12:00 PM]");
   });
 
   test("a timestamp with no offset is unparseable, as chrono has it", () => {
-    // Date.parse would read this as host-local and silently move the marker.
     expect(at("2026-04-04T12:00:00", "UTC")).toBe("hi");
     expect(at("2026-04-04", "UTC")).toBe("hi");
   });

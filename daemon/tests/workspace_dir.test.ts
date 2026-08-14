@@ -1,16 +1,3 @@
-/**
- * `SHORE_WORKSPACE_DIR`: a character's workspace, moved out of its config
- * directory.
- *
- * Not fixture-driven, unlike `dirs.test.ts` — the frozen fixture pins
- * the layout as it was, and this is the layout that did not exist when it was
- * generated. What that test still guarantees is the half that matters here:
- * with no root set, every path helper answers exactly what it answered before,
- * because the new parameter is trailing and optional. So these cases are all
- * about the *other* branch, plus the seams where "a character exists" stops
- * meaning "a directory under `characters/` exists".
- */
-
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -57,7 +44,6 @@ describe("resolveShoreDirs", () => {
   test("SHORE_WORKSPACE_DIR is used as-is, with no /shore suffix", () => {
     const dirs = resolveShoreDirs({ HOME: "/home/x", SHORE_WORKSPACE_DIR: "/srv/ws" });
     expect(dirs.workspace).toBe("/srv/ws");
-    // The other four are untouched by it.
     expect(dirs.config).toBe("/home/x/.config/shore");
   });
 
@@ -66,8 +52,6 @@ describe("resolveShoreDirs", () => {
   });
 
   test("an empty value is unset, unlike the other four overrides", () => {
-    // `SHORE_CONFIG_DIR=""` resolves to the empty string, because there is no
-    // other answer to give. Here there is: the default layout.
     expect(resolveShoreDirs({ HOME: "/home/x", SHORE_WORKSPACE_DIR: "" }).workspace)
       .toBeUndefined();
     expect(resolveShoreDirs({ HOME: "/home/x", SHORE_CONFIG_DIR: "" }).config).toBe("");
@@ -99,8 +83,6 @@ describe("path helpers", () => {
   });
 
   test("the config directory is still the config directory", () => {
-    // Only the workspace moves. Per-character `config.toml` and `prompts/`
-    // stay where they were, which is the whole point of separating the two.
     const dirs = resolveShoreDirs({ SHORE_CONFIG_DIR: "/cfg", SHORE_WORKSPACE_DIR: "/srv/ws" });
     expect(dirs.config).toBe("/cfg");
   });
@@ -118,9 +100,6 @@ describe("discoverCharacters", () => {
   });
 
   test("the config tree's own workspace/SOUL.md stops counting", () => {
-    // Otherwise a stale copy left behind by the default layout would announce
-    // a character whose definition nothing goes on to read — the daemon would
-    // look under the root, find nothing, and run it with an empty prompt.
     const config = scratch();
     const ws = scratch();
     write(config, "characters/stale/workspace/SOUL.md", "left behind\n");
@@ -130,8 +109,6 @@ describe("discoverCharacters", () => {
   });
 
   test("the legacy character.md still counts, root or no root", () => {
-    // `loadCharacterDefinition` still falls back to it either way, so a
-    // character that has never been migrated is still discovered.
     const config = scratch();
     const ws = scratch();
     write(config, "characters/old/character.md", "You are old.\n");
@@ -161,7 +138,6 @@ describe("definition loading", () => {
     const ws = scratch();
     write(ws, "ada/SOUL.md", "soul from the root\n");
     write(ws, "ada/USER.md", "user from the root\n");
-    // Same names in the old place, to prove which one wins.
     write(config, "characters/ada/workspace/SOUL.md", "soul from the config tree\n");
     write(config, "characters/ada/workspace/USER.md", "user from the config tree\n");
 
@@ -190,14 +166,11 @@ describe("workspace preparation", () => {
     await ensureCharacterWorkspace(join(data, "ada"), config, "ada", ws);
 
     expect(readFileSync(join(ws, "ada", "TOOLS.md"), "utf8")).toContain("Read files before");
-    // The memory directory follows the workspace, not the config tree.
     expect(discoverCharacters(config, ws)).toEqual([]);
     expect(() => readFileSync(join(config, "characters/ada/workspace/TOOLS.md"))).toThrow();
   });
 
   test("the legacy migration still reads out of the config tree", async () => {
-    // The files being migrated *from* never moved — they are what the old
-    // layout left behind — so a migration has to cross the two trees.
     const config = scratch();
     const ws = scratch();
     const data = scratch();
@@ -252,8 +225,6 @@ describe("the commands that answer for a character", () => {
     expect(info.workspace_dir).toBe(join(ws, "ada"));
     expect(info.has_definition).toBe(true);
     expect(info.bootstrap_files).toEqual(["SOUL.md", "USER.md"]);
-    // The config directory is still reported, and still where it always was —
-    // it is where `config.toml` goes, whether or not anything is there yet.
     expect(info.config_dir).toBe(join(config, "characters", "ada"));
   });
 
@@ -281,8 +252,6 @@ describe("the workspace watcher", () => {
   });
 
   test("a known character editing its own SOUL.md does not", () => {
-    // The rule the module exists to protect: a save is not a prompt
-    // activation boundary, so it must not invalidate the cached prefix.
     expect(workspacePathTriggersReload("/srv/ws", "/srv/ws/ada/SOUL.md", known)).toBe(false);
   });
 

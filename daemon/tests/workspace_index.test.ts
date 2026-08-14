@@ -1,13 +1,3 @@
-/**
- * Recorded cases for workspace index.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
@@ -58,7 +48,6 @@ const fixture = JSON.parse(
   readFileSync(new URL("./memory_fixtures/workspace_index.json", import.meta.url), "utf8"),
 );
 
-/** Every float the fixture carries is an f32 the Rust wrote. */
 function f32(value: number | null): number | undefined {
   return value === null ? undefined : toF32(value);
 }
@@ -67,19 +56,10 @@ function f32s(values: ArrayLike<number>): number[] {
   return Array.from(values, toF32);
 }
 
-/** Vectors come back off the store as f32 views, not boxed arrays. */
 function vec(v: Float32Array | undefined): number[] | undefined {
   return v === undefined ? undefined : Array.from(v);
 }
 
-// ── the embedder the generator used ─────────────────────────────────────
-
-/**
- * The generator's `GenEmbedder`, reimplemented from its recorded topic list.
- *
- * Topic `i` contributes `1.0 / (i + 3)` rather than `1.0`, so cosine
- * similarity genuinely rounds in f32 rather than falling out exact.
- */
 class TopicEmbedder implements Embedder {
   readonly modelId: string;
   readonly dimensions: number;
@@ -112,8 +92,6 @@ class TopicEmbedder implements Embedder {
   }
 }
 
-// ── temp tree ───────────────────────────────────────────────────────────
-
 let root = "";
 
 beforeEach(async () => {
@@ -145,15 +123,6 @@ function configOf(raw: Record<string, unknown>): RetrievalConfig {
   };
 }
 
-
-// ── end-to-end scripts ──────────────────────────────────────────────────
-
-/**
- * Cases the move off the JSON file deliberately settles differently. Both are
- * consequences of keying freshness on the hash of the embedded document rather
- * than on a size + mtime tuple, and both are restated as their own tests below
- * rather than left in the corpus asserting the old answer.
- */
 const CORRECTED = new Set([
   "a same-size same-mtime rewrite is missed by design",
   "an entry recorded as not embedded is stale even when the tuple matches",
@@ -272,8 +241,6 @@ async function replayRun(run: Record<string, any>, ctx: RunContext): Promise<voi
   if (run.outcome.error !== undefined) {
     expect(error).toBeInstanceOf(WorkspaceIndexError);
     expect((error as WorkspaceIndexError).message).toBe(run.outcome.error);
-    // The prune and the skip records are written *before* the embed call, so a
-    // failed search still has to have left them behind.
     await expectIndexOnDisk(ctx.indexFile, run.index_after, ctx.embedder.modelId);
     return;
   }
@@ -285,9 +252,6 @@ async function replayRun(run: Record<string, any>, ctx: RunContext): Promise<voi
   expect(got.skippedBinaryOrLarge).toBe(run.outcome.skipped_binary_or_large);
 
   if (run.counts_only) {
-    // Which files a truncated walk kept is filesystem-order dependent, so only
-    // the arithmetic of the caps is comparable. The query matches nothing, so
-    // the file list is empty either way and the counts are the whole content.
     expect(got.files).toEqual([]);
     const inputs = calls.reduce((n, batch) => n + batch.length, 0);
     expect(inputs).toBe(run.embed_input_count);
@@ -308,15 +272,9 @@ async function replayRun(run: Record<string, any>, ctx: RunContext): Promise<voi
     expect(actual.skipReason).toBe(expected.skip_reason ?? undefined);
   }
 
-  // Compared batch by batch, with each batch's inputs sorted. The *number* of
-  // calls, and which documents went in which one, is the whole of the batching
-  // contract; the order within a batch follows the walk, and this port sorts
-  // the walk where the Rust took the filesystem's order (see `enumerateFiles`).
   expect(calls.map((b) => [...b].sort())).toEqual(
     (run.embed_calls as string[][]).map((b) => [...b].sort()),
   );
-  // The query is always embedded last, on its own — except when the walk never
-  // happened at all, which is the missing-root case's whole point.
   if (calls.length > 0) expect(calls.at(-1)).toEqual([run.query]);
 
   await expectIndexOnDisk(ctx.indexFile, run.index_after, ctx.embedder.modelId);
@@ -328,11 +286,6 @@ async function expectIndexOnDisk(
   model: string,
 ): Promise<void> {
   if (expected === null) {
-    // The JSON index only existed once something had been written to it, so
-    // the fixture spells "nothing was recorded" as an absent file. A SQLite
-    // store is created by opening it, so the same claim is now that it holds
-    // no rows — including when the path was blocked and the store fell back
-    // to memory, which leaves nothing on disk at all.
     if (!(await Bun.file(path).exists())) return;
     expectIndexMatches(storedEntries(path, model), {});
     return;
@@ -340,15 +293,6 @@ async function expectIndexOnDisk(
   expectIndexMatches(storedEntries(path, model), expectedEntries(expected));
 }
 
-/**
- * What the store holds, projected onto the fields the fixture can still speak
- * about. `hash` and `model_id` were columns of the JSON file, not claims about
- * behaviour: the first was a size+mtime tag the freshness check no longer
- * consults, and the second is now the embeddings table's own key. Everything
- * the fixture asserts *about the search* — which files were recorded, their
- * size and mtime, whether they carry a vector, why they were skipped, and the
- * vector itself — is compared exactly.
- */
 function storedEntries(path: string, model: string): Record<string, unknown> {
   const store = WorkspaceIndexStore.open(path);
   try {
@@ -371,14 +315,6 @@ function storedEntries(path: string, model: string): Record<string, unknown> {
   }
 }
 
-/**
- * Every entry the fixture names must match exactly. An entry it does not name
- * is allowed only if it is a file recorded as seen but not yet embedded — the
- * one thing the store says that the JSON index could not. That file only ever
- * gained an entry once its vector existed, so a pending file was invisible
- * until something walked the workspace again; the row is what lets the
- * background indexer and `shore workspace index` report outstanding work.
- */
 function expectIndexMatches(
   got: Record<string, any>,
   want: Record<string, unknown>,
@@ -405,21 +341,11 @@ function expectedEntries(expected: any): Record<string, unknown> {
   return out;
 }
 
-/**
- * The document hash a seeded entry would have if it were genuinely fresh.
- *
- * The JSON index keyed freshness on size + mtime + model + cap; the store keys
- * it on the hash of the document that was actually embedded. Seeding therefore
- * has to compute that hash from the file on disk, which is what the real
- * migration does too.
- */
 function seededHash(fsPath: string, displayPath: string, cap: number): string {
   let text: string;
   try {
     text = readFileSync(fsPath, "utf8");
   } catch {
-    // The vanished-file cases delete the file between the walk and the read,
-    // so there is no document to hash and no way the entry could be fresh.
     return `absent:${displayPath}`;
   }
   return documentHash(documentForEmbedding(displayPath, text, cap));
@@ -450,8 +376,6 @@ function expectedIndexShape(index: any): Record<string, unknown> {
   }
   return out;
 }
-
-// ── the refresh phase on its own ────────────────────────────────────────
 
 describe("refreshIndexEntries", () => {
   for (const c of fixture.refresh_index_entries.filter((c: any) => !CORRECTED.has(c.name))) {
@@ -509,16 +433,10 @@ describe("refreshIndexEntries", () => {
   }
 
   test("a read failure is what the vanished-file cases actually exercise", () => {
-    // The container this ran in is root, where mode 000 does not deny a read,
-    // so a chmod-based case would have recorded a successful read and pinned
-    // nothing. Deleting the file between the walk and the refresh reaches the
-    // same branch for the same reason it exists.
     const cases = fixture.refresh_index_entries.filter(
       (c: any) => c.delete_after_walk.length > 0,
     );
     expect(cases.length).toBeGreaterThan(0);
-    // An oversize candidate is recorded before anything is read, so it never
-    // reaches the branch; every other vanished file does.
     const readable = cases.filter(
       (c: any) => !c.out.candidates.some((f: any) => f.skip_reason === "oversize"),
     );
@@ -526,14 +444,10 @@ describe("refreshIndexEntries", () => {
     for (const c of readable) {
       expect(c.out.candidates.some((f: any) => f.skip_reason === "read failed")).toBe(true);
     }
-    // One of them held an index entry for the vanished file and one did not:
-    // that is the whole of what `dirty` reports here.
     expect(readable.map((c: any) => c.out.dirty)).toContain(true);
     expect(readable.map((c: any) => c.out.dirty)).toContain(false);
   });
 });
-
-// ── pure functions ──────────────────────────────────────────────────────
 
 describe("displayPathFor", () => {
   for (const c of fixture.display_path_for) {
@@ -554,8 +468,6 @@ describe("tokenizeQuery", () => {
 describe("lexicalScore", () => {
   for (const c of fixture.lexical_score) {
     test(c.name, () => {
-      // The query is lowercased and tokenized by the caller; the fixture
-      // recorded both so a tokenizer change cannot quietly rescore everything.
       expect(c.q_lower).toBe(c.query.toLowerCase());
       expect(tokenizeQuery(c.q_lower)).toEqual(c.terms);
       expect(lexicalScore(c.path, c.content, c.q_lower, c.terms)).toBe(c.out);
@@ -563,8 +475,6 @@ describe("lexicalScore", () => {
   }
 
   test("a BOM before a heading costs it the heading weight", () => {
-    // Not a curiosity: JS's own `trimStart` strips U+FEFF and Rust's does not,
-    // so the naive port scores this 84 where the Rust scored 34.
     const withBom = fixture.lexical_score.find((c: any) => c.content.startsWith("﻿# tea"));
     const withNel = fixture.lexical_score.find((c: any) => c.content.startsWith("# tea"));
     expect(withBom.out).toBe(34);
@@ -580,8 +490,6 @@ describe("cosineSimilarity", () => {
   }
 
   test("the f32 accumulation is load-bearing", () => {
-    // Same inputs in doubles give a different answer, which is the reason
-    // every step of the loop is rounded.
     const c = fixture.cosine_similarity.find((x: any) => x.name === "long accumulation order matters");
     const a = f32s(c.a);
     const b = f32s(c.b);
@@ -617,9 +525,6 @@ describe("skipTag", () => {
 describe("indexPath", () => {
   for (const c of fixture.index_path) {
     test(`${c.cache_dir} / ${c.character}`, () => {
-      // The cases pin how the cache dir, the character and the filename are
-      // joined — trailing slashes, relative roots, spaces in a name. Only the
-      // filename moved when the index stopped being a JSON document.
       expect(indexPath(c.cache_dir, c.character)).toBe(
         c.out.replace(/workspace_index\.json$/, WORKSPACE_INDEX_DB_FILE),
       );
@@ -630,10 +535,6 @@ describe("indexPath", () => {
 describe("embedDocuments batching", () => {
   for (const c of fixture.embed_batching) {
     test(c.name, async () => {
-      // Rebuilt from the recorded character counts rather than shipping
-      // hundreds of kilobytes of filler in the fixture. `🌊` is there because
-      // one case turns on chars-not-UTF-16-units, and the reconstruction has
-      // to preserve that distinction to mean anything.
       const docs = c.doc_char_counts.map((n: number, i: number) =>
         (i === 0 && c.name.includes("counts chars") ? "🌊" : "x").repeat(n),
       );
@@ -654,19 +555,14 @@ describe("embedDocuments batching", () => {
     const recorder = new TopicEmbedder(["never-matches"], "batch-probe", undefined, false);
     await embedDocuments(recorder, docs);
     expect(recorder.calls.map((b) => b.length)).toEqual(c.batches.map((b: any) => b.items));
-    // Counting `.length` instead would see twice the characters and split
-    // every batch in half.
     expect(docs[0]!.length).toBe(c.doc_char_counts[0] * 2);
   });
 });
-
-// ── embedder wire shapes ────────────────────────────────────────────────
 
 describe("buildEmbedBody", () => {
   for (const c of fixture.build_embed_body) {
     test(c.name, () => {
       expect(buildEmbedBody(c.model, c.inputs, c.dimensions ?? undefined)).toEqual(c.out);
-      // Key order is part of the body the Rust sent.
       expect(Object.keys(buildEmbedBody(c.model, c.inputs, c.dimensions ?? undefined))).toEqual(
         Object.keys(c.out),
       );
@@ -682,8 +578,6 @@ describe("parseEmbeddingResponse", () => {
         try {
           parseEmbeddingResponse(c.response, c.expected_count);
         } catch (e) {
-          // The Rust's Display prefixes the variant; the message is the part
-          // this code chose.
           expect(c.out.error).toBe(`provider error: ${(e as { message: string }).message}`);
         }
       } else {
@@ -697,8 +591,6 @@ describe("parseEmbeddingResponse", () => {
 
 describe("bodyPreview", () => {
   test("cuts by byte, on a character boundary", () => {
-    // Not fixture-generated: the Rust used `floor_char_boundary` over a byte
-    // length, and slicing by JS string index would cut by UTF-16 unit.
     expect(bodyPreview("abc", 10)).toBe("abc");
     expect(bodyPreview("abcdef", 3)).toBe("abc");
     expect(bodyPreview("🌊🌊", 4)).toBe("🌊");
@@ -709,8 +601,6 @@ describe("bodyPreview", () => {
   });
 });
 
-// ── embedder resolution ─────────────────────────────────────────────────
-
 describe("hardcodedProviderBaseUrl", () => {
   for (const c of fixture.retrieval.hardcoded_base_url) {
     test(c.provider_key || "(empty)", () => {
@@ -719,10 +609,6 @@ describe("hardcodedProviderBaseUrl", () => {
   }
 
   test("it is not the same table chat uses", () => {
-    // Merging the two would be a silent bug: they genuinely disagree, and the
-    // Rust kept them apart on purpose. Embeddings were the first caller of
-    // this column; image generation and the preferences overlay are the other
-    // two, which is why it now lives beside the table it must not become.
     const disagreements = fixture.retrieval.hardcoded_base_url.filter(
       (c: any) => (c.base_url ?? undefined) !== defaultBaseUrl(c.provider_key),
     );
@@ -730,8 +616,6 @@ describe("hardcodedProviderBaseUrl", () => {
       "anthropic",
       "deepseek",
       "nanogpt",
-      // `openai` is the one benign disagreement: an absent answer here means
-      // `OpenAIEmbedder`'s own default, which is the same endpoint.
       "openai",
       "zai",
       "zhipuai",
@@ -784,21 +668,14 @@ describe("resolveEmbedder", () => {
         });
 
       if (c.outcome.error !== undefined) {
-        // The frozen text cites `CONFIGURATION.md`, a file that has never
-        // existed here; the message no longer does (#52). Cut out of the
-        // expectation rather than the fixture, so the rest stays literal.
         expect(call).toThrow(String(c.outcome.error).replace(" (see CONFIGURATION.md).", "."));
         return;
       }
       const embedder = call();
       expect(embedder.modelId).toBe(c.outcome.model_id);
       expect(embedder.dimensions).toBe(c.outcome.dimensions ?? undefined);
-      // The same inputs must reuse the cached embedder rather than rebuild it.
       expect(call()).toBe(embedder);
 
-      // The cache key never leaves the Rust function, so it is read back
-      // apart: `provider::model::baseUrl::dimensions`, split from the right
-      // because a model id may itself contain colons.
       const parts = c.outcome.cache_key.split("::");
       const keyDimensions = parts.at(-1)!;
       const keyBaseUrl = parts.at(-2)!;
@@ -808,8 +685,6 @@ describe("resolveEmbedder", () => {
         c.outcome.dimensions === null ? "native" : String(c.outcome.dimensions),
       );
 
-      // And the endpoint half of the key is checked against the thing it
-      // actually decides: where the request goes.
       await embedder.embed(["x"]);
       expect(requested).toEqual([
         `${keyBaseUrl === "default" ? "https://api.openai.com/v1" : keyBaseUrl}/embeddings`,
@@ -850,8 +725,6 @@ function splitOnce(s: string, sep: string): [string, string] {
   const i = s.indexOf(sep);
   return i === -1 ? [s, ""] : [s.slice(0, i), s.slice(i + sep.length)];
 }
-
-// ── index file round trip ───────────────────────────────────────────────
 
 describe("index persistence", () => {
   test("a file row round-trips through the store", () => {
@@ -944,8 +817,6 @@ describe("index persistence", () => {
   });
 });
 
-// ── what content hashing settles differently ────────────────────────────
-
 describe("freshness keyed on the document, not the tuple", () => {
   const config: RetrievalConfig = {
     maxFileBytes: 1_000_000,
@@ -956,10 +827,6 @@ describe("freshness keyed on the document, not the tuple", () => {
   };
 
   test("a rewrite with the same size and mtime is caught", async () => {
-    // The JSON index compared size and mtime, so a file rewritten to the same
-    // length and stamped back to the same second kept its old vector for ever.
-    // The corpus recorded that as "missed by design"; hashing the document
-    // catches it, because the document is what changed.
     const ws = join(root, "ws-rewrite");
     await writeAt(join(ws, "a.md"), "tea aaa", 1000);
 
@@ -982,10 +849,6 @@ describe("freshness keyed on the document, not the tuple", () => {
   });
 
   test("a skip record for a file that is now readable is replaced, not kept", async () => {
-    // The JSON index left a stale entry untouched until its replacement vector
-    // existed, so a file recorded as non-utf8 kept saying so after it became
-    // readable text. The row is now rewritten to what the file actually is:
-    // seen, readable, and waiting on an embedding.
     const ws = join(root, "ws-reason");
     await writeAt(join(ws, "a.md"), "tea", 1000);
     const candidates = await enumerateFiles(ws, config);
@@ -1037,8 +900,6 @@ describe("freshness keyed on the document, not the tuple", () => {
     expect(out.rows).toEqual([]);
   });
 });
-
-// ── the one-time migration off the JSON file ────────────────────────────
 
 describe("legacy JSON migration", () => {
   async function seed(raw: string, files: Record<string, string>): Promise<string> {
@@ -1195,14 +1056,8 @@ describe("legacy JSON migration", () => {
   });
 });
 
-// ── walk determinism ────────────────────────────────────────────────────
-
 describe("enumerateFiles", () => {
   test("a capped walk keeps the same files every time", async () => {
-    // The deliberate divergence from the Rust: it walked in whatever order the
-    // filesystem gave, so a capped workspace indexed a different slice of
-    // itself depending on the filesystem and, across a rebuild, on nothing in
-    // particular.
     const ws = join(root, "ws");
     for (let i = 0; i < 30; i += 1) await writeAt(join(ws, `f${i}.md`), "x", 1000);
     await writeAt(join(ws, "sub", "deep.md"), "x", 1000);
@@ -1222,7 +1077,6 @@ describe("enumerateFiles", () => {
 
   test("a pre-epoch mtime is recorded as zero", async () => {
     const ws = join(root, "ws2");
-    // A negative number is silently taken as "now" by `utimes`; a Date is not.
     await writeAt(join(ws, "old.md"), "x", new Date(-86_400_000));
     const got = await enumerateFiles(ws, {
       maxFileBytes: 1000,

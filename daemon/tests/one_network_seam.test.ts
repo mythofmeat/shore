@@ -1,18 +1,3 @@
-/**
- * There is one place that constructs an Anthropic SDK client — issue #80.
- *
- * The tool loop used to build its own, and every tools-enabled Claude turn
- * bypassed call capture as a result: no `calls` row, no `http_calls` row, for
- * what is the normal case. That was fixed by wrapping the loop in
- * `capturedEvents` at both call sites, which left the second seam in place and
- * the fix a thing to remember. This makes it structural: a new caller that
- * builds its own client fails here.
- *
- * Wire capture patches global fetch, so it covers anything that goes out. Call
- * capture does not — it wraps a specific event stream — which is why the
- * construction site is what has to stay singular.
- */
-
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

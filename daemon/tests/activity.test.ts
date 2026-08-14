@@ -1,16 +1,3 @@
-/**
- * The activity tracker's own behaviour.
- *
- * `activity_walks.test.ts` replays message streams recorded from the Rust and
- * is the stronger check for anything a stream can reach. This file covers what
- * a recorded stream cannot: the stats cache, which is a function of elapsed
- * time rather than of the messages; the guards on `backfill`, which are about
- * what the tracker refuses to do; and exact values for the free functions,
- * where the fixture only ever pins whatever the streams happened to produce.
- *
- * Each test here mirrors one in `the deleted port`.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -28,7 +15,6 @@ import {
 const MINUTE = 60_000;
 const HOUR = 3_600_000;
 
-/** A naive local timestamp, the way the tracker carries them. */
 function at(
   year: number,
   month: number,
@@ -41,8 +27,6 @@ function at(
 }
 
 describe("the tempo logistic", () => {
-  // Centred on fifteen minutes. The published shape of the curve, not just
-  // whatever the streams happened to sample.
   test.each([
     ["30 seconds", 30, 0.9, 0.02],
     ["5 minutes", 300, 0.82, 0.02],
@@ -74,8 +58,6 @@ describe("median", () => {
   });
 
   test("the input is left alone", () => {
-    // It sorts, and sorting in place would quietly reorder a caller's session
-    // gaps — which are read again, in order, for the anomaly score.
     const gaps = [30, 10, 20];
     median(gaps);
     expect(gaps).toEqual([30, 10, 20]);
@@ -89,8 +71,6 @@ describe("hour classification", () => {
     histogram[14] = 0.3;
     histogram[3] = 0.01;
     histogram[4] = 0.01;
-    // Average over the four non-zero hours is 0.205, so the peak line is at
-    // 0.3075 and the trough line at 0.1025.
     const classes = classifyHours(histogram);
     expect(classes[10]).toBe("peak");
     expect(classes[14]).toBe("normal");
@@ -99,9 +79,6 @@ describe("hour classification", () => {
   });
 
   test("an hour with no events at all is a trough", () => {
-    // The average is taken over non-zero hours only, but the comparison runs
-    // over all 24 — so an hour nobody has ever spoken in is a trough. That is
-    // what makes the heatmap read as a sleep pattern rather than a flat band.
     const histogram = new Array<number>(24).fill(0);
     histogram[10] = 0.5;
     histogram[11] = 0.5;
@@ -116,10 +93,6 @@ describe("hour classification", () => {
   });
 
   test("an hour exactly on either line is normal", () => {
-    // Both comparisons are strict, and nothing else pins which way the
-    // boundary falls. The numbers are chosen so the arithmetic is exact in
-    // binary: two non-zero hours of 0.75 and 0.25 average to 0.5, putting the
-    // peak line at exactly 0.75 and the trough line at exactly 0.25.
     const histogram = new Array<number>(24).fill(0);
     histogram[9] = 0.75;
     histogram[21] = 0.25;
@@ -132,17 +105,14 @@ describe("hour classification", () => {
 
 describe("the hour histogram", () => {
   test("exactly five events on a weekday is enough to prefer it", () => {
-    // The check is `>=`, and a stream that happens to land on five is rare
-    // enough that the fixture never did.
     const t = new ActivityTracker();
-    for (let i = 0; i < 5; i += 1) t.recordMessage(at(2026, 3, 25, 10, i * 5)); // Wednesday
-    for (let i = 0; i < 4; i += 1) t.recordMessage(at(2026, 3, 26, 14, i * 5)); // Thursday
+    for (let i = 0; i < 5; i += 1) t.recordMessage(at(2026, 3, 25, 10, i * 5));
+    for (let i = 0; i < 4; i += 1) t.recordMessage(at(2026, 3, 26, 14, i * 5));
 
     const wed = t.computeStats("Wed").hourHistogram;
     expect(wed[10], "five is enough to narrow to Wednesday").toBe(1);
     expect(wed[14]).toBe(0);
 
-    // Four is not, so Thursday still sees everything.
     const thu = t.computeStats("Thu").hourHistogram;
     expect(thu[10]).toBeGreaterThan(0);
     expect(thu[14]).toBeGreaterThan(0);
@@ -150,8 +120,8 @@ describe("the hour histogram", () => {
 
   test("the pooled one never narrows to a weekday", () => {
     const t = new ActivityTracker();
-    for (let i = 0; i < 5; i += 1) t.recordMessage(at(2026, 3, 25, 10, i * 5)); // Wednesday
-    for (let i = 0; i < 4; i += 1) t.recordMessage(at(2026, 3, 26, 14, i * 5)); // Thursday
+    for (let i = 0; i < 5; i += 1) t.recordMessage(at(2026, 3, 25, 10, i * 5));
+    for (let i = 0; i < 4; i += 1) t.recordMessage(at(2026, 3, 26, 14, i * 5));
 
     const pooled = t.computeStats("Wed").pooledHourHistogram;
     expect(pooled[10]).toBeCloseTo(5 / 9, 12);
@@ -161,9 +131,9 @@ describe("the hour histogram", () => {
 
   test("weekday counts are of the window, not of all time", () => {
     const t = new ActivityTracker();
-    t.recordMessage(at(2026, 3, 4, 10)); // Wednesday, five weeks back
-    t.recordMessage(at(2026, 4, 6, 10)); // Monday
-    t.recordMessage(at(2026, 4, 7, 10)); // Tuesday
+    t.recordMessage(at(2026, 3, 4, 10));
+    t.recordMessage(at(2026, 4, 6, 10));
+    t.recordMessage(at(2026, 4, 7, 10));
 
     const localNow = at(2026, 4, 8, 10);
     const all = t.computeStats("Wed");
@@ -187,7 +157,6 @@ describe("the window", () => {
 
   test("keeps a message exactly on the boundary", () => {
     const stats = tracker().computeStats("Wed", { localNow, days: 7 });
-    // The cutoff is April 1st at noon, so April 1st at 10am falls outside it.
     expect(stats.windowMessageCount).toBe(7);
   });
 
@@ -213,8 +182,6 @@ describe("the anomaly score", () => {
   });
 
   test("a perfectly regular rhythm scores zero rather than dividing by it", () => {
-    // Without the guard this is 0/0 — a NaN that would ride out through
-    // `engagementScore` into the activity tool as `null`.
     expect(anomalyZScore([7140, 7140, 7140])).toBe(0);
   });
 
@@ -226,9 +193,6 @@ describe("the anomaly score", () => {
 });
 
 describe("the stats cache", () => {
-  // Absent from the parity fixture: it is a function of elapsed time, and the
-  // fixture records only what the messages determine.
-
   function tracker(): ActivityTracker {
     const t = new ActivityTracker();
     t.recordMessage(at(2026, 3, 25, 10, 0, 0));
@@ -255,13 +219,9 @@ describe("the stats cache", () => {
   });
 
   test("is keyed on time alone, so a new weekday inside the TTL gets the old answer", () => {
-    // The cache is keyed on nothing but time, so a second caller asking about
-    // a different weekday inside the TTL gets the first one's answer. Pinned
-    // because it is a real edge and the fixture cannot see it: in the daemon
-    // only one weekday is ever current, so it never bites.
     const t = new ActivityTracker();
-    for (let i = 0; i < 6; i += 1) t.recordMessage(at(2026, 3, 25, 10, i * 5, 0)); // Wednesday
-    for (let i = 0; i < 6; i += 1) t.recordMessage(at(2026, 3, 26, 14, i * 5, 0)); // Thursday
+    for (let i = 0; i < 6; i += 1) t.recordMessage(at(2026, 3, 25, 10, i * 5, 0));
+    for (let i = 0; i < 6; i += 1) t.recordMessage(at(2026, 3, 26, 14, i * 5, 0));
 
     const wed = t.stats(0, "Wed");
     expect(wed.hourHistogram[10]).toBe(1);
@@ -278,8 +238,6 @@ describe("the stats cache", () => {
 
 describe("backfill", () => {
   test("refuses a tracker that already has messages", () => {
-    // Seeding a live tracker from history would double every message it had
-    // already recorded.
     const t = new ActivityTracker();
     t.recordMessage(at(2026, 3, 25, 10, 0, 0));
     t.backfill([at(2026, 3, 20, 10), at(2026, 3, 21, 14)]);
@@ -290,7 +248,6 @@ describe("backfill", () => {
     const t = new ActivityTracker();
     t.backfill([]);
     expect(t.messageCount).toBe(0);
-    // And still lets a real backfill land afterwards.
     t.backfill([at(2026, 3, 20, 10)]);
     expect(t.messageCount).toBe(1);
   });
@@ -298,8 +255,6 @@ describe("backfill", () => {
   test("sorts what arrives out of order", () => {
     const t = new ActivityTracker();
     t.backfill([at(2026, 3, 22, 9), at(2026, 3, 20, 10), at(2026, 3, 21, 14)]);
-    // Three consecutive days, each its own session, in the right order: the
-    // span is three days and all three are active.
     expect(t.messageCount).toBe(3);
     expect(t.computeStats("Fri").consistency).toBe(1);
   });
@@ -314,8 +269,6 @@ describe("backfill", () => {
 
 describe("session detection", () => {
   test("a gap of exactly half an hour starts a new session", () => {
-    // The comparison is `>=`. A stream drawn at random never lands on the
-    // boundary, so nothing else pins which side it falls on.
     const start = at(2026, 3, 25, 10, 0, 0);
     const exact = new ActivityTracker();
     exact.recordMessage(start);
@@ -336,13 +289,10 @@ describe("session detection", () => {
     }
     const stats = t.computeStats("Fri");
     expect(stats.sessionCount).toBe(35);
-    // Before #15 the numerator was windowed to 30 and this read 0.857.
     expect(stats.sessionsPerDay).toBeCloseTo(1, 12);
   });
 
   test("the rate stops falling as the habit continues", () => {
-    // The defect's signature: the more consistent the user, the lower the
-    // number. Same habit at three lengths of record, one answer.
     for (const days of [20, 60, 200]) {
       const t = new ActivityTracker();
       for (let day = 0; day < days; day += 1) {
@@ -366,8 +316,6 @@ describe("the recent-rhythm window", () => {
   });
 
   test("the median gap ignores rhythm the character has left behind", () => {
-    // Forty two-hourly sessions, then thirty-one daily ones. The count sees
-    // all of it; the median must report the day it now lives by.
     const t = new ActivityTracker();
     const base = at(2026, 3, 1, 0);
     for (let i = 0; i < 40; i += 1) {
@@ -396,8 +344,6 @@ describe("consistency", () => {
   });
 
   test("counts the days a character stayed quiet", () => {
-    // Two active days at the ends of a five-day span. The span is inclusive of
-    // both endpoints, so this is 2/5 and not 2/4.
     const t = new ActivityTracker();
     t.recordMessage(at(2026, 3, 21, 10));
     t.recordMessage(at(2026, 3, 25, 10));
@@ -407,8 +353,6 @@ describe("consistency", () => {
 
 describe("the tempo window", () => {
   test("reads only the last ten gaps", () => {
-    // The window trims from the front: a conversation that started slow and
-    // turned fast scores as fast.
     const t = new ActivityTracker();
     let cursor = at(2026, 3, 25, 8, 0, 0);
     t.recordMessage(cursor);
@@ -423,7 +367,6 @@ describe("the tempo window", () => {
 
     const stats = t.computeStats("Wed");
     expect(stats.sessionCount, "the whole walk is one session").toBe(1);
-    // Ten-second gaps only; the twelve ten-minute ones are dropped, not averaged.
     expect(stats.tempoScore).toBeCloseTo(computeTempoScore([10]), 12);
   });
 });
@@ -436,9 +379,6 @@ describe("naive timestamps", () => {
   });
 
   test("a day that lost an hour is still a day long", () => {
-    // The point of carrying naive local time as UTC. In a zone that springs
-    // forward on 2026-03-29, a local-zone Date would make this 23 hours and
-    // put the two messages in one session; as a calendar reading it is 24.
     const t = new ActivityTracker();
     t.recordMessage(at(2026, 3, 29, 1, 0, 0));
     t.recordMessage(at(2026, 3, 30, 1, 0, 0));

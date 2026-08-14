@@ -1,13 +1,3 @@
-/**
- * The three decisions that moved here from the daemon's `content_util.rs`.
- *
- * They ran on the wrong side for the whole life of the sidecar, and had already
- * drifted: the daemon's chat path kept carrier-less thinking for DeepSeek and
- * Moonshot while every tool-loop continuation path stripped it — on the two
- * providers whose APIs reject a request that omits prior `reasoning_content`.
- * The first test below is that case.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import { replayableMessages } from "../src/llm/replay.ts";
@@ -26,7 +16,6 @@ function req(over: Partial<SidecarRequest> = {}): SidecarRequest {
   };
 }
 
-/** An assistant turn carrying one thinking block plus visible text. */
 function thinkingTurn(block: Record<string, unknown>, provenance: Partial<WireMessage> = {}) {
   return {
     role: "assistant" as const,
@@ -46,8 +35,6 @@ describe("carrier-less thinking", () => {
   });
 
   test("survives on the dialects that echo raw reasoning back", () => {
-    // The drift this pins: DeepSeek and Moonshot *require* prior
-    // reasoning_content, and the daemon's continuation paths were stripping it.
     for (const sdk of ["openai", "zai", "deepseek", "moonshot"] as const) {
       const out = replayableMessages(
         req({ sdk, model: "m", provider_key: sdk, messages: [uncarried] }),
@@ -70,8 +57,6 @@ describe("replay portability", () => {
   });
 
   test("thinking minted by another model of the same provider is dropped", () => {
-    // Provider alone is too coarse: one aggregator key fronts many families,
-    // and a signature from the wrong family hard-fails the request.
     const out = replayableMessages(
       req({
         messages: [thinkingTurn(signed, { provider_key: "anthropic", model: "claude-opus-4-6" })],
@@ -81,8 +66,6 @@ describe("replay portability", () => {
   });
 
   test("a foreign carrier is dropped when provenance is unknown", () => {
-    // The backstop that keeps a provenance-free legacy history from sailing
-    // onto the Anthropic wire with an OpenRouter payload attached.
     const out = replayableMessages(
       req({
         messages: [
@@ -94,8 +77,6 @@ describe("replay portability", () => {
   });
 
   test("a plain legacy blob with no provenance is kept", () => {
-    // Stripping these would bust working same-provider histories that predate
-    // provenance tracking.
     const out = replayableMessages(req({ messages: [thinkingTurn(signed)] }));
     expect(types(out)).toEqual([["thinking", "text"]]);
   });
@@ -149,8 +130,6 @@ describe("prior-thinking replay setting", () => {
 
   test("the provider floor overrides `none` where the API demands replay", () => {
     for (const provider of ["moonshot", "moonshotai"]) {
-      // Minted by the same provider/model — the floor governs the *setting*,
-      // not portability, and a foreign signature is still dropped either way.
       const own: WireMessage[] = history.map((m) =>
         m.role === "assistant" ? { ...m, provider_key: provider, model: "reasoner" } : m,
       );
@@ -168,8 +147,6 @@ describe("prior-thinking replay setting", () => {
   });
 
   test("portability still wins over the floor: a foreign signature is dropped", () => {
-    // The floor says "never strip for this provider"; replaying a signature
-    // the provider cannot read fails the request outright, so it goes anyway.
     const out = replayableMessages(
       req({
         sdk: "moonshot",
@@ -183,10 +160,6 @@ describe("prior-thinking replay setting", () => {
   });
 
   test("deepseek is not on the floor: `none` strips there like anywhere else", () => {
-    // Measured 2026-08-08: DeepSeek neither rejects a request that omits prior
-    // `reasoning_content` nor one that carries it — a ~600-token block moves
-    // `prompt_tokens` by zero, so it is accepted and discarded server-side. The
-    // floor claimed the opposite and bought nothing.
     const own: WireMessage[] = history.map((m) =>
       m.role === "assistant" ? { ...m, provider_key: "deepseek", model: "reasoner" } : m,
     );
@@ -203,9 +176,6 @@ describe("prior-thinking replay setting", () => {
   });
 
   test("the same history always projects to the same bytes", () => {
-    // What makes the keepalive ping byte-identical to the request it pings.
-    // The daemon used to filter before sending, so identity depended on when it
-    // ran; now it is a pure function of the stored history.
     for (const mode of ["all", "none"] as const) {
       const r = req({ messages: history, replay_prior_thinking: mode });
       expect(JSON.stringify(replayableMessages(r))).toEqual(
@@ -215,9 +185,6 @@ describe("prior-thinking replay setting", () => {
   });
 
   test("a request's prefix is stable as turns are appended", () => {
-    // The property the whole cache design rests on: bytes already sent must
-    // render identically in the next request, or every breakpoint at or past
-    // them is dead. This is what the retired `last_turn` mode violated.
     for (const mode of ["all", "none"] as const) {
       const prev = replayableMessages(req({ messages: history, replay_prior_thinking: mode }));
       const next = replayableMessages(
@@ -250,8 +217,6 @@ describe("empty content", () => {
   });
 
   test("a turn left with nothing is dropped rather than sent empty", () => {
-    // An empty content array is rejected by every provider and fails the whole
-    // request, not just the turn.
     const out = replayableMessages(
       req({
         messages: [

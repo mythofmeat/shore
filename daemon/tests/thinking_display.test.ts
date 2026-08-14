@@ -1,19 +1,3 @@
-/**
- * Thinking display follows Anthropic's two documented values and nothing else.
- *
- * https://platform.claude.com/docs/en/build-with-claude/thinking
- *   "It accepts two values" — "summarized" and "omitted". "No `display` setting
- *   returns the raw chain of thought."
- *   "You're still charged for the full thinking tokens. Omitting reduces
- *   latency, not cost."
- *   "`display` is invalid with `thinking.type: "disabled"`"
- *
- * Shore asks for the summary everywhere and lets an explicit provider option
- * override it. Deriving the value from the call type, as `6c1b80da` did, bought
- * no token saving and made a keepalive ping send a different thinking parameter
- * than the call whose prefix it was armed against.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import { buildAnthropicPlan, buildThinkingParams } from "../src/llm/providers/anthropic.ts";

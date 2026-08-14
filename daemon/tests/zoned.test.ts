@@ -1,15 +1,3 @@
-/**
- * The wall-clock primitives, tested directly.
- *
- * `ledger_budget.test.ts` exercises these through whole budget windows
- * against the Rust, which is the real lock. These are here because when that
- * one fails, the diff is a budget status and the cause is three layers down —
- * this says which primitive broke.
- *
- * The zone is pinned explicitly rather than taken from the host, so the suite
- * means the same thing on a laptop in Sydney and in CI in UTC.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -30,7 +18,6 @@ import {
 const NY = "America/New_York";
 const UTC = "UTC";
 
-/** A wall-clock reading, for readability in assertions. */
 const wall = (
   y: number,
   m: number,
@@ -43,7 +30,6 @@ const iso = (s: string) => Date.parse(s);
 
 describe("instant → wall clock", () => {
   test("reads the local hour on both sides of spring forward", () => {
-    // 06:30Z is 01:30 EST; 07:30Z is 03:30 EDT — 02:30 never happens.
     expect(naiveInZone(iso("2026-03-08T06:30:00Z"), NY)).toBe(
       wall(2026, 3, 8, 1, 30),
     );
@@ -79,10 +65,6 @@ describe("wall clock → instant", () => {
   });
 
   test("an ambiguous time takes the standard-time reading", () => {
-    // Both 05:00Z (EDT) and 06:00Z (EST) read as 01:00 local. chrono's
-    // `Ambiguous(.0, .1)` puts the standard-time one in `.0`, and the daemon
-    // takes `.0` — despite binding it as `early`. Probed against chrono
-    // directly; the budget fixture pins the consequence.
     expect(resolveInZone(wall(2026, 11, 1, 1), NY)).toBe(
       iso("2026-11-01T06:00:00Z"),
     );
@@ -92,16 +74,12 @@ describe("wall clock → instant", () => {
   });
 
   test("a nonexistent time retries an hour later", () => {
-    // 02:30 on spring-forward day does not exist; Rust shifts by an hour and
-    // takes the earliest, landing on 03:30 EDT.
     expect(resolveInZone(wall(2026, 3, 8, 2, 30), NY)).toBe(
       iso("2026-03-08T07:30:00Z"),
     );
   });
 
   test("round-trips every hour across both transitions", () => {
-    // Anything that resolves must read back as itself — except inside the gap,
-    // where no instant carries that reading at all.
     for (const day of ["2026-03-08", "2026-11-01"]) {
       for (let h = 0; h < 24; h += 1) {
         const naive = asNaive(Date.parse(`${day}T00:00:00Z`) + h * HOUR_MS);
@@ -121,9 +99,9 @@ describe("naive field arithmetic", () => {
   });
 
   test("daysFromMonday counts from Monday, not Sunday", () => {
-    expect(daysFromMonday(wall(2026, 3, 2, 0))).toBe(0); // Monday
-    expect(daysFromMonday(wall(2026, 3, 4, 0))).toBe(2); // Wednesday
-    expect(daysFromMonday(wall(2026, 3, 8, 0))).toBe(6); // Sunday
+    expect(daysFromMonday(wall(2026, 3, 2, 0))).toBe(0);
+    expect(daysFromMonday(wall(2026, 3, 4, 0))).toBe(2);
+    expect(daysFromMonday(wall(2026, 3, 8, 0))).toBe(6);
   });
 
   test("daysInMonth handles February and year ends", () => {
@@ -141,8 +119,6 @@ describe("naive field arithmetic", () => {
 
 describe("rendering", () => {
   test("rfc3339 uses a numeric offset, not Z", () => {
-    // These strings are compared against the `ts` column as text, and chrono
-    // writes `+00:00`. `toISOString()` would give `Z` and a millis field.
     expect(toRfc3339(iso("2026-03-09T10:00:00Z"))).toBe(
       "2026-03-09T10:00:00+00:00",
     );
@@ -155,7 +131,6 @@ describe("rendering", () => {
     expect(formatLocalAmPm("2026-04-15T19:05:00+00:00", NY)).toBe(
       "2026-04-15 03:05 PM",
     );
-    // Midnight is 12 AM, not 00 AM.
     expect(formatLocalAmPm("2026-04-15T04:00:00+00:00", NY)).toBe(
       "2026-04-15 12:00 AM",
     );

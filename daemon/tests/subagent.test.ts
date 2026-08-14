@@ -1,13 +1,3 @@
-/**
- * Recorded cases for subagent.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -34,8 +24,6 @@ import {
 } from "../src/tools/workspace_path";
 import type { ContentBlock, Message, Role } from "../src/engine/types";
 
-// ── Layout ──────────────────────────────────────────────────────────────
-
 interface Layout {
   data: string;
   ws: string;
@@ -44,7 +32,6 @@ interface Layout {
 
 const layouts: Layout[] = [];
 
-/** Rebuild the exact tree the generator wrote, so the replay sees the same fs. */
 function buildLayout(withSnapshot: boolean): Layout {
   const root = mkdtempSync(join(tmpdir(), "subagent-parity-"));
   const data = join(root, "data");
@@ -91,12 +78,9 @@ afterAll(() => {
   for (const l of layouts) rmSync(join(l.ws, ".."), { recursive: true, force: true });
 });
 
-/** Substitute the fixture's placeholders with this run's real directories. */
 function hydrate(s: string, l: Layout): string {
   return s.replaceAll("<WS>", l.ws).replaceAll("<OUTSIDE>", l.outside).replaceAll("<DATA>", l.data);
 }
-
-// ── Messages ────────────────────────────────────────────────────────────
 
 interface FixtureBlock {
   type: string;
@@ -143,9 +127,6 @@ const histories = new Map<string, Message[]>(
 
 const exfilHistory = (fixture.exfil_history as FixtureMessage[]).map(toMessage);
 
-
-// ── Workspace confinement ───────────────────────────────────────────────
-
 describe("resolvePath: workspace confinement", () => {
   for (const c of fixture.resolve_path as {
     input: string;
@@ -171,10 +152,6 @@ describe("resolvePath: workspace confinement", () => {
   });
 
   test("a not-yet-existing file under a symlinked-out directory is refused", () => {
-    // `write` needs paths to missing files to resolve, so the existence check
-    // cannot simply reject them — confinement falls to the nearest existing
-    // ancestor. A symlinked parent escapes exactly as effectively as a
-    // symlinked file, and nothing about the target's name reveals it.
     symlinkSync(bare.outside, join(bare.ws, "escape-dir"));
     expect(() => resolvePath(bare.ws, "escape-dir/brand-new.md")).toThrow("escapes workspace");
     expect(() => resolvePath(bare.ws, "escape-dir/deeper/still-new.md")).toThrow(
@@ -183,16 +160,11 @@ describe("resolvePath: workspace confinement", () => {
   });
 
   test("a backslash counts as a separator, so `..` cannot hide behind one", () => {
-    // Deliberately stricter than the Rust's unix build, which treats the whole
-    // string as one filename. Strictness here only ever refuses more.
     expect(() => resolvePath(bare.ws, "..\\..\\etc\\passwd")).toThrow("traversal");
     expect(() => resolvePath(bare.ws, "sub\\..\\..\\out.md")).toThrow("traversal");
   });
 
   test("resolveRoots rejects a blank path on its own", () => {
-    // `resolvePath` would also catch this via its empty-`stripped` check, so
-    // the guard is asserted at its own level rather than through a caller that
-    // happens to produce the same message.
     expect(() => resolveRoots("", "SOUL.md")).toThrow("workspace not configured");
     expect(() => resolveRoots(bare.ws, "")).toThrow("path is empty");
     expect(() => resolveRoots(bare.ws, "   ")).toThrow("path is empty");
@@ -200,8 +172,6 @@ describe("resolvePath: workspace confinement", () => {
   });
 
   test("a sibling directory sharing the workspace's prefix is outside it", () => {
-    // The containment check compares path components. A `startsWith` on the
-    // raw string would accept this, and the name is trivially arrangeable.
     const sibling = `${bare.ws}-secrets`;
     mkdirSync(sibling, { recursive: true });
     writeFileSync(join(sibling, "keys.md"), "SECRET");
@@ -218,22 +188,13 @@ describe("normalizePromptVisiblePath", () => {
   }
 
   test("normalization runs to a fixed point, not once", () => {
-    // Every fixture case above is satisfied by a single pass *because*
-    // `normalizePromptVisiblePath` happens to normalize twice — once itself
-    // and once inside the protected-path check. Asserting the underlying
-    // function directly is what actually pins the loop, since a path that
-    // fails to normalize is a path the protected-file guard does not
-    // recognize.
     expect(normalizeWorkspacePath("workspace/./SOUL.md")).toBe("SOUL.md");
     expect(normalizeWorkspacePath("//workspace//SOUL.md")).toBe("SOUL.md");
     expect(normalizeWorkspacePath("./workspace/SOUL.md")).toBe("SOUL.md");
 
-    // And an input needing three passes defeats the double call as well.
     expect(normalizePromptVisiblePath("workspace/./workspace/./SOUL.md")).toBe("SOUL.md");
   });
 });
-
-// ── Macro expansion ─────────────────────────────────────────────────────
 
 describe("expandPromptMacros", () => {
   for (const c of fixture.expand as {
@@ -260,8 +221,6 @@ describe("expandPromptMacros", () => {
 
 describe("expansion is terminal", () => {
   test("untrusted conversation text is never re-scanned for macros", () => {
-    // The security boundary. A user typing macro syntax into the chat must not
-    // cause a file read whose contents go to an external model.
     const out = expandPromptMacros("{{active_history: 1}}", {
       characterDataDir: bare.data,
       workspaceDir: bare.ws,
@@ -286,8 +245,6 @@ describe("expansion is terminal", () => {
   });
 
   test("a refused path expands to nothing and does not echo itself", () => {
-    // An error message naming the path would put attacker-chosen text into a
-    // prompt bound for an external provider.
     const warned: string[] = [];
     const out = expandPromptMacros("[{{file: ../../etc/passwd}}]", {
       characterDataDir: bare.data,
@@ -302,8 +259,6 @@ describe("expansion is terminal", () => {
   });
 
   test("a macro name is matched on its colon, not its prefix", () => {
-    // `{{filename}}` and `{{files}}` are ordinary unresolved vars. Matching on
-    // `file` alone would treat them as file macros with a nonsense argument.
     for (const text of ["{{filename}}", "{{files}}", "{{file_list}}", "{{active_history_x}}"]) {
       expect(
         expandPromptMacros(text, {
@@ -318,8 +273,6 @@ describe("expansion is terminal", () => {
   });
 
   test("the snapshot lookup key can only ever be a known filename", () => {
-    // A traversal dressed up as a protected file resolves to the snapshot's
-    // own SOUL.md at worst — never to an attacker-chosen path.
     expect(normalizePromptVisiblePath("../SOUL.md")).toBeUndefined();
     expect(
       expandPromptMacros("[{{file: ../SOUL.md}}]", {
@@ -332,8 +285,6 @@ describe("expansion is terminal", () => {
     ).toBe("[]");
   });
 });
-
-// ── Two-phase render ────────────────────────────────────────────────────
 
 describe("two-phase render", () => {
   const tp = fixture.two_phase as {
@@ -365,14 +316,11 @@ describe("two-phase render", () => {
     });
 
     expect(out).toBe(tp.output);
-    // The authored `{{char}}` resolved; the one living inside SOUL.md did not.
     expect(out).toContain("I am Qifei");
     expect(out).toContain("soul says {{char}}");
     rmSync(root, { recursive: true, force: true });
   });
 });
-
-// ── History transcript ──────────────────────────────────────────────────
 
 describe("renderHistorySlice", () => {
   for (const c of fixture.history_slices as {
@@ -393,14 +341,11 @@ describe("renderHistorySlice", () => {
     );
     const out = renderHistorySlice(many, "250", "C", "U");
     expect(out.split("\n")).toHaveLength(MAX_HISTORY_MESSAGES);
-    // Capped to the *most recent* window, not the oldest.
     expect(out.startsWith("U: m150")).toBe(true);
     expect(out.endsWith("U: m249")).toBe(true);
   });
 
   test("a non-numeric count yields nothing rather than everything", () => {
-    // `{{active_history: all}}` is a plausible authoring mistake; degrading to
-    // the whole conversation would ship it to a cheaper third-party model.
     const many = Array.from({ length: 10 }, (_, i) =>
       toMessage({ role: "user", content: `m${i}`, images: 0, blocks: [] }),
     );
@@ -438,16 +383,8 @@ describe("messageDisplayText", () => {
   });
 });
 
-// ── Tool subset ─────────────────────────────────────────────────────────
-
 const registry = fixture.registry as RegisteredTool[];
 
-/**
- * The MCP tools the generator's registry held, in the order the live registry
- * yields them — sorted, not insertion order. Matching that here keeps the
- * fixture's tool ordering meaningful; the ordering itself belongs to the MCP
- * registry, not to this port.
- */
 const MCP_TOOLS = ["mcp__hue__off", "mcp__hue__on", "mcp__nanoleaf__scene"];
 
 const mcpMatcher = {
@@ -481,17 +418,12 @@ describe("subagentToolSubset", () => {
   }
 
   test("ask_* can never be offered, however it is spelled", () => {
-    // Structural: sub-agent tools are not in the static registry, so the
-    // recursion cap is a property of the filter rather than a check.
     for (const name of ["ask_music", "ask_research", "ASK_music", "ask_"]) {
       expect(subagentToolSubset([name], registry, vars, renderTemplate)).toEqual([]);
     }
   });
 
   test("tool names match exactly, never by prefix", () => {
-    // `search` and `search_chat_logs` are both in the registry. A prefix match
-    // would hand a sub-agent granted `search` the chat-log reader as well —
-    // silently widening the subset that is supposed to be the whole point.
     expect(subagentToolSubset(["search"], registry, vars, renderTemplate).map((d) => d.name)).toEqual([
       "search",
     ]);
@@ -499,9 +431,6 @@ describe("subagentToolSubset", () => {
       subagentToolSubset(["search_chat_logs"], registry, vars, renderTemplate).map((d) => d.name),
     ).toEqual(["search_chat_logs"]);
 
-    // A partial name is simply unknown. Prefix matching would resolve `web` to
-    // `web_search` and `gen` to `generate_image`, turning a config typo into a
-    // silently granted capability.
     for (const partial of ["web", "gen", "sear", "model"]) {
       expect(subagentToolSubset([partial], registry, vars, renderTemplate)).toEqual([]);
     }
@@ -536,8 +465,6 @@ describe("subagentToolSubset", () => {
   });
 });
 
-// ── Template vars ───────────────────────────────────────────────────────
-
 describe("templateVars", () => {
   const shape = fixture.template_vars as {
     keys: string[];
@@ -555,8 +482,6 @@ describe("templateVars", () => {
   });
 
   test("date and time are populated from the live clock", () => {
-    // A sub-agent never sees the conversation's time markers, so a blank
-    // `{{date}}` leaves its prompt with no way to anchor to "now".
     const vars = templateVars("Qifei", "Ren", () => new Date("2026-03-14T15:09:00Z"));
     expect(vars.get("date")).not.toBe("");
     expect(vars.get("time")).not.toBe("");
@@ -565,8 +490,6 @@ describe("templateVars", () => {
     expect(rendered).not.toContain("{{time}}");
   });
 });
-
-// ── Model resolution ────────────────────────────────────────────────────
 
 describe("resolveSubagentModel", () => {
   test("spec wins over both defaults", () => {
@@ -579,18 +502,11 @@ describe("resolveSubagentModel", () => {
   });
 
   test("an explicitly empty model is a configuration error, not an unset value", () => {
-    // Rust's `Option::or` chain only skips `None`. `""` is a value, and it
-    // must fail loudly at resolution rather than quietly promoting whatever
-    // the next fallback is — a typo'd `model = ""` silently running on the
-    // expensive default is the failure this prevents.
     expect(resolveSubagentModel("", { subagent_model: "mid", model: "big" })).toBe("");
     expect(resolveSubagentModel(undefined, { subagent_model: "", model: "big" })).toBe("");
   });
 
   test("stops at defaults.model rather than inheriting the chat model", () => {
-    // Delegation exists to land on something cheap. Silently inheriting the
-    // expensive conversational model would invert the feature while looking
-    // like it worked, so "nothing configured" is an error, not a fallback.
     expect(resolveSubagentModel(undefined, {})).toBeUndefined();
     expect(missingModelMessage("research")).toBe(
       "subagent 'research' has no model; set subagents.research.model or defaults.subagent_model",

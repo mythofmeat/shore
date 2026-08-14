@@ -1,20 +1,3 @@
-/**
- * Recorded cases for sanitize.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- *
- * What a failure means: an orphaned `tool_use` or `tool_result` reaching a
- * provider is a hard 400 from Anthropic and the OpenAI family — the turn dies
- * outright, and the user sees a failed message with no indication that the
- * cause was a block left over from an earlier interruption. Failing the other
- * way is quieter and worse: stripping a *paired* block silently removes a tool
- * call the model made from the history it is about to reason over.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import { sanitizeToolPairs } from "../src/llm/sanitize";
@@ -23,7 +6,6 @@ import type { WireMessage } from "../src/llm/types";
 interface Case {
   name: string;
   messages: WireMessage[];
-  /** `null` when the Rust returned `None` — no orphans, send the original. */
   expect: WireMessage[] | null;
 }
 
@@ -36,10 +18,7 @@ const fixture = (await Bun.file(
 ).json()) as Fixture;
 
 describe("the fixture is real", () => {
-
   test("both answers are represented", () => {
-    // A fixture of only-clean or only-dirty conversations would pass against
-    // an implementation that always returned one of them.
     const clean = fixture.sanitize_tool_pairs.filter((c) => c.expect === null);
     const dirty = fixture.sanitize_tool_pairs.filter((c) => c.expect !== null);
     expect(clean.length).toBeGreaterThan(0);
@@ -69,7 +48,6 @@ describe("sanitizeToolPairs matches the Rust", () => {
     test(c.name, () => {
       const got = sanitizeToolPairs(c.messages);
       if (c.expect === null) {
-        // `undefined` is the answer, not an empty array and not a copy.
         expect(got).toBeUndefined();
         return;
       }
@@ -78,8 +56,6 @@ describe("sanitizeToolPairs matches the Rust", () => {
   }
 
   test("the input is never mutated", () => {
-    // The Rust took `&[WireMessage]` and could not have; TypeScript can, and a
-    // caller that passed the request's own messages would find them edited.
     for (const c of fixture.sanitize_tool_pairs) {
       const before = JSON.stringify(c.messages);
       sanitizeToolPairs(c.messages);

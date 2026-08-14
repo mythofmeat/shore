@@ -1,13 +1,3 @@
-/**
- * Recorded cases for router.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import fixture from "./handler_fixtures/router.json" with { type: "json" };
@@ -26,9 +16,6 @@ import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { NoModelError } from "../src/handler/setup.ts";
 import { NO_CHAT_MODELS_MESSAGE } from "../src/config/models.ts";
 
-// ── harness ─────────────────────────────────────────────────────────────
-
-/** The registry the Rust harness was: a fixed character list. */
 function registryOf(characters: readonly string[]): HandlerRegistry {
   return {
     resolveCharacter: (selected) => {
@@ -52,7 +39,6 @@ function registryOf(characters: readonly string[]): HandlerRegistry {
 function harness(
   characters: readonly string[],
   sessions: number,
-  /** Overrides the never-settling default; used by the failure cases below. */
   runGeneration?: (params: GenerationParams) => Promise<void>,
 ) {
   const router = new SessionRouter();
@@ -86,11 +72,6 @@ function harness(
     notifier: { notify: (_e, title, body) => notifications.push({ title, body }) },
     dispatchCommand: () =>
       Promise.resolve({ type: "command_output", name: "status", success: true, data: null }),
-    // Never settles on its own: a generation is running until something
-    // aborts it, which is exactly what the Rust fixture recorded as
-    // `generation_running`. It resolves on the signal, because that is the
-    // whole of the cancellation contract on this side — the Rust aborted a
-    // tokio task, and a promise has no equivalent handle.
     runGeneration: (params) => {
       started.push(params);
       if (runGeneration !== undefined) return runGeneration(params);
@@ -132,7 +113,6 @@ const message = (rid: string | null, text: string, stream: boolean): ClientMessa
   image_data: [],
 });
 
-/** Drop absent keys, so an omitted optional compares to a skipped Rust field. */
 function stripAbsent(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stripAbsent);
   if (value === null || typeof value !== "object") return value;
@@ -148,8 +128,6 @@ const caseByName = <T extends { name: string }>(group: readonly T[], name: strin
   if (found === undefined) throw new Error(`no fixture case named ${name}`);
   return found;
 };
-
-// ── routed messages ─────────────────────────────────────────────────────
 
 const routed = fixture.routed as unknown as Array<{
   name: string;
@@ -200,7 +178,6 @@ describe("routed messages", () => {
       stripAbsent({
         launched,
         lease_taken: leaseTaken,
-        // The cancel frame carries the CANCEL's rid, not the message's.
         cancel_frame: received.at(-1),
         generation_running: false,
       }),
@@ -259,7 +236,6 @@ describe("routed messages", () => {
     expect(
       stripAbsent({
         running_before: before,
-        // Both handles are cleared, so a second cancel would send nothing.
         running_after: [false, false],
         leases_after: h.leases.spectator("Alice", 99, h.router) === undefined ? 0 : 1,
         last_frame_1: (h.frames.get(1) ?? []).at(-1),
@@ -286,9 +262,7 @@ describe("routed messages", () => {
     } as RoutedMessage);
 
     expect({ generation_running: h.started.length === 2 }).toEqual(c.output as never);
-    // One per session, not a queue: the first was started and then superseded.
     expect(firstSignal).toBeDefined();
-    // And no cancelled `stream_end` went out — superseding is not cancelling.
     expect((h.frames.get(1) ?? []).filter((f) => f.type === "stream_end")).toHaveLength(0);
   });
   test("a hello on the engine path is ignored", async () => {
@@ -342,26 +316,15 @@ describe("routed messages", () => {
         meta: meta("Alice", 1, c.input.rid, "message"),
       } as RoutedMessage);
 
-      // The Rust read this off the generation's opening frame because its
-      // generation was real. Here the generation is injected, so the same
-      // decision is read off the params it was handed.
       expect(h.started[0]?.rid ?? null).toEqual(c.output.first_frame_rid);
     });
   }
 });
 
-// ── the wiring the fixture cannot see ───────────────────────────────────
-
-/**
- * Two things the Rust fixture could not record, because both are only visible
- * from inside a generation and its generations were real.
- */
 describe("what a generation is handed", () => {
   test("the stream reaches the lease holder as well as the issuer", async () => {
     const h = harness(["Alice"], 2);
 
-    // Session 2 types, taking the lease. Session 1 then regens, which does not
-    // move it — so 1 is the issuer and 2 is the spectator.
     await h.handler.handleRouted({
       kind: "engine",
       msg: message("r1", "hi", false),
@@ -377,8 +340,6 @@ describe("what a generation is handed", () => {
     expect(regenParams?.regen).toBe(true);
     await regenParams?.send({ type: "stream_chunk", text: "hello", content_type: "text" });
 
-    // Both, and once each. Handing the issuer's own sender through instead
-    // would leave the open frontend showing nothing for the whole turn.
     const chunks = (id: number) =>
       (h.frames.get(id) ?? []).filter((f) => f.type === "stream_chunk");
     expect(chunks(1)).toHaveLength(1);
@@ -396,7 +357,6 @@ describe("what a generation is handed", () => {
     const first = h.started[0];
     expect(first?.signal.aborted).toBe(false);
 
-    // Superseded.
     await h.handler.handleRouted({
       kind: "engine",
       msg: message("r2", "second", false),
@@ -404,7 +364,6 @@ describe("what a generation is handed", () => {
     } as RoutedMessage);
     expect(first?.signal.aborted).toBe(true);
 
-    // Cancelled.
     const second = h.started[1];
     expect(second?.signal.aborted).toBe(false);
     await h.handler.handleRouted({
@@ -415,8 +374,6 @@ describe("what a generation is handed", () => {
     expect(second?.signal.aborted).toBe(true);
   });
 });
-
-// ── with_rid ────────────────────────────────────────────────────────────
 
 describe("with_rid", () => {
   for (const c of fixture.with_rid as unknown as Array<{
@@ -431,8 +388,6 @@ describe("with_rid", () => {
   }
 });
 
-// ── the rid filter ──────────────────────────────────────────────────────
-
 describe("the rid filter", () => {
   for (const c of fixture.rid_filter as unknown as Array<{
     name: string;
@@ -445,8 +400,6 @@ describe("the rid filter", () => {
     });
   }
 });
-
-// ── the regen body ──────────────────────────────────────────────────────
 
 describe("the regen body", () => {
   for (const c of fixture.regen_body as unknown as Array<{
@@ -464,9 +417,6 @@ describe("the regen body", () => {
       } as RoutedMessage);
 
       const body = h.started[0]?.body;
-      // The Rust serialized `ClientMessageBody`, whose `image_data` and the
-      // two `Option`s are `skip_serializing_if`-empty. Compared on the fields
-      // the fixture kept, which is what a regen actually decides.
       expect({
         rid: body?.rid,
         text: body?.text,
@@ -477,18 +427,6 @@ describe("the regen body", () => {
   }
 });
 
-// ── the code a failed generation reports ────────────────────────────────
-
-/**
- * Not fixture-driven, and could not be: the Rust's `handle_generation` reached
- * an LLM, so no recorded case fails before the wire.
- *
- * `internal_error` is the right default for a turn that broke — the client can
- * do nothing about a provider that hung up mid-stream. A missing model is the
- * other kind: the user's config has no `[providers.*]` and no `[defaults].model`,
- * which is theirs to fix, and calling it internal pointed them at the daemon
- * (#31).
- */
 describe("a generation that throws", () => {
   async function failWith(error: unknown): Promise<ServerMessage | undefined> {
     const h = harness(["Alice"], 1, () => Promise.reject(error));
@@ -497,7 +435,6 @@ describe("a generation that throws", () => {
       msg: message(null, "hello", true),
       meta: meta("Alice", 1, null, "message"),
     } as RoutedMessage);
-    // The catch runs on the promise the launch did not await.
     await h.handler.drain();
     return h.frames.get(1)?.find((f) => f.type === "error");
   }

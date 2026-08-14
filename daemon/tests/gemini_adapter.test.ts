@@ -1,10 +1,3 @@
-/**
- * Gemini adapter parity tests. These pin sidecar Gemini behavior without live
- * network calls: message/tool/system translation,
- * generation-aware thinkingConfig, safety OFF settings, streaming event
- * mapping, and non-streaming response shaping.
- */
-
 import { HarmBlockThreshold, ThinkingLevel, type GenerateContentResponse } from "@google/genai";
 import { describe, expect, test } from "bun:test";
 
@@ -140,9 +133,6 @@ describe("request construction", () => {
   });
 
   test("replays signed thinking as a thought part carrying its signature", () => {
-    // #10: the adapter captured `thoughtSignature` on the way in and dropped it
-    // on the way out, so Shore could never comply with Gemini's "you MUST
-    // resend thought blocks" contract on the stateless `contents` API.
     const contents = translateMessages([
       {
         role: "assistant",
@@ -162,8 +152,6 @@ describe("request construction", () => {
   });
 
   test("an unsigned thinking block still sends nothing", () => {
-    // Nothing Gemini can continue from, and the round trip is what the
-    // signature exists for.
     const contents = translateMessages([
       {
         role: "assistant",
@@ -179,8 +167,6 @@ describe("request construction", () => {
   });
 
   test("a captured signature survives the full round trip", () => {
-    // Pins inbound capture and outbound replay against each other, so the two
-    // halves cannot drift apart again.
     const response = geminiGenerateResponse(
       "gemini-2.5-pro",
       {
@@ -267,8 +253,6 @@ test("maps Gemini stream chunks to StreamEvents", async () => {
     content: "answer",
     finish_reason: "tool_use",
     usage: {
-      // promptTokenCount (12) is inclusive of the 7 cached tokens; input_tokens
-      // carries only the 5 cache-miss tokens so the buckets are disjoint.
       input_tokens: 5,
       output_tokens: 4,
       cache_read_tokens: 7,
@@ -308,7 +292,6 @@ test("maps non-streaming Gemini response to GenerateResponse", () => {
     ],
     finish_reason: "max_tokens",
     usage: {
-      // promptTokenCount (20) less the 3 cached tokens = 17 cache-miss tokens.
       input_tokens: 17,
       output_tokens: 5,
       cache_read_tokens: 3,

@@ -1,19 +1,3 @@
-/**
- * Who creates `ledger.db`, and what happens to the one already on disk.
- *
- * The daemon used to own this: it started first, ran the migrations, and the
- * sidecar opened a file that already existed. That was right while two
- * processes shared the file and stops being right the moment the daemon is not
- * there to start first — and the failure is silent in the worst way. `ledgerFor`
- * memoises the open failure, every call after it records nothing, and
- * `shore usage` reports a quiet month.
- *
- * So the schema and the migrations moved. The migrations are the half that
- * matters for anyone who already runs shore: their `ledger.db` was created by
- * some older daemon, and six of the columns the readers on this side select by
- * name were added after v1.
- */
-
 import { afterEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -35,7 +19,6 @@ function tempPath(): string {
   return join(root, "ledger.db");
 }
 
-/** Column names on `calls`, as SQLite reports them. */
 function columns(path: string): Set<string> {
   const db = new Database(path, { readonly: true });
   const rows = db.query("PRAGMA table_info(calls)").all() as { name: string }[];
@@ -52,8 +35,6 @@ function tables(path: string): Set<string> {
   return new Set(rows.map((r) => r.name));
 }
 
-/** The v1 schema, as the deleted Rust port last shipped it. Ledgers on disk
- * still have it, so the migration off it is live code, not history. */
 const V1 = `
 CREATE TABLE calls (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -119,9 +100,6 @@ describe("creating a ledger", () => {
   });
 
   test("a reader still refuses a ledger that does not exist", () => {
-    // `open` and `create` stay apart on purpose: a *reader* asking for a ledger
-    // that is not there has usually named the wrong data directory, and
-    // creating an empty one turns that into a report of zero spend.
     expect(() => Ledger.open(tempPath())).toThrow();
   });
 });
@@ -150,9 +128,6 @@ describe("migrating a ledger an older daemon made", () => {
   });
 
   test("the new column is null on the rows that predate it", () => {
-    // The property the tracker leans on: null means *unknown*, so a
-    // pre-migration row compares to nothing and produces no spurious cold row
-    // on the first call after an upgrade (#33).
     const path = v1Ledger();
     const seed = new Database(path);
     seed
@@ -209,9 +184,6 @@ describe("migrating a ledger an older daemon made", () => {
     db.close();
     expect(row.character).toBe("ada");
     expect(row.total_cost).toBe(1.25);
-    // Backfilled: a row with a total and no component costs came from the
-    // provider, and must not be overwritten by a catalog estimate on the next
-    // forced recalculation.
     expect(row.cost_source).toBe("provider_reported");
   });
 

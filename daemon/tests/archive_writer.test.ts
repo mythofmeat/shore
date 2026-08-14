@@ -1,13 +1,3 @@
-/**
- * Recorded cases for archive writer.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, readdir, writeFile, rm } from "node:fs/promises";
@@ -38,7 +28,6 @@ const fixture = JSON.parse(
 
 const b64 = (s: string) => Buffer.from(s, "base64").toString("utf8");
 
-/** Recursively snapshot a directory as relative path -> exact content. */
 async function snapshot(dir: string): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   async function walk(cur: string): Promise<void> {
@@ -52,26 +41,15 @@ async function snapshot(dir: string): Promise<Record<string, string>> {
   return out;
 }
 
-/**
- * Replace every `compacted_at` the writer just stamped with a sentinel, after
- * checking it looks like a timestamp. Entries carried over from a seeded
- * manifest keep their original literal values and are compared for real.
- */
 function normalizeManifest(raw: string, seeded: Set<string>): string {
   let parsed: { segments?: { file: string; compacted_at: string }[] };
   try {
     parsed = JSON.parse(raw) as typeof parsed;
   } catch {
-    return raw; // Malformed on the way in and left untouched; compare verbatim.
+    return raw;
   }
-  // A rejected manifest is written back by nobody, so it has nothing to stamp.
   if (!Array.isArray(parsed.segments)) return raw;
 
-  // Substitute the stamped timestamps textually rather than re-serialising.
-  // An earlier version parsed and re-stringified both sides, which normalised
-  // away indentation too and let "manifest written compact" and "indented four
-  // spaces" both survive mutation. The whole point of this fixture is that the
-  // bytes on disk match, so only the unpinnable value may be replaced.
   let out = raw;
   for (const seg of parsed.segments) {
     if (seeded.has(seg.file)) continue;
@@ -96,15 +74,12 @@ describe("compaction writer parity", () => {
     test(c.name, async () => {
       const dir = await mkdtemp(join(tmpdir(), "compaction-writer-"));
       try {
-        // Rebuild the exact directory the Rust started from.
         for (const [rel, content] of Object.entries(c.before)) {
           const p = join(dir, rel);
           await mkdir(dirname(p), { recursive: true });
           await writeFile(p, b64(content), "utf8");
         }
 
-        // Segment entries present before the call keep their literal
-        // timestamps; only newly stamped ones get normalised.
         const seeded = new Set<string>();
         if (c.before["compaction.json"] !== undefined) {
           try {
@@ -113,7 +88,6 @@ describe("compaction writer parity", () => {
             };
             for (const s of m.segments ?? []) seeded.add(s.file);
           } catch {
-            // A malformed seeded manifest has no entries to carry over.
           }
         }
 
@@ -127,15 +101,10 @@ describe("compaction writer parity", () => {
 
         if (c.outcome.ok) {
           expect(threw).toBeUndefined();
-          // The Rust returned a v4 UUID; pin the version nibble, not the bytes.
           expect(c.outcome.returns_uuid_v4).toBe(true);
           expect(returned).toMatch(UUID_V4);
         } else {
-          // serde's inner text is not reproducible, but the failure and its
-          // `conversation:` prefix are this port's contract.
           expect(threw).toBeInstanceOf(CompactionError);
-          // The Rust's variant, which the command surface branches on. Carried
-          // by the class rather than recovered from the message prefix.
           expect((threw as CompactionError).kind).toBe("conversation");
           expect((threw as Error).message).toStartWith("conversation:");
           expect(c.outcome.err).toStartWith("conversation:");
@@ -146,8 +115,6 @@ describe("compaction writer parity", () => {
           Object.entries(c.after).map(([k, v]) => [k, b64(v)]),
         );
 
-        // Same set of files, so a writer that stopped creating segments — or
-        // started creating extra ones — fails here rather than slipping past.
         expect(Object.keys(actual).sort()).toEqual(Object.keys(expected).sort());
 
         for (const [rel, want] of Object.entries(expected)) {

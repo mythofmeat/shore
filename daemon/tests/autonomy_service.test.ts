@@ -1,12 +1,3 @@
-/**
- * Every loaded character's autonomy, and the endpoints the daemon drives it by.
- *
- * The loop itself is covered by `autonomy_runner.test.ts`. What is here is what
- * only exists once there is more than one of them and a clock: registration
- * reading state back off disk, the guard that stops a slow tick being
- * overlapped, and one character's failure not taking the others with it.
- */
-
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -27,19 +18,11 @@ import type { KeepaliveSnapshot } from "../src/cache/schedule.ts";
 const HOUR = 3_600_000;
 const START = 1_000_000_000_000;
 
-/**
- * A calendar reading for the activity tracker, deliberately nowhere near the
- * fake wall clock these tests run on. The two are different clocks, and a
- * value that could pass for either would hide them being crossed.
- */
 const LOCAL_AT = Date.UTC(2026, 6, 30, 14, 0, 0);
 
-/** Records what it was asked to do, per character, and can be made to hang. */
 class SpyExecutor implements AutonomyExecutor {
   readonly calls: string[] = [];
-  /** Characters whose actions never resolve, for the in-flight guard. */
   readonly hanging = new Set<string>();
-  /** Characters whose actions throw, as an unreachable daemon does. */
   readonly unreachable = new Set<string>();
 
   async #record(character: string, what: string): Promise<AutonomyActionResult> {
@@ -95,7 +78,6 @@ function registration(
   };
 }
 
-/** Compaction as the only thing a tick can do, so a count is unambiguous. */
 const COMPACTION_ONLY = { heartbeatEnabled: false } as const;
 
 async function inTempDir(fn: (dir: string) => Promise<void>): Promise<void> {
@@ -107,7 +89,6 @@ async function inTempDir(fn: (dir: string) => Promise<void>): Promise<void> {
   }
 }
 
-/** A character directory under `root`, made because the daemon would have. */
 function characterDir(root: string, character: string): string {
   const dir = join(root, character);
   mkdirSync(dir, { recursive: true });
@@ -154,8 +135,6 @@ describe("registering", () => {
         heartbeat_state: "Active",
         ticks_without_user: 0,
         covered_turn_count: 0,
-        // Echoed straight back off the clock, so a status can show a reload
-        // that never arrived rather than the number the daemon meant to send.
         default_interval_ms: HOUR,
         max_idle_ticks: 100,
         min_wake_interval_ms: HOUR,
@@ -190,9 +169,6 @@ describe("registering", () => {
   });
 
   test("re-registering writes down where the old runner got to first", async () => {
-    // What a config reload does. The in-memory state is the current one, so
-    // dropping it would roll the heartbeat deadline back to whatever was on
-    // disk when the character loaded.
     await inTempDir(async (root) => {
       const dir = characterDir(root, "nova");
       const { service, now } = build();
@@ -202,8 +178,6 @@ describe("registering", () => {
       now.value += HOUR;
       await service.register(registration("nova", dir));
       expect(service.status("nova")?.covered_turn_count).toBe(0);
-      // The reload did not lose the last user message: the reloaded runner read
-      // it back from the file the outgoing one wrote.
       const saved = JSON.parse(await Bun.file(join(dir, STATE_FILENAME)).text());
       expect(saved.last_user_at).not.toBeNull();
     });
@@ -246,8 +220,6 @@ describe("ticking", () => {
   });
 
   test("a character mid-tick is passed over, not started again", async () => {
-    // Every action is an LLM round trip and can outlast the ten seconds to the
-    // next tick. A second would compact a conversation the first is compacting.
     await inTempDir(async (root) => {
       const { service, executor, now } = build();
       await service.register(
@@ -263,7 +235,6 @@ describe("ticking", () => {
       await service.tick();
 
       expect(executor.calls).toEqual(["nova:compaction:max_turns"]);
-      // The hung action never resolves; the point is that nothing else started.
       void first;
     });
   });
@@ -284,8 +255,6 @@ describe("ticking", () => {
   });
 
   test("a character whose tick threw is ticked again next time", async () => {
-    // The guard must release on the failure path too, or one unreachable
-    // moment would leave that character unticked until a restart.
     await inTempDir(async (root) => {
       const { service, executor, now } = build();
       await service.register(
@@ -323,9 +292,6 @@ describe("what the daemon reports", () => {
   });
 
   test("a compaction the daemon ran reaches the turn count a tick decides on", async () => {
-    // The handler's post-turn compaction is not one a tick asked for, so this
-    // side would otherwise never hear about it and keep compacting a
-    // conversation that is already short.
     await inTempDir(async (root) => {
       const { service } = build();
       await service.register(registration("nova", characterDir(root, "nova")));
@@ -344,17 +310,6 @@ describe("what the daemon reports", () => {
 });
 
 describe("the surface the daemon drives", () => {
-  // These ran over `/v1/autonomy/*` until that hop was deleted. The service is
-  // the same object either way; what the HTTP layer added was JSON validation
-  // and a status code, and both are gone with it — an unknown character is now
-  // `undefined` from a typed call rather than a 404 body.
-  //
-  // One test did not survive the move, deliberately. It asserted that a missing
-  // `local_ms` was a 400 rather than a `NaN` in the record, because the bodies
-  // were hand-mirrored Rust structs and a field renamed on one side only would
-  // arrive as `undefined`. In one process there is no body to mirror and the
-  // parameter is `number`, so the case it guarded cannot be constructed.
-
   test("pause round-trips, and reports the state it set", async () => {
     await inTempDir(async (root) => {
       const { service } = build();
@@ -371,7 +326,6 @@ describe("the surface the daemon drives", () => {
       await service.register(registration("nova", characterDir(root, "nova")));
       service.onUserMessage("nova", 1, LOCAL_AT);
 
-      // Two hours and two ticks: the clock arms on one and fires on the next.
       now.value += 2 * HOUR;
       await service.tick();
       now.value += 2 * HOUR;
@@ -392,8 +346,6 @@ describe("the surface the daemon drives", () => {
 
       const report = service.activityStats("nova", nineAM);
       expect(report?.messageCount, "two backfilled and one live").toBe(3);
-      // Densities, not counts: every message landed at 09:00, so that hour
-      // holds all of the mass and the other twenty-three hold none.
       expect(report?.stats.hourHistogram[9]).toBe(1);
       expect(report?.stats.hourHistogram.filter((d) => d > 0).length).toBe(1);
     });
@@ -413,7 +365,6 @@ describe("the surface the daemon drives", () => {
       await service.tick();
       expect(executor.calls, "the tick sees the latch the caller took").toEqual([]);
 
-      // And the failure gives it back.
       service.onCompactionFailed("nova");
       now.value += 3 * HOUR;
       await service.tick();
@@ -422,11 +373,6 @@ describe("the surface the daemon drives", () => {
   });
 
   test("a character nobody registered is told not to compact", () => {
-    // Not an error: the caller asks on every generation, and a character that
-    // has not been registered yet has nothing to compact anyway. Matches the
-    // Rust, where a `with_state` miss fell through to `false`. The endpoint
-    // spelled that `{compact: false}` with a 200; here it is `undefined`, and
-    // `handler/deps.ts` is what coalesces it.
     const { service } = build();
     expect(service.shouldCompactNow("ghost", 500, 0)).toBeUndefined();
   });
@@ -464,21 +410,6 @@ describe("the surface the daemon drives", () => {
 });
 
 describe("the keepalive's two halves", () => {
-  /**
-   * Both were lost in `001c594d`, silently and in the allowing direction.
-   *
-   * That commit moved `heartbeat.jsonl` and `autonomy_state.json` to this side
-   * and deleted the daemon code that drove `/v1/keepalive/{drain,restore}` — but
-   * left the endpoints standing with nothing calling them. Ping outcomes went on
-   * accumulating in a ring buffer that no longer had a reader, and the persisted
-   * schedule was written on every save and read on every load without anything
-   * ever acting on it. Pings kept firing and kept being billed, so the only
-   * symptom was a heartbeat log that had quietly stopped mentioning them.
-   *
-   * These pin the two joins that replaced the round trip.
-   */
-
-  /** A keepalive stub with only the surface `attachKeepalive` uses. */
   function fakeKeepalive() {
     const schedules = new Map<string, KeepaliveSnapshot | undefined>();
     let sink: ((e: KeepaliveEvent) => void) | undefined;
@@ -532,8 +463,6 @@ describe("the keepalive's two halves", () => {
       const ping = lines.find((l) => l.kind === "dormant_ping");
       expect(ping, "the ping is in the log").toBeDefined();
       expect(ping.detail).toContain("COLD");
-      // Stamped when the ping fired, not when the log was written. The daemon's
-      // drain could only ever say the latter.
       expect(ping.timestamp).toBe(new Date(START + 5_000).toISOString().replace(/\.\d{3}Z$/, "+00:00"));
     });
   });
@@ -565,8 +494,6 @@ describe("the keepalive's two halves", () => {
 
       const saved = JSON.parse(await Bun.file(join(dir, STATE_FILENAME)).text());
       expect(saved.keepalive_model).toBe("claude-opus-4-6");
-      // Milliseconds. Seconds here would read as a schedule ~1000x stale on the
-      // next restore and stop re-arming for good.
       expect(saved.keepalive_interval_ms).toBe(3_300_000);
     });
   });
@@ -581,8 +508,6 @@ describe("the keepalive's two halves", () => {
 
       ka.schedules.set("nova", snapshot());
       await service.tick();
-      // Disarmed: keepalive off, or the prefix was invalidated. Leaving the old
-      // copy behind would re-arm against a dead prefix after a restart.
       ka.schedules.set("nova", undefined);
       await service.tick();
       await service.unregister("nova");
@@ -617,13 +542,11 @@ describe("the keepalive's two halves", () => {
       service.attachKeepalive(ka.service);
       await service.register(registration("nova", dir));
 
-      // Handed over in the wire spelling, which is what the keepalive speaks.
       expect(ka.schedules.get("nova")).toEqual(snapshot());
     });
   });
 
   test("no keepalive attached is not a crash", async () => {
-    // Unit tests build a bare AutonomyService; it must tick without one.
     await inTempDir(async (root) => {
       const { service } = build();
       await service.register(registration("nova", characterDir(root, "nova"), COMPACTION_ONLY));

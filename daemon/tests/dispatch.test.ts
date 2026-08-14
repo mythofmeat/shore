@@ -1,13 +1,3 @@
-/**
- * Recorded cases for dispatch.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { afterAll, describe, expect, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 
@@ -31,8 +21,6 @@ import { DEFAULT_RETRIEVAL_CONFIG } from "../src/tools/workspace.ts";
 import type { Embedder } from "../src/llm/embed.ts";
 
 afterAll(restoreTestEnv);
-
-// ── The bare context the fixture was generated against ──────────────────
 
 const STUB_EMBEDDER: Embedder = {
   embed: async () => [],
@@ -59,7 +47,6 @@ function bareContext(over: Partial<ToolContext> = {}): ToolContext {
   };
 }
 
-/** Mirror the generator's `describe`: an outcome as `{ok}` or `{err}`. */
 async function route(name: string, input: unknown, ctx = bareContext()): Promise<unknown> {
   try {
     return { ok: await dispatchTool(name, input, ctx) };
@@ -68,13 +55,10 @@ async function route(name: string, input: unknown, ctx = bareContext()): Promise
   }
 }
 
-// ── Routing ─────────────────────────────────────────────────────────────
-
 describe("routing", () => {
   const routing = fixture.routing as Record<string, unknown>;
 
   for (const [name, expected] of Object.entries(routing)) {
-    // Two rows carry their input in the key rather than being bare names.
     if (name.includes(" WITH ")) continue;
     test(`dispatch ${JSON.stringify(name)}`, async () => {
       expect(await route(name, {})).toEqual(expected);
@@ -106,8 +90,6 @@ describe("routing, wired", () => {
     expect(await dispatchTool("ask_deep_research", { query: "why" }, ctx)).toEqual({
       answer: "ok",
     });
-    // The prefix is stripped exactly once, and an agent name containing `_`
-    // survives intact.
     expect(seen).toEqual([["deep_research", "why"]]);
   });
 
@@ -123,10 +105,6 @@ describe("routing, wired", () => {
     expect(seen).toEqual([["mcp__multi__part__set__light", { on: true }]]);
   });
 
-  // The fixture cannot distinguish these on its own: on the bare context it
-  // generated against, taking the `mcp__` branch and falling through to the
-  // catch-all both produce `<name>: not yet implemented`. The Rust used
-  // `starts_with`, so a wired context is where the difference shows.
   test("a name merely containing mcp__ does not route to MCP", async () => {
     let called = false;
     const ctx = bareContext({
@@ -156,8 +134,6 @@ describe("routing, wired", () => {
   });
 
   test("a null input reads as an empty object, the way Value::Null did", async () => {
-    // `Value::Null.get("query")` was `None`, so a null input reached each
-    // handler as "no arguments" rather than as a type error.
     expect(await route("roll_dice", null)).toEqual(
       (fixture.routing as Record<string, unknown>)["roll_dice"],
     );
@@ -167,9 +143,6 @@ describe("routing, wired", () => {
   });
 
   test("mcp receives the caller's input verbatim, not the coerced one", async () => {
-    // The Rust handed `mcp_call` the original `Value`, so a null stayed null on
-    // the wire rather than becoming `{}`. `McpClient.call` is the side that
-    // decides what a null means.
     const seen: unknown[] = [];
     const ctx = bareContext({
       mcpCall: async (_name, input) => {
@@ -189,8 +162,6 @@ describe("routing, wired", () => {
   });
 });
 
-// ── Default search mode ─────────────────────────────────────────────────
-
 describe("search mode defaulting", () => {
   type ModeRow = {
     mode?: string;
@@ -202,8 +173,6 @@ describe("search mode defaulting", () => {
 
   for (const [i, row] of (fixture.search_mode as ModeRow[]).entries()) {
     test(`case ${i}: ${JSON.stringify(row.mode ?? row.preset)}`, () => {
-      // `?? {}` would fold the `preset: null` row into the no-preset case and
-      // quietly stop testing that a null input is left alone.
       const input = structuredClone("preset" in row ? row.preset : {});
       const mode = (row.mode?.toLowerCase() ?? "auto") as RetrievalMode;
       applyDefaultSearchMode(input, mode, row.embedder ?? false, row.index_path ?? false);
@@ -212,9 +181,6 @@ describe("search mode defaulting", () => {
   }
 
   test("an explicit null mode is kept, not treated as absent", () => {
-    // `Value::get("mode")` was `Some(Null)` for this, so the Rust left it
-    // alone. A `!= null` check here would overwrite it and silently turn a
-    // malformed request into a hybrid search.
     const input: Record<string, unknown> = { mode: null };
     applyDefaultSearchMode(input, "hybrid", true, true);
     expect(input["mode"]).toBeNull();
@@ -234,7 +200,6 @@ describe("search mode defaulting", () => {
 });
 
 describe("search semantics bundling", () => {
-  /** A workspace with one file, so the lexical path has something to answer. */
   async function workspace(): Promise<string> {
     const dir = `/tmp/claude-0/dispatch-search-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     await Bun.write(`${dir}/notes.md`, "the quick brown fox\n");
@@ -242,10 +207,6 @@ describe("search semantics bundling", () => {
   }
 
   test("an embedder with no index path is not semantics", async () => {
-    // The Rust passed `ctx.embedder()` and `ctx.memory_index_path()` as two
-    // arguments; the port bundles them, and the bundle must be all-or-nothing.
-    // An embedder paired with an empty index path would send an explicit
-    // `hybrid` request down the vector road with nothing to search.
     const ctx = bareContext({
       workspaceDir: await workspace(),
       embedder: STUB_EMBEDDER,
@@ -273,9 +234,6 @@ describe("search semantics bundling", () => {
   });
 
   test("the configured retrieval mode reaches the request", async () => {
-    // `parseSearchMode(undefined)` is `hybrid`, so skipping the default
-    // entirely still produces a hybrid request — the mode that shows the
-    // difference is `lexical`, which only the default can supply.
     const ctx = bareContext({ workspaceDir: await workspace(), retrievalMode: "lexical" });
     const result = (await dispatchTool("search", { query: "fox" }, ctx)) as Record<string, unknown>;
     expect("semantic_unavailable" in result).toBe(false);
@@ -285,7 +243,6 @@ describe("search semantics bundling", () => {
     const ctx = bareContext({
       workspaceDir: await workspace(),
       retrievalMode: "lexical",
-      // Smaller than the one file in the workspace, so the scan skips it.
       retrievalConfig: { ...DEFAULT_RETRIEVAL_CONFIG, maxFileBytes: 4 },
     });
     const result = (await dispatchTool("search", { query: "fox" }, ctx)) as Record<string, unknown>;
@@ -320,8 +277,6 @@ describe("context fields reach their handler argument", () => {
       unknown
     >;
     expect(result["deleted"]).toBe(true);
-    // The display path is rooted at the character directory's *name*, which is
-    // only knowable from `characterDataDir`.
     expect(String(result["trashed_to"])).toStartWith("juniper/trash/");
   });
 
@@ -335,7 +290,6 @@ describe("context fields reach their handler argument", () => {
         api_key: "k",
         size: "1024x1024",
       },
-      // A one-pixel PNG as a data URL, so nothing is fetched.
       imageGenerator: async () => ({
         url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
         revised_prompt: "a dot",
@@ -414,12 +368,9 @@ describe("context fields reach their handler argument", () => {
       ctx,
     )) as Record<string, unknown>;
 
-    // Spaces become hyphens in the local part; the display name is verbatim.
     expect(String(log["stdout"])).toContain("Juniper Vale <juniper-vale@shore.local>");
   });
 });
-
-// ── Deferred-edit annotation ────────────────────────────────────────────
 
 describe("deferred edit annotation", () => {
   type DeferredRow = { path: string; result: unknown };
@@ -459,8 +410,6 @@ describe("deferred edit annotation", () => {
     const result: Record<string, unknown> = {};
     await annotateDeferredEdit("./SOUL.md", result, {
       deferEdit: (p) => {
-        // The annotation must not have run yet: the queue write is what makes
-        // the "deferred" claim true.
         expect(result["deferred_until_compaction"]).toBeUndefined();
         seen.push(p);
       },
@@ -479,9 +428,6 @@ describe("deferred edit annotation", () => {
   });
 
   test("a failed queue write does not fail the tool whose write succeeded", async () => {
-    // The file is already on disk by the time this runs. Throwing here would
-    // tell the model the edit failed when it did not — the worst available
-    // answer, because it will try again.
     const defer = deferEditTo("/data/juniper", async () => {
       throw new Error("disk full");
     });
@@ -529,21 +475,9 @@ describe("deferred edit annotation", () => {
   });
 });
 
-// ── Truncation ──────────────────────────────────────────────────────────
-
 describe("result truncation", () => {
   type TruncRow = { input: string; max_chars: number; output: string };
 
-  /**
-   * The Rust kept the head only and said so, which is what the fixture
-   * records. Since #92 the window keeps both ends at the same character cost
-   * — for a build log or a file read the tail is usually the part that matters
-   * — and the marker names a recovery instead of stating a fact and stopping.
-   *
-   * The fixture is frozen, so the cases that pass through untouched still
-   * assert against it verbatim; the ones that truncate assert the properties
-   * the Rust's format also had, plus the two that are new.
-   */
   for (const [i, row] of (fixture.truncate as TruncRow[]).entries()) {
     const truncates = row.output.includes("[tool_result truncated");
     test(`case ${i}: ${JSON.stringify(row.input)} @ ${row.max_chars}`, () => {
@@ -570,8 +504,6 @@ describe("result truncation", () => {
   });
 
   test("counts code points, not UTF-16 units", () => {
-    // Four musical notes are 8 UTF-16 units and 4 chars. A `.length`-based
-    // implementation would report "of 8" here.
     const got = windowToolResult("🎵🎵🎵🎵", 3);
     expect(got.originalChars).toBe(4);
     expect(got.output).toContain("4 characters");
@@ -586,8 +518,6 @@ describe("result truncation", () => {
     expect(truncateToolResult("hello", 0)).toBe("hello");
   });
 });
-
-// ── Per-tool limits ─────────────────────────────────────────────────────
 
 describe("per-tool limits", () => {
   const cfg: ToolLimitsView = {
@@ -644,15 +574,11 @@ describe("per-tool limits", () => {
   });
 });
 
-// ── The deadline ────────────────────────────────────────────────────────
-
 describe("dispatch deadline", () => {
-  /** A context whose `roll_dice` hangs until aborted. */
   function hangingContext(): ToolContext {
     return bareContext({
       mcpCall: (_name, _input) =>
         new Promise((_resolve, reject) => {
-          // Never resolves on its own.
           setTimeout(() => reject(new Error("test overran")), 30_000).unref?.();
         }),
     });
@@ -681,9 +607,6 @@ describe("dispatch deadline", () => {
   });
 
   test("the deadline reaches the handler as an abort signal it can act on", async () => {
-    // This is the whole reason the signal is threaded: a promise cannot be
-    // cancelled, so without it the handler runs on forever after the race is
-    // lost. A handler that honours the signal actually stops.
     let aborted = false;
     const ctx = bareContext({
       mcpCall: (_name, _input, signal) =>

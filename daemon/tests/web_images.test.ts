@@ -1,13 +1,3 @@
-/**
- * Recorded cases for web images.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import fixture from "./tools_fixtures/web_images.json" with { type: "json" };
@@ -53,9 +43,6 @@ describe("stripHtml", () => {
     expect(stripHtml(c.input)).toBe(c.output);
   });
 
-  // Spelled out because each is a decision a rewrite would plausibly reverse,
-  // and the table above would still pass if two of them cancelled.
-
   test("entity decoding runs after tag stripping, so it is not a sanitizer", () => {
     expect(stripHtml("&lt;script&gt;alert(1)&lt;/script&gt;")).toBe(
       "<script>alert(1)</script>",
@@ -80,29 +67,17 @@ describe("stripHtml", () => {
   test("block matching is ASCII-case-insensitive only", () => {
     expect(stripHtml("<SCRIPT>x</SCRIPT>y")).toBe("y");
     expect(stripHtml("<ScRiPt>x</ScRiPt>after")).toBe("after");
-    // U+FF53 FULLWIDTH LATIN SMALL LETTER S is not `s` to `to_ascii_lowercase`,
-    // so this is an ordinary tag and its content survives.
     expect(stripHtml("<\u{ff53}cript>x</\u{ff53}cript>y")).toBe("x y");
   });
 
-  // `char::is_whitespace` is the Unicode White_Space property. JavaScript's
-  // `\s` disagrees in both directions, so both directions are asserted.
   test("whitespace collapse uses Rust's set, not JavaScript's", () => {
     expect(stripHtml("a\u{a0}b")).toBe("a b");
     expect(stripHtml("a\u{3000}b")).toBe("a b");
-    // `\s` misses U+0085 NEL, which Rust collapses.
     expect(stripHtml("a\u{85}b")).toBe("a b");
-    // `\s` claims U+FEFF, which Rust leaves alone — including at the ends,
-    // where JavaScript's own `trim` would eat it.
     expect(stripHtml("a\u{feff}b")).toBe("a\u{feff}b");
     expect(stripHtml("\u{feff}text")).toBe("\u{feff}text");
   });
 
-  // The Rust comments on this directly: lowercasing a *copy* to search it can
-  // change the copy's length, misaligning every offset taken from it. U+0130
-  // lowercases to two code units under Unicode rules and to itself under ASCII
-  // rules, so a Unicode `toLowerCase()` shifts the closing-tag position by one
-  // and the block is not removed cleanly.
   test("the tag search lowercases in ASCII, so offsets stay aligned", () => {
     expect(stripHtml("<script>\u{130}</script>after")).toBe("after");
     expect(stripHtml("<p>\u{130}</p>tail")).toBe("\u{130} tail");
@@ -121,9 +96,6 @@ describe("truncateToBytes", () => {
     expect(out.truncated).toBe(c.truncated);
   });
 
-  // The limit is in UTF-8 bytes. `"🎵".length` is 2 in JavaScript and 4 in
-  // Rust, so a `.length`-based port lets four times too much through on an
-  // astral-heavy page and cuts surrogate pairs in half doing it.
   test("the limit counts UTF-8 bytes, not UTF-16 code units", () => {
     expect("🎵".length).toBe(2);
     expect(utf8("🎵")).toBe(4);
@@ -134,7 +106,6 @@ describe("truncateToBytes", () => {
   test("the cut never splits a character", () => {
     for (let max = 0; max <= 8; max += 1) {
       const { content } = truncateToBytes("a🎵b", max);
-      // Round-tripping is lossless only if no surrogate was orphaned.
       expect([...content].every((ch) => ch.codePointAt(0) !== 0xfffd)).toBe(true);
       expect(utf8(content)).toBeLessThanOrEqual(max);
     }
@@ -147,7 +118,6 @@ describe("truncateToBytes", () => {
     expect(utf8(out.content)).toBe(fx.truncate_at_real_limit.content_bytes);
     expect([...out.content].length).toBe(fx.truncate_at_real_limit.content_chars);
     expect(out.truncated).toBe(fx.truncate_at_real_limit.truncated);
-    // The `é` starts at byte 49,999 and would not fit, so the cut backs off.
     expect(out.content.endsWith("aaa")).toBe(true);
   });
 });
@@ -169,29 +139,22 @@ describe("decodeDataUrl", () => {
     expect(decodeDataUrl("data:image/svg+xml;base64,aGVsbG8=").extension).toBe("svg+xml");
   });
 
-  // `atob` and `Buffer.from(…, "base64")` both accept these; the Rust engine
-  // does not, and the difference is a failed tool versus a truncated file.
-  // The messages reach the model, so they are asserted exactly.
   test("base64 decoding is strict, with the crate's own messages", () => {
-    // Length: %4 of 1 is a length error, 2 and 3 are padding errors.
     expect(() => decodeDataUrl("data:image/png;base64,a")).toThrow(
       "io: failed to decode base64 image: Invalid input length: 1",
     );
     expect(() => decodeDataUrl("data:image/png;base64,aGVsbG8")).toThrow(
       "io: failed to decode base64 image: Invalid padding",
     );
-    // Symbols report the character code and byte offset, with a trailing stop.
     expect(() => decodeDataUrl("data:image/png;base64,aG!sbG8=")).toThrow(
       "io: failed to decode base64 image: Invalid symbol 33, offset 2.",
     );
-    // `=` outside the final quantum is an invalid *symbol*, not bad padding.
     expect(() => decodeDataUrl("data:image/png;base64,aG=sbG8=")).toThrow(
       "io: failed to decode base64 image: Invalid symbol 61, offset 2.",
     );
     expect(() => decodeDataUrl("data:image/png;base64,aGVsbG8===")).toThrow(
       "io: failed to decode base64 image: Invalid symbol 61, offset 7.",
     );
-    // An empty payload is a valid zero-byte image, not an error.
     expect(decodeDataUrl("data:image/png;base64,").bytes.length).toBe(0);
   });
 
@@ -202,11 +165,8 @@ describe("decodeDataUrl", () => {
   });
 });
 
-// ── The handler shells, checked against the Rust directly ────────────────
-
 const searchConfig: SearchConfigView = {
   api_key_env: "TAVILY_KEY",
-  // Deliberately not the value any hard-coded default would be.
   result_limit: 7,
   search_depth: "basic",
   include_answer: true,
@@ -254,8 +214,6 @@ describe("handleWebSearch", () => {
     expect(out.answer).toBe("42");
   });
 
-  // An absent answer omits the key entirely; the Rust only inserted it when
-  // Tavily returned a string.
   test("an absent answer omits the key", async () => {
     const out = await handleWebSearch(
       { query: "q" },
@@ -329,8 +287,6 @@ describe("handleFetchUrl", () => {
       { url: "u" },
       async () => new Response("<p>hi</p>", { status: 200 }),
     );
-    // Bun/undici default a text body to text/plain, so assert on the branch
-    // taken rather than the header string.
     expect(out.content).toBe("<p>hi</p>");
   });
 

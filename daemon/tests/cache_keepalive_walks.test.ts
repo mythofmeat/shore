@@ -1,19 +1,3 @@
-/**
- * Recorded cases for cache keepalive.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- *
- * What a failure here means: the two implementations disagree about when to
- * ping. If TypeScript pings where Rust would not, that ping lands on a prefix
- * Rust knew was cold and pays a full cache write. That is the failure mode the
- * whole subsystem exists to prevent, so treat a diff here as a defect until
- * proven otherwise — not as a fixture that needs regenerating.
- */
-
 import { expect, test } from "bun:test";
 
 import fixture from "./keepalive_fixtures/cache_keepalive_walks.json";
@@ -47,44 +31,6 @@ interface Case {
 
 const cases = (fixture as { cases: Case[] }).cases;
 
-/**
- * The steps where the port pings and the Rust did not, keyed `case:step`.
- *
- * #27 anchors the ping deadline on the last *confirmed* warm of the prefix a
- * ping sends, rather than on the last event claiming to be a warm:
- *
- *     nextPingAt = min(now + interval, prefixWarmAt + interval)
- *
- * The fixture's `warm` op is the ledger funnel's signal — "a real call ran on
- * this model" — which is precisely the claim the clamp declines to trust. It
- * has no op for the *other* half of a real turn, the body being cached
- * afterwards, because the Rust had nothing that distinguished them. So a replay
- * of a bare `warm` leaves the anchor where the last ping put it, and the ping
- * comes due earlier than the Rust scheduled it.
- *
- * **This diverges in the safe direction, and only in it.** The port pings
- * *sooner*, never later, and never re-arms something invalidation or the idle
- * ceiling had stood down — the clamp can only lower `nextPingAt`. An early ping
- * costs one cheap read; a late one is the cold write this whole subsystem
- * exists to prevent, and eight of the eleven cold pings in #27's evidence came
- * from a deadline that had slid exactly this way.
- *
- * Every other step is still compared strictly, including every `ping` the Rust
- * expected: a port that failed to ping where the Rust did would be scheduling
- * *later*, and that is a defect however it is arrived at.
- *
- * All six listed steps are the same shape, checked one by one rather than
- * assumed: a `ping_succeeded` sets the anchor, one or more bare `warm`s follow
- * that the clamp declines to trust, and a tick falls in the gap between the two
- * deadlines. None of them is a ping into an invalidated or idle-ceilinged
- * schedule — the clamp cannot produce one, since it only ever lowers a
- * `nextPingAt` that was already set.
- *
- * `walk_32:18` is worth naming: its warm is on the *target* model and is still
- * clamped. That is the second mechanism #27 describes — same model, different
- * prefix — which the earlier `4ee6bb7f` model guard could not catch, and which
- * accounts for the three cold pings that fix left behind.
- */
 const PINGS_EARLIER: ReadonlySet<string> = new Set([
   "walk_02:24",
   "walk_09:28",
@@ -94,7 +40,6 @@ const PINGS_EARLIER: ReadonlySet<string> = new Set([
   "walk_37:29",
 ]);
 
-/** The fixture's snapshot shape → the port's. */
 function toSnapshot(w: WireSnapshot): KeepaliveSnapshot {
   return {
     model: w.model,
@@ -109,8 +54,6 @@ test("every recorded walk decides the same at each step", () => {
 
   for (const c of cases) {
     const ka = new CacheKeepalive(c.max_idle_ms);
-    // `restore` opens a fresh keepalive; the `restored_tick`s that follow probe
-    // it, mirroring how the Rust generator built the tail.
     let restored: CacheKeepalive | undefined;
 
     c.steps.forEach((step, i) => {
@@ -133,9 +76,6 @@ test("every recorded walk decides the same at each step", () => {
           break;
         case "tick": {
           if (PINGS_EARLIER.has(`${c.name}:${i}`)) {
-            // Asserted in both directions: the Rust's answer is still what the
-            // fixture holds, and ours is the one the clamp produces. A step
-            // that stopped diverging would fail here rather than pass quietly.
             expect(step.expect, where).toBe("none");
             expect(ka.tick(step.at_ms!), where).toBe("ping");
             break;

@@ -1,13 +1,3 @@
-/**
- * Recorded cases for dirs.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -51,7 +41,6 @@ function scratch(): string {
   return dir;
 }
 
-/** Rebuild a case's scripted tree under a fresh root. */
 function build(files: { path: string; content: string }[], dirs: string[] = []): string {
   const root = scratch();
   for (const d of dirs) mkdirSync(join(root, d), { recursive: true });
@@ -80,8 +69,6 @@ describe("ShoreDirs.resolve", () => {
   }
 
   test("the cases cover both the override and the platform branch", () => {
-    // A fixture of only-SHORE_* cases would pass against a resolver that
-    // ignored XDG entirely, and vice versa.
     const names = fixture.shore_dirs.map((c) => c.name).join(" ");
     expect(names).toContain("SHORE_*");
     expect(names).toContain("platform defaults");
@@ -93,21 +80,11 @@ describe("ShoreDirs.resolve", () => {
 });
 
 describe("ShoreDirs.resolve, where the fixture cannot reach", () => {
-  // Not fixture-generated: the generator cannot run as an account with no
-  // passwd entry, so this branch is pinned by construction rather than by
-  // replay. It used to assert the Rust's literals faithfully — `config` came
-  // back as `"~/.config/shore"`, a *relative* path whose first component is a
-  // directory literally named `~`, created wherever the process started.
-  // Nothing on either side expands a tilde, so that was never a home
-  // directory; #45 replaced it with a refusal.
-
   test("with no HOME and no passwd entry, resolution refuses", () => {
     expect(() => resolveShoreDirs({}, () => undefined)).toThrow(NoHomeDirectoryError);
   });
 
   test("the refusal says which variables would fix it", () => {
-    // The message is the entire user interface of this failure: whoever hits it
-    // is inside a container wondering why shore will not start.
     let message = "";
     try {
       resolveShoreDirs({}, () => undefined);
@@ -120,8 +97,6 @@ describe("ShoreDirs.resolve, where the fixture cannot reach", () => {
   });
 
   test("an override is enough on its own, with no home anywhere", () => {
-    // The escape hatch the message points at has to actually work — and it has
-    // to work for each directory independently, since they refuse independently.
     const got = resolveShoreDirs(
       {
         SHORE_CONFIG_DIR: "/srv/cfg",
@@ -133,7 +108,6 @@ describe("ShoreDirs.resolve, where the fixture cannot reach", () => {
     expect(got.config).toBe("/srv/cfg");
     expect(got.data).toBe("/srv/data");
     expect(got.cache).toBe("/srv/cache");
-    // runtime never refuses: the temp dir is a correct answer for it.
     expect(got.runtime).toBe(join(tmpdir(), "shore"));
   });
 
@@ -152,8 +126,6 @@ describe("ShoreDirs.resolve, where the fixture cannot reach", () => {
   });
 
   test("a home from passwd alone still resolves everything", () => {
-    // The case that made the tilde unreachable in practice, and the reason
-    // this was latent rather than a live bug.
     const got = resolveShoreDirs({}, () => "/home/u");
     expect(got.config).toBe("/home/u/.config/shore");
     expect(got.data).toBe("/home/u/.local/share/shore");
@@ -197,10 +169,6 @@ describe("path helpers", () => {
   }
 
   test("an absolute character name swallows the base, and the fixture says so", () => {
-    // This is the property `node:path`'s join does not have, and the one with
-    // security weight: a name arriving over the wire can escape the data dir
-    // entirely. If this case ever leaves the fixture, the port silently becomes
-    // stricter than the daemon and the two write to different files.
     const absolute = fixture.paths.find((c) => c.name.startsWith("/"));
     expect(absolute).toBeDefined();
     expect((absolute as { character_data_dir: string }).character_data_dir).toBe("/etc");
@@ -241,14 +209,12 @@ describe("load_raw_config_table", () => {
       const ok = (c as { ok: { table: Record<string, unknown>; config_dir_rel: string } }).ok;
       const got = loadRawConfigTable(explicit, { env, homeLookup: passwdHome });
       expect(got.table).toEqual(ok.table);
-      // The generator recorded the config dir relative to its own temp root.
       const wantDir = ok.config_dir_rel === "" ? root : join(root, ok.config_dir_rel);
       expect(got.dirs.config).toBe(wantDir);
     });
   }
 
   test("both outcomes are represented", () => {
-    // A fixture of only-Ok cases would pass against a loader that never threw.
     const errs = fixture.raw_config.filter((c) => "error_kind" in c);
     const oks = fixture.raw_config.filter((c) => "ok" in c);
     expect(errs.length).toBeGreaterThanOrEqual(3);
@@ -256,20 +222,6 @@ describe("load_raw_config_table", () => {
   });
 
   test("Bun's TOML parser accepts an unterminated table header Rust rejects", () => {
-    // The third Bun.TOML divergence this branch has hit, after the `\\U` escape
-    // (model_resolution) and the nan/inf literals (stream) — and the worst
-    // of them, because it turns a *fatal* config error into a plausible-looking
-    // success rather than into wrong data.
-    //
-    // `[unclosed` is rejected by the Rust `toml` crate. Bun reads it as the
-    // table `[unclosed]`, so a typo that stops the daemon dead would load
-    // silently here. No TypeScript on this parser can see the Rust's answer, so
-    // the case is absent from the fixture rather than asserted, and the
-    // config.toml parse-error case uses input both halves reject.
-    //
-    // Not worked around: the only cheap guard is a scan for an unmatched `[`,
-    // which false-rejects a multi-line string containing one — trading a
-    // silent accept for a silent reject on valid config.
     expect(Bun.TOML.parse("[unclosed")).toEqual({ unclosed: {} });
     expect(Bun.TOML.parse("[[a]\nx=1")).toEqual({ a: [{ x: 1 }] });
     expect(() => Bun.TOML.parse("this is not toml")).toThrow();
@@ -277,8 +229,6 @@ describe("load_raw_config_table", () => {
   });
 
   test("a missing config.toml is not written by the loader itself", () => {
-    // The Rust writes a starter file as a side effect. That is opt-in here, so
-    // the default must leave the directory alone.
     const root = build([]);
     const env: Env = { SHORE_CONFIG_DIR: root };
     const got = loadRawConfigTable(undefined, { env, homeLookup: passwdHome });
@@ -296,9 +246,6 @@ describe("Path::parent, which is how --config picks the config directory", () =>
 
   test("the shapes that differ from a naive rsplit are present", () => {
     const inputs = fixture.parent_of.map((c) => c.input);
-    // A bare filename yields "", the root yields ".", and a trailing separator
-    // is not a component. Drop any of the three and the port can rsplit on "/"
-    // and still pass.
     expect(inputs).toContain("config.toml");
     expect(inputs).toContain("/");
     expect(inputs).toContain("a/b/");
@@ -321,9 +268,6 @@ describe("per-character config merge", () => {
   }
 
   test("merging does not mutate the global table", () => {
-    // The Rust clones before merging. Sharing the object instead would leak one
-    // character's overrides into the next character's config, which is the kind
-    // of bug that only shows up with two characters loaded.
     const root = build([
       { path: "config.toml", content: "[defaults]\nstream = true" },
       { path: "characters/aria/config.toml", content: "[defaults]\nstream = false" },
@@ -360,7 +304,6 @@ describe("character discovery", () => {
     const unicode = fixture.discovery.find((c) => c.name.includes("code point"));
     expect(unicode).toBeDefined();
     const names = (unicode as { discovered: string[] }).discovered;
-    // Rust's byte order puts U+FB00 before U+1F3B5; JS's default sort does not.
     expect([...names].sort()).not.toEqual(names);
   });
 });

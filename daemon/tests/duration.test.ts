@@ -1,15 +1,3 @@
-/**
- * `ConfigDuration` and `parseCacheKeepalive`: the two string formats a user can
- * type into config.toml for a span of time.
- *
- * The case list came from `model_resolution`, which replayed it against a
- * recording of the Rust. The inputs are the valuable half — BOM and the three
- * unicode spaces, u64 overflow at both the value and the suffix, the
- * fractional-precision ceiling, a bare "." — and no one would re-derive them by
- * hand. What is gone is the framing: these are shore's answers, editable when
- * one of them turns out to be wrong, not a recording that wins by default.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import { ConfigDuration } from "../src/config/duration.ts";
@@ -89,8 +77,6 @@ describe("ConfigDuration.parse", () => {
   }
 
   test("the corpus still covers the shapes it was built for", () => {
-    // A row deleted by accident should fail here rather than quietly shrink
-    // the coverage. Each predicate names a class someone had to think of.
     const raws = PARSE.map((c) => c.raw);
     expect(raws.some((r) => r.startsWith("\uFEFF")), "byte order mark").toBe(true);
     expect(raws.some((r) => /^[\u0085\u00A0\u3000]/.test(r)), "unicode spaces").toBe(true);
@@ -126,8 +112,6 @@ describe("ConfigDuration renders back to something re-parseable", () => {
   }
 
   test("every rendering parses back to the value it came from", () => {
-    // The round trip is the reason the format exists: a duration written back
-    // to config.toml has to survive being read again.
     for (const c of DISPLAY) {
       const parsed = ConfigDuration.parse(c.display);
       expect("ok" in parsed, `${c.display} did not re-parse`).toBe(true);

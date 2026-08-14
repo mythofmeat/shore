@@ -1,20 +1,3 @@
-/**
- * The non-streaming provider call, with rotation and a ledger row around it.
- *
- * This is the seam three background passes have been carrying an injected stub
- * for, so what it has to get right is the things a stub never exercised:
- *
- * - **A rotation is reported, not logged.** A heartbeat folds rotations into
- *   its ring buffer and a chat turn sends them to the client; neither is this
- *   module's call, so both come back to the caller.
- * - **The ledger row exists whether or not the call worked.** A ledger with
- *   holes reads as a quiet period rather than as a provider that is down.
- * - **A model the static catalog cannot place still runs.** Discovered models
- *   and `provider:model_id` pins are not in it, and refusing a request that is
- *   already carrying a working key would take out exactly the configurations
- *   the effective catalog exists to support.
- */
-
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -45,8 +28,6 @@ afterEach(() => {
 const ACCOUNTING_ROOT = mkdtempSync(join(tmpdir(), "shore-llm-generate-"));
 afterAll(() => rmSync(ACCOUNTING_ROOT, { recursive: true, force: true }));
 
-// ── harness ─────────────────────────────────────────────────────────────
-
 const PRIMARY = "SHORE_GEN_TEST_PRIMARY";
 const SPARE = "SHORE_GEN_TEST_SPARE";
 
@@ -64,7 +45,6 @@ function catalog() {
   return models;
 }
 
-/** Two keys under one provider, so a rotation has somewhere to go. */
 function config(twoKeys = true): LoadedConfig {
   const providers = twoKeys
     ? ProviderRegistry.fromSection({
@@ -115,7 +95,6 @@ function ok(model = "claude-sonnet"): GenerateResponse {
   };
 }
 
-/** An adapter that records the key each attempt ran with. */
 function recordingProvider(
   keys: string[],
   behaviour: (attempt: number) => GenerateResponse | LlmError = () => ok(),
@@ -144,23 +123,13 @@ function deps(provider: SidecarProvider, over: Partial<GenerateDeps> = {}): Gene
   };
 }
 
-/**
- * A 401, which is what a bad key looks like coming back from a provider.
- *
- * An `LlmError` is a plain discriminated union, not an `Error` subclass — the
- * classifier reads `kind`, and a thrown `Error` with the fields bolted on is
- * unclassifiable and therefore unrotatable.
- */
 function unauthorized(): LlmError {
   return { kind: "http_status", status: 401, body: "unauthorized" };
 }
 
-/** A 400 — malformed request, which no other credential can fix. */
 function badRequest(): LlmError {
   return { kind: "http_status", status: 400, body: "bad request" };
 }
-
-// ── placing the request in the catalog ──────────────────────────────────
 
 describe("finding the model a request was built from", () => {
   test("matches on id, sdk and provider", () => {
@@ -186,8 +155,6 @@ describe("finding the model a request was built from", () => {
   });
 });
 
-// ── rotation ────────────────────────────────────────────────────────────
-
 describe("rotating through a provider's keys", () => {
   test("uses the first key and reports no rotation when it works", async () => {
     const keys: string[] = [];
@@ -212,14 +179,10 @@ describe("rotating through a provider's keys", () => {
       deps(provider),
     );
 
-    // Straight to the spare, with no backoff spent first: the retry layer
-    // classifies a credential-shaped failure and fails fast precisely so the
-    // rotation happens immediately. Retrying a bad key is pure latency.
     expect(keys).toEqual(["primary-secret", "spare-secret"]);
     expect(out.fallbacks.length).toBe(1);
     expect(out.fallbacks[0]?.from.name).toBe("primary");
     expect(out.fallbacks[0]?.to?.name).toBe("spare");
-    // The abandoned key opted into visibility, so there is a sentence to show.
     expect(out.fallbacks[0]?.warning).toBeDefined();
   });
 
@@ -265,17 +228,9 @@ describe("rotating through a provider's keys", () => {
       ),
     ).rejects.toThrow();
 
-    // One key tried, not both. Rotating on a 400 burns every credential on a
-    // request that was malformed to begin with.
     expect(new Set(keys)).toEqual(new Set(["primary-secret"]));
   });
 
-  /**
-   * `enabled = false` must be uniformly unreferenceable. Falling back to the
-   * request's own key here would quietly re-enable a provider the user turned
-   * off — and the request always carries one, because it was built before the
-   * registry was consulted.
-   */
   test("a disabled provider is refused rather than run on the seed key", async () => {
     const keys: string[] = [];
     const disabled = config();
@@ -309,8 +264,6 @@ describe("rotating through a provider's keys", () => {
   });
 });
 
-// ── the outer call ──────────────────────────────────────────────────────
-
 describe("calling the model", () => {
   test("a catalog model rotates", async () => {
     const keys: string[] = [];
@@ -321,11 +274,6 @@ describe("calling the model", () => {
     expect(out.fallbacks.length).toBe(1);
   });
 
-  /**
-   * Discovered models and `provider:model_id` pins are not in the static
-   * catalog. Refusing them would take out exactly the configurations the
-   * effective catalog exists to support.
-   */
   test("a model the catalog cannot place runs on the key it was built with", async () => {
     const keys: string[] = [];
     const out = await generate(request({ model: "dyn-model" }), deps(recordingProvider(keys)));
@@ -350,9 +298,6 @@ describe("calling the model", () => {
   });
 });
 
-// ── the ledger row ──────────────────────────────────────────────────────
-
-/** A ledger this side created, which is the point: nothing else does now. */
 function freshLedger(): string {
   const path = join(mkdtempSync(testTmp("shore-gen-ledger-")), "ledger.db");
   Ledger.create(path).close();
@@ -398,8 +343,6 @@ describe("the ledger row", () => {
     await expect(generate(withLedger(path), deps(provider))).rejects.toBeDefined();
 
     const rows = rowsIn(path);
-    // A ledger with holes in it reads as a quiet period rather than as a
-    // provider that is refusing every request.
     expect(rows.length).toBe(1);
     expect(rows[0]).toMatchObject({ finish_reason: "error", input_tokens: 0 });
     const ledger = Ledger.open(path);
@@ -422,8 +365,6 @@ describe("the ledger row", () => {
   });
 });
 
-// ── the budget gate ─────────────────────────────────────────────────────
-
 describe("the budget gate", () => {
   test("a request with no call context is never gated", async () => {
     const keys: string[] = [];
@@ -434,8 +375,6 @@ describe("the budget gate", () => {
   test("a budget that is already blown refuses the call before the provider", async () => {
     const path = freshLedger();
     const keys: string[] = [];
-    // One $5 call already on the books, stamped now — the window is relative to
-    // the clock, so a row outside the current period would correctly allow it.
     const db = openLedger(path);
     db.query(
       `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type,
@@ -460,7 +399,6 @@ describe("the budget gate", () => {
 
     await expect(generate(req, deps(recordingProvider(keys)))).rejects.toBeInstanceOf(BudgetBlocked);
 
-    // Nothing reached the provider, and the refusal is not itself a call.
     expect(keys).toEqual([]);
     expect(rowsIn(path).length).toBe(1);
   });

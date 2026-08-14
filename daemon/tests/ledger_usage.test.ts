@@ -1,23 +1,3 @@
-/**
- * The `shore usage` paths the recorded cases in `ledger_usage_cases` do not reach.
- *
- * `ledger_usage_cases.test.ts` pins every mode that is answerable from a
- * ledger alone. Two are not, and they are here:
- *
- *   - **`recalculate`** drives the pricing catalog, and a fixture that fetched
- *     OpenRouter would not be a fixture.
- *   - **`budgetWarnings`** writes as it reads: the dedup marker is what makes a
- *     threshold announce once per window, so the second call is the test.
- *
- * **`refresh_pricing`** was a third. It invalidates a cache, and the clearing
- * moved to `commands/usage.ts` when the daemon's half of it arrived there — so
- * the test that watches the next lookup miss is in `commands_usage.test.ts`.
- *
- * The catalog fetch is stubbed at `globalThis.fetch` rather than injected,
- * because `PricingEngine` resolves it per call — which means the production
- * wiring, including `ledgerFor`'s memoised handles, is what runs here.
- */
-
 import { afterEach, expect, test } from "bun:test";
 
 import { closeLedgers } from "../src/ledger/record.ts";
@@ -76,7 +56,6 @@ function ledgerWith(rows: SeedRow[]): string {
   return f.path;
 }
 
-/** Put a price in the `pricing` table, where a cached lookup finds it. */
 function priceInStore(path: string, modelId: string, perToken: number): void {
   const db = openLedger(path);
   db.query(
@@ -88,7 +67,6 @@ function priceInStore(path: string, modelId: string, perToken: number): void {
   db.close();
 }
 
-/** A catalog response naming `modelId`, or an empty catalog when omitted. */
 function stubCatalog(modelId?: string): { calls: number } {
   const state = { calls: 0 };
   globalThis.fetch = ((): Promise<Response> => {
@@ -121,8 +99,6 @@ function costOf(path: string, id: number): number | null {
   return row?.total_cost ?? null;
 }
 
-// ── recalculate ──────────────────────────────────────────────────────────────
-
 test("recalculate prices rows the catalog knows", async () => {
   const ledger = ledgerWith([{}]);
   priceInStore(ledger, "anthropic/claude-opus-4.6", 0.00001);
@@ -138,9 +114,6 @@ test("recalculate prices rows the catalog knows", async () => {
   expect(result.total).toBe(1);
   expect(result.failures).toEqual([]);
   expect(fetched.calls, "a cached price must not reach the network").toBe(0);
-  // 1000 in + 500 out + 200 read at 1e-5, then 100 write at 1.6e-5: native
-  // Anthropic charges 1.6x for a 1h cache write, and `cache_ttl` unset means
-  // 1h. A port that dropped the multiplier lands on 0.018.
   expect(costOf(ledger, 1)).toBeCloseTo(0.0186, 10);
 });
 
@@ -177,9 +150,6 @@ test("recalculate fetches each model once, not each row", async () => {
 });
 
 test("recalculate leaves already-costed rows alone unless forced", async () => {
-  // A priced row, a provider-reported one, and a subscription one. Only the
-  // first is repriceable, and only under `force` — without it, nothing has a
-  // NULL cost to fill in.
   const ledger = ledgerWith([
     { cost_source: "pricing_catalog", total_cost: 99 },
     { cost_source: "provider_reported", total_cost: 42 },
@@ -211,8 +181,6 @@ test("recalculate leaves already-costed rows alone unless forced", async () => {
   expect(costOf(ledger, 3), "a flat-plan row must not start accruing cost").toBe(0);
 });
 
-// ── budget warnings ──────────────────────────────────────────────────────────
-
 const OVER_BUDGET: UsageConfig = {
   timezone: "utc",
   budgets: [{ name: "tiny", period: "month", cost_usd: 1, warn_at: [1.0], limit: "warn" }],
@@ -230,21 +198,15 @@ test("a crossed threshold is announced once per window", () => {
   const second = budgetWarnings({ ledger, usage: OVER_BUDGET }, { now }) as {
     warnings: Array<{ budget: string }>;
   };
-  // Over-limit re-fires by design — "still over budget" is an active signal —
-  // but it must be the over-limit crossing, not the whole ladder again.
   expect(second.warnings.map((w) => w.budget)).toEqual(["tiny"]);
   expect(second.warnings.length).toBe(first.warnings.length);
 });
 
 test("no budgets means no warnings and no ledger open", () => {
-  // A path that cannot be opened: reaching the ledger at all would throw, so
-  // this also pins that the empty-budget check comes first.
   expect(budgetWarnings({ ledger: "/nonexistent/ledger.db", usage: { budgets: [] } })).toEqual({
     warnings: [],
   } as never);
 });
-
-// ── model history ────────────────────────────────────────────────────────────
 
 test("model history is scoped to one character", () => {
   const ledger = ledgerWith([
@@ -280,8 +242,6 @@ test("model history honours the time bounds", () => {
   expect(result.models.length).toBe(1);
   expect(result.models[0]!.call_count).toBe(1);
 });
-
-// ── failure ──────────────────────────────────────────────────────────────────
 
 test("a ledger that will not open is an error, not an empty report", () => {
   expect(() => modelHistory({ ledger: "/nonexistent/ledger.db", character: "aria" })).toThrow(

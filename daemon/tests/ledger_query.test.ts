@@ -1,19 +1,3 @@
-/**
- * Ported from `the deleted port::tests`, test for test, while
- * both implementations existed. The Rust is gone; these are now this
- * implementation's own tests, kept case for case.
- *
- * The schema comes from the daemon binary (see `support/ledger_fixture.ts`),
- * not from a copy kept here — these queries are only meaningful against the
- * real table, and a test that built its own would prove nothing about the pair.
- *
- * Two of these are money rules rather than query mechanics: `allCostRows` must
- * refuse to hand a `provider_reported` or `subscription` row to the pricing
- * catalog, because `updateCosts` rewrites `cost_source` and sets a non-zero
- * total — repricing a flat-plan row would start accruing it against usage
- * budgets for a plan that bills a flat rate.
- */
-
 import { Database } from "bun:sqlite";
 import { afterAll, describe, expect, test } from "bun:test";
 
@@ -51,8 +35,6 @@ const BASE: CallRow = {
   api_key_name: "default",
   model: "claude-opus-4-6",
   call_type: "message",
-  // Unknown, as every row written before #33 is: the query layer passes it
-  // through and nothing here is about the tool surface.
   tool_surface: null,
   input_tokens: 100,
   output_tokens: 50,
@@ -76,8 +58,6 @@ const BASE: CallRow = {
 
 const COLUMNS = Object.keys(BASE);
 
-/** Insert a raw row. The writer path (`Ledger.record`) computes fields these
- *  tests want to set directly, so this goes straight to SQL. */
 function insert(db: Database, row: CallRow): number {
   db.query(
     `INSERT INTO calls (${COLUMNS.join(", ")}) VALUES (${COLUMNS.map((c) => `$${c}`).join(", ")})`,
@@ -86,7 +66,6 @@ function insert(db: Database, row: CallRow): number {
   return r.id;
 }
 
-/** A fresh daemon-made ledger seeded with `rows`. */
 function ledgerWith(rows: CallRow[]): Database {
   const fixture = freshLedger();
   cleanups.push(fixture.cleanup);
@@ -95,7 +74,6 @@ function ledgerWith(rows: CallRow[]): Database {
   return db;
 }
 
-/** The three-row ledger the Rust tests build: two anthropic, one openai. */
 function populated(): Database {
   return ledgerWith([
     BASE,
@@ -127,8 +105,6 @@ describe("grouping", () => {
   test("model usage summary groups and orders by first seen", () => {
     const db = populated();
     const rows = modelUsageSummary(db, NONE);
-    // (claude-opus-4-6, anthropic, message), (claude-opus-4-6, anthropic,
-    // tool_loop), (gpt-4o, openai, message) — ordered by first appearance.
     expect(rows).toHaveLength(3);
     const [opusMessage, opusToolLoop, gpt] = rows;
     expect(opusMessage!.model).toBe("claude-opus-4-6");
@@ -139,7 +115,6 @@ describe("grouping", () => {
     expect(gpt!.model).toBe("gpt-4o");
     expect(gpt!.provider).toBe("openai");
 
-    // Character + time filters compose through buildWhere.
     const filtered = modelUsageSummary(db, {
       character: "aria",
       since: "2026-04-05T10:02:00Z",
@@ -161,7 +136,6 @@ describe("grouping", () => {
   test("summary groups by usage kind", () => {
     const summary = usageSummaryByUsageKind(populated(), NONE);
     const byKind = new Map(summary.map((s) => [s.usage_kind, s.call_count]));
-    // A `message` finishing at `tool_use` is the first leg of a tool loop.
     expect(byKind.get("message_no_tools")).toBe(1);
     expect(byKind.get("message_with_tools")).toBe(2);
   });
@@ -178,7 +152,7 @@ describe("grouping", () => {
 
   test("summary groups by provider and model", () => {
     const summary = usageSummary(populated(), NONE);
-    expect(summary).toHaveLength(2); // anthropic/opus + openai/gpt-4o
+    expect(summary).toHaveLength(2);
     expect(summary.find((s) => s.provider === "anthropic")!.call_count).toBe(2);
   });
 });
@@ -205,8 +179,6 @@ describe("filtering", () => {
   });
 
   test("totals over an empty match are zero, not null", () => {
-    // `TOTAL()` returns 0.0 where `SUM()` would return NULL — a budget reading
-    // NULL as a cost is the difference between "spent nothing" and "unknown".
     const totals = usageTotals(populated(), { character: "nobody" });
     expect(totals).toEqual({
       call_count: 0,
@@ -245,8 +217,7 @@ describe("anomalies and export", () => {
     const lines = tsv.split("\n");
     expect(lines[0]).toContain("ts\t");
     expect(lines[0]).toContain("\tcost_source\t");
-    expect(lines).toHaveLength(4); // header + 3 rows
-    // Column count must match the header, or the export silently misaligns.
+    expect(lines).toHaveLength(4);
     expect(lines[1]!.split("\t")).toHaveLength(lines[0]!.split("\t").length);
   });
 });
@@ -270,10 +241,6 @@ describe("recalculation candidates", () => {
   });
 
   test("all cost rows skips subscription rows", () => {
-    // A subscription row must never be repriced: `updateCosts` rewrites
-    // `cost_source` to `pricing_catalog` and sets a non-zero total, so a
-    // repriced flat-plan row would start accruing against usage budgets. Only
-    // the catalog not listing `opencode-go/<model>` was stopping it.
     const db = populated();
     const id = insert(db, {
       ...BASE,
@@ -319,9 +286,6 @@ describe("recalculation candidates", () => {
 
 describe("cache health readers", () => {
   test("active anthropic characters includes routed provider", () => {
-    // A custom provider name (sdk = "anthropic", base_url = OpenRouter) with
-    // model_id resolved to `anthropic/...` must show up in cache health
-    // alongside native-anthropic rows.
     const db = ledgerWith([
       { ...BASE, finish_reason: "end_turn", total_cost: null },
       {

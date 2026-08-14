@@ -1,13 +1,3 @@
-/**
- * Recorded cases for llm decisions.
- *
- * These cases were captured from the deleted Rust port. That is where they
- * came from, not what makes them right: the port is gone, this side is the
- * implementation, and a case that turns out to disagree with what shore
- * should do gets corrected here rather than shimmed around. The corpus is
- * worth keeping for its inputs, which are hard to re-derive by hand.
- */
-
 import { describe, expect, test } from "bun:test";
 import { emptyTiming, emptyUsage } from "../src/llm/stream.ts";
 
@@ -34,12 +24,6 @@ interface EncodedError {
 
 interface PolicyJson {
   max_retries: number;
-  /**
-   * Recorded, no longer an input. `RetryPolicy` carried a fallback model when
-   * the fixture was taken; #16 removed it along with refusal handling, and the
-   * cases whose decision depended on it went with it. It stays in the records
-   * because they are recordings, and is ignored by {@link policyOf}.
-   */
   fallback_model: string | null;
 }
 
@@ -70,7 +54,6 @@ const fixture = (await Bun.file(
   new URL("./llm_fixtures/llm_decisions.json", import.meta.url),
 ).json()) as Fixture;
 
-/** Rebuild the `LlmError` the generator encoded. */
 function decodeError(e: EncodedError): LlmError {
   switch (e.kind) {
     case "http_status":
@@ -102,7 +85,6 @@ function label(e: EncodedError): string {
 }
 
 describe("the fixture is real", () => {
-
   test("a silently empty fixture must not pass", () => {
     expect(fixture.classify_credential_failure.length).toBeGreaterThanOrEqual(20);
     expect(fixture.should_retry_error.length).toBeGreaterThanOrEqual(300);
@@ -111,12 +93,9 @@ describe("the fixture is real", () => {
 
   test("the sweep reaches every decision and every classification", () => {
     const decisions = new Set(fixture.should_retry_error.map((c) => c.expect.decision));
-    // Two arms, not three: `fallback_model` went with #16.
     expect(decisions).toEqual(new Set(["retry", "fail"]));
 
     const kinds = new Set(fixture.classify_credential_failure.map((c) => c.kind));
-    // `unknown` is unreachable from the current classifier — no branch emits
-    // it — so five of the seven, plus not_credential_failure.
     expect(kinds).toEqual(
       new Set([
         "missing_key",
@@ -150,9 +129,6 @@ describe("classifyCredentialFailure", () => {
 
 describe("shouldRetryError", () => {
   test(`all ${String(fixture.should_retry_error.length)} recorded decisions`, () => {
-    // The credential short-circuit warns, and a 400-case sweep would put 400
-    // lines through the runner. Captured rather than silenced, so the count is
-    // still assertable below.
     const warned: string[] = [];
     const realWarn = console.warn;
     console.warn = (...args: unknown[]) => {
@@ -170,8 +146,6 @@ describe("shouldRetryError", () => {
       console.warn = realWarn;
     }
 
-    // Every rotating case should have said so — the log is how an operator
-    // finds out a key was abandoned, so a silent short-circuit is a defect.
     const rotating = fixture.should_retry_error.filter((c) => {
       const kind = classifyCredentialFailure("", decodeError(c.error));
       return shouldRotate(kind);
@@ -198,8 +172,6 @@ describe("resolveKeyCandidates", () => {
 describe("readCandidateEnv", () => {
   for (const c of fixture.read_candidate_env) {
     test(`${c.env} set to ${JSON.stringify(c.set_to)}`, () => {
-      // Injected rather than mutating process.env, so the cases cannot leak
-      // into each other or into anything else in the suite.
       const env: Record<string, string | undefined> =
         c.set_to === null ? {} : { [c.env]: c.set_to };
       const candidate: KeyCandidate = { name: "t", env: c.env, warn_on_fallback: false };

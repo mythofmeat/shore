@@ -1,20 +1,3 @@
-/**
- * A thinking block that accompanies a `tool_use` is not optional to replay.
- *
- * https://platform.claude.com/docs/en/build-with-claude/thinking
- *   "when you return tool results, you must pass the thinking blocks from the
- *    assistant message back to the API, complete and unmodified"
- *   "Pass every `thinking` block back to the API complete and unmodified,
- *    alongside the `tool_use` block it accompanied."
- *   "Required: within a tool-use turn, pass thinking blocks back.
- *    Allowed: outside tool use, omit prior turns' thinking."
- *
- * `replay_prior_thinking = "none"` is shore's own setting and it may take the
- * documented Allowed case. It may not take the Required one: stripping the
- * thinking block off an assistant message that carries a `tool_use` sends a
- * turn the API rejects.
- */
-
 import { describe, expect, test } from "bun:test";
 
 import { replayableMessagesWithDrops } from "../src/llm/replay.ts";
@@ -94,9 +77,6 @@ describe("the strip policy stops at a tool-use turn", () => {
   });
 
   test("a model switch still strips a tool-use turn, as the docs require", () => {
-    // "When you switch between any two models ... strip `thinking` and
-    // `redacted_thinking` blocks from prior assistant turns. Thinking blocks
-    // are tied to the model that produced them."
     const { messages, drops } = replayableMessagesWithDrops(
       request([thinkingWithToolUse()], {
         model: "claude-sonnet-5",
@@ -109,18 +89,6 @@ describe("the strip policy stops at a tool-use turn", () => {
   });
 });
 
-/**
- * A message's thinking blocks travel together or not at all.
- *
- * https://platform.claude.com/docs/en/build-with-claude/thinking
- *   "Within the latest assistant message, the sequence of consecutive
- *    `thinking` blocks must match what the model generated in the original
- *    request: you can't rearrange, edit, or partially drop them. This includes
- *    `redacted_thinking` blocks."
- *
- * Deciding per block let a message with one signed and one unsigned block send
- * half its reasoning, which is the partial drop the API rejects.
- */
 describe("thinking blocks are dropped per message, never per block", () => {
   function mixed(): WireMessage {
     return {
