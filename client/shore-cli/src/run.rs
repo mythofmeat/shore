@@ -26,7 +26,7 @@ fn log_role_matches(filter: Option<&LogRole>, role: &Role) -> bool {
     match filter {
         None => true,
         Some(LogRole::User) => *role == Role::User,
-        Some(LogRole::Assistant) => *role == Role::Assistant,
+        Some(LogRole::Assistant | LogRole::Character) => *role == Role::Assistant,
         Some(LogRole::System) => *role == Role::System,
     }
 }
@@ -103,6 +103,21 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
     // themselves correctly without threading the name through every call site.
     let _ignored = SESSION_DISPLAY_CHARACTER.set(display_character.clone());
 
+    if let Some(requested) = cli.character.as_deref().filter(|r| !r.is_empty()) {
+        if let Some(serving) = history
+            .selected_character
+            .as_deref()
+            .filter(|s| !s.is_empty())
+        {
+            if serving != requested {
+                return Err(format!(
+                    "no character named {requested:?}; the daemon is serving {serving:?}. Run `shore character` to list them."
+                )
+                .into());
+            }
+        }
+    }
+
     pre_apply_active_model(&mut conn).await;
 
     match &cli.command {
@@ -113,19 +128,56 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
         }
         CliCommand::Alt { .. } => handle_alt_command(&mut conn, &cli.command).await?,
         CliCommand::Character {
+            subcommand: Some(crate::cli::CharacterCommand::New { name }),
+            ..
+        }
+        | CliCommand::Character {
             name: Some(name),
             new: true,
             ..
         } => handle_create_character(&mut conn, name).await?,
         CliCommand::Character {
+            subcommand: Some(crate::cli::CharacterCommand::Use { name }),
+            ..
+        } => handle_switch_character(&mut conn, name).await?,
+        CliCommand::Character {
+            subcommand: None,
             name,
             info: false,
             new: false,
+            json,
             ..
         } => match name {
             Some(target) => handle_switch_character(&mut conn, target).await?,
-            None => handle_list_characters(&mut conn).await?,
+            None => handle_list_characters(&mut conn, *json).await?,
         },
+        CliCommand::Trace { subcommand: None } => {
+            output::vocab::print_index(
+                "trace",
+                "what the daemon did behind the conversation",
+                &[
+                    ("trace calls", "raw model call payloads"),
+                    ("trace heartbeat", "what each heartbeat tick thought and did"),
+                    ("trace events", "the heartbeat timeline: fired, dormant, woke"),
+                    ("trace subagent", "stored sub-agent runs and their tools"),
+                ],
+            );
+        }
+        CliCommand::Debug { subcommand: None } => {
+            output::vocab::print_index(
+                "debug",
+                "make the daemon do something now, out of band",
+                &[
+                    ("debug tick-now", "run a heartbeat tick immediately"),
+                    ("debug keepalive-ping-now", "send a cache keepalive ping now"),
+                    ("debug session-activate", "mark the session active"),
+                    ("debug status-dormant", "force the heartbeat dormant"),
+                    ("debug status-active", "force the heartbeat active"),
+                    ("debug tool <name>", "invoke one tool directly"),
+                    ("debug subagent <name>", "invoke one sub-agent directly"),
+                ],
+            );
+        }
         CliCommand::Log { .. } => {
             handle_log_command(&mut conn, &cli.command, &display_character).await?;
         }
@@ -204,10 +256,13 @@ async fn handle_generic_swp_command(
                 )
         }
         CliCommand::Trace { subcommand } => match subcommand {
-            crate::cli::TraceCommand::Calls { json, .. }
-            | crate::cli::TraceCommand::Heartbeat { json, .. }
-            | crate::cli::TraceCommand::Events { json, .. }
-            | crate::cli::TraceCommand::Subagent { json, .. } => *json,
+            Some(
+                crate::cli::TraceCommand::Calls { json, .. }
+                | crate::cli::TraceCommand::Heartbeat { json, .. }
+                | crate::cli::TraceCommand::Events { json, .. }
+                | crate::cli::TraceCommand::Subagent { json, .. },
+            ) => *json,
+            None => false,
         },
         CliCommand::Character { json, .. }
         | CliCommand::Memory { json, .. }
@@ -216,8 +271,10 @@ async fn handle_generic_swp_command(
         | CliCommand::Usage { json, .. } => *json,
         CliCommand::Debug { subcommand } => matches!(
             subcommand,
-            crate::cli::DebugCommand::Tool { json: true, .. }
-                | crate::cli::DebugCommand::Subagent { json: true, .. }
+            Some(
+                crate::cli::DebugCommand::Tool { json: true, .. }
+                    | crate::cli::DebugCommand::Subagent { json: true, .. }
+            )
         ),
         CliCommand::Send { .. }
         | CliCommand::Regen { .. }
@@ -253,11 +310,54 @@ async fn handle_generic_swp_command(
     } else if json_mode {
         cli_out!("{}", serde_json::to_string_pretty(&data)?);
     } else if name == "config" {
-        output::commands::print_config(&data, show_all);
+        output::config::print(&data, show_all);
+    } else if name == "config_check" {
+        output::config::print_check(&data);
+    } else if name == "tools" {
+        output::tools::print(&data);
+    } else if let Some(render) = catalog_render(name) {
+        render(&data);
+    } else if let Some(view) = usage_view(other) {
+        output::usage::print(&data, view);
     } else {
         output::format_command(name, &data);
     }
     Ok(())
+}
+
+fn catalog_render(name: &str) -> Option<fn(&serde_json::Value)> {
+    match name {
+        "list_models" => Some(output::catalog::print_model_list),
+        "model_info" => Some(output::catalog::print_model_info),
+        "model_settings" => Some(output::catalog::print_model_settings),
+        "background_models" => Some(output::catalog::print_background_models),
+        "list_providers" => Some(output::catalog::print_provider_list),
+        "list_provider_models" => Some(output::catalog::print_provider_models),
+        _ => None,
+    }
+}
+
+fn usage_view(cmd: &CliCommand) -> Option<output::usage::View> {
+    use crate::cli::UsageCommand;
+    use output::usage::View;
+    let CliCommand::Usage { subcommand, .. } = cmd else {
+        return None;
+    };
+    Some(match subcommand {
+        None => View::Summary,
+        Some(UsageCommand::CallType) => View::CallType,
+        Some(UsageCommand::Kind) => View::Kind,
+        Some(UsageCommand::ApiKey) => View::ApiKey,
+        Some(UsageCommand::Budgets) => View::Budgets,
+        Some(UsageCommand::Cache) => View::Cache,
+        Some(UsageCommand::Anomalies) => View::Anomalies,
+        Some(UsageCommand::Limits) => View::Limits,
+        Some(
+            UsageCommand::Export { .. }
+            | UsageCommand::Recalculate { .. }
+            | UsageCommand::RefreshPricing,
+        ) => View::Summary,
+    })
 }
 
 /// Handle `shore config reload`: validate and reload config from disk, and
@@ -689,14 +789,14 @@ async fn handle_status_command(
             if *json {
                 cli_out!("{}", serde_json::to_string_pretty(val)?);
             } else {
-                _ = output::print_status_section(&data, s);
+                _ = output::status::print_section(&data, s);
             }
         }
         None if *json => {
             cli_out!("{}", serde_json::to_string_pretty(&data)?);
         }
         None => {
-            output::print_status(&data, display_character);
+            output::status::print(&data, display_character);
         }
     }
     Ok(())
@@ -870,14 +970,19 @@ const SCAFFOLD_GUIDE: &[(&str, &str)] = &[
 /// Handle `list-characters`: query daemon, annotate active character.
 async fn handle_list_characters(
     conn: &mut SWPConnection,
+    json: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let _ignored = conn
         .send_command("list_characters", serde_json::json!({}))
         .await?;
     let data = recv_command_data(conn).await?;
 
+    if json {
+        cli_out!("{}", serde_json::to_string_pretty(&data)?);
+        return Ok(());
+    }
     let active = state::read_active_character();
-    output::print_character_list(&data, active.as_deref());
+    output::catalog::print_character_list(&data, active.as_deref());
     Ok(())
 }
 
@@ -1241,7 +1346,9 @@ async fn recv_streaming_response(
             ServerMessage::Error(err) => {
                 spinner.stop().await;
                 output::print_server_error(
-                    &serde_json::to_string(&err.code).unwrap_or_default(),
+                    serde_json::to_string(&err.code)
+                        .unwrap_or_default()
+                        .trim_matches('"'),
                     &err.message,
                 );
                 return Err(ReportedError::new(err.message.clone()).into());
@@ -1290,7 +1397,9 @@ async fn recv_command_data(
             }
             ServerMessage::Error(err) => {
                 output::print_server_error(
-                    &serde_json::to_string(&err.code).unwrap_or_default(),
+                    serde_json::to_string(&err.code)
+                        .unwrap_or_default()
+                        .trim_matches('"'),
                     &err.message,
                 );
                 return Err(ReportedError::new(err.message.clone()).into());

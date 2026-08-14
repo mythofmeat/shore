@@ -295,6 +295,51 @@ describe("tools", () => {
       await check(row("tools", name), w, () => tools(w.ctx));
     });
   }
+
+  const withSubagent = (extra: string, subagentTools: string): string =>
+    '\n[chat.anthropic.primary]\nmodel_id = "claude-primary"\n\n' +
+    '[defaults]\nmodel = "primary"\n' +
+    extra +
+    '\n[tools]\nenabled_subagents = ["probe"]\n\n' +
+    '[subagents.probe]\ndescription = "d"\nprompt = "p"\nmodel = "primary"\n' +
+    `tools = [${subagentTools}]\n`;
+
+  test("a configured mcp server's tools are not reported as unknown", async () => {
+    const w = await build(
+      "mid",
+      withSubagent('\n[mcp.whoop]\nurl = "http://mcp-whoop:3000/mcp"\n', '"mcp__whoop__*"'),
+    );
+    const out = tools(w.ctx) as { warnings: string[] };
+    expect(out.warnings.filter((x) => x.includes("mcp__whoop__"))).toEqual([]);
+  });
+
+  test("an mcp server name with an underscore still resolves", async () => {
+    const w = await build(
+      "mid",
+      withSubagent(
+        '\n[mcp.listening_stats]\nurl = "http://mcp-listening-stats:3000/mcp"\n',
+        '"mcp__listening_stats__*"',
+      ),
+    );
+    const out = tools(w.ctx) as { warnings: string[] };
+    expect(out.warnings.filter((x) => x.includes("mcp__listening_stats__"))).toEqual([]);
+  });
+
+  test("a provider-only config is not reported as having no models", async () => {
+    const w = await build(
+      "mid",
+      '\n[providers.anthropic]\nsdk = "anthropic"\napi_key_env = "SHORE_FIXTURE_KEY_SET"\n',
+    );
+    const out = configCheck(w.ctx, ENV) as { warnings: string[]; providers: number };
+    expect(out.providers).toBe(1);
+    expect(out.warnings.filter((x) => x.includes("No chat models configured"))).toEqual([]);
+  });
+
+  test("an mcp tool for a server that is not configured is still unknown", async () => {
+    const w = await build("mid", withSubagent("", '"mcp__nosuchserver__*"'));
+    const out = tools(w.ctx) as { warnings: string[] };
+    expect(out.warnings.some((x) => x.includes("mcp__nosuchserver__"))).toBe(true);
+  });
 });
 
 // ── config_check ────────────────────────────────────────────────────────

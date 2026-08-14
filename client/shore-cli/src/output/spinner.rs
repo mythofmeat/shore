@@ -2,11 +2,10 @@ use std::io::{self, IsTerminal, Write};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Instant;
 
-use crossterm::style::{Color, ResetColor, SetForegroundColor};
 use crossterm::terminal::{Clear, ClearType};
 use tokio::task::JoinHandle;
 
-use super::{abbreviate_model, use_color};
+use super::abbreviate_model;
 
 struct SpinnerState {
     phase: String,
@@ -92,13 +91,7 @@ impl StreamSpinner {
                 let mut out = stdout.lock();
                 let _ignored = write!(out, "\r");
                 _ = crossterm::execute!(out, Clear(ClearType::CurrentLine));
-                if use_color() {
-                    _ = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-                }
-                _ = write!(out, "{line}");
-                if use_color() {
-                    _ = crossterm::execute!(out, ResetColor);
-                }
+                super::vocab::paint(&mut out, super::vocab::Tone::Muted, &line);
                 _ = out.flush();
             }
         }));

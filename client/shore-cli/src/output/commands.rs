@@ -1,11 +1,15 @@
 use std::io::{self, Write};
 
-use crossterm::style::{Attribute, Color, ResetColor, SetAttribute, SetForegroundColor};
+use crossterm::style::{Attribute, SetAttribute};
 
 use super::transcript::{character_color, format_time};
+use super::vocab::{COLOR_ERROR, Tone, indent_to, paint};
 use super::{
-    abbreviate_model, parse_timestamp, print_dim_line, term_width, use_color, write_dim, write_fg,
-    write_row, write_row_colored, write_section_header,
+    COLOR_RESULT, COLOR_SUBAGENT, COLOR_THINKING, COLOR_TOOL, SIGIL_ERROR, SIGIL_OK,
+    SIGIL_SUBAGENT, SIGIL_THINKING, SIGIL_TOOL, abbreviate_model, format_tool_input,
+    format_tool_output, parse_timestamp, primary_tool_arg, print_dim_line, term_width, use_color,
+    write_dim, write_fg, write_process_body, write_row, write_row_colored, write_section_header,
+    write_sigil_header,
 };
 
 const SECONDS_PER_MINUTE: u64 = 60;
@@ -16,16 +20,6 @@ const SECONDS_PER_DAY: u64 = 86_400;
 // Status formatter -- human-readable dashboard
 // ---------------------------------------------------------------------------
 
-/// Translate a heartbeat state string to a human-readable description.
-fn heartbeat_description(state: &str, ticks: u64, max_ticks: u64) -> String {
-    match state {
-        "Active" if ticks == 0 => "active \u{2014} in conversation".to_owned(),
-        "Active" => format!("active \u{2014} idle {ticks}/{max_ticks} ticks"),
-        "Dormant" => "dormant \u{2014} waiting for you".to_owned(),
-        other => other.to_owned(),
-    }
-}
-
 /// Map a normalized density (0.0-1.0) to a bar character.
 ///
 /// Uses 8 Unicode block elements for non-zero values and a light shade for
@@ -34,29 +28,6 @@ fn heartbeat_description(state: &str, ticks: u64, max_ticks: u64) -> String {
     clippy::float_arithmetic,
     reason = "heatmap rendering maps a normalized float density onto eight display glyphs"
 )]
-fn density_to_block(normalized: f64) -> char {
-    const BLOCKS: [char; 8] = [
-        '\u{2581}', '\u{2582}', '\u{2583}', '\u{2584}', '\u{2585}', '\u{2586}', '\u{2587}',
-        '\u{2588}',
-    ];
-    if normalized < 0.05 {
-        '\u{2591}'
-    } else {
-        let level = (normalized.clamp(0.0, 1.0) * 7.0).round();
-        let idx = match level {
-            x if x <= 0.0 => 0,
-            x if x <= 1.0 => 1,
-            x if x <= 2.0 => 2,
-            x if x <= 3.0 => 3,
-            x if x <= 4.0 => 4,
-            x if x <= 5.0 => 5,
-            x if x <= 6.0 => 6,
-            _ => 7,
-        };
-        BLOCKS.get(idx).copied().unwrap_or('\u{2588}')
-    }
-}
-
 fn checked_div_u64(value: u64, divisor: u64) -> u64 {
     value.checked_div(divisor).unwrap_or_default()
 }
@@ -76,19 +47,6 @@ fn format_millis_as_seconds_one_decimal(millis: u64) -> String {
     clippy::float_arithmetic,
     reason = "CLI usage summaries add daemon-provided f64 display costs for rounded totals only"
 )]
-fn add_display_cost(total: &mut f64, cost: f64) {
-    *total += cost;
-}
-
-/// Color for an hour classification label.
-fn classification_color(class: &str) -> Color {
-    match class {
-        "peak" => Color::Cyan,
-        "trough" => Color::DarkGrey,
-        _ => Color::White,
-    }
-}
-
 /// Write the activity heatmap section into the status dashboard.
 ///
 /// Renders a 24-character bar chart (one block per hour) with hour labels
@@ -97,270 +55,6 @@ fn classification_color(class: &str) -> Color {
     clippy::float_arithmetic,
     reason = "activity heatmap uses visual-only logarithmic scaling of normalized f64 densities"
 )]
-fn write_activity_section(out: &mut impl Write, activity: &serde_json::Value, width: usize) {
-    let histogram: Vec<f64> = match activity["hour_histogram"].as_array() {
-        Some(arr) => arr.iter().filter_map(serde_json::Value::as_f64).collect(),
-        None => return,
-    };
-    if histogram.len() != 24 {
-        return;
-    }
-    let classifications: Vec<String> = activity["hour_classifications"]
-        .as_array()
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(String::from))
-                .collect()
-        })
-        .unwrap_or_default();
-    if classifications.len() != 24 {
-        return;
-    }
-
-    let sufficient = activity["has_sufficient_heatmap"]
-        .as_bool()
-        .unwrap_or(false);
-    let suffix = if sufficient { "" } else { "sparse" };
-    write_section_header(out, "Activity", suffix, width);
-
-    // -- bar chart row --
-    let max_val = histogram.iter().copied().fold(0.0_f64, f64::max);
-    if use_color() {
-        let _ignored = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-    }
-    _ = write!(out, "  {:<13}", "");
-    for (&density, classification) in histogram.iter().zip(classifications.iter()) {
-        let linear = if max_val > 0.0 {
-            density / max_val
-        } else {
-            0.0
-        };
-        // Log scale: ln(1 + x*k) / ln(1+k) -- spreads low values, compresses peaks.
-        let normalized = (1.0 + linear * 9.0).ln() / 10.0_f64.ln();
-        let ch = density_to_block(normalized);
-        if use_color() {
-            let color = classification_color(classification);
-            _ = crossterm::execute!(out, SetForegroundColor(color));
-        }
-        _ = write!(out, "{ch}");
-    }
-    if use_color() {
-        _ = crossterm::execute!(out, ResetColor);
-    }
-    _ = writeln!(out);
-
-    // -- hour labels row --
-    //    0  3  6  9  12 15 18 21
-    if use_color() {
-        _ = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-    }
-    _ = write!(out, "  {:<13}0  3  6  9  12 15 18 21", "");
-    if use_color() {
-        _ = crossterm::execute!(out, ResetColor);
-    }
-    _ = writeln!(out);
-
-    // -- stats row --
-    let engagement = activity["engagement_score"].as_f64().unwrap_or(0.0);
-    let sessions = activity["sessions_per_day"].as_f64().unwrap_or(0.0);
-    let turn_count = activity["turn_count"].as_u64().unwrap_or(0);
-    write_row(
-        out,
-        "Engagement",
-        &format!("{engagement:.2} \u{00b7} {sessions:.1} sessions/day \u{00b7} {turn_count} turns"),
-    );
-
-    _ = writeln!(out);
-}
-
-/// Report a halted cache keepalive, loudly.
-///
-/// The halt fires when two pings in a row miss with nothing between them, which
-/// means the cache is not holding what shore writes to it. Nothing clears it:
-/// there is no runtime cause worth resuming from, so the only exit is a fix in
-/// the source. Without this row the halt reaches only the daemon log, where it
-/// would sit unread while every call paid full price.
-fn print_keepalive_halt(out: &mut impl Write, data: &serde_json::Value) {
-    let Some(halt) = data.get("keepalive_halted").filter(|h| !h.is_null()) else {
-        return;
-    };
-    let at = halt["at"].as_str().unwrap_or("?");
-    let reason = halt["reason"].as_str().unwrap_or("no reason recorded");
-    let character = halt["character"].as_str().unwrap_or("?");
-
-    _ = writeln!(out);
-    write_fg(out, Color::Red, "  KEEPALIVE HALTED");
-    _ = writeln!(out, " \u{00b7} {character} \u{00b7} {at}");
-    _ = writeln!(out, "  {reason}.");
-    _ = writeln!(
-        out,
-        "  This does not clear on its own and restarting only hides it. Read the wire in"
-    );
-    _ = writeln!(out, "  calls.db and fix the cause.");
-}
-
-/// Print the status dashboard.
-pub(crate) fn print_status(data: &serde_json::Value, character_name: &str) {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    let width = term_width();
-
-    // -- Status --
-    write_section_header(&mut out, "Status", "", width);
-
-    // Prefer the character name from the daemon response over the CLI fallback.
-    let effective_name = data["character"].as_str().unwrap_or(character_name);
-    let char_color = character_color(effective_name);
-    write_row_colored(&mut out, "Character", effective_name, char_color);
-
-    let model = data["active_model"].as_str().unwrap_or("(none)");
-    write_row(&mut out, "Model", abbreviate_model(model));
-
-    if let Some(count) = data["turn_count"].as_u64() {
-        write_row(&mut out, "Turns", &count.to_string());
-    }
-
-    let pending_deferred_edit_count = data["pending_deferred_edit_count"].as_u64().unwrap_or(0);
-    if pending_deferred_edit_count > 0 {
-        let paths: Vec<&str> = data["pending_deferred_edits"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|path| path.as_str())
-            .collect();
-        let label = if pending_deferred_edit_count == 1 {
-            "1 pending".to_owned()
-        } else {
-            format!("{pending_deferred_edit_count} pending")
-        };
-        let detail = if paths.is_empty() {
-            label
-        } else {
-            format!("{label}: {}", paths.join(", "))
-        };
-        write_row(&mut out, "Prompt Edits", &detail);
-    }
-
-    print_keepalive_halt(&mut out, data);
-
-    _ = writeln!(out);
-
-    // -- Clients --
-    if let Some(clients) = data.get("clients").and_then(|c| c.as_array()) {
-        if !clients.is_empty() {
-            write_section_header(&mut out, "Clients", "", width);
-            for client in clients {
-                let ctype = client["client_type"].as_str().unwrap_or("?");
-                let cname = client["client_name"].as_str().unwrap_or("?");
-                write_row(&mut out, ctype, cname);
-            }
-            _ = writeln!(out);
-        }
-    }
-
-    // -- Autonomy --
-    if let Some(autonomy) = data.get("autonomy") {
-        if !autonomy.is_null() {
-            write_autonomy_section(&mut out, autonomy, width);
-        }
-    }
-
-    // -- Activity --
-    if let Some(activity) = data.get("activity") {
-        if !activity.is_null() {
-            let turn_count = activity["turn_count"].as_u64().unwrap_or(0);
-            if turn_count > 0 {
-                write_activity_section(&mut out, activity, width);
-            }
-        }
-    }
-}
-
-pub(crate) fn print_character_list(data: &serde_json::Value, active: Option<&str>) {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    let width = term_width();
-    write_section_header(&mut out, "Characters", "", width);
-
-    let names: Vec<&str> = data["characters"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|c| c["name"].as_str())
-        .collect();
-    if names.is_empty() {
-        print_dim_line(
-            &mut out,
-            "(none — `shore character --new <name>` creates one)",
-        );
-        return;
-    }
-    for name in names {
-        if active == Some(name) {
-            _ = write!(out, "  * ");
-            write_fg(&mut out, character_color(name), name);
-            write_dim(&mut out, " (active)");
-            _ = writeln!(out);
-        } else {
-            _ = writeln!(out, "    {name}");
-        }
-    }
-}
-
-/// Render one named slice of the status payload. Returns false when the
-/// payload has no such section, so the caller can report an unknown name.
-pub(crate) fn print_status_section(data: &serde_json::Value, section: &str) -> bool {
-    let Some(value) = data.get(section) else {
-        return false;
-    };
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    let width = term_width();
-
-    match section {
-        "autonomy" if !value.is_null() => write_autonomy_section(&mut out, value, width),
-        "activity" if !value.is_null() => write_activity_section(&mut out, value, width),
-        _ => {
-            write_section_header(&mut out, section, "", width);
-            write_value_rows(&mut out, value);
-        }
-    }
-    true
-}
-
-fn write_value_rows(out: &mut impl Write, value: &serde_json::Value) {
-    match value {
-        serde_json::Value::Null => print_dim_line(out, "(not set)"),
-        serde_json::Value::Object(fields) if fields.is_empty() => print_dim_line(out, "(empty)"),
-        serde_json::Value::Object(fields) => {
-            for (key, field) in fields {
-                write_row(out, key, &scalar_display(field));
-            }
-        }
-        serde_json::Value::Array(items) if items.is_empty() => print_dim_line(out, "(none)"),
-        serde_json::Value::Array(items) => {
-            for item in items {
-                _ = writeln!(out, "  {}", scalar_display(item));
-            }
-        }
-        scalar @ (serde_json::Value::Bool(_)
-        | serde_json::Value::Number(_)
-        | serde_json::Value::String(_)) => {
-            _ = writeln!(out, "  {}", scalar_display(scalar));
-        }
-    }
-}
-
-fn scalar_display(value: &serde_json::Value) -> String {
-    match value {
-        serde_json::Value::Null => "(unset)".to_owned(),
-        serde_json::Value::String(text) => text.clone(),
-        serde_json::Value::Bool(flag) => flag.to_string(),
-        serde_json::Value::Number(number) => number.to_string(),
-        nested @ (serde_json::Value::Array(_) | serde_json::Value::Object(_)) => nested.to_string(),
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Command-specific formatters
 // ---------------------------------------------------------------------------
@@ -370,22 +64,13 @@ fn scalar_display(value: &serde_json::Value) -> String {
 pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
     match name {
         "character_info" => print_character_info(data),
-        "list_models" => print_model_list(data),
-        "background_models" => print_background_models(data),
         "switch_model" => print_model_switched(data),
         "reset_model" => print_model_reset(data),
-        "model_info" => print_model_info(data),
-        "model_settings" => print_model_settings(data),
         "set_model_setting" => print_set_model_setting(data),
-        "list_providers" => print_provider_list(data),
-        "list_provider_models" => print_provider_models(data),
         "refresh_provider_models" => print_provider_refresh(data),
         "refresh_all_provider_models" => print_provider_refresh_all(data),
         "memory" => print_memory(data),
         "compact" => print_compact_result(data),
-        "config" => print_config(data, false),
-        "tools" => print_tools(data),
-        "config_check" => print_config_check(data),
         "config_reload" => print_config_reload(data),
         "config_reset" => print_config_reset(data),
         "edit" => print_edit_confirmation(data),
@@ -394,7 +79,6 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "list_alternatives" => print_alt_list(data),
         "inject_system" => cli_out!("System instruction injected."),
         "diagnostics" => print_diagnostics(data),
-        "usage" => print_usage(data),
         "heartbeat_log" => super::transcript::print_heartbeat_log(data),
         "call_log" => print_call_log(data),
         "transcript" => print_transcript(data),
@@ -446,17 +130,17 @@ fn print_call_log(data: &serde_json::Value) {
         let usage = &entry["usage"];
         write_fg(
             &mut out,
-            Color::DarkGrey,
+            Tone::Muted,
             &format!("  #{:<6}", entry["id"].as_i64().unwrap_or(0)),
         );
         write_fg(
             &mut out,
-            Color::Blue,
+            Tone::Active,
             &format!("{:<18}", entry["call_type"].as_str().unwrap_or("?")),
         );
         write_fg(
             &mut out,
-            Color::Magenta,
+            Tone::Thinking,
             &format!(
                 "{}/{}",
                 entry["provider"].as_str().unwrap_or("?"),
@@ -515,7 +199,7 @@ fn print_one_call(out: &mut impl Write, call: &serde_json::Value, width: usize) 
     );
     _ = writeln!(out);
     for (label, key) in [("request", "request"), ("response", "response")] {
-        write_fg(out, Color::Cyan, &format!("  {label}:\n"));
+        write_fg(out, Tone::Active, &format!("  {label}:\n"));
         let body = display_payload_body(&call[key]);
         let formatted = if key == "response" {
             format_stream_payload(&body)
@@ -609,7 +293,7 @@ fn print_wire_exchanges(out: &mut impl Write, wire: Option<&serde_json::Value>, 
             .map_or_else(|| "-".to_owned(), |s| s.to_string());
         write_fg(
             out,
-            Color::Magenta,
+            Tone::Thinking,
             &format!(
                 "  #{} {} {}",
                 exchange["seq"].as_u64().unwrap_or(0),
@@ -641,7 +325,7 @@ fn print_wire_exchanges(out: &mut impl Write, wire: Option<&serde_json::Value>, 
             if body.is_empty() {
                 continue;
             }
-            write_fg(out, Color::Cyan, &format!("  {label}:\n"));
+            write_fg(out, Tone::Active, &format!("  {label}:\n"));
             _ = writeln!(out, "{}", truncate_display(&body, CALL_BODY_PREVIEW));
         }
         _ = writeln!(out);
@@ -728,9 +412,9 @@ fn print_call_diff(
             unchanged_run = 0;
         }
         let (color, sign) = if op == "added" {
-            (Color::Green, '+')
+            (Tone::Good, '+')
         } else {
-            (Color::Red, '-')
+            (COLOR_ERROR, '-')
         };
         for line in truncate_display(body, DIFF_CHUNK_PREVIEW).lines() {
             write_fg(out, color, &format!("  {sign} {line}\n"));
@@ -788,10 +472,10 @@ fn print_transcript_entry(
         },
     );
     let usage = &entry["usage"];
-    write_fg(out, Color::DarkGrey, &format!("  {time_str:<14}"));
+    write_fg(out, Tone::Muted, &format!("  {time_str:<14}"));
     write_fg(
         out,
-        Color::Blue,
+        Tone::Active,
         &format!(
             "{}#{}",
             entry["call_type"].as_str().unwrap_or("?"),
@@ -800,7 +484,7 @@ fn print_transcript_entry(
     );
     write_fg(
         out,
-        Color::Magenta,
+        Tone::Thinking,
         &format!(
             "  {}/{}",
             entry["provider"].as_str().unwrap_or("?"),
@@ -822,19 +506,19 @@ fn print_transcript_entry(
     let inner = &entry["entry"];
     if let Some(reasoning) = inner["reasoning"].as_array() {
         for block in reasoning.iter().filter_map(serde_json::Value::as_str) {
-            write_fg(out, Color::DarkCyan, "                reasoning: ");
+            write_fg(out, Tone::Active, "                reasoning: ");
             _ = writeln!(out, "{}", block.trim());
         }
     }
     let text = inner["text"].as_str().unwrap_or("");
     if !text.trim().is_empty() {
-        write_fg(out, Color::White, "                text: ");
+        write_fg(out, Tone::Heading, "                text: ");
         _ = writeln!(out, "{}", text.trim());
     }
     if let Some(tools) = inner["tool_calls"].as_array() {
         for tool in tools {
             let is_error = tool["is_error"].as_bool().unwrap_or(false);
-            let color = if is_error { Color::Red } else { Color::Cyan };
+            let color = if is_error { COLOR_ERROR } else { Tone::Active };
             let tag = if is_error { " (error)" } else { "" };
             write_fg(
                 out,
@@ -899,15 +583,15 @@ fn print_subagent_run(
             formatted
         },
     );
-    write_fg(out, Color::DarkGrey, &format!("  {time_str:<14}"));
+    write_fg(out, Tone::Muted, &format!("  {time_str:<14}"));
     write_fg(
         out,
-        Color::Blue,
+        Tone::Active,
         &format!("ask_{}", entry["subagent"].as_str().unwrap_or("?")),
     );
     write_fg(
         out,
-        Color::Magenta,
+        Tone::Thinking,
         &format!(
             "  {}",
             abbreviate_model(entry["model"].as_str().unwrap_or("?"))
@@ -936,11 +620,11 @@ fn print_subagent_run(
 
     match (entry["error"].as_str(), entry["result"].as_str()) {
         (Some(error), _) => {
-            write_fg(out, Color::Red, "                failed: ");
+            write_fg(out, COLOR_ERROR, "                failed: ");
             _ = writeln!(out, "{}", truncate_display(error, 600));
         }
         (None, Some(result)) => {
-            write_fg(out, Color::White, "                answer: ");
+            write_fg(out, Tone::Heading, "                answer: ");
             _ = writeln!(out, "{}", truncate_display(result, 600));
         }
         (None, None) => {}
@@ -955,48 +639,40 @@ fn print_subagent_block(out: &mut impl Write, block: &serde_json::Value) {
             if thinking.trim().is_empty() {
                 return;
             }
-            write_fg(out, Color::DarkCyan, "                reasoning: ");
-            _ = writeln!(out, "{}", truncate_display(thinking.trim(), 600));
+            write_sigil_header(out, SIGIL_THINKING, "Thinking", COLOR_THINKING);
+            write_process_body(out, thinking.trim());
         }
         "text" => {
             let text = block["text"].as_str().unwrap_or("");
             if text.trim().is_empty() {
                 return;
             }
-            write_fg(out, Color::White, "                text: ");
-            _ = writeln!(out, "{}", truncate_display(text.trim(), 600));
+            write_sigil_header(out, SIGIL_SUBAGENT, "answer", COLOR_SUBAGENT);
+            write_process_body(out, text.trim());
         }
         "tool_use" => {
-            write_fg(
-                out,
-                Color::Cyan,
-                &format!(
-                    "                tool {}: ",
-                    block["name"].as_str().unwrap_or("?")
-                ),
-            );
-            _ = writeln!(
-                out,
-                "{}",
-                truncate_display(&block["input"].to_string(), 200)
-            );
+            let name = block["name"].as_str().unwrap_or("?");
+            let header = match primary_tool_arg(&block["input"]) {
+                Some(arg) => format!("{name} \u{00b7} {arg}"),
+                None => name.to_owned(),
+            };
+            write_sigil_header(out, SIGIL_TOOL, &header, COLOR_TOOL);
+            if let Some(input) = format_tool_input(&block["input"]) {
+                write_process_body(out, &input);
+            }
         }
         "tool_result" => {
             let is_error = block["is_error"].as_bool().unwrap_or(false);
-            let arrow = if is_error { "  ✗ " } else { "  → " };
+            let (sigil, label, color) = if is_error {
+                (SIGIL_ERROR, "error", COLOR_ERROR)
+            } else {
+                (SIGIL_OK, "result", COLOR_RESULT)
+            };
+            write_sigil_header(out, sigil, label, color);
             let body = block["content"]
                 .as_str()
                 .map_or_else(|| block["content"].to_string(), str::to_owned);
-            if is_error {
-                write_fg(out, Color::Red, &format!("                {arrow}"));
-                _ = writeln!(out, "{}", truncate_display(&body, 600));
-            } else {
-                write_dim(
-                    out,
-                    &format!("                {arrow}{}", truncate_display(&body, 600)),
-                );
-                _ = writeln!(out);
-            }
+            write_process_body(out, &format_tool_output(&body));
         }
         _ => {}
     }
@@ -1036,7 +712,7 @@ fn print_heartbeat_tick_now(data: &serde_json::Value) {
     if let Some(warning) = data["warning"].as_str() {
         let stdout = io::stdout();
         let mut out = stdout.lock();
-        write_fg(&mut out, Color::Yellow, warning);
+        write_fg(&mut out, Tone::Warn, warning);
         _ = writeln!(out);
     }
 }
@@ -1101,7 +777,7 @@ fn print_run_tool(data: &serde_json::Value) {
 
     write_fg(
         &mut out,
-        if ok { Color::Green } else { Color::Red },
+        if ok { Tone::Good } else { COLOR_ERROR },
         if ok { "  ok" } else { "  failed" },
     );
     write_dim(
@@ -1180,8 +856,8 @@ fn print_run_tool_calls(out: &mut impl Write, data: &serde_json::Value, width: u
     write_section_header(out, "nested calls", &format!("{}", calls.len()), width);
     for call in calls {
         let ok = call["ok"].as_bool().unwrap_or(false);
-        write_fg(out, if ok { Color::Green } else { Color::Red }, "  \u{2022} ");
-        write_fg(out, Color::Blue, call["tool"].as_str().unwrap_or("?"));
+        write_fg(out, if ok { Tone::Good } else { COLOR_ERROR }, "  \u{2022} ");
+        write_fg(out, Tone::Active, call["tool"].as_str().unwrap_or("?"));
         if let Some(agent) = call["subagent"].as_str() {
             write_dim(out, &format!("  (ask_{agent})"));
         }
@@ -1368,145 +1044,8 @@ fn print_alt_list(data: &serde_json::Value) {
             " "
         };
         let preview = alt_preview(alt["content"].as_str().unwrap_or(""), preview_width);
-        _ = writeln!(out, "  {marker} {position}/{count}  {preview}");
-    }
-    _ = writeln!(out);
-}
-
-/// Print model list.
-///
-/// Phase 8: rows include the source tag (`static`/`discovered`) so users
-/// can tell aliases from upstream-discovered ids at a glance, and an
-/// optional `hidden_count` footer points them at `--all` when filtered
-/// models exist.
-fn print_model_list(data: &serde_json::Value) {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    let width = term_width();
-
-    let active = data["active"].as_str().unwrap_or("");
-    let include_hidden = data["include_hidden"].as_bool().unwrap_or(false);
-    let suffix = if include_hidden { "all" } else { "" };
-    write_section_header(&mut out, "Models", suffix, width);
-
-    let listed = data["models"].as_array().map_or(0, Vec::len);
-    if listed == 0 {
-        print_dim_line(
-            &mut out,
-            "(no models in the catalog — `shore model --info` shows what the active \
-             model resolves to)",
-        );
-    }
-    if let Some(models) = data["models"].as_array() {
-        // Size columns to the widest value so rows stay visually separated
-        // even when names like `arcee-ai/trinity-large-thinking:free` or
-        // providers like `openrouter-anthropic` blow past fixed defaults.
-        let name_w = models
-            .iter()
-            .map(|m| m["name"].as_str().unwrap_or("?").chars().count())
-            .max()
-            .unwrap_or(0)
-            .max(24);
-        let provider_w = models
-            .iter()
-            .map(|m| m["provider"].as_str().unwrap_or("?").chars().count())
-            .max()
-            .unwrap_or(0)
-            .max(10);
-
-        for m in models {
-            let name = m["name"].as_str().unwrap_or("?");
-            let provider = m["provider"].as_str().unwrap_or("?");
-            let source = m["source"].as_str().unwrap_or("");
-            let hidden = m["hidden"].as_bool().unwrap_or(false);
-            let is_active = name == active || m["qualified_name"].as_str() == Some(active);
-
-            let marker = if is_active { "*" } else { " " };
-
-            if use_color() && is_active {
-                let _ignored = crossterm::execute!(out, SetForegroundColor(Color::Cyan));
-            } else if use_color() {
-                let _ignored = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-            } else {
-                // No color: leave the default terminal foreground.
-            }
-            _ = write!(out, "  {marker} ");
-            if use_color() {
-                _ = crossterm::execute!(out, ResetColor);
-            }
-            _ = write!(out, "{name:<name_w$}  ");
-            if use_color() {
-                _ = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-            }
-            _ = write!(out, "{provider:<provider_w$}  ");
-            // Tag like `static` / `discovered`. Hidden rows (only seen
-            // with `--all`) carry an extra `hidden` so users can spot
-            // why their default list filtered them.
-            if !source.is_empty() {
-                let tag = if hidden {
-                    format!("{source}, hidden")
-                } else {
-                    source.to_owned()
-                };
-                _ = write!(out, "[{tag}]");
-            }
-            if use_color() {
-                _ = crossterm::execute!(out, ResetColor);
-            }
-            _ = writeln!(out);
-        }
-    }
-
-    // Hint about hidden models the user is not currently seeing.
-    let hidden_count = data["hidden_count"].as_u64().unwrap_or(0);
-    if !include_hidden && hidden_count > 0 {
-        _ = writeln!(out);
-        write_dim(
-            &mut out,
-            &format!("  ({hidden_count} hidden — use `shore model --all` to include them)"),
-        );
-        _ = writeln!(out);
-    }
-    _ = writeln!(out);
-}
-
-/// Print the model resolved for each background task, with its source.
-fn print_background_models(data: &serde_json::Value) {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    let width = term_width();
-    write_section_header(&mut out, "Background models", "", width);
-
-    if let Some(rows) = data["background"].as_array() {
-        let task_w = rows
-            .iter()
-            .map(|r| r["task"].as_str().unwrap_or("?").chars().count())
-            .max()
-            .unwrap_or(0)
-            .max(10);
-        let model_w = rows
-            .iter()
-            .map(|r| r["model"].as_str().unwrap_or("?").chars().count())
-            .max()
-            .unwrap_or(0)
-            .max(20);
-
-        for r in rows {
-            let task = r["task"].as_str().unwrap_or("?");
-            let model = r["model"].as_str().unwrap_or("?");
-            let source = r["source"].as_str().unwrap_or("");
-            _ = write!(out, "  {task:<task_w$}  {model:<model_w$}  ");
-            if use_color() {
-                _ = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-            }
-            if !source.is_empty() {
-                _ = write!(out, "[{source}]");
-            }
-            if use_color() {
-                _ = crossterm::execute!(out, ResetColor);
-            }
-            _ = writeln!(out);
-        }
+        indent_to(&mut out, 0);
+        _ = writeln!(out, "{marker} {position}/{count}  {preview}");
     }
     _ = writeln!(out);
 }
@@ -1523,168 +1062,6 @@ fn print_model_reset(data: &serde_json::Value) {
     cli_out!("Model reset to: {}", abbreviate_model(model));
 }
 
-/// Print detailed model info.
-fn print_model_info(data: &serde_json::Value) {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    let width = term_width();
-
-    let name = data["name"].as_str().unwrap_or("?");
-    write_section_header(&mut out, "Model", name, width);
-
-    if let Some(qn) = data["qualified_name"].as_str() {
-        write_row(&mut out, "Qualified", qn);
-    }
-    if let Some(mid) = data["model_id"].as_str() {
-        write_row(&mut out, "Model ID", mid);
-    }
-    if let Some(sdk) = data["sdk"].as_str() {
-        write_row(&mut out, "SDK", sdk);
-    }
-    if let Some(pk) = data["provider_key"].as_str() {
-        write_row(&mut out, "Provider", pk);
-    }
-    if let Some(url) = data["base_url"].as_str() {
-        write_row(&mut out, "Base URL", url);
-    }
-    if let Some(key) = data["api_key_env"].as_str() {
-        write_row(&mut out, "API key env", &format!("${key}"));
-    }
-
-    // Cache settings
-    if let Some(ttl) = data["cache_ttl_secs"].as_u64() {
-        if ttl > 0 {
-            write_row(&mut out, "Cache TTL", &format!("{ttl}s"));
-        }
-    }
-    if let Some(depth) = data["cache_depth"].as_u64() {
-        if depth > 0 {
-            write_row(&mut out, "Cache depth", &depth.to_string());
-        }
-    }
-    if let Some(re) = data["reasoning_effort"].as_str() {
-        write_row(&mut out, "Reasoning", re);
-    }
-    if let Some(mt) = data["max_output_tokens"].as_u64() {
-        write_row(&mut out, "Max output tokens", &mt.to_string());
-    }
-    _ = writeln!(out);
-}
-
-/// Print effective sampler settings + which scope set each value.
-/// Keys to display in `model_settings`, hiding those the model's resolved sdk
-/// ignores/rejects (#162). A key is shown when its `applicability` label is
-/// `"honored"` or `"always"`, or when no label is present — older daemons omit
-/// the `applicability` map, in which case every key is shown (forward/backward
-/// compatible).
-fn visible_setting_keys<'src>(
-    all_keys: &[&'src str],
-    applicability: &serde_json::Value,
-) -> Vec<&'src str> {
-    all_keys
-        .iter()
-        .copied()
-        .filter(
-            |key| match applicability.get(*key).and_then(|v| v.as_str()) {
-                Some(label) => label == "honored" || label == "always",
-                None => true,
-            },
-        )
-        .collect()
-}
-
-/// One rendered row of `print_model_settings`, collected before drawing so the
-/// value and scope columns can be width-aligned.
-struct SettingRow<'key> {
-    key: &'key str,
-    value: String,
-    scope: String,
-    domain: Option<String>,
-}
-
-fn print_model_settings(data: &serde_json::Value) {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    let width = term_width();
-
-    let model = data["model"].as_str().unwrap_or("?");
-    write_section_header(&mut out, "Model Settings", model, width);
-
-    let sampler = data.get("effective_sampler").cloned().unwrap_or_default();
-    let scopes = data.get("scopes").cloned().unwrap_or_default();
-    let applicability = data.get("applicability").cloned().unwrap_or_default();
-    let all_keys = [
-        "temperature",
-        "top_p",
-        "reasoning_effort",
-        "budget_tokens",
-        "max_output_tokens",
-        "cache_ttl",
-        "cache_keepalive",
-        "sdk",
-        "replay_prior_thinking",
-        "max_tool_iterations",
-        "openrouter_provider",
-        "gemini_generation",
-        "zai_clear_thinking",
-        "zai_subscription",
-    ];
-    // Capability matrix (#162): show only keys the resolved sdk honors (or
-    // Shore-only keys it always applies).
-    let keys = visible_setting_keys(&all_keys, &applicability);
-
-    // Accepted `reasoning_effort` value set for this model's sdk, if provided.
-    let effort_domain: Vec<&str> = data
-        .get("reasoning_effort_domain")
-        .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
-        .unwrap_or_default();
-
-    // Collect rows up front so value/scope columns can be aligned.
-    let rows: Vec<SettingRow<'_>> = keys
-        .iter()
-        .map(|&key| {
-            let value = match sampler.get(key) {
-                Some(v) if v.is_null() => "(unset)".to_owned(),
-                Some(v) => v.as_str().map_or_else(|| v.to_string(), String::from),
-                None => "(unset)".to_owned(),
-            };
-            let scope = scopes
-                .get(key)
-                .and_then(|v| v.as_str())
-                .unwrap_or("(default)")
-                .to_owned();
-            let domain = (key == "reasoning_effort" && !effort_domain.is_empty())
-                .then(|| effort_domain.join(", "));
-            SettingRow {
-                key,
-                value,
-                scope,
-                domain,
-            }
-        })
-        .collect();
-
-    let label_width = rows.iter().map(|r| r.key.len()).max().unwrap_or(0);
-    let value_width = rows.iter().map(|r| r.value.len()).max().unwrap_or(0);
-    for row in &rows {
-        // `  <label>   <value>   [scope]   {domain}`, columns aligned, with the
-        // label/scope/domain dimmed and the live value at full brightness.
-        write_dim(&mut out, &format!("  {:<label_width$}   ", row.key));
-        write_fg(
-            &mut out,
-            Color::White,
-            &format!("{:<value_width$}", row.value),
-        );
-        write_dim(&mut out, &format!("   [{}]", row.scope));
-        if let Some(domain) = &row.domain {
-            write_dim(&mut out, &format!("   {{{domain}}}"));
-        }
-        _ = writeln!(out);
-    }
-    _ = writeln!(out);
-}
-
 /// Print confirmation after `set_model_setting`.
 fn print_set_model_setting(data: &serde_json::Value) {
     let key = data["key"].as_str().unwrap_or("?");
@@ -1696,162 +1073,6 @@ fn print_set_model_setting(data: &serde_json::Value) {
     };
     let model = data["model"].as_str().unwrap_or("?");
     cli_out!("[{scope}] {key} = {value}  ({})", abbreviate_model(model));
-}
-
-/// Print the configured provider list with key + cache status.
-fn print_provider_list(data: &serde_json::Value) {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    let width = term_width();
-
-    write_section_header(&mut out, "Providers", "", width);
-
-    let providers = match data["providers"].as_array() {
-        Some(p) if !p.is_empty() => p,
-        _ => {
-            print_dim_line(&mut out, "(no providers configured)");
-            _ = writeln!(out);
-            return;
-        }
-    };
-
-    for p in providers {
-        let name = p["name"].as_str().unwrap_or("?");
-        let enabled = p["enabled"].as_bool().unwrap_or(true);
-        let sdk = p["sdk"].as_str().unwrap_or("?");
-        let base_url = p["base_url"].as_str().unwrap_or("");
-        let discovery = p["discovery_enabled"].as_bool().unwrap_or(false);
-
-        // Header line: bold provider name + sdk tag, dim base_url.
-        if use_color() {
-            let _ignored = crossterm::execute!(out, SetAttribute(Attribute::Bold));
-        }
-        _ = write!(out, "  {name}");
-        if use_color() {
-            _ = crossterm::execute!(out, SetAttribute(Attribute::Reset));
-        }
-        if !enabled {
-            write_fg(&mut out, Color::Yellow, "  [disabled]");
-        }
-        if discovery {
-            write_dim(&mut out, "  [discovery]");
-        }
-        _ = writeln!(out);
-
-        write_row(&mut out, "SDK", sdk);
-        if !base_url.is_empty() {
-            write_row(&mut out, "Base URL", base_url);
-        }
-
-        if let Some(keys) = p["keys"].as_array() {
-            if keys.is_empty() {
-                write_row(&mut out, "Keys", "(none configured)");
-            } else {
-                let mut parts: Vec<String> = Vec::new();
-                for k in keys {
-                    let kn = k["name"].as_str().unwrap_or("?");
-                    let env_set = k["env_set"].as_bool().unwrap_or(false);
-                    let warn = k["warn_on_fallback"].as_bool().unwrap_or(false);
-                    let mark = if env_set { "set" } else { "missing" };
-                    let warn_tag = if warn { "*" } else { "" };
-                    parts.push(format!("{kn}{warn_tag}={mark}"));
-                }
-                write_row(&mut out, "Keys", &parts.join(", "));
-            }
-        }
-
-        let cache = &p["cache"];
-        if cache["present"].as_bool().unwrap_or(false) {
-            let total = cache["models"].as_u64().unwrap_or(0);
-            let visible = cache["visible"].as_u64().unwrap_or(total);
-            let hidden = cache["hidden"].as_u64().unwrap_or(0);
-            let fetched = cache["fetched_at"].as_str().unwrap_or("?");
-            let summary = if hidden > 0 {
-                format!("{visible} visible / {hidden} hidden / {total} total · fetched {fetched}")
-            } else {
-                format!("{total} models · fetched {fetched}")
-            };
-            write_row(&mut out, "Cache", &summary);
-        } else if discovery {
-            write_row(
-                &mut out,
-                "Cache",
-                &format!("(empty — `shore provider refresh {name}`)"),
-            );
-        } else {
-            write_row(
-                &mut out,
-                "Cache",
-                "(none — discovery is off for this provider)",
-            );
-        }
-        _ = writeln!(out);
-    }
-}
-
-/// Print discovered + static models for a single provider.
-fn print_provider_models(data: &serde_json::Value) {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    let width = term_width();
-
-    let provider = data["provider"].as_str().unwrap_or("?");
-    let include_hidden = data["include_hidden"].as_bool().unwrap_or(false);
-    let suffix = if include_hidden { "all" } else { "" };
-    write_section_header(&mut out, &format!("Provider — {provider}"), suffix, width);
-
-    let static_models = data["static"].as_array().cloned().unwrap_or_default();
-    if !static_models.is_empty() {
-        write_dim(&mut out, "  static\n");
-        for m in &static_models {
-            let name = m["name"].as_str().unwrap_or("?");
-            let id = m["model_id"].as_str().unwrap_or("?");
-            _ = writeln!(out, "    {name:<28}{id}");
-        }
-        _ = writeln!(out);
-    }
-
-    let discovered = data["discovered"].as_array().cloned().unwrap_or_default();
-    if !discovered.is_empty() {
-        write_dim(&mut out, "  discovered\n");
-        for m in &discovered {
-            let id = m["model_id"].as_str().unwrap_or("?");
-            let display = m["display_name"].as_str().unwrap_or("");
-            if display.is_empty() {
-                _ = writeln!(out, "    {id}");
-            } else {
-                _ = writeln!(out, "    {id:<48}{display}");
-            }
-        }
-        _ = writeln!(out);
-    }
-
-    let hidden = data["hidden"].as_array().cloned().unwrap_or_default();
-    if !hidden.is_empty() {
-        write_dim(
-            &mut out,
-            &format!("  hidden ({} — pass --all to include)\n", hidden.len()),
-        );
-        for m in &hidden {
-            let id = m["model_id"].as_str().unwrap_or("?");
-            _ = writeln!(out, "    {id}");
-        }
-        _ = writeln!(out);
-    }
-
-    if static_models.is_empty() && discovered.is_empty() && hidden.is_empty() {
-        print_dim_line(
-            &mut out,
-            "no models — run `shore provider refresh <name>` if discovery is configured",
-        );
-        _ = writeln!(out);
-    }
-
-    if let Some(cache) = data.get("cache") {
-        if let Some(fetched) = cache["fetched_at"].as_str() {
-            write_dim(&mut out, &format!("  cache fetched {fetched}\n"));
-        }
-    }
 }
 
 /// Print the result of `shore provider refresh <name>`.
@@ -1883,22 +1104,20 @@ fn print_provider_refresh_all(data: &serde_json::Value) {
                 let count = r["model_count"].as_u64().unwrap_or(0);
                 let fetched = r["fetched_at"].as_str().unwrap_or("?");
                 if use_color() {
-                    let _ignored = crossterm::execute!(out, SetForegroundColor(Color::Green));
-                    _ = write!(out, "  ok  ");
-                    _ = crossterm::execute!(out, ResetColor);
+                    paint(&mut out, Tone::Good, &format!("  ok  "));
                 } else {
-                    _ = write!(out, "  ok  ");
+                    indent_to(&mut out, 0);
+                    _ = write!(out, "ok  ");
                 }
                 _ = writeln!(out, "{provider}: {count} models (fetched {fetched})");
             } else {
                 fail_count = fail_count.saturating_add(1);
                 let err = r["error"].as_str().unwrap_or("unknown error");
                 if use_color() {
-                    let _ignored = crossterm::execute!(out, SetForegroundColor(Color::Red));
-                    _ = write!(out, "  FAIL");
-                    _ = crossterm::execute!(out, ResetColor);
+                    paint(&mut out, COLOR_ERROR, &format!("  FAIL"));
                 } else {
-                    _ = write!(out, "  FAIL");
+                    indent_to(&mut out, 0);
+                    _ = write!(out, "FAIL");
                 }
                 _ = writeln!(out, " {provider}: {err}");
             }
@@ -1912,13 +1131,8 @@ fn print_provider_refresh_all(data: &serde_json::Value) {
             for s in skipped {
                 let provider = s["provider"].as_str().unwrap_or("?");
                 let reason = s["reason"].as_str().unwrap_or("?");
-                if use_color() {
-                    _ = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-                }
-                _ = writeln!(out, "  {provider}: {reason}");
-                if use_color() {
-                    _ = crossterm::execute!(out, ResetColor);
-                }
+                paint(&mut out, Tone::Muted, &format!("  {provider}: {reason}"));
+                _ = writeln!(out);
             }
         }
     }
@@ -1944,7 +1158,7 @@ fn print_character_info(data: &serde_json::Value) {
 
     let active = data["active"].as_bool().unwrap_or(false);
     if active {
-        write_row_colored(&mut out, "Active", "yes", Color::Green);
+        write_row_colored(&mut out, "Active", "yes", Tone::Good);
     }
 
     if let Some(dir) = data["config_dir"].as_str() {
@@ -1959,7 +1173,7 @@ fn print_character_info(data: &serde_json::Value) {
     }
 
     if data["has_config_override"].as_bool().unwrap_or(false) {
-        write_row_colored(&mut out, "Config override", "yes", Color::Yellow);
+        write_row_colored(&mut out, "Config override", "yes", Tone::Warn);
     }
 
     if let Some(overrides) = data["prompt_overrides"].as_array() {
@@ -1979,14 +1193,11 @@ fn print_character_info(data: &serde_json::Value) {
             _ = writeln!(out);
             write_section_header(&mut out, "Preview", "", width);
             // Show first few lines, dimmed
-            if use_color() {
-                _ = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-            }
             for line in preview.lines().take(8) {
-                _ = writeln!(out, "  {line}");
+                paint(&mut out, Tone::Muted, &format!("  {line}"));
+                _ = writeln!(out);
             }
-            if use_color() {
-                _ = crossterm::execute!(out, ResetColor);
+            if false {
             }
         }
     }
@@ -2069,358 +1280,6 @@ fn print_compact_result(data: &serde_json::Value) {
     _ = writeln!(out);
 }
 
-/// Print config display.
-pub(crate) fn print_config(data: &serde_json::Value, show_all: bool) {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    let width = term_width();
-
-    // Config set confirmation: { "set": "key", "value": ... }
-    if let Some(key) = data["set"].as_str() {
-        let value = &data["value"];
-        _ = writeln!(out, "Set {key} = {value}");
-        return;
-    }
-
-    // Section view: { "key": "name", "config": { ... }, "defaults": { ... } }
-    if let Some(key) = data["key"].as_str() {
-        // The daemon scopes `defaults` to the section for us.
-        let section_default = data.get("defaults");
-        write_section_header(&mut out, "Config", key, width);
-        print_config_section(&mut out, &data["config"], section_default, 1, show_all);
-        _ = writeln!(out);
-        return;
-    }
-
-    // Full config: { "config": { ... }, "defaults": { ... } }
-    if let Some(config) = data.get("config") {
-        let defaults = data.get("defaults");
-        write_section_header(&mut out, "Config", "", width);
-        print_config_section(&mut out, config, defaults, 1, show_all);
-        _ = writeln!(out);
-    }
-}
-
-/// Render a scalar value to its display string (matches the original formatter).
-fn render_config_value(v: &serde_json::Value) -> String {
-    match v {
-        serde_json::Value::String(s) => s.clone(),
-        serde_json::Value::Bool(b) => b.to_string(),
-        serde_json::Value::Number(n) => n.to_string(),
-        serde_json::Value::Array(arr) if arr.is_empty() => "(none)".to_owned(),
-        serde_json::Value::Array(arr) => arr
-            .iter()
-            .map(|i| i.as_str().map_or_else(|| i.to_string(), String::from))
-            .collect::<Vec<_>>()
-            .join(", "),
-        serde_json::Value::Null | serde_json::Value::Object(_) => v.to_string(),
-    }
-}
-
-/// Returns true if `value` contains at least one leaf that differs from its
-/// corresponding entry in `defaults` (or has no default to compare against).
-/// Used to decide whether a subtable header is worth showing when defaults
-/// are hidden.
-fn has_non_defaults(value: &serde_json::Value, defaults: Option<&serde_json::Value>) -> bool {
-    match value {
-        serde_json::Value::Null => false,
-        serde_json::Value::Object(map) => map.iter().any(|(k, v)| {
-            let d = defaults.and_then(|dd| dd.get(k));
-            has_non_defaults(v, d)
-        }),
-        leaf @ (serde_json::Value::Bool(_)
-        | serde_json::Value::Number(_)
-        | serde_json::Value::String(_)
-        | serde_json::Value::Array(_)) => defaults.is_none_or(|d| d != leaf),
-    }
-}
-
-/// Recursively print config as indented key-value pairs.
-///
-/// Column width is computed per parent table from the visible scalar keys, so
-/// each section aligns its own values without bleeding into sibling sections.
-/// When `show_all` is false, leaves that equal the default are skipped and
-/// subtables with no non-default descendants are collapsed.
-fn print_config_section(
-    out: &mut impl Write,
-    value: &serde_json::Value,
-    defaults: Option<&serde_json::Value>,
-    depth: usize,
-    show_all: bool,
-) {
-    let indent = "  ".repeat(depth);
-    let serde_json::Value::Object(map) = value else {
-        // `render_config_value`, not `{value}`: a dotted read lands here with a
-        // bare leaf, and serde's Display would print a string in quotes and an
-        // array as JSON — neither of which is how the same leaf renders one
-        // line up inside its section.
-        _ = writeln!(out, "{indent}{}", render_config_value(value));
-        return;
-    };
-
-    // First pass: filter to entries we'll actually render and classify them.
-    let mut visible: Vec<(
-        &str,
-        &serde_json::Value,
-        Option<&serde_json::Value>,
-        bool,
-        bool,
-    )> = Vec::new();
-    for (k, v) in map {
-        let d = defaults.and_then(|dd| dd.get(k));
-        match v {
-            serde_json::Value::Null => {}
-            serde_json::Value::Object(_) => {
-                if show_all || has_non_defaults(v, d) {
-                    visible.push((k.as_str(), v, d, true, false));
-                }
-            }
-            serde_json::Value::Array(items) if is_table_array(items) => {
-                if show_all || has_non_defaults(v, d) {
-                    visible.push((k.as_str(), v, d, true, false));
-                }
-            }
-            serde_json::Value::Bool(_)
-            | serde_json::Value::Number(_)
-            | serde_json::Value::String(_)
-            | serde_json::Value::Array(_) => {
-                let is_default = d.is_some_and(|dd| dd == v);
-                if !show_all && is_default {
-                    continue;
-                }
-                visible.push((k.as_str(), v, d, false, is_default));
-            }
-        }
-    }
-
-    // Per-section column: max scalar key length + 1 space. Subtable headers
-    // ("key:") don't share a column with scalar rows.
-    let scalar_width = visible
-        .iter()
-        .filter(|(_, _, _, is_sub, _)| !is_sub)
-        .map(|(k, _, _, _, _)| k.len())
-        .max()
-        .map_or(0, |m| m.saturating_add(1));
-
-    for (k, v, d, is_subtable, is_default) in visible {
-        if is_subtable {
-            if use_color() {
-                let _ignored = crossterm::execute!(out, SetForegroundColor(Color::White));
-            }
-            _ = writeln!(out, "{indent}{k}:");
-            if use_color() {
-                _ = crossterm::execute!(out, ResetColor);
-            }
-            if let serde_json::Value::Array(items) = v {
-                print_config_table_array(out, items, depth.saturating_add(1), show_all);
-            } else {
-                print_config_section(out, v, d, depth.saturating_add(1), show_all);
-            }
-        } else {
-            // Default rows (only reachable with show_all): whole line dimmed.
-            // Non-default rows: key dimmed, value in the default terminal color
-            // so customizations visually pop.
-            if use_color() {
-                let _ignored = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-            }
-            _ = write!(out, "{indent}{k:<scalar_width$}");
-            if use_color() && !is_default {
-                _ = crossterm::execute!(out, ResetColor);
-            }
-            _ = writeln!(out, "{}", render_config_value(v));
-            if use_color() && is_default {
-                _ = crossterm::execute!(out, ResetColor);
-            }
-        }
-    }
-}
-
-/// True for a non-empty array whose every element is an object -- TOML's array
-/// of tables, e.g. `[[usage.budgets]]`.
-fn is_table_array(items: &[serde_json::Value]) -> bool {
-    !items.is_empty() && items.iter().all(serde_json::Value::is_object)
-}
-
-/// Render an array of tables as one labelled block per element.
-///
-/// Without this each element fell through `render_config_value`'s array arm,
-/// which stringifies a non-string element -- so a `[[usage.budgets]]` entry
-/// printed as a single line of raw JSON, every null field included, in a
-/// section where nothing else looks remotely like that.
-///
-/// The label is the element's `name` where it has one, since that is what the
-/// same budget is called everywhere else, and its index otherwise.
-fn print_config_table_array(
-    out: &mut impl Write,
-    items: &[serde_json::Value],
-    depth: usize,
-    show_all: bool,
-) {
-    let indent = "  ".repeat(depth);
-    for (i, item) in items.iter().enumerate() {
-        let label = item["name"]
-            .as_str()
-            .filter(|s| !s.trim().is_empty())
-            .map_or_else(|| format!("[{i}]"), String::from);
-        if use_color() {
-            let _ignored = crossterm::execute!(out, SetForegroundColor(Color::White));
-        }
-        _ = writeln!(out, "{indent}{label}:");
-        if use_color() {
-            _ = crossterm::execute!(out, ResetColor);
-        }
-        let named = item["name"].as_str().is_some_and(|s| s == label);
-        let body = if named {
-            let mut rest = item.clone();
-            if let Some(map) = rest.as_object_mut() {
-                _ = map.shift_remove("name");
-            }
-            rest
-        } else {
-            item.clone()
-        };
-        print_config_section(out, &body, None, depth.saturating_add(1), show_all);
-    }
-}
-
-/// Print config check results.
-/// Render the `shore tools` surface: per-tool main-character enablement, the
-/// sub-agent roster and the tools each owns, the `exec` allowlist, and any
-/// dangling-config warnings, all from the SWP `tools` query payload.
-fn print_tools(data: &serde_json::Value) {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    let width = term_width();
-
-    write_section_header(&mut out, "Tools", "surface", width);
-
-    // Per-tool: enablement on the main character + sub-agent owners.
-    if let Some(tools) = data["tools"].as_array() {
-        for t in tools {
-            let name = t["tool"].as_str().unwrap_or("?");
-            let main = t["main"].as_bool().unwrap_or(false);
-            let owners: Vec<&str> = t["subagents"]
-                .as_array()
-                .map(|a| a.iter().filter_map(|s| s.as_str()).collect())
-                .unwrap_or_default();
-
-            if use_color() {
-                _ = crossterm::execute!(
-                    out,
-                    SetForegroundColor(if main { Color::Green } else { Color::DarkGrey })
-                );
-            }
-            _ = write!(out, "  {} ", if main { "✓" } else { "·" });
-            if use_color() {
-                _ = crossterm::execute!(out, ResetColor);
-            }
-            let owners_str = if owners.is_empty() {
-                String::new()
-            } else {
-                format!("  ← {}", owners.join(", "))
-            };
-            _ = writeln!(out, "{name:<20}{owners_str}");
-        }
-    }
-    _ = writeln!(out);
-
-    // Sub-agent roster.
-    if let Some(subs) = data["subagents"].as_array() {
-        if !subs.is_empty() {
-            write_row(&mut out, "Sub-agents", "");
-            for s in subs {
-                let name = s["name"].as_str().unwrap_or("?");
-                let enabled = s["enabled"].as_bool().unwrap_or(false);
-                let tools: Vec<&str> = s["tools"]
-                    .as_array()
-                    .map(|a| a.iter().filter_map(|t| t.as_str()).collect())
-                    .unwrap_or_default();
-                let model = s["model"].as_str().unwrap_or("(default)");
-                let mark = if enabled { "ask_" } else { "(disabled) " };
-                _ = writeln!(out, "  {mark}{name}  [{}]  {model}", tools.join(", "));
-            }
-            _ = writeln!(out);
-        }
-    }
-
-    // Dangling references.
-    if let Some(warnings) = data["warnings"].as_array() {
-        for w in warnings {
-            if let Some(msg) = w.as_str() {
-                if use_color() {
-                    _ = crossterm::execute!(out, SetForegroundColor(Color::DarkYellow));
-                }
-                _ = write!(out, "  ! ");
-                if use_color() {
-                    _ = crossterm::execute!(out, ResetColor);
-                }
-                _ = writeln!(out, "{msg}");
-            }
-        }
-    }
-    _ = writeln!(out);
-}
-
-fn print_config_check(data: &serde_json::Value) {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    let width = term_width();
-
-    let valid = data["valid"].as_bool().unwrap_or(false);
-    let suffix = if valid { "valid" } else { "warnings" };
-    write_section_header(&mut out, "Config Check", suffix, width);
-
-    if let Some(dir) = data["config_dir"].as_str() {
-        write_row(&mut out, "Config dir", dir);
-    }
-    if let Some(dir) = data["data_dir"].as_str() {
-        write_row(&mut out, "Data dir", dir);
-    }
-
-    let chat = data["chat_models"].as_u64().unwrap_or(0);
-    let embed = data["embedding_models"].as_u64().unwrap_or(0);
-    write_row(
-        &mut out,
-        "Models",
-        &format!("{chat} chat, {embed} embedding"),
-    );
-
-    _ = writeln!(out);
-
-    // Warnings
-    if let Some(warnings) = data["warnings"].as_array() {
-        for w in warnings {
-            if let Some(msg) = w.as_str() {
-                if use_color() {
-                    _ = crossterm::execute!(out, SetForegroundColor(Color::DarkYellow));
-                }
-                _ = write!(out, "  ! ");
-                if use_color() {
-                    _ = crossterm::execute!(out, ResetColor);
-                }
-                _ = writeln!(out, "{msg}");
-            }
-        }
-    }
-
-    // Info
-    if let Some(info) = data["info"].as_array() {
-        for i in info {
-            if let Some(msg) = i.as_str() {
-                if use_color() {
-                    _ = crossterm::execute!(out, SetForegroundColor(Color::Green));
-                }
-                _ = write!(out, "  ");
-                if use_color() {
-                    _ = crossterm::execute!(out, ResetColor);
-                }
-                _ = writeln!(out, "{msg}");
-            }
-        }
-    }
-    _ = writeln!(out);
-}
-
 /// Print config reload result: what was reloaded, whether system prompt
 /// edits were activated, and any sections that still need a daemon restart.
 fn print_config_reload(data: &serde_json::Value) {
@@ -2497,7 +1356,7 @@ pub(crate) fn print_diagnostics(data: &serde_json::Value) {
             if let Some(err) = call.get("error").filter(|v| !v.is_null()) {
                 write_fg(
                     w,
-                    Color::Red,
+                    COLOR_ERROR,
                     &format!("  ERR: {}", err.as_str().unwrap_or("?")),
                 );
             }
@@ -2522,9 +1381,9 @@ pub(crate) fn print_diagnostics(data: &serde_json::Value) {
                 write_dim(w, &format!("via {sub}  "));
             }
             let (marker_color, marker_text) = if ok {
-                (Color::Green, "ok")
+                (Tone::Good, "ok")
             } else {
-                (Color::Red, "FAIL")
+                (COLOR_ERROR, "FAIL")
             };
             write_fg(w, marker_color, marker_text);
             _ = writeln!(w);
@@ -2536,7 +1395,7 @@ pub(crate) fn print_diagnostics(data: &serde_json::Value) {
         let etype = err["error_type"].as_str().unwrap_or("?");
         let msg = err["message"].as_str().unwrap_or("?");
 
-        write_fg(w, Color::Red, &format!("{etype:<12}"));
+        write_fg(w, COLOR_ERROR, &format!("{etype:<12}"));
         _ = writeln!(w, "{msg}");
     });
 }
@@ -2571,677 +1430,6 @@ fn print_diagnostics_section<W: Write>(
     }
     _ = writeln!(out);
 }
-
-fn format_k(tokens: u64) -> String {
-    if tokens == 0 {
-        "\u{2014}".into()
-    } else if tokens < 1000 {
-        tokens.to_string()
-    } else if tokens < 1_000_000 {
-        format!("{}K", scaled_tenths(tokens, 1000))
-    } else if tokens < 1_000_000_000 {
-        format!("{}M", scaled_tenths(tokens, 1_000_000))
-    } else {
-        format!("{}B", scaled_tenths(tokens, 1_000_000_000))
-    }
-}
-
-fn scaled_tenths(value: u64, unit: u64) -> String {
-    let per_tenth = checked_div_u64(unit, 10);
-    let rounded_tenths = checked_div_u64(value.saturating_add(checked_div_u64(per_tenth, 2)), per_tenth);
-    let whole = checked_div_u64(rounded_tenths, 10);
-    let decimal = checked_rem_u64(rounded_tenths, 10);
-    format!("{whole}.{decimal}")
-}
-
-/// Truncate `s` so it fits in `max_width` display columns, appending `…` when
-/// truncation occurs. Width is counted in chars (the table columns assume
-/// monospace single-width glyphs).
-fn ellipsize(s: &str, max_width: usize) -> String {
-    if max_width == 0 {
-        return String::new();
-    }
-    let count = s.chars().count();
-    if count <= max_width {
-        return s.to_owned();
-    }
-    let mut out: String = s.chars().take(max_width.saturating_sub(1)).collect();
-    out.push('\u{2026}');
-    out
-}
-
-/// Render an RFC 3339 timestamp as a short local weekday-and-clock label
-/// (e.g. `Wed 5:00 PM`). The raw daemon payload is always UTC; a budget's
-/// reset is read against the user's own week, not the wire's.
-fn format_local_short(rfc3339: &str) -> String {
-    parse_timestamp(rfc3339).map_or_else(
-        || rfc3339.to_owned(),
-        |dt| dt.format("%a %-I:%M %p").to_string(),
-    )
-}
-
-const BAR_W: usize = 22;
-
-fn budget_bar(fraction: f64, width: usize) -> String {
-    #[expect(
-        clippy::float_arithmetic,
-        clippy::as_conversions,
-        clippy::cast_precision_loss,
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "share of a budget scaled to a character count for the bar"
-    )]
-    let filled = ((fraction.clamp(0.0, 1.0) * width as f64).round() as usize).min(width);
-    let mut bar = "\u{2588}".repeat(filled);
-    bar.push_str(&"\u{2591}".repeat(width.saturating_sub(filled)));
-    bar
-}
-
-fn action_phrase(action: &str) -> String {
-    match action {
-        "block" => "blocks at limit".to_owned(),
-        "warn" => "warns at limit".to_owned(),
-        "pause_heartbeat" => "pauses heartbeat at limit".to_owned(),
-        "pause_background" => "pauses background at limit".to_owned(),
-        other => format!("{} at limit", other.replace('_', " ")),
-    }
-}
-
-fn budget_color(status: &str, over_limit: bool) -> Color {
-    if over_limit || status == "over_limit" {
-        Color::Red
-    } else if status == "warning" {
-        Color::Yellow
-    } else {
-        Color::Green
-    }
-}
-
-fn percent_of(value: &serde_json::Value) -> f64 {
-    value["percent_used"].as_f64().unwrap_or(0.0)
-}
-
-fn write_budget_meter(
-    out: &mut impl Write,
-    lead: &str,
-    fraction: f64,
-    current: f64,
-    limit: f64,
-    color: Color,
-) {
-    write_dim(out, &format!("  {lead:<9}"));
-    write_fg(out, color, &budget_bar(fraction, BAR_W));
-    #[expect(
-        clippy::float_arithmetic,
-        reason = "budget payload stores used share as f64; CLI scales it for percent display"
-    )]
-    let percent = fraction * 100.0;
-    _ = write!(out, "  {:>16}", format!("${current:.2} / ${limit:.2}"));
-    write_fg(out, color, &format!(" {percent:>4.0}%"));
-    _ = writeln!(out);
-}
-
-fn print_budget_table(data: &serde_json::Value) {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    write_budget_table(&mut out, data);
-}
-
-fn write_budget_table(out: &mut impl Write, data: &serde_json::Value) {
-    let budgets = data["budgets"].as_array();
-    if budgets.is_none_or(Vec::is_empty) {
-        print_dim_line(out, "No usage budgets configured.");
-        return;
-    }
-
-    if let Some(rows) = budgets {
-        for budget in rows {
-            let over = budget["over_limit"].as_bool().unwrap_or(false);
-            let status = budget["status"].as_str().unwrap_or("ok");
-            let color = budget_color(status, over);
-            let name = ellipsize(
-                budget["name"].as_str().unwrap_or("budget"),
-                term_width().saturating_sub(2),
-            );
-            write_fg(out, color, &format!("  {name}"));
-            write_dim(
-                out,
-                &format!(
-                    "  {} · resets {}",
-                    action_phrase(acting_now(budget)),
-                    budget["reset_at"]
-                        .as_str()
-                        .map_or_else(|| "?".into(), format_local_short),
-                ),
-            );
-            _ = writeln!(out);
-            write_budget_meter(
-                out,
-                budget["period"].as_str().unwrap_or("day"),
-                percent_of(budget),
-                budget["current_cost"].as_f64().unwrap_or(0.0),
-                budget["cost_limit"].as_f64().unwrap_or(0.0),
-                color,
-            );
-            write_pace_meter(out, budget);
-            _ = writeln!(out);
-        }
-    }
-}
-
-fn write_pace_meter(out: &mut impl Write, budget: &serde_json::Value) {
-    let pace = &budget["pace"];
-    if !pace.is_object() {
-        return;
-    }
-    let color = budget_color(
-        pace["status"].as_str().unwrap_or("ok"),
-        pace["over_limit"].as_bool().unwrap_or(false),
-    );
-    write_budget_meter(
-        out,
-        pace["period"].as_str().unwrap_or("day"),
-        percent_of(pace),
-        pace["current_cost"].as_f64().unwrap_or(0.0),
-        pace["allowance"].as_f64().unwrap_or(0.0),
-        color,
-    );
-    let debt = pace["debt_adjustment"].as_f64().unwrap_or(0.0);
-    if let Some(rollover) = pace["rollover"].as_f64()
-        && (rollover != 0.0 || debt != 0.0)
-    {
-        {
-            let base = pace["base_allowance"].as_f64().unwrap_or(0.0);
-            write_dim(
-                out,
-                &format!(
-                    "           allowance ${base:.2} + ${rollover:.2} rollover − ${debt:.2} debt"
-                ),
-            );
-            _ = writeln!(out);
-        }
-    }
-}
-
-/// The action in force at the current spend, for the `Action` column.
-///
-/// `action` is what happens at the *limit*. A budget in `warning` has not
-/// reached its limit, so a row that printed `action` claimed `warn` while a
-/// configured `warn_action` or `pace_warn_action` was already pausing
-/// heartbeats. `effective_action` is the daemon resolving the two; the fallback
-/// keeps this readable against an older daemon that doesn't send it.
-fn acting_now(status: &serde_json::Value) -> &str {
-    status["effective_action"]
-        .as_str()
-        .or_else(|| status["action"].as_str())
-        .unwrap_or("warn")
-}
-
-fn usage_display_date(data: &serde_json::Value) -> String {
-    if data["timezone"].as_str() == Some("utc") {
-        chrono::Utc::now().format("%Y-%m-%d").to_string()
-    } else {
-        chrono::Local::now().format("%Y-%m-%d").to_string()
-    }
-}
-
-const CALLS_W: usize = 6;
-const TOK_W: usize = 7;
-const COST_W: usize = 8;
-const MIN_NAME_W: usize = 12;
-
-fn usage_fixed_width() -> usize {
-    CALLS_W
-        .saturating_add(TOK_W.saturating_mul(4))
-        .saturating_add(COST_W)
-        .saturating_add(8)
-}
-
-fn usage_name_width(labels: &[String]) -> usize {
-    let widest = labels
-        .iter()
-        .map(|l| l.chars().count())
-        .max()
-        .unwrap_or(MIN_NAME_W);
-    let available = term_width().saturating_sub(usage_fixed_width());
-    widest.clamp(MIN_NAME_W, available.max(MIN_NAME_W))
-}
-
-fn write_usage_table_header(out: &mut impl Write, name_header: &str, name_w: usize) {
-    write_dim(
-        out,
-        &format!(
-            "  {:<name_w$} {:>CALLS_W$} {:>TOK_W$} {:>TOK_W$} {:>TOK_W$} {:>TOK_W$} {:>COST_W$}",
-            name_header, "CALLS", "IN", "OUT", "CACHE R", "CACHE W", "COST"
-        ),
-    );
-    _ = writeln!(out);
-}
-
-fn write_usage_table_row(
-    out: &mut impl Write,
-    label: &str,
-    row: &serde_json::Value,
-    cost: &str,
-    name_w: usize,
-) {
-    let name = ellipsize(label, name_w);
-    let pad = name_w.saturating_sub(name.chars().count());
-    _ = write!(out, "  {name}{:pad$}", "");
-    _ = write!(
-        out,
-        " {:>CALLS_W$} {:>TOK_W$} {:>TOK_W$} {:>TOK_W$} {:>TOK_W$}",
-        row["call_count"].as_u64().unwrap_or(0),
-        format_k(row["total_input"].as_u64().unwrap_or(0)),
-        format_k(row["total_output"].as_u64().unwrap_or(0)),
-        format_k(row["total_cache_read"].as_u64().unwrap_or(0)),
-        format_k(row["total_cache_write"].as_u64().unwrap_or(0)),
-    );
-    write_fg(out, Color::Cyan, &format!(" {cost:>COST_W$}"));
-    _ = writeln!(out);
-}
-
-fn write_usage_total(out: &mut impl Write, total: f64, name_w: usize) {
-    let lead = name_w
-        .saturating_add(CALLS_W)
-        .saturating_add(TOK_W.saturating_mul(4))
-        .saturating_add(5);
-    write_dim(out, &format!("  {:>lead$}", "TOTAL"));
-    write_fg(
-        out,
-        Color::Cyan,
-        &format!(" {:>COST_W$}", format!("${total:.2}")),
-    );
-    _ = writeln!(out);
-}
-
-fn cost_cell(row: &serde_json::Value, running: &mut f64) -> String {
-    row["total_cost"].as_f64().map_or_else(
-        || "\u{2014}".into(),
-        |c| {
-            add_display_cost(running, c);
-            format!("${c:.2}")
-        },
-    )
-}
-
-fn write_usage_rows(
-    out: &mut impl Write,
-    name_header: &str,
-    rows: &[serde_json::Value],
-    labels: &[String],
-) {
-    if rows.is_empty() {
-        print_dim_line(out, "No usage data for this period.");
-        return;
-    }
-    let name_w = usage_name_width(labels);
-    write_usage_table_header(out, name_header, name_w);
-    let mut total = 0.0_f64;
-    for (row, label) in rows.iter().zip(labels) {
-        let cost = cost_cell(row, &mut total);
-        write_usage_table_row(out, label, row, &cost, name_w);
-    }
-    write_usage_total(out, total, name_w);
-}
-
-fn summary_rows(data: &serde_json::Value) -> Vec<serde_json::Value> {
-    data["summary"].as_array().cloned().unwrap_or_default()
-}
-
-fn write_usage_summary_table(out: &mut impl Write, data: &serde_json::Value) {
-    let period = data["period"].as_str().unwrap_or("today");
-    let today = usage_display_date(data);
-    write_section_header(out, "Usage", &format!("{today} · {period}"), term_width());
-    let rows = summary_rows(data);
-    let labels: Vec<String> = rows
-        .iter()
-        .map(|s| {
-            format!(
-                "{} {}",
-                s["provider"].as_str().unwrap_or("?"),
-                abbreviate_model(s["model"].as_str().unwrap_or("?"))
-            )
-        })
-        .collect();
-    write_usage_rows(out, "MODEL", &rows, &labels);
-}
-
-pub(crate) fn print_usage(data: &serde_json::Value) {
-    let mode = data["mode"].as_str().unwrap_or("summary");
-
-    match mode {
-        "tsv" | "csv" => {
-            if let Some(d) = data["data"].as_str() {
-                cli_write!("{d}");
-            }
-        }
-        "summary_by_call_type" => print_usage_by_call_type(data),
-        "summary_by_usage_kind" => print_usage_by_kind(data),
-        "summary_by_api_key" => print_usage_by_api_key(data),
-        "budget" => {
-            let today = usage_display_date(data);
-            let timezone = data["timezone"].as_str().unwrap_or("local");
-            let stdout = io::stdout();
-            let mut out = stdout.lock();
-            write_section_header(
-                &mut out,
-                "Usage budgets",
-                &format!("{today} · {timezone}"),
-                term_width(),
-            );
-            drop(out);
-            print_budget_table(data);
-        }
-        "anomalies" => print_usage_anomalies(data),
-        "refresh_pricing" => {
-            cli_out!("Pricing cache cleared. Prices will be re-fetched on next daemon use.");
-        }
-        "recalculate" => print_usage_recalculate(data),
-        _ => print_usage_summary(data),
-    }
-}
-
-fn print_usage_breakdown(
-    data: &serde_json::Value,
-    title: &str,
-    name_header: &str,
-    label: impl Fn(&serde_json::Value) -> String,
-) {
-    let period = data["period"].as_str().unwrap_or("today");
-    let today = usage_display_date(data);
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    write_section_header(&mut out, title, &format!("{today} · {period}"), term_width());
-    let rows = summary_rows(data);
-    let labels: Vec<String> = rows.iter().map(&label).collect();
-    write_usage_rows(&mut out, name_header, &rows, &labels);
-}
-
-fn print_usage_by_call_type(data: &serde_json::Value) {
-    print_usage_breakdown(data, "Usage by call type", "CALL TYPE", |s| {
-        s["call_type"].as_str().unwrap_or("?").to_owned()
-    });
-}
-
-fn print_usage_by_kind(data: &serde_json::Value) {
-    print_usage_breakdown(data, "Usage by kind", "KIND", |s| {
-        let kind = s["usage_kind"].as_str().unwrap_or("");
-        if kind.is_empty() { "(none)".to_owned() } else { kind.to_owned() }
-    });
-}
-
-fn print_usage_by_api_key(data: &serde_json::Value) {
-    print_usage_breakdown(data, "Usage by API key", "API KEY", |s| {
-        format!(
-            "{} {}",
-            s["provider"].as_str().unwrap_or("?"),
-            s["api_key_name"].as_str().unwrap_or("unknown")
-        )
-    });
-}
-
-const WHEN_W: usize = 13;
-const WHO_W: usize = 10;
-const MODEL_W: usize = 16;
-const ANOMALY_W: usize = 19;
-
-fn print_usage_anomalies(data: &serde_json::Value) {
-    let today = usage_display_date(data);
-    let subtitle = match data["period"].as_str() {
-        Some(period) => format!("{today} · {period}"),
-        None => today,
-    };
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    write_section_header(&mut out, "Cache anomalies", &subtitle, term_width());
-    let Some(anomalies) = data["anomalies"].as_array() else {
-        print_dim_line(&mut out, "No cache anomalies found.");
-        return;
-    };
-    if anomalies.is_empty() {
-        print_dim_line(&mut out, "No cache anomalies found.");
-        return;
-    }
-    write_dim(
-        &mut out,
-        &format!(
-            "  {:<WHEN_W$} {:<WHO_W$} {:<MODEL_W$} {:<ANOMALY_W$} {:>7} {:>7}",
-            "WHEN", "CHARACTER", "MODEL", "ANOMALY", "READ", "WRITE"
-        ),
-    );
-    _ = writeln!(&mut out);
-    for r in anomalies {
-        let when = r["ts"]
-            .as_str()
-            .map_or_else(|| "?".into(), format_local_short);
-        let model = abbreviate_model(r["model"].as_str().unwrap_or("?"));
-        _ = write!(
-            &mut out,
-            "  {:<WHEN_W$} {:<WHO_W$} {:<MODEL_W$} ",
-            ellipsize(&when, WHEN_W),
-            ellipsize(r["character"].as_str().unwrap_or("?"), WHO_W),
-            ellipsize(&model, MODEL_W),
-        );
-        write_fg(
-            &mut out,
-            Color::Yellow,
-            &format!(
-                "{:<ANOMALY_W$}",
-                ellipsize(r["anomaly"].as_str().unwrap_or("?"), ANOMALY_W)
-            ),
-        );
-        _ = writeln!(
-            &mut out,
-            " {:>7} {:>7}",
-            format_k(r["cache_read_tokens"].as_u64().unwrap_or(0)),
-            format_k(r["cache_write_tokens"].as_u64().unwrap_or(0)),
-        );
-    }
-    write_dim(&mut out, &format!("  {} anomalies", anomalies.len()));
-    _ = writeln!(&mut out);
-}
-
-/// Render the `usage --recalculate` summary.
-fn print_usage_recalculate(data: &serde_json::Value) {
-    let updated = data["updated"].as_u64().unwrap_or(0);
-    let total = data["total"].as_u64().unwrap_or(0);
-    if total == 0 {
-        cli_out!("All rows already have costs calculated.");
-    } else {
-        cli_out!(
-            "Updated {updated}/{total} rows. {} still missing pricing data.",
-            total.saturating_sub(updated)
-        );
-        if let Some(failures) = data["failures"].as_array() {
-            if !failures.is_empty() {
-                cli_out!("\nFailed models:");
-                for f in failures {
-                    cli_out!(
-                        "  {} — {}",
-                        f["model"].as_str().unwrap_or("?"),
-                        f["reason"].as_str().unwrap_or("unknown")
-                    );
-                }
-            }
-        }
-    }
-}
-
-fn print_cache_health(data: &serde_json::Value) {
-    let health = data["cache_health"].as_array();
-    if health.is_none_or(Vec::is_empty) {
-        return;
-    }
-    print_usage_section("Cache health", "anthropic");
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    for entry in health.into_iter().flatten() {
-        let char_name = entry["character"].as_str().unwrap_or("?");
-        let state = entry["state"].as_str().unwrap_or("cold");
-        let streak = entry["streak"].as_u64().unwrap_or(0);
-        let (state_str, color) = if state == "warm" {
-            (format!("warm · {streak} calls"), Color::Green)
-        } else {
-            ("cold".to_owned(), Color::Yellow)
-        };
-        _ = write!(&mut out, "  {char_name:<14}");
-        write_fg(&mut out, color, &state_str);
-        _ = writeln!(&mut out);
-    }
-}
-
-/// Render the default usage summary (table + cache health + budgets).
-fn print_usage_summary(data: &serde_json::Value) {
-    let mut stdout = io::stdout().lock();
-    write_usage_summary_table(&mut stdout, data);
-    drop(stdout);
-
-    print_cache_health(data);
-
-    print_usage_section("Usage budgets", "");
-    print_budget_table(data);
-
-    let anomaly_count = data["anomaly_count_7d"].as_u64().unwrap_or(0);
-    print_usage_section("Cache anomalies", "last 7d");
-    if anomaly_count == 0 {
-        let empty = io::stdout();
-        let mut none_line = empty.lock();
-        print_dim_line(&mut none_line, "None.");
-    }
-    print_anomaly_breakdown(data);
-    print_cache_coverage(data);
-    print_rate_limits(data);
-}
-
-fn print_usage_section(title: &str, suffix: &str) {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    write_section_header(&mut out, title, suffix, term_width());
-}
-
-/// Break the anomaly total down by kind. A bare count says something is wrong;
-/// which kind says what, and a keepalive that misses is pure waste.
-fn print_anomaly_breakdown(data: &serde_json::Value) {
-    let Some(rows) = data["anomaly_counts_7d"].as_array() else {
-        return;
-    };
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    for row in rows {
-        let kind = row["anomaly"].as_str().unwrap_or("?");
-        let calls = row["calls"].as_u64().unwrap_or(0);
-        let writes = format_k(row["cache_write_tokens"].as_u64().unwrap_or(0));
-        let color = if kind == "keepalive_double_miss" {
-            Color::Red
-        } else {
-            Color::Yellow
-        };
-        write_fg(&mut out, color, &format!("  {kind:<28}"));
-        _ = writeln!(&mut out, "{calls:>6} calls   wrote {writes}");
-        // Two pings missing in a row means the first one's write never landed.
-        // No amount of re-arming fixes that, so it is called out rather than
-        // left as one row among several.
-        if kind == "keepalive_double_miss" {
-            write_dim(
-                &mut out,
-                "    two pings missed in a row with nothing between them. The first wrote the\n\
-                 \x20   entry the second should have read. The cache is not holding what shore\n\
-                 \x20   writes; keepalives halt when this happens.",
-            );
-            _ = writeln!(&mut out);
-        }
-    }
-}
-
-/// Render how many calls the cache tracker could classify, and why the rest
-/// could not. Unclassified calls are invisible to any warm/cold percentage, so
-/// showing them keeps the denominator honest.
-fn print_cache_coverage(data: &serde_json::Value) {
-    let Some(rows) = data["cache_coverage"].as_array() else {
-        return;
-    };
-    if rows.is_empty() {
-        return;
-    }
-    print_usage_section("Cache coverage", "");
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    write_dim(
-        &mut out,
-        &format!("  {:<30} {:>6} {:>9} {:>9}", "STATE", "CALLS", "READ", "WRITE"),
-    );
-    _ = writeln!(&mut out);
-    for row in rows {
-        let state = row["state"].as_str().unwrap_or("?");
-        let label = match row["reason"].as_str() {
-            Some(reason) => format!("{state} ({reason})"),
-            None => state.to_owned(),
-        };
-        let color = match state {
-            "warm" => Color::Green,
-            "cold" => Color::Yellow,
-            _ => Color::DarkGrey,
-        };
-        write_fg(&mut out, color, &format!("  {:<30}", ellipsize(&label, 30)));
-        _ = writeln!(
-            &mut out,
-            " {:>6} {:>9} {:>9}",
-            row["calls"].as_u64().unwrap_or(0),
-            format_k(row["cache_read_tokens"].as_u64().unwrap_or(0)),
-            format_k(row["cache_write_tokens"].as_u64().unwrap_or(0)),
-        );
-    }
-}
-
-/// Render the provider quota headroom captured on the most recent response
-/// from each provider host.
-fn print_rate_limits(data: &serde_json::Value) {
-    let Some(rows) = data["rate_limits"].as_array() else {
-        return;
-    };
-    if rows.is_empty() {
-        return;
-    }
-    print_usage_section("Provider quota", "last response");
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    for row in rows {
-        let host = row["host"].as_str().unwrap_or("?");
-        _ = write!(&mut out, "  {host}");
-        if let Some(resets) = row["resets_at"].as_str() {
-            write_dim(&mut out, &format!("  resets {}", format_local_short(resets)));
-        }
-        _ = writeln!(&mut out);
-        write_dim(&mut out, "    requests ");
-        _ = write!(&mut out, "{:<14}", quota_fraction(row, "requests"));
-        write_dim(&mut out, "input ");
-        _ = write!(&mut out, "{:<14}", quota_tokens(row, "input_tokens"));
-        write_dim(&mut out, "output ");
-        _ = writeln!(&mut out, "{}", quota_tokens(row, "output_tokens"));
-    }
-}
-
-fn quota_tokens(row: &serde_json::Value, field: &str) -> String {
-    let remaining = row[format!("{field}_remaining")].as_u64();
-    let limit = row[format!("{field}_limit")].as_u64();
-    match (remaining, limit) {
-        (Some(r), Some(l)) => format!("{}/{}", format_k(r), format_k(l)),
-        (Some(r), None) => format_k(r),
-        _ => "-".into(),
-    }
-}
-
-fn quota_fraction(row: &serde_json::Value, field: &str) -> String {
-    let remaining = row[format!("{field}_remaining")].as_u64();
-    let limit = row[format!("{field}_limit")].as_u64();
-    match (remaining, limit) {
-        (Some(r), Some(l)) => format!("{r}/{l}"),
-        (Some(r), None) => format!("{r}"),
-        _ => "-".into(),
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Autonomy section — rendered inside `shore status`
 // ---------------------------------------------------------------------------
@@ -3268,196 +1456,6 @@ fn format_duration_compact(secs: i64) -> String {
         format!("{seconds}s")
     };
     if neg { format!("-{body}") } else { body }
-}
-
-/// Format a duration in seconds for "threshold" rows like "100m" or "48h".
-fn format_threshold(secs: u64) -> String {
-    if secs >= SECONDS_PER_HOUR && secs.is_multiple_of(SECONDS_PER_HOUR) {
-        format!("{}h", checked_div_u64(secs, SECONDS_PER_HOUR))
-    } else if secs >= SECONDS_PER_MINUTE && secs.is_multiple_of(SECONDS_PER_MINUTE) {
-        format!("{}m", checked_div_u64(secs, SECONDS_PER_MINUTE))
-    } else if secs >= SECONDS_PER_HOUR {
-        let hours = checked_div_u64(secs, SECONDS_PER_HOUR);
-        let remaining_minutes =
-            checked_div_u64(checked_rem_u64(secs, SECONDS_PER_HOUR), SECONDS_PER_MINUTE);
-        format!("{hours}h {remaining_minutes}m")
-    } else if secs >= SECONDS_PER_MINUTE {
-        let minutes = checked_div_u64(secs, SECONDS_PER_MINUTE);
-        let seconds = checked_rem_u64(secs, SECONDS_PER_MINUTE);
-        format!("{minutes}m {seconds}s")
-    } else {
-        format!("{secs}s")
-    }
-}
-
-/// Format an RFC3339 timestamp as "YYYY-MM-DD HH:MM" in local time, or the
-/// raw string on parse failure.
-fn format_local_timestamp(rfc3339: &str) -> String {
-    parse_timestamp(rfc3339).map_or_else(
-        || rfc3339.to_owned(),
-        |dt| dt.format("%Y-%m-%d %H:%M").to_string(),
-    )
-}
-
-/// Render the autonomy block of `shore status`. Reads the `AutonomyStatus`
-/// JSON snapshot from the daemon and renders state, schedule, thresholds,
-/// and the most recent heartbeat events.
-fn write_autonomy_section(out: &mut impl Write, autonomy: &serde_json::Value, width: usize) {
-    let paused = autonomy["paused"].as_bool().unwrap_or(false);
-    let suffix = if paused { "paused" } else { "" };
-    write_section_header(out, "Autonomy", suffix, width);
-
-    let int_state = autonomy["heartbeat_state"].as_str().unwrap_or("Active");
-    let ticks = autonomy["ticks_without_user"].as_u64().unwrap_or(0);
-    let max_ticks = autonomy["dormant_after_heartbeat_turns"]
-        .as_u64()
-        .unwrap_or(0);
-    let description = heartbeat_description(int_state, ticks, max_ticks);
-
-    // Heartbeat row: description + state label.
-    if use_color() {
-        let _ignored = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-    }
-    _ = write!(out, "  {:<13}", "Heartbeat");
-    if use_color() {
-        _ = crossterm::execute!(out, ResetColor);
-    }
-    _ = write!(out, "{description}  ");
-    if use_color() {
-        _ = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-    }
-    _ = write!(out, "({int_state})");
-    if use_color() {
-        _ = crossterm::execute!(out, ResetColor);
-    }
-    _ = writeln!(out);
-
-    write_autonomy_schedule(out, autonomy, ticks, max_ticks);
-    write_autonomy_events(out, autonomy);
-}
-
-/// Render the autonomy schedule rows (interval, next wake, last user, idle
-/// ticks, latency thresholds).
-fn write_autonomy_schedule(
-    out: &mut impl Write,
-    autonomy: &serde_json::Value,
-    ticks: u64,
-    max_ticks: u64,
-) {
-    if let Some(eff) = autonomy["effective_interval_secs"].as_u64() {
-        let mins = checked_div_u64(eff, SECONDS_PER_MINUTE);
-        let secs = checked_rem_u64(eff, SECONDS_PER_MINUTE);
-        let label = if secs == 0 {
-            format!("{mins}m")
-        } else {
-            format!("{mins}m{secs}s")
-        };
-        write_row(out, "Interval", &label);
-    }
-
-    if let Some(secs) = autonomy["seconds_until_wake"].as_i64() {
-        let abs_label = autonomy["next_wake_at"]
-            .as_str()
-            .map(format_local_timestamp)
-            .unwrap_or_default();
-        let rel = if secs >= 0 {
-            format!("in {}", format_duration_compact(secs))
-        } else {
-            format!("{} overdue", format_duration_compact(secs.saturating_neg()))
-        };
-        let detail = if abs_label.is_empty() {
-            rel
-        } else {
-            format!("{rel}  ({abs_label})")
-        };
-        write_row(out, "Next Wake", &detail);
-    } else {
-        write_row(out, "Next Wake", "(none scheduled)");
-    }
-
-    if let Some(secs) = autonomy["seconds_since_user"].as_i64() {
-        let abs_label = autonomy["last_user_at"]
-            .as_str()
-            .map(format_local_timestamp)
-            .unwrap_or_default();
-        let rel = format!("{} ago", format_duration_compact(secs));
-        let detail = if abs_label.is_empty() {
-            rel
-        } else {
-            format!("{rel}  ({abs_label})")
-        };
-        write_row(out, "Last User", &detail);
-    }
-
-    write_row(out, "Idle Ticks", &format!("{ticks} / {max_ticks}"));
-
-    if let Some(secs) = autonomy["minimum_heartbeat_latency_secs"].as_u64() {
-        write_row(out, "Min Latency", &format_threshold(secs));
-    }
-    if let Some(secs) = autonomy["dormant_after_idle_time_secs"].as_u64() {
-        write_row(out, "Idle Limit", &format_threshold(secs));
-    }
-}
-
-/// Render the recent autonomy events list. Emits nothing beyond a blank line
-/// when the daemon included no events — the schedule rows already tell the
-/// story.
-fn write_autonomy_events(out: &mut impl Write, autonomy: &serde_json::Value) {
-    let events: Vec<serde_json::Value> = autonomy
-        .get("recent_events")
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default();
-    if events.is_empty() {
-        _ = writeln!(out);
-        return;
-    }
-
-    _ = writeln!(out);
-    if use_color() {
-        _ = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-    }
-    _ = writeln!(out, "  Recent events:");
-    if use_color() {
-        _ = crossterm::execute!(out, ResetColor);
-    }
-    let mut prev_date: Option<String> = None;
-    for event in &events {
-        let ts = event["timestamp"].as_str().unwrap_or("");
-        let kind = event["kind"].as_str().unwrap_or("?");
-        let detail = event["detail"].as_str().unwrap_or("");
-        let time_str = parse_timestamp(ts).map_or_else(
-            || ts.chars().take(8).collect(),
-            |dt| {
-                let formatted = format_time(&dt, prev_date.as_deref());
-                prev_date = Some(dt.format("%Y-%m-%d").to_string());
-                formatted
-            },
-        );
-        let kind_color = match kind {
-            "tick_fired" => Color::Blue,
-            "message_sent" | "wake" => Color::Green,
-            "message_skipped" => Color::DarkGrey,
-            "tool_use" => Color::Cyan,
-            "dormant" => Color::Red,
-            "dormant_ping" => Color::Magenta,
-            "timeout" => Color::Yellow,
-            _ => Color::White,
-        };
-        if use_color() {
-            _ = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-        }
-        _ = write!(out, "    {time_str:<12}");
-        if use_color() {
-            _ = crossterm::execute!(out, SetForegroundColor(kind_color));
-        }
-        _ = write!(out, "{kind:<17}");
-        if use_color() {
-            _ = crossterm::execute!(out, ResetColor);
-        }
-        _ = writeln!(out, "{detail}");
-    }
-    _ = writeln!(out);
 }
 
 #[cfg(test)]
@@ -3552,10 +1550,23 @@ mod tests {
 
         assert!(rendered.contains("ask_researcher"));
         assert!(rendered.contains("toolu_01A"));
-        assert!(rendered.contains("tool search_memory"));
         assert!(rendered.contains("Sam took the smaller room"));
-        assert!(rendered.contains("✗"));
-        assert!(rendered.contains("answer: Sam moved out in June"));
+        assert!(rendered.contains("Sam moved out in June"));
+
+        assert!(
+            rendered.contains("\u{2192} search_memory"),
+            "a tool call must use the shared call sigil: {rendered}"
+        );
+        assert!(
+            rendered.contains("\u{2717} error"),
+            "a failed result must use the shared error sigil: {rendered}"
+        );
+        for line in rendered.lines().filter(|l| l.contains("search_memory")) {
+            assert!(
+                line.trim_start().starts_with('\u{2502}'),
+                "every channel line keeps the gutter: {line:?}"
+            );
+        }
     }
 
     fn with_error(mut entry: serde_json::Value, message: &str) -> serde_json::Value {
@@ -3575,26 +1586,6 @@ mod tests {
 
         assert!(rendered.contains("failed: budget exhausted"));
         assert!(!rendered.contains("answer:"));
-    }
-
-    #[test]
-    fn a_status_section_renders_as_rows_rather_than_json() {
-        set_color_enabled(false);
-        let data = serde_json::json!({
-            "tokens": { "input": 12, "output": 3 },
-            "autonomy": serde_json::Value::Null,
-        });
-
-        assert!(print_status_section(&data, "tokens"));
-        assert!(print_status_section(&data, "autonomy"));
-        assert!(!print_status_section(&data, "no_such_section"));
-    }
-
-    #[test]
-    fn a_missing_value_reads_as_unset_not_as_the_word_null() {
-        assert_eq!(scalar_display(&serde_json::Value::Null), "(unset)");
-        assert_eq!(scalar_display(&serde_json::json!("ada")), "ada");
-        assert_eq!(scalar_display(&serde_json::json!(7)), "7");
     }
 
     #[test]
@@ -3656,236 +1647,15 @@ mod tests {
         assert_eq!(display_payload_body(&body), "event: message_start\n");
     }
 
-    /// Visual preview of `shore tools` rendering. Run with:
-    /// `cargo test -p shore-cli render_preview_tools -- --ignored --nocapture --test-threads=1`
-    #[test]
-    #[ignore = "visual preview"]
-    fn render_preview_tools() {
-        set_color_enabled(true);
-        let data = serde_json::json!({
-            "tools": [
-                { "tool": "read", "main": true, "subagents": ["memory"] },
-                { "tool": "search", "main": false, "subagents": ["memory"] },
-                { "tool": "web_search", "main": true, "subagents": [] },
-                { "tool": "edit", "main": false, "subagents": [] },
-                { "tool": "git", "main": true, "subagents": [] },
-            ],
-            "subagents": [
-                { "name": "memory", "enabled": true, "tools": ["search", "read"], "model": "anthropic:claude-haiku-4-5" },
-                { "name": "research", "enabled": false, "tools": ["web_search", "fetch_url"], "model": null },
-            ],
-            "warnings": ["subagent 'research' references unknown tool 'crawl'"],
-        });
-        format_command("tools", &data);
-        set_color_enabled(false);
-    }
 
-    #[test]
-    fn heartbeat_description_maps_states() {
-        assert_eq!(
-            heartbeat_description("Active", 0, 3),
-            "active \u{2014} in conversation"
-        );
-        assert_eq!(
-            heartbeat_description("Active", 2, 3),
-            "active \u{2014} idle 2/3 ticks"
-        );
-        assert_eq!(
-            heartbeat_description("Dormant", 4, 3),
-            "dormant \u{2014} waiting for you"
-        );
-    }
 
-    #[test]
-    fn print_status_does_not_panic() {
-        set_color_enabled(false);
-        let data = serde_json::json!({
-            "character": "Sable",
-            "message_count": 142,
-            "turn_count": 142,
-            "active_model": "claude-sonnet-4-20250514",
-            "pending_deferred_edit_count": 2,
-            "pending_deferred_edits": ["SOUL.md", "TOOLS.md"],
-            "tokens": {
-                "input": 12450,
-                "output": 3218,
-                "cache_read": 8100,
-                "cache_write": 1024,
-            },
-            "autonomy": {
-                "paused": false,
-                "heartbeat_state": "Active",
-                "ticks_without_user": 1,
-                "dormant_after_heartbeat_turns": 3,
-                "effective_interval_secs": 3540,
-            }
-        });
-        print_status(&data, "Sable");
-    }
 
-    #[test]
-    fn print_status_minimal_does_not_panic() {
-        set_color_enabled(false);
-        let data = serde_json::json!({
-            "character": "Sable",
-            "message_count": 5,
-            "turn_count": 5,
-            "active_model": null,
-        });
-        print_status(&data, "Sable");
-    }
-
-    #[test]
-    fn keepalive_halt_prints_nothing_when_healthy() {
-        set_color_enabled(false);
-        let mut out: Vec<u8> = Vec::new();
-        print_keepalive_halt(&mut out, &serde_json::json!({ "keepalive_halted": null }));
-        assert!(out.is_empty());
-
-        let mut missing: Vec<u8> = Vec::new();
-        print_keepalive_halt(&mut missing, &serde_json::json!({ "character": "Sable" }));
-        assert!(missing.is_empty());
-    }
-
-    #[test]
-    fn keepalive_halt_names_the_character_the_reason_and_the_fix() {
-        set_color_enabled(false);
-        let mut out: Vec<u8> = Vec::new();
-        print_keepalive_halt(
-            &mut out,
-            &serde_json::json!({
-                "keepalive_halted": {
-                    "character": "poppy",
-                    "reason": "two keepalive pings in a row missed with nothing in between",
-                    "at": "2026-08-13T07:36:41+00:00",
-                }
-            }),
-        );
-        let text = String::from_utf8(out).expect("utf8");
-        assert!(text.contains("KEEPALIVE HALTED"), "{text}");
-        assert!(text.contains("poppy"), "{text}");
-        assert!(text.contains("2026-08-13T07:36:41+00:00"), "{text}");
-        assert!(
-            text.contains("two keepalive pings in a row missed"),
-            "{text}"
-        );
-        // The halt has no runtime exit, so the banner must not read as
-        // something a restart clears.
-        assert!(text.contains("does not clear on its own"), "{text}");
-    }
-
-    #[test]
-    fn keepalive_halt_survives_a_missing_reason() {
-        set_color_enabled(false);
-        let mut out: Vec<u8> = Vec::new();
-        print_keepalive_halt(
-            &mut out,
-            &serde_json::json!({ "keepalive_halted": { "character": "poppy" } }),
-        );
-        let text = String::from_utf8(out).expect("utf8");
-        assert!(text.contains("KEEPALIVE HALTED"), "{text}");
-        assert!(text.contains("no reason recorded"), "{text}");
-    }
-
-    #[test]
-    fn print_status_paused_does_not_panic() {
-        set_color_enabled(false);
-        let data = serde_json::json!({
-            "character": "Sable",
-            "message_count": 50,
-            "turn_count": 50,
-            "active_model": "test-model",
-            "autonomy": {
-                "paused": true,
-                "heartbeat_state": "Active",
-                "ticks_without_user": 0,
-                "dormant_after_heartbeat_turns": 3,
-                "effective_interval_secs": 3600,
-            }
-        });
-        print_status(&data, "Sable");
-    }
-
-    #[test]
-    fn print_status_with_activity_does_not_panic() {
-        set_color_enabled(false);
-        // Simulate a realistic hour histogram: busier in afternoon/evening.
-        let histogram: Vec<f64> = (0..24)
-            .map(|h| match h {
-                0..=5 => 0.01,
-                6..=8 => 0.04,
-                9..=11 => 0.06,
-                12..=14 => 0.08,
-                15..=17 => 0.05,
-                18..=21 => 0.10,
-                _ => 0.02,
-            })
-            .collect();
-        let classifications: Vec<&str> = (0..24)
-            .map(|h| match h {
-                0..=5 => "trough",
-                18..=21 => "peak",
-                _ => "normal",
-            })
-            .collect();
-
-        let data = serde_json::json!({
-            "character": "Sable",
-            "message_count": 200,
-            "turn_count": 200,
-            "active_model": "claude-sonnet-4-20250514",
-            "tokens": { "input": 5000, "output": 1200, "cache_read": 0, "cache_write": 0 },
-            "activity": {
-                "hour_histogram": histogram,
-                "hour_classifications": classifications,
-                "has_sufficient_heatmap": true,
-                "engagement_score": 0.72,
-                "sessions_per_day": 2.3,
-                "message_count": 200,
-                "turn_count": 200,
-            }
-        });
-        print_status(&data, "Sable");
-    }
-
-    #[test]
-    fn print_status_sparse_activity_does_not_panic() {
-        set_color_enabled(false);
-        let data = serde_json::json!({
-            "character": "Sable",
-            "message_count": 3,
-            "turn_count": 3,
-            "active_model": "test-model",
-            "activity": {
-                "hour_histogram": vec![0.0_f64; 24],
-                "hour_classifications": vec!["normal"; 24],
-                "has_sufficient_heatmap": false,
-                "engagement_score": 0.0,
-                "sessions_per_day": 0.0,
-                "message_count": 3,
-                "turn_count": 3,
-            }
-        });
-        print_status(&data, "Sable");
-    }
 
     // ── classification_color ─────────────────────────────────────────
 
-    #[test]
-    fn classification_color_maps_correctly() {
-        assert!(matches!(classification_color("peak"), Color::Cyan));
-        assert!(matches!(classification_color("trough"), Color::DarkGrey));
-        assert!(matches!(classification_color("normal"), Color::White));
-        assert!(matches!(classification_color("unknown"), Color::White));
-    }
 
     // ── heartbeat_description edge cases ──────────────────────────
 
-    #[test]
-    fn heartbeat_description_unknown_state() {
-        // Unknown states pass through as-is.
-        assert_eq!(heartbeat_description("CustomState", 0, 8), "CustomState");
-    }
 
     // ── format_command dispatch ─────────────────────────────────────
 
@@ -3991,89 +1761,6 @@ mod tests {
     }
 
     #[test]
-    fn visible_setting_keys_hides_ignored_and_rejected() {
-        let all = [
-            "temperature",
-            "reasoning_effort",
-            "cache_ttl",
-            "sdk",
-            "replay_prior_thinking",
-        ];
-        // openrouter-shaped: cache_ttl ignored, temperature honored, Shore keys always.
-        let applicability = serde_json::json!({
-            "temperature": "honored",
-            "reasoning_effort": "honored",
-            "cache_ttl": "ignored",
-            "sdk": "always",
-            "replay_prior_thinking": "always",
-        });
-        let visible = visible_setting_keys(&all, &applicability);
-        assert!(visible.contains(&"temperature"));
-        assert!(visible.contains(&"reasoning_effort"));
-        assert!(visible.contains(&"sdk"));
-        assert!(
-            !visible.contains(&"cache_ttl"),
-            "ignored key must be hidden"
-        );
-    }
-
-    #[test]
-    fn visible_setting_keys_falls_back_when_absent() {
-        // Older daemon without the applicability map → show everything.
-        let all = ["temperature", "cache_ttl"];
-        let visible = visible_setting_keys(&all, &serde_json::Value::Null);
-        assert_eq!(visible, vec!["temperature", "cache_ttl"]);
-    }
-
-    #[test]
-    fn print_model_settings_renders_filtered_with_domain() {
-        set_color_enabled(false);
-        // Exercises the filter + reasoning_effort domain branches without panic.
-        print_model_settings(&serde_json::json!({
-            "model": "chat.openrouter.gpt-4o",
-            "effective_sampler": {"reasoning_effort": "high"},
-            "scopes": {"reasoning_effort": "character_model"},
-            "applicability": {"reasoning_effort": "honored", "cache_ttl": "ignored"},
-            "reasoning_effort_domain": ["minimal", "low", "medium", "high", "xhigh", "max"],
-        }));
-    }
-
-    /// Visual preview of `shore model setting` (the user-reported scenario).
-    /// Run with: cargo test -p shore-cli render_preview_model_settings --
-    ///   --ignored --nocapture --test-threads=1
-    #[test]
-    #[ignore = "visual preview; run explicitly with --ignored --nocapture"]
-    fn render_preview_model_settings() {
-        set_color_enabled(true);
-        print_model_settings(&serde_json::json!({
-            "model": "anthropic:claude-opus-4-8",
-            "effective_sampler": {
-                "reasoning_effort": "high",
-                "max_output_tokens": 8192,
-                "cache_ttl": "1h",
-                "sdk": "anthropic",
-                "replay_prior_thinking": "none",
-            },
-            "scopes": {
-                "reasoning_effort": "character_model",
-                "max_output_tokens": "static_default",
-                "cache_ttl": "static_default",
-                "sdk": "static_default",
-                "replay_prior_thinking": "character_model",
-            },
-            "applicability": {
-                "reasoning_effort": "honored",
-                "max_output_tokens": "honored",
-                "cache_ttl": "honored",
-                "sdk": "always",
-                "replay_prior_thinking": "honored",
-            },
-            "reasoning_effort_domain": ["adaptive", "low", "medium", "high", "xhigh", "max"],
-        }));
-        set_color_enabled(false);
-    }
-
-    #[test]
     fn format_command_fallback_for_unknown() {
         set_color_enabled(false);
         // Unknown commands should use fallback (JSON pretty print), not panic.
@@ -4098,519 +1785,4 @@ mod tests {
         print_model_switched(&serde_json::json!({"active": "claude-sonnet-4-20250514"}));
     }
 
-    #[test]
-    fn format_k_correctness() {
-        // Regression for SHA 31f20cb: verify correct formatting across boundary.
-        // 0 maps to em-dash (—), not a number.
-        assert_eq!(format_k(0), "\u{2014}");
-        // Numbers < 1000 display without K suffix.
-        assert_eq!(format_k(1), "1");
-        assert_eq!(format_k(500), "500");
-        assert_eq!(format_k(999), "999");
-        // 1000 is the first value that rounds to K.
-        assert_eq!(format_k(1000), "1.0K");
-        // 1500 → "1.5K"
-        assert_eq!(format_k(1500), "1.5K");
-        // 10000 → "10.0K"
-        assert_eq!(format_k(10000), "10.0K");
-    }
-
-    #[test]
-    fn format_local_short_renders_weekday_and_clock() {
-        let rendered = format_local_short("2026-05-23T00:00:00+00:00");
-        assert!(!rendered.contains('T'), "should not contain 'T': {rendered:?}");
-        assert!(
-            rendered.ends_with(" AM") || rendered.ends_with(" PM"),
-            "should end with AM/PM marker: {rendered:?}"
-        );
-        assert_eq!(format_local_short("not-a-timestamp"), "not-a-timestamp");
-    }
-
-    /// Visual preview of the budget table with and without a pace. Skipped by
-    /// default; run it to eyeball column alignment after touching either row:
-    ///
-    /// ```sh
-    /// cargo test -p shore-cli render_preview_budget_table \
-    ///   -- --ignored --nocapture --test-threads=1
-    /// ```
-    #[test]
-    #[ignore = "visual preview"]
-    fn render_preview_budget_table() {
-        let data = serde_json::json!({
-            "budgets": [
-                {
-                    "name": "weekly", "period": "week",
-                    "current_cost": 5.0, "cost_limit": 14.0, "percent_used": 0.357,
-                    "status": "ok", "action": "block",
-                    "period_start": "2026-05-20T06:00:00+00:00",
-                    "reset_at": "2026-05-27T06:00:00+00:00",
-                    "pace": {
-                        "period": "day",
-                        "window_start": "2026-05-22T06:00:00+00:00",
-                        "window_end": "2026-05-23T06:00:00+00:00",
-                        "allowance": 1.8, "current_cost": 0.0, "remaining": 1.8,
-                        "percent_used": 0.0, "periods_remaining": 5.0,
-                        "status": "ok", "action": "warn",
-                        "warning_thresholds": [0.8, 1.0], "crossed_warn_at": [],
-                        "over_limit": false
-                    }
-                },
-                {
-                    "name": "background", "period": "day",
-                    "current_cost": 1.9, "cost_limit": 2.0, "percent_used": 0.95,
-                    "status": "warning", "action": "pause_background",
-                    "period_start": "2026-05-22T00:00:00+00:00",
-                    "reset_at": "2026-05-23T00:00:00+00:00"
-                }
-            ]
-        });
-        // `print_budget_table` writes straight to stdout via `cli_out!`, so the
-        // banners go the same way rather than through `println!` (denied here).
-        let mut stdout = io::stdout();
-        let _ignored = stdout.write_all(b"----- budget table -----\n");
-        let _flushed = stdout.flush();
-        print_budget_table(&data);
-        let _ignored_end = stdout.write_all(b"----- end -----\n");
-        let _flushed_end = stdout.flush();
-    }
-
-    #[test]
-    fn budget_without_a_pace_renders_one_meter() {
-        set_color_enabled(false);
-        let data = serde_json::json!({
-            "budgets": [{
-                "name": "weekly", "period": "week",
-                "current_cost": 5.0, "cost_limit": 14.0, "percent_used": 0.357,
-                "status": "ok", "action": "block",
-                "reset_at": "2026-05-27T06:00:00+00:00"
-            }]
-        });
-        let mut buf: Vec<u8> = Vec::new();
-        write_budget_table(&mut buf, &data);
-        let rendered = String::from_utf8(buf).expect("utf8");
-        let meters = rendered
-            .lines()
-            .filter(|l| l.contains('\u{2588}') || l.contains('\u{2591}'))
-            .count();
-        assert_eq!(meters, 1, "an unpaced budget gets one meter:\n{rendered}");
-    }
-
-    /// Field names here mirror a real `budget_statuses` payload (the daemon's
-    /// ledger module's `PaceStatus`), since this renderer reads the JSON
-    /// untyped and would silently print zeros if a key were ever renamed on
-    /// the producer side.
-    #[test]
-    fn budget_with_a_pace_renders_both_meters_and_the_allowance_basis() {
-        set_color_enabled(false);
-        let data = serde_json::json!({
-            "budgets": [{
-                "name": "weekly",
-                "period": "week",
-                "current_cost": 5.0,
-                "cost_limit": 14.0,
-                "percent_used": 0.357,
-                "status": "ok",
-                "action": "block",
-                "reset_at": "2026-05-27T06:00:00+00:00",
-                "pace": {
-                    "period": "day",
-                    "window_start": "2026-05-21T06:00:00+00:00",
-                    "window_end": "2026-05-22T06:00:00+00:00",
-                    "allowance": 2.166_666_666_666_666_5,
-                    "base_allowance": 2.0,
-                    "rollover": 0.25,
-                    "debt_adjustment": 0.083_333_333_333_333_33,
-                    "current_cost": 1.0,
-                    "remaining": 1.166_666_666_666_666_5,
-                    "percent_used": 0.461_538_461_538_461_56,
-                    "periods_remaining": 6.0,
-                    "status": "ok",
-                    "action": "warn",
-                    "warning_thresholds": [0.8, 1.0],
-                    "crossed_warn_at": [],
-                    "over_limit": false
-                }
-            }]
-        });
-        let mut buf: Vec<u8> = Vec::new();
-        write_budget_table(&mut buf, &data);
-        let rendered = String::from_utf8(buf).expect("utf8");
-        assert!(rendered.contains("$5.00 / $14.00"), "period spend: {rendered}");
-        assert!(rendered.contains("$1.00 / $2.17"), "pace spend: {rendered}");
-        assert!(rendered.contains("46%"), "pace share: {rendered}");
-        assert!(
-            rendered.contains("allowance $2.00 + $0.25 rollover \u{2212} $0.08 debt"),
-            "pace basis: {rendered}"
-        );
-        assert!(
-            rendered.lines().all(|line| line.chars().count() <= 80),
-            "budget view exceeded terminal width:\n{rendered}"
-        );
-    }
-
-    #[test]
-    fn an_over_limit_budget_reads_red_and_a_warning_reads_yellow() {
-        assert_eq!(budget_color("over_limit", false), Color::Red);
-        assert_eq!(budget_color("ok", true), Color::Red);
-        assert_eq!(budget_color("warning", false), Color::Yellow);
-        assert_eq!(budget_color("ok", false), Color::Green);
-    }
-
-    #[test]
-    fn a_full_budget_fills_its_bar_and_an_empty_one_does_not() {
-        assert_eq!(budget_bar(0.0, 4).chars().filter(|c| *c == '\u{2588}').count(), 0);
-        assert_eq!(budget_bar(1.0, 4).chars().filter(|c| *c == '\u{2588}').count(), 4);
-        assert_eq!(budget_bar(2.0, 4).chars().filter(|c| *c == '\u{2588}').count(), 4);
-        assert_eq!(budget_bar(0.5, 4).chars().count(), 4);
-    }
-
-    #[test]
-    fn ellipsize_pads_and_truncates() {
-        assert_eq!(ellipsize("short", 10), "short");
-        assert_eq!(ellipsize("exactly10!", 10), "exactly10!");
-        // Truncated values end with U+2026 and fit exactly in `max_width` chars.
-        let truncated = ellipsize("openrouter-anthropic", 12);
-        assert_eq!(truncated.chars().count(), 12);
-        assert!(truncated.ends_with('\u{2026}'));
-        assert!(truncated.starts_with("openrouter-"));
-    }
-
-    #[test]
-    fn usage_summary_uses_section_rows_and_stays_narrow() {
-        let data = serde_json::json!({
-            "mode": "summary",
-            "period": "today",
-            "timezone": "local",
-            "summary": [
-                {
-                    "provider": "openrouter-anthropic",
-                    "model": "anthropic/claude-opus-4.6",
-                    "call_count": 96,
-                    "total_input": 189_900,
-                    "total_output": 52_000,
-                    "total_cache_read": 2_513_200,
-                    "total_cache_write": 246_300,
-                    "total_cost": 5.11,
-                },
-                {
-                    "provider": "anthropic",
-                    "model": "claude-sonnet-4.6",
-                    "call_count": 12,
-                    "total_input": 1_200,
-                    "total_output": 800,
-                    "total_cache_read": 0,
-                    "total_cache_write": 0,
-                    "total_cost": 0.42,
-                },
-            ],
-        });
-        let mut buf: Vec<u8> = Vec::new();
-        write_usage_summary_table(&mut buf, &data);
-        let rendered = String::from_utf8(buf).expect("utf8");
-        assert!(
-            rendered.starts_with("── Usage ("),
-            "section header: {rendered}"
-        );
-        assert!(
-            rendered.contains("CALLS") && rendered.contains("CACHE W"),
-            "column headers: {rendered}"
-        );
-        assert!(rendered.contains("96"), "call count: {rendered}");
-        assert!(rendered.contains("$5.11"), "row cost: {rendered}");
-        assert!(rendered.contains("$5.53"), "total cost: {rendered}");
-        assert_eq!(
-            rendered.lines().count(),
-            5,
-            "one line per model plus header, columns and total:\n{rendered}"
-        );
-        assert!(
-            rendered.lines().all(|line| line.chars().count() <= 80),
-            "usage view exceeded terminal width:\n{rendered}"
-        );
-    }
-
-    #[test]
-    fn usage_summary_table_truncates_runaway_provider_names() {
-        // A provider name longer than MAX_PROVIDER_W should be ellipsized so
-        // the column width stays bounded.
-        let absurd = "a".repeat(80);
-        let data = serde_json::json!({
-            "mode": "summary",
-            "period": "today",
-            "summary": [{
-                "provider": absurd,
-                "model": "m",
-                "call_count": 1,
-                "total_input": 0,
-                "total_output": 0,
-                "total_cache_read": 0,
-                "total_cache_write": 0,
-                "total_cost": 0.01,
-            }],
-        });
-        let mut buf: Vec<u8> = Vec::new();
-        write_usage_summary_table(&mut buf, &data);
-        let rendered = String::from_utf8(buf).expect("utf8");
-        assert!(
-            rendered.contains('\u{2026}'),
-            "expected ellipsis for runaway provider"
-        );
-        for line in rendered.lines() {
-            assert!(line.chars().count() <= 80, "line too wide: {line:?}");
-        }
-    }
-
-    #[test]
-    fn density_to_block_ranges() {
-        assert_eq!(density_to_block(0.0), '\u{2591}'); // below threshold
-        assert_eq!(density_to_block(0.04), '\u{2591}'); // below threshold
-        assert_eq!(density_to_block(0.06), '\u{2581}'); // 0.06 * 7 = 0.42 -> round 0 -> first block
-        assert_eq!(density_to_block(0.5), '\u{2585}'); // 0.5 * 7 = 3.5 -> round 4 -> fifth block
-        assert_eq!(density_to_block(1.0), '\u{2588}'); // 1.0 * 7 = 7.0 -> index 7 -> full block
-    }
-
-    #[test]
-    fn print_config_section_aligns_per_table_to_longest_key() {
-        // Regression for #73: keys used to butt up against values because the
-        // column was a fixed 24. Now the column is computed per-section from
-        // the longest visible scalar key. The longest key here is
-        // `allow_compaction_over_budget` (28 chars) -> column = 29.
-        set_color_enabled(false);
-        let data = serde_json::json!({
-            "addr": "0.0.0.0:1112",
-            "allow_compaction_over_budget": true,
-            "max_embed_chars_per_file": 4000,
-        });
-        let mut buf: Vec<u8> = Vec::new();
-        print_config_section(&mut buf, &data, None, 0, true);
-        let rendered = String::from_utf8(buf).expect("utf8");
-        assert!(
-            !rendered.contains("accesstrue"),
-            "long key bled into value:\n{rendered}"
-        );
-        assert!(
-            !rendered.contains("file4000"),
-            "boundary key bled into value:\n{rendered}"
-        );
-        // All rows should align to column 27 (longest key + 1 space).
-        assert!(
-            rendered.contains(&format!("addr{:25}0.0.0.0:1112", "")),
-            "short key not padded to section column:\n{rendered}"
-        );
-        assert!(
-            rendered.contains("allow_compaction_over_budget true"),
-            "longest key should get a single trailing space:\n{rendered}"
-        );
-        assert!(
-            rendered.contains(&format!("max_embed_chars_per_file{:5}4000", "")),
-            "mid-length key not padded to section column:\n{rendered}"
-        );
-    }
-
-    #[test]
-    fn print_config_section_renders_budgets_as_blocks_not_json() {
-        // The reported shape: `[[usage.budgets]]` used to print as one line of
-        // raw JSON, nulls and all, inside a section of aligned key/value rows.
-        set_color_enabled(false);
-        let config = serde_json::json!({
-            "usage": {
-                "budgets": [{
-                    "name": "brainwife",
-                    "period": "week",
-                    "cost_usd": 15,
-                    "warn_at": [0.85, 1],
-                    "limit": "warn",
-                    "character": serde_json::Value::Null,
-                    "pace_period": "day",
-                    "pace_action": serde_json::Value::Null,
-                    "pace_warn_at": [0.5],
-                    "pace_warn_action": "pause_heartbeat",
-                }],
-            },
-        });
-        let mut buf: Vec<u8> = Vec::new();
-        print_config_section(&mut buf, &config, None, 0, true);
-        let rendered = String::from_utf8(buf).expect("utf8");
-        assert!(
-            !rendered.contains('{'),
-            "budget still rendered as raw JSON:\n{rendered}"
-        );
-        assert!(
-            rendered.contains("    brainwife:"),
-            "budget not labelled by its name:\n{rendered}"
-        );
-        assert!(
-            rendered.contains("pace_warn_action pause_heartbeat"),
-            "budget fields not rendered as rows:\n{rendered}"
-        );
-        assert!(
-            rendered.contains("warn_at          0.85, 1"),
-            "list-valued field should render like any other list:\n{rendered}"
-        );
-        assert!(
-            !rendered.contains("character"),
-            "null field should be skipped like any other null:\n{rendered}"
-        );
-    }
-
-    #[test]
-    fn budget_action_column_reports_the_action_in_force() {
-        // A pace in `warning` with a `pace_warn_action` set: the column used to
-        // read `action` (the limit's) and print `warn` while the daemon was
-        // already pausing heartbeats.
-        let budget = serde_json::json!({
-            "status": "ok",
-            "action": "warn",
-            "effective_action": "warn",
-            "pace": {
-                "status": "warning",
-                "action": "warn",
-                "effective_action": "pause_heartbeat",
-            },
-        });
-        assert_eq!(acting_now(&budget), "warn");
-        assert_eq!(budget.get("pace").map(acting_now), Some("pause_heartbeat"));
-    }
-
-    #[test]
-    fn session_activate_names_the_cache_write_it_paid_for() {
-        let primed = serde_json::json!({
-            "status": "primed",
-            "cache_creation_tokens": 5000,
-            "cache_read_tokens": 0,
-            "seconds_until_ping": 3300,
-        });
-        assert_eq!(
-            session_activate_keepalive(&primed),
-            "primed — wrote 5000 cache tokens; next ping in 55m"
-        );
-    }
-
-    #[test]
-    fn session_activate_distinguishes_resumed_from_off() {
-        let resumed = serde_json::json!({ "status": "resumed", "seconds_until_ping": 1800 });
-        assert_eq!(
-            session_activate_keepalive(&resumed),
-            "already warm; next ping in 30m"
-        );
-
-        let off = serde_json::json!({ "status": "off" });
-        assert_eq!(
-            session_activate_keepalive(&off),
-            "off — this character's model sets cache_keepalive = off"
-        );
-    }
-
-    #[test]
-    fn session_activate_heartbeat_reports_the_wake_it_has() {
-        let scheduled =
-            serde_json::json!({ "state": "Active", "paused": false, "seconds_until_wake": 7200 });
-        assert_eq!(
-            session_activate_heartbeat(&scheduled),
-            "Active, next wake in 2h 0m"
-        );
-
-        let unscheduled = serde_json::json!({ "state": "Dormant", "paused": false });
-        assert_eq!(
-            session_activate_heartbeat(&unscheduled),
-            "Dormant, no wake scheduled"
-        );
-    }
-
-    #[test]
-    fn budget_action_column_falls_back_for_an_older_daemon() {
-        let budget = serde_json::json!({ "status": "ok", "action": "block" });
-        assert_eq!(acting_now(&budget), "block");
-        assert_eq!(acting_now(&serde_json::json!({})), "warn");
-    }
-
-    #[test]
-    fn print_config_section_hides_defaults_when_show_all_is_false() {
-        set_color_enabled(false);
-        let config = serde_json::json!({
-            "stream": true,
-            "model": "claude-haiku-4-5",
-        });
-        let defaults = serde_json::json!({
-            "stream": true,
-            "model": "claude-sonnet-4-5",
-        });
-        let mut buf: Vec<u8> = Vec::new();
-        print_config_section(&mut buf, &config, Some(&defaults), 0, false);
-        let rendered = String::from_utf8(buf).expect("utf8");
-        assert!(
-            !rendered.contains("stream"),
-            "default-valued key should be hidden:\n{rendered}"
-        );
-        assert!(
-            rendered.contains("model"),
-            "non-default key should still be shown:\n{rendered}"
-        );
-    }
-
-    #[test]
-    fn print_config_section_realistic_shape_renders_cleanly() {
-        // Mirrors the bug report in issue #73, where long keys collided with
-        // their values. Confirms the per-section column
-        // produces consistent alignment on a realistic payload.
-        set_color_enabled(false);
-        let config = serde_json::json!({
-            "usage": {
-                "timezone": "local",
-                "allow_compaction_over_budget": true,
-                "budgets": ["a", "b"],
-            },
-        });
-        let mut buf: Vec<u8> = Vec::new();
-        print_config_section(&mut buf, &config, None, 0, true);
-        let rendered = String::from_utf8(buf).expect("utf8");
-        let daemon_lines: Vec<&str> = rendered
-            .lines()
-            .filter(|l| l.starts_with("  ") && !l.ends_with(':'))
-            .collect();
-        assert!(
-            !daemon_lines.is_empty(),
-            "expected scalar rows under the section"
-        );
-        // Every scalar row in the section must start at the same column for
-        // the value (i.e. consistent indent + matching pad column).
-        let value_columns: Vec<usize> = daemon_lines
-            .iter()
-            .map(|l| l.find(|c: char| !c.is_whitespace()).unwrap_or(0))
-            .collect();
-        assert!(
-            value_columns
-                .windows(2)
-                .all(|w| matches!(w, [a, b] if a == b)),
-            "scalar rows indented inconsistently: {daemon_lines:?}"
-        );
-    }
-
-    #[test]
-    fn print_config_section_collapses_all_default_subtables() {
-        set_color_enabled(false);
-        let config = serde_json::json!({
-            "outer": {
-                "nested": { "a": 1, "b": 2 },
-                "kept": "user-value",
-            }
-        });
-        let defaults = serde_json::json!({
-            "outer": {
-                "nested": { "a": 1, "b": 2 },
-                "kept": "default-value",
-            }
-        });
-        let mut buf: Vec<u8> = Vec::new();
-        print_config_section(&mut buf, &config, Some(&defaults), 0, false);
-        let rendered = String::from_utf8(buf).expect("utf8");
-        assert!(
-            !rendered.contains("nested:"),
-            "subtable with no non-default descendants should be elided:\n{rendered}"
-        );
-        assert!(
-            rendered.contains("outer:") && rendered.contains("kept"),
-            "outer header and non-default leaf should be shown:\n{rendered}"
-        );
-    }
 }

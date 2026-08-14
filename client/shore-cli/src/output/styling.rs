@@ -1,7 +1,6 @@
 use std::io::{self, Write};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use crossterm::style::{Color, ResetColor, SetForegroundColor};
 use shore_common::protocol::server_msg::{
     ConfigWarning, Phase, ProviderFallbackWarning, SendImage, ServerMessage, StreamChunk,
     StreamEnd, ToolCall, ToolResult, UsageWarning,
@@ -11,10 +10,11 @@ use shore_common::protocol::tool_display::{
 };
 use shore_common::protocol::types::ImageRef;
 
+use super::vocab::{COLOR_ERROR, Tone, paint};
 use super::{
     COLOR_RESULT, COLOR_SUBAGENT, COLOR_THINKING, COLOR_TOOL, MAX_TOOL_OUTPUT, SIGIL_ERROR,
     SIGIL_OK, SIGIL_SUBAGENT, SIGIL_THINKING, SIGIL_TOOL, abbreviate_model, primary_tool_arg,
-    process_wrap_width, use_color, write_channel_rule, write_process_body, write_sigil_header,
+    process_wrap_width, write_channel_rule, write_process_body, write_sigil_header,
     write_thinking_content_line,
 };
 use crate::images;
@@ -241,11 +241,7 @@ pub(crate) fn print_stream_end(end: &StreamEnd) {
 
     // Metadata line in dim
     let model = abbreviate_model(&end.metadata.model);
-    if use_color() {
-        _ = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-    }
-    _ = write!(
-        out,
+    let meta = format!(
         "[{} | in:{} out:{} cache_r:{} cache_w:{} | ttft:{}ms total:{}ms]",
         model,
         end.metadata.tokens.input,
@@ -255,24 +251,17 @@ pub(crate) fn print_stream_end(end: &StreamEnd) {
         end.metadata.timing.ttft_ms,
         end.metadata.timing.total_ms,
     );
-    if use_color() {
-        _ = crossterm::execute!(out, ResetColor);
-    }
+    paint(&mut out, Tone::Muted, &meta);
     _ = writeln!(out);
 
     // A reply that stopped at the token ceiling is cut off mid-sentence.
     // Without this the truncation is indistinguishable from a short answer.
     if matches!(end.finish_reason.as_str(), "max_tokens" | "length") {
-        if use_color() {
-            _ = crossterm::execute!(out, SetForegroundColor(Color::Yellow));
-        }
-        _ = write!(
-            out,
-            "[reply truncated: it reached the max_tokens ceiling and stops mid-sentence]"
+        paint(
+            &mut out,
+            Tone::Warn,
+            "[reply truncated: it reached the max_tokens ceiling and stops mid-sentence]",
         );
-        if use_color() {
-            _ = crossterm::execute!(out, ResetColor);
-        }
         _ = writeln!(out);
     }
 
@@ -284,13 +273,7 @@ pub(crate) fn print_error(err: &dyn std::fmt::Display) {
     let stderr = io::stderr();
     let mut out = stderr.lock();
 
-    if use_color() {
-        let _ignored = crossterm::execute!(out, SetForegroundColor(Color::Red));
-    }
-    let _ignored = write!(out, "error");
-    if use_color() {
-        _ = crossterm::execute!(out, ResetColor);
-    }
+    paint(&mut out, Tone::Bad, "error");
     _ = writeln!(out, ": {err}");
 }
 
@@ -301,13 +284,7 @@ pub(crate) fn print_provider_fallback_warning(w: &ProviderFallbackWarning) {
     let stderr = io::stderr();
     let mut out = stderr.lock();
 
-    if use_color() {
-        let _ignored = crossterm::execute!(out, SetForegroundColor(Color::Yellow));
-    }
-    let _ignored = write!(out, "warning");
-    if use_color() {
-        _ = crossterm::execute!(out, ResetColor);
-    }
+    paint(&mut out, Tone::Warn, "warning");
     _ = writeln!(out, ": {}", w.message);
 }
 
@@ -316,13 +293,7 @@ pub(crate) fn print_usage_warning(w: &UsageWarning) {
     let stderr = io::stderr();
     let mut out = stderr.lock();
 
-    if use_color() {
-        let _ignored = crossterm::execute!(out, SetForegroundColor(Color::Yellow));
-    }
-    let _ignored = write!(out, "warning");
-    if use_color() {
-        _ = crossterm::execute!(out, ResetColor);
-    }
+    paint(&mut out, Tone::Warn, "warning");
     _ = writeln!(out, ": {}", w.message);
 }
 
@@ -335,13 +306,7 @@ pub(crate) fn print_config_warning(w: &ConfigWarning) {
     let stderr = io::stderr();
     let mut out = stderr.lock();
 
-    if use_color() {
-        let _ignored = crossterm::execute!(out, SetForegroundColor(Color::Yellow));
-    }
-    let _ignored = write!(out, "config not applied");
-    if use_color() {
-        _ = crossterm::execute!(out, ResetColor);
-    }
+    paint(&mut out, Tone::Warn, "config not applied");
     match w.character.as_deref() {
         Some(character) => _ = writeln!(out, " ({character}) {}: {}", w.path, w.message),
         None => _ = writeln!(out, " {}: {}", w.path, w.message),
@@ -387,13 +352,7 @@ pub(crate) fn print_server_error(code: &str, message: &str) {
     let stderr = io::stderr();
     let mut out = stderr.lock();
 
-    if use_color() {
-        let _ignored = crossterm::execute!(out, SetForegroundColor(Color::Red));
-    }
-    let _ignored = write!(out, "server error");
-    if use_color() {
-        _ = crossterm::execute!(out, ResetColor);
-    }
+    paint(&mut out, Tone::Bad, "server error");
     _ = writeln!(out, " [{code}]: {message}");
 }
 
@@ -421,7 +380,8 @@ pub(crate) fn format_tool_output(output: &str) -> String {
 
 pub(crate) fn write_tool_body_plain(out: &mut impl Write, body: &str) {
     for line in body.lines() {
-        let _ignored = writeln!(out, "  {line}");
+        super::vocab::indent_to(out, 0);
+        let _ignored = writeln!(out, "{line}");
     }
 }
 
@@ -437,7 +397,7 @@ pub(crate) fn print_subagent_tool_call(call: &ToolCall) {
     print_tool_call_styled(call, COLOR_SUBAGENT);
 }
 
-fn print_tool_call_styled(call: &ToolCall, color: Color) {
+fn print_tool_call_styled(call: &ToolCall, color: Tone) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
     let mut state = lock_chunk_state();
@@ -469,7 +429,7 @@ pub(crate) fn print_subagent_tool_result(result: &ToolResult) {
     print_tool_result_styled(result, COLOR_SUBAGENT);
 }
 
-fn print_tool_result_styled(result: &ToolResult, ok_color: Color) {
+fn print_tool_result_styled(result: &ToolResult, ok_color: Tone) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
     let mut state = lock_chunk_state();
@@ -479,7 +439,7 @@ fn print_tool_result_styled(result: &ToolResult, ok_color: Color) {
     state.was_thinking = false;
 
     let (sigil, label, color) = if result.is_error {
-        (SIGIL_ERROR, "error", Color::Red)
+        (SIGIL_ERROR, "error", COLOR_ERROR)
     } else {
         (SIGIL_OK, "result", ok_color)
     };
@@ -498,13 +458,7 @@ pub(crate) fn print_stream_start(regen: bool) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
 
-    if use_color() {
-        let _ignored = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-    }
-    let _ignored = write!(out, "(regenerating...) ");
-    if use_color() {
-        _ = crossterm::execute!(out, ResetColor);
-    }
+    paint(&mut out, Tone::Muted, "(regenerating...) ");
     _ = out.flush();
 }
 
@@ -518,13 +472,7 @@ pub(crate) fn print_phase(phase: &Phase) {
         other => other,
     };
 
-    if use_color() {
-        let _ignored = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-    }
-    let _ignored = write!(out, "({label}) ");
-    if use_color() {
-        _ = crossterm::execute!(out, ResetColor);
-    }
+    paint(&mut out, Tone::Muted, &format!("({label}) "));
     _ = out.flush();
 }
 

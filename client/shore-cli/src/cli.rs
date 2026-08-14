@@ -90,7 +90,7 @@ pub(crate) enum CliCommand {
         json: bool,
     },
 
-    /// Show conversation log, get/edit/delete messages
+    /// Show the conversation, or edit and delete messages in it
     #[command(args_conflicts_with_subcommands = true)]
     #[command(display_order = 4)]
     Log {
@@ -105,7 +105,7 @@ pub(crate) enum CliCommand {
         #[arg(short = 'n', long = "turns", alias = "count", default_value = "64")]
         count: u32,
 
-        /// Show only messages from one role (`character` aliases `assistant`)
+        /// Show only messages from one role
         #[arg(long, value_enum)]
         role: Option<LogRole>,
 
@@ -143,25 +143,29 @@ pub(crate) enum CliCommand {
     #[command(display_order = 13)]
     Trace {
         #[command(subcommand)]
-        subcommand: TraceCommand,
+        subcommand: Option<TraceCommand>,
     },
 
     /// List or switch characters (no args = list, with name = switch)
     #[command(display_order = 6)]
     Character {
+        #[command(subcommand)]
+        subcommand: Option<CharacterCommand>,
+
         /// Character name to switch to
+        #[arg(hide = true)]
         name: Option<String>,
 
         /// Show detailed character info
-        #[arg(long)]
+        #[arg(long, hide = true)]
         info: bool,
 
         /// Create a new character scaffold directory
-        #[arg(long, requires = "name")]
+        #[arg(long, requires = "name", hide = true)]
         new: bool,
 
         /// Output raw JSON
-        #[arg(long)]
+        #[arg(long, global = true)]
         json: bool,
     },
 
@@ -189,7 +193,7 @@ pub(crate) enum CliCommand {
     #[command(display_order = 14)]
     Debug {
         #[command(subcommand)]
-        subcommand: DebugCommand,
+        subcommand: Option<DebugCommand>,
     },
 
     /// List or switch models, or manage saved sampler settings.
@@ -393,8 +397,9 @@ impl BackgroundTarget {
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum LogRole {
     User,
-    #[value(alias = "character")]
     Assistant,
+    /// Alias for `assistant`
+    Character,
     System,
 }
 
@@ -402,7 +407,7 @@ impl LogRole {
     pub(crate) fn as_protocol_role(self) -> &'static str {
         match self {
             Self::User => "user",
-            Self::Assistant => "assistant",
+            Self::Assistant | Self::Character => "assistant",
             Self::System => "system",
         }
     }
@@ -430,14 +435,26 @@ pub(crate) enum LogCommand {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum UsageCommand {
-    #[command(about = "Group totals by call type, usage kind, or API key")]
-    Breakdown { dimension: UsageDimension },
+    /// Group spend by call type: message, tool_loop, compaction, subagent
+    CallType,
 
-    #[command(about = "Show configured budgets and their current limit state")]
+    /// Group spend by usage kind
+    Kind,
+
+    /// Group spend by the API key that paid for it
+    ApiKey,
+
+    /// Budget meters, what they cover, and when they reset
     Budgets,
 
-    #[command(about = "Show cache anomalies for the selected period")]
+    /// Cache health and coverage for the selected period
+    Cache,
+
+    /// Every cache anomaly in the period, with when and which model
     Anomalies,
+
+    /// Provider rate limits as of each provider's last response
+    Limits,
 
     /// Write the full ledger to stdout as CSV (or TSV with --tsv)
     Export {
@@ -455,13 +472,6 @@ pub(crate) enum UsageCommand {
 
     /// Drop cached provider pricing so the next call re-fetches it
     RefreshPricing,
-}
-
-#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum UsageDimension {
-    CallType,
-    Kind,
-    ApiKey,
 }
 
 #[derive(Subcommand, Debug)]
@@ -534,6 +544,18 @@ pub(crate) enum TraceCommand {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum ModelCommand {
+    /// Switch the active model. Unknown names are an error, never a fallback
+    Use {
+        /// Model name or provider:model_id
+        name: String,
+    },
+
+    /// Describe one model: provider, sdk, limits, and where it resolves from
+    Info {
+        /// Model to describe. Omit for the active one
+        name: Option<String>,
+    },
+
     /// Show, set, or reset saved sampler settings (temperature, top_p,
     /// reasoning_effort, budget_tokens, max_output_tokens, cache_ttl,
     /// cache_keepalive, sdk, replay_prior_thinking, max_tool_iterations) for
@@ -580,6 +602,24 @@ pub(crate) enum ModelCommand {
         /// Output raw JSON
         #[arg(long)]
         json: bool,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum CharacterCommand {
+    /// Switch the active character. Unknown names are an error, never a fallback
+    Use {
+        /// Character name
+        name: String,
+    },
+
+    /// Describe the active character
+    Info,
+
+    /// Create a new character
+    New {
+        /// Character name
+        name: String,
     },
 }
 
@@ -914,7 +954,12 @@ pub(crate) fn to_swp_command(
             selector, msg_ref, ..
         } => Some(alt_command_to_swp(selector.as_deref(), msg_ref.as_deref())),
 
-        // Character: list/switch/new handled locally, --info goes to daemon.
+        // Character: list/switch/new handled locally, info goes to daemon.
+        CliCommand::Character {
+            subcommand: Some(CharacterCommand::Info),
+            name,
+            ..
+        } => Some(("character_info", json!({ "name": name.as_deref().unwrap_or("") }))),
         CliCommand::Character { name, info, .. } => {
             if *info {
                 let n = name.as_deref().unwrap_or("");
@@ -927,6 +972,7 @@ pub(crate) fn to_swp_command(
 
         // Log: subcommands (edit/delete), single message ref, or list.
         CliCommand::Log { .. } => log_to_swp(cmd),
+        CliCommand::Trace { subcommand: None } => None,
         CliCommand::Trace { .. } => trace_to_swp(cmd),
 
         // Status: diagnostics mode or normal status.
@@ -937,7 +983,10 @@ pub(crate) fn to_swp_command(
         } => Some(("diagnostics", json!({ "count": count }))),
         CliCommand::Status { .. } => Some(("status", json!({}))),
 
-        CliCommand::Debug { subcommand } => match subcommand {
+        CliCommand::Debug { subcommand: None } => None,
+        CliCommand::Debug {
+            subcommand: Some(subcommand),
+        } => match subcommand {
             DebugCommand::TickNow => Some(("heartbeat_tick_now", json!({}))),
             DebugCommand::StatusDormant => Some(("heartbeat_set_dormant", json!({}))),
             DebugCommand::StatusActive => Some(("heartbeat_set_active", json!({}))),
@@ -1038,7 +1087,10 @@ fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
 /// The observability views: raw call payloads, heartbeat activity, sub-agent runs.
 fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     use serde_json::{Map, Value, json};
-    let CliCommand::Trace { subcommand } = cmd else {
+    let CliCommand::Trace {
+        subcommand: Some(subcommand),
+    } = cmd
+    else {
         return None;
     };
     match subcommand {
@@ -1101,6 +1153,13 @@ fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     else {
         return None;
     };
+    if let Some(ModelCommand::Info { name: info_name }) = subcommand {
+        let target = info_name.clone().or_else(|| name.clone()).unwrap_or_default();
+        return Some(("model_info", json!({ "name": target })));
+    }
+    if let Some(ModelCommand::Use { name: target }) = subcommand {
+        return Some(("switch_model", json!({ "name": target })));
+    }
     if let Some(ModelCommand::Setting {
         key,
         value,
@@ -1232,18 +1291,19 @@ fn usage_to_swp(
         return None;
     };
     let (by_call_type, by_kind, by_api_key, budget, anomalies) = match subcommand {
-        Some(UsageCommand::Breakdown {
-            dimension: UsageDimension::CallType,
-        }) => (true, false, false, false, false),
-        Some(UsageCommand::Breakdown {
-            dimension: UsageDimension::Kind,
-        }) => (false, true, false, false, false),
-        Some(UsageCommand::Breakdown {
-            dimension: UsageDimension::ApiKey,
-        }) => (false, false, true, false, false),
+        Some(UsageCommand::CallType) => (true, false, false, false, false),
+        Some(UsageCommand::Kind) => (false, true, false, false, false),
+        Some(UsageCommand::ApiKey) => (false, false, true, false, false),
         Some(UsageCommand::Budgets) => (false, false, false, true, false),
         Some(UsageCommand::Anomalies) => (false, false, false, false, true),
-        _ => (false, false, false, false, false),
+        Some(
+            UsageCommand::Cache
+            | UsageCommand::Limits
+            | UsageCommand::Export { .. }
+            | UsageCommand::Recalculate { .. }
+            | UsageCommand::RefreshPricing,
+        )
+        | None => (false, false, false, false, false),
     };
     let (export_csv, export_tsv, recalculate, force, refresh_pricing) = match subcommand {
         Some(UsageCommand::Export { tsv }) => (!tsv, *tsv, false, false, false),
@@ -1486,8 +1546,26 @@ mod tests {
         assert_variant!(
             &cli.command,
             CliCommand::Log { role, .. } => {
-                assert_eq!(*role, Some(LogRole::Assistant));
+                assert_eq!(*role, Some(LogRole::Character));
+                assert_eq!(
+                    role.map(LogRole::as_protocol_role),
+                    Some("assistant"),
+                    "character must reach the daemon as assistant"
+                );
             }
+        );
+    }
+
+    #[test]
+    fn character_is_offered_in_the_role_list_not_hidden_as_an_alias() {
+        use clap::CommandFactory as _;
+        let help = Cli::command()
+            .find_subcommand("log")
+            .map(|c| c.clone().render_long_help().to_string())
+            .unwrap_or_default();
+        assert!(
+            help.contains("character"),
+            "a role you can pass must appear in --help: {help}"
         );
     }
 
@@ -1702,7 +1780,7 @@ mod tests {
         assert_variant!(
             &cli.command,
             CliCommand::Debug {
-                subcommand: DebugCommand::TickNow,
+                subcommand: Some(DebugCommand::TickNow),
             } => {}
         );
     }
@@ -1713,7 +1791,7 @@ mod tests {
         assert_variant!(
             &cli.command,
             CliCommand::Debug {
-                subcommand: DebugCommand::StatusDormant,
+                subcommand: Some(DebugCommand::StatusDormant),
             } => {}
         );
     }
@@ -1724,7 +1802,7 @@ mod tests {
         assert_variant!(
             &cli.command,
             CliCommand::Debug {
-                subcommand: DebugCommand::StatusActive,
+                subcommand: Some(DebugCommand::StatusActive),
             } => {}
         );
     }
@@ -2174,7 +2252,7 @@ mod tests {
     #[test]
     fn debug_keepalive_ping_now_maps_to_command() {
         let cmd = CliCommand::Debug {
-            subcommand: DebugCommand::KeepalivePingNow,
+            subcommand: Some(DebugCommand::KeepalivePingNow),
         };
         let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "keepalive_ping_now");
@@ -2187,7 +2265,7 @@ mod tests {
         assert!(matches!(
             cli.command,
             CliCommand::Debug {
-                subcommand: DebugCommand::KeepalivePingNow
+                subcommand: Some(DebugCommand::KeepalivePingNow)
             }
         ));
     }
@@ -2258,7 +2336,7 @@ mod tests {
     #[test]
     fn debug_session_activate_maps_to_command() {
         let cmd = CliCommand::Debug {
-            subcommand: DebugCommand::SessionActivate,
+            subcommand: Some(DebugCommand::SessionActivate),
         };
         let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "session_activate");
@@ -2271,7 +2349,7 @@ mod tests {
         assert!(matches!(
             cli.command,
             CliCommand::Debug {
-                subcommand: DebugCommand::SessionActivate
+                subcommand: Some(DebugCommand::SessionActivate)
             }
         ));
     }
@@ -2279,7 +2357,7 @@ mod tests {
     #[test]
     fn debug_tick_now_maps_to_command() {
         let cmd = CliCommand::Debug {
-            subcommand: DebugCommand::TickNow,
+            subcommand: Some(DebugCommand::TickNow),
         };
         let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "heartbeat_tick_now");
@@ -2289,7 +2367,7 @@ mod tests {
     #[test]
     fn debug_status_dormant_maps_to_command() {
         let cmd = CliCommand::Debug {
-            subcommand: DebugCommand::StatusDormant,
+            subcommand: Some(DebugCommand::StatusDormant),
         };
         let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "heartbeat_set_dormant");
@@ -2299,7 +2377,7 @@ mod tests {
     #[test]
     fn debug_status_active_maps_to_command() {
         let cmd = CliCommand::Debug {
-            subcommand: DebugCommand::StatusActive,
+            subcommand: Some(DebugCommand::StatusActive),
         };
         let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "heartbeat_set_active");
@@ -2309,6 +2387,7 @@ mod tests {
     #[test]
     fn character_maps_to_none_without_info() {
         let cmd_none = CliCommand::Character {
+            subcommand: None,
             name: None,
             info: false,
             new: false,
@@ -2316,6 +2395,7 @@ mod tests {
         };
         assert!(to_swp_command(&cmd_none, None).is_none());
         let cmd_named = CliCommand::Character {
+            subcommand: None,
             name: Some("alice".into()),
             info: false,
             new: false,
@@ -2327,6 +2407,7 @@ mod tests {
     #[test]
     fn character_info_maps_to_command() {
         let cmd = CliCommand::Character {
+            subcommand: None,
             name: Some("alice".into()),
             info: true,
             new: false,
@@ -2982,13 +3063,13 @@ mod tests {
                 json: false,
             },
             CliCommand::Debug {
-                subcommand: DebugCommand::TickNow,
+                subcommand: Some(DebugCommand::TickNow),
             },
             CliCommand::Debug {
-                subcommand: DebugCommand::StatusDormant,
+                subcommand: Some(DebugCommand::StatusDormant),
             },
             CliCommand::Debug {
-                subcommand: DebugCommand::StatusActive,
+                subcommand: Some(DebugCommand::StatusActive),
             },
         ]
     }
@@ -3072,6 +3153,7 @@ mod tests {
                 json: false,
             },
             CliCommand::Character {
+                subcommand: None,
                 name: Some("c".into()),
                 info: true,
                 new: false,
@@ -3231,7 +3313,7 @@ mod tests {
 
     #[test]
     fn usage_breakdown_call_type_sets_only_its_grouping() {
-        let cli = parse(&["usage", "breakdown", "call-type"]);
+        let cli = parse(&["usage", "call-type"]);
         let (cmd, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(cmd, "usage");
         assert_eq!(arg(&args, "by_call_type").as_bool(), Some(true));
@@ -3254,13 +3336,12 @@ mod tests {
 
     #[test]
     fn usage_breakdown_dimensions_are_mutually_exclusive() {
-        let (_, kind) =
-            to_swp_command(&parse(&["usage", "breakdown", "kind"]).command, None).unwrap();
+        let (_, kind) = to_swp_command(&parse(&["usage", "kind"]).command, None).unwrap();
         assert_eq!(arg(&kind, "by_kind").as_bool(), Some(true));
         assert_eq!(arg(&kind, "by_api_key").as_bool(), Some(false));
 
         let (_, key) = to_swp_command(
-            &parse(&["usage", "breakdown", "api-key", "--api-key", "overflow"]).command,
+            &parse(&["usage", "api-key", "--api-key", "overflow"]).command,
             None,
         )
         .unwrap();
