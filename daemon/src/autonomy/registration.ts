@@ -1,3 +1,5 @@
+import { localWallClock } from "./activity.ts";
+import { hostZone } from "../ledger/zoned.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import type { AutonomyRunnerConfig, CompactionRunnerConfig } from "./runner.ts";
 import type { HeartbeatClockConfig } from "./heartbeat.ts";
@@ -58,11 +60,17 @@ type ServiceSlice = Pick<
 export class TurnAutonomyBridge {
   readonly #service: ServiceSlice;
   readonly #now: () => number;
+  readonly #zone: string;
   readonly #registered = new Map<string, Promise<void>>();
 
-  constructor(service: ServiceSlice, now: () => number = () => Date.now()) {
+  constructor(
+    service: ServiceSlice,
+    now: () => number = () => Date.now(),
+    zone: string = hostZone(),
+  ) {
     this.#service = service;
     this.#now = now;
+    this.#zone = zone;
   }
 
   ensureState(character: string, config: LoadedConfig): boolean {
@@ -76,17 +84,18 @@ export class TurnAutonomyBridge {
   }
 
   backfillActivity(character: string, timestamps: readonly Date[]): void {
-    const stamps = timestamps.map((t) => t.getTime());
-    const latestUserAt = stamps.length === 0 ? undefined : Math.max(...stamps);
+    const instants = timestamps.map((t) => t.getTime());
+    const localStamps = instants.map((at) => localWallClock(at, this.#zone));
+    const latestUserAt = instants.length === 0 ? undefined : Math.max(...instants);
     this.#after(character, () => {
-      this.#service.backfillActivity(character, stamps, latestUserAt);
+      this.#service.backfillActivity(character, localStamps, latestUserAt);
     });
   }
 
   onUserMessage(character: string, turnCount: number): void {
-    const at = this.#now();
+    const localAt = localWallClock(this.#now(), this.#zone);
     this.#after(character, () => {
-      this.#service.onUserMessage(character, turnCount, at);
+      this.#service.onUserMessage(character, turnCount, localAt);
     });
   }
 

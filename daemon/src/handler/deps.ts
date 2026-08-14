@@ -1,3 +1,4 @@
+import { localWallClock } from "../autonomy/activity.ts";
 import { compactionGenerate } from "../autonomy/in_process.ts";
 import type { InvalidationReason, LastRequestCache } from "../cache/last_request.ts";
 import type { TurnAutonomyBridge } from "../autonomy/registration.ts";
@@ -163,7 +164,7 @@ export function chatToolDeps(
       queueDeferredEdit,
     ),
     activityStats: () => {
-      const report = runtime.autonomy.activityStats(charName, Date.now());
+      const report = runtime.autonomy.activityStats(charName, localWallClock(Date.now()));
       return report === undefined
         ? undefined
         : { stats: report.stats, turnCount: report.messageCount };
@@ -295,7 +296,7 @@ class ProcessSessionCache implements SessionCache {
   readonly #models = new Map<string, string>();
 
   static #key(sessionId: number, character: string | undefined): string {
-    return `${sessionId} ${character ?? ""}`;
+    return `${sessionId}\0${character ?? ""}`;
   }
 
   activeModel(sessionId: number, character: string | undefined): string | undefined {

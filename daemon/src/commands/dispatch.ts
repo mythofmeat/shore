@@ -7,6 +7,7 @@ import type { ConversationEngine } from "../engine/conversation.ts";
 import type { CallStore } from "../call_store.ts";
 import type { Diagnostics } from "../diagnostics.ts";
 import type { AutonomyService } from "../autonomy/service.ts";
+import { localWallClock } from "../autonomy/activity.ts";
 import { CommandError, internalError, invalidRequest } from "./errors.ts";
 import { callLog, transcript } from "./call_log.ts";
 import { subagentTrace } from "./subagent_trace.ts";
@@ -296,7 +297,7 @@ function statusContext(
     autonomy: deps.autonomy,
     diagnostics: deps.diagnostics,
     now: deps.now ?? Date.now,
-    localNow: deps.localNow ?? Date.now,
+    localNow: deps.localNow ?? (() => localWallClock(Date.now())),
   };
 }
 

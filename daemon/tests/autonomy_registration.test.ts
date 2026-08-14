@@ -47,14 +47,17 @@ function configWith(mutate: (app: ReturnType<typeof defaultAppConfig>) => void =
 /** Records what reached the service, and when it was allowed to. */
 function recordingService(registerDelay?: Promise<void>) {
   const calls: string[] = [];
+  const stamps: number[] = [];
   return {
     calls,
+    stamps,
     register: async () => {
       calls.push("register");
       if (registerDelay !== undefined) await registerDelay;
     },
-    backfillActivity: (_c: string, stamps: readonly number[], latest: number | undefined) => {
-      calls.push(`backfill:${stamps.length}:${String(latest)}`);
+    backfillActivity: (_c: string, at: readonly number[], latest: number | undefined) => {
+      stamps.push(...at);
+      calls.push(`backfill:${at.length}:${String(latest)}`);
     },
     onUserMessage: (_c: string, turns: number, at: number) => {
       calls.push(`user:${turns}:${at}`);
@@ -207,7 +210,7 @@ describe("updates that can wait", () => {
       release = resolve;
     });
     const service = recordingService(slow);
-    const bridge = new TurnAutonomyBridge(service, () => 7);
+    const bridge = new TurnAutonomyBridge(service, () => 7, "UTC");
 
     bridge.ensureState("ada", configWith());
     bridge.onUserMessage("ada", 1);
@@ -255,7 +258,7 @@ describe("updates that can wait", () => {
     });
     const service = recordingService(slow);
     let clock = 100;
-    const bridge = new TurnAutonomyBridge(service, () => clock);
+    const bridge = new TurnAutonomyBridge(service, () => clock, "UTC");
 
     bridge.ensureState("ada", configWith());
     bridge.onUserMessage("ada", 1);
@@ -273,6 +276,45 @@ describe("updates that can wait", () => {
 
     expect(() => bridge.onUserMessage("ghost", 1)).not.toThrow();
     expect(service.calls).toEqual([]);
+  });
+});
+
+describe("the hour the tracker is told a message landed in", () => {
+  const NOON_UTC = Date.UTC(2026, 7, 15, 12, 0, 0);
+  const hourOf = (naive: number): number => new Date(naive).getUTCHours();
+
+  test("is the user's wall clock, not UTC", async () => {
+    const service = recordingService();
+    const bridge = new TurnAutonomyBridge(service, () => NOON_UTC, "Australia/Sydney");
+    bridge.ensureState("ada", configWith());
+
+    bridge.onUserMessage("ada", 1);
+
+    await bridge.settled("ada");
+    const at = Number(service.calls[1]?.split(":")[2]);
+    expect(hourOf(at)).toBe(22);
+  });
+
+  test("and a backfilled one is shifted the same way", async () => {
+    const service = recordingService();
+    const bridge = new TurnAutonomyBridge(service, () => 0, "Australia/Sydney");
+    bridge.ensureState("ada", configWith());
+
+    bridge.backfillActivity("ada", [new Date(NOON_UTC)]);
+
+    await bridge.settled("ada");
+    expect(service.stamps.map(hourOf)).toEqual([22]);
+  });
+
+  test("but the silence clock is still seeded with the real instant", async () => {
+    const service = recordingService();
+    const bridge = new TurnAutonomyBridge(service, () => 0, "Australia/Sydney");
+    bridge.ensureState("ada", configWith());
+
+    bridge.backfillActivity("ada", [new Date(NOON_UTC)]);
+
+    await bridge.settled("ada");
+    expect(service.calls).toEqual(["register", `backfill:1:${String(NOON_UTC)}`]);
   });
 });
 

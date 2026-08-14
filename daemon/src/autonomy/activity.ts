@@ -1,3 +1,5 @@
+import { hostZone, naiveInZone } from "../ledger/zoned.ts";
+
 export const SESSION_GAP_SECS = 1800;
 
 export const SUFFICIENT_DATA_MSGS = 5;
@@ -39,6 +41,11 @@ const WEEKDAY_BY_UTC_DAY: readonly Weekday[] = [
 export function weekdayOf(at: number): Weekday {
   const day = new Date(at).getUTCDay();
   return WEEKDAY_BY_UTC_DAY[day] ?? "Mon";
+}
+
+export function localWallClock(instant: number, zone: string = hostZone()): number {
+  const wholeSecond = Math.floor(instant / 1000) * 1000;
+  return instant + (naiveInZone(instant, zone) - wholeSecond);
 }
 
 export type HourClassification = "peak" | "trough" | "normal";
