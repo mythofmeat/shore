@@ -2577,12 +2577,21 @@ fn format_k(tokens: u64) -> String {
         "\u{2014}".into()
     } else if tokens < 1000 {
         tokens.to_string()
+    } else if tokens < 1_000_000 {
+        format!("{}K", scaled_tenths(tokens, 1000))
+    } else if tokens < 1_000_000_000 {
+        format!("{}M", scaled_tenths(tokens, 1_000_000))
     } else {
-        let rounded_tenths = checked_div_u64(tokens.saturating_add(50), 100);
-        let whole = checked_div_u64(rounded_tenths, 10);
-        let decimal = checked_rem_u64(rounded_tenths, 10);
-        format!("{whole}.{decimal}K")
+        format!("{}B", scaled_tenths(tokens, 1_000_000_000))
     }
+}
+
+fn scaled_tenths(value: u64, unit: u64) -> String {
+    let per_tenth = checked_div_u64(unit, 10);
+    let rounded_tenths = checked_div_u64(value.saturating_add(checked_div_u64(per_tenth, 2)), per_tenth);
+    let whole = checked_div_u64(rounded_tenths, 10);
+    let decimal = checked_rem_u64(rounded_tenths, 10);
+    format!("{whole}.{decimal}")
 }
 
 /// Truncate `s` so it fits in `max_width` display columns, appending `…` when
@@ -2601,135 +2610,157 @@ fn ellipsize(s: &str, max_width: usize) -> String {
     out
 }
 
-/// Render an RFC 3339 timestamp as the user's local clock time in
-/// `YYYY-MM-DD HH:MM AM|PM` form (e.g. `2026-05-23 10:00 AM`). The raw daemon
-/// payload is always UTC; converting to local with AM/PM makes the value
-/// match the configured anchor at a glance.
-fn format_local_ampm(rfc3339: &str) -> String {
+/// Render an RFC 3339 timestamp as a short local weekday-and-clock label
+/// (e.g. `Wed 5:00 PM`). The raw daemon payload is always UTC; a budget's
+/// reset is read against the user's own week, not the wire's.
+fn format_local_short(rfc3339: &str) -> String {
     parse_timestamp(rfc3339).map_or_else(
         || rfc3339.to_owned(),
-        |dt| dt.format("%Y-%m-%d %I:%M %p").to_string(),
+        |dt| dt.format("%a %-I:%M %p").to_string(),
     )
 }
 
-/// Time columns match the width of `format_local_ampm`'s output
-/// (`YYYY-MM-DD HH:MM AM` = 19 chars); raw-string fallbacks are ellipsized
-/// to the same width so the divider always spans the table. `Started`
-/// shows when the current window opened (so a user with `reset_hour=10`
-/// can see why the budget total isn't the same as today's summary).
-const TIME_W: usize = 19;
+const BAR_W: usize = 22;
+
+fn budget_bar(fraction: f64, width: usize) -> String {
+    #[expect(
+        clippy::float_arithmetic,
+        clippy::as_conversions,
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "share of a budget scaled to a character count for the bar"
+    )]
+    let filled = ((fraction.clamp(0.0, 1.0) * width as f64).round() as usize).min(width);
+    let mut bar = "\u{2588}".repeat(filled);
+    bar.push_str(&"\u{2591}".repeat(width.saturating_sub(filled)));
+    bar
+}
+
+fn action_phrase(action: &str) -> String {
+    match action {
+        "block" => "blocks at limit".to_owned(),
+        "warn" => "warns at limit".to_owned(),
+        "pause_heartbeat" => "pauses heartbeat at limit".to_owned(),
+        "pause_background" => "pauses background at limit".to_owned(),
+        other => format!("{} at limit", other.replace('_', " ")),
+    }
+}
+
+fn budget_color(status: &str, over_limit: bool) -> Color {
+    if over_limit || status == "over_limit" {
+        Color::Red
+    } else if status == "warning" {
+        Color::Yellow
+    } else {
+        Color::Green
+    }
+}
+
+fn percent_of(value: &serde_json::Value) -> f64 {
+    value["percent_used"].as_f64().unwrap_or(0.0)
+}
+
+fn write_budget_meter(
+    out: &mut impl Write,
+    lead: &str,
+    fraction: f64,
+    current: f64,
+    limit: f64,
+    color: Color,
+) {
+    write_dim(out, &format!("  {lead:<9}"));
+    write_fg(out, color, &budget_bar(fraction, BAR_W));
+    #[expect(
+        clippy::float_arithmetic,
+        reason = "budget payload stores used share as f64; CLI scales it for percent display"
+    )]
+    let percent = fraction * 100.0;
+    _ = write!(out, "  {:>16}", format!("${current:.2} / ${limit:.2}"));
+    write_fg(out, color, &format!(" {percent:>4.0}%"));
+    _ = writeln!(out);
+}
 
 fn print_budget_table(data: &serde_json::Value) {
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    write_budget_table(&mut out, data);
+}
+
+fn write_budget_table(out: &mut impl Write, data: &serde_json::Value) {
     let budgets = data["budgets"].as_array();
     if budgets.is_none_or(Vec::is_empty) {
-        cli_out!("  No usage budgets configured.");
+        print_dim_line(out, "No usage budgets configured.");
         return;
     }
 
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
     if let Some(rows) = budgets {
         for budget in rows {
-            let current = budget["current_cost"].as_f64().unwrap_or(0.0);
-            let limit = budget["cost_limit"].as_f64().unwrap_or(0.0);
-            #[expect(
-                clippy::float_arithmetic,
-                reason = "budget payload stores used share as f64; CLI scales it for percent display"
-            )]
-            let percent = budget["percent_used"].as_f64().unwrap_or(0.0) * 100.0;
-            let started = budget["period_start"]
-                .as_str()
-                .map(format_local_ampm)
-                .map_or_else(|| "?".into(), |s| ellipsize(&s, TIME_W));
-            let reset = budget["reset_at"]
-                .as_str()
-                .map(format_local_ampm)
-                .map_or_else(|| "?".into(), |s| ellipsize(&s, TIME_W));
-            _ = writeln!(
+            let over = budget["over_limit"].as_bool().unwrap_or(false);
+            let status = budget["status"].as_str().unwrap_or("ok");
+            let color = budget_color(status, over);
+            let name = ellipsize(
+                budget["name"].as_str().unwrap_or("budget"),
+                term_width().saturating_sub(2),
+            );
+            write_fg(out, color, &format!("  {name}"));
+            write_dim(
                 out,
-                "  {}",
-                ellipsize(
-                    budget["name"].as_str().unwrap_or("budget"),
-                    term_width().saturating_sub(2)
-                )
-            );
-            write_row(
-                &mut out,
-                "Period",
-                budget["period"].as_str().unwrap_or("day"),
-            );
-            write_row(
-                &mut out,
-                "Spend",
-                &format!("${current:.2} / ${limit:.2} · {percent:.0}%"),
-            );
-            write_row(
-                &mut out,
-                "State",
                 &format!(
-                    "{} · action {}",
-                    budget["status"].as_str().unwrap_or("ok"),
-                    acting_now(budget)
+                    "  {} · resets {}",
+                    action_phrase(acting_now(budget)),
+                    budget["reset_at"]
+                        .as_str()
+                        .map_or_else(|| "?".into(), format_local_short),
                 ),
             );
-            write_row(&mut out, "Window", &format!("{started} → {reset}"));
-            for (label, value) in pace_rows(budget) {
-                write_row(&mut out, label, &value);
-            }
+            _ = writeln!(out);
+            write_budget_meter(
+                out,
+                budget["period"].as_str().unwrap_or("day"),
+                percent_of(budget),
+                budget["current_cost"].as_f64().unwrap_or(0.0),
+                budget["cost_limit"].as_f64().unwrap_or(0.0),
+                color,
+            );
+            write_pace_meter(out, budget);
             _ = writeln!(out);
         }
     }
 }
 
-fn pace_rows(budget: &serde_json::Value) -> Vec<(&'static str, String)> {
+fn write_pace_meter(out: &mut impl Write, budget: &serde_json::Value) {
     let pace = &budget["pace"];
     if !pace.is_object() {
-        return Vec::new();
+        return;
     }
-
-    let current = pace["current_cost"].as_f64().unwrap_or(0.0);
-    let allowance = pace["allowance"].as_f64().unwrap_or(0.0);
-    #[expect(
-        clippy::float_arithmetic,
-        reason = "pace payload stores used share as f64; CLI scales it for percent display"
-    )]
-    let percent = pace["percent_used"].as_f64().unwrap_or(0.0) * 100.0;
-    let started = pace["window_start"]
-        .as_str()
-        .map(format_local_ampm)
-        .map_or_else(|| "?".into(), |s| ellipsize(&s, TIME_W));
-    let resets = pace["window_end"]
-        .as_str()
-        .map(format_local_ampm)
-        .map_or_else(|| "?".into(), |s| ellipsize(&s, TIME_W));
-
-    let mut rows = vec![
-        (
-            "Pace",
-            format!(
-                "{} · ${current:.2} / ${allowance:.2} · {percent:.0}%",
-                pace["period"].as_str().unwrap_or("day")
-            ),
-        ),
-        (
-            "Pace State",
-            format!(
-                "{} · action {}",
-                pace["status"].as_str().unwrap_or("ok"),
-                acting_now(pace)
-            ),
-        ),
-        ("Pace Window", format!("{started} → {resets}")),
-    ];
-    if let Some(base) = pace["base_allowance"].as_f64() {
-        let rollover = pace["rollover"].as_f64().unwrap_or(0.0);
-        let debt = pace["debt_adjustment"].as_f64().unwrap_or(0.0);
-        rows.push((
-            "Pace Basis",
-            format!("${base:.2} + ${rollover:.2} rollover − ${debt:.2} debt"),
-        ));
+    let color = budget_color(
+        pace["status"].as_str().unwrap_or("ok"),
+        pace["over_limit"].as_bool().unwrap_or(false),
+    );
+    write_budget_meter(
+        out,
+        pace["period"].as_str().unwrap_or("day"),
+        percent_of(pace),
+        pace["current_cost"].as_f64().unwrap_or(0.0),
+        pace["allowance"].as_f64().unwrap_or(0.0),
+        color,
+    );
+    let debt = pace["debt_adjustment"].as_f64().unwrap_or(0.0);
+    if let Some(rollover) = pace["rollover"].as_f64()
+        && (rollover != 0.0 || debt != 0.0)
+    {
+        {
+            let base = pace["base_allowance"].as_f64().unwrap_or(0.0);
+            write_dim(
+                out,
+                &format!(
+                    "           allowance ${base:.2} + ${rollover:.2} rollover − ${debt:.2} debt"
+                ),
+            );
+            _ = writeln!(out);
+        }
     }
-    rows
 }
 
 /// The action in force at the current spend, for the `Action` column.
@@ -2754,65 +2785,126 @@ fn usage_display_date(data: &serde_json::Value) -> String {
     }
 }
 
-fn write_usage_summary_table(out: &mut impl Write, data: &serde_json::Value) -> io::Result<()> {
+const CALLS_W: usize = 6;
+const TOK_W: usize = 7;
+const COST_W: usize = 8;
+const MIN_NAME_W: usize = 12;
+
+fn usage_fixed_width() -> usize {
+    CALLS_W
+        .saturating_add(TOK_W.saturating_mul(4))
+        .saturating_add(COST_W)
+        .saturating_add(8)
+}
+
+fn usage_name_width(labels: &[String]) -> usize {
+    let widest = labels
+        .iter()
+        .map(|l| l.chars().count())
+        .max()
+        .unwrap_or(MIN_NAME_W);
+    let available = term_width().saturating_sub(usage_fixed_width());
+    widest.clamp(MIN_NAME_W, available.max(MIN_NAME_W))
+}
+
+fn write_usage_table_header(out: &mut impl Write, name_header: &str, name_w: usize) {
+    write_dim(
+        out,
+        &format!(
+            "  {:<name_w$} {:>CALLS_W$} {:>TOK_W$} {:>TOK_W$} {:>TOK_W$} {:>TOK_W$} {:>COST_W$}",
+            name_header, "CALLS", "IN", "OUT", "CACHE R", "CACHE W", "COST"
+        ),
+    );
+    _ = writeln!(out);
+}
+
+fn write_usage_table_row(
+    out: &mut impl Write,
+    label: &str,
+    row: &serde_json::Value,
+    cost: &str,
+    name_w: usize,
+) {
+    let name = ellipsize(label, name_w);
+    let pad = name_w.saturating_sub(name.chars().count());
+    _ = write!(out, "  {name}{:pad$}", "");
+    _ = write!(
+        out,
+        " {:>CALLS_W$} {:>TOK_W$} {:>TOK_W$} {:>TOK_W$} {:>TOK_W$}",
+        row["call_count"].as_u64().unwrap_or(0),
+        format_k(row["total_input"].as_u64().unwrap_or(0)),
+        format_k(row["total_output"].as_u64().unwrap_or(0)),
+        format_k(row["total_cache_read"].as_u64().unwrap_or(0)),
+        format_k(row["total_cache_write"].as_u64().unwrap_or(0)),
+    );
+    write_fg(out, Color::Cyan, &format!(" {cost:>COST_W$}"));
+    _ = writeln!(out);
+}
+
+fn write_usage_total(out: &mut impl Write, total: f64, name_w: usize) {
+    let lead = name_w
+        .saturating_add(CALLS_W)
+        .saturating_add(TOK_W.saturating_mul(4))
+        .saturating_add(5);
+    write_dim(out, &format!("  {:>lead$}", "TOTAL"));
+    write_fg(
+        out,
+        Color::Cyan,
+        &format!(" {:>COST_W$}", format!("${total:.2}")),
+    );
+    _ = writeln!(out);
+}
+
+fn cost_cell(row: &serde_json::Value, running: &mut f64) -> String {
+    row["total_cost"].as_f64().map_or_else(
+        || "\u{2014}".into(),
+        |c| {
+            add_display_cost(running, c);
+            format!("${c:.2}")
+        },
+    )
+}
+
+fn write_usage_rows(
+    out: &mut impl Write,
+    name_header: &str,
+    rows: &[serde_json::Value],
+    labels: &[String],
+) {
+    if rows.is_empty() {
+        print_dim_line(out, "No usage data for this period.");
+        return;
+    }
+    let name_w = usage_name_width(labels);
+    write_usage_table_header(out, name_header, name_w);
+    let mut total = 0.0_f64;
+    for (row, label) in rows.iter().zip(labels) {
+        let cost = cost_cell(row, &mut total);
+        write_usage_table_row(out, label, row, &cost, name_w);
+    }
+    write_usage_total(out, total, name_w);
+}
+
+fn summary_rows(data: &serde_json::Value) -> Vec<serde_json::Value> {
+    data["summary"].as_array().cloned().unwrap_or_default()
+}
+
+fn write_usage_summary_table(out: &mut impl Write, data: &serde_json::Value) {
     let period = data["period"].as_str().unwrap_or("today");
     let today = usage_display_date(data);
     write_section_header(out, "Usage", &format!("{today} · {period}"), term_width());
-    let summary = data["summary"].as_array();
-    let mut grand_total = 0.0_f64;
-    if let Some(rows) = summary {
-        for s in rows {
-            let cost_str = s["total_cost"].as_f64().map_or_else(
-                || "\u{2014}".into(),
-                |c| {
-                    add_display_cost(&mut grand_total, c);
-                    format!("${c:.2}")
-                },
-            );
-            let provider = s["provider"].as_str().unwrap_or("?");
-            let model = s["model"].as_str().unwrap_or("?");
-            let heading = ellipsize(
-                &format!("{provider} · {model}"),
-                term_width().saturating_sub(2),
-            );
-            writeln!(out, "  {heading}")?;
-            write_row(
-                out,
-                "Calls",
-                &format!(
-                    "{} · cost {cost_str}",
-                    s["call_count"].as_u64().unwrap_or(0)
-                ),
-            );
-            write_row(
-                out,
-                "Input",
-                &format_k(s["total_input"].as_u64().unwrap_or(0)),
-            );
-            write_row(
-                out,
-                "Output",
-                &format_k(s["total_output"].as_u64().unwrap_or(0)),
-            );
-            write_row(
-                out,
-                "Cache Read",
-                &format_k(s["total_cache_read"].as_u64().unwrap_or(0)),
-            );
-            write_row(
-                out,
-                "Cache Write",
-                &format_k(s["total_cache_write"].as_u64().unwrap_or(0)),
-            );
-            writeln!(out)?;
-        }
-        if rows.is_empty() {
-            print_dim_line(out, "No usage data for this period.");
-        } else {
-            write_row(out, "Total Cost", &format!("${grand_total:.2}"));
-        }
-    }
-    Ok(())
+    let rows = summary_rows(data);
+    let labels: Vec<String> = rows
+        .iter()
+        .map(|s| {
+            format!(
+                "{} {}",
+                s["provider"].as_str().unwrap_or("?"),
+                abbreviate_model(s["model"].as_str().unwrap_or("?"))
+            )
+        })
+        .collect();
+    write_usage_rows(out, "MODEL", &rows, &labels);
 }
 
 pub(crate) fn print_usage(data: &serde_json::Value) {
@@ -2850,150 +2942,49 @@ pub(crate) fn print_usage(data: &serde_json::Value) {
     }
 }
 
-fn print_usage_by_call_type(data: &serde_json::Value) {
+fn print_usage_breakdown(
+    data: &serde_json::Value,
+    title: &str,
+    name_header: &str,
+    label: impl Fn(&serde_json::Value) -> String,
+) {
     let period = data["period"].as_str().unwrap_or("today");
     let today = usage_display_date(data);
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    write_section_header(
-        &mut out,
-        "Usage by call type",
-        &format!("{today} · {period}"),
-        term_width(),
-    );
-    let summary = data["summary"].as_array();
-    let mut grand_total = 0.0_f64;
-    if let Some(rows) = summary {
-        for s in rows {
-            let cost_str = s["total_cost"].as_f64().map_or_else(
-                || "\u{2014}".into(),
-                |c| {
-                    add_display_cost(&mut grand_total, c);
-                    format!("${c:.2}")
-                },
-            );
-            write_usage_group(
-                &mut out,
-                s["call_type"].as_str().unwrap_or("?"),
-                s,
-                &cost_str,
-            );
-        }
-        if rows.is_empty() {
-            print_dim_line(&mut out, "No usage data for this period.");
-        } else {
-            write_row(&mut out, "Total Cost", &format!("${grand_total:.2}"));
-        }
-    }
+    write_section_header(&mut out, title, &format!("{today} · {period}"), term_width());
+    let rows = summary_rows(data);
+    let labels: Vec<String> = rows.iter().map(&label).collect();
+    write_usage_rows(&mut out, name_header, &rows, &labels);
+}
+
+fn print_usage_by_call_type(data: &serde_json::Value) {
+    print_usage_breakdown(data, "Usage by call type", "CALL TYPE", |s| {
+        s["call_type"].as_str().unwrap_or("?").to_owned()
+    });
 }
 
 fn print_usage_by_kind(data: &serde_json::Value) {
-    let period = data["period"].as_str().unwrap_or("today");
-    let today = usage_display_date(data);
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    write_section_header(
-        &mut out,
-        "Usage by kind",
-        &format!("{today} · {period}"),
-        term_width(),
-    );
-    let summary = data["summary"].as_array();
-    let mut grand_total = 0.0_f64;
-    if let Some(rows) = summary {
-        for s in rows {
-            let cost_str = s["total_cost"].as_f64().map_or_else(
-                || "\u{2014}".into(),
-                |c| {
-                    add_display_cost(&mut grand_total, c);
-                    format!("${c:.2}")
-                },
-            );
-            write_usage_group(
-                &mut out,
-                s["usage_kind"].as_str().unwrap_or(""),
-                s,
-                &cost_str,
-            );
-        }
-        if rows.is_empty() {
-            print_dim_line(&mut out, "No usage data for this period.");
-        } else {
-            write_row(&mut out, "Total Cost", &format!("${grand_total:.2}"));
-        }
-    }
+    print_usage_breakdown(data, "Usage by kind", "KIND", |s| {
+        let kind = s["usage_kind"].as_str().unwrap_or("");
+        if kind.is_empty() { "(none)".to_owned() } else { kind.to_owned() }
+    });
 }
 
 fn print_usage_by_api_key(data: &serde_json::Value) {
-    let period = data["period"].as_str().unwrap_or("today");
-    let today = usage_display_date(data);
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    write_section_header(
-        &mut out,
-        "Usage by API key",
-        &format!("{today} · {period}"),
-        term_width(),
-    );
-    let summary = data["summary"].as_array();
-    let mut grand_total = 0.0_f64;
-    if let Some(rows) = summary {
-        for s in rows {
-            let cost_str = s["total_cost"].as_f64().map_or_else(
-                || "\u{2014}".into(),
-                |c| {
-                    add_display_cost(&mut grand_total, c);
-                    format!("${c:.2}")
-                },
-            );
-            write_usage_group(
-                &mut out,
-                &format!(
-                    "{} · {}",
-                    s["provider"].as_str().unwrap_or("?"),
-                    s["api_key_name"].as_str().unwrap_or("unknown")
-                ),
-                s,
-                &cost_str,
-            );
-        }
-        if rows.is_empty() {
-            print_dim_line(&mut out, "No usage data for this period.");
-        } else {
-            write_row(&mut out, "Total Cost", &format!("${grand_total:.2}"));
-        }
-    }
+    print_usage_breakdown(data, "Usage by API key", "API KEY", |s| {
+        format!(
+            "{} {}",
+            s["provider"].as_str().unwrap_or("?"),
+            s["api_key_name"].as_str().unwrap_or("unknown")
+        )
+    });
 }
 
-fn write_usage_group(out: &mut impl Write, name: &str, row: &serde_json::Value, cost: &str) {
-    _ = writeln!(out, "  {}", ellipsize(name, term_width().saturating_sub(2)));
-    write_row(
-        out,
-        "Calls",
-        &format!("{} · cost {cost}", row["call_count"].as_u64().unwrap_or(0)),
-    );
-    write_row(
-        out,
-        "Input",
-        &format_k(row["total_input"].as_u64().unwrap_or(0)),
-    );
-    write_row(
-        out,
-        "Output",
-        &format_k(row["total_output"].as_u64().unwrap_or(0)),
-    );
-    write_row(
-        out,
-        "Cache Read",
-        &format_k(row["total_cache_read"].as_u64().unwrap_or(0)),
-    );
-    write_row(
-        out,
-        "Cache Write",
-        &format_k(row["total_cache_write"].as_u64().unwrap_or(0)),
-    );
-    _ = writeln!(out);
-}
+const WHEN_W: usize = 13;
+const WHO_W: usize = 10;
+const MODEL_W: usize = 16;
+const ANOMALY_W: usize = 19;
 
 fn print_usage_anomalies(data: &serde_json::Value) {
     let today = usage_display_date(data);
@@ -3010,37 +3001,45 @@ fn print_usage_anomalies(data: &serde_json::Value) {
     };
     if anomalies.is_empty() {
         print_dim_line(&mut out, "No cache anomalies found.");
-    } else {
-        for r in anomalies {
-            _ = writeln!(
-                out,
-                "  {} · {}",
-                r["character"].as_str().unwrap_or("?"),
-                r["anomaly"].as_str().unwrap_or("?")
-            );
-            write_row(&mut out, "When", r["ts"].as_str().unwrap_or("?"));
-            write_row(
-                &mut out,
-                "Call",
-                &format!(
-                    "{} · {}",
-                    r["model"].as_str().unwrap_or("?"),
-                    r["call_type"].as_str().unwrap_or("?")
-                ),
-            );
-            write_row(
-                &mut out,
-                "Cache",
-                &format!(
-                    "read {} · write {}",
-                    r["cache_read_tokens"].as_u64().unwrap_or(0),
-                    r["cache_write_tokens"].as_u64().unwrap_or(0)
-                ),
-            );
-            _ = writeln!(out);
-        }
-        write_row(&mut out, "Total", &format!("{} anomalies", anomalies.len()));
+        return;
     }
+    write_dim(
+        &mut out,
+        &format!(
+            "  {:<WHEN_W$} {:<WHO_W$} {:<MODEL_W$} {:<ANOMALY_W$} {:>7} {:>7}",
+            "WHEN", "CHARACTER", "MODEL", "ANOMALY", "READ", "WRITE"
+        ),
+    );
+    _ = writeln!(&mut out);
+    for r in anomalies {
+        let when = r["ts"]
+            .as_str()
+            .map_or_else(|| "?".into(), format_local_short);
+        let model = abbreviate_model(r["model"].as_str().unwrap_or("?"));
+        _ = write!(
+            &mut out,
+            "  {:<WHEN_W$} {:<WHO_W$} {:<MODEL_W$} ",
+            ellipsize(&when, WHEN_W),
+            ellipsize(r["character"].as_str().unwrap_or("?"), WHO_W),
+            ellipsize(&model, MODEL_W),
+        );
+        write_fg(
+            &mut out,
+            Color::Yellow,
+            &format!(
+                "{:<ANOMALY_W$}",
+                ellipsize(r["anomaly"].as_str().unwrap_or("?"), ANOMALY_W)
+            ),
+        );
+        _ = writeln!(
+            &mut out,
+            " {:>7} {:>7}",
+            format_k(r["cache_read_tokens"].as_u64().unwrap_or(0)),
+            format_k(r["cache_write_tokens"].as_u64().unwrap_or(0)),
+        );
+    }
+    write_dim(&mut out, &format!("  {} anomalies", anomalies.len()));
+    _ = writeln!(&mut out);
 }
 
 /// Render the `usage --recalculate` summary.
@@ -3069,38 +3068,47 @@ fn print_usage_recalculate(data: &serde_json::Value) {
     }
 }
 
+fn print_cache_health(data: &serde_json::Value) {
+    let health = data["cache_health"].as_array();
+    if health.is_none_or(Vec::is_empty) {
+        return;
+    }
+    print_usage_section("Cache health", "anthropic");
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    for entry in health.into_iter().flatten() {
+        let char_name = entry["character"].as_str().unwrap_or("?");
+        let state = entry["state"].as_str().unwrap_or("cold");
+        let streak = entry["streak"].as_u64().unwrap_or(0);
+        let (state_str, color) = if state == "warm" {
+            (format!("warm · {streak} calls"), Color::Green)
+        } else {
+            ("cold".to_owned(), Color::Yellow)
+        };
+        _ = write!(&mut out, "  {char_name:<14}");
+        write_fg(&mut out, color, &state_str);
+        _ = writeln!(&mut out);
+    }
+}
+
 /// Render the default usage summary (table + cache health + budgets).
 fn print_usage_summary(data: &serde_json::Value) {
     let mut stdout = io::stdout().lock();
-    let _ignored = write_usage_summary_table(&mut stdout, data);
+    write_usage_summary_table(&mut stdout, data);
     drop(stdout);
 
-    if let Some(health) = data["cache_health"].as_array() {
-        if !health.is_empty() {
-            print_usage_section("Cache health", "anthropic");
-            for entry in health {
-                let char_name = entry["character"].as_str().unwrap_or("?");
-                let state = entry["state"].as_str().unwrap_or("cold");
-                let streak = entry["streak"].as_u64().unwrap_or(0);
-                let state_str = if state == "warm" {
-                    format!("Warm (streak: {streak} calls)")
-                } else {
-                    "Cold".into()
-                };
-                cli_out!("  {char_name:<13}{state_str}");
-            }
-        }
-    }
+    print_cache_health(data);
 
-    if let Some(budgets) = data["budgets"].as_array() {
-        if !budgets.is_empty() {
-            print_usage_section("Usage budgets", "");
-            print_budget_table(data);
-        }
-    }
+    print_usage_section("Usage budgets", "");
+    print_budget_table(data);
+
     let anomaly_count = data["anomaly_count_7d"].as_u64().unwrap_or(0);
     print_usage_section("Cache anomalies", "last 7d");
-    write_usage_row("Total", &anomaly_count.to_string());
+    if anomaly_count == 0 {
+        let empty = io::stdout();
+        let mut none_line = empty.lock();
+        print_dim_line(&mut none_line, "None.");
+    }
     print_anomaly_breakdown(data);
     print_cache_coverage(data);
     print_rate_limits(data);
@@ -3112,34 +3120,36 @@ fn print_usage_section(title: &str, suffix: &str) {
     write_section_header(&mut out, title, suffix, term_width());
 }
 
-fn write_usage_row(label: &str, value: &str) {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    write_row(&mut out, label, value);
-}
-
 /// Break the anomaly total down by kind. A bare count says something is wrong;
 /// which kind says what, and a keepalive that misses is pure waste.
 fn print_anomaly_breakdown(data: &serde_json::Value) {
     let Some(rows) = data["anomaly_counts_7d"].as_array() else {
         return;
     };
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
     for row in rows {
         let kind = row["anomaly"].as_str().unwrap_or("?");
         let calls = row["calls"].as_u64().unwrap_or(0);
-        let writes = row["cache_write_tokens"].as_u64().unwrap_or(0);
-        cli_out!("  {kind:<24} {calls:>6}  cache write {writes}");
+        let writes = format_k(row["cache_write_tokens"].as_u64().unwrap_or(0));
+        let color = if kind == "keepalive_double_miss" {
+            Color::Red
+        } else {
+            Color::Yellow
+        };
+        write_fg(&mut out, color, &format!("  {kind:<28}"));
+        _ = writeln!(&mut out, "{calls:>6} calls   wrote {writes}");
         // Two pings missing in a row means the first one's write never landed.
         // No amount of re-arming fixes that, so it is called out rather than
         // left as one row among several.
         if kind == "keepalive_double_miss" {
-            cli_out!(
-                "    ^ two pings missed in a row with nothing between them. The first wrote the"
+            write_dim(
+                &mut out,
+                "    two pings missed in a row with nothing between them. The first wrote the\n\
+                 \x20   entry the second should have read. The cache is not holding what shore\n\
+                 \x20   writes; keepalives halt when this happens.",
             );
-            cli_out!(
-                "      entry the second should have read. The cache is not holding what shore"
-            );
-            cli_out!("      writes; keepalives halt when this happens.");
+            _ = writeln!(&mut out);
         }
     }
 }
@@ -3155,16 +3165,32 @@ fn print_cache_coverage(data: &serde_json::Value) {
         return;
     }
     print_usage_section("Cache coverage", "");
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    write_dim(
+        &mut out,
+        &format!("  {:<30} {:>6} {:>9} {:>9}", "STATE", "CALLS", "READ", "WRITE"),
+    );
+    _ = writeln!(&mut out);
     for row in rows {
         let state = row["state"].as_str().unwrap_or("?");
-        let calls = row["calls"].as_u64().unwrap_or(0);
-        let reads = row["cache_read_tokens"].as_u64().unwrap_or(0);
-        let writes = row["cache_write_tokens"].as_u64().unwrap_or(0);
         let label = match row["reason"].as_str() {
             Some(reason) => format!("{state} ({reason})"),
             None => state.to_owned(),
         };
-        cli_out!("  {label:<40} {calls:>6} calls  read {reads}  write {writes}");
+        let color = match state {
+            "warm" => Color::Green,
+            "cold" => Color::Yellow,
+            _ => Color::DarkGrey,
+        };
+        write_fg(&mut out, color, &format!("  {:<30}", ellipsize(&label, 30)));
+        _ = writeln!(
+            &mut out,
+            " {:>6} {:>9} {:>9}",
+            row["calls"].as_u64().unwrap_or(0),
+            format_k(row["cache_read_tokens"].as_u64().unwrap_or(0)),
+            format_k(row["cache_write_tokens"].as_u64().unwrap_or(0)),
+        );
     }
 }
 
@@ -3178,15 +3204,31 @@ fn print_rate_limits(data: &serde_json::Value) {
         return;
     }
     print_usage_section("Provider quota", "last response");
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
     for row in rows {
         let host = row["host"].as_str().unwrap_or("?");
-        let requests = quota_fraction(row, "requests");
-        let input = quota_fraction(row, "input_tokens");
-        let output = quota_fraction(row, "output_tokens");
-        let resets = row["resets_at"].as_str().unwrap_or("?");
-        cli_out!(
-            "  {host:<24} requests {requests}  input {input}  output {output}  resets {resets}"
-        );
+        _ = write!(&mut out, "  {host}");
+        if let Some(resets) = row["resets_at"].as_str() {
+            write_dim(&mut out, &format!("  resets {}", format_local_short(resets)));
+        }
+        _ = writeln!(&mut out);
+        write_dim(&mut out, "    requests ");
+        _ = write!(&mut out, "{:<14}", quota_fraction(row, "requests"));
+        write_dim(&mut out, "input ");
+        _ = write!(&mut out, "{:<14}", quota_tokens(row, "input_tokens"));
+        write_dim(&mut out, "output ");
+        _ = writeln!(&mut out, "{}", quota_tokens(row, "output_tokens"));
+    }
+}
+
+fn quota_tokens(row: &serde_json::Value, field: &str) -> String {
+    let remaining = row[format!("{field}_remaining")].as_u64();
+    let limit = row[format!("{field}_limit")].as_u64();
+    match (remaining, limit) {
+        (Some(r), Some(l)) => format!("{}/{}", format_k(r), format_k(l)),
+        (Some(r), None) => format_k(r),
+        _ => "-".into(),
     }
 }
 
@@ -4074,23 +4116,14 @@ mod tests {
     }
 
     #[test]
-    fn format_local_ampm_renders_user_facing_format() {
-        // UTC midnight should render as the local equivalent in
-        // `YYYY-MM-DD HH:MM AM|PM` form (19 chars), regardless of the test
-        // runner's timezone.
-        let rendered = format_local_ampm("2026-05-23T00:00:00+00:00");
-        assert_eq!(rendered.len(), 19, "unexpected length: {rendered:?}");
-        // Raw RFC 3339 form contained 'T' which we drop.
-        assert!(
-            !rendered.contains('T'),
-            "should not contain 'T': {rendered:?}"
-        );
+    fn format_local_short_renders_weekday_and_clock() {
+        let rendered = format_local_short("2026-05-23T00:00:00+00:00");
+        assert!(!rendered.contains('T'), "should not contain 'T': {rendered:?}");
         assert!(
             rendered.ends_with(" AM") || rendered.ends_with(" PM"),
             "should end with AM/PM marker: {rendered:?}"
         );
-        // Malformed input falls back to the raw string.
-        assert_eq!(format_local_ampm("not-a-timestamp"), "not-a-timestamp");
+        assert_eq!(format_local_short("not-a-timestamp"), "not-a-timestamp");
     }
 
     /// Visual preview of the budget table with and without a pace. Skipped by
@@ -4142,57 +4175,93 @@ mod tests {
     }
 
     #[test]
-    fn pace_rows_omitted_without_a_pace() {
-        let budget = serde_json::json!({ "name": "weekly", "period": "week" });
-        assert!(
-            pace_rows(&budget).is_empty(),
-            "an unpaced budget gets no pace rows"
-        );
+    fn budget_without_a_pace_renders_one_meter() {
+        set_color_enabled(false);
+        let data = serde_json::json!({
+            "budgets": [{
+                "name": "weekly", "period": "week",
+                "current_cost": 5.0, "cost_limit": 14.0, "percent_used": 0.357,
+                "status": "ok", "action": "block",
+                "reset_at": "2026-05-27T06:00:00+00:00"
+            }]
+        });
+        let mut buf: Vec<u8> = Vec::new();
+        write_budget_table(&mut buf, &data);
+        let rendered = String::from_utf8(buf).expect("utf8");
+        let meters = rendered
+            .lines()
+            .filter(|l| l.contains('\u{2588}') || l.contains('\u{2591}'))
+            .count();
+        assert_eq!(meters, 1, "an unpaced budget gets one meter:\n{rendered}");
     }
 
-    /// Field names here mirror a real `budget_statuses` payload (the daemon's ledger module's
-    /// `PaceStatus`), since this renderer reads the JSON untyped and would
-    /// silently print zeros if a key were ever renamed on the producer side.
+    /// Field names here mirror a real `budget_statuses` payload (the daemon's
+    /// ledger module's `PaceStatus`), since this renderer reads the JSON
+    /// untyped and would silently print zeros if a key were ever renamed on
+    /// the producer side.
     #[test]
-    fn pace_rows_render_spend_state_window_and_basis() {
-        let budget = serde_json::json!({
-            "name": "weekly",
-            "period": "week",
-            "current_cost": 5.0,
-            "cost_limit": 14.0,
-            "pace": {
-                "period": "day",
-                "window_start": "2026-05-21T06:00:00+00:00",
-                "window_end": "2026-05-22T06:00:00+00:00",
-                "allowance": 2.166_666_666_666_666_5,
-                "base_allowance": 2.0,
-                "rollover": 0.25,
-                "debt_adjustment": 0.083_333_333_333_333_33,
-                "current_cost": 1.0,
-                "remaining": 1.166_666_666_666_666_5,
-                "percent_used": 0.461_538_461_538_461_56,
-                "periods_remaining": 6.0,
+    fn budget_with_a_pace_renders_both_meters_and_the_allowance_basis() {
+        set_color_enabled(false);
+        let data = serde_json::json!({
+            "budgets": [{
+                "name": "weekly",
+                "period": "week",
+                "current_cost": 5.0,
+                "cost_limit": 14.0,
+                "percent_used": 0.357,
                 "status": "ok",
-                "action": "warn",
-                "warning_thresholds": [0.8, 1.0],
-                "crossed_warn_at": [],
-                "over_limit": false
-            }
+                "action": "block",
+                "reset_at": "2026-05-27T06:00:00+00:00",
+                "pace": {
+                    "period": "day",
+                    "window_start": "2026-05-21T06:00:00+00:00",
+                    "window_end": "2026-05-22T06:00:00+00:00",
+                    "allowance": 2.166_666_666_666_666_5,
+                    "base_allowance": 2.0,
+                    "rollover": 0.25,
+                    "debt_adjustment": 0.083_333_333_333_333_33,
+                    "current_cost": 1.0,
+                    "remaining": 1.166_666_666_666_666_5,
+                    "percent_used": 0.461_538_461_538_461_56,
+                    "periods_remaining": 6.0,
+                    "status": "ok",
+                    "action": "warn",
+                    "warning_thresholds": [0.8, 1.0],
+                    "crossed_warn_at": [],
+                    "over_limit": false
+                }
+            }]
         });
-        let rows = pace_rows(&budget);
-        let rendered = rows
-            .iter()
-            .map(|(label, value)| format!("{label}: {value}"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        assert!(rendered.contains("Pace: day"), "pace period: {rendered}");
+        let mut buf: Vec<u8> = Vec::new();
+        write_budget_table(&mut buf, &data);
+        let rendered = String::from_utf8(buf).expect("utf8");
+        assert!(rendered.contains("$5.00 / $14.00"), "period spend: {rendered}");
         assert!(rendered.contains("$1.00 / $2.17"), "pace spend: {rendered}");
         assert!(rendered.contains("46%"), "pace share: {rendered}");
         assert!(
-            rendered.contains("$2.00 + $0.25 rollover − $0.08 debt"),
+            rendered.contains("allowance $2.00 + $0.25 rollover \u{2212} $0.08 debt"),
             "pace basis: {rendered}"
         );
-        assert!(rendered.contains("2026-05-22"), "pace window: {rendered}");
+        assert!(
+            rendered.lines().all(|line| line.chars().count() <= 80),
+            "budget view exceeded terminal width:\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn an_over_limit_budget_reads_red_and_a_warning_reads_yellow() {
+        assert_eq!(budget_color("over_limit", false), Color::Red);
+        assert_eq!(budget_color("ok", true), Color::Red);
+        assert_eq!(budget_color("warning", false), Color::Yellow);
+        assert_eq!(budget_color("ok", false), Color::Green);
+    }
+
+    #[test]
+    fn a_full_budget_fills_its_bar_and_an_empty_one_does_not() {
+        assert_eq!(budget_bar(0.0, 4).chars().filter(|c| *c == '\u{2588}').count(), 0);
+        assert_eq!(budget_bar(1.0, 4).chars().filter(|c| *c == '\u{2588}').count(), 4);
+        assert_eq!(budget_bar(2.0, 4).chars().filter(|c| *c == '\u{2588}').count(), 4);
+        assert_eq!(budget_bar(0.5, 4).chars().count(), 4);
     }
 
     #[test]
@@ -4236,15 +4305,24 @@ mod tests {
             ],
         });
         let mut buf: Vec<u8> = Vec::new();
-        write_usage_summary_table(&mut buf, &data).expect("write");
+        write_usage_summary_table(&mut buf, &data);
         let rendered = String::from_utf8(buf).expect("utf8");
         assert!(
             rendered.starts_with("── Usage ("),
             "section header: {rendered}"
         );
-        assert!(rendered.contains("openrouter-anthropic · anthropic/claude-opus-4.6"));
-        assert!(rendered.contains("Calls        96 · cost $5.11"));
-        assert!(rendered.contains("Total Cost   $5.53"));
+        assert!(
+            rendered.contains("CALLS") && rendered.contains("CACHE W"),
+            "column headers: {rendered}"
+        );
+        assert!(rendered.contains("96"), "call count: {rendered}");
+        assert!(rendered.contains("$5.11"), "row cost: {rendered}");
+        assert!(rendered.contains("$5.53"), "total cost: {rendered}");
+        assert_eq!(
+            rendered.lines().count(),
+            5,
+            "one line per model plus header, columns and total:\n{rendered}"
+        );
         assert!(
             rendered.lines().all(|line| line.chars().count() <= 80),
             "usage view exceeded terminal width:\n{rendered}"
@@ -4271,7 +4349,7 @@ mod tests {
             }],
         });
         let mut buf: Vec<u8> = Vec::new();
-        write_usage_summary_table(&mut buf, &data).expect("write");
+        write_usage_summary_table(&mut buf, &data);
         let rendered = String::from_utf8(buf).expect("utf8");
         assert!(
             rendered.contains('\u{2026}'),

@@ -249,14 +249,14 @@ pub(crate) enum CliCommand {
         json: bool,
     },
 
-    /// Show, query, or manage the memory system
+    /// Search what this character remembers, or fold the conversation into it
     #[command(args_conflicts_with_subcommands = true)]
     #[command(display_order = 5)]
     Memory {
         #[command(subcommand)]
         subcommand: Option<MemoryCommand>,
 
-        /// Query to search memory
+        /// Text to search stored memory for; omit to show the memory index
         query: Option<String>,
 
         /// Output raw JSON
@@ -749,10 +749,39 @@ fn pairs_object(pairs: &[(String, String)]) -> serde_json::Value {
 /// of leaving the positional argument uncompleted.
 pub(crate) fn print_completions(shell: Shell) {
     use clap::CommandFactory;
-    clap_complete::generate(shell, &mut Cli::command(), "shore", &mut std::io::stdout());
+    let mut generated: Vec<u8> = Vec::new();
+    clap_complete::generate(shell, &mut Cli::command(), "shore", &mut generated);
+    let script = String::from_utf8_lossy(&generated).into_owned();
+    cli_write!("{}", suppress_noise_completions(shell, &script));
     if shell == Shell::Fish {
         cli_out!("{}", fish_dynamic_completions_footer());
     }
+}
+
+const INTERNAL_HELPER_HELP: &str = "Emit plain names for shell completion helpers (internal)";
+
+const MACHINE_SCOPED_FLAGS: [&str; 3] = ["-l addr", "-l config", "-l no-color"];
+
+pub(crate) fn suppress_noise_completions(shell: Shell, script: &str) -> String {
+    let mut out = String::with_capacity(script.len());
+    for line in script.lines() {
+        if line.contains(INTERNAL_HELPER_HELP) {
+            continue;
+        }
+        if shell == Shell::Fish
+            && line.contains("__fish_shore_using_subcommand")
+            && MACHINE_SCOPED_FLAGS.iter().any(|flag| line.contains(flag))
+        {
+            continue;
+        }
+        if shell == Shell::Bash && line.trim_start().starts_with("opts=") {
+            out.push_str(&line.replacen(" complete\"", "\"", 1));
+        } else {
+            out.push_str(line);
+        }
+        out.push('\n');
+    }
+    out
 }
 
 /// Fish completions for the positional `name` arguments of `shore model`,
@@ -3266,6 +3295,66 @@ mod tests {
                 "completions for {shell:?} should reference 'shore'"
             );
         }
+    }
+
+    fn generated_for(shell: Shell) -> (String, String) {
+        use clap::CommandFactory;
+        let mut buf = Vec::new();
+        clap_complete::generate(shell, &mut Cli::command(), "shore", &mut buf);
+        let raw = String::from_utf8(buf).expect("utf8");
+        let filtered = suppress_noise_completions(shell, &raw);
+        (raw, filtered)
+    }
+
+    #[test]
+    fn internal_helper_is_never_offered_as_a_command() {
+        for shell in [Shell::Fish, Shell::Zsh] {
+            let (raw, filtered) = generated_for(shell);
+            assert!(
+                raw.contains(INTERNAL_HELPER_HELP),
+                "{shell:?} generator stopped emitting the helper; the filter may be stale"
+            );
+            assert!(
+                !filtered.contains(INTERNAL_HELPER_HELP),
+                "{shell:?} still offers the internal helper:\n{filtered}"
+            );
+            assert!(
+                filtered.contains("usage"),
+                "{shell:?} lost its real subcommands: {filtered}"
+            );
+        }
+
+        let (raw, filtered) = generated_for(Shell::Bash);
+        assert!(
+            raw.contains("completions complete\""),
+            "bash generator stopped listing the helper; the filter may be stale"
+        );
+        assert!(
+            !filtered.contains("completions complete\""),
+            "bash word list still ends in the internal helper: {filtered}"
+        );
+        assert!(
+            filtered.contains("usage completions\""),
+            "bash lost its real subcommands: {filtered}"
+        );
+    }
+
+    #[test]
+    fn machine_scoped_flags_are_offered_once_not_per_subcommand() {
+        let (raw, filtered) = generated_for(Shell::Fish);
+        assert!(
+            raw.matches("-l addr").count() > 1,
+            "clap stopped repeating globals; the filter may be stale"
+        );
+        assert_eq!(
+            filtered.matches("-l addr").count(),
+            1,
+            "--addr should be offered before the subcommand only:\n{filtered}"
+        );
+        assert!(
+            filtered.contains("-s c -l character"),
+            "-c stays available per subcommand: {filtered}"
+        );
     }
 
     // ── Dynamic completions (regression #3 followup) ────────────────
