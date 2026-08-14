@@ -7,7 +7,7 @@ use shore_common::protocol::types::Role;
 use shore_common::swp_client::{SWPConnection, ServerAddr};
 use tracing::{debug, info, instrument};
 
-use crate::cli::{Cli, CliCommand, LogRole};
+use crate::cli::{Cli, CliCommand, LogRole, ModelCommand};
 use crate::output;
 use crate::state;
 
@@ -130,11 +130,6 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
         CliCommand::Character {
             subcommand: Some(crate::cli::CharacterCommand::New { name }),
             ..
-        }
-        | CliCommand::Character {
-            name: Some(name),
-            new: true,
-            ..
         } => handle_create_character(&mut conn, name).await?,
         CliCommand::Character {
             subcommand: Some(crate::cli::CharacterCommand::Use { name }),
@@ -142,15 +137,9 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
         } => handle_switch_character(&mut conn, name).await?,
         CliCommand::Character {
             subcommand: None,
-            name,
             info: false,
-            new: false,
             json,
-            ..
-        } => match name {
-            Some(target) => handle_switch_character(&mut conn, target).await?,
-            None => handle_list_characters(&mut conn, *json).await?,
-        },
+        } => handle_list_characters(&mut conn, *json).await?,
         CliCommand::Trace { subcommand: None } => {
             output::vocab::print_index(
                 "trace",
@@ -184,19 +173,11 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
         CliCommand::Status { .. } => {
             handle_status_command(&mut conn, &cli.command, &display_character).await?;
         }
-        CliCommand::Model {
-            subcommand: None,
-            reset: true,
-            ..
-        }
-        | CliCommand::Model {
-            subcommand: None,
-            name: Some(_),
-            info: false,
-            reset: false,
-            ..
-        } => {
-            handle_local_model_command(&mut conn, &cli.command).await?;
+        CliCommand::Model { .. } if model_change(&cli.command).is_some() => {
+            let Some(change) = model_change(&cli.command) else {
+                return Ok(());
+            };
+            apply_model_change(&mut conn, &cli.command, change).await?;
         }
         other @ (CliCommand::Character { .. }
         | CliCommand::Trace { .. }
@@ -240,7 +221,7 @@ async fn handle_generic_swp_command(
             *json
                 || matches!(
                     subcommand,
-                    Some(crate::cli::ModelCommand::Setting { json: true, .. })
+                    Some(ModelCommand::Setting { json: true, .. })
                 )
         }
         CliCommand::Provider {
@@ -449,7 +430,6 @@ async fn handle_log_command(
         subcommand,
         msg_ref,
         json,
-        plain,
         content,
         role,
         reasoning,
@@ -480,10 +460,10 @@ async fn handle_log_command(
             cli_out!("{}", serde_json::to_string_pretty(&data)?);
         } else if *content {
             output::print_message_content(&data);
-        } else if *plain {
-            output::print_log_plain(std::slice::from_ref(&data), display_character, filter);
-        } else {
+        } else if output::use_decoration() {
             output::print_single_message(&data, display_character, filter);
+        } else {
+            output::print_log_plain(std::slice::from_ref(&data), display_character, filter);
         }
         return Ok(());
     }
@@ -501,7 +481,7 @@ async fn handle_log_command(
         .await?;
     let data = recv_command_data(conn).await?;
 
-    render_log_list(&data, *json, *content, *plain, display_character, filter)?;
+    render_log_list(&data, *json, *content, display_character, filter)?;
 
     if *follow {
         follow_log_stream(conn, role.as_ref(), display_character, filter).await?;
@@ -566,13 +546,12 @@ async fn fetch_single_message(
     recv_command_data(conn).await
 }
 
-/// Render a `shore log` message list honoring `--json` / `--content` / `--plain`
-/// (otherwise the boundary-annotated default view).
+/// Render a `shore log` message list honoring `--json` / `--content`, else the
+/// boundary-annotated view drawn for a terminal or flattened for a pipe.
 fn render_log_list(
     data: &serde_json::Value,
     json: bool,
     content: bool,
-    plain: bool,
     display_character: &str,
     filter: output::LogFilter,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -589,12 +568,12 @@ fn render_log_list(
                 cli_out!("{c}");
             }
         }
-    } else if plain {
-        let active_start = active_start_index(data);
-        output::print_log_plain_with_boundary(messages, active_start, display_character, filter);
-    } else {
+    } else if output::use_decoration() {
         let active_start = active_start_index(data);
         output::print_log_with_boundary(messages, active_start, display_character, filter);
+    } else {
+        let active_start = active_start_index(data);
+        output::print_log_plain_with_boundary(messages, active_start, display_character, filter);
     }
     Ok(())
 }
@@ -806,49 +785,63 @@ async fn handle_status_command(
 /// bare `model <name>` switch — which clear the runtime mirror. (`--all`
 /// propagates `include_hidden = true`, the documented escape hatch from the
 /// `discovery.ignore` error message.)
-async fn handle_local_model_command(
-    conn: &mut SWPConnection,
-    cmd: &CliCommand,
-) -> Result<(), Box<dyn std::error::Error>> {
+/// A `shore model` invocation that changes which model is active.
+enum ModelChange<'target> {
+    SwitchTo(&'target str),
+    Reset,
+}
+
+/// Recognise a model change in either spelling.
+///
+/// `shore model <name>` and `shore model use <name>` mean the same thing, and
+/// so do `shore model --reset` and `shore model reset`. They have to leave by
+/// the same door: the change is only complete once the locally pinned model is
+/// cleared, and a spelling that skips that gets silently switched back by the
+/// next command that connects.
+fn model_change(cmd: &CliCommand) -> Option<ModelChange<'_>> {
     let CliCommand::Model {
-        name,
-        reset,
-        all,
-        json,
-        ..
+        subcommand, reset, ..
     } = cmd
     else {
+        return None;
+    };
+    match subcommand {
+        Some(ModelCommand::Use { name: target }) => Some(ModelChange::SwitchTo(target)),
+        Some(ModelCommand::Reset) => Some(ModelChange::Reset),
+        Some(_) => None,
+        None if *reset => Some(ModelChange::Reset),
+        None => None,
+    }
+}
+
+async fn apply_model_change(
+    conn: &mut SWPConnection,
+    cmd: &CliCommand,
+    change: ModelChange<'_>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let CliCommand::Model { all, json, .. } = cmd else {
         return Ok(());
     };
-    if *reset {
-        _ = conn
-            .send_command("reset_model", serde_json::json!({}))
-            .await?;
-        let data = recv_command_data(conn).await?;
-        _ = state::clear_active_model();
-        if *json {
-            cli_out!("{}", serde_json::to_string_pretty(&data)?);
-        } else {
-            output::format_command("reset_model", &data);
+    let (command, args) = match change {
+        ModelChange::Reset => ("reset_model", serde_json::Map::new()),
+        ModelChange::SwitchTo(target) => {
+            let mut args = serde_json::Map::new();
+            _ = args.insert("name".into(), serde_json::json!(target));
+            if *all {
+                _ = args.insert("include_hidden".into(), serde_json::json!(true));
+            }
+            ("switch_model", args)
         }
-        return Ok(());
-    }
-    let mut args = serde_json::Map::new();
-    if let Some(model_name) = name {
-        _ = args.insert("name".into(), serde_json::json!(model_name));
-    }
-    if *all {
-        _ = args.insert("include_hidden".into(), serde_json::json!(true));
-    }
+    };
     _ = conn
-        .send_command("switch_model", serde_json::Value::Object(args))
+        .send_command(command, serde_json::Value::Object(args))
         .await?;
     let data = recv_command_data(conn).await?;
     _ = state::clear_active_model();
     if *json {
         cli_out!("{}", serde_json::to_string_pretty(&data)?);
     } else {
-        output::format_command("switch_model", &data);
+        output::format_command(command, &data);
     }
     Ok(())
 }
@@ -1261,7 +1254,7 @@ fn resolve_addr(cli: &Cli) -> Result<ServerAddr, shore_common::swp_client::Clien
     if let Some(addr) = &cli.addr {
         return Ok(ServerAddr(addr.clone()));
     }
-    shore_common::swp_client::discover_or_default(cli.config.as_deref())
+    shore_common::swp_client::discover_or_default(None)
 }
 
 /// Receive and render a streaming response (for send/regen).
@@ -1443,6 +1436,8 @@ async fn recv_command_data(
 
 #[cfg(test)]
 mod tests {
+    use super::{ModelChange, model_change};
+    use crate::cli::ModelCommand;
     use crate::test_env::set_env;
     use tokio::io::AsyncWriteExt;
     use tokio::io::duplex;
@@ -1530,13 +1525,68 @@ mod tests {
         client_msg
     }
 
+    fn model_command(subcommand: Option<ModelCommand>) -> CliCommand {
+        model_flags(subcommand, false, false)
+    }
+
+    fn model_flags(subcommand: Option<ModelCommand>, info: bool, reset: bool) -> CliCommand {
+        CliCommand::Model {
+            subcommand,
+            all: false,
+            json: false,
+            info,
+            reset,
+            background: false,
+        }
+    }
+
+    /// `shore model X` and `shore model use X` are the same request, and the
+    /// switch is only finished once the locally pinned model is cleared. When
+    /// `use` took the generic path instead, a pin written by the TUI survived
+    /// and the next command that connected re-applied it — switching you back
+    /// without saying so.
+    /// Switching is only finished once the locally pinned model is cleared.
+    /// When `use` took the generic path instead, a pin written by the TUI
+    /// survived and the next command that connected re-applied it — switching
+    /// you back without saying so.
+    #[test]
+    fn switching_models_clears_the_local_pin() {
+        let cmd = model_command(Some(ModelCommand::Use {
+            name: "opus".to_owned(),
+        }));
+        assert!(
+            matches!(model_change(&cmd), Some(ModelChange::SwitchTo("opus"))),
+            "{cmd:?}"
+        );
+    }
+
+    #[test]
+    fn both_spellings_of_a_model_reset_are_one_change() {
+        let flag = model_flags(None, false, true);
+        assert!(matches!(model_change(&flag), Some(ModelChange::Reset)));
+        assert!(matches!(
+            model_change(&model_command(Some(ModelCommand::Reset))),
+            Some(ModelChange::Reset)
+        ));
+    }
+
+    /// Reading commands must not go down the path that clears the pin.
+    #[test]
+    fn reading_about_models_changes_nothing() {
+        let listing = model_command(None);
+        let describing = model_command(Some(ModelCommand::Info { name: None }));
+        let background = model_command(Some(ModelCommand::Background));
+        let info_flag = model_flags(None, true, false);
+        for cmd in [listing, describing, background, info_flag] {
+            assert!(model_change(&cmd).is_none(), "{cmd:?}");
+        }
+    }
+
     /// Build a Cli struct for testing (bypasses actual socket connection).
     fn test_cli(command: CliCommand) -> Cli {
         Cli {
             addr: None,
-            config: None,
             character: None,
-            no_color: false,
             command,
         }
     }
@@ -1775,7 +1825,6 @@ mod tests {
             follow: false,
             json: false,
             content: false,
-            plain: false,
             reasoning: false,
             tools: false,
             subagent_tools: false,
@@ -1806,7 +1855,6 @@ mod tests {
             follow: false,
             json: false,
             content: false,
-            plain: false,
             reasoning: false,
             tools: false,
             subagent_tools: false,

@@ -10,7 +10,7 @@ use shore_common::protocol::tool_display::{
 };
 use shore_common::protocol::types::ImageRef;
 
-use super::vocab::{COLOR_ERROR, Tone, paint};
+use super::vocab::{COLOR_ERROR, Tone, paint, paint_on_stderr};
 use super::{
     COLOR_RESULT, COLOR_SUBAGENT, COLOR_THINKING, COLOR_TOOL, MAX_TOOL_OUTPUT, SIGIL_ERROR,
     SIGIL_OK, SIGIL_SUBAGENT, SIGIL_THINKING, SIGIL_TOOL, abbreviate_model, primary_tool_arg,
@@ -273,7 +273,7 @@ pub(crate) fn print_error(err: &dyn std::fmt::Display) {
     let stderr = io::stderr();
     let mut out = stderr.lock();
 
-    paint(&mut out, Tone::Bad, "error");
+    paint_on_stderr(&mut out, Tone::Bad, "error");
     _ = writeln!(out, ": {err}");
 }
 
@@ -284,7 +284,7 @@ pub(crate) fn print_provider_fallback_warning(w: &ProviderFallbackWarning) {
     let stderr = io::stderr();
     let mut out = stderr.lock();
 
-    paint(&mut out, Tone::Warn, "warning");
+    paint_on_stderr(&mut out, Tone::Warn, "warning");
     _ = writeln!(out, ": {}", w.message);
 }
 
@@ -293,7 +293,7 @@ pub(crate) fn print_usage_warning(w: &UsageWarning) {
     let stderr = io::stderr();
     let mut out = stderr.lock();
 
-    paint(&mut out, Tone::Warn, "warning");
+    paint_on_stderr(&mut out, Tone::Warn, "warning");
     _ = writeln!(out, ": {}", w.message);
 }
 
@@ -306,7 +306,7 @@ pub(crate) fn print_config_warning(w: &ConfigWarning) {
     let stderr = io::stderr();
     let mut out = stderr.lock();
 
-    paint(&mut out, Tone::Warn, "config not applied");
+    paint_on_stderr(&mut out, Tone::Warn, "config not applied");
     match w.character.as_deref() {
         Some(character) => _ = writeln!(out, " ({character}) {}: {}", w.path, w.message),
         None => _ = writeln!(out, " {}: {}", w.path, w.message),
@@ -352,7 +352,7 @@ pub(crate) fn print_server_error(code: &str, message: &str) {
     let stderr = io::stderr();
     let mut out = stderr.lock();
 
-    paint(&mut out, Tone::Bad, "server error");
+    paint_on_stderr(&mut out, Tone::Bad, "server error");
     _ = writeln!(out, " [{code}]: {message}");
 }
 

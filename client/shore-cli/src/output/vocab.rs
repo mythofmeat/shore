@@ -105,7 +105,18 @@ pub(crate) fn ellipsize(text: &str, max: usize) -> String {
 }
 
 pub(crate) fn paint<W: Write>(out: &mut W, tone: Tone, text: &str) {
-    match (use_color(), tone.color()) {
+    paint_when(use_color(), out, tone, text);
+}
+
+/// [`paint`] for the five printers that write to stderr, which decides colour
+/// separately: `shore log | less` must not colour the pipe, but an error on
+/// the way is still going to the terminal.
+pub(crate) fn paint_on_stderr<W: Write>(out: &mut W, tone: Tone, text: &str) {
+    paint_when(crate::output::use_color_on_stderr(), out, tone, text);
+}
+
+fn paint_when<W: Write>(colored: bool, out: &mut W, tone: Tone, text: &str) {
+    match (colored, tone.color()) {
         (true, Some(color)) => {
             let _ignored = crossterm::execute!(out, SetForegroundColor(color));
             _ = write!(out, "{text}");

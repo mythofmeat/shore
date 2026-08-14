@@ -36,6 +36,12 @@ use cli::{Cli, CliCommand};
 use tracing_subscriber::EnvFilter;
 
 fn main() -> ExitCode {
+    output::detect_color();
+
+    if let Some(problem) = cli::flag_problem(std::env::args()) {
+        return cli::report_flag_problem(&problem);
+    }
+
     let cli = <Cli as clap::Parser>::parse();
 
     // Completion queries must never print to stderr — fish feeds both
@@ -55,10 +61,6 @@ fn main() -> ExitCode {
         .with_target(true)
         .with_writer(std::io::stderr)
         .init();
-
-    // Initialize color control: --no-color flag or NO_COLOR env var disables color.
-    let no_color = cli.no_color || std::env::var("NO_COLOR").is_ok_and(|v| !v.is_empty());
-    output::set_color_enabled(!no_color);
 
     // Handle local-only commands that don't need a daemon connection.
     if let CliCommand::Completions { shell } = &cli.command {
