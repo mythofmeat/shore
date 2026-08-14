@@ -326,11 +326,11 @@ fn print_wire_exchanges(out: &mut impl Write, wire: Option<&serde_json::Value>, 
                 continue;
             }
             write_fg(out, Tone::Active, &format!("  {label}:\n"));
-            _ = writeln!(out, "{}", truncate_display(&body, CALL_BODY_PREVIEW));
+            _ = writeln!(out, "{}", truncate_payload(&body, CALL_BODY_PREVIEW));
         }
         _ = writeln!(out);
     }
-    print_dim_line(out, "(--json for the untruncated wire bytes and headers)");
+    print_dim_line(out, "(--json for the untruncated bodies and headers)");
 }
 
 fn display_payload_body(body: &serde_json::Value) -> String {
@@ -1634,11 +1634,75 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "visual preview"]
+    fn render_preview_wire() {
+        let wire = serde_json::json!([{
+            "seq": 0,
+            "method": "POST",
+            "url": "https://api.z.ai/api/paas/v4/chat/completions",
+            "status": 200,
+            "status_text": "OK",
+            "duration_ms": 8412,
+            "request_bytes": 48213,
+            "response_bytes": 91044,
+            "request_body": {
+                "model": "glm-5.3",
+                "stream": true,
+                "messages": [{"role": "user", "content": "how long can this go on"}]
+            },
+            "response_body": {
+                "stream": "sse",
+                "model": "glm-5.3",
+                "content": " allowed to say the word \"done\" at least once before you find the next wall to chew.",
+                "finish_reason": "stop",
+                "usage": {
+                    "prompt_tokens": 14241,
+                    "completion_tokens": 1288,
+                    "total_tokens": 15529,
+                    "prompt_tokens_details": {"cached_tokens": 12480},
+                    "completion_tokens_details": {"reasoning_tokens": 797}
+                },
+                "chunk_count": 812
+            }
+        }]);
+
+        set_color_enabled(true);
+        let mut buf = Vec::new();
+        print_wire_exchanges(&mut buf, Some(&wire), 80);
+        set_color_enabled(false);
+
+        let mut stdout = io::stdout();
+        let _ignored = stdout.write_all(b"\n----- WIRE (shore trace calls --id N) -----\n");
+        _ = stdout.write_all(&buf);
+        _ = stdout.write_all(b"----- end -----\n");
+        _ = stdout.flush();
+    }
+
+    #[test]
     fn payload_json_is_pretty_printed_without_string_escaping() {
         let body = serde_json::json!({"messages": [{"role": "user", "content": "hello"}]});
         let rendered = display_payload_body(&body);
         assert!(rendered.contains("\"messages\": ["));
         assert!(!rendered.contains("\\\"messages\\\""));
+    }
+
+    #[test]
+    fn wire_bodies_keep_their_line_breaks() {
+        let wire = serde_json::json!([{
+            "seq": 0,
+            "method": "POST",
+            "url": "https://example.test/v1",
+            "status": 200,
+            "request_body": {"model": "glm-5.3"},
+            "response_body": {"content": "hi", "finish_reason": "stop"},
+        }]);
+        let mut buf = Vec::new();
+        print_wire_exchanges(&mut buf, Some(&wire), 80);
+        let rendered = String::from_utf8(buf).expect("utf8");
+
+        assert!(rendered.contains("{\n  \"model\": \"glm-5.3\"\n}"));
+        assert!(rendered.contains("\"finish_reason\": \"stop\""));
+        assert!(!rendered.contains("{   \"model\""));
     }
 
     #[test]
