@@ -184,7 +184,6 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
         | CliCommand::Debug { .. }
         | CliCommand::Model { .. }
         | CliCommand::Provider { .. }
-        | CliCommand::Memory { .. }
         | CliCommand::Compact { .. }
         | CliCommand::Config { .. }
         | CliCommand::Tools { .. }
@@ -247,7 +246,6 @@ async fn handle_generic_swp_command(
             None => false,
         },
         CliCommand::Character { json, .. }
-        | CliCommand::Memory { json, .. }
         | CliCommand::Compact { json, .. }
         | CliCommand::Config { json, .. }
         | CliCommand::Tools { json, .. }
@@ -1635,8 +1633,7 @@ mod tests {
             | CliCommand::Debug { .. }
             | CliCommand::Model { .. }
             | CliCommand::Provider { .. }
-            | CliCommand::Memory { .. }
-            | CliCommand::Compact { .. }
+                | CliCommand::Compact { .. }
             | CliCommand::Config { .. }
             | CliCommand::Tools { .. }
             | CliCommand::Usage { .. }
@@ -1773,25 +1770,6 @@ mod tests {
             ClientMessage::Command(c) => {
                 assert_eq!(c.name, "compact");
                 assert_eq!(c.args, serde_json::json!({}));
-            }
-        );
-    }
-
-    // ── Memory query command ─────────────────────────────────────────
-
-    #[tokio::test]
-    async fn memory_sends_command_with_query() {
-        let cli = test_cli(CliCommand::Memory {
-            query: Some("recent topics".into()),
-            json: false,
-        });
-        let received = execute_with_mock(cli, command_response("memory")).await;
-
-        assert_variant!(
-            received,
-            ClientMessage::Command(c) => {
-                assert_eq!(c.name, "memory");
-                assert_eq!(arg(&c.args, "query"), "recent topics");
             }
         );
     }

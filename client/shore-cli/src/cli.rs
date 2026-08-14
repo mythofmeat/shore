@@ -142,10 +142,9 @@ where
     promoted(&words).or_else(|| bare_name(&words, flagged))
 }
 
-/// `shore memory compact` used to fold the conversation into memory. `memory`
-/// still takes a search term, so left alone the old spelling would quietly
-/// search stored memory for the word "compact" and report nothing found —
-/// which looks like the compaction ran and did nothing.
+/// `shore memory compact` used to fold the conversation into memory. With
+/// `memory` itself gone, clap has nothing to say beyond "unrecognized
+/// subcommand", which does not mention where compaction went.
 fn promoted(words: &[String]) -> Option<FlagProblem> {
     let command = words.first()?;
     let sub = words.get(1)?;
@@ -320,14 +319,14 @@ pub(crate) enum CliCommand {
 
     /// Inspect what the daemon did behind the conversation: raw model calls,
     /// heartbeat activity, and stored sub-agent runs.
-    #[command(display_order = 14)]
+    #[command(display_order = 13)]
     Trace {
         #[command(subcommand)]
         subcommand: Option<TraceCommand>,
     },
 
     /// List characters, or switch to another one
-    #[command(display_order = 7)]
+    #[command(display_order = 6)]
     Character {
         #[command(subcommand)]
         subcommand: Option<CharacterCommand>,
@@ -342,7 +341,7 @@ pub(crate) enum CliCommand {
     },
 
     /// Show daemon and session status
-    #[command(display_order = 12)]
+    #[command(display_order = 11)]
     Status {
         /// Show only a specific section (e.g. autonomy, tokens)
         #[arg(long)]
@@ -362,7 +361,7 @@ pub(crate) enum CliCommand {
     },
 
     /// Advanced debugging utilities
-    #[command(display_order = 15)]
+    #[command(display_order = 14)]
     Debug {
         #[command(subcommand)]
         subcommand: Option<DebugCommand>,
@@ -370,7 +369,7 @@ pub(crate) enum CliCommand {
 
     /// List models, switch the active one, or tune its sampler settings
     #[command(args_conflicts_with_subcommands = true)]
-    #[command(display_order = 8)]
+    #[command(display_order = 7)]
     Model {
         #[command(subcommand)]
         subcommand: Option<ModelCommand>,
@@ -398,7 +397,7 @@ pub(crate) enum CliCommand {
 
     /// List configured providers with key and cache status, or refresh a catalog
     #[command(args_conflicts_with_subcommands = true)]
-    #[command(display_order = 9)]
+    #[command(display_order = 8)]
     Provider {
         #[command(subcommand)]
         subcommand: Option<ProviderCommand>,
@@ -408,19 +407,8 @@ pub(crate) enum CliCommand {
         json: bool,
     },
 
-    /// Search what this character remembers
-    #[command(display_order = 5)]
-    Memory {
-        /// Text to search stored memory for; omit to show the memory index
-        query: Option<String>,
-
-        /// Output raw JSON
-        #[arg(long)]
-        json: bool,
-    },
-
     /// Summarize the conversation into memory and shorten the active window
-    #[command(display_order = 6)]
+    #[command(display_order = 5)]
     Compact {
         /// How many recent user turns to leave in the conversation. Everything
         /// older is folded into markdown memory. 0 keeps none of it, leaving
@@ -434,7 +422,7 @@ pub(crate) enum CliCommand {
 
     /// Show or modify configuration
     #[command(args_conflicts_with_subcommands = true)]
-    #[command(display_order = 10)]
+    #[command(display_order = 9)]
     Config {
         #[command(subcommand)]
         subcommand: Option<ConfigCommand>,
@@ -474,7 +462,7 @@ pub(crate) enum CliCommand {
 
     /// Show the tool surface: which tools are enabled, sub-agent ownership,
     /// the exec allowlist, and any dangling config references
-    #[command(display_order = 11)]
+    #[command(display_order = 10)]
     Tools {
         /// Output raw JSON
         #[arg(long)]
@@ -482,7 +470,7 @@ pub(crate) enum CliCommand {
     },
 
     /// Show token usage statistics and costs
-    #[command(display_order = 13)]
+    #[command(display_order = 12)]
     Usage {
         #[command(subcommand)]
         subcommand: Option<UsageCommand>,
@@ -513,7 +501,7 @@ pub(crate) enum CliCommand {
     },
 
     /// Generate shell completions
-    #[command(display_order = 16)]
+    #[command(display_order = 15)]
     Completions {
         /// Shell to generate completions for
         shell: Shell,
@@ -1179,8 +1167,6 @@ pub(crate) fn to_swp_command(
 
         CliCommand::Provider { .. } => provider_to_swp(cmd),
 
-        CliCommand::Memory { .. } => memory_to_swp(cmd),
-
         CliCommand::Compact { .. } => compact_to_swp(cmd),
 
         CliCommand::Config { reset: true, .. } => Some(("config_reset", json!({}))),
@@ -1399,15 +1385,6 @@ fn provider_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)
         }
         None => Some(("list_providers", json!({}))),
     }
-}
-
-/// `memory` index or search.
-fn memory_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
-    use serde_json::json;
-    let CliCommand::Memory { query, .. } = cmd else {
-        return None;
-    };
-    Some(("memory", json!({ "query": query })))
 }
 
 /// `compact`, with the turn count left off when it was not given so the
@@ -2148,30 +2125,9 @@ mod tests {
         );
     }
 
-    // ── Memory ───────────────────────────────────────────────────────
+    // ── Compact ──────────────────────────────────────────────────────
 
-    #[test]
-    fn parse_memory_no_query() {
-        let cli = parse(&["memory"]);
-        assert_variant!(
-            &cli.command,
-            CliCommand::Memory { query, .. } => assert!(query.is_none())
-        );
-    }
-
-    #[test]
-    fn parse_memory_with_query() {
-        let cli = parse(&["memory", "recent topics"]);
-        assert_variant!(
-            &cli.command,
-            CliCommand::Memory { query, .. } => {
-                assert_eq!(query.as_deref(), Some("recent topics"));
-            }
-        );
-    }
-
-    /// `compact` used to live under `memory`, where it read as a way of
-    /// tidying the memory index rather than a rewrite of the conversation.
+    /// `compact` used to live under `memory`, which is gone.
     #[test]
     fn parse_compact() {
         for (args, expected) in [
@@ -2189,9 +2145,8 @@ mod tests {
         }
     }
 
-    /// Left to clap, `shore memory compact` would search stored memory for the
-    /// word "compact" and report nothing found, which reads exactly like a
-    /// compaction that ran and did nothing.
+    /// With `memory` itself gone, clap answers the old spelling with a bare
+    /// "unrecognized subcommand 'memory'" and no hint about compaction.
     #[test]
     fn compact_is_no_longer_under_memory() {
         for args in [&["memory", "compact"][..], &["memory", "compact", "8"][..]] {
@@ -2201,19 +2156,6 @@ mod tests {
                 "{args:?}"
             );
         }
-    }
-
-    /// The redirect keys on the pair of words, so a search whose first word
-    /// happens to be `compact` still reaches the daemon.
-    #[test]
-    fn a_memory_search_is_not_mistaken_for_the_old_spelling() {
-        assert_eq!(misplaced(&["memory", "compaction costs"]), None);
-        assert_variant!(
-            &parse(&["memory", "compaction costs"]).command,
-            CliCommand::Memory { query, .. } => {
-                assert_eq!(query.as_deref(), Some("compaction costs"));
-            }
-        );
     }
 
     // ── Config ───────────────────────────────────────────────────────
@@ -3470,10 +3412,6 @@ mod tests {
             CliCommand::Character {
                 subcommand: Some(CharacterCommand::Info),
                 info: false,
-                json: false,
-            },
-            CliCommand::Memory {
-                query: None,
                 json: false,
             },
             CliCommand::Compact {
