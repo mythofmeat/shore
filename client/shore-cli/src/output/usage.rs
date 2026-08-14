@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use serde_json::Value;
 
 use super::vocab::{
-    Align, Meter, Rows, Table, Tone, blank, count, empty, money, note, pointer, section,
+    Align, Meter, Rows, Table, Tone, blank, count, empty, money, note, section,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -211,13 +211,6 @@ pub(crate) fn write_summary<W: Write>(out: &mut W, data: &Value) {
         blank(out);
         headline.write(out);
     }
-    blank(out);
-    pointer(out, &[
-        "usage budgets",
-        "usage cache",
-        "usage call-type",
-        "usage limits",
-    ]);
 }
 
 pub(crate) fn write_breakdown<W: Write>(out: &mut W, data: &Value, view: View) {
@@ -369,7 +362,6 @@ pub(crate) fn write_cache<W: Write>(out: &mut W, data: &Value) {
     if anomalies > 0 {
         blank(out);
         note(out, &format!("{anomalies} anomalies in the last 7d"));
-        pointer(out, &["usage anomalies"]);
     }
 }
 
@@ -568,14 +560,10 @@ mod tests {
     }
 
     #[test]
-    fn the_summary_leads_with_spend_and_ends_with_where_to_look_next() {
+    fn the_summary_leads_with_spend() {
         let out = render(|buf| write_summary(buf, &summary_payload()));
         assert!(out.starts_with("\u{2500}\u{2500} usage \u{00b7} today "), "{out}");
         assert!(out.contains("$2.75"), "spend must be visible: {out}");
-        assert!(
-            out.contains("usage budgets \u{00b7} usage cache"),
-            "the summary must name where the detail lives: {out}"
-        );
     }
 
     #[test]

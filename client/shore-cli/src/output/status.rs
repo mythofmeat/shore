@@ -2,7 +2,7 @@ use std::io::{self, Write};
 
 use serde_json::Value;
 
-use super::vocab::{Rows, Tone, blank, count, empty, pointer, section, warning};
+use super::vocab::{Rows, Tone, blank, count, empty, section, warning};
 
 fn text<'value>(data: &'value Value, key: &str) -> &'value str {
     data.get(key).and_then(Value::as_str).unwrap_or("")
@@ -88,17 +88,6 @@ pub(crate) fn write_status<W: Write>(out: &mut W, data: &Value, character: &str)
             ),
         );
     }
-
-    blank(out);
-    let mut detail = vec!["status diagnostics"];
-    if data.get("autonomy").is_some_and(|v| !v.is_null()) {
-        detail.push("status autonomy");
-    }
-    if data.get("activity").is_some_and(|v| !v.is_null()) {
-        detail.push("status activity");
-    }
-    detail.push("usage");
-    pointer(out, &detail);
 }
 
 pub(crate) fn write_section<W: Write>(out: &mut W, data: &Value, name: &str) -> bool {
@@ -240,22 +229,6 @@ mod tests {
         let out = render(&data);
         assert!(out.contains("keepalive halted for qifei"), "{out}");
         assert!(out.contains("budget exhausted"), "{out}");
-    }
-
-    #[test]
-    fn detail_pointers_only_name_sections_that_exist() {
-        let out = render(&payload());
-        assert!(out.contains("status diagnostics"), "{out}");
-        assert!(
-            !out.contains("status autonomy"),
-            "a null section must not be advertised: {out}"
-        );
-
-        let mut data = payload();
-        if let Some(slot) = data.get_mut("autonomy") {
-            *slot = json!({"enabled": true});
-        }
-        assert!(render(&data).contains("status autonomy"), "{}", render(&data));
     }
 
     #[test]

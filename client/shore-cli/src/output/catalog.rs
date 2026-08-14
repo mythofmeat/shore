@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use serde_json::Value;
 
 use super::vocab::{
-    Align, Mark, Rows, Table, Tone, blank, count, empty, hidden, note, pointer, section,
+    Align, Mark, Rows, Table, Tone, blank, count, empty, hidden, note, section,
 };
 
 fn text<'value>(row: &'value Value, key: &str) -> &'value str {
@@ -63,7 +63,6 @@ pub(crate) fn write_model_list<W: Write>(out: &mut W, data: &Value) {
         blank(out);
         hidden(out, hidden_count, "--all");
     }
-    pointer(out, &["model info", "model use <name>", "model setting"]);
 }
 
 pub(crate) fn write_model_info<W: Write>(out: &mut W, data: &Value) {
@@ -149,7 +148,6 @@ pub(crate) fn write_model_settings<W: Write>(out: &mut W, data: &Value) {
             );
         }
     }
-    pointer(out, &["model setting <key> <value>", "model setting --reset"]);
 }
 
 pub(crate) fn write_background_models<W: Write>(out: &mut W, data: &Value) {
@@ -185,7 +183,10 @@ pub(crate) fn write_provider_list<W: Write>(out: &mut W, data: &Value) {
         empty(out, "no providers configured");
         return;
     }
-    for provider in providers {
+    for (index, provider) in providers.iter().enumerate() {
+        if index > 0 {
+            blank(out);
+        }
         let on = flag(provider, "enabled");
         let mut head = Rows::new();
         let discovery = if flag(provider, "discovery_enabled") {
@@ -229,9 +230,7 @@ pub(crate) fn write_provider_list<W: Write>(out: &mut W, data: &Value) {
             rows.add("catalog", &cache);
         }
         rows.write(out);
-        blank(out);
     }
-    pointer(out, &["provider models <name>", "provider refresh"]);
 }
 
 fn data_cache(provider: &Value) -> Option<String> {
@@ -297,7 +296,6 @@ pub(crate) fn write_character_list<W: Write>(out: &mut W, data: &Value, active: 
         );
     }
     rows.write(out);
-    pointer(out, &["character use <name>", "character info"]);
 }
 
 pub(crate) fn print_model_list(data: &Value) {

@@ -175,15 +175,6 @@ pub(crate) fn warning<W: Write>(out: &mut W, text: &str) {
     newline(out);
 }
 
-pub(crate) fn pointer<W: Write>(out: &mut W, commands: &[&str]) {
-    if commands.is_empty() {
-        return;
-    }
-    indent(out);
-    paint(out, Tone::Muted, &commands.join(" \u{00b7} "));
-    newline(out);
-}
-
 pub(crate) fn hidden<W: Write>(out: &mut W, count: usize, flag: &str) {
     if count == 0 {
         return;
