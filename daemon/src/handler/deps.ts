@@ -49,6 +49,7 @@ import type {
 } from "./router.ts";
 import type { SessionTokens } from "./persistence.ts";
 import type { ToolContextDeps } from "./tool_context.ts";
+import { indexPath as workspaceIndexPath } from "../memory/workspace_index.ts";
 
 export interface GenerationAssembly {
   runtime: ShoreRuntime;
@@ -553,6 +554,14 @@ function commandDeps(a: CommandAssembly): CommandDeps {
     runTool: {
       tools: (charName, turn) => chatToolDeps(a, charName, turn),
       mcpTools: () => runtime.mcp.current.allTools(),
+    },
+    workspaceIndex: {
+      indexPathFor: (character) => {
+        if (!runtime.registry.hasCharacter(character)) return undefined;
+        return workspaceIndexPath(runtime.registry.effectiveConfig(character).dirs.cache, character);
+      },
+      progressFor: (character) => runtime.workspaceIndex.progress(character),
+      characters: () => [...runtime.registry.availableCharacters()],
     },
   };
 }

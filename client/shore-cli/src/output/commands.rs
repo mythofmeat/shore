@@ -83,6 +83,7 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "call_log" => print_call_log(data),
         "transcript" => print_transcript(data),
         "subagent_trace" => print_subagent_trace(data),
+        "workspace_index" => print_workspace_index(data),
         "heartbeat_tick_now" => print_heartbeat_tick_now(data),
         "heartbeat_set_dormant" => print_heartbeat_status_change(data, "dormant"),
         "heartbeat_set_active" => print_heartbeat_status_change(data, "active"),
@@ -540,6 +541,127 @@ fn print_transcript_entry(
         }
     }
     _ = writeln!(out);
+}
+
+fn print_workspace_index(data: &serde_json::Value) {
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    let width = term_width();
+    let char_name = data["character"].as_str().unwrap_or("?");
+    write_section_header(&mut out, "workspace index", char_name, width);
+
+    if data["enabled"].as_bool() == Some(false) {
+        print_dim_line(&mut out, "(no workspace configured for this character)");
+        return;
+    }
+
+    let files = data["files"].as_u64().unwrap_or(0);
+    let embedded = data["embedded"].as_u64().unwrap_or(0);
+    let pending = data["pending"].as_u64().unwrap_or(0);
+    let skipped = data["skipped"].as_u64().unwrap_or(0);
+
+    if files == 0 {
+        print_dim_line(&mut out, "(nothing indexed yet)");
+    }
+
+    write_row(&mut out, "Files seen", &files.to_string());
+    write_row_colored(
+        &mut out,
+        "Embedded",
+        &format!("{embedded} of {files}"),
+        if pending == 0 { Tone::Good } else { Tone::Active },
+    );
+    if pending > 0 {
+        write_row_colored(&mut out, "Pending", &pending.to_string(), Tone::Active);
+    }
+    if skipped > 0 {
+        write_row(&mut out, "Skipped", &format!("{skipped} ({})", skip_reasons(data)));
+    }
+    write_row(&mut out, "Vectors", &data["vectors"].as_u64().unwrap_or(0).to_string());
+    if let Some(models) = data["models"].as_array().filter(|m| !m.is_empty()) {
+        let names: Vec<&str> = models.iter().filter_map(serde_json::Value::as_str).collect();
+        write_row(&mut out, "Model", &names.join(", "));
+    }
+    write_row(&mut out, "Index size", &human_bytes(data["bytes"].as_u64().unwrap_or(0)));
+    write_row(
+        &mut out,
+        "Last indexed",
+        data["last_indexed_at"].as_str().unwrap_or("never"),
+    );
+
+    _ = writeln!(out);
+    print_background_pass(&mut out, &data["background"], pending);
+}
+
+fn skip_reasons(data: &serde_json::Value) -> String {
+    let Some(reasons) = data["skip_reasons"].as_object() else {
+        return String::new();
+    };
+    let mut parts: Vec<String> = reasons
+        .iter()
+        .map(|(reason, n)| format!("{} {reason}", n.as_u64().unwrap_or(0)))
+        .collect();
+    parts.sort();
+    parts.join(", ")
+}
+
+fn human_bytes(bytes: u64) -> String {
+    const UNITS: [(u64, &str); 3] = [
+        (1_073_741_824, "GB"),
+        (1_048_576, "MB"),
+        (1_024, "KB"),
+    ];
+    for (scale, name) in UNITS {
+        if bytes < scale {
+            continue;
+        }
+        let whole = bytes.checked_div(scale).unwrap_or(0);
+        let remainder = bytes.checked_rem(scale).unwrap_or(0);
+        let tenths = remainder
+            .saturating_mul(10)
+            .saturating_add(scale.checked_div(2).unwrap_or(0))
+            .checked_div(scale)
+            .unwrap_or(0);
+        return if tenths >= 10 {
+            format!("{}.0 {name}", whole.saturating_add(1))
+        } else {
+            format!("{whole}.{tenths} {name}")
+        };
+    }
+    format!("{bytes} B")
+}
+
+fn print_background_pass(out: &mut impl Write, background: &serde_json::Value, pending: u64) {
+    if background["registered"].as_bool() != Some(true) {
+        print_dim_line(
+            out,
+            "(no background indexer registered — nothing will be embedded until one runs)",
+        );
+        return;
+    }
+
+    if let Some(error) = background["last_error"].as_str() {
+        write_row_colored(out, "Background", "failing", Tone::Bad);
+        write_row(out, "Last error", error);
+        write_row(out, "Failures", &background["failures"].as_u64().unwrap_or(0).to_string());
+        if let Some(secs) = background["retry_in_secs"].as_u64() {
+            write_row(out, "Retrying in", &format!("{secs}s"));
+        }
+        return;
+    }
+
+    if pending > 0 {
+        write_row_colored(out, "Background", "working", Tone::Active);
+        print_dim_line(out, "(it embeds a batch at a time once the daemon has been idle)");
+        return;
+    }
+
+    if background["swept"].as_bool() == Some(true) {
+        write_row_colored(out, "Background", "up to date", Tone::Good);
+    } else {
+        write_row_colored(out, "Background", "not yet run", Tone::Thinking);
+        print_dim_line(out, "(it starts once the daemon has been idle for a while)");
+    }
 }
 
 fn print_subagent_trace(data: &serde_json::Value) {
@@ -1635,6 +1757,56 @@ mod tests {
 
     #[test]
     #[ignore = "visual preview"]
+    fn render_preview_workspace_index() {
+        let states = [
+            ("up to date", serde_json::json!({
+                "character": "qifei", "enabled": true,
+                "files": 1682, "embedded": 1669, "pending": 0, "skipped": 13,
+                "skip_reasons": {"non-utf8": 11, "oversize": 2},
+                "vectors": 1669, "models": ["qwen/qwen3-embedding-8b"],
+                "bytes": 29102080, "last_indexed_at": "2026-08-15T01:44:00.000Z",
+                "background": {"registered": true, "swept": true, "failures": 0},
+            })),
+            ("still working", serde_json::json!({
+                "character": "qifei", "enabled": true,
+                "files": 1682, "embedded": 412, "pending": 1257, "skipped": 13,
+                "skip_reasons": {"non-utf8": 11, "oversize": 2},
+                "vectors": 412, "models": ["qwen/qwen3-embedding-8b"],
+                "bytes": 7180288, "last_indexed_at": "2026-08-15T01:44:00.000Z",
+                "background": {"registered": true, "swept": true, "failures": 0},
+            })),
+            ("failing", serde_json::json!({
+                "character": "qifei", "enabled": true,
+                "files": 1682, "embedded": 0, "pending": 1669, "skipped": 13,
+                "skip_reasons": {"non-utf8": 11, "oversize": 2},
+                "vectors": 0, "models": [],
+                "bytes": 40960, "last_indexed_at": null,
+                "background": {"registered": true, "swept": true, "failures": 4,
+                               "last_error": "embedder failed: 429 rate limited",
+                               "retry_in_secs": 8},
+            })),
+            ("never run", serde_json::json!({
+                "character": "yuna", "enabled": true,
+                "files": 0, "embedded": 0, "pending": 0, "skipped": 0,
+                "skip_reasons": {}, "vectors": 0, "models": [],
+                "bytes": 0, "last_indexed_at": null,
+                "background": {"registered": true, "swept": false, "failures": 0},
+            })),
+        ];
+
+        set_color_enabled(true);
+        let mut stdout = io::stdout();
+        for (label, data) in states {
+            let _ignored = stdout.write_all(format!("\n----- {label} -----\n").as_bytes());
+            print_workspace_index(&data);
+        }
+        set_color_enabled(false);
+        let _ignored = stdout.write_all(b"----- end -----\n");
+        _ = stdout.flush();
+    }
+
+    #[test]
+    #[ignore = "visual preview"]
     fn render_preview_wire() {
         let wire = serde_json::json!([{
             "seq": 0,
@@ -1684,6 +1856,81 @@ mod tests {
         let rendered = display_payload_body(&body);
         assert!(rendered.contains("\"messages\": ["));
         assert!(!rendered.contains("\\\"messages\\\""));
+    }
+
+    fn workspace_index_render(data: &serde_json::Value) -> String {
+        let mut buf = Vec::new();
+        let files = data["files"].as_u64().unwrap_or(0);
+        let pending = data["pending"].as_u64().unwrap_or(0);
+        let embedded = data["embedded"].as_u64().unwrap_or(0);
+        write_row(&mut buf, "Files seen", &files.to_string());
+        write_row(&mut buf, "Embedded", &format!("{embedded} of {files}"));
+        if pending > 0 {
+            write_row(&mut buf, "Pending", &pending.to_string());
+        }
+        write_row(&mut buf, "Skipped", &skip_reasons(data));
+        print_background_pass(&mut buf, &data["background"], pending);
+        String::from_utf8(buf).expect("utf8")
+    }
+
+    #[test]
+    fn an_unregistered_indexer_says_nothing_will_be_embedded() {
+        let out = workspace_index_render(&serde_json::json!({
+            "files": 10, "embedded": 0, "pending": 10, "skip_reasons": {},
+            "background": {"registered": false},
+        }));
+        assert!(out.contains("no background indexer registered"));
+    }
+
+    #[test]
+    fn a_failing_indexer_shows_the_error_and_the_retry() {
+        let out = workspace_index_render(&serde_json::json!({
+            "files": 10, "embedded": 0, "pending": 10, "skip_reasons": {},
+            "background": {"registered": true, "swept": true, "failures": 4,
+                           "last_error": "429 rate limited", "retry_in_secs": 8},
+        }));
+        assert!(out.contains("failing"));
+        assert!(out.contains("429 rate limited"));
+        assert!(out.contains("8s"));
+        assert!(!out.contains("up to date"));
+    }
+
+    #[test]
+    fn outstanding_work_reads_as_working_not_up_to_date() {
+        let out = workspace_index_render(&serde_json::json!({
+            "files": 10, "embedded": 4, "pending": 6, "skip_reasons": {},
+            "background": {"registered": true, "swept": true, "failures": 0},
+        }));
+        assert!(out.contains("Pending      6"));
+        assert!(out.contains("working"));
+        assert!(!out.contains("up to date"));
+    }
+
+    #[test]
+    fn a_drained_index_reads_as_up_to_date_with_no_pending_row() {
+        let out = workspace_index_render(&serde_json::json!({
+            "files": 10, "embedded": 10, "pending": 0, "skip_reasons": {},
+            "background": {"registered": true, "swept": true, "failures": 0},
+        }));
+        assert!(out.contains("up to date"));
+        assert!(!out.contains("Pending"));
+    }
+
+    #[test]
+    fn skip_reasons_are_counted_and_ordered() {
+        let out = skip_reasons(&serde_json::json!({
+            "skip_reasons": {"oversize": 2, "non-utf8": 11},
+        }));
+        assert_eq!(out, "11 non-utf8, 2 oversize");
+    }
+
+    #[test]
+    fn bytes_read_as_units_a_person_can_scan() {
+        assert_eq!(human_bytes(0), "0 B");
+        assert_eq!(human_bytes(512), "512 B");
+        assert_eq!(human_bytes(40960), "40.0 KB");
+        assert_eq!(human_bytes(29_102_080), "27.8 MB");
+        assert_eq!(human_bytes(208_936_506), "199.3 MB");
     }
 
     #[test]

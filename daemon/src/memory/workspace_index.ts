@@ -155,6 +155,82 @@ export async function hybridSearch(options: HybridSearchOptions): Promise<Hybrid
   });
 }
 
+export interface BackgroundIndexOptions {
+  workspaceDir: string;
+  retrievalConfig: RetrievalConfig;
+  embedder: Embedder;
+  indexPath: string;
+  maxBatchItems?: number;
+}
+
+export interface BackgroundIndexOutcome {
+  embedded: number;
+  pending: number;
+  files: number;
+}
+
+export async function indexPendingBatch(
+  options: BackgroundIndexOptions,
+): Promise<BackgroundIndexOutcome> {
+  const { workspaceDir, retrievalConfig, embedder } = options;
+  if (workspaceDir === "") return { embedded: 0, pending: 0, files: 0 };
+  if (!(await pathExists(workspaceDir))) return { embedded: 0, pending: 0, files: 0 };
+
+  return await withWorkspaceIndexLock(options.indexPath, async () => {
+    const store = WorkspaceIndexStore.open(options.indexPath);
+    try {
+      await migrateIfLegacy(store, options.indexPath, workspaceDir);
+
+      const candidates = await enumerateFiles(workspaceDir, retrievalConfig);
+      const existing = store.files();
+      pruneAndScope(store, existing, candidates, undefined);
+
+      const refreshed = await refreshIndexEntries(
+        candidates,
+        existing,
+        retrievalConfig,
+        (hash) => store.hasVector(embedder.modelId, hash),
+      );
+      store.deleteFiles(refreshed.removed);
+      store.putFiles(refreshed.rows);
+
+      const limit = options.maxBatchItems ?? EMBED_BATCH_MAX_ITEMS;
+      const batch = refreshed.stale.slice(0, limit);
+      if (batch.length === 0) {
+        store.pruneEmbeddings();
+        return { embedded: 0, pending: 0, files: candidates.length };
+      }
+
+      const vectors = await embedDocuments(embedder, refreshed.staleDocs.slice(0, batch.length));
+      store.putEmbeddings(
+        embedder.modelId,
+        batch.map((entry, i) => ({ hash: entry.hash, vector: vectors[i]! })),
+      );
+      store.putFiles(batch.map((entry) => ({ ...entry.row, embedded: true })));
+      store.setMetadata("last_indexed_at", new Date().toISOString());
+
+      return {
+        embedded: batch.length,
+        pending: refreshed.stale.length - batch.length,
+        files: candidates.length,
+      };
+    } finally {
+      store.close();
+    }
+  });
+}
+
+export async function workspaceIndexStats(indexPath: string) {
+  return await withWorkspaceIndexLock(indexPath, async () => {
+    const store = WorkspaceIndexStore.open(indexPath);
+    try {
+      return store.stats();
+    } finally {
+      store.close();
+    }
+  });
+}
+
 async function migrateIfLegacy(
   store: WorkspaceIndexStore,
   dbPath: string,

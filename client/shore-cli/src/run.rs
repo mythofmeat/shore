@@ -241,7 +241,8 @@ async fn handle_generic_swp_command(
                 crate::cli::TraceCommand::Calls { json, .. }
                 | crate::cli::TraceCommand::Heartbeat { json, .. }
                 | crate::cli::TraceCommand::Events { json, .. }
-                | crate::cli::TraceCommand::Subagent { json, .. },
+                | crate::cli::TraceCommand::Subagent { json, .. }
+                | crate::cli::TraceCommand::Index { json, .. },
             ) => *json,
             None => false,
         },
