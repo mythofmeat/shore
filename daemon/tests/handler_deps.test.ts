@@ -809,26 +809,6 @@ describe("the command path", () => {
     }
   });
 
-  test("a reset forgets every session's active model, not just the one that asked", async () => {
-    const { root, runtime } = await runtimeUnder("shore-deps-cmd-reset-");
-    try {
-      const deps = buildCommandPathDeps(commandAssembly(runtime));
-      deps.sessions.setActiveModel(1, "ada", "anthropic:a");
-      deps.sessions.setActiveModel(2, "nova", "openai:b");
-
-      deps.dispatchRuntime.clearActiveModel();
-
-      // The Rust kept one active model on the handler's single command context,
-      // so `config_reset` cleared it for everyone. Per session here, and the
-      // reset still has to reach all of them.
-      expect(deps.sessions.activeModel(1, "ada")).toBeUndefined();
-      expect(deps.sessions.activeModel(2, "nova")).toBeUndefined();
-    } finally {
-      await runtime.shutdown();
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
   test("one session's active model is remembered per character, not per session", async () => {
     const { root, runtime } = await runtimeUnder("shore-deps-cmd-switch-");
     try {

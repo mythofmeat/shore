@@ -118,9 +118,6 @@ function fakes(
       state.current = cfg;
       return summary;
     },
-    clearActiveModel: () => {
-      log.order.push("clear-active-model");
-    },
   };
 
   const router = new SessionRouter();
@@ -251,56 +248,6 @@ describe("a runtime config set", () => {
       expect(await afterCommand("config", args, data, f.ctx)).toBe(data);
       expect(f.log.order).toEqual([]);
     }
-  });
-});
-
-// ── config_reset ──────────────────────────────────────────────────────────
-
-describe("a config_reset", () => {
-  /** What `configReset` returns, `invalidated` included. */
-  const RESET = {
-    reset: true,
-    message: "Configuration reloaded from disk",
-    config_path: "/cfg/config.toml",
-    invalidated: { runtime_overrides: true },
-  };
-
-  test("adopts the command's config and reports all three caches", async () => {
-    const f = fakes({
-      config: config((c) => (c.app.defaults.stream = false)),
-      summary: { characterDiscoveryChanged: true, droppedEngines: 2 },
-    });
-
-    const out = await afterCommand("config_reset", {}, RESET, f.ctx);
-
-    expect(out).toEqual({
-      ...RESET,
-      invalidated: {
-        // The command's own annotation survives: the dispatcher adds to the
-        // map rather than replacing it.
-        runtime_overrides: true,
-        character_discovery: true,
-        merged_character_configs: true,
-        removed_character_engines: 2,
-      },
-    });
-    expect(f.log.adopted).toEqual([f.ctx.config]);
-    expect(f.log.order).toEqual(["clear-active-model", "adopt"]);
-  });
-
-  test("reports discovery as unchanged when it was", async () => {
-    // `config_reset_refreshes_registry_runtime_state` asserts the true case;
-    // this is the flag actually coming from the summary rather than being one.
-    const f = fakes({ summary: { characterDiscoveryChanged: false, droppedEngines: 0 } });
-
-    const out = await afterCommand("config_reset", {}, RESET, f.ctx);
-
-    expect((out as { invalidated: Record<string, unknown> }).invalidated).toEqual({
-      runtime_overrides: true,
-      character_discovery: false,
-      merged_character_configs: true,
-      removed_character_engines: 0,
-    });
   });
 });
 

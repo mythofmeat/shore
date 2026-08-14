@@ -12,7 +12,7 @@ import { CommandError, internalError, invalidRequest } from "./errors.ts";
 import { callLog, transcript } from "./call_log.ts";
 import { workspaceIndex } from "./workspace_index.ts";
 import { subagentTrace } from "./subagent_trace.ts";
-import { config, configCheck, configReload, configReset, tools, type ConfigRuntime } from "./config.ts";
+import { config, configCheck, configReload, tools, type ConfigRuntime } from "./config.ts";
 import {
   alt,
   edit,
@@ -176,8 +176,6 @@ export async function runCommand(
       return configCheck(session, session.env ?? process.env);
     case "config_reload":
       return await configReload(session, args);
-    case "config_reset":
-      return configReset(session);
     case "diagnostics":
       return diagnosticsCommand(statusContext(engine, session, deps), args);
     case "heartbeat_log":

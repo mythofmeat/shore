@@ -209,9 +209,9 @@ describe("the raw escape hatch and unmapped commands", () => {
   });
 
   test("an unmapped bang with no arguments is passed through for the daemon to judge", () => {
-    expect(parseInput("!config_reset")).toEqual({
+    expect(parseInput("!session_activate")).toEqual({
       kind: "command",
-      name: "config_reset",
+      name: "session_activate",
       args: {},
     });
   });

@@ -72,7 +72,6 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "memory" => print_memory(data),
         "compact" => print_compact_result(data),
         "config_reload" => print_config_reload(data),
-        "config_reset" => print_config_reset(data),
         "edit" => print_edit_confirmation(data),
         "delete" => print_delete_confirmation(data),
         "alt" => print_alt_confirmation(data),
@@ -1437,14 +1436,6 @@ fn print_config_reload(data: &serde_json::Value) {
     }
 }
 
-/// Print config reset confirmation.
-fn print_config_reset(data: &serde_json::Value) {
-    let msg = data["message"]
-        .as_str()
-        .unwrap_or("Configuration reloaded from disk");
-    cli_out!("{msg}");
-}
-
 /// Print diagnostics from ring buffers.
 pub(crate) fn print_diagnostics(data: &serde_json::Value) {
     let stdout = io::stdout();
@@ -1974,7 +1965,7 @@ mod tests {
     fn format_command_dispatches_known_commands() {
         set_color_enabled(false);
         // These should all run without panic and hit their formatters.
-        format_command("config_reset", &serde_json::json!({"message": "reloaded"}));
+        format_command("config_reload", &serde_json::json!({"applied": true}));
         format_command("inject_system", &serde_json::json!({}));
         format_command("edit", &serde_json::json!({"ref": "m42"}));
     }

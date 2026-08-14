@@ -1,6 +1,7 @@
 {
   "_generated_by": "crates/daemon/src/commands/gen_dispatch_fixture.rs at 9023b46d (uncommitted), driving the real commands::dispatch, dispatch_characterless and engine_err",
   "_note": "FROZEN. Driven against the real commands::dispatch, dispatch_characterless and engine_err in a worktree at 9023b46d, each case on its own temp root. Nothing regenerates this; a later diff is a defect. Generated under TZ=America/New_York. What is recorded is the ROUTING, not what a command computes: every handler here has its own frozen fixture already, so a success keeps its top-level keys and a reduction of each value, and a failure keeps the code and the message - which is what names the handler that produced it. The reduction is four discriminators rather than content: a `status` string keeps its value (it is the whole answer of the three commands that set one), a number keeps its value (the commands answering in counts have nothing else to tell them apart), an array keeps its length, and an array of named things keeps the names (which is the only thing that moves when `list_characters` marks an active character). The per-run temp root in a message becomes <root>. The world each case runs in is deliberately not empty - three messages, three characters (one sorting before the active one), one model, two memory files and live autonomy state - and `log` and `history_page` are both given a `before` argument, which the first ignores and the second honours. The first pass of this fixture used a bare temp dir and no discriminators, and nine cross-wiring mutants survived it: on an empty conversation with no models, `get` and `alt`, `log` and `history_page`, `model_info` and `model_settings` all answer identically. Two names answer from a dependency the TypeScript side does not have yet, and the replay says so at each: `compact`, whose recorded answer here is its assembly failing on an unset API key, and `keepalive_ping_now`, whose recorded answer is the skip a daemon with no LLM client produces. Both are injected arms until their dependencies port - the compaction assembly with handler/, the ping's cached-versus-rebuilt distinction with autonomy/manager.rs.",
+  "_removed": "The `config_reset` case was dropped when the command was removed: all three keys it could move were write-only, so there was nothing to reset. This is the only case ever removed from this fixture; a diff anywhere else is still a defect.",
   "timezone": "America/New_York",
   "dispatch": [
     {
@@ -572,27 +573,6 @@
           "config_path": "string",
           "character": "string",
           "changed_prompt_files": "array[1]"
-        }
-      },
-      "active_model_after": null
-    },
-    {
-      "name": "config_reset",
-      "args": {},
-      "output": {
-        "kind": "command_output",
-        "name": "config_reset",
-        "data_keys": [
-          "config_path",
-          "invalidated",
-          "message",
-          "reset"
-        ],
-        "data_shape": {
-          "reset": "bool",
-          "message": "string",
-          "config_path": "string",
-          "invalidated": "object"
         }
       },
       "active_model_after": null

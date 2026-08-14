@@ -149,9 +149,6 @@ async function harness(characters: readonly string[]): Promise<Harness> {
         characterDiscoveryChanged: false,
         droppedEngines: 0,
       }),
-      clearActiveModel: () => {
-        activeModels.clear();
-      },
     },
     router: {
       characterFor: () => null,
@@ -423,10 +420,10 @@ test("the character path is given the character's effective config", async () =>
  *
  * Not recorded: the annotation a reload adds is the same either way — what
  * moves is the config that gets *adopted*, which never reaches the frame. So
- * the adoption is what is asserted, through `config_reset`, which is the one
- * command that *replaces* its context's config rather than editing it in place.
+ * the adoption is what is asserted, through an applied `config_reload`, which
+ * *replaces* its context's config rather than editing it in place.
  */
-test("config_reset adopts the config the command re-read, not the one it started from", async () => {
+test("config_reload adopts the config the command re-read, not the one it started from", async () => {
   const h = await harness(["ada"]);
   await writeFile(
     h.deps.configPath,
@@ -439,7 +436,11 @@ test("config_reset adopts the config the command re-read, not the one it started
     return { characterDiscoveryChanged: false, droppedEngines: 0 };
   };
 
-  await dispatchCommand(h.deps, { rid: null, name: "config_reset", args: {} }, meta("ada", null));
+  await dispatchCommand(
+    h.deps,
+    { rid: null, name: "config_reload", args: { apply: true } },
+    meta("ada", null),
+  );
 
   expect(adopted).toHaveLength(1);
   expect(adopted[0]).not.toBe(before);

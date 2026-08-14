@@ -75,6 +75,15 @@ const NAMED_BY_USE: [&str; 2] = ["model", "character"];
 /// live, and what they are called now.
 const PROMOTED: [(&str, &str); 1] = [("memory compact", "compact")];
 
+/// Flags retired from one command while still live on another, so they cannot
+/// be matched by spelling alone the way `--temperature` was. `--reset` left
+/// `config` but still clears a saved value under `model setting`.
+const RETIRED_UNDER: [(&str, &str, &str); 1] = [(
+    "config",
+    "--reset",
+    "there were no runtime overrides to drop; re-read the file with: shore config reload",
+)];
+
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum FlagProblem {
     /// A leading flag written after the command name.
@@ -116,6 +125,7 @@ where
     S: AsRef<str>,
 {
     let mut words: Vec<String> = Vec::new();
+    let mut flags: Vec<String> = Vec::new();
     let mut flagged = false;
     let mut expecting_value = false;
 
@@ -141,12 +151,26 @@ where
         }
         if token.starts_with('-') {
             flagged = true;
+            flags.push(spelled.to_owned());
         } else {
             words.push(token.to_owned());
         }
     }
 
-    promoted(&words).or_else(|| bare_name(&words, flagged))
+    promoted(&words)
+        .or_else(|| retired_under(&words, &flags))
+        .or_else(|| bare_name(&words, flagged))
+}
+
+/// A flag retired from the command it is written under. Matched on the pair
+/// rather than the spelling, so `shore model setting --reset temperature`,
+/// where the flag still means something, is left alone.
+fn retired_under(words: &[String], flags: &[String]) -> Option<FlagProblem> {
+    let command = words.first()?;
+    RETIRED_UNDER
+        .iter()
+        .find(|&&(under, flag, _)| under == command && flags.iter().any(|f| f == flag))
+        .map(|&(_, flag, instead)| FlagProblem::Retired(flag, instead))
 }
 
 /// `shore memory compact` used to fold the conversation into memory. With
@@ -445,17 +469,13 @@ pub(crate) enum CliCommand {
         #[arg(long)]
         check: bool,
 
-        /// Reset all runtime overrides (reload config from disk)
-        #[arg(long)]
-        reset: bool,
-
         /// Output raw JSON
         #[arg(long)]
         json: bool,
 
         /// Output as TOML (suitable for pasting into a config file).
-        /// Only valid for read-only config queries (no value, --check, or --reset).
-        #[arg(long, conflicts_with_all = ["json", "check", "reset", "value"])]
+        /// Only valid for read-only config queries (no value or --check).
+        #[arg(long, conflicts_with_all = ["json", "check", "value"])]
         toml: bool,
 
         /// Include keys whose value matches the built-in default (shown dimmed)
@@ -1092,7 +1112,6 @@ pub(crate) fn to_swp_command(
         | CliCommand::Config {
             path: true,
             check: false,
-            reset: false,
             ..
         }
         | CliCommand::Config {
@@ -1180,7 +1199,6 @@ pub(crate) fn to_swp_command(
 
         CliCommand::Compact { .. } => compact_to_swp(cmd),
 
-        CliCommand::Config { reset: true, .. } => Some(("config_reset", json!({}))),
         CliCommand::Config { check: true, .. } => Some(("config_check", json!({}))),
         CliCommand::Config { key, value, .. } => {
             Some(("config", json!({ "key": key, "value": value })))
@@ -2184,14 +2202,12 @@ mod tests {
                 value,
                 path,
                 check,
-                reset,
                 ..
             } => {
                 assert!(key.is_none());
                 assert!(value.is_none());
                 assert!(!path);
                 assert!(!check);
-                assert!(!reset);
             }
         );
     }
@@ -2259,7 +2275,6 @@ mod tests {
             value: None,
             path: false,
             check: false,
-            reset: false,
             json: false,
             toml: false,
             all: false,
@@ -2466,6 +2481,32 @@ mod tests {
             // A flag in play means a different request; pointing it at `use`
             // would be wrong, so the redirect stays quiet and clap answers.
             &["model", "--info", "opus"][..],
+        ] {
+            assert_eq!(misplaced(args), None, "{args:?}");
+        }
+    }
+
+    /// `shore config --reset` dropped the three runtime overrides, all of
+    /// which were written and never read. Clap answers the retired spelling
+    /// with "unexpected argument" and a tip about quoting it as a value, which
+    /// is advice for a different problem.
+    ///
+    /// It cannot join `RETIRED_FLAGS`: `shore model setting --reset <key>`
+    /// still clears a saved value, and matching on spelling alone would take
+    /// that away too.
+    #[test]
+    fn reset_is_retired_under_config_and_nowhere_else() {
+        assert_eq!(
+            misplaced(&["config", "--reset"]),
+            Some(FlagProblem::Retired(
+                "--reset",
+                "there were no runtime overrides to drop; re-read the file with: shore config reload",
+            )),
+        );
+
+        for args in [
+            &["model", "setting", "--reset", "temperature"][..],
+            &["model", "--reset"][..],
         ] {
             assert_eq!(misplaced(args), None, "{args:?}");
         }
@@ -3044,7 +3085,6 @@ mod tests {
             value: None,
             path: true,
             check: false,
-            reset: false,
             json: false,
             toml: false,
             all: false,
@@ -3438,7 +3478,6 @@ mod tests {
                 value: None,
                 path: false,
                 check: false,
-                reset: false,
                 json: false,
                 toml: false,
                 all: false,

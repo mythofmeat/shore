@@ -18,8 +18,6 @@ export interface DispatchRuntime {
   reloadRuntimeConfig(config: LoadedConfig): void;
 
   applyReloadedConfig(config: LoadedConfig): Promise<ReloadSummary>;
-
-  clearActiveModel(): void;
 }
 
 export interface DispatchContext {
@@ -54,8 +52,6 @@ async function annotations(
       return isRecord(args) && typeof args["value"] === "string"
         ? await afterConfigSet(data, ctx)
         : undefined;
-    case "config_reset":
-      return await afterConfigReset(data, ctx);
     case "config_reload":
       return await afterConfigReload(data, ctx);
     case "switch_character":
@@ -72,19 +68,6 @@ async function afterConfigSet(
   await ctx.runtime.setEffectiveConfig(ctx.character, ctx.config);
   ctx.runtime.reloadRuntimeConfig(ctx.config);
   return invalidated(data, { merged_character_configs: true });
-}
-
-async function afterConfigReset(
-  data: unknown,
-  ctx: DispatchContext,
-): Promise<Record<string, unknown>> {
-  ctx.runtime.clearActiveModel();
-  const summary = await ctx.runtime.applyReloadedConfig(ctx.config);
-  return invalidated(data, {
-    character_discovery: summary.characterDiscoveryChanged,
-    merged_character_configs: true,
-    removed_character_engines: summary.droppedEngines,
-  });
 }
 
 async function afterConfigReload(

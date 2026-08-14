@@ -301,26 +301,6 @@ export async function configReload(ctx: ConfigContext, args: Args): Promise<unkn
   };
 }
 
-export function configReset(ctx: ConfigContext): unknown {
-  let fresh: LoadedConfig;
-  try {
-    fresh = loadConfig(ctx.configPath, loaderOptions(ctx));
-  } catch (e) {
-    throw internalError(`Failed to reload config: ${message(e)}`);
-  }
-
-  ctx.activeModel = undefined;
-  ctx.activeResolvedModel = undefined;
-  adopt(ctx, fresh);
-
-  return {
-    reset: true,
-    message: "Configuration reloaded from disk",
-    config_path: ctx.configPath,
-    invalidated: { runtime_overrides: true },
-  };
-}
-
 function adopt(ctx: ConfigContext, fresh: LoadedConfig): void {
   ctx.runtime.reloadRuntimeConfig(fresh);
   ctx.runtime.setUsageConfig(fresh);

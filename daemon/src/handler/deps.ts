@@ -367,10 +367,6 @@ function dispatchRuntime(
     },
 
     applyReloadedConfig: async (config) => await applyReloadedConfig(a, config),
-
-    clearActiveModel: () => {
-      sessions.clear();
-    },
   };
 }
 

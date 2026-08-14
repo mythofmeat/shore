@@ -267,17 +267,16 @@ async fn handle_generic_swp_command(
         | CliCommand::Complete { .. } => false,
     };
     // Read-only config only. Clap's `conflicts_with_all` rejects
-    // `--toml` alongside `--check`, `--reset`, or a set value at parse
-    // time; the narrow match here documents that intent and avoids
-    // serializing non-config responses (e.g. "set" confirmations) as
-    // TOML if a future code path forgets the parse-time guard.
+    // `--toml` alongside `--check` or a set value at parse time; the
+    // narrow match here documents that intent and avoids serializing
+    // non-config responses (e.g. "set" confirmations) as TOML if a
+    // future code path forgets the parse-time guard.
     let toml_mode = matches!(
         other,
         CliCommand::Config {
             toml: true,
             value: None,
             check: false,
-            reset: false,
             ..
         }
     );

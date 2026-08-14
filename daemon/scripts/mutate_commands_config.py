@@ -221,16 +221,6 @@ MUTANTS = [
      "    ctx.runtime.notifyPromptSnapshotRefreshed(character);",
      "    void character;"),
 
-    # --- config_reset ---------------------------------------------------------
-    ("reset: the active model override survives",
-     "  ctx.activeModel = undefined;\n  ctx.activeResolvedModel = undefined;",
-     "  ctx.activeResolvedModel = undefined;"),
-    ("reset: a broken config reports invalid_request rather than internal_error",
-     "    throw internalError(`Failed to reload config: ${message(e)}`);",
-     "    throw invalidRequest(`Failed to reload config: ${message(e)}`);"),
-    ("reset: the fresh config is never adopted",
-     "  ctx.activeModel = undefined;\n  ctx.activeResolvedModel = undefined;\n  adopt(ctx, fresh);",
-     "  ctx.activeModel = undefined;\n  ctx.activeResolvedModel = undefined;"),
     ("adopt: the keepalive ceiling is never handed over",
      "  ctx.runtime.setCacheKeepaliveCeiling(fresh.app.cache.keepalive_max);",
      "  void fresh.app.cache.keepalive_max;"),

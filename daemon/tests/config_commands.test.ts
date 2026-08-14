@@ -18,7 +18,6 @@ import {
   config,
   configCheck,
   configReload,
-  configReset,
   settableKeySpellings,
   tools,
   type ConfigContext,
@@ -91,8 +90,7 @@ type Section =
   | "config_check"
   | "config_read"
   | "config_set"
-  | "config_reload"
-  | "config_reset";
+  | "config_reload";
 
 const row = (section: Section, name: string): Row => {
   const found = (fixture[section] as unknown as Row[]).find((r) => r.name === name);
@@ -746,26 +744,3 @@ describe("configReload", () => {
   });
 });
 
-// ── config_reset ────────────────────────────────────────────────────────
-
-describe("configReset", () => {
-  test("reset drops runtime overrides and reloads from disk", async () => {
-    const w = await build("mid", FURNISHED);
-    config(w.ctx, { key: "defaults.model", value: "secondary" });
-    config(w.ctx, { key: "defaults.stream", value: "true" });
-    await check(
-      row("config_reset", "reset drops runtime overrides and reloads from disk"),
-      w,
-      () => configReset(w.ctx),
-    );
-  });
-
-  test("reset with a broken config on disk", async () => {
-    const w = await build("mid", FURNISHED);
-    await writeFile(w.ctx.configPath, "this is not toml [[[");
-    await check(row("config_reset", "reset with a broken config on disk"), w, () =>
-      configReset(w.ctx),
-    );
-    expect(w.calls).toEqual([]);
-  });
-});
