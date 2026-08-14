@@ -680,6 +680,7 @@ async function handleSearchHybrid(
       mode,
       embedder: semantics.embedder,
       indexPath: semantics.indexPath,
+      embedPending: false,
       ...(pathFilter === undefined ? {} : { pathFilter }),
     });
   } catch (e) {
@@ -709,6 +710,7 @@ async function handleSearchHybrid(
     count: results.length,
     searched_files: result.searchedFiles,
     embedded_files: result.embeddedFiles,
+    ...(result.pendingFiles === 0 ? {} : { pending_files: result.pendingFiles }),
     skipped_binary_or_large: result.skippedBinaryOrLarge,
   };
 

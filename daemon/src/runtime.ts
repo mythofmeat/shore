@@ -6,12 +6,12 @@ import { LastRequestCache } from "./cache/last_request.ts";
 import { AutonomyService, startAutonomyTimer } from "./autonomy/service.ts";
 import { CallStore } from "./call_store.ts";
 import { CharacterRegistry } from "./characters.ts";
-import { characterDataDir, pluginsDir, rustJoin } from "./config/dirs.ts";
+import { characterDataDir, characterWorkspaceDir, pluginsDir, rustJoin } from "./config/dirs.ts";
 import { loadConfig, type LoadedConfig } from "./config/loader.ts";
 import type { HistoryListener } from "./engine/conversation.ts";
 import type { Message } from "./engine/types.ts";
 import type { ToolContextDeps } from "./handler/tool_context.ts";
-import { providerRecord } from "./handler/tool_context.ts";
+import { providerRecord, retrievalView } from "./handler/tool_context.ts";
 import { Diagnostics } from "./diagnostics.ts";
 import type { ToolContext } from "./tools/dispatch.ts";
 import { subagentRunner } from "./tools/subagent_loop.ts";
@@ -32,6 +32,8 @@ import { McpHolder } from "./tools/mcp_holder.ts";
 import { resolveEmbedder } from "./memory/retrieval.ts";
 import { historyIndexPath } from "./memory/history_index.ts";
 import { HistoryIndexService } from "./memory/history_index_service.ts";
+import { indexPath as workspaceIndexPath } from "./memory/workspace_index.ts";
+import { WorkspaceIndexService } from "./memory/workspace_index_service.ts";
 
 const CALL_STORE_RETENTION_DAYS = 14;
 const CALL_STORE_MAX_BYTES = 536_870_912;
@@ -61,6 +63,7 @@ export interface ShoreRuntime {
   readonly keepalive: KeepaliveService;
   readonly autonomy: AutonomyService;
   readonly historyIndex: HistoryIndexService;
+  readonly workspaceIndex: WorkspaceIndexService;
   refreshHistoryIndexes(): Promise<void>;
   shutdown(): Promise<void>;
 }
@@ -80,6 +83,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
   const uninstallWireCapture = installCallStoreWireCapture(callStore);
 
   let historyIndex: HistoryIndexService | undefined;
+  let workspaceIndex: WorkspaceIndexService | undefined;
   const registry = await CharacterRegistry.create(
     config.dirs.config,
     config.dirs.data,
@@ -92,10 +96,14 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
   );
 
   historyIndex = new HistoryIndexService();
+  workspaceIndex = new WorkspaceIndexService();
   const refreshHistoryIndexes = async () => {
     const available = new Set(registry.availableCharacters());
     for (const character of historyIndex?.registeredCharacters() ?? []) {
       if (!available.has(character)) historyIndex?.unregister(character);
+    }
+    for (const character of workspaceIndex?.registeredCharacters() ?? []) {
+      if (!available.has(character)) workspaceIndex?.unregister(character);
     }
     for (const character of available) {
       const effective = registry.effectiveConfig(character);
@@ -115,10 +123,22 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
         indexPath: historyIndexPath(effective.dirs.cache, character),
         ...(embedder === undefined ? {} : { embedder }),
       });
+      workspaceIndex?.register({
+        character,
+        workspaceDir: characterWorkspaceDir(
+          effective.dirs.config,
+          character,
+          effective.dirs.workspace,
+        ),
+        indexPath: workspaceIndexPath(effective.dirs.cache, character),
+        retrievalConfig: retrievalView(effective.app.memory.retrieval),
+        ...(embedder === undefined ? {} : { embedder }),
+      });
     }
   };
   await refreshHistoryIndexes();
   await historyIndex.start();
+  await workspaceIndex.start();
 
   const keepalive = new KeepaliveService(
     (req, signal) => {
@@ -157,7 +177,14 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       ...(options.env === undefined ? {} : { env: options.env }),
       notifyAutonomousMessage: autonomousMessageNotifier(notifier),
       notifyCompactionComplete: compactionCompleteNotifier(notifier),
-      beginForeground: () => historyIndex.beginForeground(),
+      beginForeground: () => {
+        const endHistory = historyIndex.beginForeground();
+        const endWorkspace = workspaceIndex.beginForeground();
+        return () => {
+          endHistory();
+          endWorkspace();
+        };
+      },
     }),
   );
   autonomy.attachKeepalive(keepalive);
@@ -175,9 +202,11 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     keepalive,
     autonomy,
     historyIndex,
+    workspaceIndex,
     refreshHistoryIndexes,
     async shutdown() {
       await historyIndex.shutdown();
+      await workspaceIndex.shutdown();
       await mcp.current.shutdown();
       uninstallWireCapture();
       callStore?.close();

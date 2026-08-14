@@ -1,19 +1,24 @@
 import { readFile, readdir, lstat, stat } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
-import { atomicWrite } from "../engine/atomic";
 import { toF32, type Embedder } from "../llm/embed";
 import { describeLlmError, type LlmError } from "../llm/errors";
 import { compareRustStrings, rustLines, rustTrimStart, tokenizeQuery } from "./lines";
+import { migrateLegacyIndex } from "./workspace_legacy.ts";
+import {
+  documentHash,
+  withWorkspaceIndexLock,
+  workspaceIndexDbPath,
+  WorkspaceIndexStore,
+  type FileRow,
+} from "./workspace_store.ts";
 
 const EMBED_BATCH_MAX_ITEMS = 32;
 
 const EMBED_BATCH_MAX_CHARS = 96_000;
 
-const INDEX_FILE = "workspace_index.json";
-
 export function indexPath(cacheDir: string, character: string): string {
-  return join(cacheDir, "characters", character, INDEX_FILE);
+  return workspaceIndexDbPath(cacheDir, character);
 }
 
 export type WorkspaceIndexErrorKind = "not_configured" | "embedder" | "embedding_count_mismatch";
@@ -51,21 +56,6 @@ export interface RetrievalConfig {
   binary: "skip" | "metadata" | "try_embed";
 }
 
-export interface IndexedEntry {
-  hash: string;
-  size: number;
-  modified_at_secs: number;
-  model_id: string;
-  max_embed_chars_per_file?: number;
-  embedded: boolean;
-  reason?: string;
-  embedding: number[];
-}
-
-export interface WorkspaceIndex {
-  entries: Map<string, IndexedEntry>;
-}
-
 export interface ScoredFile {
   displayPath: string;
   fsPath: string;
@@ -82,6 +72,7 @@ export interface HybridSearchResult {
   searchedFiles: number;
   embeddedFiles: number;
   skippedBinaryOrLarge: number;
+  pendingFiles: number;
 }
 
 export type HybridMode = "hybrid" | "vector";
@@ -108,91 +99,181 @@ export interface HybridSearchOptions {
   embedder: Embedder;
   indexPath: string;
   pathFilter?: string;
+  embedPending?: boolean;
 }
 
 export async function hybridSearch(options: HybridSearchOptions): Promise<HybridSearchResult> {
   const { workspaceDir, retrievalConfig, query, mode, embedder, pathFilter } = options;
   if (workspaceDir === "") throw WorkspaceIndexError.notConfigured();
   if (!(await pathExists(workspaceDir))) {
-    return { files: [], searchedFiles: 0, embeddedFiles: 0, skippedBinaryOrLarge: 0 };
+    return { files: [], searchedFiles: 0, embeddedFiles: 0, skippedBinaryOrLarge: 0, pendingFiles: 0 };
   }
 
-  return await withIndexLock(options.indexPath, async () => {
-    const index = await loadIndex(options.indexPath);
-    const modelId = embedder.modelId;
+  return await withWorkspaceIndexLock(options.indexPath, async () => {
+    const store = WorkspaceIndexStore.open(options.indexPath);
+    try {
+      await migrateIfLegacy(store, options.indexPath, workspaceDir);
 
-    const candidates = await enumerateFiles(workspaceDir, retrievalConfig);
-    let indexDirty = pruneAndScope(index, candidates, pathFilter);
+      const candidates = await enumerateFiles(workspaceDir, retrievalConfig);
+      const existing = store.files();
+      pruneAndScope(store, existing, candidates, pathFilter);
 
-    const refreshed = await refreshIndexEntries(candidates, index, retrievalConfig, modelId);
-    indexDirty = indexDirty || refreshed.dirty;
-
-    if (indexDirty) {
-      await saveIndex(options.indexPath, index);
-      indexDirty = false;
-    }
-
-    if (refreshed.staleDocs.length > 0) {
-      await embedStaleEntries(
-        embedder,
-        index,
-        refreshed.stale,
-        refreshed.staleDocs,
-        modelId,
+      const refreshed = await refreshIndexEntries(
+        candidates,
+        existing,
         retrievalConfig,
+        (hash) => store.hasVector(embedder.modelId, hash),
       );
-      indexDirty = true;
+      store.deleteFiles(refreshed.removed);
+      store.putFiles(refreshed.rows);
+
+      let pendingFiles = refreshed.staleDocs.length;
+      if (refreshed.staleDocs.length > 0 && options.embedPending !== false) {
+        const vectors = await embedDocuments(embedder, refreshed.staleDocs);
+        store.putEmbeddings(
+          embedder.modelId,
+          refreshed.stale.map((entry, i) => ({ hash: entry.hash, vector: vectors[i]! })),
+        );
+        store.putFiles(refreshed.stale.map((entry) => ({ ...entry.row, embedded: true })));
+        store.setMetadata("last_indexed_at", new Date().toISOString());
+        pendingFiles = 0;
+      }
+
+      const queryVector = await embedQuery(embedder, query);
+      const scored = scoreCandidates(candidates, store, embedder.modelId, queryVector, mode, query);
+
+      return {
+        files: scored.files,
+        searchedFiles: scored.searchedFiles,
+        embeddedFiles: scored.embeddedFiles,
+        skippedBinaryOrLarge: refreshed.skippedBinaryOrLarge,
+        pendingFiles,
+      };
+    } finally {
+      store.close();
     }
-
-    if (indexDirty) await saveIndex(options.indexPath, index);
-
-    const queryVector = await embedQuery(embedder, query);
-    const scored = scoreCandidates(candidates, index, queryVector, mode, query);
-
-    return {
-      files: scored.files,
-      searchedFiles: scored.searchedFiles,
-      embeddedFiles: scored.embeddedFiles,
-      skippedBinaryOrLarge: refreshed.skippedBinaryOrLarge,
-    };
   });
 }
 
-const indexLocks = new Map<string, Promise<void>>();
+export interface BackgroundIndexOptions {
+  workspaceDir: string;
+  retrievalConfig: RetrievalConfig;
+  embedder: Embedder;
+  indexPath: string;
+  maxBatchItems?: number;
+}
 
-async function withIndexLock<T>(key: string, run: () => Promise<T>): Promise<T> {
-  const prior = indexLocks.get(key);
-  const started = prior === undefined ? run() : prior.then(run);
-  indexLocks.set(
-    key,
-    started.then(
-      () => undefined,
-      () => undefined,
-    ),
+export interface BackgroundIndexOutcome {
+  embedded: number;
+  pending: number;
+  files: number;
+}
+
+export async function indexPendingBatch(
+  options: BackgroundIndexOptions,
+): Promise<BackgroundIndexOutcome> {
+  const { workspaceDir, retrievalConfig, embedder } = options;
+  if (workspaceDir === "") return { embedded: 0, pending: 0, files: 0 };
+  if (!(await pathExists(workspaceDir))) return { embedded: 0, pending: 0, files: 0 };
+
+  return await withWorkspaceIndexLock(options.indexPath, async () => {
+    const store = WorkspaceIndexStore.open(options.indexPath);
+    try {
+      await migrateIfLegacy(store, options.indexPath, workspaceDir);
+
+      const candidates = await enumerateFiles(workspaceDir, retrievalConfig);
+      const existing = store.files();
+      pruneAndScope(store, existing, candidates, undefined);
+
+      const refreshed = await refreshIndexEntries(
+        candidates,
+        existing,
+        retrievalConfig,
+        (hash) => store.hasVector(embedder.modelId, hash),
+      );
+      store.deleteFiles(refreshed.removed);
+      store.putFiles(refreshed.rows);
+
+      const limit = options.maxBatchItems ?? EMBED_BATCH_MAX_ITEMS;
+      const batch = refreshed.stale.slice(0, limit);
+      if (batch.length === 0) {
+        store.pruneEmbeddings();
+        return { embedded: 0, pending: 0, files: candidates.length };
+      }
+
+      const vectors = await embedDocuments(embedder, refreshed.staleDocs.slice(0, batch.length));
+      store.putEmbeddings(
+        embedder.modelId,
+        batch.map((entry, i) => ({ hash: entry.hash, vector: vectors[i]! })),
+      );
+      store.putFiles(batch.map((entry) => ({ ...entry.row, embedded: true })));
+      store.setMetadata("last_indexed_at", new Date().toISOString());
+
+      return {
+        embedded: batch.length,
+        pending: refreshed.stale.length - batch.length,
+        files: candidates.length,
+      };
+    } finally {
+      store.close();
+    }
+  });
+}
+
+export async function workspaceIndexStats(indexPath: string) {
+  return await withWorkspaceIndexLock(indexPath, async () => {
+    const store = WorkspaceIndexStore.open(indexPath);
+    try {
+      return store.stats();
+    } finally {
+      store.close();
+    }
+  });
+}
+
+async function migrateIfLegacy(
+  store: WorkspaceIndexStore,
+  dbPath: string,
+  workspaceDir: string,
+): Promise<void> {
+  if (store.metadata("migrated_from_json_at") !== undefined) return;
+  const legacy = legacyPathFor(dbPath);
+  const outcome = await migrateLegacyIndex(store, legacy, workspaceDir, documentForEmbedding);
+  if (outcome === undefined) return;
+  console.warn(
+    `shore: migrated workspace index from JSON: ${outcome.files} files, ` +
+      `${outcome.vectors} vectors carried over, ${outcome.stale} stale`,
   );
-  return await started;
+}
+
+function legacyPathFor(dbPath: string): string {
+  return join(dirname(dbPath), "workspace_index.json");
+}
+
+export interface StaleEntry {
+  hash: string;
+  row: FileRow;
 }
 
 export interface RefreshOutcome {
-  stale: [string, number, number][];
+  stale: StaleEntry[];
   staleDocs: string[];
   skippedBinaryOrLarge: number;
-  dirty: boolean;
+  rows: FileRow[];
+  removed: string[];
 }
 
 function pruneAndScope(
-  index: WorkspaceIndex,
+  store: WorkspaceIndexStore,
+  existing: Map<string, FileRow>,
   candidates: FileCandidate[],
   pathFilter: string | undefined,
-): boolean {
-  let dirty = false;
-
+): void {
   const current = new Set(candidates.map((f) => f.displayPath));
-  for (const path of [...index.entries.keys()]) {
-    if (!current.has(path)) {
-      index.entries.delete(path);
-      dirty = true;
-    }
+  const gone = [...existing.keys()].filter((path) => !current.has(path));
+  if (gone.length > 0) {
+    store.deleteFiles(gone);
+    for (const path of gone) existing.delete(path);
   }
 
   const prefix = pathFilter?.replace(/\/+$/, "");
@@ -204,84 +285,105 @@ function pruneAndScope(
     candidates.length = 0;
     candidates.push(...kept);
   }
-
-  return dirty;
 }
 
 export async function refreshIndexEntries(
   candidates: FileCandidate[],
-  index: WorkspaceIndex,
+  existing: Map<string, FileRow>,
   retrievalConfig: RetrievalConfig,
-  modelId: string,
+  hasVector: (hash: string) => boolean,
 ): Promise<RefreshOutcome> {
-  const stale: [string, number, number][] = [];
+  const stale: StaleEntry[] = [];
   const staleDocs: string[] = [];
+  const rows: FileRow[] = [];
+  const removed: string[] = [];
   let skippedBinaryOrLarge = 0;
-  let dirty = false;
 
   for (const file of candidates) {
     if (file.skipReason === "oversize") {
       skippedBinaryOrLarge += 1;
-      index.entries.set(file.displayPath, {
-        hash: skipTag(file.size, file.modifiedAtSecs),
-        size: file.size,
-        modified_at_secs: file.modifiedAtSecs,
-        model_id: modelId,
-        max_embed_chars_per_file: retrievalConfig.maxEmbedCharsPerFile,
-        embedded: false,
-        reason: "oversize",
-        embedding: [],
-      });
-      dirty = true;
+      pushIfChanged(rows, existing, skipRow(file, retrievalConfig, "oversize"));
       continue;
     }
-
-    const existing = index.entries.get(file.displayPath);
-    const fresh =
-      existing !== undefined &&
-      existing.embedded &&
-      existing.size === file.size &&
-      existing.modified_at_secs === file.modifiedAtSecs &&
-      existing.model_id === modelId &&
-      existing.max_embed_chars_per_file === retrievalConfig.maxEmbedCharsPerFile;
 
     let bytes: Buffer;
     try {
       bytes = await readFile(file.fsPath);
     } catch {
       file.skipReason = "read failed";
-      if (index.entries.delete(file.displayPath)) dirty = true;
+      if (existing.has(file.displayPath)) removed.push(file.displayPath);
       continue;
     }
 
     const text = decodeUtf8(bytes);
-    if (text !== undefined) {
-      if (!fresh) {
-        stale.push([file.displayPath, file.size, file.modifiedAtSecs]);
-        staleDocs.push(
-          documentForEmbedding(file.displayPath, text, retrievalConfig.maxEmbedCharsPerFile),
-        );
-      }
-      file.content = text;
-    } else {
+    if (text === undefined) {
       skippedBinaryOrLarge += 1;
       const reason = binarySkipReason(retrievalConfig.binary);
       file.skipReason = reason;
-      index.entries.set(file.displayPath, {
-        hash: skipTag(file.size, file.modifiedAtSecs),
-        size: file.size,
-        modified_at_secs: file.modifiedAtSecs,
-        model_id: modelId,
-        max_embed_chars_per_file: retrievalConfig.maxEmbedCharsPerFile,
-        embedded: false,
-        reason,
-        embedding: [],
-      });
-      dirty = true;
+      pushIfChanged(rows, existing, skipRow(file, retrievalConfig, reason));
+      continue;
     }
+
+    file.content = text;
+    const document = documentForEmbedding(
+      file.displayPath,
+      text,
+      retrievalConfig.maxEmbedCharsPerFile,
+    );
+    const hash = documentHash(document);
+    const row: FileRow = {
+      display_path: file.displayPath,
+      size: file.size,
+      modified_at_secs: file.modifiedAtSecs,
+      document_hash: hash,
+      embed_chars: retrievalConfig.maxEmbedCharsPerFile,
+      embedded: true,
+      reason: undefined,
+    };
+
+    if (hasVector(hash)) {
+      pushIfChanged(rows, existing, row);
+      continue;
+    }
+
+    stale.push({ hash, row });
+    staleDocs.push(document);
+    pushIfChanged(rows, existing, { ...row, embedded: false });
   }
 
-  return { stale, staleDocs, skippedBinaryOrLarge, dirty };
+  return { stale, staleDocs, skippedBinaryOrLarge, rows, removed };
+}
+
+function skipRow(
+  file: FileCandidate,
+  retrievalConfig: RetrievalConfig,
+  reason: string,
+): FileRow {
+  return {
+    display_path: file.displayPath,
+    size: file.size,
+    modified_at_secs: file.modifiedAtSecs,
+    document_hash: "",
+    embed_chars: retrievalConfig.maxEmbedCharsPerFile,
+    embedded: false,
+    reason,
+  };
+}
+
+function pushIfChanged(rows: FileRow[], existing: Map<string, FileRow>, row: FileRow): void {
+  const before = existing.get(row.display_path);
+  if (
+    before !== undefined &&
+    before.size === row.size &&
+    before.modified_at_secs === row.modified_at_secs &&
+    before.document_hash === row.document_hash &&
+    before.embed_chars === row.embed_chars &&
+    before.embedded === row.embedded &&
+    before.reason === row.reason
+  ) {
+    return;
+  }
+  rows.push(row);
 }
 
 function binarySkipReason(mode: RetrievalConfig["binary"]): string {
@@ -300,28 +402,6 @@ function decodeUtf8(bytes: Buffer): string | undefined {
     return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
   } catch {
     return undefined;
-  }
-}
-
-async function embedStaleEntries(
-  embedder: Embedder,
-  index: WorkspaceIndex,
-  stale: [string, number, number][],
-  staleDocs: string[],
-  modelId: string,
-  retrievalConfig: RetrievalConfig,
-): Promise<void> {
-  const vectors = await embedDocuments(embedder, staleDocs);
-  for (const [i, [path, size, mtime]] of stale.entries()) {
-    index.entries.set(path, {
-      hash: skipTag(size, mtime),
-      size,
-      modified_at_secs: mtime,
-      model_id: modelId,
-      max_embed_chars_per_file: retrievalConfig.maxEmbedCharsPerFile,
-      embedded: true,
-      embedding: vectors[i]!,
-    });
   }
 }
 
@@ -364,27 +444,35 @@ function describeEmbedFailure(error: unknown): string {
 
 function scoreCandidates(
   candidates: FileCandidate[],
-  index: WorkspaceIndex,
+  store: WorkspaceIndexStore,
+  modelId: string,
   queryVector: number[],
   mode: HybridMode,
   query: string,
 ): { files: ScoredFile[]; searchedFiles: number; embeddedFiles: number } {
   const qLower = query.toLowerCase();
   const terms = tokenizeQuery(qLower);
+  const rows = store.files();
+  const wanted: string[] = [];
+  for (const file of candidates) {
+    const row = rows.get(file.displayPath);
+    if (row !== undefined && row.embedded) wanted.push(row.document_hash);
+  }
+  const vectors = store.vectorsFor(modelId, wanted);
 
   const scored: ScoredFile[] = candidates.map((file) => {
     const lexical =
       file.content === undefined ? 0 : lexicalScore(file.displayPath, file.content, qLower, terms);
-    const entry = index.entries.get(file.displayPath);
-    const embedded = entry !== undefined && entry.embedded;
+    const row = rows.get(file.displayPath);
+    const vector = row !== undefined && row.embedded ? vectors.get(row.document_hash) : undefined;
     return {
       displayPath: file.displayPath,
       fsPath: file.fsPath,
       content: file.content,
       lexicalScore: lexical,
-      semanticScore: embedded ? cosineSimilarity(queryVector, entry.embedding) : undefined,
+      semanticScore: vector === undefined ? undefined : cosineSimilarity(queryVector, vector),
       combinedScore: 0,
-      embedded,
+      embedded: vector !== undefined,
       skipReason: file.skipReason,
     };
   });
@@ -571,7 +659,7 @@ export function skipTag(size: number, mtimeSecs: number): string {
   return `mtime:${mtimeSecs}:${size}`;
 }
 
-export function cosineSimilarity(a: number[], b: number[]): number {
+export function cosineSimilarity(a: ArrayLike<number>, b: ArrayLike<number>): number {
   if (a.length !== b.length) return 0;
   let dot = 0;
   let na = 0;
@@ -593,106 +681,5 @@ async function pathExists(path: string): Promise<boolean> {
     return true;
   } catch {
     return false;
-  }
-}
-
-export async function loadIndex(path: string): Promise<WorkspaceIndex> {
-  let raw: string;
-  try {
-    raw = await readFile(path, "utf8");
-  } catch {
-    return { entries: new Map() };
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return { entries: new Map() };
-  }
-  return parseIndex(parsed) ?? { entries: new Map() };
-}
-
-function parseIndex(value: unknown): WorkspaceIndex | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
-  const entriesValue = (value as { entries?: unknown }).entries;
-  if (typeof entriesValue !== "object" || entriesValue === null || Array.isArray(entriesValue)) {
-    return undefined;
-  }
-  const entries = new Map<string, IndexedEntry>();
-  for (const [path, raw] of Object.entries(entriesValue as Record<string, unknown>)) {
-    const entry = parseEntry(raw);
-    if (entry === undefined) return undefined;
-    entries.set(path, entry);
-  }
-  return { entries };
-}
-
-function parseEntry(value: unknown): IndexedEntry | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
-  const v = value as Record<string, unknown>;
-
-  if (typeof v.hash !== "string") return undefined;
-  if (typeof v.model_id !== "string") return undefined;
-  if (typeof v.embedded !== "boolean") return undefined;
-  if (!Number.isInteger(v.size) || (v.size as number) < 0) return undefined;
-  if (!Number.isInteger(v.modified_at_secs)) return undefined;
-
-  let cap: number | undefined;
-  if (v.max_embed_chars_per_file !== undefined && v.max_embed_chars_per_file !== null) {
-    if (!Number.isInteger(v.max_embed_chars_per_file) || (v.max_embed_chars_per_file as number) < 0)
-      return undefined;
-    cap = v.max_embed_chars_per_file as number;
-  }
-
-  let reason: string | undefined;
-  if (v.reason !== undefined && v.reason !== null) {
-    if (typeof v.reason !== "string") return undefined;
-    reason = v.reason;
-  }
-
-  let embedding: number[] = [];
-  if (v.embedding !== undefined) {
-    if (!Array.isArray(v.embedding)) return undefined;
-    if (v.embedding.some((n) => typeof n !== "number")) return undefined;
-    embedding = (v.embedding as number[]).map(toF32);
-  }
-
-  return {
-    hash: v.hash,
-    size: v.size as number,
-    modified_at_secs: v.modified_at_secs as number,
-    model_id: v.model_id,
-    ...(cap !== undefined ? { max_embed_chars_per_file: cap } : {}),
-    embedded: v.embedded,
-    ...(reason !== undefined ? { reason } : {}),
-    embedding,
-  };
-}
-
-export function serializeIndex(index: WorkspaceIndex): string {
-  const entries: Record<string, unknown> = {};
-  for (const path of [...index.entries.keys()].sort(compareRustStrings)) {
-    const e = index.entries.get(path)!;
-    entries[path] = {
-      hash: e.hash,
-      size: e.size,
-      modified_at_secs: e.modified_at_secs,
-      model_id: e.model_id,
-      ...(e.max_embed_chars_per_file !== undefined
-        ? { max_embed_chars_per_file: e.max_embed_chars_per_file }
-        : {}),
-      embedded: e.embedded,
-      ...(e.reason !== undefined ? { reason: e.reason } : {}),
-      ...(e.embedding.length > 0 ? { embedding: e.embedding } : {}),
-    };
-  }
-  return JSON.stringify({ entries }, null, 2);
-}
-
-async function saveIndex(path: string, index: WorkspaceIndex): Promise<void> {
-  try {
-    await atomicWrite(path, serializeIndex(index));
-  } catch (e) {
-    console.warn(`failed to persist workspace index at ${path}: ${String(e)}`);
   }
 }

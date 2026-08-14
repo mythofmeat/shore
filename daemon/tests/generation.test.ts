@@ -252,7 +252,11 @@ describe("buildToolContext", () => {
       expect(stripRoot(ctx.characterDataDir, root)).toBe(out["character_data_dir"]);
       expect(stripRoot(ctx.configDir, root)).toBe(out["config_dir"]);
       expect(ctx.characterName).toBe(out["character_name"]);
-      expect(stripRoot(ctx.memoryIndexPath ?? "", root)).toBe(out["memory_index_path"]);
+      // The workspace index stopped being a JSON document; where it sits is
+      // unchanged, so the recorded path is compared with the filename moved.
+      expect(stripRoot(ctx.memoryIndexPath ?? "", root)).toBe(
+        String(out["memory_index_path"]).replace(/workspace_index\.json$/, "workspace_index.db"),
+      );
       expect(ctx.embedder !== undefined).toBe(out["embedder"]);
       expect(ctx.mcpCall !== undefined).toBe(out["mcp_registry"]);
       expect(ctx.runSubagent !== undefined).toBe(out["subagent_runtime"]);

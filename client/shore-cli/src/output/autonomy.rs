@@ -320,7 +320,6 @@ fn heartbeat_description(state: &str, ticks: u64, max_ticks: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::output::set_color_enabled;
 
     #[test]
     fn classification_color_maps_correctly() {

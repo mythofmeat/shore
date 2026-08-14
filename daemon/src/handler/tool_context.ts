@@ -119,7 +119,7 @@ export function credentialEntry(entry: RegistryEntry): ProviderEntry {
   };
 }
 
-function retrievalView(cfg: ConfiguredRetrieval): RetrievalConfig {
+export function retrievalView(cfg: ConfiguredRetrieval): RetrievalConfig {
   return {
     maxFileBytes: cfg.max_file_bytes,
     maxIndexedFiles: cfg.max_indexed_files,

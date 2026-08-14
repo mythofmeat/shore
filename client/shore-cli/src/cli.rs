@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 
-const GLOBAL_HEADING: &str = "Global options";
+const LEADING_HEADING: &str = "Options — must come before the command";
 
 #[derive(Parser, Debug)]
 #[command(
@@ -15,26 +15,185 @@ pub(crate) struct Cli {
     #[arg(
         long,
         short = 'c',
-        global = true,
         env = "SHORE_CHARACTER",
-        help_heading = GLOBAL_HEADING
+        help_heading = LEADING_HEADING
     )]
     pub character: Option<String>,
 
     /// TCP address of the daemon (overrides discovery)
-    #[arg(long, global = true, env = "SHORE_ADDR", help_heading = GLOBAL_HEADING)]
+    #[arg(long, env = "SHORE_ADDR", help_heading = LEADING_HEADING)]
     pub addr: Option<String>,
-
-    /// Path to config file (selects daemon instance)
-    #[arg(long, global = true, help_heading = GLOBAL_HEADING)]
-    pub config: Option<String>,
-
-    /// Disable colored output (also respects NO_COLOR env var)
-    #[arg(long, global = true, help_heading = GLOBAL_HEADING)]
-    pub no_color: bool,
 
     #[command(subcommand)]
     pub command: CliCommand,
+}
+
+/// The flags that only parse ahead of the command name: how they can be
+/// spelled, and what to call each one when saying so.
+const LEADING_FLAGS: [(&str, &str); 3] = [
+    ("--character", "--character"),
+    ("-c", "--character"),
+    ("--addr", "--addr"),
+];
+
+/// Flags that used to exist and now have one obvious replacement each.
+const RETIRED_FLAGS: [(&str, &str); 3] = [
+    (
+        "--config",
+        "name the daemon with --addr, or set SHORE_ADDR",
+    ),
+    ("--no-color", "set NO_COLOR=1 in the environment"),
+    (
+        "--plain",
+        "output is already plain when it is not going to a terminal",
+    ),
+];
+
+/// The commands that used to take a bare name and now want `use`.
+const NAMED_BY_USE: [&str; 2] = ["model", "character"];
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum FlagProblem {
+    /// A leading flag written after the command name.
+    Misplaced(&'static str),
+    /// A flag that no longer exists, and what to reach for instead.
+    Retired(&'static str, &'static str),
+    /// `shore model opus`, which is now `shore model use opus`.
+    BareName(&'static str, String),
+}
+
+fn leading_flag_named(spelled: &str) -> Option<&'static str> {
+    LEADING_FLAGS
+        .iter()
+        .find(|&&(spelling, _)| spelling == spelled)
+        .map(|&(_, canonical)| canonical)
+}
+
+fn retired_flag_named(spelled: &str) -> Option<FlagProblem> {
+    RETIRED_FLAGS
+        .iter()
+        .find(|&&(spelling, _)| spelling == spelled)
+        .map(|&(name, instead)| FlagProblem::Retired(name, instead))
+}
+
+/// Read the raw arguments for a flag written where it cannot work.
+///
+/// This runs ahead of clap because clap cannot say either of these things
+/// well. For a leading flag written late it emits "unexpected argument",
+/// whose did-you-mean tip sends you hunting a typo you did not make — and
+/// worse, `log` and `alt` take message references that are allowed to start
+/// with a hyphen, so `shore log --character ada` parses clean and asks the
+/// daemon for a message named `--character`. For a retired flag it has
+/// nothing at all to say, having never heard of it.
+pub(crate) fn flag_problem<I, S>(argv: I) -> Option<FlagProblem>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let mut words: Vec<String> = Vec::new();
+    let mut flagged = false;
+    let mut expecting_value = false;
+
+    for raw in argv.into_iter().skip(1) {
+        let token = raw.as_ref();
+        if token == "--" {
+            break;
+        }
+        if expecting_value {
+            expecting_value = false;
+            continue;
+        }
+        let spelled = token.split('=').next().unwrap_or(token);
+        if let Some(problem) = retired_flag_named(spelled) {
+            return Some(problem);
+        }
+        if let Some(flag) = leading_flag_named(spelled) {
+            if words.is_empty() {
+                expecting_value = !token.contains('=');
+                continue;
+            }
+            return Some(FlagProblem::Misplaced(flag));
+        }
+        if token.starts_with('-') {
+            flagged = true;
+        } else {
+            words.push(token.to_owned());
+        }
+    }
+
+    bare_name(&words, flagged)
+}
+
+/// `shore model opus` switched models and `shore character qifei` switched
+/// characters. Both are `use` now.
+///
+/// The bare name shared a tab-completion list with the subcommand names, so
+/// pressing tab after `shore model` offered `opus` and `setting` in one
+/// undifferentiated list with no way to tell which kind of thing you were
+/// picking. Clap answers the retired spelling with "unrecognized subcommand",
+/// which describes the parser's problem rather than the user's.
+///
+/// Silent when any flag is in play: `shore model --info opus` is a different
+/// request and pointing it at `use` would be wrong.
+fn bare_name(words: &[String], flagged: bool) -> Option<FlagProblem> {
+    if flagged {
+        return None;
+    }
+    let command = words.first()?;
+    let name = words.get(1)?;
+    let known = NAMED_BY_USE
+        .iter()
+        .copied()
+        .find(|candidate| *candidate == command.as_str())?;
+    if names_a_subcommand(command, name) {
+        return None;
+    }
+    Some(FlagProblem::BareName(known, name.clone()))
+}
+
+/// Whether `word` names a subcommand of `command`. Asked of clap rather than
+/// listed here, so adding a subcommand cannot make this start misreporting it.
+fn names_a_subcommand(command: &str, word: &str) -> bool {
+    use clap::CommandFactory;
+    Cli::command()
+        .find_subcommand(command)
+        .is_some_and(|parent| {
+            parent.get_subcommands().any(|sub| {
+                sub.get_name() == word || sub.get_all_aliases().any(|alias| alias == word)
+            })
+        })
+}
+
+pub(crate) fn report_flag_problem(problem: &FlagProblem) -> std::process::ExitCode {
+    match *problem {
+        FlagProblem::Misplaced(flag) => {
+            crate::output::print_error(&format!("{flag} has to come before the command"));
+            cli_err!();
+            cli_err!("  shore {flag} <value> <command>");
+        }
+        FlagProblem::Retired(flag, instead) => {
+            crate::output::print_error(&format!("{flag} was removed — {instead}"));
+        }
+        FlagProblem::BareName(command, ref name) => {
+            crate::output::print_error(&format!("`shore {command}` no longer takes a name"));
+            cli_err!();
+            cli_err!("  shore {command} use {name}");
+        }
+    }
+    std::process::ExitCode::FAILURE
+}
+
+/// A message reference — `last`, `-1`, `3`, a message ID.
+///
+/// Hyphens are legal here so `-1` reaches the daemon instead of being read as
+/// a flag, which is exactly why a mistyped flag would otherwise sail through
+/// as the name of a message.
+fn message_ref(raw: &str) -> Result<String, String> {
+    if raw.starts_with("--") {
+        Err(format!("'{raw}' is not a message reference"))
+    } else {
+        Ok(raw.to_owned())
+    }
 }
 
 #[derive(Subcommand, Debug)]
@@ -78,11 +237,11 @@ pub(crate) enum CliCommand {
     #[command(display_order = 3)]
     Alt {
         /// Selector: list, prev, next, last, first, or 1-based alternate position
-        #[arg(allow_hyphen_values = true)]
+        #[arg(allow_hyphen_values = true, value_parser = message_ref)]
         selector: Option<String>,
 
         /// Assistant message reference (defaults to latest assistant)
-        #[arg(long = "ref", allow_hyphen_values = true)]
+        #[arg(long = "ref", allow_hyphen_values = true, value_parser = message_ref)]
         msg_ref: Option<String>,
 
         /// Output raw JSON
@@ -98,7 +257,7 @@ pub(crate) enum CliCommand {
         subcommand: Option<LogCommand>,
 
         /// Message reference — show a single message (last, -1, 3, etc.)
-        #[arg(allow_hyphen_values = true)]
+        #[arg(allow_hyphen_values = true, value_parser = message_ref)]
         msg_ref: Option<String>,
 
         /// Number of turns to show
@@ -120,10 +279,6 @@ pub(crate) enum CliCommand {
         /// Output only message content (no metadata)
         #[arg(long)]
         content: bool,
-
-        /// Plain text output (no colors or decoration), pipe-friendly
-        #[arg(long)]
-        plain: bool,
 
         /// Also show reasoning/thinking blocks (hidden by default)
         #[arg(long)]
@@ -152,17 +307,9 @@ pub(crate) enum CliCommand {
         #[command(subcommand)]
         subcommand: Option<CharacterCommand>,
 
-        /// Character name to switch to
-        #[arg(hide = true)]
-        name: Option<String>,
-
-        /// Show detailed character info
+        /// Superseded by `shore character info`
         #[arg(long, hide = true)]
         info: bool,
-
-        /// Create a new character scaffold directory
-        #[arg(long, requires = "name", hide = true)]
-        new: bool,
 
         /// Output raw JSON
         #[arg(long, global = true)]
@@ -196,53 +343,36 @@ pub(crate) enum CliCommand {
         subcommand: Option<DebugCommand>,
     },
 
-    /// List or switch models, or manage saved sampler settings.
-    ///
-    /// `shore model`                      list visible models
-    /// `shore model <name>`               switch active model
-    /// `shore model --info [<name>]`      show detailed model info
-    /// `shore model --reset`              clear active model selection
-    /// `shore model --all`                include hidden discovered models
-    /// `shore model setting [...]`        manage saved sampler settings
-    #[command(args_conflicts_with_subcommands = true, verbatim_doc_comment)]
+    /// List models, switch the active one, or tune its sampler settings
+    #[command(args_conflicts_with_subcommands = true)]
     #[command(display_order = 7)]
     Model {
         #[command(subcommand)]
         subcommand: Option<ModelCommand>,
 
-        /// Model name to switch to (or look up with --info)
-        name: Option<String>,
-
-        /// Show detailed model info
-        #[arg(long)]
-        info: bool,
-
-        /// Reset to config default model
-        #[arg(long)]
-        reset: bool,
-
         /// Include hidden discovered models in the list
         #[arg(long)]
         all: bool,
 
-        /// Show which model each background task (heartbeat/compaction)
-        /// resolves to, and where that selection comes from.
-        #[arg(long, conflicts_with_all = ["name", "info", "reset", "all"])]
-        background: bool,
-
         /// Output raw JSON
         #[arg(long)]
         json: bool,
+
+        /// Superseded by `shore model info`
+        #[arg(long, hide = true)]
+        info: bool,
+
+        /// Superseded by `shore model reset`
+        #[arg(long, hide = true)]
+        reset: bool,
+
+        /// Superseded by `shore model background`
+        #[arg(long, hide = true, conflicts_with_all = ["info", "reset", "all"])]
+        background: bool,
     },
 
-    /// Inspect or manage configured providers.
-    ///
-    /// `shore provider`                  list providers + key/cache status
-    /// `shore provider models <name>`    list discovered + static models
-    /// `shore provider refresh [name]`   re-fetch one provider's catalog,
-    ///                                   or every discovery-enabled
-    ///                                   provider when no name is given
-    #[command(args_conflicts_with_subcommands = true, verbatim_doc_comment)]
+    /// List configured providers with key and cache status, or refresh a catalog
+    #[command(args_conflicts_with_subcommands = true)]
     #[command(display_order = 8)]
     Provider {
         #[command(subcommand)]
@@ -418,7 +548,7 @@ pub(crate) enum LogCommand {
     /// Edit a message by reference (last, -1, 3, etc.)
     Edit {
         /// Message reference (last, -1, -2, 3, etc.)
-        #[arg(allow_hyphen_values = true)]
+        #[arg(allow_hyphen_values = true, value_parser = message_ref)]
         msg_ref: String,
 
         /// New content
@@ -428,7 +558,7 @@ pub(crate) enum LogCommand {
     /// Delete a message by reference (last, -1, 3, etc.)
     Delete {
         /// Message reference (last, -1, -2, 3, etc.)
-        #[arg(allow_hyphen_values = true)]
+        #[arg(allow_hyphen_values = true, value_parser = message_ref)]
         msg_ref: String,
     },
 }
@@ -476,6 +606,14 @@ pub(crate) enum UsageCommand {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum TraceCommand {
+    /// What the workspace search index holds: files seen, embedded, skipped,
+    /// and whether the background pass still has work outstanding
+    Index {
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Raw model call payloads. Bare lists recent calls; pass an id to dump
     /// that call's full request and response
     Calls {
@@ -544,58 +682,54 @@ pub(crate) enum TraceCommand {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum ModelCommand {
-    /// Switch the active model. Unknown names are an error, never a fallback
+    /// Switch the active model
+    ///
+    /// The same thing as `shore model <name>`, spelled out. Use it when a
+    /// model's name would otherwise read as one of these subcommands. An
+    /// unknown name is an error, never a fallback.
     Use {
         /// Model name or provider:model_id
         name: String,
     },
 
-    /// Describe one model: provider, sdk, limits, and where it resolves from
+    /// Describe a model: provider, sdk, limits, and where it resolves from
     Info {
         /// Model to describe. Omit for the active one
         name: Option<String>,
     },
 
-    /// Show, set, or reset saved sampler settings (temperature, top_p,
-    /// reasoning_effort, budget_tokens, max_output_tokens, cache_ttl,
-    /// cache_keepalive, sdk, replay_prior_thinking, max_tool_iterations) for
-    /// the active model.
+    /// Show, set, or clear this model's saved sampler settings
     ///
-    /// `shore model setting`                          show effective sampler
-    /// `shore model setting <key>`                    show one key
-    /// `shore model setting <key> <value>`            set saved value
-    /// `shore model setting --reset <key>`            clear saved value
-    /// `shore model setting --reset` (no key)         (unsupported — pass a key)
+    /// With no key, shows every setting in effect. With a key, shows that one;
+    /// with a key and a value, saves it; with --reset and a key, clears it.
+    /// Clearing everything at once is not supported — name the key.
     ///
-    /// `sdk` accepts `anthropic`, `openai`, `gemini`, or `zai` — useful
-    /// for forcing a wire shape on a discovered model whose provider
-    /// catalog labelled it incorrectly.
+    /// The keys are temperature, top_p, reasoning_effort, budget_tokens,
+    /// max_output_tokens, cache_ttl, cache_keepalive, sdk,
+    /// replay_prior_thinking and max_tool_iterations.
     ///
-    /// Vendor knobs (`openrouter_provider`, `gemini_generation`,
-    /// `zai_clear_thinking`, `zai_subscription`) are also settable per-model;
-    /// the list shown for a model includes only the knobs its resolved sdk
-    /// honors.
+    /// sdk takes anthropic, openai, gemini or zai, which forces a wire shape
+    /// on a discovered model whose provider catalog labelled it wrong.
+    ///
+    /// The vendor knobs openrouter_provider, gemini_generation,
+    /// zai_clear_thinking and zai_subscription are settable per model too. A
+    /// model only lists the knobs its own sdk honors.
     Setting {
         /// Setting key (temperature, top_p, reasoning_effort, sdk, ...)
         key: Option<String>,
 
-        /// Value to assign. For booleans pass true/false.
-        /// "off"/"none" map to no-reasoning for `reasoning_effort`.
+        /// Value to save; true/false for booleans, off/none to stop reasoning
         value: Option<String>,
 
-        /// Apply to the global preferences file instead of the active
-        /// character's. Without this flag, character-scope is used.
+        /// Save to the global preferences file instead of this character's
         #[arg(long)]
         global: bool,
 
-        /// Clear the saved value for the named key.
+        /// Clear the saved value for the named key
         #[arg(long)]
         reset: bool,
 
-        /// Operate on the model backing a background task instead of the
-        /// active chat model, so you can tune heartbeat/compaction without
-        /// switching chat to that model. `all` errors if the tasks resolve
-        /// to different models.
+        /// Tune a background task's model instead of the chat model
         #[arg(long, value_enum)]
         background: Option<BackgroundTarget>,
 
@@ -603,6 +737,12 @@ pub(crate) enum ModelCommand {
         #[arg(long)]
         json: bool,
     },
+
+    /// Which model heartbeat and compaction resolve to, and why
+    Background,
+
+    /// Drop the saved selection and fall back to the configured default
+    Reset,
 }
 
 #[derive(Subcommand, Debug)]
@@ -639,8 +779,10 @@ pub(crate) enum ProviderCommand {
         json: bool,
     },
 
-    /// Re-fetch the provider's `/v1/models` catalog and update the cache.
-    /// Omit the name to refresh every discovery-enabled provider.
+    /// Re-fetch a provider's model catalog and update the cache
+    ///
+    /// Reads the provider's /v1/models endpoint. Omit the name to refresh
+    /// every discovery-enabled provider in one batch.
     Refresh {
         /// Provider key to refresh. Omit to refresh all discovery-enabled
         /// providers in one batch.
@@ -800,18 +942,15 @@ pub(crate) fn print_completions(shell: Shell) {
 
 const INTERNAL_HELPER_HELP: &str = "Emit plain names for shell completion helpers (internal)";
 
-const MACHINE_SCOPED_FLAGS: [&str; 3] = ["-l addr", "-l config", "-l no-color"];
+/// How a retired-but-working flag describes itself. `hide = true` keeps those
+/// out of `--help`, but clap_complete emits them regardless, so tab-completion
+/// would keep teaching the spelling the help no longer documents.
+const SUPERSEDED_HELP: &str = "Superseded by";
 
 pub(crate) fn suppress_noise_completions(shell: Shell, script: &str) -> String {
     let mut out = String::with_capacity(script.len());
     for line in script.lines() {
-        if line.contains(INTERNAL_HELPER_HELP) {
-            continue;
-        }
-        if shell == Shell::Fish
-            && line.contains("__fish_shore_using_subcommand")
-            && MACHINE_SCOPED_FLAGS.iter().any(|flag| line.contains(flag))
-        {
+        if line.contains(INTERNAL_HELPER_HELP) || line.contains(SUPERSEDED_HELP) {
             continue;
         }
         if shell == Shell::Bash && line.trim_start().starts_with("opts=") {
@@ -834,8 +973,8 @@ pub(crate) fn fish_dynamic_completions_footer() -> &'static str {
     // wall of error messages at every tab press.
     "\n\
 # ── Dynamic completions (populated by the daemon) ────────────────────\n\
-complete -c shore -n \"__fish_shore_using_subcommand model\" -f -a \"(shore complete models 2>/dev/null)\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand character\" -f -a \"(shore complete characters 2>/dev/null)\"\n\
+complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from use info\" -f -a \"(shore complete models 2>/dev/null)\"\n\
+complete -c shore -n \"__fish_shore_using_subcommand character; and __fish_seen_subcommand_from use\" -f -a \"(shore complete characters 2>/dev/null)\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand provider; and __fish_seen_subcommand_from models refresh\" -f -a \"(shore complete providers 2>/dev/null)\"\n"
 }
 
@@ -957,13 +1096,11 @@ pub(crate) fn to_swp_command(
         // Character: list/switch/new handled locally, info goes to daemon.
         CliCommand::Character {
             subcommand: Some(CharacterCommand::Info),
-            name,
             ..
-        } => Some(("character_info", json!({ "name": name.as_deref().unwrap_or("") }))),
-        CliCommand::Character { name, info, .. } => {
+        } => Some(("character_info", json!({ "name": "" }))),
+        CliCommand::Character { info, .. } => {
             if *info {
-                let n = name.as_deref().unwrap_or("");
-                Some(("character_info", json!({ "name": n })))
+                Some(("character_info", json!({ "name": "" })))
             } else {
                 // list, switch, and new are handled in run.rs
                 None
@@ -1099,6 +1236,7 @@ fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
             json!({ "source": "heartbeat", "count": count }),
         )),
         TraceCommand::Events { count, .. } => Some(("heartbeat_log", json!({ "count": count }))),
+        TraceCommand::Index { .. } => Some(("workspace_index", Value::Object(Map::new()))),
         TraceCommand::Subagent { id, count, .. } => {
             let mut args = Map::new();
             match id {
@@ -1143,7 +1281,6 @@ fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     use serde_json::{Map, Value, json};
     let CliCommand::Model {
         subcommand,
-        name,
         info,
         reset,
         all,
@@ -1154,11 +1291,17 @@ fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         return None;
     };
     if let Some(ModelCommand::Info { name: info_name }) = subcommand {
-        let target = info_name.clone().or_else(|| name.clone()).unwrap_or_default();
+        let target = info_name.clone().unwrap_or_default();
         return Some(("model_info", json!({ "name": target })));
     }
     if let Some(ModelCommand::Use { name: target }) = subcommand {
         return Some(("switch_model", json!({ "name": target })));
+    }
+    if let Some(ModelCommand::Background) = subcommand {
+        return Some(("background_models", json!({})));
+    }
+    if let Some(ModelCommand::Reset) = subcommand {
+        return Some(("reset_model", json!({})));
     }
     if let Some(ModelCommand::Setting {
         key,
@@ -1209,25 +1352,14 @@ fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     if *reset {
         return Some(("reset_model", json!({})));
     }
-    match (name, info) {
-        (Some(model_name), true) => Some(("model_info", json!({ "name": model_name }))),
-        (None, true) => Some(("model_info", json!({}))),
-        (None, false) => {
-            let mut args = Map::new();
-            if *all {
-                let _ignored = args.insert("include_hidden".into(), json!(true));
-            }
-            Some(("list_models", Value::Object(args)))
-        }
-        (Some(model_name), false) => {
-            let mut args = Map::new();
-            let _ignored = args.insert("name".into(), json!(model_name));
-            if *all {
-                _ = args.insert("include_hidden".into(), json!(true));
-            }
-            Some(("switch_model", Value::Object(args)))
-        }
+    if *info {
+        return Some(("model_info", json!({})));
     }
+    let mut args = Map::new();
+    if *all {
+        let _ignored = args.insert("include_hidden".into(), json!(true));
+    }
+    Some(("list_models", Value::Object(args)))
 }
 
 /// `provider` models listing / refresh, or provider listing.
@@ -1481,7 +1613,6 @@ mod tests {
                 follow,
                 json,
                 content,
-                plain,
                 reasoning,
                 tools,
                 subagent_tools,
@@ -1493,7 +1624,6 @@ mod tests {
                 assert!(!follow);
                 assert!(!json);
                 assert!(!content);
-                assert!(!plain);
                 assert!(!reasoning);
                 assert!(!tools);
                 assert!(!subagent_tools);
@@ -1671,8 +1801,8 @@ mod tests {
         let cli = parse(&["character"]);
         assert_variant!(
             &cli.command,
-            CliCommand::Character { name, info, .. } => {
-                assert!(name.is_none());
+            CliCommand::Character { subcommand, info, .. } => {
+                assert!(subcommand.is_none());
                 assert!(!info);
             }
         );
@@ -1680,48 +1810,47 @@ mod tests {
 
     #[test]
     fn parse_character_switch() {
-        let cli = parse(&["character", "alice"]);
+        let cli = parse(&["character", "use", "alice"]);
         assert_variant!(
             &cli.command,
-            CliCommand::Character { name, info, .. } => {
-                assert_eq!(name.as_deref(), Some("alice"));
-                assert!(!info);
+            CliCommand::Character { subcommand, .. } => {
+                assert!(matches!(
+                    subcommand,
+                    Some(CharacterCommand::Use { name }) if name == "alice"
+                ));
             }
         );
     }
 
     #[test]
     fn parse_character_new() {
-        let cli = parse(&["character", "--new", "alice"]);
+        let cli = parse(&["character", "new", "alice"]);
         assert_variant!(
             &cli.command,
-            CliCommand::Character { name, new, .. } => {
-                assert_eq!(name.as_deref(), Some("alice"));
-                assert!(new);
+            CliCommand::Character { subcommand, .. } => {
+                assert!(matches!(
+                    subcommand,
+                    Some(CharacterCommand::New { name }) if name == "alice"
+                ));
             }
         );
     }
 
     #[test]
     fn character_new_requires_a_name() {
-        // Without `requires`, this parses fine and then falls past the local
-        // handler in `run.rs` and out the bottom of `to_swp_command`, reporting
-        // "non-send/regen/local command must map to SWP command" — a routing
-        // invariant shown to someone who forgot an argument.
-        let err = Cli::try_parse_from(["shore", "character", "--new"])
-            .expect_err("--new with no NAME must not parse");
+        let err = Cli::try_parse_from(["shore", "character", "new"])
+            .expect_err("new with no NAME must not parse");
         assert_eq!(err.kind(), clap::error::ErrorKind::MissingRequiredArgument);
         assert!(err.to_string().contains("NAME"), "{err}");
     }
 
     #[test]
     fn parse_character_info() {
-        let cli = parse(&["character", "alice", "--info"]);
+        let cli = parse(&["character", "info"]);
         assert_variant!(
             &cli.command,
-            CliCommand::Character { name, info, .. } => {
-                assert_eq!(name.as_deref(), Some("alice"));
-                assert!(info);
+            CliCommand::Character { subcommand, .. } => {
+                assert!(matches!(subcommand, Some(CharacterCommand::Info)));
             }
         );
     }
@@ -1815,13 +1944,11 @@ mod tests {
         assert_variant!(
             &cli.command,
             CliCommand::Model {
-                name,
                 info,
                 subcommand,
                 all,
                 ..
             } => {
-                assert!(name.is_none());
                 assert!(!info);
                 assert!(subcommand.is_none());
                 assert!(!all);
@@ -1831,30 +1958,29 @@ mod tests {
 
     #[test]
     fn parse_model_switch() {
-        let cli = parse(&["model", "claude-haiku-4-5-20251001"]);
+        let cli = parse(&["model", "use", "claude-haiku-4-5-20251001"]);
         assert_variant!(
             &cli.command,
-            CliCommand::Model {
-                name,
-                info,
-                subcommand,
-                ..
-            } => {
-                assert_eq!(name.as_deref(), Some("claude-haiku-4-5-20251001"));
-                assert!(!info);
-                assert!(subcommand.is_none());
+            CliCommand::Model { subcommand, .. } => {
+                assert!(matches!(
+                    subcommand,
+                    Some(ModelCommand::Use { name })
+                        if name == "claude-haiku-4-5-20251001"
+                ));
             }
         );
     }
 
     #[test]
     fn parse_model_info() {
-        let cli = parse(&["model", "opus", "--info"]);
+        let cli = parse(&["model", "info", "opus"]);
         assert_variant!(
             &cli.command,
-            CliCommand::Model { name, info, .. } => {
-                assert_eq!(name.as_deref(), Some("opus"));
-                assert!(info);
+            CliCommand::Model { subcommand, .. } => {
+                assert!(matches!(
+                    subcommand,
+                    Some(ModelCommand::Info { name: Some(n) }) if n == "opus"
+                ));
             }
         );
     }
@@ -2180,20 +2306,185 @@ mod tests {
         );
     }
 
-    // ── Global flags ─────────────────────────────────────────────────
+    // ── Leading flags ────────────────────────────────────────────────
 
     #[test]
-    fn parse_global_addr_flag() {
+    fn parse_leading_addr_flag() {
         let cli = parse(&["--addr", "127.0.0.1:7320", "status"]);
         assert_eq!(cli.addr.as_deref(), Some("127.0.0.1:7320"));
         assert!(matches!(cli.command, CliCommand::Status { .. }));
     }
 
     #[test]
-    fn parse_global_config_flag() {
-        let cli = parse(&["--config", "/etc/shore.toml", "status"]);
-        assert_eq!(cli.config.as_deref(), Some("/etc/shore.toml"));
-        assert!(matches!(cli.command, CliCommand::Status { .. }));
+    fn parse_leading_character_flag() {
+        let cli = parse(&["--character", "ada", "status"]);
+        assert_eq!(cli.character.as_deref(), Some("ada"));
+        let short = parse(&["-c", "ada", "status"]);
+        assert_eq!(short.character.as_deref(), Some("ada"));
+    }
+
+    fn with_program_name<'arg>(rest: &[&'arg str]) -> Vec<&'arg str> {
+        std::iter::once("shore").chain(rest.iter().copied()).collect()
+    }
+
+    fn parse_error(rest: &[&str]) -> clap::Error {
+        <Cli as clap::Parser>::try_parse_from(with_program_name(rest))
+            .expect_err("should not parse")
+    }
+
+    fn misplaced(rest: &[&str]) -> Option<FlagProblem> {
+        flag_problem(with_program_name(rest))
+    }
+
+    #[test]
+    fn a_trailing_leading_flag_says_where_it_belongs() {
+        for args in [
+            &["log", "--character", "ada"][..],
+            &["log", "-c", "ada"][..],
+            &["status", "--character=ada"][..],
+            &["log", "edit", "last", "-c", "ada"][..],
+        ] {
+            assert_eq!(
+                misplaced(args),
+                Some(FlagProblem::Misplaced("--character")),
+                "{args:?}"
+            );
+        }
+        assert_eq!(
+            misplaced(&["status", "--addr", "127.0.0.1:7320"]),
+            Some(FlagProblem::Misplaced("--addr"))
+        );
+    }
+
+    /// Clap has never heard of these, so left to itself it answers `--config`
+    /// with "tip: 'status --count' exists". Naming the replacement is the
+    /// whole point of removing a flag.
+    #[test]
+    fn a_retired_flag_names_what_replaced_it() {
+        for args in [
+            &["--config", "/etc/shore.toml", "status"][..],
+            &["status", "--config=/etc/shore.toml"][..],
+        ] {
+            assert_eq!(
+                misplaced(args),
+                Some(FlagProblem::Retired(
+                    "--config",
+                    "name the daemon with --addr, or set SHORE_ADDR"
+                )),
+                "{args:?}"
+            );
+        }
+        assert_eq!(
+            misplaced(&["--no-color", "status"]),
+            Some(FlagProblem::Retired(
+                "--no-color",
+                "set NO_COLOR=1 in the environment"
+            ))
+        );
+        assert_eq!(
+            misplaced(&["log", "--plain"]),
+            Some(FlagProblem::Retired(
+                "--plain",
+                "output is already plain when it is not going to a terminal"
+            )),
+            "otherwise the message-reference parser answers first, and says \
+             '--plain' is not a message reference"
+        );
+    }
+
+    /// The value of a leading flag is not the command, so a command name that
+    /// happens to also be one — `shore --character status status` — must not
+    /// make the scan think it is already past the command.
+    #[test]
+    fn a_leading_flag_in_its_own_place_is_fine() {
+        for args in [
+            &["--character", "ada", "log"][..],
+            &["-c", "ada", "--addr", "127.0.0.1:7320", "status"][..],
+            &["--character=ada", "status"][..],
+            &["--character", "status", "status"][..],
+            &["log", "-n", "5"][..],
+            &["send", "--", "-c", "is a flag"][..],
+        ] {
+            assert_eq!(misplaced(args), None, "{args:?}");
+        }
+    }
+
+    /// `log` and `alt` take message references that may start with a hyphen,
+    /// so a mistyped flag lands in the reference rather than being rejected.
+    /// Asking the daemon for a message named `--conten` is not an answer.
+    #[test]
+    fn a_mistyped_flag_is_not_read_as_a_message_reference() {
+        for args in [
+            &["log", "--conten"][..],
+            &["log", "edit", "--conten"][..],
+            &["alt", "--conten"][..],
+        ] {
+            let err = parse_error(args);
+            assert!(
+                err.to_string().contains("is not a message reference"),
+                "{args:?} gave: {err}"
+            );
+        }
+        assert_variant!(
+            &parse(&["log", "-1"]).command,
+            CliCommand::Log { msg_ref, .. } => {
+                assert_eq!(msg_ref.as_deref(), Some("-1"));
+            }
+        );
+    }
+
+    /// A bare name shared its completion list with the subcommand names, so
+    /// tab after `shore model` offered `opus` and `setting` side by side with
+    /// nothing to say which kind of thing you were choosing.
+    #[test]
+    fn a_bare_name_points_at_use() {
+        assert_eq!(
+            misplaced(&["model", "opus"]),
+            Some(FlagProblem::BareName("model", "opus".to_owned()))
+        );
+        assert_eq!(
+            misplaced(&["character", "qifei"]),
+            Some(FlagProblem::BareName("character", "qifei".to_owned()))
+        );
+    }
+
+    /// The redirect must not fire on the real subcommands, on their arguments,
+    /// or on commands that legitimately take a positional.
+    #[test]
+    fn a_real_subcommand_is_not_mistaken_for_a_name() {
+        for args in [
+            &["model"][..],
+            &["model", "use", "opus"][..],
+            &["model", "info", "opus"][..],
+            &["model", "setting", "temperature", "0.7"][..],
+            &["model", "background"][..],
+            &["character", "use", "qifei"][..],
+            &["character", "new", "ada"][..],
+            &["provider", "models", "openrouter"][..],
+            &["memory", "what did we decide"][..],
+            &["log", "last"][..],
+            // A flag in play means a different request; pointing it at `use`
+            // would be wrong, so the redirect stays quiet and clap answers.
+            &["model", "--info", "opus"][..],
+        ] {
+            assert_eq!(misplaced(args), None, "{args:?}");
+        }
+    }
+
+    /// `--config` selected a daemon instance by id or config directory;
+    /// `--addr` names the same daemon by the thing the client actually
+    /// connects to. Two ways to say one thing is one too many. Colour is an
+    /// environment decision, not a per-invocation one, and NO_COLOR is
+    /// honoured by everything else in the terminal already.
+    #[test]
+    fn retired_flags_no_longer_parse() {
+        for flag in ["--config", "--no-color"] {
+            assert_eq!(
+                parse_error(&[flag, "status"]).kind(),
+                clap::error::ErrorKind::UnknownArgument,
+                "{flag}"
+            );
+        }
     }
 
     // ── SWP mapping tests ────────────────────────────────────────────
@@ -2385,45 +2676,41 @@ mod tests {
     }
 
     #[test]
-    fn character_maps_to_none_without_info() {
-        let cmd_none = CliCommand::Character {
+    fn character_listing_maps_to_none() {
+        let listing = CliCommand::Character {
             subcommand: None,
-            name: None,
             info: false,
-            new: false,
             json: false,
         };
-        assert!(to_swp_command(&cmd_none, None).is_none());
-        let cmd_named = CliCommand::Character {
-            subcommand: None,
-            name: Some("alice".into()),
+        assert!(to_swp_command(&listing, None).is_none());
+        let switching = CliCommand::Character {
+            subcommand: Some(CharacterCommand::Use {
+                name: "alice".into(),
+            }),
             info: false,
-            new: false,
             json: false,
         };
-        assert!(to_swp_command(&cmd_named, None).is_none());
+        assert!(to_swp_command(&switching, None).is_none());
     }
 
     #[test]
     fn character_info_maps_to_command() {
         let cmd = CliCommand::Character {
-            subcommand: None,
-            name: Some("alice".into()),
-            info: true,
-            new: false,
+            subcommand: Some(CharacterCommand::Info),
+            info: false,
             json: false,
         };
-        let (name, args) = to_swp_command(&cmd, None).unwrap();
+        let (name, _) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "character_info");
-        assert_eq!(arg(&args, "name"), "alice");
     }
 
     #[test]
     fn model_info_maps_to_command() {
         let cmd = CliCommand::Model {
-            subcommand: None,
-            name: Some("opus".into()),
-            info: true,
+            subcommand: Some(ModelCommand::Info {
+                name: Some("opus".into()),
+            }),
+            info: false,
             reset: false,
             all: false,
             background: false,
@@ -2438,7 +2725,6 @@ mod tests {
     fn model_list_with_all_includes_hidden_arg() {
         let cmd = CliCommand::Model {
             subcommand: None,
-            name: None,
             info: false,
             reset: false,
             all: true,
@@ -2461,7 +2747,6 @@ mod tests {
                 background: None,
                 json: false,
             }),
-            name: None,
             info: false,
             reset: false,
             all: false,
@@ -2483,7 +2768,6 @@ mod tests {
                 background: None,
                 json: false,
             }),
-            name: None,
             info: false,
             reset: false,
             all: false,
@@ -2508,7 +2792,6 @@ mod tests {
                 background: None,
                 json: false,
             }),
-            name: None,
             info: false,
             reset: false,
             all: false,
@@ -2531,7 +2814,6 @@ mod tests {
                 background: None,
                 json: false,
             }),
-            name: None,
             info: false,
             reset: false,
             all: false,
@@ -2627,7 +2909,6 @@ mod tests {
                 background: None,
                 json: false,
             }),
-            name: None,
             info: false,
             reset: false,
             all: false,
@@ -2650,7 +2931,6 @@ mod tests {
                     background: None,
                     json: false,
                 }),
-                name: None,
                 info: false,
                 reset: false,
                 all: false,
@@ -2781,7 +3061,6 @@ mod tests {
             follow: false,
             json: false,
             content: false,
-            plain: false,
             reasoning: false,
             tools: false,
             subagent_tools: false,
@@ -2804,7 +3083,6 @@ mod tests {
             follow: false,
             json: false,
             content: false,
-            plain: false,
             reasoning: false,
             tools: false,
             subagent_tools: false,
@@ -2849,7 +3127,6 @@ mod tests {
             follow: false,
             json: false,
             content: false,
-            plain: false,
             reasoning: false,
             tools: false,
             subagent_tools: false,
@@ -2870,7 +3147,6 @@ mod tests {
             follow: false,
             json: false,
             content: false,
-            plain: false,
             reasoning: false,
             tools: false,
             subagent_tools: false,
@@ -3001,8 +3277,7 @@ mod tests {
                 follow: false,
                 json: false,
                 content: false,
-                plain: false,
-                reasoning: false,
+                    reasoning: false,
                 tools: false,
                 subagent_tools: false,
             },
@@ -3017,8 +3292,7 @@ mod tests {
                 follow: false,
                 json: false,
                 content: false,
-                plain: false,
-                reasoning: false,
+                    reasoning: false,
                 tools: false,
                 subagent_tools: false,
             },
@@ -3032,8 +3306,7 @@ mod tests {
                 follow: false,
                 json: false,
                 content: false,
-                plain: false,
-                reasoning: false,
+                    reasoning: false,
                 tools: false,
                 subagent_tools: false,
             },
@@ -3045,8 +3318,7 @@ mod tests {
                 follow: false,
                 json: false,
                 content: false,
-                plain: false,
-                reasoning: false,
+                    reasoning: false,
                 tools: false,
                 subagent_tools: false,
             },
@@ -3078,7 +3350,24 @@ mod tests {
         vec![
             CliCommand::Model {
                 subcommand: None,
-                name: None,
+                info: false,
+                reset: false,
+                all: false,
+                background: false,
+                json: false,
+            },
+            CliCommand::Model {
+                subcommand: Some(ModelCommand::Use { name: "m".into() }),
+                info: false,
+                reset: false,
+                all: false,
+                background: false,
+                json: false,
+            },
+            CliCommand::Model {
+                subcommand: Some(ModelCommand::Info {
+                    name: Some("m".into()),
+                }),
                 info: false,
                 reset: false,
                 all: false,
@@ -3087,25 +3376,6 @@ mod tests {
             },
             CliCommand::Model {
                 subcommand: None,
-                name: Some("m".into()),
-                info: false,
-                reset: false,
-                all: false,
-                background: false,
-                json: false,
-            },
-            CliCommand::Model {
-                subcommand: None,
-                name: Some("m".into()),
-                info: true,
-                reset: false,
-                all: false,
-                background: false,
-                json: false,
-            },
-            CliCommand::Model {
-                subcommand: None,
-                name: None,
                 info: false,
                 reset: true,
                 all: false,
@@ -3121,7 +3391,6 @@ mod tests {
                     background: None,
                     json: false,
                 }),
-                name: None,
                 info: false,
                 reset: false,
                 all: false,
@@ -3153,10 +3422,8 @@ mod tests {
                 json: false,
             },
             CliCommand::Character {
-                subcommand: None,
-                name: Some("c".into()),
-                info: true,
-                new: false,
+                subcommand: Some(CharacterCommand::Info),
+                info: false,
                 json: false,
             },
             CliCommand::Memory {
@@ -3420,22 +3687,38 @@ mod tests {
         );
     }
 
+    /// A hidden flag still works, but tab-completion must stop teaching it —
+    /// otherwise the surface `--help` documents and the surface the shell
+    /// offers disagree, and the retired spelling never dies.
     #[test]
-    fn machine_scoped_flags_are_offered_once_not_per_subcommand() {
-        let (raw, filtered) = generated_for(Shell::Fish);
-        assert!(
-            raw.matches("-l addr").count() > 1,
-            "clap stopped repeating globals; the filter may be stale"
-        );
-        assert_eq!(
-            filtered.matches("-l addr").count(),
-            1,
-            "--addr should be offered before the subcommand only:\n{filtered}"
-        );
-        assert!(
-            filtered.contains("-s c -l character"),
-            "-c stays available per subcommand: {filtered}"
-        );
+    fn superseded_flags_are_not_offered_by_the_shell() {
+        for shell in [Shell::Fish, Shell::Zsh] {
+            let (raw, filtered) = generated_for(shell);
+            assert!(
+                raw.contains(SUPERSEDED_HELP),
+                "{shell:?} stopped emitting hidden flags; the filter may be stale"
+            );
+            assert!(
+                !filtered.contains(SUPERSEDED_HELP),
+                "{shell:?} still offers a superseded flag:\n{filtered}"
+            );
+            assert!(
+                filtered.contains("model"),
+                "{shell:?} lost its real commands"
+            );
+        }
+    }
+
+    #[test]
+    fn leading_flags_are_offered_once_not_per_subcommand() {
+        let (_, filtered) = generated_for(Shell::Fish);
+        for flag in ["-l addr", "-l character"] {
+            assert_eq!(
+                filtered.matches(flag).count(),
+                1,
+                "{flag} should be offered before the command only:\n{filtered}"
+            );
+        }
     }
 
     // ── Dynamic completions (regression #3 followup) ────────────────
