@@ -1,12 +1,12 @@
 use std::io::{self, Write};
 
 use chrono::{DateTime, Local};
-use crossterm::style::{Color, ResetColor, SetForegroundColor};
 use shore_common::protocol::server_msg::NewMessage;
 
 use super::styling::{
     format_tool_input, format_tool_output, print_image_refs, write_tool_body_plain,
 };
+use super::vocab::{COLOR_ERROR, Tone, indent_to, paint};
 use super::{
     COLOR_RESULT, COLOR_THINKING, COLOR_TOOL, SIGIL_ERROR, SIGIL_OK, SIGIL_THINKING, SIGIL_TOOL,
     parse_timestamp, primary_tool_arg, print_dim_line, process_wrap_width, term_width, use_color,
@@ -76,26 +76,8 @@ fn message_renders(
     }
 }
 
-/// Terminal colors that look distinct on both dark and light backgrounds.
-const CHARACTER_PALETTE: &[Color] = &[
-    Color::Magenta,
-    Color::Green,
-    Color::DarkYellow,
-    Color::Blue,
-    Color::DarkCyan,
-    Color::Red,
-    Color::DarkMagenta,
-    Color::DarkGreen,
-];
-
-/// Deterministic color derived from a character name.
-pub(crate) fn character_color(name: &str) -> Color {
-    let hash = name.bytes().fold(0_u32, |acc, b| {
-        acc.wrapping_mul(31).wrapping_add(u32::from(b))
-    });
-    let hash_idx = usize::try_from(hash).unwrap_or(usize::MAX);
-    let idx = hash_idx.checked_rem(CHARACTER_PALETTE.len()).unwrap_or(0);
-    CHARACTER_PALETTE.get(idx).copied().unwrap_or(Color::White)
+pub(crate) fn character_color(name: &str) -> Tone {
+    super::vocab::speaker_tone(name)
 }
 
 /// Format a timestamp for display. Uses "HH:MM" normally,
@@ -115,7 +97,7 @@ pub(crate) fn write_header(
     out: &mut impl Write,
     name: &str,
     time_str: &str,
-    color: Color,
+    color: Tone,
     width: usize,
 ) {
     // "-- Name . HH:MM " = 4 + name.len() + 3 + time.len() + 1
@@ -124,13 +106,7 @@ pub(crate) fn write_header(
     let trail = width.saturating_sub(prefix_len);
     let rule: String = "\u{2500}".repeat(trail);
 
-    if use_color() {
-        let _ignored = crossterm::execute!(out, SetForegroundColor(color));
-    }
-    let _ignored = write!(out, "{prefix}{rule}");
-    if use_color() {
-        _ = crossterm::execute!(out, ResetColor);
-    }
+    paint(out, color, &format!("{prefix}{rule}"));
     _ = writeln!(out);
 }
 
@@ -150,13 +126,8 @@ fn write_archive_boundary(out: &mut impl Write, width: usize, archived_turns: us
         label.trim().to_owned()
     };
 
-    if use_color() {
-        let _ignored = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-    }
-    let _ignored = writeln!(out, "{line}");
-    if use_color() {
-        _ = crossterm::execute!(out, ResetColor);
-    }
+    paint(out, Tone::Muted, &line);
+    _ = writeln!(out);
     _ = writeln!(out);
 }
 
@@ -255,7 +226,7 @@ fn render_message_content(
                         let output = block["content"].as_str().unwrap_or("");
                         let is_error = block["is_error"].as_bool().unwrap_or(false);
                         let (sigil, label, color) = if is_error {
-                            (SIGIL_ERROR, "error", Color::Red)
+                            (SIGIL_ERROR, "error", COLOR_ERROR)
                         } else {
                             (SIGIL_OK, "result", COLOR_RESULT)
                         };
@@ -360,17 +331,17 @@ fn write_log_with_boundary(
         // Write header (skip for tool result messages -- they're continuations).
         if !is_tool_result_msg {
             match role_str {
-                "user" => write_header(out, "You", &time_str, Color::Cyan, width),
+                "user" => write_header(out, "You", &time_str, Tone::Active, width),
                 "assistant" => write_header(out, character_name, &time_str, char_color, width),
                 "system" => {
-                    if use_color() {
-                        let _ignored =
-                            crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-                    }
                     let prefix = format!("\u{2500}\u{2500} system \u{00b7} {time_str} ");
                     let prefix_len = prefix.chars().count();
                     let trail = width.saturating_sub(prefix_len);
-                    let _ignored = write!(out, "{prefix}{}", "\u{2500}".repeat(trail));
+                    paint(
+                        out,
+                        Tone::Muted,
+                        &format!("{prefix}{}", "\u{2500}".repeat(trail)),
+                    );
                     _ = writeln!(out);
                 }
                 _ => {}
@@ -381,7 +352,6 @@ fn write_log_with_boundary(
 
         // System messages: close dimming.
         if role_str == "system" && use_color() {
-            let _ignored = crossterm::execute!(out, ResetColor);
         }
 
         // Images
@@ -393,13 +363,8 @@ fn write_log_with_boundary(
                     .or_else(|| img["path"].as_str().and_then(|p| p.rsplit('/').next()))
                     .unwrap_or("image");
 
-                if use_color() {
-                    let _ignored = crossterm::execute!(out, SetForegroundColor(Color::Yellow));
-                }
-                let _ignored = write!(out, "  \u{1f4ce} {label}");
-                if use_color() {
-                    _ = crossterm::execute!(out, ResetColor);
-                }
+                indent_to(out, 0);
+                paint(out, Tone::Warn, &format!("\u{1f4ce} {label}"));
                 _ = writeln!(out);
             }
         }
@@ -587,11 +552,11 @@ pub(crate) fn print_new_message(msg: &NewMessage, character_name: &str) {
         .unwrap_or_default();
 
     let (name, color) = match msg.message.role {
-        shore_common::protocol::types::Role::User => ("You", Color::Cyan),
+        shore_common::protocol::types::Role::User => ("You", Tone::Active),
         shore_common::protocol::types::Role::Assistant => {
             (character_name, character_color(character_name))
         }
-        shore_common::protocol::types::Role::System => ("system", Color::DarkGrey),
+        shore_common::protocol::types::Role::System => ("system", Tone::Muted),
     };
 
     write_header(&mut out, name, &time_str, color, width);
@@ -658,27 +623,18 @@ pub(crate) fn print_heartbeat_log(data: &serde_json::Value) {
 
         // Kind label with color
         let kind_color = match kind {
-            "tick_fired" => Color::Blue,
-            "message_sent" | "wake" | "recap_written" => Color::Green,
-            "message_skipped" => Color::DarkGrey,
-            "tool_use" => Color::Cyan,
-            "dormant" => Color::Red,
-            "recap_missing" => Color::Yellow,
-            _ => Color::White,
+            "tick_fired" => Tone::Active,
+            "message_sent" | "wake" | "recap_written" => Tone::Good,
+            "message_skipped" => Tone::Muted,
+            "tool_use" => Tone::Active,
+            "dormant" => COLOR_ERROR,
+            "recap_missing" => Tone::Warn,
+            _ => Tone::Heading,
         };
 
-        if use_color() {
-            let _ignored = crossterm::execute!(out, SetForegroundColor(Color::DarkGrey));
-        }
-        let _ignored = write!(out, "  {time_str:<14}");
-        if use_color() {
-            _ = crossterm::execute!(out, SetForegroundColor(kind_color));
-        }
-        _ = write!(out, "{kind:<18}");
-        if use_color() {
-            _ = crossterm::execute!(out, ResetColor);
-        }
-        _ = writeln!(out, "{detail}");
+        paint(&mut out, Tone::Muted, &format!("  {time_str:<14}"));
+        paint(&mut out, kind_color, &format!("{kind:<18}"));
+        let _ignored = writeln!(out, "{detail}");
     }
     let _ignored = writeln!(out);
 }
@@ -775,6 +731,9 @@ mod tests {
 
     #[test]
     fn rich_transcript_render_snapshot() {
+        let _guard = crate::output::COLOR_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         set_color_enabled(false);
         let mut buf = Vec::new();
         write_log_with_boundary(
@@ -1062,7 +1021,7 @@ mod tests {
     fn write_header_contains_name_and_time() {
         set_color_enabled(false);
         let mut buf = Vec::new();
-        write_header(&mut buf, "Alice", "14:30", Color::Cyan, 40);
+        write_header(&mut buf, "Alice", "14:30", Tone::Active, 40);
         let output = String::from_utf8(buf).unwrap();
 
         assert!(
@@ -1081,10 +1040,26 @@ mod tests {
     }
 
     #[test]
+    fn write_header_is_coloured_by_speaker() {
+        let _guard = crate::output::COLOR_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        set_color_enabled(true);
+        let mut buf = Vec::new();
+        write_header(&mut buf, "qifei", "14:30", character_color("qifei"), 40);
+        set_color_enabled(false);
+        let out = String::from_utf8(buf).unwrap_or_default();
+        assert!(
+            out.contains('\u{1b}'),
+            "a speaker header must carry its colour: {out:?}"
+        );
+    }
+
+    #[test]
     fn write_header_pads_to_width() {
         set_color_enabled(false);
         let mut buf = Vec::new();
-        write_header(&mut buf, "X", "00:00", Color::Cyan, 60);
+        write_header(&mut buf, "X", "00:00", Tone::Active, 60);
         let output = String::from_utf8(buf).unwrap();
         let line = output.trim_end_matches('\n');
         // Width should roughly match requested width (all ASCII/box-drawing).

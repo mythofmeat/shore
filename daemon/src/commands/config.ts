@@ -41,10 +41,26 @@ const asBool = (v: unknown): boolean => v === true;
 const message = (e: unknown): string =>
   e instanceof ConfigError ? e.display : e instanceof Error ? e.message : String(e);
 
+function mcpServerOf(tool: string): string | undefined {
+  const parts = tool.split("__");
+  if (parts.length < 3 || parts[0] !== "mcp") return undefined;
+  return parts[1];
+}
+
+function toolResolver(ctx: ConfigContext): (tool: string) => boolean {
+  const builtin = new Set(ALL_TOOLS.map((t) => t.name));
+  const servers = ctx.config.app.mcp;
+  return (tool) => {
+    if (builtin.has(tool)) return true;
+    const server = mcpServerOf(tool);
+    return server !== undefined && servers.has(server);
+  };
+}
+
 export function tools(ctx: ConfigContext): unknown {
   const cfg = ctx.config.app.tools;
   const subagents = ctx.config.app.subagents;
-  const known = new Set(ALL_TOOLS.map((t) => t.name));
+  const known = { has: toolResolver(ctx) };
 
   const toolRows = ALL_TOOLS.map((def) => ({
     tool: def.name,
@@ -91,8 +107,12 @@ export function configCheck(ctx: ConfigContext, env: NodeJS.ProcessEnv = process
     defaultModel !== undefined &&
     modelRefResolves(ctx.config.models, ctx.config.providers, defaultModel);
 
+  const providerCount = ctx.config.providers.size;
+
   if (ctx.config.models.chat.size > 0) {
     info.push(`${ctx.config.models.chat.size} chat model(s) configured`);
+  } else if (providerCount > 0) {
+    info.push(`${providerCount} provider(s) configured; models come from discovery`);
   } else if (!defaultResolves) {
     warnings.push(NO_CHAT_MODELS_MESSAGE);
   }
@@ -123,6 +143,7 @@ export function configCheck(ctx: ConfigContext, env: NodeJS.ProcessEnv = process
     data_dir: ctx.config.dirs.data,
     cache_dir: ctx.config.dirs.cache,
     chat_models: ctx.config.models.chat.size,
+    providers: providerCount,
     memory_mode: "markdown",
   };
 }
