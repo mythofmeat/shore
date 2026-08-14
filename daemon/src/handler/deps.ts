@@ -163,8 +163,12 @@ export function chatToolDeps(
       characterDataDir(runtime.config.dirs.data, charName),
       queueDeferredEdit,
     ),
-    activityStats: () => {
-      const report = runtime.autonomy.activityStats(charName, localWallClock(Date.now()));
+    activityStats: (days: number) => {
+      const report = runtime.autonomy.activityStats(
+        charName,
+        localWallClock(Date.now()),
+        days,
+      );
       return report === undefined
         ? undefined
         : { stats: report.stats, turnCount: report.messageCount };

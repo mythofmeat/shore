@@ -67,6 +67,13 @@ function record(at: number): Recorded {
   };
 }
 
+export type WeekdayCounts = Readonly<Record<Weekday, number>>;
+
+export interface ActivityWindow {
+  readonly localNow: number;
+  readonly days: number;
+}
+
 export interface ActivityStats {
   readonly engagementScore: number;
   readonly consistency: number;
@@ -75,6 +82,10 @@ export interface ActivityStats {
   readonly sessionsPerDay: number;
   readonly hourHistogram: readonly number[];
   readonly hourClassifications: readonly HourClassification[];
+  readonly pooledHourHistogram: readonly number[];
+  readonly pooledHourClassifications: readonly HourClassification[];
+  readonly weekdayCounts: WeekdayCounts;
+  readonly windowMessageCount: number;
   readonly hasSufficientData: boolean;
   readonly hasSufficientHeatmap: boolean;
   readonly medianSessionGap: number | undefined;
@@ -84,7 +95,7 @@ export interface ActivityStats {
 
 export class ActivityTracker {
   #timestamps: Recorded[] = [];
-  #cached: ActivityStats | undefined;
+  #cached: { stats: ActivityStats; days: number | undefined } | undefined;
 
   recordMessage(at: number): void {
     this.#timestamps.push(record(at));
@@ -101,32 +112,38 @@ export class ActivityTracker {
     return this.#timestamps.length;
   }
 
-  stats(now: number, today: Weekday): ActivityStats {
+  stats(now: number, today: Weekday, window?: ActivityWindow): ActivityStats {
     const cached = this.#cached;
-    if (cached !== undefined && now - cached.computedAt < STATS_CACHE_TTL_MS) {
-      return cached;
+    if (
+      cached !== undefined &&
+      cached.days === window?.days &&
+      now - cached.stats.computedAt < STATS_CACHE_TTL_MS
+    ) {
+      return cached.stats;
     }
-    return this.recomputeStats(now, today);
+    return this.recomputeStats(now, today, window);
   }
 
-  recomputeStats(now: number, today: Weekday): ActivityStats {
-    const stats = { ...this.computeStats(today), computedAt: now };
-    this.#cached = stats;
+  recomputeStats(now: number, today: Weekday, window?: ActivityWindow): ActivityStats {
+    const stats = { ...this.computeStats(today, window), computedAt: now };
+    this.#cached = { stats, days: window?.days };
     return stats;
   }
 
-  computeStats(today: Weekday): Omit<ActivityStats, "computedAt"> {
-    const distinctDays = this.#distinctDays();
-    const msgCount = this.#timestamps.length;
+  computeStats(today: Weekday, window?: ActivityWindow): Omit<ActivityStats, "computedAt"> {
+    const source = this.#within(window);
+    const distinctDays = countDistinctDays(source);
+    const msgCount = source.length;
 
-    const sessions = this.#detectSessions();
+    const sessions = detectSessions(source);
     const sessionCount = sessions.length;
 
     const recent = recentSessions(sessions);
-    const consistency = this.#consistency();
-    const sessionGaps = this.#sessionGaps(recent);
-    const tempoScore = computeTempoScore(this.#tempoGaps(recent));
-    const hourHistogram = this.#hourHistogram(today);
+    const consistency = consistencyOf(source, distinctDays);
+    const sessionGaps = gapsBetweenSessions(recent);
+    const tempoScore = computeTempoScore(tempoGaps(recent));
+    const hourHistogram = weekdayHourHistogram(source, today);
+    const pooledHourHistogram = hourHistogramOf(source);
 
     return {
       engagementScore: 0.6 * consistency + 0.4 * tempoScore,
@@ -136,6 +153,10 @@ export class ActivityTracker {
       sessionsPerDay: distinctDays > 0 ? sessionCount / distinctDays : 0,
       hourHistogram,
       hourClassifications: classifyHours(hourHistogram),
+      pooledHourHistogram,
+      pooledHourClassifications: classifyHours(pooledHourHistogram),
+      weekdayCounts: countByWeekday(source),
+      windowMessageCount: msgCount,
       hasSufficientData:
         msgCount >= SUFFICIENT_DATA_MSGS && distinctDays >= SUFFICIENT_DATA_DAYS,
       hasSufficientHeatmap:
@@ -145,81 +166,103 @@ export class ActivityTracker {
     };
   }
 
-  #distinctDays(): number {
-    return new Set(this.#timestamps.map((ts) => ts.day)).size;
+  #within(window: ActivityWindow | undefined): readonly Recorded[] {
+    if (window === undefined || window.days <= 0) return this.#timestamps;
+    const cutoff = window.localNow - window.days * DAY_MS;
+    return this.#timestamps.filter((ts) => ts.at >= cutoff);
   }
+}
 
-  #consistency(): number {
-    if (this.#timestamps.length < 2) return this.#timestamps.length === 0 ? 0 : 1;
+function countDistinctDays(source: readonly Recorded[]): number {
+  return new Set(source.map((ts) => ts.day)).size;
+}
 
-    const first = this.#timestamps[0];
-    const last = this.#timestamps[this.#timestamps.length - 1];
-    if (first === undefined || last === undefined) return 1;
+function consistencyOf(source: readonly Recorded[], distinctDays: number): number {
+  if (source.length < 2) return source.length === 0 ? 0 : 1;
 
-    const spanDays = last.day - first.day + 1;
-    if (spanDays <= 0) return 1;
-    return Math.min(Math.max(this.#distinctDays() / spanDays, 0), 1);
-  }
+  const first = source[0];
+  const last = source[source.length - 1];
+  if (first === undefined || last === undefined) return 1;
 
-  #detectSessions(): Recorded[][] {
-    if (this.#timestamps.length === 0) return [];
+  const spanDays = last.day - first.day + 1;
+  if (spanDays <= 0) return 1;
+  return Math.min(Math.max(distinctDays / spanDays, 0), 1);
+}
 
-    const sessions: Recorded[][] = [];
-    let current: Recorded[] = [];
+function detectSessions(source: readonly Recorded[]): Recorded[][] {
+  if (source.length === 0) return [];
 
-    for (const [i, ts] of this.#timestamps.entries()) {
-      const prev = this.#timestamps[i - 1];
-      if (prev !== undefined && gapSecs(prev.at, ts.at) >= SESSION_GAP_SECS) {
-        sessions.push(current);
-        current = [];
-      }
-      current.push(ts);
+  const sessions: Recorded[][] = [];
+  let current: Recorded[] = [];
+
+  for (const [i, ts] of source.entries()) {
+    const prev = source[i - 1];
+    if (prev !== undefined && gapSecs(prev.at, ts.at) >= SESSION_GAP_SECS) {
+      sessions.push(current);
+      current = [];
     }
-    sessions.push(current);
+    current.push(ts);
+  }
+  sessions.push(current);
 
-    return sessions;
+  return sessions;
+}
+
+function gapsBetweenSessions(sessions: readonly Recorded[][]): number[] {
+  const gaps: number[] = [];
+  for (const [i, next] of sessions.entries()) {
+    if (i === 0) continue;
+    const prev = sessions[i - 1];
+    const from = prev?.[prev.length - 1];
+    const to = next[0];
+    if (from === undefined || to === undefined) continue;
+    gaps.push(gapSecs(from.at, to.at));
+  }
+  return gaps;
+}
+
+function tempoGaps(sessions: readonly Recorded[][]): number[] {
+  const gaps: number[] = [];
+  for (const session of sessions) {
+    for (const [i, ts] of session.entries()) {
+      const prev = session[i - 1];
+      if (prev === undefined) continue;
+      gaps.push(gapSecs(prev.at, ts.at));
+    }
+  }
+  return gaps.slice(-SESSION_TEMPO_WINDOW);
+}
+
+function hourHistogramOf(source: readonly Recorded[]): number[] {
+  const histogram = new Array<number>(24).fill(0);
+  for (const ts of source) {
+    histogram[ts.hour] = (histogram[ts.hour] ?? 0) + 1;
   }
 
-  #sessionGaps(sessions: readonly Recorded[][]): number[] {
-    const gaps: number[] = [];
-    for (const [i, next] of sessions.entries()) {
-      if (i === 0) continue;
-      const prev = sessions[i - 1];
-      const from = prev?.[prev.length - 1];
-      const to = next[0];
-      if (from === undefined || to === undefined) continue;
-      gaps.push(gapSecs(from.at, to.at));
-    }
-    return gaps;
+  const total = histogram.reduce((a, b) => a + b, 0);
+  if (total > 0) {
+    for (const [i, count] of histogram.entries()) histogram[i] = count / total;
   }
+  return histogram;
+}
 
-  #tempoGaps(sessions: readonly Recorded[][]): number[] {
-    const gaps: number[] = [];
-    for (const session of sessions) {
-      for (const [i, ts] of session.entries()) {
-        const prev = session[i - 1];
-        if (prev === undefined) continue;
-        gaps.push(gapSecs(prev.at, ts.at));
-      }
-    }
-    return gaps.slice(-SESSION_TEMPO_WINDOW);
-  }
+function weekdayHourHistogram(source: readonly Recorded[], today: Weekday): number[] {
+  const onToday = source.filter((ts) => ts.weekday === today);
+  return hourHistogramOf(onToday.length >= WEEKDAY_HEATMAP_MIN ? onToday : source);
+}
 
-  #hourHistogram(today: Weekday): number[] {
-    const onToday = this.#timestamps.filter((ts) => ts.weekday === today);
-    const source = onToday.length >= WEEKDAY_HEATMAP_MIN ? onToday : this.#timestamps;
-
-    const histogram = new Array<number>(24).fill(0);
-    for (const ts of source) {
-      histogram[ts.hour] = (histogram[ts.hour] ?? 0) + 1;
-    }
-
-    const total = histogram.reduce((a, b) => a + b, 0);
-    if (total > 0) {
-      for (const [i, count] of histogram.entries()) histogram[i] = count / total;
-    }
-    return histogram;
-  }
+function countByWeekday(source: readonly Recorded[]): WeekdayCounts {
+  const counts: Record<Weekday, number> = {
+    Mon: 0,
+    Tue: 0,
+    Wed: 0,
+    Thu: 0,
+    Fri: 0,
+    Sat: 0,
+    Sun: 0,
+  };
+  for (const ts of source) counts[ts.weekday] += 1;
+  return counts;
 }
 
 export function recentSessions<T>(sessions: readonly T[]): readonly T[] {

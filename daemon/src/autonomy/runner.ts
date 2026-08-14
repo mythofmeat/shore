@@ -233,9 +233,14 @@ export class CharacterAutonomy {
     if (latestUserAt !== undefined) this.#clock.seedLastUserAtIfUnset(latestUserAt);
   }
 
-  activityStats(now: number, localAt: number): { stats: ActivityStats; messageCount: number } {
+  activityStats(
+    now: number,
+    localAt: number,
+    days?: number,
+  ): { stats: ActivityStats; messageCount: number } {
+    const window = days === undefined ? undefined : { localNow: localAt, days };
     return {
-      stats: this.#activity.stats(now, weekdayOf(localAt)),
+      stats: this.#activity.stats(now, weekdayOf(localAt), window),
       messageCount: this.#activity.messageCount,
     };
   }
