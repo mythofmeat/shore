@@ -22,27 +22,81 @@ pub(crate) use styling::*;
 pub(crate) use transcript::*;
 
 use std::fmt;
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use chrono::{DateTime, FixedOffset, Local};
 
 // ---------------------------------------------------------------------------
-// Color control (NO_COLOR / --no-color)
+// Color control (NO_COLOR)
 // ---------------------------------------------------------------------------
 
-static COLOR_ENABLED: AtomicBool = AtomicBool::new(true);
+static COLOR_STDOUT: AtomicBool = AtomicBool::new(true);
+static COLOR_STDERR: AtomicBool = AtomicBool::new(true);
+static DECORATE_STDOUT: AtomicBool = AtomicBool::new(true);
 
-/// Set whether color output is enabled. Call once at startup.
+/// Set whether color output is enabled on both streams. Tests pin it; the
+/// binary decides with [`detect_color`].
+#[cfg(test)]
 pub(crate) fn set_color_enabled(enabled: bool) {
-    COLOR_ENABLED.store(enabled, Ordering::Relaxed);
+    COLOR_STDOUT.store(enabled, Ordering::Relaxed);
+    COLOR_STDERR.store(enabled, Ordering::Relaxed);
+}
+
+/// Decide color and decoration from the environment and the two streams.
+/// Call once at startup.
+///
+/// Each stream decides its color separately, so `shore log | less` sends plain
+/// text down the pipe while an error raised on the way still reaches the
+/// terminal in red.
+pub(crate) fn detect_color() {
+    let vetoed = env_flag_set("NO_COLOR");
+    let forced = env_flag_set("FORCE_COLOR");
+    let stdout_is_screen = forced || io::stdout().is_terminal();
+    COLOR_STDOUT.store(
+        color_for_stream(vetoed, forced, io::stdout().is_terminal()),
+        Ordering::Relaxed,
+    );
+    COLOR_STDERR.store(
+        color_for_stream(vetoed, forced, io::stderr().is_terminal()),
+        Ordering::Relaxed,
+    );
+    DECORATE_STDOUT.store(stdout_is_screen, Ordering::Relaxed);
+}
+
+fn env_flag_set(name: &str) -> bool {
+    std::env::var(name).is_ok_and(|v| !v.is_empty())
+}
+
+/// A terminal gets color; a pipe or a file does not, unless FORCE_COLOR asks
+/// for it — which is what `| less -R` needs. NO_COLOR overrules both.
+fn color_for_stream(vetoed: bool, forced: bool, is_terminal: bool) -> bool {
+    !vetoed && (forced || is_terminal)
 }
 
 #[cfg(test)]
 pub(crate) static COLOR_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 pub(crate) fn use_color() -> bool {
-    COLOR_ENABLED.load(Ordering::Relaxed)
+    COLOR_STDOUT.load(Ordering::Relaxed)
+}
+
+pub(crate) fn use_color_on_stderr() -> bool {
+    COLOR_STDERR.load(Ordering::Relaxed)
+}
+
+/// Whether stdout gets the drawn transcript — rules, gutters, box characters —
+/// or the flat `name [HH:MM]:` rendering. A pipe or a file gets the flat one.
+///
+/// Distinct from [`use_color`] because the two answers differ: NO_COLOR on a
+/// terminal means an uncolored *drawn* transcript, not a flattened one.
+pub(crate) fn use_decoration() -> bool {
+    DECORATE_STDOUT.load(Ordering::Relaxed)
+}
+
+#[cfg(test)]
+pub(crate) fn set_decoration_enabled(enabled: bool) {
+    DECORATE_STDOUT.store(enabled, Ordering::Relaxed);
 }
 
 pub(crate) fn write_stdout_line(args: fmt::Arguments<'_>) {
@@ -105,6 +159,21 @@ pub(crate) fn parse_timestamp(ts: &str) -> Option<DateTime<Local>> {
 mod tests {
     use super::*;
     use super::vocab::wrap_line;
+
+    #[test]
+    fn a_terminal_gets_colour_and_a_pipe_does_not() {
+        assert!(color_for_stream(false, false, true));
+        assert!(!color_for_stream(false, false, false));
+    }
+
+    /// `shore log | less -R` wants the escapes kept; NO_COLOR wants them gone
+    /// whatever else is set, which is the rule no-color.org asks for.
+    #[test]
+    fn force_color_overrides_the_pipe_and_no_color_overrides_everything() {
+        assert!(color_for_stream(false, true, false));
+        assert!(!color_for_stream(true, false, true));
+        assert!(!color_for_stream(true, true, true));
+    }
 
     #[test]
     fn abbreviate_strips_date_suffix() {

@@ -147,7 +147,7 @@ fn discover_from_path(path: &Path, selector: Option<&str>) -> Result<ServerAddr>
                 return Err(ClientError::Discovery {
                     kind: DiscoveryKind::Ambiguous,
                     message: format!(
-                        "{} daemons are running ({}) — name one with --addr or --config, \
+                        "{} daemons are running ({}) — name one with --addr or SHORE_ADDR, \
                          or set default_address in client.toml",
                         several.len(),
                         describe_instances(several)

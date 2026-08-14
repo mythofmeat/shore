@@ -551,15 +551,25 @@ pub(crate) fn print_new_message(msg: &NewMessage, character_name: &str) {
         .map(|dt| dt.format("%H:%M").to_string())
         .unwrap_or_default();
 
-    let (name, color) = match msg.message.role {
-        shore_common::protocol::types::Role::User => ("You", Tone::Active),
-        shore_common::protocol::types::Role::Assistant => {
-            (character_name, character_color(character_name))
-        }
-        shore_common::protocol::types::Role::System => ("system", Tone::Muted),
+    let speaker = match msg.message.role {
+        shore_common::protocol::types::Role::User => Speaker {
+            drawn: "You",
+            flat: "you",
+            tone: Tone::Active,
+        },
+        shore_common::protocol::types::Role::Assistant => Speaker {
+            drawn: character_name,
+            flat: character_name,
+            tone: character_color(character_name),
+        },
+        shore_common::protocol::types::Role::System => Speaker {
+            drawn: "system",
+            flat: "system",
+            tone: Tone::Muted,
+        },
     };
 
-    write_header(&mut out, name, &time_str, color, width);
+    write_speaker_line(&mut out, &speaker, &time_str, width);
     let _ignored = writeln!(out, "{}", msg.message.content);
     _ = writeln!(out);
 
@@ -573,8 +583,35 @@ pub(crate) fn print_follow_stream_start(character_name: &str) {
     let mut out = stdout.lock();
     let width = term_width();
     let time_str = Local::now().format("%H:%M").to_string();
-    let color = character_color(character_name);
-    write_header(&mut out, character_name, &time_str, color, width);
+    let speaker = Speaker {
+        drawn: character_name,
+        flat: character_name,
+        tone: character_color(character_name),
+    };
+    write_speaker_line(&mut out, &speaker, &time_str, width);
+}
+
+/// How a speaker is named in each of the two renderings. The drawn rule says
+/// `You`; the flat line says `you`, matching what the batch renderer writes so
+/// a pipe reading both sees one spelling.
+struct Speaker<'name> {
+    drawn: &'name str,
+    flat: &'name str,
+    tone: Tone,
+}
+
+/// The speaker header for live frames: a rule on a terminal, the flat
+/// `name [HH:MM]:` line into a pipe.
+///
+/// `--follow` streams messages one frame at a time rather than through the
+/// batch renderer, so it never saw `--plain` and would otherwise keep drawing
+/// rules down a pipe that the rest of `shore log` no longer draws.
+fn write_speaker_line(out: &mut impl Write, speaker: &Speaker<'_>, time_str: &str, width: usize) {
+    if crate::output::use_decoration() {
+        write_header(out, speaker.drawn, time_str, speaker.tone, width);
+    } else {
+        let _ignored = writeln!(out, "{} [{time_str}]:", speaker.flat);
+    }
 }
 
 /// Print a single message in the same transcript format as print_log.
@@ -1053,6 +1090,74 @@ mod tests {
             out.contains('\u{1b}'),
             "a speaker header must carry its colour: {out:?}"
         );
+    }
+
+    /// A pipe reads batch output and `--follow` output as one stream, so a
+    /// reader keying on `you [HH:MM]:` has to match both halves.
+    #[test]
+    fn the_flat_speaker_line_matches_what_the_batch_renderer_writes() {
+        let _guard = crate::output::COLOR_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        crate::output::set_decoration_enabled(false);
+
+        let mut batch_bytes = Vec::new();
+        write_log_plain_with_boundary(
+            &mut batch_bytes,
+            &[serde_json::json!({
+                "role": "user",
+                "content": "hi",
+                "timestamp": "2026-01-01T14:30:00+00:00",
+            })],
+            0,
+            "qifei",
+            LogFilter::default(),
+        );
+        let batch = String::from_utf8(batch_bytes).unwrap_or_default();
+        let batch_header = batch.lines().next().unwrap_or_default().to_owned();
+
+        // The batch renderer shows local time; take its clock, compare the line.
+        let time_str = batch_header.split(['[', ']']).nth(1).unwrap_or_default();
+
+        let mut live_bytes = Vec::new();
+        write_speaker_line(
+            &mut live_bytes,
+            &Speaker {
+                drawn: "You",
+                flat: "you",
+                tone: Tone::Active,
+            },
+            time_str,
+            40,
+        );
+
+        crate::output::set_decoration_enabled(true);
+
+        let live = String::from_utf8(live_bytes).unwrap_or_default();
+        assert_eq!(live.trim_end(), batch_header);
+        assert!(!live.contains('\u{2500}'), "a pipe gets no rule: {live:?}");
+    }
+
+    #[test]
+    fn a_terminal_still_gets_the_drawn_rule() {
+        let _guard = crate::output::COLOR_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        set_color_enabled(false);
+        let mut buf = Vec::new();
+        write_speaker_line(
+            &mut buf,
+            &Speaker {
+                drawn: "You",
+                flat: "you",
+                tone: Tone::Active,
+            },
+            "14:30",
+            40,
+        );
+        let out = String::from_utf8(buf).unwrap_or_default();
+        assert!(out.contains('\u{2500}'), "terminal keeps the rule: {out:?}");
+        assert!(out.contains("You"));
     }
 
     #[test]
