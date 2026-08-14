@@ -272,16 +272,8 @@ fn arb_client_message() -> BoxedStrategy<ClientMessage> {
     prop_oneof![
         hello,
         message,
-        (
-            prop::option::of(arb_ident()),
-            any::<bool>(),
-            prop::option::of(arb_small_string())
-        )
-            .prop_map(|(rid, stream, guidance)| ClientMessage::Regen(Regen {
-                rid,
-                stream,
-                guidance,
-            })),
+        (prop::option::of(arb_ident()), any::<bool>())
+            .prop_map(|(rid, stream)| ClientMessage::Regen(Regen { rid, stream })),
         (prop::option::of(arb_ident()), arb_ident(), arb_json())
             .prop_map(|(rid, name, args)| ClientMessage::Command(Command { rid, name, args }),),
         Just(ClientMessage::Cancel(Cancel {})),

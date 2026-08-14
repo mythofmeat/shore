@@ -686,8 +686,7 @@ fn client_message_golden() {
 const CLIENT_REGEN_FIXTURE: &str = r#"{
     "type": "regen",
     "rid": "req_002",
-    "stream": true,
-    "guidance": "Be more concise"
+    "stream": true
 }"#;
 
 #[test]
@@ -698,7 +697,28 @@ fn client_regen_golden() {
     ClientMessage::Regen(r) => {
         assert_eq!(r.rid.as_deref(), Some("req_002"));
         assert!(r.stream);
-        assert_eq!(r.guidance.as_deref(), Some("Be more concise"));
+    }
+    );
+}
+
+/// `guidance` was decoded and discarded for the whole life of the field, and
+/// was removed rather than implemented. An older `shore` on the same machine
+/// still puts it on the wire, and must get a regenerated reply rather than a
+/// parse failure.
+#[test]
+fn client_regen_tolerates_a_retired_guidance_field() {
+    let fixture = r#"{
+        "type": "regen",
+        "rid": "req_002",
+        "stream": true,
+        "guidance": "Be more concise"
+    }"#;
+    let msg: ClientMessage = serde_json::from_str(fixture).expect("retired field must not reject");
+    assert_variant!(
+    msg,
+    ClientMessage::Regen(r) => {
+        assert_eq!(r.rid.as_deref(), Some("req_002"));
+        assert!(r.stream);
     }
     );
 }
@@ -1002,7 +1022,6 @@ fn client_regen_missing_optionals() {
     ClientMessage::Regen(r) => {
         assert_eq!(r.rid, None);
         assert!(!r.stream);
-        assert_eq!(r.guidance, None);
     }
     );
 }

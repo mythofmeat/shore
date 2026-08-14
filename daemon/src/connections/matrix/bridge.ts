@@ -142,11 +142,7 @@ export class Bridge {
       case "regen":
         if (!(await this.#target(roomId))) return;
         this.#activeRoom = roomId;
-        await this.#options.peer.send({
-          type: "regen",
-          stream: true,
-          ...(input.guidance === undefined ? {} : { guidance: input.guidance }),
-        });
+        await this.#options.peer.send({ type: "regen", stream: true });
         return;
 
       case "command":

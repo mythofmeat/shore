@@ -332,17 +332,12 @@ impl SWPConnection {
     }
 
     /// Send a regen request. Returns the `rid` used.
-    pub async fn send_regen(
-        &mut self,
-        stream: bool,
-        guidance: Option<String>,
-    ) -> Result<Option<String>> {
+    pub async fn send_regen(&mut self, stream: bool) -> Result<Option<String>> {
         use crate::protocol::client_msg::Regen;
         let rid = Some(uuid_v4());
         let msg = ClientMessage::Regen(Regen {
             rid: rid.clone(),
             stream,
-            guidance,
         });
         self.send(&msg).await?;
         Ok(rid)

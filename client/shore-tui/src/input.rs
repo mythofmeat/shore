@@ -223,9 +223,7 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
             app.begin_regen_optimistic();
             let msg = ClientMessage::Regen(Regen {
                 rid: None,
-
                 stream: true,
-                guidance: None,
             });
             Action::Send(ConnCommand::Send(msg))
         }
@@ -1028,13 +1026,7 @@ fn parse_command(app: &mut App, input: &str) -> Action {
             app.begin_regen_optimistic();
             let msg = ClientMessage::Regen(Regen {
                 rid: None,
-
                 stream: true,
-                guidance: if arg.is_empty() {
-                    None
-                } else {
-                    Some(arg.to_string())
-                },
             });
             Action::Send(ConnCommand::Send(msg))
         }

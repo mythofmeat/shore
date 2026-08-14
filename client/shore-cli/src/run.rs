@@ -122,8 +122,8 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
 
     match &cli.command {
         CliCommand::Send { .. } => handle_send_command(&mut conn, &cli.command).await?,
-        CliCommand::Regen { guidance } => {
-            _ = conn.send_regen(true, guidance.clone()).await?;
+        CliCommand::Regen => {
+            _ = conn.send_regen(true).await?;
             recv_streaming_response(&mut conn).await?;
         }
         CliCommand::Alt { .. } => handle_alt_command(&mut conn, &cli.command).await?,
@@ -1621,8 +1621,8 @@ mod tests {
                     .unwrap();
                 super::recv_streaming_response(&mut conn).await.unwrap();
             }
-            CliCommand::Regen { guidance } => {
-                let _ignored = conn.send_regen(true, guidance.clone()).await.unwrap();
+            CliCommand::Regen => {
+                let _ignored = conn.send_regen(true).await.unwrap();
                 super::recv_streaming_response(&mut conn).await.unwrap();
             }
             other @ (CliCommand::Alt { .. }
@@ -1719,17 +1719,12 @@ mod tests {
 
     #[tokio::test]
     async fn regen_sends_swp_regen() {
-        let cli = test_cli(CliCommand::Regen {
-            guidance: Some("be funny".into()),
-        });
+        let cli = test_cli(CliCommand::Regen);
         let received = execute_with_mock(cli, streaming_response("Haha!")).await;
 
         assert_variant!(
             received,
-            ClientMessage::Regen(r) => {
-                assert!(r.stream);
-                assert_eq!(r.guidance.as_deref(), Some("be funny"));
-            }
+            ClientMessage::Regen(r) => assert!(r.stream)
         );
     }
 

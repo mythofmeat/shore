@@ -116,7 +116,6 @@ mod tests {
         let msg = ClientMessage::Regen(Regen {
             rid: Some("regen_01".into()),
             stream: true,
-            guidance: None,
         });
         let (json, _back) = round_trip(&msg);
         assert_eq!(field(&json, "type"), "regen");

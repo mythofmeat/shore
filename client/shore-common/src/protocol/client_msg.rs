@@ -81,8 +81,6 @@ pub struct Regen {
     pub rid: Option<String>,
     #[serde(default)]
     pub stream: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub guidance: Option<String>,
 }
 
 /// Execute a server command.

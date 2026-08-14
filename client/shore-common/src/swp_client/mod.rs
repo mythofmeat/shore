@@ -289,7 +289,7 @@ mod tests {
         });
 
         let mut conn = SWPConnection::from_raw_stream(client_stream);
-        let _regen_sent = conn.send_regen(true, None).await.unwrap();
+        let _regen_sent = conn.send_regen(true).await.unwrap();
         let _command_sent = conn
             .send_command("switch_character", serde_json::json!({"name": "alice"}))
             .await

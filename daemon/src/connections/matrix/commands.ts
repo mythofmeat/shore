@@ -1,7 +1,7 @@
 export type BridgeInput =
   | { readonly kind: "text"; readonly text: string }
   | { readonly kind: "command"; readonly name: string; readonly args: Record<string, unknown> }
-  | { readonly kind: "regen"; readonly guidance: string | undefined }
+  | { readonly kind: "regen" }
   | { readonly kind: "cancel" }
   | { readonly kind: "bind"; readonly character: string | undefined }
   | { readonly kind: "unbind" }
@@ -47,7 +47,7 @@ const BANGS: Record<string, Resolver> = {
     return { kind: "view", key, value: parseToggle(value) };
   },
 
-  regen: (args) => ({ kind: "regen", guidance: args === "" ? undefined : args }),
+  regen: () => ({ kind: "regen" }),
   cancel: () => ({ kind: "cancel" }),
 
   status: () => command("status"),
@@ -156,7 +156,7 @@ export const HELP = [
   "- `!bind [character]` — bind this room to a character (no argument lists them)",
   "- `!unbind` — release this room",
   "- `!view [thinking|tools|usage] [on|off]` — what this room shows alongside replies",
-  "- `!regen [guidance]` / `!cancel` — redo or stop the current reply",
+  "- `!regen` / `!cancel` — redo or stop the current reply",
   "- `!status`, `!usage`, `!tools`, `!log [n]`",
   "- `!character [name]`, `!model [name|all|reset]`, `!setting <key> <value>`",
   "- `!memory <query>`, `!compact [dry] [keep <n>]`, `!sys <text>`",

@@ -37,7 +37,7 @@ const LEADING_FLAGS: [(&str, &str); 3] = [
 ];
 
 /// Flags that used to exist and now have one obvious replacement each.
-const RETIRED_FLAGS: [(&str, &str); 6] = [
+const RETIRED_FLAGS: [(&str, &str); 8] = [
     (
         "--config",
         "name the daemon with --addr, or set SHORE_ADDR",
@@ -59,7 +59,14 @@ const RETIRED_FLAGS: [(&str, &str); 6] = [
         "--thinking",
         "set it on the model: shore model setting budget_tokens <tokens>",
     ),
+    ("--guidance", GUIDANCE_WAS_NEVER_READ),
+    ("-g", GUIDANCE_WAS_NEVER_READ),
 ];
+
+/// The daemon decoded `guidance` off the wire and built the generation body
+/// without it — in this daemon and in the Rust one before it. Naming a
+/// replacement would be wrong; there was never a behaviour to replace.
+const GUIDANCE_WAS_NEVER_READ: &str = "it never reached the model, so `shore regen` is the same call";
 
 /// The commands that used to take a bare name and now want `use`.
 const NAMED_BY_USE: [&str; 2] = ["model", "character"];
@@ -251,11 +258,7 @@ pub(crate) enum CliCommand {
 
     /// Regenerate the last assistant response
     #[command(display_order = 2)]
-    Regen {
-        /// Optional guidance for the regeneration
-        #[arg(short, long)]
-        guidance: Option<String>,
-    },
+    Regen,
 
     /// List or select alternate responses for the latest assistant message
     #[command(display_order = 3)]
@@ -1538,24 +1541,26 @@ mod tests {
     // ── Regen ────────────────────────────────────────────────────────
 
     #[test]
-    fn parse_regen_no_guidance() {
-        let cli = parse(&["regen"]);
-        assert_variant!(
-            &cli.command,
-            CliCommand::Regen { guidance } => {
-                assert!(guidance.is_none());
-            }
-        );
+    fn parse_regen() {
+        assert_variant!(&parse(&["regen"]).command, CliCommand::Regen => {});
     }
 
+    /// `--guidance` reached the daemon, which decoded it and dropped it on the
+    /// floor — no daemon ever read the field, in this port or the Rust one it
+    /// replaced. It is retired rather than implemented, and the message says
+    /// so instead of naming a replacement that never existed.
     #[test]
-    fn parse_regen_with_guidance() {
-        let cli = parse(&["regen", "--guidance", "be more concise"]);
-        assert_variant!(
-            &cli.command,
-            CliCommand::Regen { guidance } => {
-                assert_eq!(guidance.as_deref(), Some("be more concise"));
-            }
+    fn regen_guidance_no_longer_parses() {
+        for flag in ["--guidance", "-g"] {
+            assert_eq!(
+                misplaced(&["regen", flag, "be more concise"]),
+                Some(FlagProblem::Retired(flag, GUIDANCE_WAS_NEVER_READ)),
+                "{flag}"
+            );
+        }
+        assert_eq!(
+            parse_error(&["regen", "--guidance", "be more concise"]).kind(),
+            clap::error::ErrorKind::UnknownArgument
         );
     }
 
@@ -2494,7 +2499,7 @@ mod tests {
 
     #[test]
     fn regen_maps_to_none() {
-        let cmd = CliCommand::Regen { guidance: None };
+        let cmd = CliCommand::Regen;
         assert!(to_swp_command(&cmd, None).is_none());
     }
 

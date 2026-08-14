@@ -52,9 +52,9 @@ describe("commands the bridge answers itself", () => {
 });
 
 describe("stream control", () => {
-  test("regen carries optional guidance; cancel carries nothing", () => {
-    expect(parseInput("!regen")).toEqual({ kind: "regen", guidance: undefined });
-    expect(parseInput("!regen be shorter")).toEqual({ kind: "regen", guidance: "be shorter" });
+  test("regen and cancel carry nothing, trailing words and all", () => {
+    expect(parseInput("!regen")).toEqual({ kind: "regen" });
+    expect(parseInput("!regen be shorter")).toEqual({ kind: "regen" });
     expect(parseInput("!cancel")).toEqual({ kind: "cancel" });
   });
 });

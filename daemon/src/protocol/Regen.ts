@@ -3,4 +3,4 @@
 /**
  * Regenerate last response.
  */
-export type Regen = { rid?: string | null, stream: boolean, guidance?: string | null, };
+export type Regen = { rid?: string | null, stream: boolean, };
