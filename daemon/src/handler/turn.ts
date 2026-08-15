@@ -95,9 +95,10 @@ export async function appendUserTurn(
 }
 
 const ACTIVITY_BACKFILL_DAYS = 90;
+const SEGMENTS_PAST_THE_WINDOW = 3;
 
 export async function ensureAndBackfillAutonomy(
-  ctx: TurnContext,
+  ctx: Pick<TurnContext, "autonomy">,
   engine: TurnEngine,
   charName: string,
   config: LoadedConfig,
@@ -109,19 +110,24 @@ export async function ensureAndBackfillAutonomy(
   const cutoff = new Date(now.getTime() - ACTIVITY_BACKFILL_DAYS * 24 * 60 * 60 * 1000);
   const timestamps: Date[] = [];
 
-  const collect = (msgs: readonly Message[]): void => {
+  const collect = (msgs: readonly Message[]): number => {
+    let kept = 0;
     for (const msg of msgs) {
       if (msg.role !== "user" || isToolResultOnly(msg)) continue;
       const at = new Date(msg.timestamp);
-      if (!Number.isNaN(at.getTime()) && at >= cutoff) timestamps.push(at);
+      if (Number.isNaN(at.getTime()) || at < cutoff) continue;
+      timestamps.push(at);
+      kept += 1;
     }
+    return kept;
   };
 
   collect(engine.messages());
   const segments = engine.segments();
-  for (let i = 0; i < segments.segmentCount(); i += 1) {
+  let barren = 0;
+  for (let i = segments.segmentCount() - 1; i >= 0 && barren < SEGMENTS_PAST_THE_WINDOW; i -= 1) {
     try {
-      collect(await segments.readSegment(i));
+      barren = collect(await segments.readSegment(i)) === 0 ? barren + 1 : 0;
     } catch {
     }
   }

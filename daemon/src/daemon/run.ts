@@ -10,6 +10,7 @@ import { superviseMatrixBridge } from "../connections/matrix/supervise.ts";
 import { tokenMatches, TOKEN_ENV } from "../config/token.ts";
 import { buildMessageHandlerDeps, configReloader } from "../handler/deps.ts";
 import { MessageHandler } from "../handler/router.ts";
+import { ensureAndBackfillAutonomy } from "../handler/turn.ts";
 import { Instances, type InstanceInfo } from "./instances.ts";
 import type { SidecarProvider, SidecarRequest } from "../llm/types.ts";
 import { createRuntime, startRuntimeClocks, type ShoreRuntime } from "../runtime.ts";
@@ -40,6 +41,34 @@ async function registerKnownCharacters(
       characters: characters.join(", "),
     });
   }
+}
+
+function seedActivityInBackground(
+  runtime: ShoreRuntime,
+  bridge: TurnAutonomyBridge,
+  log: Logger | undefined,
+): void {
+  void (async () => {
+    for (const character of runtime.registry.availableCharacters()) {
+      if (!bridge.needsActivityBackfill(character)) continue;
+      const started = performance.now();
+      try {
+        const engine = await runtime.registry.getOrCreate(character);
+        await ensureAndBackfillAutonomy(
+          { autonomy: bridge },
+          engine,
+          character,
+          runtime.registry.effectiveConfig(character),
+        );
+        log?.info?.("Seeded activity from history", {
+          character,
+          took_ms: Math.round(performance.now() - started),
+        });
+      } catch (e) {
+        console.warn(`shore: could not seed ${character}'s activity from history: ${String(e)}`);
+      }
+    }
+  })();
 }
 
 export interface DaemonOptions {
@@ -177,6 +206,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     ...(log === undefined ? {} : { log }),
   };
   await registerKnownCharacters(runtime, assembly.autonomy, log);
+  seedActivityInBackground(runtime, assembly.autonomy, log);
   const clocks = startRuntimeClocks(runtime);
 
   const handler = new MessageHandler(buildMessageHandlerDeps(assembly));
