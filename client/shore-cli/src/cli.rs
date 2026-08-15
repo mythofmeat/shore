@@ -646,6 +646,10 @@ pub(crate) enum TraceCommand {
         #[arg(long, requires = "diff", value_name = "ID")]
         against: Option<i64>,
 
+        /// Show the raw HTTP request and response bodies in full, untruncated
+        #[arg(long, requires = "id")]
+        wire: bool,
+
         /// Output raw JSON
         #[arg(long)]
         json: bool,
@@ -1287,12 +1291,16 @@ fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
             call_type,
             diff,
             against,
+            wire,
             ..
         } => {
             let mut args = Map::new();
             match id {
                 Some(one) => {
                     _ = args.insert("id".into(), json!(one));
+                    if *wire {
+                        _ = args.insert("wire".into(), json!(true));
+                    }
                     if *diff {
                         _ = args.insert("diff".into(), json!(true));
                         if let Some(other) = against {
@@ -1488,6 +1496,12 @@ mod tests {
         let mut full = vec!["shore"];
         full.extend_from_slice(args);
         Cli::parse_from(full)
+    }
+
+    fn try_parse(args: &[&str]) -> Result<Cli, clap::Error> {
+        let mut full = vec!["shore"];
+        full.extend_from_slice(args);
+        Cli::try_parse_from(full)
     }
 
     fn arg<'val>(args: &'val serde_json::Value, key: &str) -> &'val serde_json::Value {
@@ -3320,6 +3334,24 @@ mod tests {
         let cli = parse(&["trace", "calls", "42"]);
         let (_, args) = to_swp_command(&cli.command, None).unwrap();
         assert!(args.get("diff").is_none());
+    }
+
+    #[test]
+    fn trace_calls_asks_for_the_wire_only_when_told_to() {
+        let bare = parse(&["trace", "calls", "42"]);
+        let (_, bare_args) = to_swp_command(&bare.command, None).unwrap();
+        assert!(bare_args.get("wire").is_none());
+
+        let asked = parse(&["trace", "calls", "42", "--wire"]);
+        let (name, args) = to_swp_command(&asked.command, None).unwrap();
+        assert_eq!(name, "call_log");
+        assert_eq!(arg(&args, "id"), 42);
+        assert_eq!(arg(&args, "wire"), true);
+    }
+
+    #[test]
+    fn trace_calls_wire_needs_a_call_to_read() {
+        assert!(try_parse(&["trace", "calls", "--wire"]).is_err());
     }
 
     #[test]

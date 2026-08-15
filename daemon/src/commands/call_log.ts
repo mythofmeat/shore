@@ -37,12 +37,24 @@ function presentCall(call: CallPayload): Json {
   };
 }
 
-function presentWire(exchanges: readonly HttpExchangeRow[]): Json {
-  return exchanges.map((exchange) => ({
-    ...exchange,
-    request_body: decodeBody(exchange.request_body),
-    response_body: decodeBody(exchange.response_body),
-  }));
+function presentWire(exchanges: readonly HttpExchangeRow[], bodies: boolean): Json {
+  return exchanges.map((exchange) => {
+    const {
+      request_headers,
+      request_body,
+      response_headers,
+      response_body,
+      ...meta
+    } = exchange;
+    if (!bodies) return meta;
+    return {
+      ...meta,
+      request_headers,
+      response_headers,
+      request_body: decodeBody(request_body),
+      response_body: decodeBody(response_body),
+    };
+  });
 }
 
 export function callLog(ctx: CallLogContext, args: Args): Json {
@@ -54,8 +66,9 @@ export function callLog(ctx: CallLogContext, args: Args): Json {
     const payload = query(CALL_STORE_FAILED, () => store.getCall(id));
     if (payload === null) throw invalidRequest(`no call with id ${id}`);
     const wire = query(CALL_STORE_FAILED, () => store.httpCallsFor(payload.call_id));
+    const bodies = args["wire"] === true;
     if (args["diff"] !== true) {
-      return { enabled: true, call: presentCall(payload), wire: presentWire(wire) };
+      return { enabled: true, call: presentCall(payload), wire: presentWire(wire, bodies) };
     }
 
     const against = asI64(args["against"]) ?? query(CALL_STORE_FAILED, () => store.previousCallId(id));
@@ -69,7 +82,7 @@ export function callLog(ctx: CallLogContext, args: Args): Json {
     return {
       enabled: true,
       call: presentCall(payload),
-      wire: presentWire(wire),
+      wire: presentWire(wire, bodies),
       diff: diff as unknown as Json,
     };
   }
