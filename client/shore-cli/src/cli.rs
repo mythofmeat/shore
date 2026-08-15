@@ -924,6 +924,78 @@ fn pairs_object(pairs: &[(String, String)]) -> serde_json::Value {
     )
 }
 
+const COMMAND_GROUPS: [(&str, &[&str]); 5] = [
+    (
+        "Conversation",
+        &["send", "log", "regen", "alt", "edit", "delete", "compact"],
+    ),
+    ("Configuration", &["character", "model", "provider", "config"]),
+    ("Inspection", &["status", "usage", "trace"]),
+    ("Shell", &["completions"]),
+    ("Advanced", &["debug"]),
+];
+
+fn first_line(about: &str) -> String {
+    about.lines().next().unwrap_or("").trim().to_owned()
+}
+
+fn grouped_names() -> impl Iterator<Item = &'static str> {
+    COMMAND_GROUPS
+        .iter()
+        .flat_map(|(_, names)| names.iter().copied())
+}
+
+fn render_command_groups(base: &clap::Command) -> String {
+    let width = COMMAND_GROUPS
+        .iter()
+        .flat_map(|(_, names)| names.iter())
+        .map(|name| name.chars().count())
+        .max()
+        .unwrap_or(0);
+
+    let mut out = String::new();
+    for (heading, names) in COMMAND_GROUPS {
+        out.push_str(heading);
+        out.push_str(":\n");
+        for name in names {
+            let about = base
+                .find_subcommand(name)
+                .and_then(clap::Command::get_about)
+                .map(ToString::to_string)
+                .unwrap_or_default();
+            out.push_str(&format!("  {name:width$}  {}\n", first_line(&about)));
+        }
+        out.push('\n');
+    }
+    out
+}
+
+pub(crate) fn grouped_command() -> clap::Command {
+    use clap::CommandFactory;
+    let base = Cli::command();
+    let listing = render_command_groups(&base);
+
+    let ungrouped: Vec<String> = base
+        .get_subcommands()
+        .map(|sub| sub.get_name().to_owned())
+        .filter(|name| !grouped_names().any(|grouped| grouped == name))
+        .collect();
+
+    let mut cmd = base;
+    for (_, names) in COMMAND_GROUPS {
+        for name in names {
+            cmd = cmd.mut_subcommand(name, |sub| sub.hide(true));
+        }
+    }
+    for name in &ungrouped {
+        cmd = cmd.mut_subcommand(name.as_str(), |sub| sub.hide(true));
+    }
+    cmd.override_usage("shore [OPTIONS] <COMMAND>")
+        .help_template(format!(
+            "{{about-with-newline}}\n{{usage-heading}} {{usage}}\n\n{listing}{{all-args}}"
+        ))
+}
+
 pub(crate) fn print_completions(shell: Shell) {
     use clap::CommandFactory;
     let mut generated: Vec<u8> = Vec::new();
@@ -1587,6 +1659,81 @@ mod tests {
             help.contains("character"),
             "a role you can pass must appear in --help: {help}"
         );
+    }
+
+    fn visible_subcommand_names() -> Vec<String> {
+        use clap::CommandFactory as _;
+        Cli::command()
+            .get_subcommands()
+            .filter(|sub| !sub.is_hide_set())
+            .map(|sub| sub.get_name().to_owned())
+            .collect()
+    }
+
+    #[test]
+    fn every_command_belongs_to_exactly_one_help_group() {
+        for name in visible_subcommand_names() {
+            let groups: Vec<&str> = COMMAND_GROUPS
+                .iter()
+                .filter(|(_, names)| names.contains(&name.as_str()))
+                .map(|(heading, _)| *heading)
+                .collect();
+            assert_eq!(
+                groups.len(),
+                1,
+                "`shore {name}` is in {groups:?}; every command needs exactly one group"
+            );
+        }
+    }
+
+    #[test]
+    fn every_grouped_name_is_a_command_that_exists() {
+        use clap::CommandFactory as _;
+        let command = Cli::command();
+        for name in grouped_names() {
+            assert!(
+                command.find_subcommand(name).is_some(),
+                "`{name}` is listed in a help group but is not a command"
+            );
+        }
+    }
+
+    #[test]
+    fn the_top_level_help_shows_the_groups_and_every_command_under_them() {
+        let help = grouped_command().render_help().to_string();
+        for (heading, names) in COMMAND_GROUPS {
+            assert!(
+                help.contains(&format!("{heading}:")),
+                "group `{heading}` is missing from --help: {help}"
+            );
+            for name in names {
+                assert!(
+                    help.contains(name),
+                    "`shore {name}` is missing from --help: {help}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_help_only_hiding_does_not_reach_the_completions() {
+        let mut buf = Vec::new();
+        clap_complete::generate(
+            Shell::Fish,
+            &mut {
+                use clap::CommandFactory as _;
+                Cli::command()
+            },
+            "shore",
+            &mut buf,
+        );
+        let script = String::from_utf8(buf).expect("utf8");
+        for name in visible_subcommand_names() {
+            assert!(
+                script.contains(&format!("-a \"{name}\"")),
+                "`shore {name}` must still be completable: {script}"
+            );
+        }
     }
 
     #[test]

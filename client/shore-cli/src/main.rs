@@ -42,7 +42,12 @@ fn main() -> ExitCode {
         return cli::report_flag_problem(&problem);
     }
 
-    let cli = <Cli as clap::Parser>::parse();
+    let cli = match <Cli as clap::FromArgMatches>::from_arg_matches(
+        &cli::grouped_command().get_matches(),
+    ) {
+        Ok(parsed) => parsed,
+        Err(e) => e.exit(),
+    };
 
     let default_filter = if matches!(cli.command, CliCommand::Complete { .. }) {
         "off"
