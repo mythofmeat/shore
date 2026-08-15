@@ -1019,14 +1019,30 @@ fn session_activate_heartbeat(h: &serde_json::Value) -> String {
 }
 
 fn print_edit_confirmation(data: &serde_json::Value) {
-    let msg_ref = data["_display_ref"]
-        .as_str()
+    let msg_ref = first_display_ref(data)
         .or_else(|| data["ref"].as_str())
         .unwrap_or("?");
     cli_out!("Edited message {msg_ref}");
 }
 
+fn first_display_ref(data: &serde_json::Value) -> Option<&str> {
+    data["_display_refs"]
+        .as_array()
+        .and_then(|refs| refs.first())
+        .and_then(serde_json::Value::as_str)
+        .or_else(|| data["_display_ref"].as_str())
+}
+
 fn print_delete_confirmation(data: &serde_json::Value) {
+    if let Some(refs) = data["_display_refs"].as_array() {
+        let shown: Vec<&str> = refs.iter().filter_map(serde_json::Value::as_str).collect();
+        match shown.as_slice() {
+            [] => {}
+            [one] => cli_out!("Deleted message {one}"),
+            many => cli_out!("Deleted {} messages: {}", many.len(), many.join(", ")),
+        }
+        return;
+    }
     if let Some(display_ref) = data["_display_ref"].as_str() {
         cli_out!("Deleted message {display_ref}");
         return;

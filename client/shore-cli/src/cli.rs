@@ -267,13 +267,9 @@ pub(crate) enum CliCommand {
         json: bool,
     },
 
-    /// Show the conversation, or edit and delete messages in it
-    #[command(args_conflicts_with_subcommands = true)]
+    /// Show the conversation
     #[command(display_order = 4)]
     Log {
-        #[command(subcommand)]
-        subcommand: Option<LogCommand>,
-
         /// Message reference — show a single message (last, -1, 3, etc.)
         #[arg(allow_hyphen_values = true, value_parser = message_ref)]
         msg_ref: Option<String>,
@@ -311,16 +307,44 @@ pub(crate) enum CliCommand {
         subagent_tools: bool,
     },
 
+    /// Replace the content of a message (last, -1, 3, etc.)
+    #[command(display_order = 5)]
+    Edit {
+        /// Message reference (last, -1, -2, 3, etc.)
+        #[arg(allow_hyphen_values = true, value_parser = message_ref)]
+        msg_ref: String,
+
+        /// New content
+        content: Vec<String>,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Remove one or more messages from the conversation
+    #[command(display_order = 6)]
+    Delete {
+        /// Message references (last, -1, -2, 3, etc.). Every reference resolves
+        /// against the conversation as it stands before any of them are removed
+        #[arg(required = true, allow_hyphen_values = true, value_parser = message_ref)]
+        msg_refs: Vec<String>,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Inspect what the daemon did behind the conversation: raw model calls,
     /// heartbeat activity, and stored sub-agent runs.
-    #[command(display_order = 13)]
+    #[command(display_order = 14)]
     Trace {
         #[command(subcommand)]
         subcommand: Option<TraceCommand>,
     },
 
     /// List characters, or switch to another one
-    #[command(display_order = 6)]
+    #[command(display_order = 8)]
     Character {
         #[command(subcommand)]
         subcommand: Option<CharacterCommand>,
@@ -335,7 +359,7 @@ pub(crate) enum CliCommand {
     },
 
     /// Show daemon and session status
-    #[command(display_order = 11)]
+    #[command(display_order = 12)]
     Status {
         /// Show only one section; every section is shown by default.
         /// `shore complete sections` lists them
@@ -356,7 +380,7 @@ pub(crate) enum CliCommand {
     },
 
     /// Advanced debugging utilities
-    #[command(display_order = 14)]
+    #[command(display_order = 15)]
     Debug {
         #[command(subcommand)]
         subcommand: Option<DebugCommand>,
@@ -364,7 +388,7 @@ pub(crate) enum CliCommand {
 
     /// List models, switch the active one, or tune its sampler settings
     #[command(args_conflicts_with_subcommands = true)]
-    #[command(display_order = 7)]
+    #[command(display_order = 9)]
     Model {
         #[command(subcommand)]
         subcommand: Option<ModelCommand>,
@@ -389,7 +413,7 @@ pub(crate) enum CliCommand {
 
     /// List configured providers with key and cache status, or refresh a catalog
     #[command(args_conflicts_with_subcommands = true)]
-    #[command(display_order = 8)]
+    #[command(display_order = 10)]
     Provider {
         #[command(subcommand)]
         subcommand: Option<ProviderCommand>,
@@ -400,7 +424,7 @@ pub(crate) enum CliCommand {
     },
 
     /// Summarize the conversation into memory and shorten the active window
-    #[command(display_order = 5)]
+    #[command(display_order = 7)]
     Compact {
         /// How many recent user turns to leave in the conversation. Everything
         /// older is folded into markdown memory. 0 keeps none of it, leaving
@@ -414,7 +438,7 @@ pub(crate) enum CliCommand {
 
     /// Show or modify configuration
     #[command(args_conflicts_with_subcommands = true)]
-    #[command(display_order = 9)]
+    #[command(display_order = 11)]
     Config {
         #[command(subcommand)]
         subcommand: Option<ConfigCommand>,
@@ -449,7 +473,7 @@ pub(crate) enum CliCommand {
     },
 
     /// Show token usage statistics and costs
-    #[command(display_order = 12)]
+    #[command(display_order = 13)]
     Usage {
         #[command(subcommand)]
         subcommand: Option<UsageCommand>,
@@ -480,7 +504,7 @@ pub(crate) enum CliCommand {
     },
 
     /// Generate shell completions
-    #[command(display_order = 15)]
+    #[command(display_order = 16)]
     Completions {
         /// Shell to generate completions for
         shell: Shell,
@@ -544,26 +568,6 @@ impl LogRole {
             Self::System => "system",
         }
     }
-}
-
-#[derive(Subcommand, Debug)]
-pub(crate) enum LogCommand {
-    /// Edit a message by reference (last, -1, 3, etc.)
-    Edit {
-        /// Message reference (last, -1, -2, 3, etc.)
-        #[arg(allow_hyphen_values = true, value_parser = message_ref)]
-        msg_ref: String,
-
-        /// New content
-        content: Vec<String>,
-    },
-
-    /// Delete a message by reference (last, -1, 3, etc.)
-    Delete {
-        /// Message reference (last, -1, -2, 3, etc.)
-        #[arg(allow_hyphen_values = true, value_parser = message_ref)]
-        msg_ref: String,
-    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -1063,6 +1067,13 @@ pub(crate) fn to_swp_command(
         }
 
         CliCommand::Log { .. } => log_to_swp(cmd),
+        CliCommand::Edit {
+            msg_ref, content, ..
+        } => Some((
+            "edit",
+            json!({ "ref": msg_ref, "content": content.join(" ") }),
+        )),
+        CliCommand::Delete { msg_refs, .. } => Some(("delete", json!({ "refs": msg_refs }))),
         CliCommand::Trace { subcommand: None } => None,
         CliCommand::Trace { .. } => trace_to_swp(cmd),
 
@@ -1132,7 +1143,6 @@ pub(crate) fn to_swp_command(
 fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     use serde_json::{Map, Value, json};
     let CliCommand::Log {
-        subcommand,
         msg_ref,
         role,
         count,
@@ -1141,20 +1151,6 @@ fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     else {
         return None;
     };
-    if let Some(sub) = subcommand {
-        return match sub {
-            LogCommand::Edit {
-                msg_ref: edit_ref,
-                content,
-            } => Some((
-                "edit",
-                json!({ "ref": edit_ref, "content": content.join(" ") }),
-            )),
-            LogCommand::Delete {
-                msg_ref: delete_ref,
-            } => Some(("delete", json!({ "refs": delete_ref }))),
-        };
-    }
     if let Some(r) = msg_ref {
         let mut args = Map::new();
         let _ignored = args.insert("ref".into(), json!(r));
@@ -1516,7 +1512,6 @@ mod tests {
         assert_variant!(
             &cli.command,
             CliCommand::Log {
-                subcommand,
                 msg_ref,
                 count,
                 role,
@@ -1527,7 +1522,6 @@ mod tests {
                 tools,
                 subagent_tools,
             } => {
-                assert!(subcommand.is_none());
                 assert!(msg_ref.is_none());
                 assert_eq!(*count, 64);
                 assert!(role.is_none());
@@ -1557,12 +1551,7 @@ mod tests {
         let cli = parse(&["log", "last"]);
         assert_variant!(
             &cli.command,
-            CliCommand::Log {
-                msg_ref,
-                subcommand,
-                ..
-            } => {
-                assert!(subcommand.is_none());
+            CliCommand::Log { msg_ref, .. } => {
                 assert_eq!(msg_ref.as_deref(), Some("last"));
             }
         );
@@ -1614,26 +1603,18 @@ mod tests {
         let cli = parse(&["log", "3"]);
         assert_variant!(
             &cli.command,
-            CliCommand::Log {
-                msg_ref,
-                subcommand,
-                ..
-            } => {
-                assert!(subcommand.is_none());
+            CliCommand::Log { msg_ref, .. } => {
                 assert_eq!(msg_ref.as_deref(), Some("3"));
             }
         );
     }
 
     #[test]
-    fn parse_log_edit() {
-        let cli = parse(&["log", "edit", "msg_123", "new", "text"]);
+    fn parse_edit() {
+        let cli = parse(&["edit", "msg_123", "new", "text"]);
         assert_variant!(
             &cli.command,
-            CliCommand::Log {
-                subcommand: Some(LogCommand::Edit { msg_ref, content }),
-                ..
-            } => {
+            CliCommand::Edit { msg_ref, content, .. } => {
                 assert_eq!(msg_ref, "msg_123");
                 assert_eq!(content, &["new", "text"]);
             }
@@ -1641,14 +1622,11 @@ mod tests {
     }
 
     #[test]
-    fn parse_log_edit_last() {
-        let cli = parse(&["log", "edit", "last", "updated"]);
+    fn parse_edit_last() {
+        let cli = parse(&["edit", "last", "updated"]);
         assert_variant!(
             &cli.command,
-            CliCommand::Log {
-                subcommand: Some(LogCommand::Edit { msg_ref, content }),
-                ..
-            } => {
+            CliCommand::Edit { msg_ref, content, .. } => {
                 assert_eq!(msg_ref, "last");
                 assert_eq!(content, &["updated"]);
             }
@@ -1656,14 +1634,11 @@ mod tests {
     }
 
     #[test]
-    fn parse_log_edit_negative_index() {
-        let cli = parse(&["log", "edit", "-1", "new", "text"]);
+    fn parse_edit_negative_index() {
+        let cli = parse(&["edit", "-1", "new", "text"]);
         assert_variant!(
             &cli.command,
-            CliCommand::Log {
-                subcommand: Some(LogCommand::Edit { msg_ref, content }),
-                ..
-            } => {
+            CliCommand::Edit { msg_ref, content, .. } => {
                 assert_eq!(msg_ref, "-1");
                 assert_eq!(content, &["new", "text"]);
             }
@@ -1671,31 +1646,54 @@ mod tests {
     }
 
     #[test]
-    fn parse_log_delete() {
-        let cli = parse(&["log", "delete", "msg_456"]);
+    fn parse_delete() {
+        let cli = parse(&["delete", "msg_456"]);
         assert_variant!(
             &cli.command,
-            CliCommand::Log {
-                subcommand: Some(LogCommand::Delete { msg_ref }),
-                ..
-            } => {
-                assert_eq!(msg_ref, "msg_456");
+            CliCommand::Delete { msg_refs, .. } => {
+                assert_eq!(msg_refs, &["msg_456"]);
             }
         );
     }
 
     #[test]
-    fn parse_log_delete_negative_index() {
-        let cli = parse(&["log", "delete", "-1"]);
+    fn parse_delete_negative_index() {
+        let cli = parse(&["delete", "-1"]);
         assert_variant!(
             &cli.command,
-            CliCommand::Log {
-                subcommand: Some(LogCommand::Delete { msg_ref }),
-                ..
-            } => {
-                assert_eq!(msg_ref, "-1");
+            CliCommand::Delete { msg_refs, .. } => {
+                assert_eq!(msg_refs, &["-1"]);
             }
         );
+    }
+
+    #[test]
+    fn parse_delete_takes_several_refs() {
+        let cli = parse(&["delete", "-1", "-2", "msg_456"]);
+        assert_variant!(
+            &cli.command,
+            CliCommand::Delete { msg_refs, .. } => {
+                assert_eq!(msg_refs, &["-1", "-2", "msg_456"]);
+            }
+        );
+    }
+
+    #[test]
+    fn delete_needs_at_least_one_ref() {
+        assert!(Cli::try_parse_from(["shore", "delete"]).is_err());
+    }
+
+    #[test]
+    fn log_no_longer_carries_edit_or_delete() {
+        for args in [
+            &["log", "edit", "last", "text"][..],
+            &["log", "delete", "last"][..],
+        ] {
+            assert!(
+                Cli::try_parse_from(std::iter::once("shore").chain(args.iter().copied())).is_err(),
+                "{args:?} must not parse"
+            );
+        }
     }
 
     #[test]
@@ -2318,7 +2316,9 @@ mod tests {
     fn a_mistyped_flag_is_not_read_as_a_message_reference() {
         for args in [
             &["log", "--conten"][..],
-            &["log", "edit", "--conten"][..],
+            &["edit", "--conten"][..],
+            &["delete", "--conten"][..],
+            &["delete", "-1", "--conten"][..],
             &["alt", "--conten"][..],
         ] {
             let err = parse_error(args);
@@ -2331,6 +2331,12 @@ mod tests {
             &parse(&["log", "-1"]).command,
             CliCommand::Log { msg_ref, .. } => {
                 assert_eq!(msg_ref.as_deref(), Some("-1"));
+            }
+        );
+        assert_variant!(
+            &parse(&["delete", "-1", "-2"]).command,
+            CliCommand::Delete { msg_refs, .. } => {
+                assert_eq!(msg_refs, &["-1", "-2"]);
             }
         );
     }
@@ -2939,21 +2945,11 @@ mod tests {
     }
 
     #[test]
-    fn log_edit_maps_to_edit_command() {
-        let cmd = CliCommand::Log {
-            subcommand: Some(LogCommand::Edit {
-                msg_ref: "m1".into(),
-                content: vec!["new".into(), "text".into()],
-            }),
-            msg_ref: None,
-            count: 20,
-            role: None,
-            follow: false,
+    fn edit_maps_to_edit_command() {
+        let cmd = CliCommand::Edit {
+            msg_ref: "m1".into(),
+            content: vec!["new".into(), "text".into()],
             json: false,
-            content: false,
-            reasoning: false,
-            tools: false,
-            subagent_tools: false,
         };
         let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "edit");
@@ -2962,24 +2958,25 @@ mod tests {
     }
 
     #[test]
-    fn log_delete_maps_to_delete_command() {
-        let cmd = CliCommand::Log {
-            subcommand: Some(LogCommand::Delete {
-                msg_ref: "m1".into(),
-            }),
-            msg_ref: None,
-            count: 20,
-            role: None,
-            follow: false,
+    fn delete_maps_to_delete_command() {
+        let cmd = CliCommand::Delete {
+            msg_refs: vec!["m1".into()],
             json: false,
-            content: false,
-            reasoning: false,
-            tools: false,
-            subagent_tools: false,
         };
         let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "delete");
-        assert_eq!(arg(&args, "refs"), "m1");
+        assert_eq!(arg(&args, "refs"), &serde_json::json!(["m1"]));
+    }
+
+    #[test]
+    fn delete_sends_every_ref_as_one_list() {
+        let cmd = CliCommand::Delete {
+            msg_refs: vec!["-1".into(), "-2".into()],
+            json: false,
+        };
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
+        assert_eq!(name, "delete");
+        assert_eq!(arg(&args, "refs"), &serde_json::json!(["-1", "-2"]));
     }
 
     #[test]
@@ -3010,7 +3007,6 @@ mod tests {
     #[test]
     fn log_ref_maps_to_get_command() {
         let cmd = CliCommand::Log {
-            subcommand: None,
             msg_ref: Some("last".into()),
             count: 20,
             role: Some(LogRole::User),
@@ -3030,7 +3026,6 @@ mod tests {
     #[test]
     fn log_default_maps_to_log_command() {
         let cmd = CliCommand::Log {
-            subcommand: None,
             msg_ref: None,
             count: 20,
             role: Some(LogRole::Assistant),
@@ -3154,55 +3149,33 @@ mod tests {
     fn log_status_debug_samples() -> Vec<CliCommand> {
         vec![
             CliCommand::Log {
-                subcommand: None,
                 msg_ref: None,
                 count: 20,
                 role: None,
                 follow: false,
                 json: false,
                 content: false,
-                    reasoning: false,
+                reasoning: false,
                 tools: false,
                 subagent_tools: false,
             },
-            CliCommand::Log {
-                subcommand: Some(LogCommand::Edit {
-                    msg_ref: "m1".into(),
-                    content: vec!["text".into()],
-                }),
-                msg_ref: None,
-                count: 20,
-                role: None,
-                follow: false,
+            CliCommand::Edit {
+                msg_ref: "m1".into(),
+                content: vec!["text".into()],
                 json: false,
-                content: false,
-                    reasoning: false,
-                tools: false,
-                subagent_tools: false,
             },
-            CliCommand::Log {
-                subcommand: Some(LogCommand::Delete {
-                    msg_ref: "m1".into(),
-                }),
-                msg_ref: None,
-                count: 20,
-                role: None,
-                follow: false,
+            CliCommand::Delete {
+                msg_refs: vec!["m1".into()],
                 json: false,
-                content: false,
-                    reasoning: false,
-                tools: false,
-                subagent_tools: false,
             },
             CliCommand::Log {
-                subcommand: None,
                 msg_ref: Some("last".into()),
                 count: 20,
                 role: None,
                 follow: false,
                 json: false,
                 content: false,
-                    reasoning: false,
+                reasoning: false,
                 tools: false,
                 subagent_tools: false,
             },

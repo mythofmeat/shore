@@ -144,6 +144,13 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
         CliCommand::Log { .. } => {
             handle_log_command(&mut conn, &cli.command, &display_character).await?;
         }
+        CliCommand::Edit { msg_ref, json, .. } => {
+            let one = std::slice::from_ref(msg_ref);
+            handle_message_change(&mut conn, &cli.command, *json, one).await?;
+        }
+        CliCommand::Delete { msg_refs, json } => {
+            handle_message_change(&mut conn, &cli.command, *json, msg_refs).await?;
+        }
         CliCommand::Status { .. } => {
             handle_status_command(&mut conn, &cli.command, &display_character).await?;
         }
@@ -222,6 +229,7 @@ fn wants_json(other: &CliCommand) -> bool {
                     | crate::cli::DebugCommand::Subagent { json: true, .. }
             )
         ),
+        CliCommand::Edit { json, .. } | CliCommand::Delete { json, .. } => *json,
         CliCommand::Send { .. }
         | CliCommand::Regen { .. }
         | CliCommand::Alt { .. }
@@ -390,7 +398,6 @@ async fn handle_log_command(
     display_character: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let CliCommand::Log {
-        subcommand,
         msg_ref,
         json,
         content,
@@ -411,10 +418,6 @@ async fn handle_log_command(
         tools: *tools,
         subagent_tools: *subagent_tools,
     };
-
-    if let Some(sub) = subcommand {
-        return run_log_subcommand(conn, sub, *json).await;
-    }
 
     if let Some(r) = msg_ref {
         let data = fetch_single_message(conn, r, role.as_ref()).await?;
@@ -451,38 +454,38 @@ async fn handle_log_command(
     Ok(())
 }
 
-async fn run_log_subcommand(
+async fn handle_message_change(
     conn: &mut SWPConnection,
-    sub: &crate::cli::LogCommand,
+    cmd: &CliCommand,
     json: bool,
+    display_refs: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let display_ref = match sub {
-        crate::cli::LogCommand::Edit { msg_ref, .. }
-        | crate::cli::LogCommand::Delete { msg_ref } => msg_ref,
-    };
-    let (name, args) = match sub {
-        crate::cli::LogCommand::Edit { msg_ref, content } => (
-            "edit",
-            serde_json::json!({ "ref": msg_ref, "content": content.join(" ") }),
-        ),
-        crate::cli::LogCommand::Delete { msg_ref } => {
-            ("delete", serde_json::json!({ "refs": msg_ref }))
-        }
+    let Some((name, args)) = crate::cli::to_swp_command(cmd, None) else {
+        return Ok(());
     };
     _ = conn.send_command(name, args).await?;
     let data = recv_command_data(conn).await?;
     if json {
         cli_out!("{}", serde_json::to_string_pretty(&data)?);
-    } else {
-        let shown = response_with_display_ref(data, display_ref);
-        output::format_command(name, &shown);
+        return Ok(());
     }
+    output::format_command(name, &response_with_display_refs(data, display_refs));
     Ok(())
 }
 
 fn response_with_display_ref(mut data: serde_json::Value, display_ref: &str) -> serde_json::Value {
     if let Some(object) = data.as_object_mut() {
         _ = object.insert("_display_ref".into(), serde_json::json!(display_ref));
+    }
+    data
+}
+
+fn response_with_display_refs(
+    mut data: serde_json::Value,
+    display_refs: &[String],
+) -> serde_json::Value {
+    if let Some(object) = data.as_object_mut() {
+        _ = object.insert("_display_refs".into(), serde_json::json!(display_refs));
     }
     data
 }
@@ -1445,13 +1448,15 @@ mod tests {
             }
             other @ (CliCommand::Alt { .. }
             | CliCommand::Log { .. }
+            | CliCommand::Edit { .. }
+            | CliCommand::Delete { .. }
             | CliCommand::Trace { .. }
             | CliCommand::Character { .. }
             | CliCommand::Status { .. }
             | CliCommand::Debug { .. }
             | CliCommand::Model { .. }
             | CliCommand::Provider { .. }
-                | CliCommand::Compact { .. }
+            | CliCommand::Compact { .. }
             | CliCommand::Config { .. }
             | CliCommand::Usage { .. }
             | CliCommand::Completions { .. }
@@ -1577,21 +1582,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn log_edit_sends_edit_command() {
-        let cli = test_cli(CliCommand::Log {
-            subcommand: Some(crate::cli::LogCommand::Edit {
-                msg_ref: "m1".into(),
-                content: vec!["new".into(), "text".into()],
-            }),
-            msg_ref: None,
-            count: 20,
-            role: None,
-            follow: false,
+    async fn edit_sends_edit_command() {
+        let cli = test_cli(CliCommand::Edit {
+            msg_ref: "m1".into(),
+            content: vec!["new".into(), "text".into()],
             json: false,
-            content: false,
-            reasoning: false,
-            tools: false,
-            subagent_tools: false,
         });
         let received = execute_with_mock(cli, command_response("edit")).await;
 
@@ -1606,20 +1601,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn log_delete_sends_delete_command() {
-        let cli = test_cli(CliCommand::Log {
-            subcommand: Some(crate::cli::LogCommand::Delete {
-                msg_ref: "m1".into(),
-            }),
-            msg_ref: None,
-            count: 20,
-            role: None,
-            follow: false,
+    async fn delete_sends_delete_command() {
+        let cli = test_cli(CliCommand::Delete {
+            msg_refs: vec!["m1".into()],
             json: false,
-            content: false,
-            reasoning: false,
-            tools: false,
-            subagent_tools: false,
         });
         let received = execute_with_mock(cli, command_response("delete")).await;
 
@@ -1627,7 +1612,24 @@ mod tests {
             received,
             ClientMessage::Command(c) => {
                 assert_eq!(c.name, "delete");
-                assert_eq!(arg(&c.args, "refs"), "m1");
+                assert_eq!(arg(&c.args, "refs"), &serde_json::json!(["m1"]));
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn delete_sends_every_ref_in_one_command() {
+        let cli = test_cli(CliCommand::Delete {
+            msg_refs: vec!["-1".into(), "-2".into(), "-3".into()],
+            json: false,
+        });
+        let received = execute_with_mock(cli, command_response("delete")).await;
+
+        assert_variant!(
+            received,
+            ClientMessage::Command(c) => {
+                assert_eq!(c.name, "delete");
+                assert_eq!(arg(&c.args, "refs"), &serde_json::json!(["-1", "-2", "-3"]));
             }
         );
     }
