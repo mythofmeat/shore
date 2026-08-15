@@ -104,6 +104,7 @@ export class CharacterAutonomy {
         next_wake_at: restored.nextWakeAt,
         last_user_at: restored.lastUserAt,
       });
+      this.#clock.deferWakeToMinimumLatency(opts.now());
     }
     this.#state = {
       paused: false,

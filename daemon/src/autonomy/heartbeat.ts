@@ -135,6 +135,15 @@ export class HeartbeatClock {
     this.#nextWakeAt = existing !== undefined && existing > floor ? existing : floor;
   }
 
+  deferWakeToMinimumLatency(now: number): void {
+    const existing = this.#nextWakeAt;
+    if (existing === undefined) return;
+    const floor = now + this.#config.minWakeIntervalMs;
+    if (existing >= floor) return;
+    this.#nextWakeAt = floor;
+    this.#lastAnchor = floor;
+  }
+
   restore(snapshot: HeartbeatSnapshot): void {
     this.#ticksWithoutUser = snapshot.ticks_without_user;
     if (snapshot.next_wake_at !== undefined) {

@@ -366,8 +366,8 @@
         ]
       },
       "volatile": {
-        "wake_at_secs": -45,
-        "wake_until_secs": -45,
+        "wake_at_secs": 3600,
+        "wake_until_secs": 3600,
         "user_at_secs": -7200,
         "user_since_secs": 7200
       }

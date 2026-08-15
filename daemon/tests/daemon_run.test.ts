@@ -206,6 +206,44 @@ describe("coming up", () => {
 
     expect(daemon.runtime.configPath).toBe(place.configPath);
   });
+
+  test("autonomy is running for every character on disk before anyone speaks", async () => {
+    const place = await layout("", ["ada", "bo"]);
+    const daemon = await start(place);
+
+    expect(daemon.runtime.autonomy.status("ada")).toBeDefined();
+    expect(daemon.runtime.autonomy.status("bo")).toBeDefined();
+  });
+
+  test("a wake that came due while the daemon was down is held off, not fired at once", async () => {
+    const place = await layout();
+    const charData = join(place.root, "data", "shore", "ada");
+    await mkdir(charData, { recursive: true });
+    const overdue = Date.now() - 45 * 60_000;
+    await writeFile(
+      join(charData, "autonomy_state.json"),
+      JSON.stringify({
+        version: 4,
+        ticks_without_user: 0,
+        next_wake_at: new Date(overdue).toISOString().replace(/\.\d{3}Z$/, "+00:00"),
+        last_user_at: new Date(overdue - 3_600_000).toISOString().replace(/\.\d{3}Z$/, "+00:00"),
+        covered_turn_count: 0,
+        keepalive_model: null,
+        keepalive_interval_ms: null,
+        keepalive_last_warm_at: null,
+        keepalive_last_active_at: null,
+      }),
+    );
+
+    const startedAt = Date.now();
+    const daemon = await start(place);
+    const state = daemon.runtime.autonomy.status("ada");
+
+    expect(state).toBeDefined();
+    expect(state?.next_wake_at).toBeGreaterThanOrEqual(
+      startedAt + (state?.min_wake_interval_ms ?? 0),
+    );
+  });
 });
 
 describe("what a client gets", () => {

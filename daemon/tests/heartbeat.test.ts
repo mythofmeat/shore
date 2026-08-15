@@ -179,6 +179,42 @@ describe("restore", () => {
   });
 });
 
+describe("deferring the wake to the minimum latency", () => {
+  test("an overdue deadline is pushed out instead of firing at once", () => {
+    const clock = new HeartbeatClock(config(), 0);
+    clock.restore({ ticks_without_user: 0, next_wake_at: HOUR, last_user_at: 0 });
+    clock.deferWakeToMinimumLatency(2 * HOUR);
+
+    expect(clock.nextWakeAt).toBe(3 * HOUR);
+    expect(clock.tick(2 * HOUR)).toBe("none");
+    expect(clock.tick(3 * HOUR)).toBe("run_tick");
+  });
+
+  test("a deadline already past the minimum is left where it is", () => {
+    const clock = new HeartbeatClock(config(), 0);
+    clock.restore({ ticks_without_user: 0, next_wake_at: 9 * HOUR, last_user_at: 0 });
+    clock.deferWakeToMinimumLatency(2 * HOUR);
+
+    expect(clock.nextWakeAt).toBe(9 * HOUR);
+  });
+
+  test("a clock with no deadline stays unarmed", () => {
+    const clock = new HeartbeatClock(config(), 0);
+    clock.restore({ ticks_without_user: 0, next_wake_at: undefined, last_user_at: 0 });
+    clock.deferWakeToMinimumLatency(2 * HOUR);
+
+    expect(clock.nextWakeAt).toBeUndefined();
+  });
+
+  test("the minimum comes from config, not the default interval", () => {
+    const clock = new HeartbeatClock(config({ minWakeIntervalMs: 5 * HOUR }), 0);
+    clock.restore({ ticks_without_user: 0, next_wake_at: HOUR, last_user_at: 0 });
+    clock.deferWakeToMinimumLatency(2 * HOUR);
+
+    expect(clock.nextWakeAt).toBe(7 * HOUR);
+  });
+});
+
 describe("seeding the silence anchor", () => {
   test("fills an empty anchor but never overwrites a real one", () => {
     const fresh = new HeartbeatClock(config(), 0);

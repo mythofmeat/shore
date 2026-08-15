@@ -25,6 +25,23 @@ import { parseArgs, resolveStartup, sourceLabel, StartupError } from "./startup.
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
+async function registerKnownCharacters(
+  runtime: ShoreRuntime,
+  bridge: TurnAutonomyBridge,
+  log: Logger | undefined,
+): Promise<void> {
+  const characters = runtime.registry.availableCharacters();
+  for (const character of characters) {
+    bridge.ensureState(character, runtime.registry.effectiveConfig(character));
+  }
+  await Promise.all(characters.map((character) => bridge.settled(character)));
+  if (characters.length > 0) {
+    log?.info?.("Autonomy started for known characters", {
+      characters: characters.join(", "),
+    });
+  }
+}
+
 export interface DaemonOptions {
   argv?: readonly string[] | undefined;
   env?: NodeJS.ProcessEnv | undefined;
@@ -147,8 +164,6 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   const handshake = buildHandshakeProvider(runtime.registry);
   server.setHandshakeProvider(handshake);
 
-  const clocks = startRuntimeClocks(runtime);
-
   const assembly = {
     runtime,
     providers: runtime.providers,
@@ -161,6 +176,9 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     env,
     ...(log === undefined ? {} : { log }),
   };
+  await registerKnownCharacters(runtime, assembly.autonomy, log);
+  const clocks = startRuntimeClocks(runtime);
+
   const handler = new MessageHandler(buildMessageHandlerDeps(assembly));
 
   const handlerDone = handler.run(server.routes());
