@@ -79,7 +79,8 @@ export function callLog(ctx: CallLogContext, args: Args): Json {
     character: asStr(args["character"]) ?? ctx.characterName,
     limit: countArg(args, 20),
   };
-  return { enabled: true, entries: query(CALL_STORE_FAILED, () => store.queryCalls(filter)) };
+  const newestFirst = query(CALL_STORE_FAILED, () => store.queryCalls(filter));
+  return { enabled: true, entries: [...newestFirst].reverse() };
 }
 
 const TRANSCRIPT_SOURCE = "heartbeat";
@@ -115,7 +116,6 @@ function orderTranscriptRows(rows: readonly TranscriptRow[]): TranscriptRow[] {
     if (continues) (ticks[ticks.length - 1] as TranscriptRow[]).push(row);
     else ticks.push([row]);
   }
-  ticks.reverse();
   return ticks.flat();
 }
 

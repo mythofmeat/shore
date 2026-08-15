@@ -233,20 +233,20 @@ test("a call with no recorded exchange dumps an empty wire list", () => {
   expect(out.wire).toEqual([]);
 });
 
-test("ticks read newest-first, iterations chronologically within each", () => {
+test("ticks and the iterations inside them both read oldest-first", () => {
   const ctx: CallLogContext = { characterName: "poppy", callStore: stocked };
   const result = transcript(ctx, { count: 8 }) as {
     entries: { entry: { marker: string } }[];
   };
   expect(result.entries.map((e) => e.entry.marker)).toEqual([
-    "t5-i1",
-    "t4-i1",
-    "t3-i0",
-    "t3-i1",
-    "t2-i0",
     "t1-i0",
     "t1-i1",
     "t1-i2",
+    "t2-i0",
+    "t3-i0",
+    "t3-i1",
+    "t4-i1",
+    "t5-i1",
   ]);
 });
 
