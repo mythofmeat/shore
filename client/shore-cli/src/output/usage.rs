@@ -137,46 +137,6 @@ fn write_spend_table<W: Write>(out: &mut W, data: &Value, view: View) -> bool {
     true
 }
 
-fn budget_headline(budget: &Value) -> Option<(String, Meter, Tone)> {
-    let current = decimal(budget, "current_cost");
-    let limit = decimal(budget, "cost_limit");
-    let meter = Meter::new(current, limit);
-    let name = text(budget, "period");
-    Some((name.to_owned(), meter, meter.tone()))
-}
-
-fn add_budget_row(rows: &mut Rows, budgets: &[Value]) {
-    let mut parts: Vec<(String, Tone)> = Vec::new();
-    for budget in budgets {
-        if let Some((label, meter, tone)) = budget_headline(budget) {
-            let state = if meter.is_over() { " OVER" } else { "" };
-            parts.push((format!("{label} {}%{state}", meter.percent()), tone));
-        }
-        if let Some(pace) = budget.get("pace") {
-            let meter = Meter::new(decimal(pace, "current_cost"), decimal(pace, "allowance"));
-            let state = if meter.is_over() { " OVER" } else { "" };
-            parts.push((
-                format!("{} {}%{state}", text(pace, "period"), meter.percent()),
-                meter.tone(),
-            ));
-        }
-    }
-    if parts.is_empty() {
-        return;
-    }
-    let worst = parts
-        .iter()
-        .find(|(_, tone)| *tone == Tone::Bad)
-        .or_else(|| parts.iter().find(|(_, tone)| *tone == Tone::Warn))
-        .map_or(Tone::Good, |(_, tone)| *tone);
-    let joined = parts
-        .iter()
-        .map(|(label, _)| label.clone())
-        .collect::<Vec<String>>()
-        .join(" \u{00b7} ");
-    rows.add_toned("budget", &joined, worst);
-}
-
 fn add_cache_rows(rows: &mut Rows, data: &Value) {
     let health = rows_of(data, "cache_health");
     if !health.is_empty() {
@@ -204,8 +164,15 @@ pub(crate) fn write_summary<W: Write>(out: &mut W, data: &Value) {
     if !any {
         return;
     }
+    let budgets = rows_of(data, "budgets");
+    if !budgets.is_empty() {
+        blank(out);
+        for budget in budgets {
+            write_budget_meters(out, budget);
+        }
+    }
+
     let mut headline = Rows::new();
-    add_budget_row(&mut headline, rows_of(data, "budgets"));
     add_cache_rows(&mut headline, data);
     if !headline.is_empty() {
         blank(out);
@@ -253,6 +220,29 @@ fn write_meter_row<W: Write>(
     );
 }
 
+fn write_budget_meters<W: Write>(out: &mut W, budget: &Value) {
+    let period = text(budget, "period");
+    let pace_period = budget.get("pace").map_or("", |pace| text(pace, "period"));
+    let width = period.chars().count().max(pace_period.chars().count());
+
+    let current = decimal(budget, "current_cost");
+    let limit = decimal(budget, "cost_limit");
+    write_meter_row(out, period, width, Meter::new(current, limit), current, limit);
+
+    if let Some(pace) = budget.get("pace") {
+        let spent = decimal(pace, "current_cost");
+        let allowance = decimal(pace, "allowance");
+        write_meter_row(
+            out,
+            pace_period,
+            width,
+            Meter::new(spent, allowance),
+            spent,
+            allowance,
+        );
+    }
+}
+
 #[expect(
     clippy::float_arithmetic,
     reason = "the pace allowance is stated as a base plus rollover minus debt"
@@ -265,12 +255,6 @@ pub(crate) fn write_budgets<W: Write>(out: &mut W, data: &Value) {
         return;
     }
     for budget in budgets {
-        let period = text(budget, "period");
-        let pace_period = budget
-            .get("pace")
-            .map_or("", |pace| text(pace, "period"));
-        let width = period.chars().count().max(pace_period.chars().count());
-
         let reset = text(budget, "reset_at");
         let summary = if reset.is_empty() {
             action_phrase(acting_now(budget))
@@ -285,21 +269,9 @@ pub(crate) fn write_budgets<W: Write>(out: &mut W, data: &Value) {
         header.add(text(budget, "name"), &summary);
         header.write(out);
 
-        let current = decimal(budget, "current_cost");
-        let limit = decimal(budget, "cost_limit");
-        write_meter_row(out, period, width, Meter::new(current, limit), current, limit);
+        write_budget_meters(out, budget);
 
         if let Some(pace) = budget.get("pace") {
-            let spent = decimal(pace, "current_cost");
-            let allowance = decimal(pace, "allowance");
-            write_meter_row(
-                out,
-                pace_period,
-                width,
-                Meter::new(spent, allowance),
-                spent,
-                allowance,
-            );
             let base = decimal(pace, "base_allowance");
             let rollover = decimal(pace, "rollover");
             let debt = decimal(pace, "debt_adjustment");
@@ -319,10 +291,34 @@ pub(crate) fn write_budgets<W: Write>(out: &mut W, data: &Value) {
 
 pub(crate) fn write_cache<W: Write>(out: &mut W, data: &Value) {
     section(out, View::Cache.title(), period_of(data).as_deref());
-    let health = rows_of(data, "cache_health");
-    if health.is_empty() {
-        empty(out, "no cache activity recorded");
+
+    let coverage = rows_of(data, "cache_coverage");
+    if coverage.is_empty() {
+        empty(out, "no calls in this period");
     } else {
+        let mut table = Table::new(&["served", "why", "calls", "read", "write"], &[
+            Align::Left,
+            Align::Left,
+            Align::Right,
+            Align::Right,
+            Align::Right,
+        ]);
+        for row in coverage {
+            table.row(&[
+                text(row, "state").to_owned(),
+                text(row, "reason").replace('_', " "),
+                count(number(row, "calls")),
+                count(number(row, "cache_read_tokens")),
+                count(number(row, "cache_write_tokens")),
+            ]);
+        }
+        table.write(out);
+    }
+
+    let health = rows_of(data, "cache_health");
+    if !health.is_empty() {
+        blank(out);
+        note(out, "keepalive, per character");
         let mut rows = Rows::new();
         for row in health {
             let state = text(row, "state");
@@ -336,26 +332,6 @@ pub(crate) fn write_cache<W: Write>(out: &mut W, data: &Value) {
             rows.add_toned(text(row, "character"), &value, tone);
         }
         rows.write(out);
-    }
-
-    let coverage = rows_of(data, "cache_coverage");
-    if !coverage.is_empty() {
-        blank(out);
-        let mut table = Table::new(&["state", "calls", "read", "write"], &[
-            Align::Left,
-            Align::Right,
-            Align::Right,
-            Align::Right,
-        ]);
-        for row in coverage {
-            table.row(&[
-                text(row, "state").to_owned(),
-                count(number(row, "calls")),
-                count(number(row, "cache_read_tokens")),
-                count(number(row, "cache_write_tokens")),
-            ]);
-        }
-        table.write(out);
     }
 
     let anomalies = number(data, "anomaly_count_7d");
@@ -570,10 +546,26 @@ mod tests {
     fn the_summary_says_the_budget_is_blown_without_being_asked() {
         let out = render(|buf| write_summary(buf, &summary_payload()));
         assert!(
-            out.contains("day 133% OVER"),
+            out.contains("133%"),
             "an over-limit pace must surface in the summary: {out}"
         );
-        assert!(out.contains("week 34%"), "{out}");
+        assert!(out.contains("34%"), "{out}");
+    }
+
+    #[test]
+    fn the_summary_draws_the_same_meters_the_budgets_view_does() {
+        let summary = render(|buf| write_summary(buf, &summary_payload()));
+        let budgets = render(|buf| write_budgets(buf, &summary_payload()));
+        for line in ["week", "day"] {
+            let meter_in_budgets = budgets
+                .lines()
+                .find(|l| l.trim_start().starts_with(line))
+                .expect("the budgets view draws a meter per period");
+            assert!(
+                summary.contains(meter_in_budgets.trim()),
+                "`{line}` must read the same in both views\n  summary: {summary}\n  budgets: {budgets}"
+            );
+        }
     }
 
     #[test]

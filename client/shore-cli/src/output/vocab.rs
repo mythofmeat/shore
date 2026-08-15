@@ -475,6 +475,7 @@ impl Meter {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn percent(self) -> u64 {
         self.percent
     }
