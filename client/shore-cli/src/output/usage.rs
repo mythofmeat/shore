@@ -430,39 +430,6 @@ pub(crate) fn write_limits<W: Write>(out: &mut W, data: &Value) {
     }
 }
 
-pub(crate) fn write_recalculate<W: Write>(out: &mut W, data: &Value) {
-    section(out, "recalculate", None);
-    let total = number(data, "total");
-    if total == 0 {
-        note(out, "every row already had a cost");
-        return;
-    }
-    let updated = number(data, "updated");
-    let missing = total.saturating_sub(updated);
-    let mut rows = Rows::new();
-    rows.add("rows updated", &format!("{updated} of {total}"));
-    if missing > 0 {
-        _ = rows.add_toned(
-            "still unpriced",
-            &missing.to_string(),
-            Tone::Warn,
-        );
-    }
-    rows.write(out);
-    let failures = rows_of(data, "failures");
-    if failures.is_empty() {
-        return;
-    }
-    blank(out);
-    let mut table = Table::new(&["model", "reason"], &[Align::Left, Align::Left]);
-    for failure in failures {
-        _ = table.row(&[
-            text(failure, "model").to_owned(),
-            text(failure, "reason").to_owned(),
-        ]);
-    }
-    table.write(out);
-}
 
 pub(crate) fn print(data: &Value, view: View) {
     let stdout = io::stdout();

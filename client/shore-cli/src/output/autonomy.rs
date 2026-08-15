@@ -2,7 +2,7 @@ use std::io::Write;
 
 use super::parse_timestamp;
 use super::transcript::format_time;
-use super::vocab::{COLOR_ERROR, Tone, paint, write_row, write_section_header};
+use super::vocab::{COLOR_ERROR, Tone, note, paint, write_row, write_section_header};
 
 #[expect(
     clippy::float_arithmetic,
@@ -63,6 +63,17 @@ pub(crate) fn write_activity_section(out: &mut impl Write, activity: &serde_json
         return;
     }
 
+    let turn_count = activity["turn_count"].as_u64().unwrap_or(0);
+    if turn_count == 0 {
+        write_section_header(out, "activity", "", width);
+        note(
+            out,
+            "nothing recorded yet \u{00b7} activity is learned from your messages",
+        );
+        _ = writeln!(out);
+        return;
+    }
+
     let sufficient = activity["has_sufficient_heatmap"]
         .as_bool()
         .unwrap_or(false);
@@ -88,10 +99,9 @@ pub(crate) fn write_activity_section(out: &mut impl Write, activity: &serde_json
 
     let engagement = activity["engagement_score"].as_f64().unwrap_or(0.0);
     let sessions = activity["sessions_per_day"].as_f64().unwrap_or(0.0);
-    let turn_count = activity["turn_count"].as_u64().unwrap_or(0);
     write_row(
         out,
-        "Engagement",
+        "engagement",
         &format!("{engagement:.2} \u{00b7} {sessions:.1} sessions/day \u{00b7} {turn_count} turns"),
     );
 
@@ -247,11 +257,11 @@ fn write_autonomy_events(out: &mut impl Write, autonomy: &serde_json::Value) {
     }
 
     _ = writeln!(out);
-    paint(out, Tone::Muted, &format!("  Recent events:"));
+    paint(out, Tone::Muted, "  Recent events:");
 
     let _ignored = writeln!(out);
     let mut prev_date: Option<String> = None;
-    for event in &events {
+    for event in events.iter().rev() {
         let ts = event["timestamp"].as_str().unwrap_or("");
         let kind = event["kind"].as_str().unwrap_or("?");
         let detail = event["detail"].as_str().unwrap_or("");

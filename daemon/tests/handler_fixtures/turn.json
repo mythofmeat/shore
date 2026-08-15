@@ -60,7 +60,7 @@
     },
     {
       "name": "an image-only turn carries no empty text block",
-      "note": "an empty text block persists into history and later fails an Anthropic request when a cache breakpoint lands on it \u2014 cache_control cannot be set for empty text blocks. The turn is content_blocks-empty and image-bearing, which is the shape the wire builder has to recognise later",
+      "note": "an empty text block persists into history and later fails an Anthropic request when a cache breakpoint lands on it — cache_control cannot be set for empty text blocks. The turn is content_blocks-empty and image-bearing, which is the shape the wire builder has to recognise later",
       "input": {
         "history": [],
         "body": {
@@ -117,7 +117,7 @@
     },
     {
       "name": "text plus an image keeps the image out of the content blocks",
-      "note": "ingest_images returns an empty block list \u2014 the attachment travels in `images` and the text block is the only content block, so the persisted turn has both without the image being inlined twice",
+      "note": "ingest_images returns an empty block list — the attachment travels in `images` and the text block is the only content block, so the persisted turn has both without the image being inlined twice",
       "input": {
         "history": [],
         "body": {
@@ -184,7 +184,7 @@
     },
     {
       "name": "an empty body appends nothing",
-      "note": "no text, no images, no image_data \u2014 there is no turn to record and no frame to emit",
+      "note": "no text, no images, no image_data — there is no turn to record and no frame to emit",
       "input": {
         "history": [
           {
@@ -236,7 +236,7 @@
     },
     {
       "name": "a regen returns the pending alternatives and appends nothing",
-      "note": "the body is ignored entirely on a regen \u2014 even a non-empty one \u2014 because the user turn it would append is already there",
+      "note": "the body is ignored entirely on a regen — even a non-empty one — because the user turn it would append is already there",
       "input": {
         "history": [
           {
@@ -326,7 +326,7 @@
     },
     {
       "name": "a regen with no prior assistant turn yields empty alternatives",
-      "note": "pending_regen_alt is None, and the fallback is an empty alternatives list rather than None \u2014 persistence distinguishes the two",
+      "note": "pending_regen_alt is None, and the fallback is an empty alternatives list rather than None — persistence distinguishes the two",
       "input": {
         "history": [
           {
@@ -439,7 +439,7 @@
     },
     {
       "name": "inline uploads win and legacy paths are ignored entirely",
-      "note": "not a merge \u2014 `ingest_images` only walks the legacy list when `image_data` is empty, so a client that sends both gets one attachment, not two",
+      "note": "not a merge — `ingest_images` only walks the legacy list when `image_data` is empty, so a client that sends both gets one attachment, not two",
       "input": {
         "history": [],
         "body": {
@@ -512,7 +512,7 @@
     },
     {
       "name": "whitespace-only text still gets a text block",
-      "note": "the emptiness check is `is_empty()`, not a trim \u2014 a turn of spaces is a turn the user sent, and the block it carries is not the empty block the cache-breakpoint rule is about",
+      "note": "the emptiness check is `is_empty()`, not a trim — a turn of spaces is a turn the user sent, and the block it carries is not the empty block the cache-breakpoint rule is about",
       "input": {
         "history": [],
         "body": {
@@ -631,7 +631,7 @@
     },
     {
       "name": "assistant turns are not activity",
-      "note": "only user turns count \u2014 the tracker models when the user was present",
+      "note": "only user turns count — the tracker models when the user was present",
       "input": {
         "active": [
           {
@@ -775,8 +775,8 @@
       }
     },
     {
-      "name": "an existing autonomy state is left alone",
-      "note": "backfill runs once, when the state is first created; re-running it on every turn would double-count",
+      "name": "a character whose activity was already seeded is left alone",
+      "note": "backfill runs once per character, not once per turn; the gate is whether activity has been seeded, not whether autonomy was registered this turn, because autonomy now registers at daemon start",
       "input": {
         "active": [
           {
@@ -795,15 +795,16 @@
         ],
         "archived": [],
         "state_exists": true,
-        "now": "2026-08-04T11:24:40.586049067-04:00"
+        "now": "2026-08-04T11:24:40.586049067-04:00",
+        "activity_seeded": true
       },
       "output": {
         "backfill_calls": []
       }
     },
     {
-      "name": "no qualifying timestamps means no backfill call at all",
-      "note": "an empty list is not passed down \u2014 the tracker is left untouched rather than seeded with nothing",
+      "name": "no qualifying timestamps still marks the character seeded",
+      "note": "an empty list is passed down so the character counts as seeded; rescanning every segment on every turn to find the same nothing is the alternative",
       "input": {
         "active": [
           {
@@ -825,7 +826,12 @@
         "now": "2026-08-04T11:24:40.586049067-04:00"
       },
       "output": {
-        "backfill_calls": []
+        "backfill_calls": [
+          {
+            "character": "ada",
+            "timestamps": []
+          }
+        ]
       }
     },
     {
@@ -879,7 +885,7 @@
   "context_tokens": [
     {
       "name": "all three sources add up",
-      "note": "the gate compares against the whole prompt, and a cached prompt still occupies the context window \u2014 counting only input_tokens would never fire on a warm cache",
+      "note": "the gate compares against the whole prompt, and a cached prompt still occupies the context window — counting only input_tokens would never fire on a warm cache",
       "input": {
         "input_tokens": 1000,
         "cache_read_tokens": 20000,

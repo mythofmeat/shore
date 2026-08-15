@@ -330,6 +330,7 @@ async function replayTurn(c: Record<string, any>): Promise<Run> {
       autonomyCalls.push("ensureState");
       return false;
     },
+    needsActivityBackfill: () => false,
     backfillActivity: () => {},
     onUserMessage: () => {
       autonomyCalls.push("onUserMessage");
@@ -560,6 +561,7 @@ test("a sampler preference set for the character reaches the outgoing request", 
       providers: { anthropic: provider },
       autonomy: {
         ensureState: () => false,
+        needsActivityBackfill: () => false,
         backfillActivity: () => {},
         onUserMessage: () => {},
         shouldCompactNow: () => false,
@@ -621,6 +623,7 @@ test("a turn with no model configured leaves the conversation untouched", async 
       },
       autonomy: {
         ensureState: () => false,
+        needsActivityBackfill: () => false,
         backfillActivity: () => {},
         onUserMessage: () => {},
         shouldCompactNow: () => false,

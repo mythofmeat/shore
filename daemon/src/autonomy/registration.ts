@@ -62,6 +62,7 @@ export class TurnAutonomyBridge {
   readonly #now: () => number;
   readonly #zone: string;
   readonly #registered = new Map<string, Promise<void>>();
+  readonly #activityBackfilled = new Set<string>();
 
   constructor(
     service: ServiceSlice,
@@ -83,7 +84,12 @@ export class TurnAutonomyBridge {
     return true;
   }
 
+  needsActivityBackfill(character: string): boolean {
+    return !this.#activityBackfilled.has(character);
+  }
+
   backfillActivity(character: string, timestamps: readonly Date[]): void {
+    this.#activityBackfilled.add(character);
     const instants = timestamps.map((t) => t.getTime());
     const localStamps = instants.map((at) => localWallClock(at, this.#zone));
     const latestUserAt = instants.length === 0 ? undefined : Math.max(...instants);

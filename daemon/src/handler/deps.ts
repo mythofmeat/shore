@@ -113,6 +113,7 @@ export function turnAutonomy(
 ): GenerationDeps["autonomy"] {
   return {
     ensureState: (character, config) => bridge.ensureState(character, config),
+    needsActivityBackfill: (character) => bridge.needsActivityBackfill(character),
     backfillActivity: (character, timestamps) => {
       bridge.backfillActivity(character, timestamps);
     },

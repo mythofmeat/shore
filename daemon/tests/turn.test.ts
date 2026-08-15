@@ -98,6 +98,7 @@ function recorder(overrides: Partial<TurnAutonomy> = {}): Recorder {
 
   const autonomy: TurnAutonomy = {
     ensureState: () => true,
+    needsActivityBackfill: () => true,
     backfillActivity: (character, timestamps) =>
       backfills.push({ character, timestamps: [...timestamps] }),
     onUserMessage: () => {},
@@ -235,7 +236,10 @@ describe("ensureAndBackfillAutonomy", () => {
           );
         }
 
-        const rec = recorder({ ensureState: () => !input["state_exists"] });
+        const rec = recorder({
+          ensureState: () => !input["state_exists"],
+          needsActivityBackfill: () => input["activity_seeded"] !== true,
+        });
         const engine = await ConversationEngine.load("ada", dataDir);
 
         await ensureAndBackfillAutonomy(

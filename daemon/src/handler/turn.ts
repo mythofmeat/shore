@@ -23,6 +23,7 @@ export interface TurnEngine {
 
 export interface TurnAutonomy {
   ensureState(character: string, config: LoadedConfig): boolean;
+  needsActivityBackfill(character: string): boolean;
   backfillActivity(character: string, timestamps: readonly Date[]): void;
   onUserMessage(character: string, turnCount: number): void;
   shouldCompactNow(character: string, turnCount: number, contextTokens: number): boolean;
@@ -102,7 +103,8 @@ export async function ensureAndBackfillAutonomy(
   config: LoadedConfig,
   now: Date = new Date(),
 ): Promise<void> {
-  if (!ctx.autonomy.ensureState(charName, config)) return;
+  ctx.autonomy.ensureState(charName, config);
+  if (!ctx.autonomy.needsActivityBackfill(charName)) return;
 
   const cutoff = new Date(now.getTime() - ACTIVITY_BACKFILL_DAYS * 24 * 60 * 60 * 1000);
   const timestamps: Date[] = [];
@@ -124,7 +126,7 @@ export async function ensureAndBackfillAutonomy(
     }
   }
 
-  if (timestamps.length > 0) ctx.autonomy.backfillActivity(charName, timestamps);
+  ctx.autonomy.backfillActivity(charName, timestamps);
 }
 
 function isToolResultOnly(msg: Message): boolean {

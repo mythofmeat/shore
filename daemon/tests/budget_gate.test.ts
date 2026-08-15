@@ -479,6 +479,7 @@ async function chatTurn(
     providers: { openai: counting.provider },
     autonomy: {
       ensureState: () => false,
+        needsActivityBackfill: () => false,
       backfillActivity: noop,
       onUserMessage: noop,
       shouldCompactNow: () => false,
