@@ -309,18 +309,12 @@ fn usage_view(cmd: &CliCommand) -> Option<output::usage::View> {
     };
     Some(match subcommand {
         None => View::Summary,
-        Some(UsageCommand::CallType) => View::CallType,
-        Some(UsageCommand::Kind) => View::Kind,
-        Some(UsageCommand::ApiKey) => View::ApiKey,
+        Some(UsageCommand::By { .. }) => View::By,
         Some(UsageCommand::Budgets) => View::Budgets,
         Some(UsageCommand::Cache) => View::Cache,
         Some(UsageCommand::Anomalies) => View::Anomalies,
         Some(UsageCommand::Limits) => View::Limits,
-        Some(
-            UsageCommand::Export { .. }
-            | UsageCommand::Recalculate { .. }
-            | UsageCommand::RefreshPricing,
-        ) => View::Summary,
+        Some(UsageCommand::Export { .. }) => View::Summary,
     })
 }
 

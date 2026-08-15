@@ -10,9 +10,7 @@ import {
   nullCostRows,
   queryAnomalies,
   usageSummary,
-  usageSummaryByApiKey,
-  usageSummaryByCallType,
-  usageSummaryByUsageKind,
+  usageSummaryBy,
   usageTotals,
   warmStreak,
   type QueryFilter,
@@ -124,13 +122,13 @@ test("every recorded filter answers the same ten queries", () => {
     expect(usageSummary(db, filter!), at("usage_summary")).toEqual(
       c.usage_summary as never,
     );
-    expect(usageSummaryByCallType(db, filter!), at("by_call_type")).toEqual(
+    expect(usageSummaryBy(db, filter!, "call_type"), at("by_call_type")).toEqual(
       c.by_call_type as never,
     );
-    expect(usageSummaryByUsageKind(db, filter!), at("by_usage_kind")).toEqual(
+    expect(usageSummaryBy(db, filter!, "kind"), at("by_usage_kind")).toEqual(
       c.by_usage_kind as never,
     );
-    expect(usageSummaryByApiKey(db, filter!), at("by_api_key")).toEqual(
+    expect(usageSummaryBy(db, filter!, "api_key"), at("by_api_key")).toEqual(
       c.by_api_key as never,
     );
     expect(modelUsageSummary(db, filter!), at("model_usage")).toEqual(

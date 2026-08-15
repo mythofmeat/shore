@@ -271,23 +271,50 @@ export function cacheCoverage(db: Database, filter: QueryFilter): CacheCoverage[
   }));
 }
 
-export interface CallTypeSummary extends UsageTotals {
-  call_type: string;
+export type UsageDimension =
+  | "model"
+  | "provider"
+  | "call_type"
+  | "kind"
+  | "api_key";
+
+export interface GroupedUsage extends UsageTotals {
+  group: string;
 }
 
-export function usageSummaryByCallType(
+const DIMENSION_EXPR: Record<UsageDimension, string> = {
+  model: "provider || ' ' || model",
+  provider: "provider",
+  call_type: "call_type",
+  kind: USAGE_KIND_EXPR,
+  api_key: "provider || ' ' || COALESCE(api_key_name, 'unknown')",
+};
+
+export function isUsageDimension(value: string): value is UsageDimension {
+  return Object.hasOwn(DIMENSION_EXPR, value);
+}
+
+export const USAGE_DIMENSIONS = Object.keys(DIMENSION_EXPR) as UsageDimension[];
+
+export function usageSummaryBy(
   db: Database,
   filter: QueryFilter,
-): CallTypeSummary[] {
+  dimension: UsageDimension,
+): GroupedUsage[] {
   const { where, values } = buildWhere(filter);
-  const sql = `SELECT call_type,
+  const sql = `SELECT grp,
                   ${SUM_COLUMNS}
-             FROM calls
-             ${where}
-            GROUP BY call_type
-            ORDER BY total_cost DESC, call_count DESC`;
+             FROM (
+                 SELECT ${DIMENSION_EXPR[dimension]} as grp,
+                        input_tokens, output_tokens, cache_read_tokens,
+                        cache_write_tokens, total_cost
+                   FROM calls
+                  ${where}
+             )
+            GROUP BY grp
+            ORDER BY total_cost DESC, call_count DESC, grp ASC`;
   return rows(db, sql, values).map((r) => ({
-    call_type: text(r["call_type"]),
+    group: text(r["grp"]),
     ...totalsFrom(r),
   }));
 }
@@ -323,56 +350,6 @@ export function modelUsageSummary(
     first_ts: text(r["first_ts"]),
     last_ts: text(r["last_ts"]),
     call_count: count(r["call_count"]),
-  }));
-}
-
-export interface UsageKindSummary extends UsageTotals {
-  usage_kind: string;
-}
-
-export function usageSummaryByUsageKind(
-  db: Database,
-  filter: QueryFilter,
-): UsageKindSummary[] {
-  const { where, values } = buildWhere(filter);
-  const sql = `SELECT usage_kind,
-                  ${SUM_COLUMNS}
-             FROM (
-                 SELECT ${USAGE_KIND_EXPR} as usage_kind,
-                        input_tokens, output_tokens, cache_read_tokens,
-                        cache_write_tokens, total_cost
-                   FROM calls
-                  ${where}
-             )
-            GROUP BY usage_kind
-            ORDER BY total_cost DESC, call_count DESC`;
-  return rows(db, sql, values).map((r) => ({
-    usage_kind: text(r["usage_kind"]),
-    ...totalsFrom(r),
-  }));
-}
-
-export interface ApiKeySummary extends UsageTotals {
-  provider: string;
-  api_key_name: string;
-}
-
-export function usageSummaryByApiKey(
-  db: Database,
-  filter: QueryFilter,
-): ApiKeySummary[] {
-  const { where, values } = buildWhere(filter);
-  const sql = `SELECT provider,
-                  COALESCE(api_key_name, 'unknown') as api_key_name,
-                  ${SUM_COLUMNS}
-             FROM calls
-             ${where}
-            GROUP BY provider, COALESCE(api_key_name, 'unknown')
-            ORDER BY total_cost DESC, call_count DESC`;
-  return rows(db, sql, values).map((r) => ({
-    provider: text(r["provider"]),
-    api_key_name: text(r["api_key_name"]),
-    ...totalsFrom(r),
   }));
 }
 

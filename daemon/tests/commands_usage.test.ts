@@ -4,6 +4,7 @@ import { usage, type UsageContext } from "../src/commands/usage.ts";
 import { CommandError } from "../src/commands/errors.ts";
 import type { UsageConfig } from "../src/ledger/budget.ts";
 import { closeLedgers, ledgerFor } from "../src/ledger/record.ts";
+import { PRICING_TTL_MS } from "../src/ledger/store.ts";
 import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
 
 const cleanups: Array<() => void> = [];
@@ -37,8 +38,17 @@ function priceInStore(path: string, perToken: number): void {
   db.query(
     `INSERT OR REPLACE INTO pricing (model_id, input_per_token, output_per_token,
        cache_read_per_token, cache_write_per_token, fetched_at)
-     VALUES ('anthropic/claude-opus-4.6', $p, $p, $p, $p, '2026-05-13T00:00:00+00:00')`,
-  ).run({ $p: perToken });
+     VALUES ('anthropic/claude-opus-4.6', $p, $p, $p, $p, $at)`,
+  ).run({ $p: perToken, $at: new Date().toISOString() });
+  db.run("PRAGMA wal_checkpoint(TRUNCATE)");
+  db.close();
+}
+
+function stalePricing(path: string, byMs: number): void {
+  const db = openLedger(path);
+  db.query("UPDATE pricing SET fetched_at = $at").run({
+    $at: new Date(Date.now() - byMs).toISOString(),
+  });
   db.run("PRAGMA wal_checkpoint(TRUNCATE)");
   db.close();
 }
@@ -64,49 +74,24 @@ const TINY: UsageConfig = {
   budgets: [{ name: "tiny", period: "month", cost_usd: 1, warn_at: [1.0], limit: "warn" }],
 };
 
-test("a refresh empties the table and the memory in front of it", async () => {
+test("a price older than the ttl is not served, so the next call refetches it", () => {
   const ledger = ledgerWithOneCall();
   priceInStore(ledger, 0.00001);
   refuseCatalog();
 
-  const engine = ledgerFor(ledger)!.pricing;
-  expect(engine.cached("anthropic", "claude-opus-4-6")?.input_per_token).toBe(0.00001);
+  const fresh = ledgerFor(ledger)!.pricing;
+  expect(
+    fresh.cached("anthropic", "claude-opus-4-6")?.input_per_token,
+    "a price written just now is served from cache",
+  ).toBe(0.00001);
 
-  const result = await usage(ctxFor(ledger), { refresh_pricing: true });
-
-  expect(result).toEqual({ mode: "refresh_pricing" } as never);
-  expect(pricedModels(ledger), "the table is emptied").toBe(0);
-  priceInStore(ledger, 0.00002);
-  expect(engine.cached("anthropic", "claude-opus-4-6")?.input_per_token).toBe(0.00002);
-});
-
-test("the refresh happens whatever else the args ask for", async () => {
-  const ledger = ledgerWithOneCall();
-  priceInStore(ledger, 0.00001);
-  refuseCatalog();
-  const engine = ledgerFor(ledger)!.pricing;
-  expect(engine.cached("anthropic", "claude-opus-4-6")).toBeDefined();
-
-  const result = (await usage(ctxFor(ledger, TINY), {
-    refresh_pricing: true,
-    budget: true,
-  })) as { mode: string };
-
-  expect(result.mode).toBe("budget");
-  expect(pricedModels(ledger)).toBe(0);
-  expect(engine.cached("anthropic", "claude-opus-4-6")).toBeUndefined();
-});
-
-test("nothing is cleared unless the flag is exactly true", async () => {
-  const ledger = ledgerWithOneCall();
-  priceInStore(ledger, 0.00001);
-  refuseCatalog();
-
-  await usage(ctxFor(ledger), { refresh_pricing: "true" });
-  await usage(ctxFor(ledger), { refresh_pricing: false });
-  await usage(ctxFor(ledger), {});
-
-  expect(pricedModels(ledger)).toBe(1);
+  stalePricing(ledger, PRICING_TTL_MS + 60_000);
+  const stale = ledgerFor(ledger)!.pricing;
+  expect(
+    stale.cached("anthropic", "claude-opus-4-6"),
+    "a price past the ttl is a miss, not a stale hit",
+  ).toBeUndefined();
+  expect(pricedModels(ledger), "the row stays put until something replaces it").toBe(1);
 });
 
 test("the args reach the report unreshaped", async () => {

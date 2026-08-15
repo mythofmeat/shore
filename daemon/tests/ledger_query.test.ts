@@ -10,9 +10,7 @@ import {
   queryAnomalies,
   updateCosts,
   usageSummary,
-  usageSummaryByApiKey,
-  usageSummaryByCallType,
-  usageSummaryByUsageKind,
+  usageSummaryBy,
   usageTotals,
   warmStreak,
   type QueryFilter,
@@ -126,28 +124,33 @@ describe("grouping", () => {
   });
 
   test("summary groups by call type", () => {
-    const summary = usageSummaryByCallType(populated(), NONE);
+    const summary = usageSummaryBy(populated(), NONE, "call_type");
     expect(summary).toHaveLength(2);
-    const byType = new Map(summary.map((s) => [s.call_type, s.call_count]));
+    const byType = new Map(summary.map((s) => [s.group, s.call_count]));
     expect(byType.get("message")).toBe(2);
     expect(byType.get("tool_loop")).toBe(1);
   });
 
   test("summary groups by usage kind", () => {
-    const summary = usageSummaryByUsageKind(populated(), NONE);
-    const byKind = new Map(summary.map((s) => [s.usage_kind, s.call_count]));
+    const summary = usageSummaryBy(populated(), NONE, "kind");
+    const byKind = new Map(summary.map((s) => [s.group, s.call_count]));
     expect(byKind.get("message_no_tools")).toBe(1);
     expect(byKind.get("message_with_tools")).toBe(2);
   });
 
   test("summary groups by api key", () => {
-    const summary = usageSummaryByApiKey(populated(), NONE);
-    const byKey = new Map(
-      summary.map((s) => [`${s.provider}/${s.api_key_name}`, s.call_count]),
-    );
-    expect(byKey.get("anthropic/default")).toBe(1);
-    expect(byKey.get("anthropic/overflow")).toBe(1);
-    expect(byKey.get("openai/default")).toBe(1);
+    const summary = usageSummaryBy(populated(), NONE, "api_key");
+    const byKey = new Map(summary.map((s) => [s.group, s.call_count]));
+    expect(byKey.get("anthropic default")).toBe(1);
+    expect(byKey.get("anthropic overflow")).toBe(1);
+    expect(byKey.get("openai default")).toBe(1);
+  });
+
+  test("summary groups by provider on its own", () => {
+    const summary = usageSummaryBy(populated(), NONE, "provider");
+    const byProvider = new Map(summary.map((s) => [s.group, s.call_count]));
+    expect(byProvider.get("anthropic")).toBe(2);
+    expect(byProvider.get("openai")).toBe(1);
   });
 
   test("summary groups by provider and model", () => {

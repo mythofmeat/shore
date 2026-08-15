@@ -24,7 +24,7 @@
       "input_cost": 0.012,
       "output_cost": 0.004,
       "cache_read_cost": 0.00015,
-      "cache_write_cost": 0.00002,
+      "cache_write_cost": 2e-05,
       "cost_source": "pricing_catalog",
       "total_cost": 0.01617
     },
@@ -50,7 +50,7 @@
       "input_cost": 0.012,
       "output_cost": 0.004,
       "cache_read_cost": 0.00015,
-      "cache_write_cost": 0.00002,
+      "cache_write_cost": 2e-05,
       "cost_source": "pricing_catalog",
       "total_cost": 0.01617
     },
@@ -76,7 +76,7 @@
       "input_cost": 0.012,
       "output_cost": 0.004,
       "cache_read_cost": 0.00015,
-      "cache_write_cost": 0.00002,
+      "cache_write_cost": 2e-05,
       "cost_source": "pricing_catalog",
       "total_cost": 0.01617
     },
@@ -102,7 +102,7 @@
       "input_cost": 0.012,
       "output_cost": 0.004,
       "cache_read_cost": 0.00015,
-      "cache_write_cost": 0.00002,
+      "cache_write_cost": 2e-05,
       "cost_source": "pricing_catalog",
       "total_cost": 0.01617
     },
@@ -128,7 +128,7 @@
       "input_cost": 0.012,
       "output_cost": 0.004,
       "cache_read_cost": 0.00015,
-      "cache_write_cost": 0.00002,
+      "cache_write_cost": 2e-05,
       "cost_source": "pricing_catalog",
       "total_cost": 0.01617
     },
@@ -154,7 +154,7 @@
       "input_cost": 0.012,
       "output_cost": 0.004,
       "cache_read_cost": 0.00015,
-      "cache_write_cost": 0.00002,
+      "cache_write_cost": 2e-05,
       "cost_source": "pricing_catalog",
       "total_cost": 0.01617
     },
@@ -180,7 +180,7 @@
       "input_cost": 0.012,
       "output_cost": 0.004,
       "cache_read_cost": 0.00015,
-      "cache_write_cost": 0.00002,
+      "cache_write_cost": 2e-05,
       "cost_source": "pricing_catalog",
       "total_cost": 0.01617
     },
@@ -206,7 +206,7 @@
       "input_cost": 0.012,
       "output_cost": 0.004,
       "cache_read_cost": 0.00015,
-      "cache_write_cost": 0.00002,
+      "cache_write_cost": 2e-05,
       "cost_source": "pricing_catalog",
       "total_cost": 0.01617
     },
@@ -232,7 +232,7 @@
       "input_cost": 0.012,
       "output_cost": 0.004,
       "cache_read_cost": 0.00015,
-      "cache_write_cost": 0.00002,
+      "cache_write_cost": 2e-05,
       "cost_source": "pricing_catalog",
       "total_cost": 0.01617
     },
@@ -260,7 +260,7 @@
       "cache_read_cost": null,
       "cache_write_cost": null,
       "cost_source": null,
-      "total_cost": 1.5e-7
+      "total_cost": 1.5e-07
     }
   ],
   "periods": [
@@ -2201,7 +2201,7 @@
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ],
         "cache_health": [
@@ -3977,11 +3977,12 @@
       "last": "today",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "today",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 3,
             "total_input": 3600,
             "total_output": 1020,
@@ -3990,7 +3991,7 @@
             "total_cost": 0.04851
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -3999,7 +4000,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4008,13 +4009,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -4025,11 +4026,12 @@
       "last": "week",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "week",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 3,
             "total_input": 3600,
             "total_output": 1020,
@@ -4038,7 +4040,7 @@
             "total_cost": 0.04851
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -4047,7 +4049,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4056,7 +4058,7 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4065,13 +4067,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -4082,11 +4084,12 @@
       "last": "this_week",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "this_week",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 3,
             "total_input": 3600,
             "total_output": 1020,
@@ -4095,7 +4098,7 @@
             "total_cost": 0.04851
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -4104,7 +4107,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4113,7 +4116,7 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4122,13 +4125,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -4139,11 +4142,12 @@
       "last": "month",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "month",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -4152,7 +4156,7 @@
             "total_cost": 0.06468
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -4161,7 +4165,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4170,7 +4174,7 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4179,13 +4183,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -4196,11 +4200,12 @@
       "last": "this_month",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "this_month",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -4209,7 +4214,7 @@
             "total_cost": 0.06468
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -4218,7 +4223,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4227,7 +4232,7 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4236,13 +4241,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -4253,11 +4258,12 @@
       "last": "all",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "all",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 5,
             "total_input": 6000,
             "total_output": 1700,
@@ -4266,7 +4272,7 @@
             "total_cost": 0.08085
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -4275,7 +4281,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4284,7 +4290,7 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4293,13 +4299,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -4310,11 +4316,12 @@
       "last": "4h",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "4h",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 3,
             "total_input": 3600,
             "total_output": 1020,
@@ -4323,7 +4330,7 @@
             "total_cost": 0.04851
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -4332,13 +4339,13 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -4349,11 +4356,12 @@
       "last": "7d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "7d",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 3,
             "total_input": 3600,
             "total_output": 1020,
@@ -4362,7 +4370,7 @@
             "total_cost": 0.04851
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -4371,7 +4379,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4380,7 +4388,7 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4389,13 +4397,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -4406,11 +4414,12 @@
       "last": "2w",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "2w",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -4419,7 +4428,7 @@
             "total_cost": 0.06468
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -4428,7 +4437,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4437,7 +4446,7 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4446,13 +4455,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -4463,7 +4472,8 @@
       "last": "0d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "0d",
         "summary": []
       }
@@ -4474,7 +4484,8 @@
       "last": "-1d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "-1d",
         "summary": []
       }
@@ -4485,11 +4496,12 @@
       "last": "4hh",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "4hh",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 3,
             "total_input": 3600,
             "total_output": 1020,
@@ -4498,7 +4510,7 @@
             "total_cost": 0.04851
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -4507,13 +4519,13 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -4524,11 +4536,12 @@
       "last": "banana",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "banana",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 5,
             "total_input": 6000,
             "total_output": 1700,
@@ -4537,7 +4550,7 @@
             "total_cost": 0.08085
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -4546,7 +4559,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4555,7 +4568,7 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4564,13 +4577,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -4581,11 +4594,12 @@
       "last": "",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 5,
             "total_input": 6000,
             "total_output": 1700,
@@ -4594,7 +4608,7 @@
             "total_cost": 0.08085
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -4603,7 +4617,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4612,7 +4626,7 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4621,13 +4635,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -4638,11 +4652,12 @@
       "last": "d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "d",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 5,
             "total_input": 6000,
             "total_output": 1700,
@@ -4651,7 +4666,7 @@
             "total_cost": 0.08085
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -4660,7 +4675,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4669,7 +4684,7 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4678,13 +4693,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -4695,11 +4710,12 @@
       "last": "all",
       "filter": "character",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "all",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 3,
             "total_input": 3600,
             "total_output": 1020,
@@ -4708,7 +4724,7 @@
             "total_cost": 0.04851
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -4717,7 +4733,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4734,11 +4750,12 @@
       "last": "all",
       "filter": "provider",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "all",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 3,
             "total_input": 3600,
             "total_output": 1020,
@@ -4747,7 +4764,7 @@
             "total_cost": 0.04851
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -4756,7 +4773,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4765,7 +4782,7 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4774,13 +4791,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -4791,17 +4808,18 @@
       "last": "all",
       "filter": "api_key_unknown",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "all",
         "summary": [
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -4812,11 +4830,12 @@
       "last": "all",
       "filter": "model",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "all",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4833,11 +4852,12 @@
       "last": "all",
       "filter": "call_type",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "all",
         "summary": [
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4854,12 +4874,12 @@
       "last": "today",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "today",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 5,
             "total_input": 6000,
             "total_output": 1700,
@@ -4868,8 +4888,7 @@
             "total_cost": 0.08085
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4878,14 +4897,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -4896,12 +4914,12 @@
       "last": "week",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "week",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 6,
             "total_input": 7200,
             "total_output": 2040,
@@ -4910,8 +4928,7 @@
             "total_cost": 0.09702
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4920,14 +4937,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -4938,12 +4954,12 @@
       "last": "this_week",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "this_week",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 6,
             "total_input": 7200,
             "total_output": 2040,
@@ -4952,8 +4968,7 @@
             "total_cost": 0.09702
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -4962,14 +4977,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -4980,12 +4994,12 @@
       "last": "month",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "month",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 6,
             "total_input": 7200,
             "total_output": 2040,
@@ -4994,8 +5008,7 @@
             "total_cost": 0.09702
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openai default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5004,8 +5017,7 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "openai",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5014,14 +5026,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -5032,12 +5043,12 @@
       "last": "this_month",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "this_month",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 6,
             "total_input": 7200,
             "total_output": 2040,
@@ -5046,8 +5057,7 @@
             "total_cost": 0.09702
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openai default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5056,8 +5066,7 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "openai",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5066,14 +5075,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -5084,12 +5092,12 @@
       "last": "all",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "all",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 7,
             "total_input": 8400,
             "total_output": 2380,
@@ -5098,8 +5106,7 @@
             "total_cost": 0.11319
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openai default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5108,8 +5115,7 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "openai",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5118,14 +5124,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -5136,12 +5141,12 @@
       "last": "4h",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "4h",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -5150,8 +5155,7 @@
             "total_cost": 0.06468
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5160,14 +5164,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -5178,12 +5181,12 @@
       "last": "7d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "7d",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 6,
             "total_input": 7200,
             "total_output": 2040,
@@ -5192,8 +5195,7 @@
             "total_cost": 0.09702
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5202,14 +5204,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -5220,12 +5221,12 @@
       "last": "2w",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "2w",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 6,
             "total_input": 7200,
             "total_output": 2040,
@@ -5234,8 +5235,7 @@
             "total_cost": 0.09702
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openai default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5244,8 +5244,7 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "openai",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5254,14 +5253,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -5272,7 +5270,8 @@
       "last": "0d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "0d",
         "summary": []
       }
@@ -5283,7 +5282,8 @@
       "last": "-1d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "-1d",
         "summary": []
       }
@@ -5294,12 +5294,12 @@
       "last": "4hh",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "4hh",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -5308,8 +5308,7 @@
             "total_cost": 0.06468
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5318,14 +5317,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -5336,12 +5334,12 @@
       "last": "banana",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "banana",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 7,
             "total_input": 8400,
             "total_output": 2380,
@@ -5350,8 +5348,7 @@
             "total_cost": 0.11319
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openai default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5360,8 +5357,7 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "openai",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5370,14 +5366,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -5388,12 +5383,12 @@
       "last": "",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 7,
             "total_input": 8400,
             "total_output": 2380,
@@ -5402,8 +5397,7 @@
             "total_cost": 0.11319
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openai default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5412,8 +5406,7 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "openai",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5422,14 +5415,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -5440,12 +5432,12 @@
       "last": "d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "d",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 7,
             "total_input": 8400,
             "total_output": 2380,
@@ -5454,8 +5446,7 @@
             "total_cost": 0.11319
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openai default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5464,8 +5455,7 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "openai",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5474,14 +5464,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -5492,12 +5481,12 @@
       "last": "all",
       "filter": "character",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "all",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 5,
             "total_input": 6000,
             "total_output": 1700,
@@ -5506,8 +5495,7 @@
             "total_cost": 0.08085
           },
           {
-            "provider": "openai",
-            "api_key_name": "default",
+            "group": "openai default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5524,12 +5512,12 @@
       "last": "all",
       "filter": "provider",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "all",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 7,
             "total_input": 8400,
             "total_output": 2380,
@@ -5538,14 +5526,13 @@
             "total_cost": 0.11319
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -5556,18 +5543,18 @@
       "last": "all",
       "filter": "api_key_unknown",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "all",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -5578,12 +5565,12 @@
       "last": "all",
       "filter": "model",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "all",
         "summary": [
           {
-            "provider": "openai",
-            "api_key_name": "default",
+            "group": "openai default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5600,12 +5587,12 @@
       "last": "all",
       "filter": "call_type",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "all",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5622,11 +5609,12 @@
       "last": "today",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "today",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -5635,7 +5623,7 @@
             "total_cost": 0.06468
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5644,7 +5632,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5653,13 +5641,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -5670,11 +5658,12 @@
       "last": "week",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "week",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -5683,7 +5672,7 @@
             "total_cost": 0.06468
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5692,7 +5681,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5701,7 +5690,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5710,13 +5699,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -5727,11 +5716,12 @@
       "last": "this_week",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "this_week",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -5740,7 +5730,7 @@
             "total_cost": 0.06468
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5749,7 +5739,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5758,7 +5748,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5767,13 +5757,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -5784,11 +5774,12 @@
       "last": "month",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "month",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 5,
             "total_input": 6000,
             "total_output": 1700,
@@ -5797,7 +5788,7 @@
             "total_cost": 0.08085
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5806,7 +5797,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5815,7 +5806,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5824,13 +5815,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -5841,11 +5832,12 @@
       "last": "this_month",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "this_month",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 5,
             "total_input": 6000,
             "total_output": 1700,
@@ -5854,7 +5846,7 @@
             "total_cost": 0.08085
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5863,7 +5855,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5872,7 +5864,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5881,13 +5873,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -5898,11 +5890,12 @@
       "last": "all",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "all",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 6,
             "total_input": 7200,
             "total_output": 2040,
@@ -5911,7 +5904,7 @@
             "total_cost": 0.09702
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5920,7 +5913,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5929,7 +5922,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5938,13 +5931,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -5955,11 +5948,12 @@
       "last": "4h",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "4h",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -5968,7 +5962,7 @@
             "total_cost": 0.06468
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -5977,13 +5971,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -5994,11 +5988,12 @@
       "last": "7d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "7d",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -6007,7 +6002,7 @@
             "total_cost": 0.06468
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -6016,7 +6011,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -6025,7 +6020,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -6034,13 +6029,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -6051,11 +6046,12 @@
       "last": "2w",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "2w",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 5,
             "total_input": 6000,
             "total_output": 1700,
@@ -6064,7 +6060,7 @@
             "total_cost": 0.08085
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -6073,7 +6069,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -6082,7 +6078,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -6091,13 +6087,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -6108,7 +6104,8 @@
       "last": "0d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "0d",
         "summary": []
       }
@@ -6119,7 +6116,8 @@
       "last": "-1d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "-1d",
         "summary": []
       }
@@ -6130,11 +6128,12 @@
       "last": "4hh",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "4hh",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -6143,7 +6142,7 @@
             "total_cost": 0.06468
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -6152,13 +6151,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -6169,11 +6168,12 @@
       "last": "banana",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "banana",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 6,
             "total_input": 7200,
             "total_output": 2040,
@@ -6182,7 +6182,7 @@
             "total_cost": 0.09702
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -6191,7 +6191,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -6200,7 +6200,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -6209,13 +6209,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -6226,11 +6226,12 @@
       "last": "",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 6,
             "total_input": 7200,
             "total_output": 2040,
@@ -6239,7 +6240,7 @@
             "total_cost": 0.09702
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -6248,7 +6249,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -6257,7 +6258,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -6266,13 +6267,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -6283,11 +6284,12 @@
       "last": "d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "d",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 6,
             "total_input": 7200,
             "total_output": 2040,
@@ -6296,7 +6298,7 @@
             "total_cost": 0.09702
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -6305,7 +6307,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -6314,7 +6316,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -6323,13 +6325,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -6340,11 +6342,12 @@
       "last": "all",
       "filter": "character",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "all",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -6353,7 +6356,7 @@
             "total_cost": 0.06468
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -6362,7 +6365,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -6379,11 +6382,12 @@
       "last": "all",
       "filter": "provider",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "all",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -6392,7 +6396,7 @@
             "total_cost": 0.06468
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -6401,7 +6405,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -6410,7 +6414,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -6419,13 +6423,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -6436,17 +6440,18 @@
       "last": "all",
       "filter": "api_key_unknown",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "all",
         "summary": [
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -6457,11 +6462,12 @@
       "last": "all",
       "filter": "model",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "all",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -6478,11 +6484,12 @@
       "last": "all",
       "filter": "call_type",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "all",
         "summary": [
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -8740,7 +8747,7 @@
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ],
         "cache_health": [
@@ -10516,11 +10523,12 @@
       "last": "today",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "today",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 3,
             "total_input": 3600,
             "total_output": 1020,
@@ -10529,7 +10537,7 @@
             "total_cost": 0.04851
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -10538,13 +10546,13 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -10555,11 +10563,12 @@
       "last": "week",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "week",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 3,
             "total_input": 3600,
             "total_output": 1020,
@@ -10568,7 +10577,7 @@
             "total_cost": 0.04851
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -10577,7 +10586,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -10586,7 +10595,7 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -10595,13 +10604,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -10612,11 +10621,12 @@
       "last": "this_week",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "this_week",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 3,
             "total_input": 3600,
             "total_output": 1020,
@@ -10625,7 +10635,7 @@
             "total_cost": 0.04851
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -10634,7 +10644,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -10643,7 +10653,7 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -10652,13 +10662,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -10669,11 +10679,12 @@
       "last": "month",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "month",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -10682,7 +10693,7 @@
             "total_cost": 0.06468
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -10691,7 +10702,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -10700,7 +10711,7 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -10709,13 +10720,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -10726,11 +10737,12 @@
       "last": "this_month",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "this_month",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -10739,7 +10751,7 @@
             "total_cost": 0.06468
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -10748,7 +10760,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -10757,7 +10769,7 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -10766,13 +10778,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -10783,11 +10795,12 @@
       "last": "all",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "all",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 5,
             "total_input": 6000,
             "total_output": 1700,
@@ -10796,7 +10809,7 @@
             "total_cost": 0.08085
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -10805,7 +10818,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -10814,7 +10827,7 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -10823,13 +10836,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -10840,11 +10853,12 @@
       "last": "4h",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "4h",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 3,
             "total_input": 3600,
             "total_output": 1020,
@@ -10853,7 +10867,7 @@
             "total_cost": 0.04851
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -10862,13 +10876,13 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -10879,11 +10893,12 @@
       "last": "7d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "7d",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 3,
             "total_input": 3600,
             "total_output": 1020,
@@ -10892,7 +10907,7 @@
             "total_cost": 0.04851
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -10901,7 +10916,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -10910,7 +10925,7 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -10919,13 +10934,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -10936,11 +10951,12 @@
       "last": "2w",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "2w",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -10949,7 +10965,7 @@
             "total_cost": 0.06468
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -10958,7 +10974,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -10967,7 +10983,7 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -10976,13 +10992,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -10993,7 +11009,8 @@
       "last": "0d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "0d",
         "summary": []
       }
@@ -11004,7 +11021,8 @@
       "last": "-1d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "-1d",
         "summary": []
       }
@@ -11015,11 +11033,12 @@
       "last": "4hh",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "4hh",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 3,
             "total_input": 3600,
             "total_output": 1020,
@@ -11028,7 +11047,7 @@
             "total_cost": 0.04851
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -11037,13 +11056,13 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -11054,11 +11073,12 @@
       "last": "banana",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "banana",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 5,
             "total_input": 6000,
             "total_output": 1700,
@@ -11067,7 +11087,7 @@
             "total_cost": 0.08085
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -11076,7 +11096,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11085,7 +11105,7 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11094,13 +11114,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -11111,11 +11131,12 @@
       "last": "",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 5,
             "total_input": 6000,
             "total_output": 1700,
@@ -11124,7 +11145,7 @@
             "total_cost": 0.08085
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -11133,7 +11154,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11142,7 +11163,7 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11151,13 +11172,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -11168,11 +11189,12 @@
       "last": "d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "d",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 5,
             "total_input": 6000,
             "total_output": 1700,
@@ -11181,7 +11203,7 @@
             "total_cost": 0.08085
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -11190,7 +11212,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11199,7 +11221,7 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11208,13 +11230,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -11225,11 +11247,12 @@
       "last": "all",
       "filter": "character",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "all",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 3,
             "total_input": 3600,
             "total_output": 1020,
@@ -11238,7 +11261,7 @@
             "total_cost": 0.04851
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -11247,7 +11270,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11264,11 +11287,12 @@
       "last": "all",
       "filter": "provider",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "all",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 3,
             "total_input": 3600,
             "total_output": 1020,
@@ -11277,7 +11301,7 @@
             "total_cost": 0.04851
           },
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 2,
             "total_input": 2400,
             "total_output": 680,
@@ -11286,7 +11310,7 @@
             "total_cost": 0.03234
           },
           {
-            "usage_kind": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11295,7 +11319,7 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11304,13 +11328,13 @@
             "total_cost": 0.01617
           },
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -11321,17 +11345,18 @@
       "last": "all",
       "filter": "api_key_unknown",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "all",
         "summary": [
           {
-            "usage_kind": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -11342,11 +11367,12 @@
       "last": "all",
       "filter": "model",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "all",
         "summary": [
           {
-            "usage_kind": "message_no_tools",
+            "group": "message_no_tools",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11363,11 +11389,12 @@
       "last": "all",
       "filter": "call_type",
       "payload": {
-        "mode": "summary_by_usage_kind",
+        "mode": "summary_by",
+        "dimension": "kind",
         "period": "all",
         "summary": [
           {
-            "usage_kind": "message_with_tools",
+            "group": "message_with_tools",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11384,12 +11411,12 @@
       "last": "today",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "today",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -11398,8 +11425,7 @@
             "total_cost": 0.06468
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11408,14 +11434,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -11426,12 +11451,12 @@
       "last": "week",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "week",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 6,
             "total_input": 7200,
             "total_output": 2040,
@@ -11440,8 +11465,7 @@
             "total_cost": 0.09702
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11450,14 +11474,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -11468,12 +11491,12 @@
       "last": "this_week",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "this_week",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 6,
             "total_input": 7200,
             "total_output": 2040,
@@ -11482,8 +11505,7 @@
             "total_cost": 0.09702
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11492,14 +11514,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -11510,12 +11531,12 @@
       "last": "month",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "month",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 6,
             "total_input": 7200,
             "total_output": 2040,
@@ -11524,8 +11545,7 @@
             "total_cost": 0.09702
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openai default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11534,8 +11554,7 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "openai",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11544,14 +11563,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -11562,12 +11580,12 @@
       "last": "this_month",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "this_month",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 6,
             "total_input": 7200,
             "total_output": 2040,
@@ -11576,8 +11594,7 @@
             "total_cost": 0.09702
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openai default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11586,8 +11603,7 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "openai",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11596,14 +11612,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -11614,12 +11629,12 @@
       "last": "all",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "all",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 7,
             "total_input": 8400,
             "total_output": 2380,
@@ -11628,8 +11643,7 @@
             "total_cost": 0.11319
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openai default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11638,8 +11652,7 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "openai",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11648,14 +11661,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -11666,12 +11678,12 @@
       "last": "4h",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "4h",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -11680,8 +11692,7 @@
             "total_cost": 0.06468
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11690,14 +11701,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -11708,12 +11718,12 @@
       "last": "7d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "7d",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 6,
             "total_input": 7200,
             "total_output": 2040,
@@ -11722,8 +11732,7 @@
             "total_cost": 0.09702
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11732,14 +11741,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -11750,12 +11758,12 @@
       "last": "2w",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "2w",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 6,
             "total_input": 7200,
             "total_output": 2040,
@@ -11764,8 +11772,7 @@
             "total_cost": 0.09702
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openai default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11774,8 +11781,7 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "openai",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11784,14 +11790,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -11802,7 +11807,8 @@
       "last": "0d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "0d",
         "summary": []
       }
@@ -11813,7 +11819,8 @@
       "last": "-1d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "-1d",
         "summary": []
       }
@@ -11824,12 +11831,12 @@
       "last": "4hh",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "4hh",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -11838,8 +11845,7 @@
             "total_cost": 0.06468
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11848,14 +11854,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -11866,12 +11871,12 @@
       "last": "banana",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "banana",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 7,
             "total_input": 8400,
             "total_output": 2380,
@@ -11880,8 +11885,7 @@
             "total_cost": 0.11319
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openai default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11890,8 +11894,7 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "openai",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11900,14 +11903,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -11918,12 +11920,12 @@
       "last": "",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 7,
             "total_input": 8400,
             "total_output": 2380,
@@ -11932,8 +11934,7 @@
             "total_cost": 0.11319
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openai default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11942,8 +11943,7 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "openai",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11952,14 +11952,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -11970,12 +11969,12 @@
       "last": "d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "d",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 7,
             "total_input": 8400,
             "total_output": 2380,
@@ -11984,8 +11983,7 @@
             "total_cost": 0.11319
           },
           {
-            "provider": "openrouter",
-            "api_key_name": "default",
+            "group": "openai default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -11994,8 +11992,7 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "openai",
-            "api_key_name": "default",
+            "group": "openrouter default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12004,14 +12001,13 @@
             "total_cost": 0.01617
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -12022,12 +12018,12 @@
       "last": "all",
       "filter": "character",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "all",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 5,
             "total_input": 6000,
             "total_output": 1700,
@@ -12036,8 +12032,7 @@
             "total_cost": 0.08085
           },
           {
-            "provider": "openai",
-            "api_key_name": "default",
+            "group": "openai default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12054,12 +12049,12 @@
       "last": "all",
       "filter": "provider",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "all",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 7,
             "total_input": 8400,
             "total_output": 2380,
@@ -12068,14 +12063,13 @@
             "total_cost": 0.11319
           },
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -12086,18 +12080,18 @@
       "last": "all",
       "filter": "api_key_unknown",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "all",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "unknown",
+            "group": "anthropic unknown",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -12108,12 +12102,12 @@
       "last": "all",
       "filter": "model",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "all",
         "summary": [
           {
-            "provider": "openai",
-            "api_key_name": "default",
+            "group": "openai default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12130,12 +12124,12 @@
       "last": "all",
       "filter": "call_type",
       "payload": {
-        "mode": "summary_by_api_key",
+        "mode": "summary_by",
+        "dimension": "api_key",
         "period": "all",
         "summary": [
           {
-            "provider": "anthropic",
-            "api_key_name": "default",
+            "group": "anthropic default",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12152,11 +12146,12 @@
       "last": "today",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "today",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -12165,7 +12160,7 @@
             "total_cost": 0.06468
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12174,13 +12169,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -12191,11 +12186,12 @@
       "last": "week",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "week",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -12204,7 +12200,7 @@
             "total_cost": 0.06468
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12213,7 +12209,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12222,7 +12218,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12231,13 +12227,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -12248,11 +12244,12 @@
       "last": "this_week",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "this_week",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -12261,7 +12258,7 @@
             "total_cost": 0.06468
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12270,7 +12267,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12279,7 +12276,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12288,13 +12285,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -12305,11 +12302,12 @@
       "last": "month",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "month",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 5,
             "total_input": 6000,
             "total_output": 1700,
@@ -12318,7 +12316,7 @@
             "total_cost": 0.08085
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12327,7 +12325,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12336,7 +12334,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12345,13 +12343,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -12362,11 +12360,12 @@
       "last": "this_month",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "this_month",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 5,
             "total_input": 6000,
             "total_output": 1700,
@@ -12375,7 +12374,7 @@
             "total_cost": 0.08085
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12384,7 +12383,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12393,7 +12392,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12402,13 +12401,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -12419,11 +12418,12 @@
       "last": "all",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "all",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 6,
             "total_input": 7200,
             "total_output": 2040,
@@ -12432,7 +12432,7 @@
             "total_cost": 0.09702
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12441,7 +12441,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12450,7 +12450,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12459,13 +12459,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -12476,11 +12476,12 @@
       "last": "4h",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "4h",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -12489,7 +12490,7 @@
             "total_cost": 0.06468
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12498,13 +12499,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -12515,11 +12516,12 @@
       "last": "7d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "7d",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -12528,7 +12530,7 @@
             "total_cost": 0.06468
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12537,7 +12539,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12546,7 +12548,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12555,13 +12557,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -12572,11 +12574,12 @@
       "last": "2w",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "2w",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 5,
             "total_input": 6000,
             "total_output": 1700,
@@ -12585,7 +12588,7 @@
             "total_cost": 0.08085
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12594,7 +12597,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12603,7 +12606,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12612,13 +12615,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -12629,7 +12632,8 @@
       "last": "0d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "0d",
         "summary": []
       }
@@ -12640,7 +12644,8 @@
       "last": "-1d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "-1d",
         "summary": []
       }
@@ -12651,11 +12656,12 @@
       "last": "4hh",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "4hh",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -12664,7 +12670,7 @@
             "total_cost": 0.06468
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12673,13 +12679,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -12690,11 +12696,12 @@
       "last": "banana",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "banana",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 6,
             "total_input": 7200,
             "total_output": 2040,
@@ -12703,7 +12710,7 @@
             "total_cost": 0.09702
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12712,7 +12719,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12721,7 +12728,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12730,13 +12737,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -12747,11 +12754,12 @@
       "last": "",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 6,
             "total_input": 7200,
             "total_output": 2040,
@@ -12760,7 +12768,7 @@
             "total_cost": 0.09702
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12769,7 +12777,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12778,7 +12786,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12787,13 +12795,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -12804,11 +12812,12 @@
       "last": "d",
       "filter": "none",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "d",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 6,
             "total_input": 7200,
             "total_output": 2040,
@@ -12817,7 +12826,7 @@
             "total_cost": 0.09702
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12826,7 +12835,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12835,7 +12844,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12844,13 +12853,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -12861,11 +12870,12 @@
       "last": "all",
       "filter": "character",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "all",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -12874,7 +12884,7 @@
             "total_cost": 0.06468
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12883,7 +12893,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12900,11 +12910,12 @@
       "last": "all",
       "filter": "provider",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "all",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 4,
             "total_input": 4800,
             "total_output": 1360,
@@ -12913,7 +12924,7 @@
             "total_cost": 0.06468
           },
           {
-            "call_type": "heartbeat",
+            "group": "heartbeat",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12922,7 +12933,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "keepalive",
+            "group": "keepalive",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12931,7 +12942,7 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12940,13 +12951,13 @@
             "total_cost": 0.01617
           },
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -12957,17 +12968,18 @@
       "last": "all",
       "filter": "api_key_unknown",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "all",
         "summary": [
           {
-            "call_type": "dreaming",
+            "group": "dreaming",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
             "total_cache_read": 900,
             "total_cache_write": 120,
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       }
@@ -12978,11 +12990,12 @@
       "last": "all",
       "filter": "model",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "all",
         "summary": [
           {
-            "call_type": "message",
+            "group": "message",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,
@@ -12999,11 +13012,12 @@
       "last": "all",
       "filter": "call_type",
       "payload": {
-        "mode": "summary_by_call_type",
+        "mode": "summary_by",
+        "dimension": "call_type",
         "period": "all",
         "summary": [
           {
-            "call_type": "tool_loop",
+            "group": "tool_loop",
             "call_count": 1,
             "total_input": 1200,
             "total_output": 340,

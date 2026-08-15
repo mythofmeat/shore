@@ -102,7 +102,7 @@
       "cache_read_cost": 0.00012,
       "cache_write_cost": 0.000375,
       "cost_source": "pricing_catalog",
-      "total_cost": 1.5e-7
+      "total_cost": 1.5e-07
     },
     {
       "ts": "2026-04-05T10:04:00Z",
@@ -290,7 +290,7 @@
       ],
       "by_call_type": [
         {
-          "call_type": "message",
+          "group": "message",
           "call_count": 5,
           "total_input": 500,
           "total_output": 250,
@@ -299,7 +299,7 @@
           "total_cost": 0.151145
         },
         {
-          "call_type": "keepalive",
+          "group": "keepalive",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
@@ -308,7 +308,7 @@
           "total_cost": 0.123456789
         },
         {
-          "call_type": "tool_loop",
+          "group": "tool_loop",
           "call_count": 1,
           "total_input": 200,
           "total_output": 50,
@@ -317,16 +317,16 @@
           "total_cost": 0.01
         },
         {
-          "call_type": "heartbeat_tool_loop",
+          "group": "heartbeat_tool_loop",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
           "total_cache_read": 80,
           "total_cache_write": 20,
-          "total_cost": 1.5e-7
+          "total_cost": 1.5e-07
         },
         {
-          "call_type": "compaction",
+          "group": "compaction",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
@@ -337,7 +337,7 @@
       ],
       "by_usage_kind": [
         {
-          "usage_kind": "message_no_tools",
+          "group": "message_no_tools",
           "call_count": 4,
           "total_input": 400,
           "total_output": 200,
@@ -346,7 +346,7 @@
           "total_cost": 0.1454
         },
         {
-          "usage_kind": "keepalive",
+          "group": "keepalive",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
@@ -355,7 +355,7 @@
           "total_cost": 0.123456789
         },
         {
-          "usage_kind": "message_with_tools",
+          "group": "message_with_tools",
           "call_count": 2,
           "total_input": 300,
           "total_output": 100,
@@ -364,16 +364,16 @@
           "total_cost": 0.015745000000000002
         },
         {
-          "usage_kind": "heartbeat",
+          "group": "heartbeat",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
           "total_cache_read": 80,
           "total_cache_write": 20,
-          "total_cost": 1.5e-7
+          "total_cost": 1.5e-07
         },
         {
-          "usage_kind": "compaction",
+          "group": "compaction",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
@@ -384,8 +384,7 @@
       ],
       "by_api_key": [
         {
-          "provider": "anthropic",
-          "api_key_name": "default",
+          "group": "anthropic default",
           "call_count": 4,
           "total_input": 400,
           "total_output": 200,
@@ -394,8 +393,7 @@
           "total_cost": 0.149145
         },
         {
-          "provider": "openrouter-anthropic",
-          "api_key_name": "default",
+          "group": "openrouter-anthropic default",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
@@ -404,8 +402,7 @@
           "total_cost": 0.123456789
         },
         {
-          "provider": "anthropic",
-          "api_key_name": "overflow",
+          "group": "anthropic overflow",
           "call_count": 1,
           "total_input": 200,
           "total_output": 50,
@@ -414,8 +411,7 @@
           "total_cost": 0.01
         },
         {
-          "provider": "openai",
-          "api_key_name": "default",
+          "group": "openai default",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
@@ -424,18 +420,16 @@
           "total_cost": 0.002
         },
         {
-          "provider": "anthropic",
-          "api_key_name": "unknown",
+          "group": "anthropic unknown",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
           "total_cache_read": 80,
           "total_cache_write": 20,
-          "total_cost": 1.5e-7
+          "total_cost": 1.5e-07
         },
         {
-          "provider": "opencode-go",
-          "api_key_name": "default",
+          "group": "opencode-go default",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
@@ -668,12 +662,12 @@
           "total_output": 50,
           "total_cache_read": 80,
           "total_cache_write": 20,
-          "total_cost": 1.5e-7
+          "total_cost": 1.5e-07
         }
       ],
       "by_call_type": [
         {
-          "call_type": "keepalive",
+          "group": "keepalive",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
@@ -682,18 +676,18 @@
           "total_cost": 0.123456789
         },
         {
-          "call_type": "heartbeat_tool_loop",
+          "group": "heartbeat_tool_loop",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
           "total_cache_read": 80,
           "total_cache_write": 20,
-          "total_cost": 1.5e-7
+          "total_cost": 1.5e-07
         }
       ],
       "by_usage_kind": [
         {
-          "usage_kind": "keepalive",
+          "group": "keepalive",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
@@ -702,19 +696,18 @@
           "total_cost": 0.123456789
         },
         {
-          "usage_kind": "heartbeat",
+          "group": "heartbeat",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
           "total_cache_read": 80,
           "total_cache_write": 20,
-          "total_cost": 1.5e-7
+          "total_cost": 1.5e-07
         }
       ],
       "by_api_key": [
         {
-          "provider": "openrouter-anthropic",
-          "api_key_name": "default",
+          "group": "openrouter-anthropic default",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
@@ -723,14 +716,13 @@
           "total_cost": 0.123456789
         },
         {
-          "provider": "anthropic",
-          "api_key_name": "unknown",
+          "group": "anthropic unknown",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
           "total_cache_read": 80,
           "total_cache_write": 20,
-          "total_cost": 1.5e-7
+          "total_cost": 1.5e-07
         }
       ],
       "model_usage": [
@@ -836,7 +828,7 @@
       ],
       "by_call_type": [
         {
-          "call_type": "message",
+          "group": "message",
           "call_count": 4,
           "total_input": 400,
           "total_output": 200,
@@ -845,7 +837,7 @@
           "total_cost": 0.149145
         },
         {
-          "call_type": "tool_loop",
+          "group": "tool_loop",
           "call_count": 1,
           "total_input": 200,
           "total_output": 50,
@@ -854,18 +846,18 @@
           "total_cost": 0.01
         },
         {
-          "call_type": "heartbeat_tool_loop",
+          "group": "heartbeat_tool_loop",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
           "total_cache_read": 80,
           "total_cache_write": 20,
-          "total_cost": 1.5e-7
+          "total_cost": 1.5e-07
         }
       ],
       "by_usage_kind": [
         {
-          "usage_kind": "message_no_tools",
+          "group": "message_no_tools",
           "call_count": 3,
           "total_input": 300,
           "total_output": 150,
@@ -874,7 +866,7 @@
           "total_cost": 0.1434
         },
         {
-          "usage_kind": "message_with_tools",
+          "group": "message_with_tools",
           "call_count": 2,
           "total_input": 300,
           "total_output": 100,
@@ -883,19 +875,18 @@
           "total_cost": 0.015745000000000002
         },
         {
-          "usage_kind": "heartbeat",
+          "group": "heartbeat",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
           "total_cache_read": 80,
           "total_cache_write": 20,
-          "total_cost": 1.5e-7
+          "total_cost": 1.5e-07
         }
       ],
       "by_api_key": [
         {
-          "provider": "anthropic",
-          "api_key_name": "default",
+          "group": "anthropic default",
           "call_count": 4,
           "total_input": 400,
           "total_output": 200,
@@ -904,8 +895,7 @@
           "total_cost": 0.149145
         },
         {
-          "provider": "anthropic",
-          "api_key_name": "overflow",
+          "group": "anthropic overflow",
           "call_count": 1,
           "total_input": 200,
           "total_output": 50,
@@ -914,14 +904,13 @@
           "total_cost": 0.01
         },
         {
-          "provider": "anthropic",
-          "api_key_name": "unknown",
+          "group": "anthropic unknown",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
           "total_cache_read": 80,
           "total_cache_write": 20,
-          "total_cost": 1.5e-7
+          "total_cost": 1.5e-07
         }
       ],
       "model_usage": [
@@ -1063,7 +1052,7 @@
             "cache_read_cost": 0.00012,
             "cache_write_cost": 0.000375,
             "cost_source": "pricing_catalog",
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       ],
@@ -1077,7 +1066,7 @@
         "total_output": 50,
         "total_cache_read": 80,
         "total_cache_write": 20,
-        "total_cost": 1.5e-7
+        "total_cost": 1.5e-07
       },
       "usage_summary": [
         {
@@ -1088,41 +1077,40 @@
           "total_output": 50,
           "total_cache_read": 80,
           "total_cache_write": 20,
-          "total_cost": 1.5e-7
+          "total_cost": 1.5e-07
         }
       ],
       "by_call_type": [
         {
-          "call_type": "heartbeat_tool_loop",
+          "group": "heartbeat_tool_loop",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
           "total_cache_read": 80,
           "total_cache_write": 20,
-          "total_cost": 1.5e-7
+          "total_cost": 1.5e-07
         }
       ],
       "by_usage_kind": [
         {
-          "usage_kind": "heartbeat",
+          "group": "heartbeat",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
           "total_cache_read": 80,
           "total_cache_write": 20,
-          "total_cost": 1.5e-7
+          "total_cost": 1.5e-07
         }
       ],
       "by_api_key": [
         {
-          "provider": "anthropic",
-          "api_key_name": "unknown",
+          "group": "anthropic unknown",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
           "total_cache_read": 80,
           "total_cache_write": 20,
-          "total_cost": 1.5e-7
+          "total_cost": 1.5e-07
         }
       ],
       "model_usage": [
@@ -1163,7 +1151,7 @@
             "cache_read_cost": 0.00012,
             "cache_write_cost": 0.000375,
             "cost_source": "pricing_catalog",
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ]
       ],
@@ -1193,7 +1181,7 @@
       ],
       "by_call_type": [
         {
-          "call_type": "message",
+          "group": "message",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
@@ -1204,7 +1192,7 @@
       ],
       "by_usage_kind": [
         {
-          "usage_kind": "message_no_tools",
+          "group": "message_no_tools",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
@@ -1215,8 +1203,7 @@
       ],
       "by_api_key": [
         {
-          "provider": "openai",
-          "api_key_name": "default",
+          "group": "openai default",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
@@ -1263,7 +1250,7 @@
       ],
       "by_call_type": [
         {
-          "call_type": "tool_loop",
+          "group": "tool_loop",
           "call_count": 1,
           "total_input": 200,
           "total_output": 50,
@@ -1274,7 +1261,7 @@
       ],
       "by_usage_kind": [
         {
-          "usage_kind": "message_with_tools",
+          "group": "message_with_tools",
           "call_count": 1,
           "total_input": 200,
           "total_output": 50,
@@ -1285,8 +1272,7 @@
       ],
       "by_api_key": [
         {
-          "provider": "anthropic",
-          "api_key_name": "overflow",
+          "group": "anthropic overflow",
           "call_count": 1,
           "total_input": 200,
           "total_output": 50,
@@ -1363,7 +1349,7 @@
       ],
       "by_call_type": [
         {
-          "call_type": "tool_loop",
+          "group": "tool_loop",
           "call_count": 1,
           "total_input": 200,
           "total_output": 50,
@@ -1372,7 +1358,7 @@
           "total_cost": 0.01
         },
         {
-          "call_type": "message",
+          "group": "message",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
@@ -1381,18 +1367,18 @@
           "total_cost": 0.005745
         },
         {
-          "call_type": "heartbeat_tool_loop",
+          "group": "heartbeat_tool_loop",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
           "total_cache_read": 80,
           "total_cache_write": 20,
-          "total_cost": 1.5e-7
+          "total_cost": 1.5e-07
         }
       ],
       "by_usage_kind": [
         {
-          "usage_kind": "message_with_tools",
+          "group": "message_with_tools",
           "call_count": 2,
           "total_input": 300,
           "total_output": 100,
@@ -1401,19 +1387,18 @@
           "total_cost": 0.015745000000000002
         },
         {
-          "usage_kind": "heartbeat",
+          "group": "heartbeat",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
           "total_cache_read": 80,
           "total_cache_write": 20,
-          "total_cost": 1.5e-7
+          "total_cost": 1.5e-07
         }
       ],
       "by_api_key": [
         {
-          "provider": "anthropic",
-          "api_key_name": "overflow",
+          "group": "anthropic overflow",
           "call_count": 1,
           "total_input": 200,
           "total_output": 50,
@@ -1422,8 +1407,7 @@
           "total_cost": 0.01
         },
         {
-          "provider": "anthropic",
-          "api_key_name": "default",
+          "group": "anthropic default",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
@@ -1432,14 +1416,13 @@
           "total_cost": 0.005745
         },
         {
-          "provider": "anthropic",
-          "api_key_name": "unknown",
+          "group": "anthropic unknown",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
           "total_cache_read": 80,
           "total_cache_write": 20,
-          "total_cost": 1.5e-7
+          "total_cost": 1.5e-07
         }
       ],
       "model_usage": [
@@ -1496,7 +1479,7 @@
             "cache_read_cost": 0.00012,
             "cache_write_cost": 0.000375,
             "cost_source": "pricing_catalog",
-            "total_cost": 1.5e-7
+            "total_cost": 1.5e-07
           }
         ],
         [
@@ -1575,7 +1558,7 @@
       ],
       "by_call_type": [
         {
-          "call_type": "message",
+          "group": "message",
           "call_count": 3,
           "total_input": 300,
           "total_output": 150,
@@ -1584,7 +1567,7 @@
           "total_cost": 0.1454
         },
         {
-          "call_type": "keepalive",
+          "group": "keepalive",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
@@ -1593,18 +1576,18 @@
           "total_cost": 0.123456789
         },
         {
-          "call_type": "heartbeat_tool_loop",
+          "group": "heartbeat_tool_loop",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
           "total_cache_read": 80,
           "total_cache_write": 20,
-          "total_cost": 1.5e-7
+          "total_cost": 1.5e-07
         }
       ],
       "by_usage_kind": [
         {
-          "usage_kind": "message_no_tools",
+          "group": "message_no_tools",
           "call_count": 3,
           "total_input": 300,
           "total_output": 150,
@@ -1613,7 +1596,7 @@
           "total_cost": 0.1454
         },
         {
-          "usage_kind": "keepalive",
+          "group": "keepalive",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
@@ -1622,19 +1605,18 @@
           "total_cost": 0.123456789
         },
         {
-          "usage_kind": "heartbeat",
+          "group": "heartbeat",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
           "total_cache_read": 80,
           "total_cache_write": 20,
-          "total_cost": 1.5e-7
+          "total_cost": 1.5e-07
         }
       ],
       "by_api_key": [
         {
-          "provider": "anthropic",
-          "api_key_name": "default",
+          "group": "anthropic default",
           "call_count": 2,
           "total_input": 200,
           "total_output": 100,
@@ -1643,8 +1625,7 @@
           "total_cost": 0.1434
         },
         {
-          "provider": "openrouter-anthropic",
-          "api_key_name": "default",
+          "group": "openrouter-anthropic default",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
@@ -1653,8 +1634,7 @@
           "total_cost": 0.123456789
         },
         {
-          "provider": "openai",
-          "api_key_name": "default",
+          "group": "openai default",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
@@ -1663,14 +1643,13 @@
           "total_cost": 0.002
         },
         {
-          "provider": "anthropic",
-          "api_key_name": "unknown",
+          "group": "anthropic unknown",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
           "total_cache_read": 80,
           "total_cache_write": 20,
-          "total_cost": 1.5e-7
+          "total_cost": 1.5e-07
         }
       ],
       "model_usage": [
@@ -1876,7 +1855,7 @@
       ],
       "by_call_type": [
         {
-          "call_type": "message",
+          "group": "message",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
@@ -1885,7 +1864,7 @@
           "total_cost": 0.02
         },
         {
-          "call_type": "tool_loop",
+          "group": "tool_loop",
           "call_count": 1,
           "total_input": 200,
           "total_output": 50,
@@ -1896,7 +1875,7 @@
       ],
       "by_usage_kind": [
         {
-          "usage_kind": "message_no_tools",
+          "group": "message_no_tools",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
@@ -1905,7 +1884,7 @@
           "total_cost": 0.02
         },
         {
-          "usage_kind": "message_with_tools",
+          "group": "message_with_tools",
           "call_count": 1,
           "total_input": 200,
           "total_output": 50,
@@ -1916,8 +1895,7 @@
       ],
       "by_api_key": [
         {
-          "provider": "anthropic",
-          "api_key_name": "default",
+          "group": "anthropic default",
           "call_count": 1,
           "total_input": 100,
           "total_output": 50,
@@ -1926,8 +1904,7 @@
           "total_cost": 0.02
         },
         {
-          "provider": "anthropic",
-          "api_key_name": "overflow",
+          "group": "anthropic overflow",
           "call_count": 1,
           "total_input": 200,
           "total_output": 50,

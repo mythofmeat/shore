@@ -10,6 +10,8 @@ import {
 } from "../cache/tracker.ts";
 import { isAnthropicPricing, PricingEngine, type ModelPricing, type PricingStore } from "./pricing.ts";
 
+export const PRICING_TTL_MS = 24 * 60 * 60 * 1000;
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS calls (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -555,16 +557,25 @@ export class Ledger {
   }
 }
 
-function sqlitePricingStore(db: Database): PricingStore {
+function sqlitePricingStore(db: Database, now: () => number = () => Date.now()): PricingStore {
   return {
     get(modelId) {
       const row = db
         .query(
-          `SELECT input_per_token, output_per_token, cache_read_per_token, cache_write_per_token
+          `SELECT input_per_token, output_per_token, cache_read_per_token,
+                  cache_write_per_token, fetched_at
              FROM pricing WHERE model_id = $id`,
         )
-        .get({ $id: modelId }) as ModelPricing | null;
-      return row ?? undefined;
+        .get({ $id: modelId }) as (ModelPricing & { fetched_at: string }) | null;
+      if (row === null) return undefined;
+      const fetchedAt = Date.parse(row.fetched_at);
+      if (Number.isNaN(fetchedAt) || now() - fetchedAt >= PRICING_TTL_MS) return undefined;
+      return {
+        input_per_token: row.input_per_token,
+        output_per_token: row.output_per_token,
+        cache_read_per_token: row.cache_read_per_token,
+        cache_write_per_token: row.cache_write_per_token,
+      };
     },
     put(modelId, pricing) {
       db.query(

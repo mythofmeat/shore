@@ -2,7 +2,11 @@ import { afterEach, expect, test } from "bun:test";
 
 import { closeLedgers } from "../src/ledger/record.ts";
 import type { UsageConfig } from "../src/ledger/budget.ts";
-import { budgetWarnings, modelHistory, usageReport } from "../src/ledger/usage.ts";
+import {
+  backfillLedgerCosts,
+  budgetWarnings,
+  modelHistory,
+} from "../src/ledger/usage.ts";
 import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
 
 const cleanups: Array<() => void> = [];
@@ -61,8 +65,8 @@ function priceInStore(path: string, modelId: string, perToken: number): void {
   db.query(
     `INSERT OR REPLACE INTO pricing (model_id, input_per_token, output_per_token,
        cache_read_per_token, cache_write_per_token, fetched_at)
-     VALUES ($id, $p, $p, $p, $p, '2026-05-13T00:00:00+00:00')`,
-  ).run({ $id: modelId, $p: perToken });
+     VALUES ($id, $p, $p, $p, $p, $at)`,
+  ).run({ $id: modelId, $p: perToken, $at: new Date().toISOString() });
   db.run("PRAGMA wal_checkpoint(TRUNCATE)");
   db.close();
 }
@@ -99,17 +103,13 @@ function costOf(path: string, id: number): number | null {
   return row?.total_cost ?? null;
 }
 
-test("recalculate prices rows the catalog knows", async () => {
+test("the backfill prices rows the catalog knows", async () => {
   const ledger = ledgerWith([{}]);
   priceInStore(ledger, "anthropic/claude-opus-4.6", 0.00001);
   const fetched = stubCatalog();
 
-  const result = (await usageReport({
-    ledger,
-    args: { recalculate: true },
-  })) as { mode: string; updated: number; total: number; failures: unknown[] };
+  const result = await backfillLedgerCosts(ledger);
 
-  expect(result.mode).toBe("recalculate");
   expect(result.updated).toBe(1);
   expect(result.total).toBe(1);
   expect(result.failures).toEqual([]);
@@ -117,14 +117,11 @@ test("recalculate prices rows the catalog knows", async () => {
   expect(costOf(ledger, 1)).toBeCloseTo(0.0186, 10);
 });
 
-test("recalculate reports a model the catalog has no price for", async () => {
+test("the backfill reports a model the catalog has no price for", async () => {
   const ledger = ledgerWith([{ provider: "openai", model: "gpt-nonexistent" }]);
   const fetched = stubCatalog();
 
-  const result = (await usageReport({
-    ledger,
-    args: { recalculate: true },
-  })) as { updated: number; total: number; failures: Array<{ model: string; reason: string }> };
+  const result = await backfillLedgerCosts(ledger);
 
   expect(fetched.calls, "a cache miss fetches the catalog once").toBe(1);
   expect(result.updated).toBe(0);
@@ -135,21 +132,18 @@ test("recalculate reports a model the catalog has no price for", async () => {
   expect(costOf(ledger, 1), "an unpriceable row keeps its NULL cost").toBeNull();
 });
 
-test("recalculate fetches each model once, not each row", async () => {
+test("the backfill fetches each model once, not each row", async () => {
   const ledger = ledgerWith([{}, {}, {}]);
   const fetched = stubCatalog("anthropic/claude-opus-4.6");
 
-  const result = (await usageReport({ ledger, args: { recalculate: true } })) as {
-    updated: number;
-    total: number;
-  };
+  const result = await backfillLedgerCosts(ledger);
 
   expect(fetched.calls).toBe(1);
   expect(result.updated).toBe(3);
   expect(result.total).toBe(3);
 });
 
-test("recalculate leaves already-costed rows alone unless forced", async () => {
+test("the backfill leaves already-costed rows alone unless forced", async () => {
   const ledger = ledgerWith([
     { cost_source: "pricing_catalog", total_cost: 99 },
     { cost_source: "provider_reported", total_cost: 42 },
@@ -158,22 +152,13 @@ test("recalculate leaves already-costed rows alone unless forced", async () => {
   priceInStore(ledger, "anthropic/claude-opus-4.6", 0.00001);
   stubCatalog();
 
-  const plain = (await usageReport({ ledger, args: { recalculate: true } })) as {
-    updated: number;
-    total: number;
-    failures: unknown[];
-  };
-  expect(plain, "nothing has a NULL cost").toEqual({
-    mode: "recalculate",
+  expect(await backfillLedgerCosts(ledger), "nothing has a NULL cost").toEqual({
     updated: 0,
     total: 0,
     failures: [],
-  } as never);
+  });
 
-  const forced = (await usageReport({
-    ledger,
-    args: { recalculate: true, force: true },
-  })) as { updated: number; total: number };
+  const forced = await backfillLedgerCosts(ledger, true);
   expect(forced.total, "provider_reported and subscription rows are excluded").toBe(1);
   expect(forced.updated).toBe(1);
   expect(costOf(ledger, 1)).toBeCloseTo(0.0186, 10);

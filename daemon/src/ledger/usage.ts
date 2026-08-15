@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 
 import {
   budgetStatuses,
+  narrowestBudgetWindow,
   newlyCrossedBudgetWarnings,
   type BudgetOptions,
   type UsageConfig,
@@ -19,9 +20,9 @@ import {
   queryAnomalies,
   updateCosts,
   usageSummary,
-  usageSummaryByApiKey,
-  usageSummaryByCallType,
-  usageSummaryByUsageKind,
+  usageSummaryBy,
+  isUsageDimension,
+  USAGE_DIMENSIONS,
   warmStreak,
   type QueryFilter,
 } from "./query.ts";
@@ -151,18 +152,28 @@ function buildFilter(
   timezone: string,
   opts: UsageOptions,
   now: number,
-): { filter: QueryFilter; last: string } {
-  const last = str(args, "last") ?? "today";
+  config: UsageConfig,
+): { filter: QueryFilter; last: string; periodSince: string | undefined } {
+  const requested = str(args, "last");
+  const budgetWindow =
+    requested === undefined ? narrowestBudgetWindow(config, now, opts) : undefined;
+  const last = requested ?? (budgetWindow === undefined ? "today" : "budget");
+  const since =
+    budgetWindow === undefined
+      ? parseLastPeriod(last, now, timezone, opts)
+      : toRfc3339(budgetWindow.start);
+
+  const scoped = {
+    character: str(args, "character"),
+    provider: str(args, "provider"),
+    api_key_name: str(args, "api_key"),
+    model: str(args, "model"),
+    call_type: str(args, "call_type"),
+  };
   return {
-    filter: {
-      since: parseLastPeriod(last, now, timezone, opts),
-      character: str(args, "character"),
-      provider: str(args, "provider"),
-      api_key_name: str(args, "api_key"),
-      model: str(args, "model"),
-      call_type: str(args, "call_type"),
-    },
+    filter: { since, ...scoped },
     last,
+    periodSince: budgetWindow === undefined ? undefined : since,
   };
 }
 
@@ -176,7 +187,7 @@ export async function usageReport(
   const config = request.usage ?? {};
   const now = opts.now ?? Date.now();
   const timezone = config.timezone ?? "local";
-  const { filter, last } = buildFilter(args, timezone, opts, now);
+  const { filter, last, periodSince } = buildFilter(args, timezone, opts, now, config);
 
   if (flag(args, "budget")) {
     return budgetPayload(db, config, now, opts);
@@ -187,38 +198,35 @@ export async function usageReport(
   if (flag(args, "export_csv")) {
     return { mode: "csv", data: tsvToCsv(exportTsv(db, filter)) };
   }
-  if (flag(args, "by_kind")) {
+  const dimension = str(args, "group_by");
+  if (dimension !== undefined) {
+    if (!isUsageDimension(dimension)) {
+      throw new Error(
+        `unknown usage dimension '${dimension}' (expected one of ${USAGE_DIMENSIONS.join(", ")})`,
+      );
+    }
     return {
-      mode: "summary_by_usage_kind",
+      mode: "summary_by",
+      dimension,
       period: last,
-      summary: usageSummaryByUsageKind(db, filter),
-    };
-  }
-  if (flag(args, "by_api_key")) {
-    return {
-      mode: "summary_by_api_key",
-      period: last,
-      summary: usageSummaryByApiKey(db, filter),
-    };
-  }
-  if (flag(args, "by_call_type")) {
-    return {
-      mode: "summary_by_call_type",
-      period: last,
-      summary: usageSummaryByCallType(db, filter),
+      ...(periodSince === undefined ? {} : { period_since: periodSince }),
+      summary: usageSummaryBy(db, filter, dimension),
     };
   }
   if (flag(args, "anomalies")) {
     return anomaliesPayload(db, filter, last, timezone, opts, now);
   }
-  if (flag(args, "refresh_pricing")) {
-    return { mode: "refresh_pricing" };
-  }
-  if (flag(args, "recalculate")) {
-    return recalculate(db, ledger.pricing, flag(args, "force"));
-  }
-
-  return summaryPayload(db, config, filter, last, timezone, opts, now, request.rateLimits?.() ?? []);
+  return summaryPayload(
+    db,
+    config,
+    filter,
+    last,
+    periodSince,
+    timezone,
+    opts,
+    now,
+    request.rateLimits?.() ?? [],
+  );
 }
 
 function budgetPayload(
@@ -281,6 +289,7 @@ function summaryPayload(
   config: UsageConfig,
   filter: QueryFilter,
   last: string,
+  periodSince: string | undefined,
   timezone: string,
   opts: UsageOptions,
   now: number,
@@ -304,6 +313,7 @@ function summaryPayload(
   return {
     mode: "summary",
     period: last,
+    ...(periodSince === undefined ? {} : { period_since: periodSince }),
     timezone,
     summary: usageSummary(db, filter),
     cache_health: cacheHealth,
@@ -338,14 +348,20 @@ function callAttemptStatus(db: Database): {
   return { pending, unresolved, estimated_cost_at_risk: estimated };
 }
 
-async function recalculate(
+export interface CostBackfill {
+  updated: number;
+  total: number;
+  failures: { model: string; reason: string }[];
+}
+
+export async function backfillMissingCosts(
   db: Database,
   pricing: PricingEngine,
   force: boolean,
-): Promise<unknown> {
+): Promise<CostBackfill> {
   const rows = force ? allCostRows(db) : nullCostRows(db);
   if (rows.length === 0) {
-    return { mode: "recalculate", updated: 0, total: 0, failures: [] };
+    return { updated: 0, total: 0, failures: [] };
   }
 
   const fetched = new Map<string, string | undefined>();
@@ -387,10 +403,9 @@ async function recalculate(
   }
 
   const failures = [...fetched.entries()]
-    .filter(([, reason]) => reason !== undefined)
-    .map(([model, reason]) => ({ model, reason }));
+    .flatMap(([model, reason]) => (reason === undefined ? [] : [{ model, reason }]));
 
-  return { mode: "recalculate", updated, total: rows.length, failures };
+  return { updated, total: rows.length, failures };
 }
 
 export interface BudgetWarningsRequest {
@@ -435,9 +450,6 @@ export function modelHistory(request: ModelHistoryRequest): unknown {
   };
 }
 
-export function clearPricingCache(path: string): void {
-  openOrThrow(path).pricing.clearCache();
-}
 
 function openOrThrow(path: string): Ledger {
   const ledger = ledgerFor(path);
@@ -445,4 +457,13 @@ function openOrThrow(path: string): Ledger {
     throw new Error(`cannot open ledger at ${path}`);
   }
   return ledger;
+}
+
+export async function backfillLedgerCosts(
+  ledgerPath: string,
+  force = false,
+): Promise<CostBackfill> {
+  const ledger = ledgerFor(ledgerPath);
+  if (ledger === null) return { updated: 0, total: 0, failures: [] };
+  return await backfillMissingCosts(ledger.database, ledger.pricing, force);
 }

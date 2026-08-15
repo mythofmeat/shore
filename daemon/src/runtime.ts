@@ -16,6 +16,7 @@ import { Diagnostics } from "./diagnostics.ts";
 import type { ToolContext } from "./tools/dispatch.ts";
 import { subagentRunner } from "./tools/subagent_loop.ts";
 import { Ledger } from "./ledger/store.ts";
+import { backfillLedgerCosts } from "./ledger/usage.ts";
 import { ledgerFor } from "./ledger/record.ts";
 import { setCallObserver } from "./ledger/record.ts";
 import { modelUsageSummary } from "./ledger/query.ts";
@@ -38,6 +39,7 @@ import { WorkspaceIndexService } from "./memory/workspace_index_service.ts";
 const CALL_STORE_RETENTION_DAYS = 14;
 const CALL_STORE_MAX_BYTES = 536_870_912;
 const CALL_STORE_ROTATE_MS = 3_600_000;
+const COST_BACKFILL_MS = 6 * 3_600_000;
 
 export interface RuntimeOptions {
   providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
@@ -227,12 +229,16 @@ export function startRuntimeClocks(runtime: ShoreRuntime): { stop: () => void } 
   const keepaliveTimer = startKeepaliveTimer(runtime.keepalive);
   const autonomyTimer = startAutonomyTimer(runtime.autonomy);
   const rotation = startCallStoreRotation(runtime.callStore);
+  const costBackfill = startCostBackfill(
+    rustJoin(runtime.config.dirs.data, "ledger.db"),
+  );
 
   return {
     stop: () => {
       keepaliveTimer.stop();
       autonomyTimer.stop();
       rotation.stop();
+      costBackfill.stop();
     },
   };
 }
@@ -358,6 +364,34 @@ export function sharedToolDeps(
       );
     },
   };
+}
+
+function startCostBackfill(ledgerPath: string): { stop: () => void } {
+  let running = false;
+  const sweep = async () => {
+    if (running) return;
+    running = true;
+    try {
+      const result = await backfillLedgerCosts(ledgerPath);
+      if (result.updated > 0) {
+        console.info(
+          `shore: priced ${result.updated} of ${result.total} ledger rows that had no cost`,
+        );
+      }
+      for (const failure of result.failures) {
+        console.warn(`shore: still no pricing for ${failure.model}: ${failure.reason}`);
+      }
+    } catch (e) {
+      console.warn(`shore: ledger cost backfill failed: ${String(e)}`);
+    } finally {
+      running = false;
+    }
+  };
+
+  void sweep();
+  const timer = setInterval(() => void sweep(), COST_BACKFILL_MS);
+  timer.unref?.();
+  return { stop: () => clearInterval(timer) };
 }
 
 function startCallStoreRotation(store: CallStore | undefined): { stop: () => void } {

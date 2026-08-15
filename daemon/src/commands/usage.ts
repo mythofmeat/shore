@@ -1,6 +1,6 @@
 import type { CallStore } from "../call_store.ts";
 import type { UsageConfig } from "../ledger/budget.ts";
-import { clearPricingCache, usageReport } from "../ledger/usage.ts";
+import { usageReport } from "../ledger/usage.ts";
 import { internalError } from "./errors.ts";
 import type { Args, Json } from "./conversation.ts";
 
@@ -12,7 +12,6 @@ export interface UsageContext {
 
 export async function usage(ctx: UsageContext, args: Args): Promise<Json> {
   try {
-    if (args["refresh_pricing"] === true) clearPricingCache(ctx.ledger);
     const store = ctx.callStore;
     return await usageReport({
       ledger: ctx.ledger,

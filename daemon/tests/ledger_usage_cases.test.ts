@@ -54,9 +54,11 @@ const MODES: Record<string, Record<string, unknown>> = {
   budget: { budget: true },
   tsv: { export_tsv: true },
   csv: { export_csv: true },
-  by_kind: { by_kind: true },
-  by_api_key: { by_api_key: true },
-  by_call_type: { by_call_type: true },
+  by_kind: { group_by: "kind" },
+  by_api_key: { group_by: "api_key" },
+  by_call_type: { group_by: "call_type" },
+  by_model: { group_by: "model" },
+  by_provider: { group_by: "provider" },
   anomalies: { anomalies: true },
 };
 

@@ -86,7 +86,6 @@ export interface PricingStore {
 
 export class PricingEngine {
   readonly #store: PricingStore;
-  readonly #memory = new Map<string, ModelPricing>();
   readonly #fetch: CatalogFetch;
   #inflight: Promise<void> | undefined;
 
@@ -96,12 +95,7 @@ export class PricingEngine {
   }
 
   cached(provider: string, model: string): ModelPricing | undefined {
-    const id = toOpenRouterId(provider, model);
-    const hit = this.#memory.get(id);
-    if (hit) return hit;
-    const stored = this.#store.get(id);
-    if (stored) this.#memory.set(id, stored);
-    return stored;
+    return this.#store.get(toOpenRouterId(provider, model));
   }
 
   async getOrFetch(provider: string, model: string): Promise<ModelPricing | undefined> {
@@ -113,7 +107,6 @@ export class PricingEngine {
 
   clearCache(): void {
     this.#store.clear();
-    this.#memory.clear();
   }
 
   cost(request: CostRequest): CostBreakdown | undefined {
@@ -151,7 +144,6 @@ export class PricingEngine {
         cache_read_per_token: parsePrice(p["input_cache_read"] ?? p["cache_read"]),
         cache_write_per_token: parsePrice(p["input_cache_write"] ?? p["cache_write"]),
       };
-      this.#memory.set(model.id, pricing);
       this.#store.put(model.id, pricing);
     }
   }

@@ -9,9 +9,7 @@ use super::vocab::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum View {
     Summary,
-    CallType,
-    Kind,
-    ApiKey,
+    By,
     Budgets,
     Cache,
     Anomalies,
@@ -22,28 +20,17 @@ impl View {
     fn title(self) -> &'static str {
         match self {
             Self::Summary => "usage",
-            Self::CallType => "usage by call type",
-            Self::Kind => "usage by kind",
-            Self::ApiKey => "usage by api key",
+            Self::By => "usage by",
             Self::Budgets => "budgets",
             Self::Cache => "cache",
             Self::Anomalies => "cache anomalies",
             Self::Limits => "provider limits",
         }
     }
+}
 
-    fn label_header(self) -> &'static str {
-        match self {
-            Self::CallType => "call type",
-            Self::Kind => "kind",
-            Self::ApiKey => "api key",
-            Self::Summary
-            | Self::Budgets
-            | Self::Cache
-            | Self::Anomalies
-            | Self::Limits => "model",
-        }
-    }
+fn dimension_of(data: &Value) -> String {
+    text(data, "dimension").replace('_', " ")
 }
 
 fn text<'value>(row: &'value Value, key: &str) -> &'value str {
@@ -66,14 +53,16 @@ fn rows_of<'data>(data: &'data Value, key: &str) -> &'data [Value] {
 
 fn period_of(data: &Value) -> Option<String> {
     let period = data.get("period").and_then(Value::as_str)?;
-    Some(period.to_owned())
+    if period != "budget" {
+        return Some(period.to_owned());
+    }
+    let since = data.get("period_since").and_then(Value::as_str)?;
+    Some(format!("since {}", short_when(since)))
 }
 
 fn spend_label(row: &Value, view: View) -> String {
     match view {
-        View::CallType => text(row, "call_type").to_owned(),
-        View::Kind => text(row, "usage_kind").to_owned(),
-        View::ApiKey => format!("{} {}", text(row, "provider"), text(row, "api_key_name")),
+        View::By => text(row, "group").to_owned(),
         View::Summary | View::Budgets | View::Cache | View::Anomalies | View::Limits => {
             format!("{} {}", text(row, "provider"), text(row, "model"))
         }
@@ -84,7 +73,7 @@ fn spend_label(row: &Value, view: View) -> String {
     clippy::float_arithmetic,
     reason = "the total is the sum of the per-row costs the ledger reported"
 )]
-fn write_spend_table<W: Write>(out: &mut W, data: &Value, view: View) -> bool {
+fn write_spend_table<W: Write>(out: &mut W, data: &Value, view: View, label: &str) -> bool {
     let summary = rows_of(data, "summary");
     if summary.is_empty() {
         empty(out, "nothing recorded in this period");
@@ -92,7 +81,7 @@ fn write_spend_table<W: Write>(out: &mut W, data: &Value, view: View) -> bool {
     }
     let mut table = Table::new(
         &[
-            view.label_header(),
+            label,
             "calls",
             "in",
             "out",
@@ -160,10 +149,7 @@ fn add_cache_rows(rows: &mut Rows, data: &Value) {
 
 pub(crate) fn write_summary<W: Write>(out: &mut W, data: &Value) {
     section(out, View::Summary.title(), period_of(data).as_deref());
-    let any = write_spend_table(out, data, View::Summary);
-    if !any {
-        return;
-    }
+    let _spent = write_spend_table(out, data, View::Summary, "model");
     let budgets = rows_of(data, "budgets");
     if !budgets.is_empty() {
         blank(out);
@@ -180,9 +166,13 @@ pub(crate) fn write_summary<W: Write>(out: &mut W, data: &Value) {
     }
 }
 
-pub(crate) fn write_breakdown<W: Write>(out: &mut W, data: &Value, view: View) {
-    section(out, view.title(), period_of(data).as_deref());
-    let _ignored = write_spend_table(out, data, view);
+pub(crate) fn write_breakdown<W: Write>(out: &mut W, data: &Value) {
+    section(
+        out,
+        &format!("usage by {}", dimension_of(data)),
+        period_of(data).as_deref(),
+    );
+    let _ignored = write_spend_table(out, data, View::By, &dimension_of(data));
 }
 
 fn acting_now(scope: &Value) -> &str {
@@ -483,14 +473,9 @@ pub(crate) fn print(data: &Value, view: View) {
                 let _ignored = write!(out, "{body}");
             }
         }
-        "refresh_pricing" => {
-            section(&mut out, "refresh pricing", None);
-            note(&mut out, "cleared; the next call re-fetches prices");
-        }
-        "recalculate" => write_recalculate(&mut out, data),
         _ => match view {
             View::Summary => write_summary(&mut out, data),
-            View::CallType | View::Kind | View::ApiKey => write_breakdown(&mut out, data, view),
+            View::By => write_breakdown(&mut out, data),
             View::Budgets => write_budgets(&mut out, data),
             View::Cache => write_cache(&mut out, data),
             View::Anomalies => write_anomalies(&mut out, data),
@@ -598,16 +583,32 @@ mod tests {
     #[test]
     fn a_breakdown_names_the_dimension_in_both_title_and_column() {
         let payload = json!({
-            "mode": "summary_by_call_type",
+            "mode": "summary_by",
+            "dimension": "call_type",
             "period": "today",
-            "summary": [{"call_type": "compaction", "call_count": 17, "total_input": 30600,
+            "summary": [{"group": "compaction", "call_count": 17, "total_input": 30600,
                          "total_output": 22400, "total_cache_read": 837000,
                          "total_cache_write": 25500, "total_cost": 0.82}]
         });
-        let out = render(|buf| write_breakdown(buf, &payload, View::CallType));
+        let out = render(|buf| write_breakdown(buf, &payload));
         assert!(out.contains("usage by call type"), "{out}");
         assert!(out.contains("CALL TYPE"), "{out}");
         assert!(out.contains("compaction"), "{out}");
+    }
+
+    #[test]
+    fn a_budget_window_period_says_when_it_started_rather_than_naming_a_calendar_day() {
+        let payload = json!({
+            "mode": "summary",
+            "period": "budget",
+            "period_since": "2026-08-15T07:00:00+00:00",
+            "summary": [{"provider": "opencode-go", "model": "glm-5.3", "call_count": 3,
+                         "total_input": 10, "total_output": 10, "total_cache_read": 0,
+                         "total_cache_write": 0, "total_cost": 0.0}]
+        });
+        let out = render(|buf| write_summary(buf, &payload));
+        assert!(out.contains("since"), "the heading must name the window: {out}");
+        assert!(!out.contains("budget \u{2500}"), "`budget` is not a period name: {out}");
     }
 
     #[test]

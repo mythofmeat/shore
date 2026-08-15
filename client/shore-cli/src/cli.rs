@@ -470,9 +470,10 @@ pub(crate) enum CliCommand {
         #[command(subcommand)]
         subcommand: Option<UsageCommand>,
 
-        /// Time period: "today", "4h", "7d", "30d", "all" (default: today)
-        #[arg(long, default_value = "today", global = true)]
-        last: String,
+        /// Time period: "today", "4h", "7d", "30d", "all". Defaults to the
+        /// current budget window when a budget is configured, else today
+        #[arg(long, global = true)]
+        last: Option<String>,
 
         /// Filter by provider
         #[arg(long, global = true)]
@@ -562,16 +563,38 @@ impl LogRole {
     }
 }
 
+
+/// Dimension `shore usage by` groups spend along
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+#[value(rename_all = "kebab-case")]
+pub(crate) enum UsageDimension {
+    Model,
+    Provider,
+    CallType,
+    Kind,
+    ApiKey,
+}
+
+impl UsageDimension {
+    fn wire(self) -> &'static str {
+        match self {
+            Self::Model => "model",
+            Self::Provider => "provider",
+            Self::CallType => "call_type",
+            Self::Kind => "kind",
+            Self::ApiKey => "api_key",
+        }
+    }
+}
+
 #[derive(Subcommand, Debug)]
 pub(crate) enum UsageCommand {
-    /// Group spend by call type: message, tool_loop, compaction, subagent
-    CallType,
-
-    /// Group spend by usage kind
-    Kind,
-
-    /// Group spend by the API key that paid for it
-    ApiKey,
+    /// Group spend by a dimension: model, provider, call-type, kind, api-key
+    By {
+        /// What to group by
+        #[arg(value_enum)]
+        dimension: UsageDimension,
+    },
 
     /// Budget meters, what they cover, and when they reset
     Budgets,
@@ -592,15 +615,6 @@ pub(crate) enum UsageCommand {
         tsv: bool,
     },
 
-    /// Recalculate stored costs against current pricing
-    Recalculate {
-        /// Redo every row, not just the ones with no cost recorded
-        #[arg(long)]
-        all: bool,
-    },
-
-    /// Drop cached provider pricing so the next call re-fetches it
-    RefreshPricing,
 }
 
 #[derive(Subcommand, Debug)]
@@ -1404,26 +1418,24 @@ fn usage_to_swp(
     else {
         return None;
     };
-    let (by_call_type, by_kind, by_api_key, budget, anomalies) = match subcommand {
-        Some(UsageCommand::CallType) => (true, false, false, false, false),
-        Some(UsageCommand::Kind) => (false, true, false, false, false),
-        Some(UsageCommand::ApiKey) => (false, false, true, false, false),
-        Some(UsageCommand::Budgets) => (false, false, false, true, false),
-        Some(UsageCommand::Anomalies) => (false, false, false, false, true),
+    let (budget, anomalies) = match subcommand {
+        Some(UsageCommand::Budgets) => (true, false),
+        Some(UsageCommand::Anomalies) => (false, true),
         Some(
-            UsageCommand::Cache
+            UsageCommand::By { .. }
+            | UsageCommand::Cache
             | UsageCommand::Limits
-            | UsageCommand::Export { .. }
-            | UsageCommand::Recalculate { .. }
-            | UsageCommand::RefreshPricing,
+            | UsageCommand::Export { .. },
         )
-        | None => (false, false, false, false, false),
+        | None => (false, false),
     };
-    let (export_csv, export_tsv, recalculate, force, refresh_pricing) = match subcommand {
-        Some(UsageCommand::Export { tsv }) => (!tsv, *tsv, false, false, false),
-        Some(UsageCommand::Recalculate { all }) => (false, false, true, *all, false),
-        Some(UsageCommand::RefreshPricing) => (false, false, false, false, true),
-        _ => (false, false, false, false, false),
+    let (export_csv, export_tsv) = match subcommand {
+        Some(UsageCommand::Export { tsv }) => (!tsv, *tsv),
+        _ => (false, false),
+    };
+    let group_by = match subcommand {
+        Some(UsageCommand::By { dimension }) => Some(dimension.wire()),
+        _ => None,
     };
     Some((
         "usage",
@@ -1434,16 +1446,11 @@ fn usage_to_swp(
             "api_key": api_key,
             "model": model,
             "call_type": call_type,
-            "by_call_type": by_call_type,
-            "by_kind": by_kind,
-            "by_api_key": by_api_key,
+            "group_by": group_by,
             "budget": budget,
             "anomalies": anomalies,
             "export_csv": export_csv,
             "export_tsv": export_tsv,
-            "refresh_pricing": refresh_pricing,
-            "recalculate": recalculate,
-            "force": force,
         }),
     ))
 }
@@ -3492,36 +3499,25 @@ mod tests {
     }
 
     #[test]
-    fn usage_recalculate_forces_every_row_only_when_asked() {
-        let (_, some) = to_swp_command(&parse(&["usage", "recalculate"]).command, None).unwrap();
-        assert_eq!(arg(&some, "recalculate"), true);
-        assert_eq!(arg(&some, "force"), false);
-
-        let (_, all) =
-            to_swp_command(&parse(&["usage", "recalculate", "--all"]).command, None).unwrap();
-        assert_eq!(arg(&all, "force"), true);
-    }
-
-    #[test]
-    fn usage_refresh_pricing_is_its_own_action() {
-        let (_, args) =
-            to_swp_command(&parse(&["usage", "refresh-pricing"]).command, None).unwrap();
-        assert_eq!(arg(&args, "refresh_pricing"), true);
-        assert_eq!(arg(&args, "recalculate"), false);
+    fn usage_no_longer_offers_pricing_actions_the_daemon_handles() {
+        for action in [
+            vec!["usage", "recalculate"],
+            vec!["usage", "refresh-pricing"],
+        ] {
+            assert!(
+                Cli::try_parse_from(std::iter::once("shore").chain(action.iter().copied())).is_err(),
+                "{action:?} must not be a command"
+            );
+        }
     }
 
     #[test]
     fn a_bare_usage_view_asks_for_no_action() {
         let (_, args) = to_swp_command(&parse(&["usage"]).command, None).unwrap();
-        for action in [
-            "export_csv",
-            "export_tsv",
-            "recalculate",
-            "force",
-            "refresh_pricing",
-        ] {
+        for action in ["export_csv", "export_tsv"] {
             assert_eq!(arg(&args, action), false, "{action} should be off");
         }
+        assert!(arg(&args, "group_by").is_null());
     }
 
     #[test]
@@ -3572,42 +3568,43 @@ mod tests {
     }
 
     #[test]
-    fn usage_breakdown_call_type_sets_only_its_grouping() {
-        let cli = parse(&["usage", "call-type"]);
-        let (cmd, args) = to_swp_command(&cli.command, None).unwrap();
-        assert_eq!(cmd, "usage");
-        assert_eq!(arg(&args, "by_call_type").as_bool(), Some(true));
-        assert!(arg(&args, "call_type").is_null());
-        assert_eq!(arg(&args, "by_kind").as_bool(), Some(false));
-        assert_eq!(arg(&args, "by_api_key").as_bool(), Some(false));
+    fn every_dimension_reaches_the_daemon_under_one_argument() {
+        for (typed, wire) in [
+            ("model", "model"),
+            ("provider", "provider"),
+            ("call-type", "call_type"),
+            ("kind", "kind"),
+            ("api-key", "api_key"),
+        ] {
+            let (cmd, args) = to_swp_command(&parse(&["usage", "by", typed]).command, None).unwrap();
+            assert_eq!(cmd, "usage");
+            assert_eq!(arg(&args, "group_by"), wire, "`usage by {typed}`");
+        }
     }
 
     #[test]
-    fn usage_call_type_value_sets_filter_not_flag() {
-        let cli = parse(&["usage", "--call-type", "message"]);
-        let (_cmd, args) = to_swp_command(&cli.command, None).unwrap();
-        assert_eq!(arg(&args, "call_type"), "message");
+    fn grouping_by_a_dimension_does_not_filter_by_it() {
+        let (_, args) = to_swp_command(&parse(&["usage", "by", "call-type"]).command, None).unwrap();
         assert!(
-            arg(&args, "by_call_type").is_null()
-                || arg(&args, "by_call_type").as_bool() == Some(false),
-            "filter value should not imply breakdown flag",
+            arg(&args, "call_type").is_null(),
+            "`usage by call-type` groups, it does not filter",
         );
-    }
 
-    #[test]
-    fn usage_breakdown_dimensions_are_mutually_exclusive() {
-        let (_, kind) = to_swp_command(&parse(&["usage", "kind"]).command, None).unwrap();
-        assert_eq!(arg(&kind, "by_kind").as_bool(), Some(true));
-        assert_eq!(arg(&kind, "by_api_key").as_bool(), Some(false));
-
-        let (_, key) = to_swp_command(
-            &parse(&["usage", "api-key", "--api-key", "overflow"]).command,
+        let (_, filtered) = to_swp_command(
+            &parse(&["usage", "by", "call-type", "--call-type", "message"]).command,
             None,
         )
         .unwrap();
-        assert_eq!(arg(&key, "by_kind").as_bool(), Some(false));
-        assert_eq!(arg(&key, "by_api_key").as_bool(), Some(true));
-        assert_eq!(arg(&key, "api_key"), "overflow");
+        assert_eq!(arg(&filtered, "group_by"), "call_type");
+        assert_eq!(arg(&filtered, "call_type"), "message");
+    }
+
+    #[test]
+    fn usage_call_type_value_sets_filter_not_grouping() {
+        let cli = parse(&["usage", "--call-type", "message"]);
+        let (_cmd, args) = to_swp_command(&cli.command, None).unwrap();
+        assert_eq!(arg(&args, "call_type"), "message");
+        assert!(arg(&args, "group_by").is_null());
     }
 
     #[test]

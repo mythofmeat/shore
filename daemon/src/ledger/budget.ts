@@ -528,6 +528,44 @@ function paceBoundsNaive(
   };
 }
 
+export interface BudgetWindow {
+  start: number;
+  period: UsageBudgetPeriod;
+  budget_name: string | undefined;
+}
+
+export function narrowestBudgetWindow(
+  config: UsageConfig,
+  now: number,
+  opts: BudgetOptions = {},
+): BudgetWindow | undefined {
+  let narrowest: BudgetWindow | undefined;
+  for (const budget of config.budgets ?? []) {
+    const anchors = anchorsFrom(budget);
+    const period = budgetPeriod(budget);
+    const window = periodWindow(
+      now,
+      period,
+      config.timezone ?? DEFAULT_TIMEZONE,
+      anchors,
+      opts,
+    );
+    const pacePeriod = budget.pace_period ?? undefined;
+    const pace =
+      pacePeriod === undefined ? undefined : paceWindow(window, now, pacePeriod);
+
+    const candidate: BudgetWindow =
+      pace === undefined
+        ? { start: window.start, period, budget_name: budget.name }
+        : { start: pace.start, period: pacePeriod as UsageBudgetPeriod, budget_name: budget.name };
+
+    if (narrowest === undefined || candidate.start > narrowest.start) {
+      narrowest = candidate;
+    }
+  }
+  return narrowest;
+}
+
 export function budgetStatuses(
   db: Database,
   config: UsageConfig,
