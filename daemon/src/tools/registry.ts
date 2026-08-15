@@ -290,11 +290,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
           description:
             "Optional model filter: only return assistant messages minted by a matching model. Case-insensitive substring match with '.' and '-' treated as equal, so 'opus-4.6' matches both 'claude-opus-4-6' and 'anthropic/claude-opus-4.6'. Messages stored before model tracking carry no model and never match.",
         },
-        include_alternatives: {
-          type: "boolean",
-          description:
-            "Also search unselected regenerated alternatives. Defaults to false to avoid duplicate or superseded answers.",
-        },
       },
       required: [],
     },

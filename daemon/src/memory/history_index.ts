@@ -1,21 +1,19 @@
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync, readFileSync, statSync, unlinkSync } from "node:fs";
+import { chmodSync, mkdirSync, statSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { deriveContentFromBlocks, MessageStore } from "../engine/message_store.ts";
+import { deriveContentFromBlocks } from "../engine/message_store.ts";
 import { SegmentReader } from "../engine/segments.ts";
-import type { Message, MessageAlternative } from "../engine/types.ts";
+import type { Message } from "../engine/types.ts";
 import type { Embedder } from "../llm/embed.ts";
 
 export const HISTORY_SEARCH_DB_FILE = "history_search.db";
-export const HISTORY_SEARCH_SCHEMA_VERSION = 2;
+export const HISTORY_SEARCH_SCHEMA_VERSION = 3;
 export const HISTORY_CHUNK_CHARS = 1_200;
 export const HISTORY_CHUNK_OVERLAP = 120;
 export const HISTORY_EMBED_BATCH_ITEMS = 32;
 export const HISTORY_EMBED_BATCH_CHARS = 96_000;
-
-const ACTIVE_SEGMENT = 2_147_483_647;
 
 const SCHEMA = `
 CREATE TABLE metadata (
@@ -27,8 +25,6 @@ CREATE TABLE messages (
   locator TEXT NOT NULL UNIQUE,
   segment INTEGER NOT NULL,
   ordinal INTEGER NOT NULL,
-  alternative_index INTEGER NOT NULL,
-  alternative_count INTEGER NOT NULL,
   msg_id TEXT NOT NULL,
   role TEXT NOT NULL,
   timestamp TEXT NOT NULL,
@@ -37,7 +33,7 @@ CREATE TABLE messages (
   chunk_count INTEGER NOT NULL
 );
 CREATE INDEX messages_chronology
-  ON messages(segment, ordinal, alternative_index);
+  ON messages(segment, ordinal);
 CREATE TABLE chunks (
   id INTEGER PRIMARY KEY,
   message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
@@ -66,8 +62,6 @@ export interface IndexedMessage {
   id: number;
   segment: number;
   ordinal: number;
-  alternative_index: number;
-  alternative_count: number;
   msg_id: string;
   role: Message["role"];
   timestamp: string;
@@ -79,8 +73,6 @@ interface CanonicalMessage {
   locator: string;
   segment: number;
   ordinal: number;
-  alternativeIndex: number;
-  alternativeCount: number;
   msgId: string;
   role: Message["role"];
   timestamp: string;
@@ -168,11 +160,11 @@ export class HistorySearchIndex {
   }
 
   async reconcile(force = false): Promise<void> {
-    const before = sourceFingerprint(this.characterDataDir);
+    const before = await sourceFingerprint(this.characterDataDir);
     if (!force && this.#metadata("source_fingerprint") === before) return;
 
     const corpus = await readCanonicalCorpus(this.characterDataDir);
-    const after = sourceFingerprint(this.characterDataDir);
+    const after = await sourceFingerprint(this.characterDataDir);
     this.#db.transaction(() => {
       const existing = this.#db.query(
         "SELECT id, locator, content_hash FROM messages",
@@ -198,9 +190,8 @@ export class HistorySearchIndex {
       }
       const putMessage = this.#db.query(
         `INSERT INTO messages
-           (locator, segment, ordinal, alternative_index, alternative_count, msg_id, role,
-            timestamp, model, content_hash, chunk_count)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`,
+           (locator, segment, ordinal, msg_id, role, timestamp, model, content_hash, chunk_count)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
       );
       const putChunk = this.#db.query(
         "INSERT INTO chunks(message_id, ordinal, content_hash) VALUES (?1, ?2, ?3)",
@@ -213,24 +204,15 @@ export class HistorySearchIndex {
         const existingId = unchanged.get(`${item.locator}\0${hash}`);
         if (existingId !== undefined) {
           this.#db.query(
-            `UPDATE messages SET alternative_count = ?1, msg_id = ?2, role = ?3,
-               timestamp = ?4, model = ?5 WHERE id = ?6`,
-          ).run(
-            item.alternativeCount,
-            item.msgId,
-            item.role,
-            item.timestamp,
-            item.model ?? null,
-            existingId,
-          );
+            `UPDATE messages SET msg_id = ?1, role = ?2, timestamp = ?3, model = ?4
+             WHERE id = ?5`,
+          ).run(item.msgId, item.role, item.timestamp, item.model ?? null, existingId);
           continue;
         }
         putMessage.run(
           item.locator,
           item.segment,
           item.ordinal,
-          item.alternativeIndex,
-          item.alternativeCount,
           item.msgId,
           item.role,
           item.timestamp,
@@ -258,19 +240,19 @@ export class HistorySearchIndex {
     return Number(this.#metadata("selected_message_count") ?? 0);
   }
 
-  lexicalRows(query: string, includeAlternatives: boolean): { row: IndexedMessage; rank: number }[] {
+  lexicalRows(query: string): { row: IndexedMessage; rank: number }[] {
     const expression = ftsExpression(query);
     if (expression === undefined) return [];
     const rows = this.#db.query(
-      `SELECT m.id, m.segment, m.ordinal, m.alternative_index, m.msg_id, m.role,
-              m.alternative_count, m.timestamp, m.model, m.content_hash,
+      `SELECT m.id, m.segment, m.ordinal, m.msg_id, m.role,
+              m.timestamp, m.model, m.content_hash,
               bm25(chunks_fts) AS score
        FROM chunks_fts
        JOIN chunks c ON c.id = chunks_fts.rowid
        JOIN messages m ON m.id = c.message_id
-       WHERE chunks_fts MATCH ?1 AND (?2 = 1 OR m.alternative_index = -1)
-       ORDER BY score, m.segment, m.ordinal, m.alternative_index`,
-    ).all(expression, includeAlternatives ? 1 : 0) as (IndexedMessage & { score: number })[];
+       WHERE chunks_fts MATCH ?1
+       ORDER BY score, m.segment, m.ordinal`,
+    ).all(expression) as (IndexedMessage & { score: number })[];
 
     const best = new Map<number, { row: IndexedMessage; score: number }>();
     for (const row of rows) {
@@ -282,21 +264,19 @@ export class HistorySearchIndex {
       .map((entry, rank) => ({ row: entry.row, rank: rank + 1 }));
   }
 
-  allRows(includeAlternatives: boolean): IndexedMessage[] {
+  allRows(): IndexedMessage[] {
     return this.#db.query(
-      `SELECT id, segment, ordinal, alternative_index, alternative_count, msg_id, role, timestamp,
-              model, content_hash
-       FROM messages WHERE (?1 = 1 OR alternative_index = -1)
-       ORDER BY segment, ordinal, alternative_index`,
-    ).all(includeAlternatives ? 1 : 0) as IndexedMessage[];
+      `SELECT id, segment, ordinal, msg_id, role, timestamp, model, content_hash
+       FROM messages ORDER BY segment, ordinal`,
+    ).all() as IndexedMessage[];
   }
 
   rowsByIds(ids: readonly number[]): IndexedMessage[] {
     if (ids.length === 0) return [];
     const marks = ids.map(() => "?").join(",");
     return this.#db.query(
-      `SELECT id, segment, ordinal, alternative_index, alternative_count, msg_id, role, timestamp,
-              model, content_hash FROM messages WHERE id IN (${marks})`,
+      `SELECT id, segment, ordinal, msg_id, role, timestamp, model, content_hash
+       FROM messages WHERE id IN (${marks})`,
     ).all(...ids) as IndexedMessage[];
   }
 
@@ -304,11 +284,9 @@ export class HistorySearchIndex {
     const op = direction < 0 ? "<" : ">";
     const order = direction < 0 ? "DESC" : "ASC";
     return this.#db.query(
-      `SELECT id, segment, ordinal, alternative_index, alternative_count, msg_id, role, timestamp,
-              model, content_hash
+      `SELECT id, segment, ordinal, msg_id, role, timestamp, model, content_hash
        FROM messages
-       WHERE alternative_index = -1
-         AND (segment ${op} ?1 OR (segment = ?1 AND ordinal ${op} ?2))
+       WHERE segment ${op} ?1 OR (segment = ?1 AND ordinal ${op} ?2)
        ORDER BY segment ${order}, ordinal ${order} LIMIT 1`,
     ).get(row.segment, row.ordinal) as IndexedMessage | null ?? undefined;
   }
@@ -327,17 +305,16 @@ export class HistorySearchIndex {
     return { indexed_chunks: indexed, total_chunks: total, pending_chunks: total - indexed };
   }
 
-  vectorRows(queryVector: readonly number[], embedder: Embedder, includeAlternatives: boolean): { row: IndexedMessage; rank: number; score: number }[] {
+  vectorRows(queryVector: readonly number[], embedder: Embedder): { row: IndexedMessage; rank: number; score: number }[] {
     const identity = embeddingIdentity(embedder);
     const rows = this.#db.query(
-      `SELECT m.id, m.segment, m.ordinal, m.alternative_index, m.msg_id, m.role,
-              m.alternative_count, m.timestamp, m.model, m.content_hash, e.vector
+      `SELECT m.id, m.segment, m.ordinal, m.msg_id, m.role,
+              m.timestamp, m.model, m.content_hash, e.vector
        FROM chunks c
        JOIN messages m ON m.id = c.message_id
        JOIN embeddings e ON e.content_hash = c.content_hash AND e.model = ?1
-                            AND e.dimensions = ?2
-       WHERE (?3 = 1 OR m.alternative_index = -1)`,
-    ).all(identity, queryVector.length, includeAlternatives ? 1 : 0) as (IndexedMessage & { vector: Uint8Array })[];
+                            AND e.dimensions = ?2`,
+    ).all(identity, queryVector.length) as (IndexedMessage & { vector: Uint8Array })[];
     const best = new Map<number, { row: IndexedMessage; score: number }>();
     for (const row of rows) {
       const score = cosineSimilarity(queryVector, bytesToVector(row.vector));
@@ -356,8 +333,7 @@ export class HistorySearchIndex {
     ).run(identity, embedder.dimensions ?? null);
     const pending = this.#db.query(
       `SELECT c.id AS chunk_id, c.ordinal AS chunk_ordinal, c.content_hash,
-              m.id, m.segment, m.ordinal, m.alternative_index, m.alternative_count,
-              m.msg_id, m.role,
+              m.id, m.segment, m.ordinal, m.msg_id, m.role,
               m.timestamp, m.model
        FROM chunks c JOIN messages m ON m.id = c.message_id
        WHERE NOT EXISTS (
@@ -466,15 +442,11 @@ export async function loadCanonicalTexts(
   const reader = await SegmentReader.load(characterDataDir);
   try {
     for (const [segment, group] of bySegment) {
-      const messages = segment === ACTIVE_SEGMENT
-        ? [...(await MessageStore.load(join(characterDataDir, "active.jsonl"))).messages()]
-        : await reader.readSegment(segment);
+      const messages = await reader.readSegment(segment);
       for (const row of group) {
         const message = messages[row.ordinal];
         if (message === undefined) continue;
-        const text = row.alternative_index < 0
-          ? visibleText(message)
-          : visibleText(message.alternatives?.[row.alternative_index]);
+        const text = visibleText(message);
         if (text !== undefined && contentHash(text) === row.content_hash) out.set(row.id, text);
       }
     }
@@ -497,38 +469,22 @@ async function readCanonicalCorpus(characterDataDir: string): Promise<CanonicalC
   } finally {
     reader.close();
   }
-  const active = await MessageStore.load(join(characterDataDir, "active.jsonl"));
-  appendCanonical(messages, active.messages(), ACTIVE_SEGMENT);
-  selectedCount += active.messageCount();
   return { messages, selectedCount };
 }
 
 function appendCanonical(out: CanonicalMessage[], messages: readonly Message[], segment: number): void {
   messages.forEach((message, ordinal) => {
     const selected = visibleText(message);
-    if (selected !== undefined) {
-      out.push({
-        locator: `${segment}:${ordinal}:-1`, segment, ordinal, alternativeIndex: -1,
-        alternativeCount: message.alternatives?.length ?? 0,
-        msgId: message.msg_id, role: message.role, timestamp: message.timestamp,
-        model: message.model, text: selected,
-      });
-    }
-    message.alternatives?.forEach((alternative, alternativeIndex) => {
-      const text = visibleText(alternative);
-      if (text === undefined || text === selected) return;
-      out.push({
-        locator: `${segment}:${ordinal}:${alternativeIndex}`, segment, ordinal, alternativeIndex,
-        alternativeCount: message.alternatives?.length ?? 0,
-        msgId: message.msg_id, role: message.role,
-        timestamp: alternative.timestamp === "" ? message.timestamp : alternative.timestamp,
-        model: alternative.model ?? message.model, text,
-      });
+    if (selected === undefined) return;
+    out.push({
+      locator: `${segment}:${ordinal}`, segment, ordinal,
+      msgId: message.msg_id, role: message.role, timestamp: message.timestamp,
+      model: message.model, text: selected,
     });
   });
 }
 
-function visibleText(value: Message | MessageAlternative | undefined): string | undefined {
+function visibleText(value: Message | undefined): string | undefined {
   if (value === undefined) return undefined;
   const text = deriveContentFromBlocks(value.content_blocks, false);
   return text === "" ? undefined : text;
@@ -545,26 +501,26 @@ function contentHash(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
-function sourceFingerprint(characterDataDir: string): string {
-  const activePath = join(characterDataDir, "active.jsonl");
-  const paths = [
-    join(dirname(characterDataDir), "history.db"),
-    join(dirname(characterDataDir), "history.db-wal"),
-    activePath,
+async function sourceFingerprint(characterDataDir: string): Promise<string> {
+  const reader = await SegmentReader.load(characterDataDir);
+  let digest: string;
+  try {
+    digest = reader.archiveDigest();
+  } finally {
+    reader.close();
+  }
+  const legacy = [
     join(characterDataDir, "compaction.json"),
     join(characterDataDir, "segments"),
-  ];
-  return paths.map((path) => {
+  ].map((path) => {
     try {
       const s = statSync(path, { bigint: true });
-      const content = path === activePath && s.isFile()
-        ? createHash("sha256").update(readFileSync(path)).digest("hex")
-        : "";
-      return `${path}:${s.size}:${s.mtimeNs}:${s.ctimeNs}:${content}`;
+      return `${path}:${s.size}:${s.mtimeNs}`;
     } catch {
       return `${path}:-`;
     }
   }).join("|");
+  return `${digest}|${legacy}`;
 }
 
 function embeddingIdentity(embedder: Embedder): string {
@@ -596,7 +552,7 @@ function cosineSimilarity(a: ArrayLike<number>, b: ArrayLike<number>): number {
 }
 
 function compareLocator(a: IndexedMessage, b: IndexedMessage): number {
-  return a.segment - b.segment || a.ordinal - b.ordinal || a.alternative_index - b.alternative_index;
+  return a.segment - b.segment || a.ordinal - b.ordinal;
 }
 
 function removeCacheFiles(path: string): void {

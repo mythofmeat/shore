@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import type { Message } from "../src/engine/types.ts";
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
@@ -32,10 +32,28 @@ function message(
 }
 
 async function character(messages: Message[]): Promise<string> {
-  const dir = testTmp(`history-index-${crypto.randomUUID()}`);
+  const dataDir = testTmp(`history-index-${crypto.randomUUID()}`);
+  const dir = join(dataDir, "ada");
   await mkdir(dir, { recursive: true });
-  await writeFile(join(dir, "active.jsonl"), messages.map((item) => JSON.stringify(item)).join("\n") + "\n");
+  archive(dir, 0, messages);
   return dir;
+}
+
+function archive(characterDir: string, index: number, messages: Message[]): void {
+  const store = HistoryStore.open(join(dirname(characterDir), HISTORY_DB_FILE));
+  store.putSegment(basename(characterDir), index, {
+    file: `${String(index + 1).padStart(4, "0")}.jsonl`,
+    message_count: messages.length,
+    compacted_at: messages[messages.length - 1]?.timestamp ?? "2026-08-13T00:00:00Z",
+  }, messages);
+  store.close();
+}
+
+async function activeWindow(characterDir: string, messages: Message[]): Promise<void> {
+  await writeFile(
+    join(characterDir, "active.jsonl"),
+    messages.map((item) => JSON.stringify(item)).join("\n") + "\n",
+  );
 }
 
 class FakeEmbedder implements Embedder {
@@ -190,31 +208,34 @@ describe("history search index", () => {
     expect((await handleSearchHistory({ query: "recoverable" }, dir)).count).toBe(1);
   });
 
-  test("neighbors cross from the final archive segment into the active window", async () => {
-    const dataDir = testTmp(`history-boundary-${crypto.randomUUID()}`);
-    const dir = join(dataDir, "ada");
-    await mkdir(dir, { recursive: true });
-    const archived = [
-      message("u1", "user", "archived before", "2026-08-13T00:00:00Z"),
-      message("a1", "assistant", "boundary needle", "2026-08-13T00:01:00Z"),
-    ];
-    const store = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
-    store.putSegment("ada", 0, {
-      file: "0001.jsonl",
-      message_count: archived.length,
-      compacted_at: "2026-08-13T00:02:00Z",
-    }, archived);
-    store.close();
-    await writeFile(
-      join(dir, "active.jsonl"),
-      `${JSON.stringify(message("u2", "user", "active after", "2026-08-13T00:03:00Z"))}\n`,
-    );
+  test("the active conversation is not searchable and cannot be asked for", async () => {
+    const dir = await character([
+      message("a1", "assistant", "archived needle", "2026-08-13T00:00:00Z"),
+    ]);
+    await activeWindow(dir, [
+      message("u2", "user", "live needle in the active window", "2026-08-13T00:01:00Z"),
+    ]);
 
     const result = await handleSearchHistory({ query: "needle" }, dir);
+    expect(result.results.map((hit) => hit.msg_id)).toEqual(["a1"]);
+    expect(result.searched_messages).toBe(1);
+    expect((await handleSearchHistory({ query: "live", include_alternatives: true }, dir)).count)
+      .toBe(0);
+  });
+
+  test("neighbors cross the archive segment boundary", async () => {
+    const dir = await character([
+      message("u1", "user", "archived before", "2026-08-13T00:00:00Z"),
+      message("a1", "assistant", "boundary needle", "2026-08-13T00:01:00Z"),
+    ]);
+    archive(dir, 1, [message("u2", "user", "next segment after", "2026-08-13T00:03:00Z")]);
+
+    const result = await handleSearchHistory({ query: "needle" }, dir);
+    expect((result.results[0]?.before as Array<Record<string, unknown>>)[0]?.msg_id).toBe("u1");
     expect((result.results[0]?.after as Array<Record<string, unknown>>)[0]?.msg_id).toBe("u2");
   });
 
-  test("active edits replace stale terms and alternatives keep their own metadata", async () => {
+  test("regenerated alternatives are never indexed or returned", async () => {
     const selected = message("a1", "assistant", "selected response", "2026-08-13T00:00:00Z");
     selected.model = "selected-model";
     selected.alternatives = [{
@@ -225,19 +246,52 @@ describe("history search index", () => {
       model: "alternate-model",
     }];
     const dir = await character([selected]);
-    const alternative = await handleSearchHistory(
-      { query: "alternate", include_alternatives: true }, dir,
-    );
-    expect(alternative.results[0]).toMatchObject({
-      alternative_index: 0,
-      alternative_count: 1,
-      model: "alternate-model",
-      text: "different alternate phrase",
-    });
 
-    const edited = message("a1", "assistant", "replacement answer", "2026-08-13T00:00:00Z");
-    await writeFile(join(dir, "active.jsonl"), `${JSON.stringify(edited)}\n`);
-    expect((await handleSearchHistory({ query: "selected" }, dir)).count).toBe(0);
+    expect((await handleSearchHistory({ query: "alternate" }, dir)).count).toBe(0);
+    expect((await handleSearchHistory({ query: "alternate", include_alternatives: true }, dir)).count)
+      .toBe(0);
+    const canonical = await handleSearchHistory({ query: "selected" }, dir);
+    expect(canonical.results[0]).toMatchObject({ model: "selected-model", text: "selected response" });
+    expect(canonical.results[0]).not.toHaveProperty("alternative_index");
+  });
+
+  test("conversation turns do not invalidate the index; compaction does", async () => {
+    const dir = await character([message("a1", "assistant", "archived note", "2026-08-13T00:00:00Z")]);
+    const path = join(dir, HISTORY_SEARCH_DB_FILE);
+    const fingerprint = (): string => {
+      const db = new Database(path, { readonly: true });
+      const row = db.query(
+        "SELECT value FROM metadata WHERE key = 'source_fingerprint'",
+      ).get() as { value: string } | null;
+      db.close();
+      return row?.value ?? "";
+    };
+
+    await handleSearchHistory({ query: "archived" }, dir);
+    const settled = fingerprint();
+    expect(settled).not.toBe("");
+
+    for (let turn = 0; turn < 3; turn += 1) {
+      await activeWindow(dir, Array.from({ length: turn + 1 }, (_, i) =>
+        message(`u${i}`, "user", `live turn ${i}`, `2026-08-16T0${i}:00:00Z`),
+      ));
+      await handleSearchHistory({ query: "archived" }, dir);
+      expect(fingerprint()).toBe(settled);
+    }
+
+    archive(dir, 1, [message("a2", "assistant", "newly archived note", "2026-08-16T04:00:00Z")]);
+    await handleSearchHistory({ query: "archived" }, dir);
+    expect(fingerprint()).not.toBe(settled);
+  });
+
+  test("archived edits replace stale terms", async () => {
+    const dir = await character([
+      message("a1", "assistant", "original answer", "2026-08-13T00:00:00Z"),
+    ]);
+    expect((await handleSearchHistory({ query: "original" }, dir)).count).toBe(1);
+
+    archive(dir, 0, [message("a1", "assistant", "replacement answer", "2026-08-13T00:00:00Z")]);
+    expect((await handleSearchHistory({ query: "original" }, dir)).count).toBe(0);
     expect((await handleSearchHistory({ query: "replacement" }, dir)).count).toBe(1);
   });
 
@@ -251,10 +305,7 @@ describe("history search index", () => {
     await index.embedPending(embedder);
     index.close();
 
-    await writeFile(
-      join(dir, "active.jsonl"),
-      `${JSON.stringify(first)}\n${JSON.stringify(message("u2", "user", "new note", "2026-08-13T00:01:00Z"))}\n`,
-    );
+    archive(dir, 0, [first, message("u2", "user", "new note", "2026-08-13T00:01:00Z")]);
     index = HistorySearchIndex.open({ characterDataDir: dir, path });
     await index.reconcile();
     expect(index.diagnostics(embedder)).toEqual({

@@ -234,6 +234,27 @@ export class HistoryStore {
     return Number(row.n);
   }
 
+  archiveDigest(character: string): string {
+    const rows = this.#db
+      .query(
+        `SELECT m.segment, m.ordinal, m.msg_id, m.blocks_hash FROM history_messages m
+         JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
+         WHERE m.character = ?1 AND s.committed = 1
+         ORDER BY m.segment, m.ordinal`,
+      )
+      .all(character) as {
+      segment: number;
+      ordinal: number;
+      msg_id: string;
+      blocks_hash: string;
+    }[];
+    const digest = createHash("sha256");
+    for (const row of rows) {
+      digest.update(`${row.segment}:${row.ordinal}:${row.msg_id}:${row.blocks_hash}\n`);
+    }
+    return `${rows.length}:${digest.digest("hex")}`;
+  }
+
   entries(character: string): SegmentEntry[] {
     const rows = this.#db
       .query(

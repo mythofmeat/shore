@@ -1,8 +1,8 @@
 import { join } from "node:path";
 
-import { deriveContentFromBlocks, MessageStore } from "../engine/message_store";
+import { deriveContentFromBlocks } from "../engine/message_store";
 import { SegmentReader } from "../engine/segments";
-import type { ContentBlock, Message, MessageAlternative } from "../engine/types";
+import type { ContentBlock, Message } from "../engine/types";
 import type { Embedder } from "../llm/embed.ts";
 import {
   HistorySearchIndex,
@@ -11,8 +11,6 @@ import {
   type IndexedMessage,
 } from "../memory/history_index.ts";
 import { InvalidArgs, ToolIoError } from "./errors";
-
-const ACTIVE_JSONL_FILE = "active.jsonl";
 
 const DEFAULT_MAX_RESULTS = 3;
 const MAX_RESULTS = 50;
@@ -289,7 +287,6 @@ interface SearchFilters {
   range: TimeRange;
   modelFilter: string | undefined;
   excerptChars: number;
-  includeAlternatives: boolean;
 }
 
 interface ScoredCandidate {
@@ -347,53 +344,22 @@ function collectMatches(
   filters: SearchFilters,
   stats: { skipped: number },
 ): void {
-  const { matcher, range, modelFilter, excerptChars, includeAlternatives } = filters;
+  const { matcher, range, modelFilter, excerptChars } = filters;
 
   for (const message of messages) {
     const text = chatText(message.content_blocks);
-    if (text !== "" && modelMatches(message.model, modelFilter)) {
-      const relevance = relevanceFor(matcher, text);
-      if (relevance !== undefined && matchesTimeRange(message.timestamp, range, stats)) {
-        candidates.push(
-          candidate(relevance, matcher?.coverage(text) ?? 0, text, message.timestamp, {
-            msg_id: message.msg_id,
-            role: roleLabel(message.role),
-            timestamp: message.timestamp,
-            model: message.model ?? null,
-            text: cleanExcerptFor(text, matcher, excerptChars),
-          }),
-        );
-      }
-    }
-
-    if (!includeAlternatives) continue;
-    const alternatives: MessageAlternative[] = message.alternatives ?? [];
-    for (const [index, alternative] of alternatives.entries()) {
-      if (alternative.content === message.content) continue;
-      const altText = chatText(alternative.content_blocks);
-      if (altText === "") continue;
-
-      const altModel = alternative.model ?? message.model;
-      if (!modelMatches(altModel, modelFilter)) continue;
-
-      const relevance = relevanceFor(matcher, altText);
-      if (relevance === undefined) continue;
-
-      const timestamp = alternative.timestamp === "" ? message.timestamp : alternative.timestamp;
-      if (!matchesTimeRange(timestamp, range, stats)) continue;
-
-      candidates.push(
-        candidate(relevance, matcher?.coverage(altText) ?? 0, altText, timestamp, {
-          msg_id: message.msg_id,
-          role: roleLabel(message.role),
-          timestamp,
-          alternative_index: index,
-          alternative_count: alternatives.length,
-          model: altModel ?? null,
-          text: cleanExcerptFor(altText, matcher, excerptChars),
-        }),
-      );
-    }
+    if (text === "" || !modelMatches(message.model, modelFilter)) continue;
+    const relevance = relevanceFor(matcher, text);
+    if (relevance === undefined || !matchesTimeRange(message.timestamp, range, stats)) continue;
+    candidates.push(
+      candidate(relevance, matcher?.coverage(text) ?? 0, text, message.timestamp, {
+        msg_id: message.msg_id,
+        role: roleLabel(message.role),
+        timestamp: message.timestamp,
+        model: message.model ?? null,
+        text: cleanExcerptFor(text, matcher, excerptChars),
+      }),
+    );
   }
 }
 
@@ -489,7 +455,6 @@ export async function handleLegacySearchHistory(
     range,
     modelFilter,
     excerptChars: excerptCharsFrom(input),
-    includeAlternatives: input["include_alternatives"] === true,
   };
 
   const candidates: ScoredCandidate[] = [];
@@ -506,12 +471,6 @@ export async function handleLegacySearchHistory(
   } finally {
     segments.close();
   }
-
-  const active = await ioGuard(() =>
-    MessageStore.load(join(characterDataDir, ACTIVE_JSONL_FILE)),
-  );
-  searchedMessages += active.messageCount();
-  collectMatches(candidates, active.messages(), filters, stats);
 
   if (matcher !== undefined) {
     rankCandidates(candidates);
@@ -608,20 +567,11 @@ async function handleSearchHistoryUnlocked(
   const index = await openAndReconcile(characterDataDir, options.indexPath);
   try {
     const diagnostics = index.diagnostics(options.embedder);
-    const includeAlternatives = input["include_alternatives"] === true;
     const stats = { skipped: 0 };
     const matcher = query === undefined ? undefined : new QueryMatcher(query);
     let lexical: RankedHistoryCandidate[] = [];
     if (mode !== "vector") {
-      lexical = await lexicalCandidates(
-        index,
-        characterDataDir,
-        matcher,
-        range,
-        modelFilter,
-        includeAlternatives,
-        stats,
-      );
+      lexical = await lexicalCandidates(index, characterDataDir, matcher, range, modelFilter, stats);
     }
 
     let vector: RankedHistoryCandidate[] = [];
@@ -637,22 +587,13 @@ async function handleSearchHistoryUnlocked(
           options.embedder,
           range,
           modelFilter,
-          includeAlternatives,
           { skipped: 0 },
         );
       } catch (error) {
         semanticUnavailable = `query_embedding_failed: ${describeFailure(error)}`;
         mode = "lexical";
         if (lexical.length === 0) {
-          lexical = await lexicalCandidates(
-            index,
-            characterDataDir,
-            matcher,
-            range,
-            modelFilter,
-            includeAlternatives,
-            stats,
-          );
+          lexical = await lexicalCandidates(index, characterDataDir, matcher, range, modelFilter, stats);
         }
       }
     }
@@ -745,14 +686,13 @@ async function lexicalCandidates(
   matcher: QueryMatcher | undefined,
   range: TimeRange,
   modelFilter: string | undefined,
-  includeAlternatives: boolean,
   stats: { skipped: number },
 ): Promise<RankedHistoryCandidate[]> {
   const indexed = matcher === undefined
-    ? index.allRows(includeAlternatives).map((row, i) => ({ row, rank: i + 1 }))
-    : index.lexicalRows(matcher.rawLower, includeAlternatives);
+    ? index.allRows().map((row, i) => ({ row, rank: i + 1 }))
+    : index.lexicalRows(matcher.rawLower);
   const source = matcher !== undefined && indexed.length === 0
-    ? index.allRows(includeAlternatives).map((row, i) => ({ row, rank: i + 1 }))
+    ? index.allRows().map((row, i) => ({ row, rank: i + 1 }))
     : indexed;
   const eligible = source.filter(({ row }) =>
     modelMatches(row.model ?? undefined, modelFilter) && matchesTimeRange(row.timestamp, range, stats),
@@ -798,10 +738,9 @@ async function vectorCandidates(
   embedder: Embedder,
   range: TimeRange,
   modelFilter: string | undefined,
-  includeAlternatives: boolean,
   stats: { skipped: number },
 ): Promise<RankedHistoryCandidate[]> {
-  const raw = index.vectorRows(queryVector, embedder, includeAlternatives).filter(({ row }) =>
+  const raw = index.vectorRows(queryVector, embedder).filter(({ row }) =>
     modelMatches(row.model ?? undefined, modelFilter) && matchesTimeRange(row.timestamp, range, stats),
   );
   const texts = await loadCanonicalTexts(characterDataDir, raw.map(({ row }) => row));
@@ -854,15 +793,11 @@ function presentMessage(row: IndexedMessage, text: string): Record<string, unkno
     timestamp: row.timestamp,
     model: row.model,
     text,
-    ...(row.alternative_index < 0 ? {} : {
-      alternative_index: row.alternative_index,
-      alternative_count: row.alternative_count,
-    }),
   };
 }
 
 function compareIndexed(a: IndexedMessage, b: IndexedMessage): number {
-  return a.segment - b.segment || a.ordinal - b.ordinal || a.alternative_index - b.alternative_index;
+  return a.segment - b.segment || a.ordinal - b.ordinal;
 }
 
 function describeFailure(error: unknown): string {

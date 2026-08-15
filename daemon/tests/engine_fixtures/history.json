@@ -2291,66 +2291,29 @@
           "model_filter": null,
           "results": [
             {
-              "msg_id": "a-recent",
-              "role": "assistant",
-              "timestamp": "2026-01-04T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "One more note on tea."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "Tea came up again today."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active:alt:2",
-              "alternative_index": 2,
-              "alternative_count": 3,
-              "model": "claude-opus-4-6",
-              "excerpt": "A third take, still about tea."
-            },
-            {
               "msg_id": "s1-unicode",
               "role": "user",
               "timestamp": "2026-01-02T10:00:00Z",
-              "source": "segment:1",
               "model": null,
-              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+              "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
             },
             {
               "msg_id": "s1-long",
               "role": "assistant",
               "timestamp": "2026-01-02T09:00:00Z",
-              "source": "segment:1",
               "model": "anthropic/claude-opus-4.6",
-              "excerpt": "...iller filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards ..."
+              "text": "… filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards …"
             },
             {
               "msg_id": "s0-tea",
               "role": "user",
               "timestamp": "2026-01-01T09:00:00Z",
-              "source": "segment:0",
               "model": null,
-              "excerpt": "We talked about tea last winter, mostly oolong."
-            },
-            {
-              "msg_id": "a-bad-ts",
-              "role": "user",
-              "timestamp": "not-a-timestamp",
-              "source": "active",
-              "model": null,
-              "excerpt": "Tea with a broken timestamp."
+              "text": "We talked about tea last winter, mostly oolong."
             }
           ],
-          "count": 7,
-          "searched_messages": 9,
+          "count": 3,
+          "searched_messages": 6,
           "skipped_invalid_timestamps": 0
         }
       }
@@ -2374,63 +2337,12 @@
               "msg_id": "s1-long",
               "role": "assistant",
               "timestamp": "2026-01-02T09:00:00Z",
-              "source": "segment:1",
               "model": "anthropic/claude-opus-4.6",
-              "excerpt": "...iller filler filler filler filler filler filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterward..."
-            },
-            {
-              "msg_id": "a-recent",
-              "role": "assistant",
-              "timestamp": "2026-01-04T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "One more note on tea."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "Tea came up again today."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active:alt:2",
-              "alternative_index": 2,
-              "alternative_count": 3,
-              "model": "claude-opus-4-6",
-              "excerpt": "A third take, still about tea."
-            },
-            {
-              "msg_id": "s1-unicode",
-              "role": "user",
-              "timestamp": "2026-01-02T10:00:00Z",
-              "source": "segment:1",
-              "model": null,
-              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
-            },
-            {
-              "msg_id": "s0-tea",
-              "role": "user",
-              "timestamp": "2026-01-01T09:00:00Z",
-              "source": "segment:0",
-              "model": null,
-              "excerpt": "We talked about tea last winter, mostly oolong."
-            },
-            {
-              "msg_id": "a-bad-ts",
-              "role": "user",
-              "timestamp": "not-a-timestamp",
-              "source": "active",
-              "model": null,
-              "excerpt": "Tea with a broken timestamp."
+              "text": "… filler filler filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards …"
             }
           ],
-          "count": 7,
-          "searched_messages": 9,
+          "count": 1,
+          "searched_messages": 6,
           "skipped_invalid_timestamps": 0
         }
       }
@@ -2451,7 +2363,7 @@
           "model_filter": null,
           "results": [],
           "count": 0,
-          "searched_messages": 9,
+          "searched_messages": 6,
           "skipped_invalid_timestamps": 0
         }
       }
@@ -2472,66 +2384,15 @@
           "model_filter": null,
           "results": [
             {
-              "msg_id": "a-recent",
-              "role": "assistant",
-              "timestamp": "2026-01-04T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "One more note on tea."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "Tea came up again today."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active:alt:2",
-              "alternative_index": 2,
-              "alternative_count": 3,
-              "model": "claude-opus-4-6",
-              "excerpt": "A third take, still about tea."
-            },
-            {
               "msg_id": "s0-tea",
               "role": "user",
               "timestamp": "2026-01-01T09:00:00Z",
-              "source": "segment:0",
               "model": null,
-              "excerpt": "We talked about tea last winter, mostly oolong."
-            },
-            {
-              "msg_id": "s1-unicode",
-              "role": "user",
-              "timestamp": "2026-01-02T10:00:00Z",
-              "source": "segment:1",
-              "model": null,
-              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
-            },
-            {
-              "msg_id": "s1-long",
-              "role": "assistant",
-              "timestamp": "2026-01-02T09:00:00Z",
-              "source": "segment:1",
-              "model": "anthropic/claude-opus-4.6",
-              "excerpt": "...iller filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards ..."
-            },
-            {
-              "msg_id": "a-bad-ts",
-              "role": "user",
-              "timestamp": "not-a-timestamp",
-              "source": "active",
-              "model": null,
-              "excerpt": "Tea with a broken timestamp."
+              "text": "We talked about tea last winter, mostly oolong."
             }
           ],
-          "count": 7,
-          "searched_messages": 9,
+          "count": 1,
+          "searched_messages": 6,
           "skipped_invalid_timestamps": 0
         }
       }
@@ -2555,63 +2416,12 @@
               "msg_id": "s0-tea",
               "role": "user",
               "timestamp": "2026-01-01T09:00:00Z",
-              "source": "segment:0",
               "model": null,
-              "excerpt": "We talked about tea last winter, mostly oolong."
-            },
-            {
-              "msg_id": "a-recent",
-              "role": "assistant",
-              "timestamp": "2026-01-04T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "One more note on tea."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "Tea came up again today."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active:alt:2",
-              "alternative_index": 2,
-              "alternative_count": 3,
-              "model": "claude-opus-4-6",
-              "excerpt": "A third take, still about tea."
-            },
-            {
-              "msg_id": "s1-unicode",
-              "role": "user",
-              "timestamp": "2026-01-02T10:00:00Z",
-              "source": "segment:1",
-              "model": null,
-              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
-            },
-            {
-              "msg_id": "s1-long",
-              "role": "assistant",
-              "timestamp": "2026-01-02T09:00:00Z",
-              "source": "segment:1",
-              "model": "anthropic/claude-opus-4.6",
-              "excerpt": "...iller filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards ..."
-            },
-            {
-              "msg_id": "a-bad-ts",
-              "role": "user",
-              "timestamp": "not-a-timestamp",
-              "source": "active",
-              "model": null,
-              "excerpt": "Tea with a broken timestamp."
+              "text": "We talked about tea last winter, mostly oolong."
             }
           ],
-          "count": 7,
-          "searched_messages": 9,
+          "count": 1,
+          "searched_messages": 6,
           "skipped_invalid_timestamps": 0
         }
       }
@@ -2632,66 +2442,29 @@
           "model_filter": null,
           "results": [
             {
-              "msg_id": "a-recent",
-              "role": "assistant",
-              "timestamp": "2026-01-04T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "One more note on tea."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "Tea came up again today."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active:alt:2",
-              "alternative_index": 2,
-              "alternative_count": 3,
-              "model": "claude-opus-4-6",
-              "excerpt": "A third take, still about tea."
-            },
-            {
               "msg_id": "s1-unicode",
               "role": "user",
               "timestamp": "2026-01-02T10:00:00Z",
-              "source": "segment:1",
               "model": null,
-              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+              "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
             },
             {
               "msg_id": "s1-long",
               "role": "assistant",
               "timestamp": "2026-01-02T09:00:00Z",
-              "source": "segment:1",
               "model": "anthropic/claude-opus-4.6",
-              "excerpt": "...iller filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards ..."
+              "text": "… filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards …"
             },
             {
               "msg_id": "s0-tea",
               "role": "user",
               "timestamp": "2026-01-01T09:00:00Z",
-              "source": "segment:0",
               "model": null,
-              "excerpt": "We talked about tea last winter, mostly oolong."
-            },
-            {
-              "msg_id": "a-bad-ts",
-              "role": "user",
-              "timestamp": "not-a-timestamp",
-              "source": "active",
-              "model": null,
-              "excerpt": "Tea with a broken timestamp."
+              "text": "We talked about tea last winter, mostly oolong."
             }
           ],
-          "count": 7,
-          "searched_messages": 9,
+          "count": 3,
+          "searched_messages": 6,
           "skipped_invalid_timestamps": 0
         }
       }
@@ -2712,84 +2485,29 @@
           "model_filter": null,
           "results": [
             {
-              "msg_id": "a-recent",
-              "role": "assistant",
-              "timestamp": "2026-01-04T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "One more note on tea."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:05:00Z",
-              "source": "active:alt:1",
-              "alternative_index": 1,
-              "alternative_count": 3,
-              "model": "gpt-5",
-              "excerpt": "Coffee came up in a regenerated reply."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "Tea came up again today."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active:alt:2",
-              "alternative_index": 2,
-              "alternative_count": 3,
-              "model": "claude-opus-4-6",
-              "excerpt": "A third take, still about tea."
-            },
-            {
               "msg_id": "s1-unicode",
               "role": "user",
               "timestamp": "2026-01-02T10:00:00Z",
-              "source": "segment:1",
               "model": null,
-              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+              "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
             },
             {
               "msg_id": "s1-long",
               "role": "assistant",
               "timestamp": "2026-01-02T09:00:00Z",
-              "source": "segment:1",
               "model": "anthropic/claude-opus-4.6",
-              "excerpt": "...iller filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards ..."
+              "text": "… filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards …"
             },
             {
               "msg_id": "s0-coffee",
               "role": "assistant",
               "timestamp": "2026-01-01T10:00:00Z",
-              "source": "segment:0",
               "model": "claude-opus-4-6",
-              "excerpt": "Coffee came up too, but only briefly."
-            },
-            {
-              "msg_id": "s0-tea",
-              "role": "user",
-              "timestamp": "2026-01-01T09:00:00Z",
-              "source": "segment:0",
-              "model": null,
-              "excerpt": "We talked about tea last winter, mostly oolong."
-            },
-            {
-              "msg_id": "a-bad-ts",
-              "role": "user",
-              "timestamp": "not-a-timestamp",
-              "source": "active",
-              "model": null,
-              "excerpt": "Tea with a broken timestamp."
+              "text": "Coffee came up too, but only briefly."
             }
           ],
-          "count": 9,
-          "searched_messages": 9,
+          "count": 3,
+          "searched_messages": 6,
           "skipped_invalid_timestamps": 0
         }
       }
@@ -2813,13 +2531,12 @@
               "msg_id": "s1-long",
               "role": "assistant",
               "timestamp": "2026-01-02T09:00:00Z",
-              "source": "segment:1",
               "model": "anthropic/claude-opus-4.6",
-              "excerpt": "...iller filler filler filler filler filler filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterward..."
+              "text": "… filler filler filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards …"
             }
           ],
           "count": 1,
-          "searched_messages": 9,
+          "searched_messages": 6,
           "skipped_invalid_timestamps": 0
         }
       }
@@ -2840,7 +2557,7 @@
           "model_filter": null,
           "results": [],
           "count": 0,
-          "searched_messages": 9,
+          "searched_messages": 6,
           "skipped_invalid_timestamps": 0
         }
       }
@@ -2863,7 +2580,7 @@
           "model_filter": null,
           "results": [],
           "count": 0,
-          "searched_messages": 9,
+          "searched_messages": 6,
           "skipped_invalid_timestamps": 0
         }
       }
@@ -2888,38 +2605,27 @@
               "msg_id": "s0-tea",
               "role": "user",
               "timestamp": "2026-01-01T09:00:00Z",
-              "source": "segment:0",
               "model": null,
-              "excerpt": "We talked about tea last winter, mostly oolong."
+              "text": "We talked about tea last winter, mostly oolong."
             },
             {
               "msg_id": "s0-coffee",
               "role": "assistant",
               "timestamp": "2026-01-01T10:00:00Z",
-              "source": "segment:0",
               "model": "claude-opus-4-6",
-              "excerpt": "Coffee came up too, but only briefly."
+              "text": "Coffee came up too, but only briefly."
             },
             {
               "msg_id": "s1-long",
               "role": "assistant",
               "timestamp": "2026-01-02T09:00:00Z",
-              "source": "segment:1",
               "model": "anthropic/claude-opus-4.6",
-              "excerpt": "filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler fil..."
-            },
-            {
-              "msg_id": "s1-unicode",
-              "role": "user",
-              "timestamp": "2026-01-02T10:00:00Z",
-              "source": "segment:1",
-              "model": null,
-              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+              "text": "filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler …"
             }
           ],
-          "count": 4,
-          "searched_messages": 9,
-          "skipped_invalid_timestamps": 1
+          "count": 3,
+          "searched_messages": 6,
+          "skipped_invalid_timestamps": 0
         }
       }
     },
@@ -2943,74 +2649,27 @@
               "msg_id": "s0-tea",
               "role": "user",
               "timestamp": "2026-01-01T09:00:00Z",
-              "source": "segment:0",
               "model": null,
-              "excerpt": "We talked about tea last winter, mostly oolong."
+              "text": "We talked about tea last winter, mostly oolong."
             },
             {
               "msg_id": "s0-coffee",
               "role": "assistant",
               "timestamp": "2026-01-01T10:00:00Z",
-              "source": "segment:0",
               "model": "claude-opus-4-6",
-              "excerpt": "Coffee came up too, but only briefly."
+              "text": "Coffee came up too, but only briefly."
             },
             {
               "msg_id": "s1-long",
               "role": "assistant",
               "timestamp": "2026-01-02T09:00:00Z",
-              "source": "segment:1",
               "model": "anthropic/claude-opus-4.6",
-              "excerpt": "filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler fil..."
-            },
-            {
-              "msg_id": "s1-unicode",
-              "role": "user",
-              "timestamp": "2026-01-02T10:00:00Z",
-              "source": "segment:1",
-              "model": null,
-              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "Tea came up again today."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active:alt:2",
-              "alternative_index": 2,
-              "alternative_count": 3,
-              "model": "claude-opus-4-6",
-              "excerpt": "A third take, still about tea."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:05:00Z",
-              "source": "active:alt:1",
-              "alternative_index": 1,
-              "alternative_count": 3,
-              "model": "gpt-5",
-              "excerpt": "Coffee came up in a regenerated reply."
-            },
-            {
-              "msg_id": "a-recent",
-              "role": "assistant",
-              "timestamp": "2026-01-04T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "One more note on tea."
+              "text": "filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler …"
             }
           ],
-          "count": 8,
-          "searched_messages": 9,
-          "skipped_invalid_timestamps": 1
+          "count": 3,
+          "searched_messages": 6,
+          "skipped_invalid_timestamps": 0
         }
       }
     },
@@ -3031,51 +2690,23 @@
           "model_filter": null,
           "results": [
             {
-              "msg_id": "a-recent",
-              "role": "assistant",
-              "timestamp": "2026-01-04T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "One more note on tea."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "Tea came up again today."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active:alt:2",
-              "alternative_index": 2,
-              "alternative_count": 3,
-              "model": "claude-opus-4-6",
-              "excerpt": "A third take, still about tea."
-            },
-            {
               "msg_id": "s1-unicode",
               "role": "user",
               "timestamp": "2026-01-02T10:00:00Z",
-              "source": "segment:1",
               "model": null,
-              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+              "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
             },
             {
               "msg_id": "s1-long",
               "role": "assistant",
               "timestamp": "2026-01-02T09:00:00Z",
-              "source": "segment:1",
               "model": "anthropic/claude-opus-4.6",
-              "excerpt": "...iller filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards ..."
+              "text": "… filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards …"
             }
           ],
-          "count": 5,
-          "searched_messages": 9,
-          "skipped_invalid_timestamps": 1
+          "count": 2,
+          "searched_messages": 6,
+          "skipped_invalid_timestamps": 0
         }
       }
     },
@@ -3096,42 +2727,15 @@
           "model_filter": "opus-4-6",
           "results": [
             {
-              "msg_id": "a-recent",
-              "role": "assistant",
-              "timestamp": "2026-01-04T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "One more note on tea."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "Tea came up again today."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active:alt:2",
-              "alternative_index": 2,
-              "alternative_count": 3,
-              "model": "claude-opus-4-6",
-              "excerpt": "A third take, still about tea."
-            },
-            {
               "msg_id": "s1-long",
               "role": "assistant",
               "timestamp": "2026-01-02T09:00:00Z",
-              "source": "segment:1",
               "model": "anthropic/claude-opus-4.6",
-              "excerpt": "...iller filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards ..."
+              "text": "… filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards …"
             }
           ],
-          "count": 4,
-          "searched_messages": 9,
+          "count": 1,
+          "searched_messages": 6,
           "skipped_invalid_timestamps": 0
         }
       }
@@ -3153,7 +2757,7 @@
           "model_filter": "gpt",
           "results": [],
           "count": 0,
-          "searched_messages": 9,
+          "searched_messages": 6,
           "skipped_invalid_timestamps": 0
         }
       }
@@ -3177,47 +2781,19 @@
               "msg_id": "s0-coffee",
               "role": "assistant",
               "timestamp": "2026-01-01T10:00:00Z",
-              "source": "segment:0",
               "model": "claude-opus-4-6",
-              "excerpt": "Coffee came up too, but only briefly."
+              "text": "Coffee came up too, but only briefly."
             },
             {
               "msg_id": "s1-long",
               "role": "assistant",
               "timestamp": "2026-01-02T09:00:00Z",
-              "source": "segment:1",
               "model": "anthropic/claude-opus-4.6",
-              "excerpt": "filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler fil..."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "Tea came up again today."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active:alt:2",
-              "alternative_index": 2,
-              "alternative_count": 3,
-              "model": "claude-opus-4-6",
-              "excerpt": "A third take, still about tea."
-            },
-            {
-              "msg_id": "a-recent",
-              "role": "assistant",
-              "timestamp": "2026-01-04T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "One more note on tea."
+              "text": "filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler filler …"
             }
           ],
-          "count": 5,
-          "searched_messages": 9,
+          "count": 2,
+          "searched_messages": 6,
           "skipped_invalid_timestamps": 0
         }
       }
@@ -3238,26 +2814,15 @@
           "model_filter": null,
           "results": [
             {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:05:00Z",
-              "source": "active:alt:1",
-              "alternative_index": 1,
-              "alternative_count": 3,
-              "model": "gpt-5",
-              "excerpt": "Coffee came up in a regenerated reply."
-            },
-            {
               "msg_id": "s0-coffee",
               "role": "assistant",
               "timestamp": "2026-01-01T10:00:00Z",
-              "source": "segment:0",
               "model": "claude-opus-4-6",
-              "excerpt": "Coffee came up too, but only briefly."
+              "text": "Coffee came up too, but only briefly."
             }
           ],
-          "count": 2,
-          "searched_messages": 9,
+          "count": 1,
+          "searched_messages": 6,
           "skipped_invalid_timestamps": 0
         }
       }
@@ -3277,20 +2842,9 @@
             "inclusive": true
           },
           "model_filter": "opus-4-6",
-          "results": [
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active:alt:2",
-              "alternative_index": 2,
-              "alternative_count": 3,
-              "model": "claude-opus-4-6",
-              "excerpt": "A third take, still about tea."
-            }
-          ],
-          "count": 1,
-          "searched_messages": 9,
+          "results": [],
+          "count": 0,
+          "searched_messages": 6,
           "skipped_invalid_timestamps": 0
         }
       }
@@ -3312,24 +2866,22 @@
           "model_filter": null,
           "results": [
             {
-              "msg_id": "a-recent",
-              "role": "assistant",
-              "timestamp": "2026-01-04T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "One more note on tea."
+              "msg_id": "s1-unicode",
+              "role": "user",
+              "timestamp": "2026-01-02T10:00:00Z",
+              "model": null,
+              "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
             },
             {
-              "msg_id": "a-regen",
+              "msg_id": "s1-long",
               "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "Tea came up again today."
+              "timestamp": "2026-01-02T09:00:00Z",
+              "model": "anthropic/claude-opus-4.6",
+              "text": "… filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards …"
             }
           ],
           "count": 2,
-          "searched_messages": 9,
+          "searched_messages": 6,
           "skipped_invalid_timestamps": 0
         }
       }
@@ -3351,16 +2903,15 @@
           "model_filter": null,
           "results": [
             {
-              "msg_id": "a-recent",
-              "role": "assistant",
-              "timestamp": "2026-01-04T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "One more note on tea."
+              "msg_id": "s1-unicode",
+              "role": "user",
+              "timestamp": "2026-01-02T10:00:00Z",
+              "model": null,
+              "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
             }
           ],
           "count": 1,
-          "searched_messages": 9,
+          "searched_messages": 6,
           "skipped_invalid_timestamps": 0
         }
       }
@@ -3385,13 +2936,12 @@
               "msg_id": "s1-unicode",
               "role": "user",
               "timestamp": "2026-01-02T10:00:00Z",
-              "source": "segment:1",
               "model": null,
-              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+              "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
             }
           ],
           "count": 1,
-          "searched_messages": 9,
+          "searched_messages": 6,
           "skipped_invalid_timestamps": 0
         }
       }
@@ -3415,63 +2965,12 @@
               "msg_id": "s1-unicode",
               "role": "user",
               "timestamp": "2026-01-02T10:00:00Z",
-              "source": "segment:1",
               "model": null,
-              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
-            },
-            {
-              "msg_id": "a-recent",
-              "role": "assistant",
-              "timestamp": "2026-01-04T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "One more note on tea."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "Tea came up again today."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active:alt:2",
-              "alternative_index": 2,
-              "alternative_count": 3,
-              "model": "claude-opus-4-6",
-              "excerpt": "A third take, still about tea."
-            },
-            {
-              "msg_id": "s1-long",
-              "role": "assistant",
-              "timestamp": "2026-01-02T09:00:00Z",
-              "source": "segment:1",
-              "model": "anthropic/claude-opus-4.6",
-              "excerpt": "...iller filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards ..."
-            },
-            {
-              "msg_id": "s0-tea",
-              "role": "user",
-              "timestamp": "2026-01-01T09:00:00Z",
-              "source": "segment:0",
-              "model": null,
-              "excerpt": "We talked about tea last winter, mostly oolong."
-            },
-            {
-              "msg_id": "a-bad-ts",
-              "role": "user",
-              "timestamp": "not-a-timestamp",
-              "source": "active",
-              "model": null,
-              "excerpt": "Tea with a broken timestamp."
+              "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
             }
           ],
-          "count": 7,
-          "searched_messages": 9,
+          "count": 1,
+          "searched_messages": 6,
           "skipped_invalid_timestamps": 0
         }
       }
@@ -3493,66 +2992,29 @@
           "model_filter": null,
           "results": [
             {
-              "msg_id": "a-recent",
-              "role": "assistant",
-              "timestamp": "2026-01-04T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "One more note on tea."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "Tea came up again today."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active:alt:2",
-              "alternative_index": 2,
-              "alternative_count": 3,
-              "model": "claude-opus-4-6",
-              "excerpt": "A third take, still about tea."
-            },
-            {
               "msg_id": "s1-unicode",
               "role": "user",
               "timestamp": "2026-01-02T10:00:00Z",
-              "source": "segment:1",
               "model": null,
-              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+              "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
             },
             {
               "msg_id": "s1-long",
               "role": "assistant",
               "timestamp": "2026-01-02T09:00:00Z",
-              "source": "segment:1",
               "model": "anthropic/claude-opus-4.6",
-              "excerpt": "...iller filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards"
+              "text": "… filler filler filler filler filler The kettle whistled and we returned to tea. afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards afterwards"
             },
             {
               "msg_id": "s0-tea",
               "role": "user",
               "timestamp": "2026-01-01T09:00:00Z",
-              "source": "segment:0",
               "model": null,
-              "excerpt": "We talked about tea last winter, mostly oolong."
-            },
-            {
-              "msg_id": "a-bad-ts",
-              "role": "user",
-              "timestamp": "not-a-timestamp",
-              "source": "active",
-              "model": null,
-              "excerpt": "Tea with a broken timestamp."
+              "text": "We talked about tea last winter, mostly oolong."
             }
           ],
-          "count": 7,
-          "searched_messages": 9,
+          "count": 3,
+          "searched_messages": 6,
           "skipped_invalid_timestamps": 0
         }
       }
@@ -3574,66 +3036,29 @@
           "model_filter": null,
           "results": [
             {
-              "msg_id": "a-recent",
-              "role": "assistant",
-              "timestamp": "2026-01-04T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "One more note on tea."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active",
-              "model": "claude-opus-4-6",
-              "excerpt": "Tea came up again today."
-            },
-            {
-              "msg_id": "a-regen",
-              "role": "assistant",
-              "timestamp": "2026-01-03T09:00:00Z",
-              "source": "active:alt:2",
-              "alternative_index": 2,
-              "alternative_count": 3,
-              "model": "claude-opus-4-6",
-              "excerpt": "...d take, still about tea."
-            },
-            {
               "msg_id": "s1-unicode",
               "role": "user",
               "timestamp": "2026-01-02T10:00:00Z",
-              "source": "segment:1",
               "model": null,
-              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+              "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
             },
             {
               "msg_id": "s1-long",
               "role": "assistant",
               "timestamp": "2026-01-02T09:00:00Z",
-              "source": "segment:1",
               "model": "anthropic/claude-opus-4.6",
-              "excerpt": "... and we returned to tea. afterwards afterwards afterwards afterwards afterwards ..."
+              "text": "… and we returned to tea. afterwards afterwards afterwards afterwards afterwards …"
             },
             {
               "msg_id": "s0-tea",
               "role": "user",
               "timestamp": "2026-01-01T09:00:00Z",
-              "source": "segment:0",
               "model": null,
-              "excerpt": "We talked about tea last winter, mostly oolong."
-            },
-            {
-              "msg_id": "a-bad-ts",
-              "role": "user",
-              "timestamp": "not-a-timestamp",
-              "source": "active",
-              "model": null,
-              "excerpt": "Tea with a broken timestamp."
+              "text": "We talked about tea last winter, mostly oolong."
             }
           ],
-          "count": 7,
-          "searched_messages": 9,
+          "count": 3,
+          "searched_messages": 6,
           "skipped_invalid_timestamps": 0
         }
       }
@@ -3657,13 +3082,12 @@
               "msg_id": "s1-unicode",
               "role": "user",
               "timestamp": "2026-01-02T10:00:00Z",
-              "source": "segment:1",
               "model": null,
-              "excerpt": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
+              "text": "🙂🙂🙂🙂🙂 世界の話をしよう tea 世界世界世界 🙂🙂🙂🙂🙂"
             }
           ],
           "count": 1,
-          "searched_messages": 9,
+          "searched_messages": 6,
           "skipped_invalid_timestamps": 0
         }
       }
