@@ -554,7 +554,7 @@
     {
       "name": "unknown_field",
       "toml": "[p]\nnope = 1\n",
-      "err": "failed to parse [providers.p]: unknown field `nope`, expected one of `enabled`, `sdk`, `base_url`, `api_key_env`, `keys`, `discovery`, `defaults`\n"
+      "err": "failed to parse [providers.p]: unknown field `nope`, expected one of `enabled`, `subscription`, `sdk`, `base_url`, `api_key_env`, `keys`, `discovery`, `defaults`\n"
     }
   ],
   "preference_files": [

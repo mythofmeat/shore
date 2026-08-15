@@ -162,10 +162,14 @@ function migrateCallAttempts(db: Database): void {
   db.exec("CREATE INDEX IF NOT EXISTS idx_call_attempts_status ON call_attempts (status, started_at)");
 }
 
-const SUBSCRIPTION_PROVIDERS = new Set(["opencode-go"]);
+let subscriptionProviders = new Set(["opencode-go", "opencode"]);
+
+export function setSubscriptionProviders(names: Iterable<string>): void {
+  subscriptionProviders = new Set(names);
+}
 
 export const isSubscriptionProvider = (provider: string): boolean =>
-  SUBSCRIPTION_PROVIDERS.has(provider);
+  subscriptionProviders.has(provider);
 
 export interface Usage {
   input_tokens: number;

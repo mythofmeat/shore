@@ -123,6 +123,7 @@ export interface ProviderKeyEntry {
 
 export interface ProviderEntry extends ProviderRegistryEntry {
   enabled: boolean;
+  subscription: boolean;
   sdk?: Sdk;
   baseUrl?: string;
   apiKeyEnv?: string;
@@ -131,8 +132,17 @@ export interface ProviderEntry extends ProviderRegistryEntry {
   defaults: ModelConfigFields;
 }
 
-function defaultProviderEntry(): ProviderEntry {
-  return { enabled: true, keys: [], discovery: defaultDiscovery(), defaults: {} };
+export const DEFAULT_SUBSCRIPTION_PROVIDERS: readonly string[] = ["opencode-go", "opencode"];
+const DEFAULT_SUBSCRIPTION_SET = new Set(DEFAULT_SUBSCRIPTION_PROVIDERS);
+
+function defaultProviderEntry(name?: string): ProviderEntry {
+  return {
+    enabled: true,
+    subscription: name !== undefined && DEFAULT_SUBSCRIPTION_SET.has(name),
+    keys: [],
+    discovery: defaultDiscovery(),
+    defaults: {},
+  };
 }
 
 export function enabledKeys(entry: ProviderEntry): ProviderKeyEntry[] {
@@ -196,6 +206,10 @@ export class ProviderRegistry {
   enabled(): [string, ProviderEntry][] {
     return this.entries().filter(([, e]) => e.enabled);
   }
+
+  subscriptionSettings(): [string, boolean][] {
+    return this.entries().map(([name, e]) => [name, e.subscription]);
+  }
 }
 
 function isTable(value: unknown): value is Record<string, unknown> {
@@ -203,7 +217,7 @@ function isTable(value: unknown): value is Record<string, unknown> {
 }
 
 function parseEntry(provider: string, value: unknown): ProviderEntry {
-  const entry = readEntry(value);
+  const entry = readEntry(value, provider);
   if ("err" in entry) throw ProviderRegistryError.parseEntry(provider, entry.err);
   const parsed = entry.ok;
 
@@ -246,7 +260,16 @@ function transportFieldInDefaults(defaults: ModelConfigFields): string | undefin
 
 type ReadResult<T> = { ok: T } | { err: string };
 
-const ENTRY_KEYS = ["enabled", "sdk", "base_url", "api_key_env", "keys", "discovery", "defaults"];
+const ENTRY_KEYS = [
+  "enabled",
+  "subscription",
+  "sdk",
+  "base_url",
+  "api_key_env",
+  "keys",
+  "discovery",
+  "defaults",
+];
 const DISCOVERY_KEYS = ["enabled", "ignore"];
 const KEY_KEYS = ["name", "env", "enabled", "warn_on_fallback"];
 
@@ -259,16 +282,17 @@ function unknownField(table: Record<string, unknown>, known: readonly string[]):
   return undefined;
 }
 
-function readEntry(value: unknown): ReadResult<ProviderEntry> {
+function readEntry(value: unknown, name?: string): ReadResult<ProviderEntry> {
   if (!isTable(value)) return { err: "invalid type: expected a table" };
   const unknown = unknownField(value, ENTRY_KEYS);
   if (unknown !== undefined) return { err: unknown };
 
-  const out = defaultProviderEntry();
+  const out = defaultProviderEntry(name);
 
-  if (value["enabled"] !== undefined) {
-    if (typeof value["enabled"] !== "boolean") return { err: "invalid type: expected a boolean" };
-    out.enabled = value["enabled"];
+  for (const field of ["enabled", "subscription"] as const) {
+    if (value[field] === undefined) continue;
+    if (typeof value[field] !== "boolean") return { err: "invalid type: expected a boolean" };
+    out[field] = value[field];
   }
   if (value["sdk"] !== undefined) {
     if (typeof value["sdk"] !== "string") return { err: "invalid type: expected a string" };

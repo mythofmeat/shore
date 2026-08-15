@@ -7,6 +7,8 @@ import {
   budgetWarnings,
   modelHistory,
 } from "../src/ledger/usage.ts";
+import { setSubscriptionProviders } from "../src/ledger/store.ts";
+import { DEFAULT_SUBSCRIPTION_PROVIDERS } from "../src/config/providers.ts";
 import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
 
 const cleanups: Array<() => void> = [];
@@ -164,6 +166,29 @@ test("the backfill leaves already-costed rows alone unless forced", async () => 
   expect(costOf(ledger, 1)).toBeCloseTo(0.0186, 10);
   expect(costOf(ledger, 2), "a provider's own total is not overwritten").toBe(42);
   expect(costOf(ledger, 3), "a flat-plan row must not start accruing cost").toBe(0);
+});
+
+test("the backfill zeroes a subscription provider's rows rather than hunting for a price", async () => {
+  const ledger = ledgerWith([
+    { provider: "zai", model: "glm-5.1" },
+    { provider: "openai", model: "gpt-nonexistent" },
+  ]);
+  const fetched = stubCatalog();
+  setSubscriptionProviders(["zai"]);
+
+  try {
+    const result = await backfillLedgerCosts(ledger);
+
+    expect(costOf(ledger, 1), "a flat-plan row costs nothing, it is not unpriced").toBe(0);
+    expect(result.updated).toBe(1);
+    expect(
+      result.failures.map((f) => f.model),
+      "a subscription provider is never reported as missing pricing",
+    ).toEqual(["openai/gpt-nonexistent"]);
+    expect(fetched.calls, "only the billable model sends us to the catalog").toBe(1);
+  } finally {
+    setSubscriptionProviders(DEFAULT_SUBSCRIPTION_PROVIDERS);
+  }
 });
 
 const OVER_BUDGET: UsageConfig = {

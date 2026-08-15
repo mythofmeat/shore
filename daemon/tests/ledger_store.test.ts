@@ -6,6 +6,8 @@ import { join } from "node:path";
 
 import { Ledger, type RecordCall } from "../src/ledger/store.ts";
 import { PricingEngine, type ModelPricing, type PricingStore } from "../src/ledger/pricing.ts";
+import { setSubscriptionProviders } from "../src/ledger/store.ts";
+import { DEFAULT_SUBSCRIPTION_PROVIDERS } from "../src/config/providers.ts";
 import { freshLedger, rowsIn } from "./support/ledger_fixture.ts";
 
 function fixedPricing(entry: ModelPricing): PricingEngine {
@@ -127,6 +129,27 @@ describe("writing rows the daemon's schema accepts", () => {
       expect(row.total_cost).toBe(0);
       expect(row.input_tokens).toBe(100);
     } finally {
+      cleanup();
+    }
+  });
+
+  test("a provider configured as a subscription records at zero, and one unconfigured does not", () => {
+    const { path, cleanup } = freshLedger();
+    try {
+      setSubscriptionProviders(["zai"]);
+      const ledger = Ledger.open(path);
+      const flat = ledger.record(call({ provider: "zai", model: "glm-5.1" }));
+      const billed = ledger.record(call({ provider: "opencode-go", model: "kimi-k3" }));
+      ledger.close();
+
+      expect(flat.cost_source, "a configured subscription is free per call").toBe("subscription");
+      expect(flat.total_cost).toBe(0);
+      expect(
+        billed.cost_source,
+        "turning the flag on for one provider must not turn it on for every provider",
+      ).not.toBe("subscription");
+    } finally {
+      setSubscriptionProviders(DEFAULT_SUBSCRIPTION_PROVIDERS);
       cleanup();
     }
   });

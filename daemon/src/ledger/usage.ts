@@ -27,6 +27,7 @@ import {
   type QueryFilter,
 } from "./query.ts";
 import { ledgerFor } from "./record.ts";
+import { isSubscriptionProvider } from "./store.ts";
 import type { Ledger } from "./store.ts";
 import {
   daysFromMonday,
@@ -348,6 +349,14 @@ function callAttemptStatus(db: Database): {
   return { pending, unresolved, estimated_cost_at_risk: estimated };
 }
 
+const FLAT_PLAN_COST = {
+  input: 0,
+  output: 0,
+  cache_read: 0,
+  cache_write: 0,
+  total: 0,
+};
+
 export interface CostBackfill {
   updated: number;
   total: number;
@@ -366,6 +375,7 @@ export async function backfillMissingCosts(
 
   const fetched = new Map<string, string | undefined>();
   for (const row of rows) {
+    if (isSubscriptionProvider(row.provider)) continue;
     const key = `${row.provider}/${row.model}`;
     if (fetched.has(key)) {
       continue;
@@ -382,6 +392,15 @@ export async function backfillMissingCosts(
 
   let updated = 0;
   for (const row of rows) {
+    if (isSubscriptionProvider(row.provider)) {
+      try {
+        updateCosts(db, row.id, FLAT_PLAN_COST);
+        updated += 1;
+      } catch (e) {
+        console.warn(`shore: could not zero costs for row ${row.id}: ${String(e)}`);
+      }
+      continue;
+    }
     const cost = pricing.cost({
       provider: row.provider,
       model: row.model,

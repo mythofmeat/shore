@@ -17,6 +17,8 @@ import type { ToolContext } from "./tools/dispatch.ts";
 import { subagentRunner } from "./tools/subagent_loop.ts";
 import { Ledger } from "./ledger/store.ts";
 import { backfillLedgerCosts } from "./ledger/usage.ts";
+import { setSubscriptionProviders } from "./ledger/store.ts";
+import { DEFAULT_SUBSCRIPTION_PROVIDERS } from "./config/providers.ts";
 import { ledgerFor } from "./ledger/record.ts";
 import { setCallObserver } from "./ledger/record.ts";
 import { modelUsageSummary } from "./ledger/query.ts";
@@ -96,6 +98,8 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       options.onHistory?.(history);
     },
   );
+
+  applySubscriptionProviders(registry);
 
   historyIndex = new HistoryIndexService();
   workspaceIndex = new WorkspaceIndexService();
@@ -364,6 +368,21 @@ export function sharedToolDeps(
       );
     },
   };
+}
+
+export function applySubscriptionProviders(registry: CharacterRegistry): void {
+  const flat = new Set<string>(DEFAULT_SUBSCRIPTION_PROVIDERS);
+  const configs = [
+    registry.globalConfig(),
+    ...registry.availableCharacters().map((c) => registry.effectiveConfig(c)),
+  ];
+  for (const config of configs) {
+    for (const [name, subscription] of config.providers.subscriptionSettings()) {
+      if (subscription) flat.add(name);
+      else flat.delete(name);
+    }
+  }
+  setSubscriptionProviders(flat);
 }
 
 function startCostBackfill(ledgerPath: string): { stop: () => void } {

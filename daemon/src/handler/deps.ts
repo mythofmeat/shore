@@ -26,7 +26,12 @@ import { queueDeferredEdit } from "../memory/deferred_edits.ts";
 import { compactionRunner } from "../memory/compaction/run.ts";
 import type { NotificationService } from "../notifications.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
-import { mcpConfigView, sharedToolDeps, type ShoreRuntime } from "../runtime.ts";
+import {
+  applySubscriptionProviders,
+  mcpConfigView,
+  sharedToolDeps,
+  type ShoreRuntime,
+} from "../runtime.ts";
 import { McpRegistry } from "../tools/mcp_registry.ts";
 import { pluginsDir } from "../config/dirs.ts";
 import { historyMessage, type HandshakeProvider } from "../swp/connection.ts";
@@ -373,6 +378,7 @@ export async function applyReloadedConfig(
   config: LoadedConfig,
 ): Promise<ReloadSummary> {
   const summary = await a.runtime.registry.reloadRuntimeState(config);
+  applySubscriptionProviders(a.runtime.registry);
   await a.runtime.refreshHistoryIndexes();
   await reconnectMcpIfChanged(a, config);
   a.autonomy.reloadConfig((name) => a.runtime.registry.effectiveConfig(name));
