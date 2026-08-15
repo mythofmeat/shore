@@ -155,8 +155,7 @@ describe("markdown store parity", () => {
         expect(group.stamps[0]!.formatted).not.toContain(".");
       }
     } finally {
-      if (originalTz === undefined) delete process.env.TZ;
-      else process.env.TZ = originalTz;
+      process.env.TZ = originalTz ?? "UTC";
     }
   });
 

@@ -160,7 +160,7 @@ describe("updates that can wait", () => {
       release = resolve;
     });
     const service = recordingService(slow);
-    const bridge = new TurnAutonomyBridge(service, () => 1000);
+    const bridge = new TurnAutonomyBridge(service, () => 1000, "UTC");
 
     bridge.ensureState("ada", configWith());
     bridge.onUserMessage("ada", 3);
