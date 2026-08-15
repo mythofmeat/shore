@@ -4,7 +4,6 @@ target/
 **/*.rs.bk
 *.profraw
 *.profdata
-bun.lock
 
 # IDE / AI tooling
 .idea/
