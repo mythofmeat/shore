@@ -3,7 +3,6 @@ import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "n
 import { compareByCodePoint } from "../util/sort.ts";
 import {
   budgetPeriodRank,
-  normalizeDeprecatedAliases,
   parseAppConfig,
   validateCompaction,
   type AppConfig,
@@ -293,7 +292,6 @@ export function parseConfigTable(
   if ("err" in parsed) throw new ConfigError("parse_app", parsed.err);
   const app = parsed.ok;
 
-  normalizeDeprecatedAliases(app.defaults);
 
   let providers: ProviderRegistry;
   try {

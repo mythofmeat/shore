@@ -12,7 +12,6 @@ import {
   defaultAppConfig,
   defaultToolsConfig,
   mapKeysInOrder,
-  normalizeDeprecatedAliases,
   numDaysFromMonday,
   parseAppConfig,
   parseThinkingReplay,
@@ -725,7 +724,6 @@ describe("tool_pattern_matches", () => {
 function defaultsFromJson(json: {
   model: string | null;
   background: { model: string | null; heartbeat: string | null; compaction: string | null };
-  heartbeat: string | null;
   embedding: string | null;
   image_generation: string | null;
   subagent_model: string | null;
@@ -740,7 +738,6 @@ function defaultsFromJson(json: {
       heartbeat: or(json.background.heartbeat),
       compaction: or(json.background.compaction),
     },
-    heartbeat: or(json.heartbeat),
     embedding: or(json.embedding),
     image_generation: or(json.image_generation),
     subagent_model: or(json.subagent_model),
@@ -763,25 +760,22 @@ describe("background model resolution", () => {
   }
 });
 
-describe("normalize_deprecated_aliases", () => {
-  for (const c of fixture.normalize) {
+describe("removed config keys", () => {
+  for (const c of fixture.removed_keys) {
     test(c.name, () => {
       const parsed = parseAppConfig(parseToml(c.toml));
-      if ("err" in parsed) throw new Error(parsed.err);
-
-      expect(canonical(parsed.ok.defaults)).toEqual(c.before);
-      normalizeDeprecatedAliases(parsed.ok.defaults);
-      expect(canonical(parsed.ok.defaults)).toEqual(c.once);
-      normalizeDeprecatedAliases(parsed.ok.defaults);
-      expect(canonical(parsed.ok.defaults)).toEqual(c.twice);
+      expect("err" in parsed ? parsed.err : null).toBe(c.err);
     });
   }
 
-  test("a case where the alias actually moves is present", () => {
-    const moved = fixture.normalize.filter(
-      (c) => JSON.stringify(c.before) !== JSON.stringify(c.once),
-    );
-    expect(moved.length).toBeGreaterThan(0);
+  test("the message names the key that replaced it, not just the valid fields", () => {
+    const refused = fixture.removed_keys.filter((c) => c.err !== null);
+    expect(refused.length).toBeGreaterThan(0);
+    for (const c of refused) {
+      expect(c.err).toContain("was removed");
+      expect(c.err).toContain("[defaults.background]");
+      expect(c.err).not.toContain("unknown field");
+    }
   });
 });
 

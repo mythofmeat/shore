@@ -36,8 +36,6 @@ Every client authenticates with a shared token. The daemon writes one to
 <config>/token on first start; SHORE_TOKEN overrides it, which is how a
 client on another host or in another container is given the value.`;
 
-const DEPRECATED_PATHS = new Set(["defaults.heartbeat"]);
-
 function isTable(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -59,7 +57,6 @@ function renderTable(
   const scalars: [string, unknown][] = [];
   const tables: [string, Record<string, unknown>][] = [];
   for (const [key, value] of Object.entries(table)) {
-    if (DEPRECATED_PATHS.has([...path, key].join("."))) continue;
     if (isTable(value)) tables.push([key, value]);
     else if (value !== null || includeUnset) scalars.push([key, value]);
   }

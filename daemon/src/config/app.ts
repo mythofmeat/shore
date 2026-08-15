@@ -34,6 +34,7 @@ interface StructSpec<T> {
   fields: { [K in keyof T]?: Reader<T[K]> };
   required?: readonly (keyof T & string)[];
   noDefault?: readonly (keyof T & string)[];
+  removed?: Readonly<Record<string, string>>;
   make: () => T;
 }
 
@@ -47,7 +48,11 @@ function readStruct<T extends object>(spec: StructSpec<T>, value: TomlValue): Pa
 
   for (const key of sortedKeys(value)) {
     const read = (spec.fields as Record<string, Reader<unknown> | undefined>)[key];
-    if (read === undefined) return { err: unknownField(key, known) };
+    if (read === undefined) {
+      const moved = spec.removed?.[key];
+      if (moved !== undefined) return { err: `\`${key}\` was removed — ${moved}` };
+      return { err: unknownField(key, known) };
+    }
     const parsed = read(value[key]);
     if ("err" in parsed) return parsed;
     (out as Record<string, unknown>)[key] = parsed.ok;
@@ -204,7 +209,6 @@ const BACKGROUND: StructSpec<BackgroundDefaultsConfig> = {
 export interface DefaultsConfig {
   model: string | undefined;
   background: BackgroundDefaultsConfig;
-  heartbeat: string | undefined;
   embedding: string | undefined;
   image_generation: string | undefined;
   subagent_model: string | undefined;
@@ -215,7 +219,6 @@ export interface DefaultsConfig {
 const defaultDefaultsConfig = (): DefaultsConfig => ({
   model: undefined,
   background: defaultBackgroundDefaults(),
-  heartbeat: undefined,
   embedding: undefined,
   image_generation: undefined,
   subagent_model: undefined,
@@ -226,11 +229,11 @@ const defaultDefaultsConfig = (): DefaultsConfig => ({
 const DEFAULTS: StructSpec<DefaultsConfig> = {
   name: "DefaultsConfig",
   noDefault: ["model", "embedding", "image_generation", "subagent_model", "display_name"],
+  removed: { heartbeat: "set it under `[defaults.background]` as `heartbeat`" },
   make: defaultDefaultsConfig,
   fields: {
     model: optional(readString),
     background: (v) => readStruct(BACKGROUND, v),
-    heartbeat: optional(readString),
     embedding: optional(readString),
     image_generation: optional(readString),
     subagent_model: optional(readString),
@@ -253,25 +256,6 @@ export function resolveDisplayName(
   env: Record<string, string | undefined> = process.env,
 ): string {
   return defaults.display_name ?? env["USER"] ?? "User";
-}
-
-export function normalizeDeprecatedAliases(defaults: DefaultsConfig): void {
-  const value = defaults.heartbeat;
-  if (value === undefined) return;
-  defaults.heartbeat = undefined;
-
-  if (defaults.background.heartbeat === undefined) {
-    console.warn(
-      `\`defaults.heartbeat = ${JSON.stringify(value)}\` is deprecated; ` +
-        "move it under `[defaults.background]` as `heartbeat`.",
-    );
-    defaults.background.heartbeat = value;
-  } else {
-    console.warn(
-      "`defaults.heartbeat` is deprecated and was ignored " +
-        "because `defaults.background.heartbeat` is already set.",
-    );
-  }
 }
 
 export type UserTimestampMode = "auto" | "always" | "never";

@@ -12,7 +12,6 @@
         "heartbeat": null,
         "compaction": null
       },
-      "heartbeat": null,
       "embedding": null,
       "image_generation": null,
       "subagent_model": null,
@@ -151,7 +150,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -277,7 +275,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": "anthropic:claude-haiku-4-5",
@@ -400,7 +397,7 @@
     },
     {
       "name": "subagent keys sort by code point, not UTF-16 order",
-      "toml": "[subagents.\"🎵drum\"]\ndescription = \"d\"\nprompt = \"p\"\n\n[subagents.\"ﬀute\"]\ndescription = \"f\"\nprompt = \"p\"\n\n[subagents.zed]\ndescription = \"z\"\nprompt = \"p\"\n",
+      "toml": "[subagents.\"\ud83c\udfb5drum\"]\ndescription = \"d\"\nprompt = \"p\"\n\n[subagents.\"\ufb00ute\"]\ndescription = \"f\"\nprompt = \"p\"\n\n[subagents.zed]\ndescription = \"z\"\nprompt = \"p\"\n",
       "ok": {
         "daemon": {
           "addr": "127.0.0.1:7320",
@@ -414,7 +411,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -528,14 +524,14 @@
             "model": null,
             "max_iterations": null
           },
-          "ﬀute": {
+          "\ufb00ute": {
             "description": "f",
             "prompt": "p",
             "tools": [],
             "model": null,
             "max_iterations": null
           },
-          "🎵drum": {
+          "\ud83c\udfb5drum": {
             "description": "d",
             "prompt": "p",
             "tools": [],
@@ -592,7 +588,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -730,7 +725,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -856,7 +850,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -1014,7 +1007,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -1189,7 +1181,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -1414,7 +1405,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -1543,7 +1533,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -1672,7 +1661,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -1800,7 +1788,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -1938,7 +1925,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -2078,7 +2064,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -2204,7 +2189,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -2335,7 +2319,7 @@
     },
     {
       "name": "mcp env keys sort by code point",
-      "toml": "[mcp.s]\ncommand = \"x\"\nenv = { ZED = \"1\", \"ﬀ\" = \"2\", ABLE = \"3\" }\n",
+      "toml": "[mcp.s]\ncommand = \"x\"\nenv = { ZED = \"1\", \"\ufb00\" = \"2\", ABLE = \"3\" }\n",
       "ok": {
         "daemon": {
           "addr": "127.0.0.1:7320",
@@ -2349,7 +2333,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -2463,7 +2446,7 @@
             "env": {
               "ABLE": "3",
               "ZED": "1",
-              "ﬀ": "2"
+              "\ufb00": "2"
             },
             "cwd": null,
             "url": null
@@ -2496,7 +2479,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -2622,7 +2604,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -2748,7 +2729,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -2874,7 +2854,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -3012,7 +2991,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -3138,7 +3116,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -3270,7 +3247,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -3396,7 +3372,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -3522,7 +3497,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -3648,7 +3622,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -3774,7 +3747,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -3900,7 +3872,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -4032,7 +4003,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -4158,7 +4128,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -4290,7 +4259,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -4416,7 +4384,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -4575,132 +4542,6 @@
       "table_err": "unknown field `bogus_key`, expected one of `enabled`, `heartbeat`, `cache_keepalive_max`"
     },
     {
-      "name": "the deprecated top-level heartbeat key parses without normalizing",
-      "toml": "[defaults]\nmodel = \"primary\"\nheartbeat = \"hb-old\"\n",
-      "ok": {
-        "daemon": {
-          "addr": "127.0.0.1:7320",
-          "unsafe_allow_remote_access": false,
-          "allowed_hosts": []
-        },
-        "defaults": {
-          "model": "primary",
-          "background": {
-            "model": null,
-            "heartbeat": null,
-            "compaction": null
-          },
-          "heartbeat": "hb-old",
-          "embedding": null,
-          "image_generation": null,
-          "subagent_model": null,
-          "display_name": null,
-          "stream": true
-        },
-        "behavior": {
-          "autonomy": {
-            "enabled": false,
-            "heartbeat": {
-              "enabled": true,
-              "fallback_heartbeat_interval": "1h",
-              "dormant_after_heartbeat_turns": 3,
-              "dormant_after_idle_time": "2d",
-              "minimum_heartbeat_latency": "1h",
-              "wrap_up_grace_rounds": 3
-            },
-            "cache_keepalive_max": "12h"
-          },
-          "user_message_timestamps": "auto"
-        },
-        "tools": {
-          "enabled_tools": [],
-          "enabled_subagents": [],
-          "max_result_chars": 20000,
-          "timeout": "5m",
-          "web_search": {
-            "api_key_env": "TAVILY_API_KEY",
-            "result_limit": 5,
-            "search_depth": "basic",
-            "include_answer": true
-          },
-          "config": {}
-        },
-        "memory": {
-          "compaction": {
-            "enabled": true,
-            "idle_trigger": "30m",
-            "archive_after": "0s",
-            "min_turns": 8,
-            "max_turns": 16,
-            "max_context_tokens": 200000,
-            "keep_recent_turns": 2
-          },
-          "thinking": {
-            "replay_prior_thinking": "all"
-          },
-          "retrieval": {
-            "mode": "auto",
-            "max_file_bytes": 2097152,
-            "max_indexed_files": 50000,
-            "max_total_indexed_bytes": 1073741824,
-            "max_embed_chars_per_file": 4000,
-            "binary": "skip"
-          },
-          "git_push": false
-        },
-        "connections": {
-          "telegram": null,
-          "discord": null
-        },
-        "notifications": {
-          "enabled": false,
-          "backend": "notify_send",
-          "ntfy": {
-            "url": "https://ntfy.sh",
-            "topic": "",
-            "token": ""
-          },
-          "command": {
-            "template": ""
-          },
-          "generation_threshold": "0s",
-          "events": {
-            "autonomous_message": true,
-            "cache_warning": true,
-            "compaction_complete": true,
-            "error": true,
-            "message_complete": false,
-            "usage_warning": true
-          }
-        },
-        "usage": {
-          "timezone": "local",
-          "allow_compaction_over_budget": true,
-          "budgets": [],
-          "spike_warnings": {
-            "enabled": false,
-            "period": "hour",
-            "multiplier": 3.0,
-            "min_cost_usd": 1.0
-          }
-        },
-        "advanced": {
-          "api_payload_logging": false,
-          "cache_forensics": false,
-          "editor": null,
-          "max_retries": null,
-          "retry_backoff": null,
-          "max_image_size": 2000000,
-          "llm_sidecar": {
-            "enabled": true,
-            "socket_path": null
-          }
-        },
-        "subagents": {},
-        "mcp": {}
-      }
-    },
-    {
       "name": "the background section",
       "toml": "[defaults.background]\nmodel = \"bg\"\nheartbeat = \"bg-h\"\ncompaction = \"bg-c\"\n",
       "ok": {
@@ -4716,7 +4557,6 @@
             "heartbeat": "bg-h",
             "compaction": "bg-c"
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -4848,7 +4688,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": "e",
           "image_generation": "i",
           "subagent_model": null,
@@ -4972,9 +4811,9 @@
     },
     {
       "name": "two unknown non-ASCII keys sort by code point, not UTF-16 order",
-      "toml": "[\"🎵\"]\nk = 1\n\n[\"ﬀ\"]\nk = 2\n",
-      "doc_err": "unknown field `🎵`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`",
-      "table_err": "unknown field `ﬀ`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`"
+      "toml": "[\"\ud83c\udfb5\"]\nk = 1\n\n[\"\ufb00\"]\nk = 2\n",
+      "doc_err": "unknown field `\ud83c\udfb5`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`",
+      "table_err": "unknown field `\ufb00`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`"
     },
     {
       "name": "an empty sequence fills a struct with its defaults",
@@ -4992,7 +4831,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -5118,7 +4956,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -5244,7 +5081,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -5383,7 +5219,6 @@
               "heartbeat": null,
               "compaction": null
             },
-            "heartbeat": null,
             "embedding": null,
             "image_generation": null,
             "subagent_model": null,
@@ -5501,11 +5336,11 @@
       "name": "seq: DefaultsConfig",
       "toml": "defaults = []\n",
       "doc_err": "invalid length 0, expected struct DefaultsConfig with 8 elements",
-      "table_err": "invalid length 0, expected struct DefaultsConfig with 8 elements"
+      "table_err": "invalid length 0, expected struct DefaultsConfig with 7 elements"
     },
     {
       "name": "seq: DefaultsConfig, at its minimum",
-      "toml": "defaults = [\"m\", [\"bm\", \"bh\", \"bc\"], \"h\", \"e\", \"i\", \"s\", \"d\"]\n",
+      "toml": "defaults = [\"m\", [\"bm\", \"bh\", \"bc\"], \"e\", \"i\", \"s\", \"d\"]\n",
       "ok": {
         "daemon": {
           "addr": "127.0.0.1:7320",
@@ -5519,7 +5354,6 @@
             "heartbeat": "bh",
             "compaction": "bc"
           },
-          "heartbeat": "h",
           "embedding": "e",
           "image_generation": "i",
           "subagent_model": "s",
@@ -5651,7 +5485,6 @@
             "heartbeat": "h",
             "compaction": "c"
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -5783,7 +5616,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -5915,7 +5747,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -6047,7 +5878,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -6187,7 +6017,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -6337,7 +6166,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -6468,7 +6296,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -6594,7 +6421,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -6756,7 +6582,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -6887,7 +6712,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -7013,7 +6837,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -7203,7 +7026,6 @@
               "heartbeat": null,
               "compaction": null
             },
-            "heartbeat": null,
             "embedding": null,
             "image_generation": null,
             "subagent_model": null,
@@ -7354,7 +7176,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -7552,7 +7373,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -7720,7 +7540,6 @@
             "heartbeat": null,
             "compaction": null
           },
-          "heartbeat": null,
           "embedding": null,
           "image_generation": null,
           "subagent_model": null,
@@ -8181,7 +8000,6 @@
           "heartbeat": null,
           "compaction": null
         },
-        "heartbeat": null,
         "embedding": null,
         "image_generation": null,
         "subagent_model": null,
@@ -8200,7 +8018,6 @@
           "heartbeat": null,
           "compaction": null
         },
-        "heartbeat": null,
         "embedding": null,
         "image_generation": null,
         "subagent_model": null,
@@ -8219,7 +8036,6 @@
           "heartbeat": null,
           "compaction": null
         },
-        "heartbeat": null,
         "embedding": null,
         "image_generation": null,
         "subagent_model": null,
@@ -8238,7 +8054,6 @@
           "heartbeat": "hb",
           "compaction": null
         },
-        "heartbeat": null,
         "embedding": null,
         "image_generation": null,
         "subagent_model": null,
@@ -8257,7 +8072,6 @@
           "heartbeat": null,
           "compaction": "c"
         },
-        "heartbeat": null,
         "embedding": null,
         "image_generation": null,
         "subagent_model": null,
@@ -8276,7 +8090,6 @@
           "heartbeat": null,
           "compaction": null
         },
-        "heartbeat": "hb-old",
         "embedding": null,
         "image_generation": null,
         "subagent_model": null,
@@ -8285,238 +8098,6 @@
       },
       "heartbeat": null,
       "compaction": null
-    }
-  ],
-  "normalize": [
-    {
-      "name": "the deprecated key forwards into background",
-      "toml": "[defaults]\nmodel = \"primary\"\nheartbeat = \"hb-old\"\n",
-      "before": {
-        "model": "primary",
-        "background": {
-          "model": null,
-          "heartbeat": null,
-          "compaction": null
-        },
-        "heartbeat": "hb-old",
-        "embedding": null,
-        "image_generation": null,
-        "subagent_model": null,
-        "display_name": null,
-        "stream": true
-      },
-      "once": {
-        "model": "primary",
-        "background": {
-          "model": null,
-          "heartbeat": "hb-old",
-          "compaction": null
-        },
-        "heartbeat": null,
-        "embedding": null,
-        "image_generation": null,
-        "subagent_model": null,
-        "display_name": null,
-        "stream": true
-      },
-      "twice": {
-        "model": "primary",
-        "background": {
-          "model": null,
-          "heartbeat": "hb-old",
-          "compaction": null
-        },
-        "heartbeat": null,
-        "embedding": null,
-        "image_generation": null,
-        "subagent_model": null,
-        "display_name": null,
-        "stream": true
-      }
-    },
-    {
-      "name": "the new key wins and the alias is dropped",
-      "toml": "[defaults]\nheartbeat = \"hb-old\"\n\n[defaults.background]\nheartbeat = \"hb-new\"\n",
-      "before": {
-        "model": null,
-        "background": {
-          "model": null,
-          "heartbeat": "hb-new",
-          "compaction": null
-        },
-        "heartbeat": "hb-old",
-        "embedding": null,
-        "image_generation": null,
-        "subagent_model": null,
-        "display_name": null,
-        "stream": true
-      },
-      "once": {
-        "model": null,
-        "background": {
-          "model": null,
-          "heartbeat": "hb-new",
-          "compaction": null
-        },
-        "heartbeat": null,
-        "embedding": null,
-        "image_generation": null,
-        "subagent_model": null,
-        "display_name": null,
-        "stream": true
-      },
-      "twice": {
-        "model": null,
-        "background": {
-          "model": null,
-          "heartbeat": "hb-new",
-          "compaction": null
-        },
-        "heartbeat": null,
-        "embedding": null,
-        "image_generation": null,
-        "subagent_model": null,
-        "display_name": null,
-        "stream": true
-      }
-    },
-    {
-      "name": "already-normalized values are untouched",
-      "toml": "[defaults.background]\nheartbeat = \"hb\"\n",
-      "before": {
-        "model": null,
-        "background": {
-          "model": null,
-          "heartbeat": "hb",
-          "compaction": null
-        },
-        "heartbeat": null,
-        "embedding": null,
-        "image_generation": null,
-        "subagent_model": null,
-        "display_name": null,
-        "stream": true
-      },
-      "once": {
-        "model": null,
-        "background": {
-          "model": null,
-          "heartbeat": "hb",
-          "compaction": null
-        },
-        "heartbeat": null,
-        "embedding": null,
-        "image_generation": null,
-        "subagent_model": null,
-        "display_name": null,
-        "stream": true
-      },
-      "twice": {
-        "model": null,
-        "background": {
-          "model": null,
-          "heartbeat": "hb",
-          "compaction": null
-        },
-        "heartbeat": null,
-        "embedding": null,
-        "image_generation": null,
-        "subagent_model": null,
-        "display_name": null,
-        "stream": true
-      }
-    },
-    {
-      "name": "nothing to normalize",
-      "toml": "[defaults]\nmodel = \"m\"\n",
-      "before": {
-        "model": "m",
-        "background": {
-          "model": null,
-          "heartbeat": null,
-          "compaction": null
-        },
-        "heartbeat": null,
-        "embedding": null,
-        "image_generation": null,
-        "subagent_model": null,
-        "display_name": null,
-        "stream": true
-      },
-      "once": {
-        "model": "m",
-        "background": {
-          "model": null,
-          "heartbeat": null,
-          "compaction": null
-        },
-        "heartbeat": null,
-        "embedding": null,
-        "image_generation": null,
-        "subagent_model": null,
-        "display_name": null,
-        "stream": true
-      },
-      "twice": {
-        "model": "m",
-        "background": {
-          "model": null,
-          "heartbeat": null,
-          "compaction": null
-        },
-        "heartbeat": null,
-        "embedding": null,
-        "image_generation": null,
-        "subagent_model": null,
-        "display_name": null,
-        "stream": true
-      }
-    },
-    {
-      "name": "an empty string is a value, not an absence",
-      "toml": "[defaults]\nheartbeat = \"\"\n",
-      "before": {
-        "model": null,
-        "background": {
-          "model": null,
-          "heartbeat": null,
-          "compaction": null
-        },
-        "heartbeat": "",
-        "embedding": null,
-        "image_generation": null,
-        "subagent_model": null,
-        "display_name": null,
-        "stream": true
-      },
-      "once": {
-        "model": null,
-        "background": {
-          "model": null,
-          "heartbeat": "",
-          "compaction": null
-        },
-        "heartbeat": null,
-        "embedding": null,
-        "image_generation": null,
-        "subagent_model": null,
-        "display_name": null,
-        "stream": true
-      },
-      "twice": {
-        "model": null,
-        "background": {
-          "model": null,
-          "heartbeat": "",
-          "compaction": null
-        },
-        "heartbeat": null,
-        "embedding": null,
-        "image_generation": null,
-        "subagent_model": null,
-        "display_name": null,
-        "stream": true
-      }
     }
   ],
   "display_name": [
@@ -8814,6 +8395,28 @@
     {
       "input": "0",
       "parsed": null
+    }
+  ],
+  "removed_keys": [
+    {
+      "name": "the retired alias is refused, not forwarded",
+      "toml": "[defaults]\nmodel = \"primary\"\nheartbeat = \"hb-old\"\n",
+      "err": "`heartbeat` was removed \u2014 set it under `[defaults.background]` as `heartbeat`"
+    },
+    {
+      "name": "setting both spellings is still refused",
+      "toml": "[defaults]\nheartbeat = \"hb-old\"\n\n[defaults.background]\nheartbeat = \"hb-new\"\n",
+      "err": "`heartbeat` was removed \u2014 set it under `[defaults.background]` as `heartbeat`"
+    },
+    {
+      "name": "an empty string is a value, not an absence",
+      "toml": "[defaults]\nheartbeat = \"\"\n",
+      "err": "`heartbeat` was removed \u2014 set it under `[defaults.background]` as `heartbeat`"
+    },
+    {
+      "name": "the key that replaced it still parses",
+      "toml": "[defaults.background]\nheartbeat = \"hb\"\n",
+      "err": null
     }
   ]
 }

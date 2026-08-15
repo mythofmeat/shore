@@ -2088,46 +2088,12 @@
       "err": "failed to parse model entry [chat.anthropic.opus]: unknown variant `nope`, expected one of `anthropic`, `openai`, `openrouter`, `gemini`, `zai`, `deepseek`, `moonshot`\n"
     },
     {
-      "name": "parse_entry_deprecated_zhipuai_sdk",
+      "name": "parse_entry_removed_zhipuai_sdk",
       "chat_toml": "[anthropic.opus]\nmodel_id = \"x\"\nsdk = \"zhipuai\"\n",
       "embedding_toml": "",
       "image_generation_toml": "",
       "providers_toml": "",
-      "catalog": {
-        "chat": {
-          "chat.anthropic.opus": {
-            "name": "opus",
-            "qualified_name": "chat.anthropic.opus",
-            "category": "chat",
-            "provider_key": "anthropic",
-            "sdk": "openai",
-            "model_id": "x",
-            "api_key_env": "ANTHROPIC_API_KEY",
-            "base_url": null,
-            "max_context_tokens": 200000,
-            "max_output_tokens": 8192,
-            "temperature": 1.0,
-            "top_p": null,
-            "reasoning_effort": null,
-            "budget_tokens": null,
-            "cache_ttl": null,
-            "cache_keepalive": null,
-            "openrouter_provider": null,
-            "gemini_generation": null,
-            "zai_clear_thinking": null,
-            "zai_subscription": null,
-            "replay_prior_thinking": null,
-            "max_tool_iterations": null
-          }
-        },
-        "chat_order": [
-          "chat.anthropic.opus"
-        ],
-        "embedding": {},
-        "embedding_order": [],
-        "image_generation": {},
-        "image_generation_order": []
-      }
+      "err": "failed to parse model entry [chat.anthropic.opus]: `sdk = \"zhipuai\"` was removed \u2014 use `sdk = \"openai\"`"
     },
     {
       "name": "parse_entry_bad_keepalive",

@@ -53,11 +53,7 @@ export function sdkFromWire(s: string): Sdk | undefined {
 
 function deserializeSdk(raw: string): ParseResult<Sdk> {
   if (raw === "zhipuai") {
-    console.warn(
-      `sdk = "${raw}" is deprecated and now maps to "openai". ` +
-        `Update your config to use sdk = "openai" instead.`,
-    );
-    return { ok: "openai" };
+    return { err: '`sdk = "zhipuai"` was removed — use `sdk = "openai"`' };
   }
   const sdk = sdkFromWire(raw);
   if (sdk === undefined) {
