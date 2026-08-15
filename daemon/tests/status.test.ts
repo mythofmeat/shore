@@ -67,6 +67,7 @@ interface Setup {
 
 const SETUPS: Record<string, Setup> = {
   unregistered: { registered: false },
+  unregistered_with_log: { registered: false, log: true },
   fresh: {},
   restored: { persisted: [2, 3600, -125, 4], log: true },
   overdue: { persisted: [1, -45, -7200, 0] },
@@ -365,7 +366,7 @@ describe("heartbeat_log", () => {
   for (const row of fixture.heartbeat_log as ArgCase[]) {
     test(row.case, async () => {
       const ctx = await build(row.setup);
-      expect<unknown>(heartbeatLog(ctx, row.args)).toEqual(row.ok);
+      expect<unknown>(await heartbeatLog(ctx, row.args)).toEqual(row.ok);
     });
   }
 });

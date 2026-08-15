@@ -1,4 +1,6 @@
 import type { AutonomyService, AutonomyStatus } from "../autonomy/service.ts";
+import { HEARTBEAT_LOG_FILENAME } from "../autonomy/service.ts";
+import { HeartbeatLog, type HeartbeatEvent } from "../autonomy/heartbeat_log.ts";
 import type { HourClassification } from "../autonomy/activity.ts";
 import type { ShoreDirs } from "../config/dirs.ts";
 import type { Diagnostics } from "../diagnostics.ts";
@@ -126,8 +128,19 @@ export function errorLog(ctx: StatusContext, args: Args): Json {
   return ctx.diagnostics.toJson(countArg(args, 20));
 }
 
-export function heartbeatLog(ctx: StatusContext, args: Args): Json {
-  const events = ctx.autonomy.log(ctx.characterName, countArg(args, 20));
+async function heartbeatEvents(
+  ctx: StatusContext,
+  limit: number,
+): Promise<readonly HeartbeatEvent[]> {
+  if (ctx.autonomy.runnerFor(ctx.characterName) !== undefined) {
+    return ctx.autonomy.log(ctx.characterName, limit);
+  }
+  const path = `${ctx.config.dirs.data}/${ctx.characterName}/${HEARTBEAT_LOG_FILENAME}`;
+  return (await HeartbeatLog.load(path)).recent(limit);
+}
+
+export async function heartbeatLog(ctx: StatusContext, args: Args): Promise<Json> {
+  const events = await heartbeatEvents(ctx, countArg(args, 20));
   return {
     events: events.map((e) => ({ timestamp: e.timestamp, kind: e.kind, detail: e.detail })),
   };

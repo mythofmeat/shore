@@ -2153,6 +2153,115 @@
       "ok": {
         "events": []
       }
+    },
+    {
+      "case": "unregistered_with_log",
+      "setup": "unregistered_with_log",
+      "args": {},
+      "ok": {
+        "events": [
+          {
+            "timestamp": "2026-01-15T09:05:00+00:00",
+            "kind": "dormant",
+            "detail": "event 5"
+          },
+          {
+            "timestamp": "2026-01-15T09:06:00+00:00",
+            "kind": "wake",
+            "detail": "event 6"
+          },
+          {
+            "timestamp": "2026-01-15T09:07:00+00:00",
+            "kind": "timeout",
+            "detail": "event 7"
+          },
+          {
+            "timestamp": "2026-01-15T09:08:00+00:00",
+            "kind": "dormant_ping",
+            "detail": "event 8"
+          },
+          {
+            "timestamp": "2026-01-15T09:09:00+00:00",
+            "kind": "recap_written",
+            "detail": "event 9"
+          },
+          {
+            "timestamp": "2026-01-15T09:10:00+00:00",
+            "kind": "tick_fired",
+            "detail": "event 10"
+          },
+          {
+            "timestamp": "2026-01-15T09:11:00+00:00",
+            "kind": "tool_use",
+            "detail": "event 11"
+          },
+          {
+            "timestamp": "2026-01-15T09:12:00+00:00",
+            "kind": "message_sent",
+            "detail": "event 12"
+          },
+          {
+            "timestamp": "2026-01-15T09:13:00+00:00",
+            "kind": "tick_fired",
+            "detail": "event 13"
+          },
+          {
+            "timestamp": "2026-01-15T09:14:00+00:00",
+            "kind": "message_skipped",
+            "detail": "event 14"
+          },
+          {
+            "timestamp": "2026-01-15T09:15:00+00:00",
+            "kind": "dormant",
+            "detail": "event 15"
+          },
+          {
+            "timestamp": "2026-01-15T09:16:00+00:00",
+            "kind": "wake",
+            "detail": "event 16"
+          },
+          {
+            "timestamp": "2026-01-15T09:17:00+00:00",
+            "kind": "timeout",
+            "detail": "event 17"
+          },
+          {
+            "timestamp": "2026-01-15T09:18:00+00:00",
+            "kind": "dormant_ping",
+            "detail": "event 18"
+          },
+          {
+            "timestamp": "2026-01-15T09:19:00+00:00",
+            "kind": "recap_written",
+            "detail": "event 19"
+          },
+          {
+            "timestamp": "2026-01-15T09:20:00+00:00",
+            "kind": "tick_fired",
+            "detail": "event 20"
+          },
+          {
+            "timestamp": "2026-01-15T09:21:00+00:00",
+            "kind": "tool_use",
+            "detail": "event 21"
+          },
+          {
+            "timestamp": "2026-01-15T09:22:00+00:00",
+            "kind": "message_sent",
+            "detail": "event 22"
+          },
+          {
+            "timestamp": "2026-01-15T09:23:00+00:00",
+            "kind": "tick_fired",
+            "detail": "event 23"
+          },
+          {
+            "timestamp": "2026-01-15T09:24:00+00:00",
+            "kind": "message_skipped",
+            "detail": "event 24"
+          }
+        ]
+      }
     }
   ],
   "controls": [

@@ -176,7 +176,7 @@ export async function runCommand(
     case "error_log":
       return errorLog(statusContext(engine, session, deps), args);
     case "heartbeat_log":
-      return heartbeatLog(statusContext(engine, session, deps), args);
+      return await heartbeatLog(statusContext(engine, session, deps), args);
     case "call_log":
       return callLog({ characterName: character, callStore: deps.callStore }, args);
     case "transcript":
