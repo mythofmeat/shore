@@ -1,17 +1,36 @@
 import type { LoadedConfig } from "./loader.ts";
 import { serializeConfigValue } from "./serialize.ts";
 
-export function restartRequiredChanges(old: LoadedConfig, fresh: LoadedConfig): string[] {
-  const a = old.app;
-  const b = fresh.app;
-  const changes: string[] = [];
-  if (!same(a.daemon, b.daemon)) changes.push("[daemon]");
-  if (!same(a.notifications, b.notifications)) changes.push("[notifications]");
-  if (!same(a.connections, b.connections)) changes.push("[connections]");
-  if (a.cache.forensics !== b.cache.forensics) {
-    changes.push("[cache].forensics");
+export const RESTART_REQUIRED_PATHS = [
+  "daemon",
+  "notifications",
+  "connections",
+  "cache.forensics",
+] as const;
+
+export function requiresRestart(key: string): boolean {
+  return RESTART_REQUIRED_PATHS.some((path) => key === path || key.startsWith(`${path}.`));
+}
+
+function at(config: LoadedConfig, path: string): unknown {
+  let node: unknown = config.app;
+  for (const segment of path.split(".")) {
+    if (node === null || typeof node !== "object") return undefined;
+    node = (node as Record<string, unknown>)[segment];
   }
-  return changes;
+  return node;
+}
+
+function displayPath(path: string): string {
+  const dot = path.indexOf(".");
+  if (dot < 0) return `[${path}]`;
+  return `[${path.slice(0, dot)}].${path.slice(dot + 1)}`;
+}
+
+export function restartRequiredChanges(old: LoadedConfig, fresh: LoadedConfig): string[] {
+  return RESTART_REQUIRED_PATHS.filter((path) => !same(at(old, path), at(fresh, path))).map(
+    displayPath,
+  );
 }
 
 function same(a: unknown, b: unknown): boolean {

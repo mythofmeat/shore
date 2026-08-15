@@ -435,13 +435,6 @@ pub(crate) enum CliCommand {
         #[command(subcommand)]
         subcommand: Option<ConfigCommand>,
 
-        /// Dotted key to read (e.g. defaults.stream, daemon.addr); omit for all
-        key: Option<String>,
-
-        /// Value to set. Only defaults.model, defaults.stream and
-        /// autonomy.enabled can move at runtime
-        value: Option<String>,
-
         /// Print the config directory path
         #[arg(long)]
         path: bool,
@@ -454,9 +447,8 @@ pub(crate) enum CliCommand {
         #[arg(long)]
         json: bool,
 
-        /// Output as TOML (suitable for pasting into a config file).
-        /// Only valid for read-only config queries (no value or --check).
-        #[arg(long, conflicts_with_all = ["json", "check", "value"])]
+        /// Output as TOML (suitable for pasting into a config file)
+        #[arg(long, conflicts_with_all = ["json", "check"])]
         toml: bool,
 
         /// Include keys whose value matches the built-in default (shown dimmed)
@@ -508,6 +500,9 @@ pub(crate) enum CliCommand {
     Complete {
         /// What to enumerate
         kind: CompleteKind,
+
+        /// Context for kinds that need it, e.g. the key for `config-values`
+        arg: Option<String>,
     },
 }
 
@@ -527,6 +522,12 @@ pub(crate) enum CompleteKind {
     Tools,
     /// Configured sub-agent names, without the `ask_` prefix
     Subagents,
+    /// Dotted config keys that `shore config set` accepts, with their types
+    ConfigKeys,
+    /// Every dotted config key, settable or not, for `shore config get`
+    ConfigSections,
+    /// Values valid for the config key named in the argument
+    ConfigValues,
 }
 
 /// Background task to retarget `shore model setting` at. `all` targets every
@@ -645,6 +646,10 @@ pub(crate) enum TraceCommand {
         /// Compare against this call id instead of the previous one
         #[arg(long, requires = "diff", value_name = "ID")]
         against: Option<i64>,
+
+        /// Show the raw HTTP request and response bodies in full, untruncated
+        #[arg(long, requires = "id")]
+        wire: bool,
 
         /// Output raw JSON
         #[arg(long)]
@@ -815,6 +820,62 @@ pub(crate) enum ProviderCommand {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum ConfigCommand {
+    /// Read one setting, or a whole section, by dotted key.
+    ///
+    /// `shore config get defaults.model`
+    /// `shore config get memory.compaction`
+    #[command(verbatim_doc_comment)]
+    Get {
+        /// Dotted key, e.g. defaults.stream, daemon.addr, mcp.beets.command
+        key: String,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Output as TOML (suitable for pasting into a config file)
+        #[arg(long, conflicts_with = "json")]
+        toml: bool,
+
+        /// Include keys whose value matches the built-in default (shown dimmed)
+        #[arg(long, short = 'a')]
+        all: bool,
+    },
+
+    /// Write one setting to the config file and apply it live.
+    ///
+    /// The value is checked against the setting's type before anything is
+    /// written, and the file is restored if the result would not load. Keys
+    /// under [daemon], [notifications] and [connections] need a daemon
+    /// restart to take effect; `set` says so when you touch one.
+    ///
+    /// `shore config set defaults.model anthropic:claude-opus-4-5`
+    /// `shore config set memory.compaction.idle_trigger 2h`
+    /// `shore config set tools.enabled_tools read,edit,search`
+    #[command(verbatim_doc_comment)]
+    Set {
+        /// Dotted key, e.g. defaults.stream, cache.keepalive_max
+        key: String,
+
+        /// New value. Lists take a comma-separated string
+        value: String,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// List every settable key and the type it takes. `shore config` shows
+    /// the current values; this shows what `set` will accept.
+    Keys {
+        /// Only keys whose name contains this substring
+        filter: Option<String>,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Reload config files from disk and, after confirmation, activate any
     /// pending system-prompt (workspace) edits. Prompt activation invalidates
     /// the provider prompt cache: the next message pays a one-time cache
@@ -831,7 +892,7 @@ pub(crate) enum ConfigCommand {
 
     /// Show the resolved tool surface: which tools are enabled, sub-agent
     /// ownership, and any dangling config references. Read the raw values
-    /// with `config tools.enabled_tools`.
+    /// with `config get tools.enabled_tools`.
     Tools {
         /// Output raw JSON
         #[arg(long)]
@@ -1059,7 +1120,24 @@ complete -c shore -n \"__fish_shore_using_subcommand character; and __fish_seen_
 complete -c shore -n \"__fish_shore_using_subcommand provider; and __fish_seen_subcommand_from models refresh\" -f -a \"(shore complete providers 2>/dev/null)\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand status\" -l section -r -f -a \"(shore complete sections 2>/dev/null)\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand debug; and __fish_seen_subcommand_from tool\" -f -a \"(shore complete tools 2>/dev/null)\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand debug; and __fish_seen_subcommand_from subagent\" -f -a \"(shore complete subagents 2>/dev/null)\"\n"
+complete -c shore -n \"__fish_shore_using_subcommand debug; and __fish_seen_subcommand_from subagent\" -f -a \"(shore complete subagents 2>/dev/null)\"\n\
+\n\
+function __shore_config_key\n\
+    set -l seen 0\n\
+    for token in (commandline -opc)\n\
+        if test $seen -eq 1; and not string match -q -- '-*' $token\n\
+            echo $token\n\
+            return 0\n\
+        end\n\
+        if contains -- $token get set\n\
+            set seen 1\n\
+        end\n\
+    end\n\
+    return 1\n\
+end\n\
+complete -c shore -n \"__fish_shore_using_subcommand config; and __fish_seen_subcommand_from set; and not __shore_config_key\" -f -a \"(shore complete config-keys 2>/dev/null)\"\n\
+complete -c shore -n \"__fish_shore_using_subcommand config; and __fish_seen_subcommand_from get; and not __shore_config_key\" -f -a \"(shore complete config-sections 2>/dev/null)\"\n\
+complete -c shore -n \"__fish_shore_using_subcommand config; and __fish_seen_subcommand_from set; and __shore_config_key\" -f -a \"(shore complete config-values (__shore_config_key) 2>/dev/null)\"\n"
 }
 
 fn parse_setting_value(key: &str, raw: &str) -> serde_json::Value {
@@ -1222,10 +1300,20 @@ pub(crate) fn to_swp_command(
             subcommand: Some(ConfigCommand::Tools { .. }),
             ..
         } => Some(("tools", json!({}))),
+        CliCommand::Config {
+            subcommand: Some(ConfigCommand::Keys { .. }),
+            ..
+        } => Some(("config_schema", json!({}))),
+        CliCommand::Config {
+            subcommand: Some(ConfigCommand::Get { key, .. }),
+            ..
+        } => Some(("config", json!({ "key": key }))),
+        CliCommand::Config {
+            subcommand: Some(ConfigCommand::Set { key, value, .. }),
+            ..
+        } => Some(("config", json!({ "key": key, "value": value }))),
         CliCommand::Config { check: true, .. } => Some(("config_check", json!({}))),
-        CliCommand::Config { key, value, .. } => {
-            Some(("config", json!({ "key": key, "value": value })))
-        }
+        CliCommand::Config { .. } => Some(("config", json!({ "key": null, "value": null }))),
 
         CliCommand::Usage { .. } => usage_to_swp(cmd, character),
     }
@@ -1287,12 +1375,16 @@ fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
             call_type,
             diff,
             against,
+            wire,
             ..
         } => {
             let mut args = Map::new();
             match id {
                 Some(one) => {
                     _ = args.insert("id".into(), json!(one));
+                    if *wire {
+                        _ = args.insert("wire".into(), json!(true));
+                    }
                     if *diff {
                         _ = args.insert("diff".into(), json!(true));
                         if let Some(other) = against {
@@ -1488,6 +1580,12 @@ mod tests {
         let mut full = vec!["shore"];
         full.extend_from_slice(args);
         Cli::parse_from(full)
+    }
+
+    fn try_parse(args: &[&str]) -> Result<Cli, clap::Error> {
+        let mut full = vec!["shore"];
+        full.extend_from_slice(args);
+        Cli::try_parse_from(full)
     }
 
     fn arg<'val>(args: &'val serde_json::Value, key: &str) -> &'val serde_json::Value {
@@ -2210,14 +2308,12 @@ mod tests {
         assert_variant!(
             &cli.command,
             CliCommand::Config {
-                key,
-                value,
+                subcommand,
                 path,
                 check,
                 ..
             } => {
-                assert!(key.is_none());
-                assert!(value.is_none());
+                assert!(subcommand.is_none());
                 assert!(!path);
                 assert!(!check);
             }
@@ -2225,27 +2321,54 @@ mod tests {
     }
 
     #[test]
-    fn parse_config_with_key() {
-        let cli = parse(&["config", "model"]);
+    fn parse_config_get() {
+        let cli = parse(&["config", "get", "defaults.model"]);
         assert_variant!(
             &cli.command,
-            CliCommand::Config { key, value, .. } => {
-                assert_eq!(key.as_deref(), Some("model"));
-                assert!(value.is_none());
+            CliCommand::Config {
+                subcommand: Some(ConfigCommand::Get { key, toml, all, .. }),
+                ..
+            } => {
+                assert_eq!(key, "defaults.model");
+                assert!(!toml);
+                assert!(!all);
             }
         );
     }
 
     #[test]
-    fn parse_config_with_key_value() {
-        let cli = parse(&["config", "model", "claude-haiku-4-5-20251001"]);
+    fn parse_config_set() {
+        let cli = parse(&["config", "set", "defaults.model", "claude-haiku-4-5-20251001"]);
         assert_variant!(
             &cli.command,
-            CliCommand::Config { key, value, .. } => {
-                assert_eq!(key.as_deref(), Some("model"));
-                assert_eq!(value.as_deref(), Some("claude-haiku-4-5-20251001"));
+            CliCommand::Config {
+                subcommand: Some(ConfigCommand::Set { key, value, .. }),
+                ..
+            } => {
+                assert_eq!(key, "defaults.model");
+                assert_eq!(value, "claude-haiku-4-5-20251001");
             }
         );
+    }
+
+    #[test]
+    fn a_bare_key_is_no_longer_a_read_or_a_write() {
+        for args in [
+            &["config", "model"][..],
+            &["config", "model", "claude-haiku-4-5-20251001"][..],
+        ] {
+            assert!(
+                Cli::try_parse_from(std::iter::once("shore").chain(args.iter().copied())).is_err(),
+                "`shore {}` must route through get/set: {args:?}",
+                args.join(" ")
+            );
+        }
+    }
+
+    #[test]
+    fn config_set_needs_both_a_key_and_a_value() {
+        assert!(Cli::try_parse_from(["shore", "config", "set", "defaults.model"]).is_err());
+        assert!(Cli::try_parse_from(["shore", "config", "get"]).is_err());
     }
 
     #[test]
@@ -2282,8 +2405,6 @@ mod tests {
                 yes: false,
                 json: false,
             }),
-            key: None,
-            value: None,
             path: false,
             check: false,
             json: false,
@@ -2309,19 +2430,21 @@ mod tests {
 
     #[test]
     fn a_dotted_key_under_tools_is_still_a_key_read() {
-        let cli = parse(&["config", "tools.enabled_tools"]);
+        let cli = parse(&["config", "get", "tools.enabled_tools"]);
         assert_variant!(
             &cli.command,
-            CliCommand::Config { subcommand, key, .. } => {
-                assert!(
-                    subcommand.is_none(),
-                    "only the bare word 'tools' is the subcommand"
+            CliCommand::Config { subcommand, .. } => {
+                assert_variant!(
+                    subcommand,
+                    Some(ConfigCommand::Get { key, .. }) => {
+                        assert_eq!(key, "tools.enabled_tools");
+                    }
                 );
-                assert_eq!(key.as_deref(), Some("tools.enabled_tools"));
             }
         );
-        let (name, _args) = to_swp_command(&cli.command, None).expect("must map to a command");
+        let (name, args) = to_swp_command(&cli.command, None).expect("must map to a command");
         assert_eq!(name, "config");
+        assert_eq!(args.get("key").and_then(|v| v.as_str()), Some("tools.enabled_tools"));
     }
 
     #[test]
@@ -3148,6 +3271,57 @@ mod tests {
     }
 
     #[test]
+    fn fish_footer_completes_config_keys_and_then_their_values() {
+        let footer = fish_dynamic_completions_footer();
+        assert!(
+            footer.contains("function __shore_config_key"),
+            "value completion needs the key already on the line: {footer}"
+        );
+
+        let line_for = |call: &str| {
+            footer
+                .lines()
+                .find(|l| l.contains(call))
+                .unwrap_or_else(|| panic!("footer must call `{call}`: {footer}"))
+                .to_owned()
+        };
+
+        let keys = line_for("shore complete config-keys");
+        assert!(
+            keys.contains("__fish_seen_subcommand_from set") && keys.contains("not __shore_config_key"),
+            "settable keys belong in `config set`'s first slot only: {keys}"
+        );
+
+        let sections = line_for("shore complete config-sections");
+        assert!(
+            sections.contains("__fish_seen_subcommand_from get"),
+            "`get` reads tables too, so it gets the wider list: {sections}"
+        );
+
+        let values = line_for("shore complete config-values");
+        assert!(
+            values.contains("(__shore_config_key)"),
+            "values must be requested for the key on the line: {values}"
+        );
+        assert!(
+            values.contains("and __shore_config_key\""),
+            "values only make sense once a key is typed: {values}"
+        );
+    }
+
+    #[test]
+    fn config_value_completion_takes_the_key_as_an_argument() {
+        let cli = parse(&["complete", "config-values", "defaults.stream"]);
+        assert_variant!(
+            &cli.command,
+            CliCommand::Complete { kind, arg } => {
+                assert_eq!(*kind, CompleteKind::ConfigValues);
+                assert_eq!(arg.as_deref(), Some("defaults.stream"));
+            }
+        );
+    }
+
+    #[test]
     fn fish_footer_includes_provider_completion() {
         let footer = fish_dynamic_completions_footer();
         assert!(
@@ -3164,8 +3338,6 @@ mod tests {
     fn config_path_maps_to_none() {
         let cmd = CliCommand::Config {
             subcommand: None,
-            key: None,
-            value: None,
             path: true,
             check: false,
             json: false,
@@ -3320,6 +3492,24 @@ mod tests {
         let cli = parse(&["trace", "calls", "42"]);
         let (_, args) = to_swp_command(&cli.command, None).unwrap();
         assert!(args.get("diff").is_none());
+    }
+
+    #[test]
+    fn trace_calls_asks_for_the_wire_only_when_told_to() {
+        let bare = parse(&["trace", "calls", "42"]);
+        let (_, bare_args) = to_swp_command(&bare.command, None).unwrap();
+        assert!(bare_args.get("wire").is_none());
+
+        let asked = parse(&["trace", "calls", "42", "--wire"]);
+        let (name, args) = to_swp_command(&asked.command, None).unwrap();
+        assert_eq!(name, "call_log");
+        assert_eq!(arg(&args, "id"), 42);
+        assert_eq!(arg(&args, "wire"), true);
+    }
+
+    #[test]
+    fn trace_calls_wire_needs_a_call_to_read() {
+        assert!(try_parse(&["trace", "calls", "--wire"]).is_err());
     }
 
     #[test]
@@ -3513,8 +3703,6 @@ mod tests {
             },
             CliCommand::Config {
                 subcommand: None,
-                key: None,
-                value: None,
                 path: false,
                 check: false,
                 json: false,
@@ -3807,7 +3995,7 @@ mod tests {
         let cli = parse(&["complete", "models"]);
         assert_variant!(
             &cli.command,
-            CliCommand::Complete { kind } => {
+            CliCommand::Complete { kind, .. } => {
                 assert_eq!(*kind, CompleteKind::Models);
             }
         );
@@ -3818,7 +4006,7 @@ mod tests {
         let cli = parse(&["complete", "characters"]);
         assert_variant!(
             &cli.command,
-            CliCommand::Complete { kind } => {
+            CliCommand::Complete { kind, .. } => {
                 assert_eq!(*kind, CompleteKind::Characters);
             }
         );
@@ -3828,6 +4016,7 @@ mod tests {
     fn complete_maps_to_none_swp() {
         let cmd = CliCommand::Complete {
             kind: CompleteKind::Models,
+            arg: None,
         };
         assert!(
             to_swp_command(&cmd, None).is_none(),

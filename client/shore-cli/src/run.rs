@@ -217,7 +217,12 @@ fn wants_json(other: &CliCommand) -> bool {
             *json
                 || matches!(
                     subcommand,
-                    Some(crate::cli::ConfigCommand::Tools { json: true })
+                    Some(
+                        crate::cli::ConfigCommand::Tools { json: true }
+                            | crate::cli::ConfigCommand::Get { json: true, .. }
+                            | crate::cli::ConfigCommand::Set { json: true, .. }
+                            | crate::cli::ConfigCommand::Keys { json: true, .. }
+                    )
                 )
         }
         CliCommand::Character { json, .. }
@@ -259,12 +264,21 @@ async fn handle_generic_swp_command(
         other,
         CliCommand::Config {
             toml: true,
-            value: None,
             check: false,
+            ..
+        } | CliCommand::Config {
+            subcommand: Some(crate::cli::ConfigCommand::Get { toml: true, .. }),
             ..
         }
     );
-    let show_all = matches!(other, CliCommand::Config { all: true, .. });
+    let show_all = matches!(
+        other,
+        CliCommand::Config { all: true, .. }
+            | CliCommand::Config {
+                subcommand: Some(crate::cli::ConfigCommand::Get { all: true, .. }),
+                ..
+            }
+    );
     let Some((name, args)) = crate::cli::to_swp_command(other, character) else {
         return Err("non-send/regen/local command must map to SWP command".into());
     };
@@ -276,6 +290,8 @@ async fn handle_generic_swp_command(
         cli_out!("{}", serde_json::to_string_pretty(&data)?);
     } else if name == "config" {
         output::config::print(&data, show_all);
+    } else if name == "config_schema" {
+        output::config::print_schema(&data, config_keys_filter(other));
     } else if name == "config_check" {
         output::config::print_check(&data);
     } else if name == "tools" {
@@ -288,6 +304,17 @@ async fn handle_generic_swp_command(
         output::format_command(name, &data);
     }
     Ok(())
+}
+
+fn config_keys_filter(other: &CliCommand) -> Option<&str> {
+    let CliCommand::Config {
+        subcommand: Some(crate::cli::ConfigCommand::Keys { filter, .. }),
+        ..
+    } = other
+    else {
+        return None;
+    };
+    filter.as_deref()
 }
 
 fn catalog_render(name: &str) -> Option<fn(&serde_json::Value)> {
@@ -764,8 +791,8 @@ async fn try_handle_local_only(cli: &Cli) -> Option<Result<(), Box<dyn std::erro
     if matches!(&cli.command, CliCommand::Config { path: true, .. }) {
         return Some(print_config_path(cli).await);
     }
-    if let CliCommand::Complete { kind } = &cli.command {
-        let _ignored = handle_complete_query(*kind, cli).await;
+    if let CliCommand::Complete { kind, arg } = &cli.command {
+        let _ignored = handle_complete_query(*kind, arg.as_deref(), cli).await;
         return Some(Ok(()));
     }
     None
@@ -875,12 +902,23 @@ async fn handle_list_characters(
 
 async fn handle_complete_query(
     kind: crate::cli::CompleteKind,
+    arg: Option<&str>,
     cli: &Cli,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::cli::CompleteKind;
     let addr = resolve_addr(cli)?;
     let (mut conn, _hello, _history) =
         SWPConnection::connect(&addr, "cli", "shore-cli", None).await?;
+
+    if matches!(
+        kind,
+        CompleteKind::ConfigKeys | CompleteKind::ConfigSections | CompleteKind::ConfigValues
+    ) {
+        let _ignored = conn.send_command("config_schema", serde_json::json!({})).await?;
+        let data = recv_command_data(&mut conn).await?;
+        print_config_completions(kind, arg, &data);
+        return Ok(());
+    }
 
     let (cmd, array_keys) = match kind {
         CompleteKind::Models => ("list_models", &["models"][..]),
@@ -889,6 +927,9 @@ async fn handle_complete_query(
         CompleteKind::Sections => ("status", &["sections"][..]),
         CompleteKind::Tools => ("tools", &["tools", "subagents", "mcp"][..]),
         CompleteKind::Subagents => ("tools", &["subagents"][..]),
+        CompleteKind::ConfigKeys | CompleteKind::ConfigSections | CompleteKind::ConfigValues => {
+            return Ok(());
+        }
     };
 
     let _ignored = conn.send_command(cmd, serde_json::json!({})).await?;
@@ -913,6 +954,80 @@ async fn handle_complete_query(
         }
     }
     Ok(())
+}
+
+fn json_strings(value: Option<&serde_json::Value>) -> Vec<String> {
+    value
+        .and_then(serde_json::Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn print_config_completions(
+    kind: crate::cli::CompleteKind,
+    arg: Option<&str>,
+    data: &serde_json::Value,
+) {
+    use crate::cli::CompleteKind;
+    let Some(entries) = data.get("schema").and_then(serde_json::Value::as_array) else {
+        return;
+    };
+
+    if kind == CompleteKind::ConfigValues {
+        let Some(key) = arg else { return };
+        let Some(entry) = entries
+            .iter()
+            .find(|e| e.get("key").and_then(serde_json::Value::as_str) == Some(key))
+        else {
+            return;
+        };
+        for value in config_value_candidates(entry, data) {
+            cli_out!("{value}");
+        }
+        return;
+    }
+
+    let settable_only = kind == CompleteKind::ConfigKeys;
+    for entry in entries {
+        let Some(key) = entry.get("key").and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        let settable = entry
+            .get("settable")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        if settable_only && !settable {
+            continue;
+        }
+        let described = entry
+            .get("type")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("value");
+        if entry
+            .get("restart_required")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
+        {
+            cli_out!("{key}\t{described} (needs restart)");
+        } else {
+            cli_out!("{key}\t{described}");
+        }
+    }
+}
+
+fn config_value_candidates(entry: &serde_json::Value, data: &serde_json::Value) -> Vec<String> {
+    if let Some(source) = entry.get("source").and_then(serde_json::Value::as_str) {
+        let from_source = json_strings(data.get("sources").and_then(|s| s.get(source)));
+        if !from_source.is_empty() {
+            return from_source;
+        }
+    }
+    json_strings(entry.get("values"))
 }
 
 fn config_dir() -> PathBuf {
