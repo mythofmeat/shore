@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import fixture from "./commands_fixtures/config_commands.json" with { type: "json" };
@@ -501,14 +501,26 @@ describe("config read walks dots", () => {
 
 describe("config set", () => {
   const cases: [name: string, args: Record<string, unknown>][] = [
-    ["defaults.model sets the session's active model", { key: "defaults.model", value: "secondary" }],
+    ["defaults.model is written to the config file", { key: "defaults.model", value: "secondary" }],
     ["model is an alias for defaults.model", { key: "model", value: "secondary" }],
     ["a model that is not in the catalog", { key: "defaults.model", value: "ghost" }],
     ["defaults.stream parses the value as a bool", { key: "defaults.stream", value: "true" }],
-    ["a value that is not a bool", { key: "stream", value: "yes" }],
+    ["yes is accepted as a bool", { key: "stream", value: "yes" }],
+    ["a value that is not a bool", { key: "stream", value: "maybe" }],
     ["autonomy.enabled echoes the canonical key", { key: "autonomy.enabled", value: "false" }],
     ["the long spelling of autonomy.enabled", { key: "behavior.autonomy.enabled", value: "false" }],
-    ["a key that is not settable at runtime", { key: "memory.mode", value: "x" }],
+    ["a key that is not in the schema", { key: "memory.mode", value: "x" }],
+    ["a table is not settable as a whole", { key: "memory.compaction", value: "x" }],
+    [
+      "an enum rejects a value outside its variants",
+      { key: "behavior.user_message_timestamps", value: "sometimes" },
+    ],
+    ["a duration is normalised before it is written", { key: "cache.keepalive_max", value: "90m" }],
+    ["a new key is added to an existing section", { key: "defaults.display_name", value: "Ellie" }],
+    [
+      "a list is set from a comma separated value",
+      { key: "tools.enabled_subagents", value: "researcher" },
+    ],
   ];
   for (const [name, args] of cases) {
     test(name, async () => {
@@ -517,15 +529,23 @@ describe("config set", () => {
     });
   }
 
-  test("a model change drops the pre-resolved selection", async () => {
+  test("a session model override still masks the new default", async () => {
     const w = await build("mid", FURNISHED);
     w.ctx.activeModel = "primary";
     w.ctx.activeResolvedModel = findModel(w.ctx.config.models, "primary");
     await check(
-      row("config_set", "a model change drops the pre-resolved selection"),
+      row("config_set", "a session model override still masks the new default"),
       w,
       () => config(w.ctx, { key: "defaults.model", value: "secondary" }),
     );
+  });
+
+  test("the file keeps its comments and untouched lines", async () => {
+    const w = await build("mid", FURNISHED);
+    const before = await readFile(w.ctx.configPath, "utf8");
+    config(w.ctx, { key: "defaults.stream", value: "true" });
+    const after = await readFile(w.ctx.configPath, "utf8");
+    expect(after).toBe(before.replace("stream = false", "stream = true"));
   });
 });
 

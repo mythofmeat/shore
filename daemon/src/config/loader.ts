@@ -27,6 +27,7 @@ export type TomlTable = Record<string, unknown>;
 export interface RawConfigTable {
   table: TomlTable;
   dirs: ShoreDirs;
+  files: string[];
 }
 
 export type ConfigErrorKind =
@@ -131,7 +132,7 @@ function parseToml(content: string, kind: ConfigErrorKind, path?: string): TomlT
   }
 }
 
-function loadConfD(dir: string, table: TomlTable): void {
+function loadConfD(dir: string, table: TomlTable, files: string[]): void {
   let entries: string[];
   try {
     entries = readdirSync(dir);
@@ -148,6 +149,7 @@ function loadConfD(dir: string, table: TomlTable): void {
   for (const path of paths) {
     const content = readFileOrThrow(path);
     deepMerge(table, parseToml(content, "conf_d", path));
+    files.push(path);
   }
 }
 
@@ -177,8 +179,10 @@ export function loadRawConfigTable(
   loadDotenv(configDirectory, options.envTarget ?? process.env, options.onWarn ?? consoleConfigWarn);
 
   let table: TomlTable;
+  const files: string[] = [];
   if (exists(configFile)) {
     table = parseToml(readFileOrThrow(configFile), "parse_app");
+    files.push(configFile);
   } else {
     options.createDefault?.(configDirectory);
     table = {};
@@ -192,12 +196,13 @@ export function loadRawConfigTable(
       const includePath = rustJoin(configDirectory, item);
       if (!exists(includePath)) continue;
       deepMerge(table, parseToml(readFileOrThrow(includePath), "parse_include", includePath));
+      files.push(includePath);
     }
   }
 
-  loadConfD(rustJoin(configDirectory, "conf.d"), table);
+  loadConfD(rustJoin(configDirectory, "conf.d"), table, files);
 
-  return { table, dirs };
+  return { table, dirs, files };
 }
 
 export function parentOf(path: string): string {
@@ -265,6 +270,7 @@ export interface LoadedConfig {
   providers: ProviderRegistry;
   dirs: ShoreDirs;
   rawTable: TomlTable | undefined;
+  files?: string[];
 }
 
 function sectionTable(value: unknown): TomlTable | undefined {
@@ -275,6 +281,7 @@ export function parseConfigTable(
   table: TomlTable,
   dirs: ShoreDirs,
   onWarn: ConfigWarn = consoleConfigWarn,
+  files: string[] = [],
 ): LoadedConfig {
   const rawTable = structuredClone(table);
 
@@ -316,7 +323,7 @@ export function parseConfigTable(
 
   validateConfig(app, models, providers, onWarn);
 
-  return { app, models, providers, dirs, rawTable };
+  return { app, models, providers, dirs, rawTable, files };
 }
 
 export function loadConfig(
@@ -329,7 +336,7 @@ export function loadConfig(
   } = {},
 ): LoadedConfig {
   const raw = loadRawConfigTable(configPath, options);
-  return parseConfigTable(raw.table, raw.dirs, options.onWarn);
+  return parseConfigTable(raw.table, raw.dirs, options.onWarn, raw.files);
 }
 
 export function loadCharacterConfig(
@@ -343,7 +350,7 @@ export function loadCharacterConfig(
   const overlay = parseToml(readFileOrThrow(path), "parse_include", path);
   const merged = structuredClone(global.rawTable ?? {});
   deepMerge(merged, overlay);
-  const loaded = parseConfigTable(merged, global.dirs, onWarn);
+  const loaded = parseConfigTable(merged, global.dirs, onWarn, [...(global.files ?? []), path]);
   scopeOverlayBudgetsToCharacter(loaded.app.usage, overlay, characterName);
   return loaded;
 }
