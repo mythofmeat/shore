@@ -6,9 +6,7 @@ import { defaultAppConfig } from "../src/config/app.ts";
 
 const PARSER = "src/config/app.ts";
 
-const READ_ELSEWHERE: Readonly<Record<string, string>> = {
-  "advanced.editor": "client/shore-cli/src/run.rs reads it for `shore log edit`",
-};
+const READ_ELSEWHERE: Readonly<Record<string, string>> = {};
 
 function sourceFiles(root: string, exts: readonly string[]): string[] {
   const out: string[] = [];

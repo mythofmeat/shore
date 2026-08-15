@@ -907,23 +907,21 @@ const USAGE: StructSpec<UsageConfig> = {
 };
 
 export interface AdvancedConfig {
-  editor: string | undefined;
   max_retries: number | undefined;
   retry_backoff: ConfigDuration | undefined;
 }
 
 const defaultAdvancedConfig = (): AdvancedConfig => ({
-  editor: undefined,
   max_retries: undefined,
   retry_backoff: undefined,
 });
 
 const ADVANCED: StructSpec<AdvancedConfig> = {
   name: "AdvancedConfig",
-  noDefault: ["editor", "max_retries", "retry_backoff"],
+  noDefault: ["max_retries", "retry_backoff"],
+  removed: { editor: "shore uses $VISUAL, then $EDITOR, then vi" },
   make: defaultAdvancedConfig,
   fields: {
-    editor: optional(readString),
     max_retries: optional(readU32),
     retry_backoff: optional(readDuration),
   },

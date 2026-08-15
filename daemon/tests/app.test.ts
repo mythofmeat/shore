@@ -371,8 +371,7 @@ describe("parsing config.toml", () => {
     const parsed = parseAppConfig(parseToml(c!.toml));
     expect("err" in parsed).toBe(true);
     expect((parsed as { err: string }).err).toBe(
-      "unknown field `api_payload_logging`, expected one of `editor`, " +
-        "`max_retries`, `retry_backoff`",
+      "unknown field `api_payload_logging`, expected `max_retries` or `retry_backoff`",
     );
   });
 
@@ -384,8 +383,7 @@ describe("parsing config.toml", () => {
       const parsed = parseAppConfig(parseToml(c.toml));
       expect("err" in parsed).toBe(true);
       expect((parsed as { err: string }).err).toBe(
-        "unknown field `max_image_size`, expected one of `editor`, " +
-          "`max_retries`, `retry_backoff`",
+        "unknown field `max_image_size`, expected `max_retries` or `retry_backoff`",
       );
     }
   });
@@ -432,29 +430,26 @@ describe("parsing config.toml", () => {
 
   test("the surviving [advanced] keys still parse, positionally and by name", () => {
     const byName = parseAppConfig(
-      parseToml(
-        `[advanced]\neditor = "hx"\nmax_retries = 5\nretry_backoff = "250ms"\n`,
-      ),
+      parseToml(`[advanced]\nmax_retries = 5\nretry_backoff = "250ms"\n`),
     );
     if ("err" in byName) throw new Error(byName.err);
-    expect(byName.ok.advanced.editor).toBe("hx");
     expect(byName.ok.advanced.max_retries).toBe(5);
     expect(byName.ok.advanced.retry_backoff?.asMillisExact()).toBe(250n);
 
-    const positional = parseAppConfig(parseToml(`advanced = ["hx", 3, "1s"]\n`));
+    const positional = parseAppConfig(parseToml(`advanced = [3, "1s"]\n`));
     if ("err" in positional) throw new Error(positional.err);
-    expect(positional.ok.advanced.editor).toBe("hx");
+    expect(positional.ok.advanced.max_retries).toBe(3);
 
-    const tooLong = parseAppConfig(parseToml(`advanced = ["hx", 3, "1s", 1, 2]\n`));
+    const tooLong = parseAppConfig(parseToml(`advanced = [3, "1s", 1, 2]\n`));
     expect("err" in tooLong).toBe(true);
     expect((tooLong as { err: string }).err).toBe(
-      "invalid length 5, expected fewer elements in array",
+      "invalid length 4, expected fewer elements in array",
     );
 
     const tooShort = parseAppConfig(parseToml(`advanced = []\n`));
     expect("err" in tooShort).toBe(true);
     expect((tooShort as { err: string }).err).toBe(
-      "invalid length 0, expected struct AdvancedConfig with 3 elements",
+      "invalid length 0, expected struct AdvancedConfig with 2 elements",
     );
   });
 
@@ -618,7 +613,7 @@ describe("distinctions Bun's TOML parser destroys", () => {
     const parsed = parseAppConfig(parseToml(c.toml));
     expect("err" in parsed).toBe(true);
     expect((parsed as { err: string }).err).toBe(
-      "unknown field `max_image_size`, expected one of `editor`, `max_retries`, `retry_backoff`",
+      "unknown field `max_image_size`, expected `max_retries` or `retry_backoff`",
     );
   });
 

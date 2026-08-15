@@ -622,8 +622,7 @@ async fn handle_send_command(
     } else if !io::stdin().is_terminal() {
         read_stdin()?
     } else {
-        let configured = configured_editor(conn).await;
-        edit_message_in_editor(configured)?
+        edit_message_in_editor()?
     };
     if text.is_empty() && images.is_empty() {
         return Ok(());
@@ -1059,22 +1058,8 @@ fn read_stdin() -> Result<String, Box<dyn std::error::Error>> {
     Ok(buf.trim().to_owned())
 }
 
-async fn configured_editor(conn: &mut SWPConnection) -> Option<String> {
-    _ = conn
-        .send_command("config", serde_json::json!({ "key": "advanced.editor" }))
-        .await
-        .ok()?;
-    let data = recv_command_data(conn).await.ok()?;
-    let editor = data.get("config")?.as_str()?.trim();
-    (!editor.is_empty()).then(|| editor.to_owned())
-}
-
-fn resolve_editor(
-    configured: Option<String>,
-    visual: Option<String>,
-    editor: Option<String>,
-) -> String {
-    [configured, visual, editor]
+fn resolve_editor(visual: Option<String>, editor: Option<String>) -> String {
+    [visual, editor]
         .into_iter()
         .flatten()
         .map(|c| c.trim().to_owned())
@@ -1082,11 +1067,8 @@ fn resolve_editor(
         .unwrap_or_else(|| "vi".into())
 }
 
-fn edit_message_in_editor(
-    configured: Option<String>,
-) -> Result<String, Box<dyn std::error::Error>> {
+fn edit_message_in_editor() -> Result<String, Box<dyn std::error::Error>> {
     let editor = resolve_editor(
-        configured,
         std::env::var("VISUAL").ok(),
         std::env::var("EDITOR").ok(),
     );
@@ -1844,37 +1826,22 @@ mod tests {
     }
 
     #[test]
-    fn the_configured_editor_outranks_the_environment() {
+    fn the_environment_order_is_visual_then_editor_then_vi() {
         assert_eq!(
-            super::resolve_editor(
-                Some("nvim".into()),
-                Some("code -w".into()),
-                Some("nano".into())
-            ),
-            "nvim"
-        );
-    }
-
-    #[test]
-    fn without_config_the_environment_order_is_visual_then_editor_then_vi() {
-        assert_eq!(
-            super::resolve_editor(None, Some("code -w".into()), Some("nano".into())),
+            super::resolve_editor(Some("code -w".into()), Some("nano".into())),
             "code -w"
         );
-        assert_eq!(
-            super::resolve_editor(None, None, Some("nano".into())),
-            "nano"
-        );
-        assert_eq!(super::resolve_editor(None, None, None), "vi");
+        assert_eq!(super::resolve_editor(None, Some("nano".into())), "nano");
+        assert_eq!(super::resolve_editor(None, None), "vi");
     }
 
     #[test]
     fn a_blank_candidate_is_skipped_rather_than_launched() {
         assert_eq!(
-            super::resolve_editor(Some("  ".into()), Some(String::new()), Some("nano".into())),
+            super::resolve_editor(Some("  ".into()), Some("nano".into())),
             "nano"
         );
-        assert_eq!(super::resolve_editor(Some(String::new()), None, None), "vi");
+        assert_eq!(super::resolve_editor(Some(String::new()), None), "vi");
     }
 
     #[test]
