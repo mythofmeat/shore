@@ -562,7 +562,7 @@ pub(crate) fn print_heartbeat_log(data: &serde_json::Value) {
 
     write_section_header(
         &mut out,
-        "Heartbeat Log",
+        "heartbeat events",
         &format!("{} events", events.len()),
         width,
     );
@@ -592,7 +592,7 @@ pub(crate) fn print_heartbeat_log(data: &serde_json::Value) {
             _ => Tone::Heading,
         };
 
-        paint(&mut out, Tone::Muted, &format!("  {time_str:<14}"));
+        paint(&mut out, Tone::Muted, &format!("  {time_str:<16}"));
         paint(&mut out, kind_color, &format!("{kind:<18}"));
         let _ignored = writeln!(out, "{detail}");
     }

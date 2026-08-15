@@ -280,7 +280,7 @@ fn write_autonomy_events(out: &mut impl Write, autonomy: &serde_json::Value) {
             "timeout" => Tone::Warn,
             _ => Tone::Heading,
         };
-        paint(out, Tone::Muted, &format!("    {time_str:<12}"));
+        paint(out, Tone::Muted, &format!("    {time_str:<16}"));
         paint(out, kind_color, &format!("{kind:<17}"));
         _ = writeln!(out, "{detail}");
     }
