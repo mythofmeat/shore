@@ -126,6 +126,38 @@
               }
             ],
             "active": "chat.anthropic.beta",
+            "roles": [
+              {
+                "role": "chat",
+                "model": "chat.anthropic.beta",
+                "source": "character"
+              },
+              {
+                "role": "heartbeat",
+                "model": "chat.anthropic.beta",
+                "source": "inherits chat"
+              },
+              {
+                "role": "compaction",
+                "model": "chat.anthropic.beta",
+                "source": "inherits chat"
+              },
+              {
+                "role": "sub-agents",
+                "model": "chat.anthropic.beta",
+                "source": "defaults.model"
+              },
+              {
+                "role": "embedding",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "images",
+                "model": null,
+                "source": null
+              }
+            ],
             "include_hidden": false,
             "hidden_count": 0
           },
@@ -242,6 +274,38 @@
               }
             ],
             "active": "chat.anthropic.beta",
+            "roles": [
+              {
+                "role": "chat",
+                "model": "chat.anthropic.beta",
+                "source": "character"
+              },
+              {
+                "role": "heartbeat",
+                "model": "chat.anthropic.beta",
+                "source": "inherits chat"
+              },
+              {
+                "role": "compaction",
+                "model": "chat.anthropic.beta",
+                "source": "inherits chat"
+              },
+              {
+                "role": "sub-agents",
+                "model": "chat.anthropic.beta",
+                "source": "defaults.model"
+              },
+              {
+                "role": "embedding",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "images",
+                "model": null,
+                "source": null
+              }
+            ],
             "include_hidden": true,
             "hidden_count": 0
           },
@@ -1181,6 +1245,38 @@
               }
             ],
             "active": "chat.anthropic.beta",
+            "roles": [
+              {
+                "role": "chat",
+                "model": "chat.anthropic.beta",
+                "source": "character"
+              },
+              {
+                "role": "heartbeat",
+                "model": "chat.anthropic.beta",
+                "source": "inherits chat"
+              },
+              {
+                "role": "compaction",
+                "model": "chat.anthropic.beta",
+                "source": "inherits chat"
+              },
+              {
+                "role": "sub-agents",
+                "model": "chat.anthropic.beta",
+                "source": "defaults.model"
+              },
+              {
+                "role": "embedding",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "images",
+                "model": null,
+                "source": null
+              }
+            ],
             "include_hidden": false,
             "hidden_count": 0
           },
@@ -1785,6 +1881,38 @@
               }
             ],
             "active": "chat.anthropic.beta",
+            "roles": [
+              {
+                "role": "chat",
+                "model": "chat.anthropic.beta",
+                "source": "character"
+              },
+              {
+                "role": "heartbeat",
+                "model": "chat.anthropic.beta",
+                "source": "inherits chat"
+              },
+              {
+                "role": "compaction",
+                "model": "chat.anthropic.beta",
+                "source": "inherits chat"
+              },
+              {
+                "role": "sub-agents",
+                "model": "chat.anthropic.beta",
+                "source": "defaults.model"
+              },
+              {
+                "role": "embedding",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "images",
+                "model": null,
+                "source": null
+              }
+            ],
             "include_hidden": false,
             "hidden_count": 0
           },
@@ -1991,6 +2119,38 @@
               }
             ],
             "active": "chat.anthropic.beta",
+            "roles": [
+              {
+                "role": "chat",
+                "model": "chat.anthropic.beta",
+                "source": "character"
+              },
+              {
+                "role": "heartbeat",
+                "model": "chat.anthropic.beta",
+                "source": "inherits chat"
+              },
+              {
+                "role": "compaction",
+                "model": "chat.anthropic.beta",
+                "source": "inherits chat"
+              },
+              {
+                "role": "sub-agents",
+                "model": "chat.anthropic.beta",
+                "source": "defaults.model"
+              },
+              {
+                "role": "embedding",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "images",
+                "model": null,
+                "source": null
+              }
+            ],
             "include_hidden": false,
             "hidden_count": 0
           },
@@ -2373,7 +2533,7 @@
             "provider": "gemini",
             "model_id": "gemini-3.1-pro",
             "effective_sampler": {
-              "temperature": 1.0,
+              "temperature": 1,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -2740,7 +2900,7 @@
     },
     {
       "name": "a model id that two providers both discovered",
-      "note": "the only route to the catalog's Ambiguous error, which is the one kind it reports as a bad request rather than a miss \u2014 a bare id has to be unique across every enabled provider's cache",
+      "note": "the only route to the catalog's Ambiguous error, which is the one kind it reports as a bad request rather than a miss — a bare id has to be unique across every enabled provider's cache",
       "setup": {
         "catalog": "\n[chat.anthropic.shared]\nmodel_id = \"a-id\"\nsdk = \"anthropic\"\n\n[chat.openai.shared]\nmodel_id = \"o-id\"\nsdk = \"openai\"\n",
         "defaults": "[defaults]\n",
@@ -3051,7 +3211,7 @@
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 250000,
             "max_output_tokens": 32000,
-            "temperature": 1.0,
+            "temperature": 1,
             "top_p": null,
             "reasoning_effort": null,
             "budget_tokens": null,
@@ -3064,7 +3224,7 @@
             "replay_prior_thinking": null,
             "max_tool_iterations": null,
             "effective_sampler": {
-              "temperature": 1.0,
+              "temperature": 1,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -3293,7 +3453,7 @@
     },
     {
       "name": "two catalog names for one model id",
-      "note": "`all` collapses on (provider, model_id) identity, not on qualified_name \u2014 these two differ by name and are the same model",
+      "note": "`all` collapses on (provider, model_id) identity, not on qualified_name — these two differ by name and are the same model",
       "setup": {
         "catalog": "\n[chat.anthropic.one]\nmodel_id = \"same-id\"\nsdk = \"anthropic\"\n\n[chat.anthropic.two]\nmodel_id = \"same-id\"\nsdk = \"anthropic\"\n",
         "defaults": "[defaults]\nmodel = \"one\"\n\n[defaults.background]\nheartbeat = \"one\"\ncompaction = \"two\"\n",
@@ -3366,22 +3526,40 @@
       },
       "steps": [
         {
-          "op": "background_models",
+          "op": "model_roles",
           "args": {},
-          "ok": {
-            "background": [
-              {
-                "task": "heartbeat",
-                "model": "chat.anthropic.one",
-                "source": "config: background.heartbeat"
-              },
-              {
-                "task": "compaction",
-                "model": "chat.anthropic.two",
-                "source": "config: background.compaction"
-              }
-            ]
-          },
+          "ok": [
+            {
+              "role": "chat",
+              "model": "chat.anthropic.one",
+              "source": "character"
+            },
+            {
+              "role": "heartbeat",
+              "model": "chat.anthropic.one",
+              "source": "defaults.background.heartbeat"
+            },
+            {
+              "role": "compaction",
+              "model": "chat.anthropic.two",
+              "source": "defaults.background.compaction"
+            },
+            {
+              "role": "sub-agents",
+              "model": "chat.anthropic.one",
+              "source": "defaults.model"
+            },
+            {
+              "role": "embedding",
+              "model": null,
+              "source": null
+            },
+            {
+              "role": "images",
+              "model": null,
+              "source": null
+            }
+          ],
           "session": {
             "active_model": null,
             "active_resolved_model": null
@@ -3451,7 +3629,7 @@
             "provider": "anthropic",
             "model_id": "same-id",
             "effective_sampler": {
-              "temperature": 1.0,
+              "temperature": 1,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -3823,7 +4001,7 @@
     },
     {
       "name": "a background pin that does not resolve",
-      "note": "a diagnostic, so the row echoes the name the user wrote rather than failing \u2014 but a settings command targeting that task still errors",
+      "note": "a diagnostic, so the row echoes the name the user wrote rather than failing — but a settings command targeting that task still errors",
       "setup": {
         "catalog": "\n[chat.anthropic.alpha]\nmodel_id = \"alpha-id\"\nsdk = \"anthropic\"\ntemperature = 0.5\n\n[chat.anthropic.beta]\nmodel_id = \"beta-id\"\nsdk = \"anthropic\"\ntemperature = 0.2\n\n[chat.openai.gamma]\nmodel_id = \"gamma-id\"\nsdk = \"openai\"\n\n[chat.anthropic.delta]\nmodel_id = \"claude-opus-4-8\"\nsdk = \"anthropic\"\n\n[chat.gemini.epsilon]\nmodel_id = \"gemini-3.1-pro\"\nsdk = \"gemini\"\n",
         "defaults": "[defaults]\nmodel = \"alpha\"\n\n[defaults.background]\nheartbeat = \"ghost\"\n",
@@ -3896,22 +4074,40 @@
       },
       "steps": [
         {
-          "op": "background_models",
+          "op": "model_roles",
           "args": {},
-          "ok": {
-            "background": [
-              {
-                "task": "heartbeat",
-                "model": "ghost",
-                "source": "config: background.heartbeat"
-              },
-              {
-                "task": "compaction",
-                "model": "chat.anthropic.alpha",
-                "source": "inherited: active chat model"
-              }
-            ]
-          },
+          "ok": [
+            {
+              "role": "chat",
+              "model": "chat.anthropic.alpha",
+              "source": "character"
+            },
+            {
+              "role": "heartbeat",
+              "model": "ghost",
+              "source": "defaults.background.heartbeat"
+            },
+            {
+              "role": "compaction",
+              "model": "chat.anthropic.alpha",
+              "source": "inherits chat"
+            },
+            {
+              "role": "sub-agents",
+              "model": "chat.anthropic.alpha",
+              "source": "defaults.model"
+            },
+            {
+              "role": "embedding",
+              "model": null,
+              "source": null
+            },
+            {
+              "role": "images",
+              "model": null,
+              "source": null
+            }
+          ],
           "session": {
             "active_model": null,
             "active_resolved_model": null
@@ -4293,6 +4489,38 @@
               }
             ],
             "active": "chat.anthropic.alpha",
+            "roles": [
+              {
+                "role": "chat",
+                "model": "chat.anthropic.alpha",
+                "source": "character"
+              },
+              {
+                "role": "heartbeat",
+                "model": "chat.anthropic.alpha",
+                "source": "inherits chat"
+              },
+              {
+                "role": "compaction",
+                "model": "chat.anthropic.alpha",
+                "source": "inherits chat"
+              },
+              {
+                "role": "sub-agents",
+                "model": "chat.anthropic.alpha",
+                "source": "defaults.model"
+              },
+              {
+                "role": "embedding",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "images",
+                "model": null,
+                "source": null
+              }
+            ],
             "include_hidden": false,
             "hidden_count": 0
           }
@@ -4537,22 +4765,40 @@
           }
         },
         {
-          "op": "background_models",
+          "op": "model_roles",
           "args": {},
-          "ok": {
-            "background": [
-              {
-                "task": "heartbeat",
-                "model": "chat.anthropic.alpha",
-                "source": "inherited: active chat model"
-              },
-              {
-                "task": "compaction",
-                "model": "chat.anthropic.alpha",
-                "source": "inherited: active chat model"
-              }
-            ]
-          },
+          "ok": [
+            {
+              "role": "chat",
+              "model": "chat.anthropic.alpha",
+              "source": "character"
+            },
+            {
+              "role": "heartbeat",
+              "model": "chat.anthropic.alpha",
+              "source": "inherits chat"
+            },
+            {
+              "role": "compaction",
+              "model": "chat.anthropic.alpha",
+              "source": "inherits chat"
+            },
+            {
+              "role": "sub-agents",
+              "model": "chat.anthropic.alpha",
+              "source": "defaults.model"
+            },
+            {
+              "role": "embedding",
+              "model": null,
+              "source": null
+            },
+            {
+              "role": "images",
+              "model": null,
+              "source": null
+            }
+          ],
           "session": {
             "active_model": "ghost",
             "active_resolved_model": null
@@ -4776,6 +5022,38 @@
               }
             ],
             "active": "openrouter:vendor/visible",
+            "roles": [
+              {
+                "role": "chat",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "heartbeat",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "compaction",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "sub-agents",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "embedding",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "images",
+                "model": null,
+                "source": null
+              }
+            ],
             "include_hidden": false,
             "hidden_count": 1
           }
@@ -5063,6 +5341,38 @@
           "ok": {
             "models": [],
             "active": null,
+            "roles": [
+              {
+                "role": "chat",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "heartbeat",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "compaction",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "sub-agents",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "embedding",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "images",
+                "model": null,
+                "source": null
+              }
+            ],
             "include_hidden": false,
             "hidden_count": 0
           },
@@ -5258,22 +5568,40 @@
           }
         },
         {
-          "op": "background_models",
+          "op": "model_roles",
           "args": {},
-          "ok": {
-            "background": [
-              {
-                "task": "heartbeat",
-                "model": "(unresolved)",
-                "source": "inherited: active chat model"
-              },
-              {
-                "task": "compaction",
-                "model": "(unresolved)",
-                "source": "inherited: active chat model"
-              }
-            ]
-          },
+          "ok": [
+            {
+              "role": "chat",
+              "model": null,
+              "source": null
+            },
+            {
+              "role": "heartbeat",
+              "model": null,
+              "source": null
+            },
+            {
+              "role": "compaction",
+              "model": null,
+              "source": null
+            },
+            {
+              "role": "sub-agents",
+              "model": null,
+              "source": null
+            },
+            {
+              "role": "embedding",
+              "model": null,
+              "source": null
+            },
+            {
+              "role": "images",
+              "model": null,
+              "source": null
+            }
+          ],
           "session": {
             "active_model": null,
             "active_resolved_model": null
@@ -5645,6 +5973,38 @@
               }
             ],
             "active": "openrouter:vendor/visible",
+            "roles": [
+              {
+                "role": "chat",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "heartbeat",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "compaction",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "sub-agents",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "embedding",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "images",
+                "model": null,
+                "source": null
+              }
+            ],
             "include_hidden": false,
             "hidden_count": 1
           },
@@ -5734,6 +6094,38 @@
               }
             ],
             "active": "openrouter:vendor/hidden",
+            "roles": [
+              {
+                "role": "chat",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "heartbeat",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "compaction",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "sub-agents",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "embedding",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "images",
+                "model": null,
+                "source": null
+              }
+            ],
             "include_hidden": true,
             "hidden_count": 1
           },
@@ -5812,7 +6204,7 @@
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 250000,
             "max_output_tokens": 32000,
-            "temperature": 1.0,
+            "temperature": 1,
             "top_p": null,
             "reasoning_effort": null,
             "budget_tokens": null,
@@ -5825,7 +6217,7 @@
             "replay_prior_thinking": null,
             "max_tool_iterations": null,
             "effective_sampler": {
-              "temperature": 1.0,
+              "temperature": 1,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -5928,7 +6320,7 @@
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 250000,
             "max_output_tokens": 32000,
-            "temperature": 1.0,
+            "temperature": 1,
             "top_p": null,
             "reasoning_effort": null,
             "budget_tokens": null,
@@ -5941,7 +6333,7 @@
             "replay_prior_thinking": null,
             "max_tool_iterations": null,
             "effective_sampler": {
-              "temperature": 1.0,
+              "temperature": 1,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -6122,7 +6514,7 @@
               "base_url": "https://openrouter.ai/api/v1",
               "max_context_tokens": 250000,
               "max_output_tokens": 32000,
-              "temperature": 1.0,
+              "temperature": 1,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -6207,6 +6599,38 @@
               }
             ],
             "active": "openrouter:vendor/hidden",
+            "roles": [
+              {
+                "role": "chat",
+                "model": "openrouter:vendor/hidden",
+                "source": "character"
+              },
+              {
+                "role": "heartbeat",
+                "model": "openrouter:vendor/hidden",
+                "source": "inherits chat"
+              },
+              {
+                "role": "compaction",
+                "model": "openrouter:vendor/hidden",
+                "source": "inherits chat"
+              },
+              {
+                "role": "sub-agents",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "embedding",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "images",
+                "model": null,
+                "source": null
+              }
+            ],
             "include_hidden": false,
             "hidden_count": 1
           },
@@ -6223,7 +6647,7 @@
               "base_url": "https://openrouter.ai/api/v1",
               "max_context_tokens": 250000,
               "max_output_tokens": 32000,
-              "temperature": 1.0,
+              "temperature": 1,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -6306,7 +6730,7 @@
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 250000,
             "max_output_tokens": 32000,
-            "temperature": 1.0,
+            "temperature": 1,
             "top_p": null,
             "reasoning_effort": null,
             "budget_tokens": null,
@@ -6319,7 +6743,7 @@
             "replay_prior_thinking": null,
             "max_tool_iterations": null,
             "effective_sampler": {
-              "temperature": 1.0,
+              "temperature": 1,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -6360,7 +6784,7 @@
               "base_url": "https://openrouter.ai/api/v1",
               "max_context_tokens": 250000,
               "max_output_tokens": 32000,
-              "temperature": 1.0,
+              "temperature": 1,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -6437,7 +6861,7 @@
             "provider": "openrouter",
             "model_id": "vendor/hidden",
             "effective_sampler": {
-              "temperature": 1.0,
+              "temperature": 1,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -6508,7 +6932,7 @@
               "base_url": "https://openrouter.ai/api/v1",
               "max_context_tokens": 250000,
               "max_output_tokens": 32000,
-              "temperature": 1.0,
+              "temperature": 1,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -6605,7 +7029,7 @@
               "base_url": "https://openrouter.ai/api/v1",
               "max_context_tokens": 250000,
               "max_output_tokens": 32000,
-              "temperature": 1.0,
+              "temperature": 1,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -6699,7 +7123,7 @@
             "provider": "openrouter",
             "model_id": "vendor/hidden",
             "effective_sampler": {
-              "temperature": 1.0,
+              "temperature": 1,
               "top_p": null,
               "reasoning_effort": "high",
               "budget_tokens": null,
@@ -6785,7 +7209,7 @@
               "base_url": "https://openrouter.ai/api/v1",
               "max_context_tokens": 250000,
               "max_output_tokens": 32000,
-              "temperature": 1.0,
+              "temperature": 1,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -6910,7 +7334,7 @@
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 250000,
             "max_output_tokens": 32000,
-            "temperature": 1.0,
+            "temperature": 1,
             "top_p": null,
             "reasoning_effort": null,
             "budget_tokens": null,
@@ -6996,6 +7420,38 @@
               }
             ],
             "active": "openrouter:vendor/visible",
+            "roles": [
+              {
+                "role": "chat",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "heartbeat",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "compaction",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "sub-agents",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "embedding",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "images",
+                "model": null,
+                "source": null
+              }
+            ],
             "include_hidden": false,
             "hidden_count": 0
           },
@@ -7012,7 +7468,7 @@
               "base_url": "https://openrouter.ai/api/v1",
               "max_context_tokens": 250000,
               "max_output_tokens": 32000,
-              "temperature": 1.0,
+              "temperature": 1,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -7097,7 +7553,7 @@
               "base_url": "https://openrouter.ai/api/v1",
               "max_context_tokens": 250000,
               "max_output_tokens": 32000,
-              "temperature": 1.0,
+              "temperature": 1,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -7186,7 +7642,7 @@
               "base_url": "https://openrouter.ai/api/v1",
               "max_context_tokens": 250000,
               "max_output_tokens": 32000,
-              "temperature": 1.0,
+              "temperature": 1,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -7260,22 +7716,40 @@
           }
         },
         {
-          "op": "background_models",
+          "op": "model_roles",
           "args": {},
-          "ok": {
-            "background": [
-              {
-                "task": "heartbeat",
-                "model": "(unresolved)",
-                "source": "inherited: active chat model"
-              },
-              {
-                "task": "compaction",
-                "model": "(unresolved)",
-                "source": "inherited: active chat model"
-              }
-            ]
-          },
+          "ok": [
+            {
+              "role": "chat",
+              "model": null,
+              "source": null
+            },
+            {
+              "role": "heartbeat",
+              "model": null,
+              "source": null
+            },
+            {
+              "role": "compaction",
+              "model": null,
+              "source": null
+            },
+            {
+              "role": "sub-agents",
+              "model": null,
+              "source": null
+            },
+            {
+              "role": "embedding",
+              "model": null,
+              "source": null
+            },
+            {
+              "role": "images",
+              "model": null,
+              "source": null
+            }
+          ],
           "session": {
             "active_model": "chat.openrouter.vendor/visible",
             "active_resolved_model": {
@@ -7289,7 +7763,7 @@
               "base_url": "https://openrouter.ai/api/v1",
               "max_context_tokens": 250000,
               "max_output_tokens": 32000,
-              "temperature": 1.0,
+              "temperature": 1,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -7377,7 +7851,7 @@
               "base_url": "https://openrouter.ai/api/v1",
               "max_context_tokens": 250000,
               "max_output_tokens": 32000,
-              "temperature": 1.0,
+              "temperature": 1,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -7527,22 +8001,40 @@
       },
       "steps": [
         {
-          "op": "background_models",
+          "op": "model_roles",
           "args": {},
-          "ok": {
-            "background": [
-              {
-                "task": "heartbeat",
-                "model": "chat.openai.gamma",
-                "source": "config: background.heartbeat"
-              },
-              {
-                "task": "compaction",
-                "model": "chat.anthropic.beta",
-                "source": "config: background.model"
-              }
-            ]
-          },
+          "ok": [
+            {
+              "role": "chat",
+              "model": "chat.anthropic.alpha",
+              "source": "character"
+            },
+            {
+              "role": "heartbeat",
+              "model": "chat.openai.gamma",
+              "source": "defaults.background.heartbeat"
+            },
+            {
+              "role": "compaction",
+              "model": "chat.anthropic.beta",
+              "source": "defaults.background.model"
+            },
+            {
+              "role": "sub-agents",
+              "model": "chat.anthropic.alpha",
+              "source": "defaults.model"
+            },
+            {
+              "role": "embedding",
+              "model": null,
+              "source": null
+            },
+            {
+              "role": "images",
+              "model": null,
+              "source": null
+            }
+          ],
           "session": {
             "active_model": null,
             "active_resolved_model": null
@@ -7863,7 +8355,7 @@
           },
           "err": {
             "code": "invalid_request",
-            "message": "background tasks use different models (heartbeat \u2192 chat.openai.gamma, compaction \u2192 chat.anthropic.beta); target a specific task instead of `all`"
+            "message": "background tasks use different models (heartbeat → chat.openai.gamma, compaction → chat.anthropic.beta); target a specific task instead of `all`"
           },
           "session": {
             "active_model": null,
@@ -8161,7 +8653,7 @@
           },
           "err": {
             "code": "invalid_request",
-            "message": "background tasks use different models (heartbeat \u2192 chat.openai.gamma, compaction \u2192 chat.anthropic.beta); target a specific task instead of `all`"
+            "message": "background tasks use different models (heartbeat → chat.openai.gamma, compaction → chat.anthropic.beta); target a specific task instead of `all`"
           },
           "session": {
             "active_model": null,
@@ -8759,22 +9251,40 @@
       },
       "steps": [
         {
-          "op": "background_models",
+          "op": "model_roles",
           "args": {},
-          "ok": {
-            "background": [
-              {
-                "task": "heartbeat",
-                "model": "chat.anthropic.beta",
-                "source": "config: background.model"
-              },
-              {
-                "task": "compaction",
-                "model": "chat.anthropic.beta",
-                "source": "config: background.model"
-              }
-            ]
-          },
+          "ok": [
+            {
+              "role": "chat",
+              "model": "chat.anthropic.alpha",
+              "source": "character"
+            },
+            {
+              "role": "heartbeat",
+              "model": "chat.anthropic.beta",
+              "source": "defaults.background.model"
+            },
+            {
+              "role": "compaction",
+              "model": "chat.anthropic.beta",
+              "source": "defaults.background.model"
+            },
+            {
+              "role": "sub-agents",
+              "model": "chat.anthropic.alpha",
+              "source": "defaults.model"
+            },
+            {
+              "role": "embedding",
+              "model": null,
+              "source": null
+            },
+            {
+              "role": "images",
+              "model": null,
+              "source": null
+            }
+          ],
           "session": {
             "active_model": null,
             "active_resolved_model": null
@@ -9289,22 +9799,40 @@
       },
       "steps": [
         {
-          "op": "background_models",
+          "op": "model_roles",
           "args": {},
-          "ok": {
-            "background": [
-              {
-                "task": "heartbeat",
-                "model": "chat.anthropic.alpha",
-                "source": "inherited: active chat model"
-              },
-              {
-                "task": "compaction",
-                "model": "chat.anthropic.alpha",
-                "source": "inherited: active chat model"
-              }
-            ]
-          },
+          "ok": [
+            {
+              "role": "chat",
+              "model": "chat.anthropic.alpha",
+              "source": "character"
+            },
+            {
+              "role": "heartbeat",
+              "model": "chat.anthropic.alpha",
+              "source": "inherits chat"
+            },
+            {
+              "role": "compaction",
+              "model": "chat.anthropic.alpha",
+              "source": "inherits chat"
+            },
+            {
+              "role": "sub-agents",
+              "model": "chat.anthropic.alpha",
+              "source": "defaults.model"
+            },
+            {
+              "role": "embedding",
+              "model": null,
+              "source": null
+            },
+            {
+              "role": "images",
+              "model": null,
+              "source": null
+            }
+          ],
           "session": {
             "active_model": null,
             "active_resolved_model": null
@@ -9586,22 +10114,40 @@
           }
         },
         {
-          "op": "background_models",
+          "op": "model_roles",
           "args": {},
-          "ok": {
-            "background": [
-              {
-                "task": "heartbeat",
-                "model": "chat.anthropic.beta",
-                "source": "inherited: active chat model"
-              },
-              {
-                "task": "compaction",
-                "model": "chat.anthropic.beta",
-                "source": "inherited: active chat model"
-              }
-            ]
-          },
+          "ok": [
+            {
+              "role": "chat",
+              "model": "chat.anthropic.beta",
+              "source": "character"
+            },
+            {
+              "role": "heartbeat",
+              "model": "chat.anthropic.beta",
+              "source": "inherits chat"
+            },
+            {
+              "role": "compaction",
+              "model": "chat.anthropic.beta",
+              "source": "inherits chat"
+            },
+            {
+              "role": "sub-agents",
+              "model": "chat.anthropic.alpha",
+              "source": "defaults.model"
+            },
+            {
+              "role": "embedding",
+              "model": null,
+              "source": null
+            },
+            {
+              "role": "images",
+              "model": null,
+              "source": null
+            }
+          ],
           "session": {
             "active_model": "beta",
             "active_resolved_model": {
@@ -13873,6 +14419,38 @@
               }
             ],
             "active": "chat.anthropic.alpha",
+            "roles": [
+              {
+                "role": "chat",
+                "model": "chat.anthropic.alpha",
+                "source": "defaults.model"
+              },
+              {
+                "role": "heartbeat",
+                "model": "chat.anthropic.alpha",
+                "source": "inherits chat"
+              },
+              {
+                "role": "compaction",
+                "model": "chat.anthropic.alpha",
+                "source": "inherits chat"
+              },
+              {
+                "role": "sub-agents",
+                "model": "chat.anthropic.alpha",
+                "source": "defaults.model"
+              },
+              {
+                "role": "embedding",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "images",
+                "model": null,
+                "source": null
+              }
+            ],
             "include_hidden": false,
             "hidden_count": 0
           },
@@ -13927,22 +14505,40 @@
           }
         },
         {
-          "op": "background_models",
+          "op": "model_roles",
           "args": {},
-          "ok": {
-            "background": [
-              {
-                "task": "heartbeat",
-                "model": "alpha",
-                "source": "inherited: active chat model"
-              },
-              {
-                "task": "compaction",
-                "model": "alpha",
-                "source": "inherited: active chat model"
-              }
-            ]
-          },
+          "ok": [
+            {
+              "role": "chat",
+              "model": "chat.anthropic.alpha",
+              "source": "defaults.model"
+            },
+            {
+              "role": "heartbeat",
+              "model": "chat.anthropic.alpha",
+              "source": "inherits chat"
+            },
+            {
+              "role": "compaction",
+              "model": "chat.anthropic.alpha",
+              "source": "inherits chat"
+            },
+            {
+              "role": "sub-agents",
+              "model": "chat.anthropic.alpha",
+              "source": "defaults.model"
+            },
+            {
+              "role": "embedding",
+              "model": null,
+              "source": null
+            },
+            {
+              "role": "images",
+              "model": null,
+              "source": null
+            }
+          ],
           "session": {
             "active_model": null,
             "active_resolved_model": null
@@ -14904,6 +15500,38 @@
               }
             ],
             "active": "chat.anthropic.alpha",
+            "roles": [
+              {
+                "role": "chat",
+                "model": "chat.anthropic.alpha",
+                "source": "character"
+              },
+              {
+                "role": "heartbeat",
+                "model": "chat.anthropic.alpha",
+                "source": "inherits chat"
+              },
+              {
+                "role": "compaction",
+                "model": "chat.anthropic.alpha",
+                "source": "inherits chat"
+              },
+              {
+                "role": "sub-agents",
+                "model": "chat.anthropic.alpha",
+                "source": "defaults.model"
+              },
+              {
+                "role": "embedding",
+                "model": null,
+                "source": null
+              },
+              {
+                "role": "images",
+                "model": null,
+                "source": null
+              }
+            ],
             "include_hidden": false,
             "hidden_count": 0
           }

@@ -7,8 +7,8 @@ import fixture from "./commands_fixtures/model_commands.json" with { type: "json
 
 import { CommandError } from "../src/commands/errors.ts";
 import {
-  backgroundModels,
   listModels,
+  modelRoles,
   modelInfo,
   modelSettings,
   resetModel,
@@ -236,8 +236,8 @@ function runStep(ctx: ModelsContext, step: Step): unknown {
       return modelInfo(ctx, step.args);
     case "model_settings":
       return modelSettings(ctx, step.args);
-    case "background_models":
-      return backgroundModels(ctx);
+    case "model_roles":
+      return modelRoles(ctx);
     case "switch_model":
       return switchModel(ctx, step.args);
     case "reset_model":
@@ -308,4 +308,73 @@ test("the active model is the one generation resolves, not the session's", async
   expect((modelInfo(ctx, {}) as { qualified_name: string }).qualified_name).toBe(
     "chat.anthropic.beta",
   );
+});
+
+async function rolesFor(defaults: string) {
+  const ctx = await buildContext({
+    catalog: '[chat.anthropic.alpha]\nmodel_id = "alpha-id"\n' +
+      '[chat.anthropic.beta]\nmodel_id = "beta-id"\n',
+    defaults,
+    discovery: [],
+    character: "ada",
+    global_prefs: null,
+    character_prefs: '[selected]\nprovider = "anthropic"\nmodel_id = "alpha-id"\n',
+    active_model: null,
+    pre_resolved: null,
+  });
+  const byRole = new Map(modelRoles(ctx).map((r) => [r.role, r]));
+  return byRole;
+}
+
+test("every model role reports where it came from", async () => {
+  const roles = await rolesFor(
+    '[defaults]\nsubagent_model = "chat.anthropic.beta"\n' +
+      'embedding = "some:embedder"\nimage_generation = "some:painter"\n',
+  );
+
+  expect(roles.get("sub-agents")).toEqual({
+    role: "sub-agents",
+    model: "chat.anthropic.beta",
+    source: "defaults.subagent_model",
+  });
+  expect(roles.get("embedding")).toEqual({
+    role: "embedding",
+    model: "some:embedder",
+    source: "defaults.embedding",
+  });
+  expect(roles.get("images")).toEqual({
+    role: "images",
+    model: "some:painter",
+    source: "defaults.image_generation",
+  });
+});
+
+test("a role nobody configured reports nothing rather than guessing", async () => {
+  const roles = await rolesFor("");
+  for (const role of ["embedding", "images"]) {
+    expect(roles.get(role), role).toEqual({ role, model: null, source: null });
+  }
+});
+
+test("background tasks name the chat model they inherit", async () => {
+  const roles = await rolesFor("");
+  const chat = roles.get("chat")!;
+  expect(chat.model).toBe("chat.anthropic.alpha");
+  for (const task of ["heartbeat", "compaction"]) {
+    expect(roles.get(task), task).toEqual({
+      role: task,
+      model: chat.model,
+      source: "inherits chat",
+    });
+  }
+});
+
+test("sub-agents that pin their own model are counted, not hidden", async () => {
+  const roles = await rolesFor(
+    '[defaults]\nsubagent_model = "chat.anthropic.beta"\n' +
+      '[subagents.plain]\ndescription = "d"\nprompt = "p"\ntools = []\n' +
+      '[subagents.picky]\ndescription = "d"\nprompt = "p"\ntools = []\n' +
+      'model = "chat.anthropic.alpha"\n',
+  );
+  expect(roles.get("sub-agents")?.source).toBe("defaults.subagent_model · 1 override");
 });

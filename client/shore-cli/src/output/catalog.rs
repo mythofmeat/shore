@@ -40,7 +40,28 @@ fn scalar(value: &Value) -> String {
     }
 }
 
+fn write_roles<W: Write>(out: &mut W, data: &Value) {
+    let roles = rows_of(data, "roles");
+    if roles.is_empty() {
+        return;
+    }
+    section(out, "in use", None);
+    let mut rows = Rows::new();
+    for role in roles {
+        let model = text(role, "model");
+        let (value, tone) = if model.is_empty() {
+            ("(not set)", Tone::Muted)
+        } else {
+            (model, Tone::Plain)
+        };
+        rows.add_noted(text(role, "role"), value, text(role, "source"), tone);
+    }
+    rows.write(out);
+    blank(out);
+}
+
 pub(crate) fn write_model_list<W: Write>(out: &mut W, data: &Value) {
+    write_roles(out, data);
     section(out, "models", None);
     let models = rows_of(data, "models");
     if models.is_empty() {
@@ -148,32 +169,6 @@ pub(crate) fn write_model_settings<W: Write>(out: &mut W, data: &Value) {
             );
         }
     }
-}
-
-pub(crate) fn write_background_models<W: Write>(out: &mut W, data: &Value) {
-    section(out, "background models", None);
-    let tasks = rows_of(data, "background");
-    if tasks.is_empty() {
-        empty(out, "no background tasks configured");
-        return;
-    }
-    let mut rows = Rows::new();
-    for task in tasks {
-        let model = text(task, "model");
-        let source = text(task, "source");
-        let value = if model.is_empty() {
-            format!("inherits the chat model ({source})")
-        } else {
-            format!("{model} \u{00b7} {source}")
-        };
-        let tone = if model.is_empty() {
-            Tone::Muted
-        } else {
-            Tone::Plain
-        };
-        rows.add_toned(text(task, "task"), &value, tone);
-    }
-    rows.write(out);
 }
 
 pub(crate) fn write_provider_list<W: Write>(out: &mut W, data: &Value) {
@@ -316,12 +311,6 @@ pub(crate) fn print_model_settings(data: &Value) {
     write_model_settings(&mut out, data);
 }
 
-pub(crate) fn print_background_models(data: &Value) {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    write_background_models(&mut out, data);
-}
-
 pub(crate) fn print_provider_list(data: &Value) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
@@ -362,15 +351,119 @@ mod tests {
                  "provider": "deepseek", "hidden": false}
             ],
             "active": "deepseek:deepseek-v4-pro",
+            "roles": [
+                {"role": "chat", "model": "deepseek:deepseek-v4-pro", "source": "character"},
+                {"role": "heartbeat", "model": "deepseek:deepseek-v4-pro",
+                 "source": "inherits chat"},
+                {"role": "compaction", "model": "anthropic:claude-opus-5",
+                 "source": "defaults.background.compaction"},
+                {"role": "embedding", "model": null, "source": null}
+            ],
             "include_hidden": false,
             "hidden_count": 440
         })
     }
 
     #[test]
-    fn the_active_model_is_marked_once_not_twice() {
+    fn the_list_says_what_each_model_is_used_for() {
+        let out = render(|b| write_model_list(b, &models()));
+        for role in ["chat", "heartbeat", "compaction"] {
+            assert!(out.contains(role), "{role} is missing: {out}");
+        }
+        assert!(
+            out.contains("inherits chat"),
+            "a role that borrows the chat model must say so: {out}"
+        );
+    }
+
+    #[test]
+    fn a_role_nobody_set_is_shown_as_unset_not_omitted() {
         let out = render(|b| write_model_list(b, &models()));
         let row = out
+            .lines()
+            .find(|l| l.contains("embedding"))
+            .unwrap_or_default();
+        assert!(
+            row.contains("(not set)"),
+            "an unconfigured role must still have a row: {out}"
+        );
+    }
+
+    #[test]
+    fn the_source_column_lines_up_across_roles() {
+        let out = render(|b| write_model_list(b, &models()));
+        let columns: Vec<usize> = ["character", "inherits chat", "defaults.background.compaction"]
+            .iter()
+            .filter_map(|source| {
+                let line = out.lines().find(|l| l.contains(*source))?;
+                line.find(source)
+                    .map(|byte| line.get(..byte).unwrap_or("").chars().count())
+            })
+            .collect();
+        assert_eq!(columns.len(), 3, "all three sources must render: {out}");
+        assert!(
+            columns.windows(2).all(|w| w.first() == w.get(1)),
+            "the source is a column, not a suffix: {out}"
+        );
+    }
+
+    #[test]
+    fn a_list_with_no_roles_still_renders_the_catalog() {
+        let mut data = models();
+        if let Some(slot) = data.get_mut("roles") {
+            *slot = json!([]);
+        }
+        let out = render(|b| write_model_list(b, &data));
+        assert!(out.contains("deepseek-v4-pro"), "{out}");
+        assert!(!out.contains("in use"), "an empty roles block must not print: {out}");
+    }
+
+    #[test]
+    #[ignore = "preview: .claude/skills/run-shore-cli/preview.sh models"]
+    fn render_preview_models() {
+        set_color_enabled(true);
+        let data = json!({
+            "models": [
+                {"name": "claude-opus-5", "qualified_name": "anthropic:claude-opus-5",
+                 "provider": "anthropic", "hidden": false},
+                {"name": "glm-5.2", "qualified_name": "opencode-go:glm-5.2",
+                 "provider": "opencode-go", "hidden": false},
+                {"name": "glm-5.3", "qualified_name": "opencode-go:glm-5.3",
+                 "provider": "opencode-go", "hidden": false},
+                {"name": "kimi-k3", "qualified_name": "opencode-go:kimi-k3",
+                 "provider": "opencode-go", "hidden": false}
+            ],
+            "active": "opencode-go:glm-5.3",
+            "roles": [
+                {"role": "chat", "model": "opencode-go:glm-5.3", "source": "character"},
+                {"role": "heartbeat", "model": "opencode-go:glm-5.3",
+                 "source": "inherits chat"},
+                {"role": "compaction", "model": "opencode-go:glm-5.3",
+                 "source": "inherits chat"},
+                {"role": "sub-agents", "model": "opencode-go:glm-5.2",
+                 "source": "defaults.subagent_model"},
+                {"role": "embedding", "model": "openrouter:qwen/qwen3-embedding-8b",
+                 "source": "defaults.embedding"},
+                {"role": "images", "model": null, "source": null}
+            ],
+            "include_hidden": false,
+            "hidden_count": 440
+        });
+        let mut buf = Vec::new();
+        write_model_list(&mut buf, &data);
+        set_color_enabled(false);
+        let mut stdout = io::stdout();
+        let _ignored = stdout.write_all(b"\n----- MODEL LIST (shore model) -----\n");
+        _ = stdout.write_all(&buf);
+        _ = stdout.write_all(b"----- end -----\n");
+        _ = stdout.flush();
+    }
+
+    #[test]
+    fn the_active_model_is_marked_once_not_twice() {
+        let out = render(|b| write_model_list(b, &models()));
+        let catalog = out.split("\u{2500}\u{2500} models").nth(1).unwrap_or_default();
+        let row = catalog
             .lines()
             .find(|l| l.contains("deepseek-v4-pro"))
             .unwrap_or_default();
@@ -432,19 +525,6 @@ mod tests {
         assert!(
             out.contains("1 saved setting(s) this model's sdk ignores"),
             "but it must not vanish silently either: {out}"
-        );
-    }
-
-    #[test]
-    fn background_models_say_inheritance_once_not_twice() {
-        let data = json!({"background": [
-            {"task": "heartbeat", "model": "", "source": "active chat model"}
-        ]});
-        let out = render(|b| write_background_models(b, &data));
-        assert!(out.contains("inherits the chat model"), "{out}");
-        assert!(
-            !out.contains("(unresolved)"),
-            "one phrase, not a contradiction plus a gloss: {out}"
         );
     }
 

@@ -29,7 +29,6 @@ import { keepalivePingNowCommand, type KeepalivePingContext } from "./keepalive.
 import { memory } from "./memory.ts";
 import { runTool, type RunToolContext } from "./run_tool.ts";
 import {
-  backgroundModels,
   effectiveChatModel,
   listModels,
   modelInfo,
@@ -98,7 +97,6 @@ const CHARACTERLESS = new Set([
   "list_characters",
   "create_character",
   "list_models",
-  "background_models",
   "list_providers",
   "list_provider_models",
 ]);
@@ -158,8 +156,6 @@ export async function runCommand(
       return setModelSetting(session, args);
     case "model_settings":
       return modelSettings(session, args);
-    case "background_models":
-      return backgroundModels(session);
     case "memory":
       return await memory(configDir, character, args, workspaceRoot);
     case "compact":
@@ -271,8 +267,6 @@ export function runCharacterlessCommand(
       return createCharacter(session.config.dirs.config, args, session.config.dirs.workspace);
     case "list_models":
       return listModels(session, args);
-    case "background_models":
-      return backgroundModels(session);
     case "list_providers":
       return listProviders(providersContext(session, deps));
     case "list_provider_models":

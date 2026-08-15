@@ -286,7 +286,6 @@ fn catalog_render(name: &str) -> Option<fn(&serde_json::Value)> {
         "list_models" => Some(output::catalog::print_model_list),
         "model_info" => Some(output::catalog::print_model_info),
         "model_settings" => Some(output::catalog::print_model_settings),
-        "background_models" => Some(output::catalog::print_background_models),
         "list_providers" => Some(output::catalog::print_provider_list),
         "list_provider_models" => Some(output::catalog::print_provider_models),
         _ => None,
@@ -1372,7 +1371,6 @@ mod tests {
             json: false,
             info,
             reset,
-            background: false,
         }
     }
 
@@ -1401,9 +1399,8 @@ mod tests {
     fn reading_about_models_changes_nothing() {
         let listing = model_command(None);
         let describing = model_command(Some(ModelCommand::Info { name: None }));
-        let background = model_command(Some(ModelCommand::Background));
         let info_flag = model_flags(None, true, false);
-        for cmd in [listing, describing, background, info_flag] {
+        for cmd in [listing, describing, info_flag] {
             assert!(model_change(&cmd).is_none(), "{cmd:?}");
         }
     }

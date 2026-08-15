@@ -215,6 +215,7 @@ struct Row {
     mark: Mark,
     label: String,
     value: String,
+    note: String,
     tone: Tone,
 }
 
@@ -251,11 +252,22 @@ impl Rows {
         self.push(mark, label, value, tone);
     }
 
+    pub(crate) fn add_noted(&mut self, label: &str, value: &str, note: &str, tone: Tone) {
+        self.entries.push(Row {
+            mark: Mark::None,
+            label: label.to_owned(),
+            value: value.to_owned(),
+            note: note.to_owned(),
+            tone,
+        });
+    }
+
     fn push(&mut self, mark: Mark, label: &str, value: &str, tone: Tone) {
         self.entries.push(Row {
             mark,
             label: label.to_owned(),
             value: value.to_owned(),
+            note: String::new(),
             tone,
         });
     }
@@ -276,8 +288,18 @@ impl Rows {
             .unwrap_or(0)
     }
 
+    fn value_width(&self) -> usize {
+        self.entries
+            .iter()
+            .filter(|r| !r.note.is_empty())
+            .map(|r| r.value.chars().count())
+            .max()
+            .unwrap_or(0)
+    }
+
     pub(crate) fn write<W: Write>(&self, out: &mut W) {
         let width = self.label_width();
+        let notes = self.value_width();
         let marked = self.any_marked();
         for row in &self.entries {
             indent_to(out, self.depth);
@@ -295,6 +317,13 @@ impl Rows {
                 .saturating_add(COLUMN_GAP);
             let _ignored = write!(out, "{}", " ".repeat(pad));
             paint(out, row.tone, &row.value);
+            if !row.note.is_empty() {
+                let gap = notes
+                    .saturating_sub(row.value.chars().count())
+                    .saturating_add(COLUMN_GAP);
+                let _note_pad = write!(out, "{}", " ".repeat(gap));
+                paint(out, Tone::Muted, &row.note);
+            }
             newline(out);
         }
     }

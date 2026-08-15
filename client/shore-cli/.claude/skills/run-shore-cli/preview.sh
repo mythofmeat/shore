@@ -9,20 +9,22 @@
 # and all — so your terminal shows it exactly as the CLI would.
 #
 # Usage:
-#   .claude/skills/run-shore-cli/preview.sh            # both previews
+#   .claude/skills/run-shore-cli/preview.sh            # every preview
 #   .claude/skills/run-shore-cli/preview.sh log        # just the log render
 #   .claude/skills/run-shore-cli/preview.sh stream     # just live streaming
+#   .claude/skills/run-shore-cli/preview.sh models     # just shore model
 #
 # Add a new preview by writing another `#[ignore]`-d `render_preview_*` test in
-# client/shore-cli/src/output/{transcript.rs,styling.rs}; it is picked up here
+# client/shore-cli/src/output/{transcript.rs,styling.rs,catalog.rs}; it is picked up here
 # automatically by the `render_preview` filter.
 set -euo pipefail
 
 case "${1:-all}" in
   log)    filter=render_preview_log ;;
   stream) filter=render_preview_stream ;;
+  models) filter=render_preview_models ;;
   all|"") filter=render_preview ;;
-  *) echo "usage: preview.sh [log|stream|all]" >&2; exit 2 ;;
+  *) echo "usage: preview.sh [log|stream|models|all]" >&2; exit 2 ;;
 esac
 
 # --test-threads=1 is REQUIRED: COLOR_ENABLED and the streaming chunk state are

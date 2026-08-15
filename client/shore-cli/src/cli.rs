@@ -66,6 +66,11 @@ const NAMED_BY_USE: [&str; 2] = ["model", "character"];
 
 const PROMOTED: [(&str, &str); 1] = [("memory compact", "compact")];
 
+const FOLDED_IN: [(&str, &str); 1] = [(
+    "model background",
+    "every model role is listed by: shore model",
+)];
+
 const RETIRED_UNDER: [(&str, &str, &str); 1] = [(
     "config",
     "--reset",
@@ -133,8 +138,19 @@ where
     }
 
     promoted(&words)
+        .or_else(|| folded_in(&words))
         .or_else(|| retired_under(&words, &flags))
         .or_else(|| bare_name(&words, flagged))
+}
+
+fn folded_in(words: &[String]) -> Option<FlagProblem> {
+    let command = words.first()?;
+    let sub = words.get(1)?;
+    let typed = format!("{command} {sub}");
+    FOLDED_IN
+        .iter()
+        .find(|&&(old, _)| old == typed)
+        .map(|&(old, instead)| FlagProblem::Retired(old, instead))
 }
 
 fn retired_under(words: &[String], flags: &[String]) -> Option<FlagProblem> {
@@ -368,9 +384,6 @@ pub(crate) enum CliCommand {
         #[arg(long, hide = true)]
         reset: bool,
 
-        /// Superseded by `shore model background`
-        #[arg(long, hide = true, conflicts_with_all = ["info", "reset", "all"])]
-        background: bool,
     },
 
     /// List configured providers with key and cache status, or refresh a catalog
@@ -724,9 +737,6 @@ pub(crate) enum ModelCommand {
         #[arg(long)]
         json: bool,
     },
-
-    /// Which model heartbeat and compaction resolve to, and why
-    Background,
 
     /// Drop the saved selection and fall back to the configured default
     Reset,
@@ -1218,7 +1228,6 @@ fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         info,
         reset,
         all,
-        background,
         ..
     } = cmd
     else {
@@ -1230,9 +1239,6 @@ fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     }
     if let Some(ModelCommand::Use { name: target }) = subcommand {
         return Some(("switch_model", json!({ "name": target })));
-    }
-    if let Some(ModelCommand::Background) = subcommand {
-        return Some(("background_models", json!({})));
     }
     if let Some(ModelCommand::Reset) = subcommand {
         return Some(("reset_model", json!({})));
@@ -1271,10 +1277,6 @@ fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
                 Some(("set_model_setting", with_bg(obj)))
             }
         };
-    }
-
-    if *background {
-        return Some(("background_models", json!({})));
     }
 
     if *reset {
@@ -2348,7 +2350,6 @@ mod tests {
             &["model", "use", "opus"][..],
             &["model", "info", "opus"][..],
             &["model", "setting", "temperature", "0.7"][..],
-            &["model", "background"][..],
             &["character", "use", "qifei"][..],
             &["character", "new", "ada"][..],
             &["provider", "models", "openrouter"][..],
@@ -2617,7 +2618,6 @@ mod tests {
             info: false,
             reset: false,
             all: false,
-            background: false,
             json: false,
         };
         let (name, args) = to_swp_command(&cmd, None).unwrap();
@@ -2632,7 +2632,6 @@ mod tests {
             info: false,
             reset: false,
             all: true,
-            background: false,
             json: false,
         };
         let (cmd_name, args) = to_swp_command(&cmd, None).unwrap();
@@ -2654,7 +2653,6 @@ mod tests {
             info: false,
             reset: false,
             all: false,
-            background: false,
             json: false,
         };
         let (name, _) = to_swp_command(&cmd, None).unwrap();
@@ -2675,7 +2673,6 @@ mod tests {
             info: false,
             reset: false,
             all: false,
-            background: false,
             json: false,
         };
         let (name, args) = to_swp_command(&cmd, None).unwrap();
@@ -2699,7 +2696,6 @@ mod tests {
             info: false,
             reset: false,
             all: false,
-            background: false,
             json: false,
         };
         let (name, args) = to_swp_command(&cmd, None).unwrap();
@@ -2721,7 +2717,6 @@ mod tests {
             info: false,
             reset: false,
             all: false,
-            background: false,
             json: false,
         };
         let (_, args) = to_swp_command(&cmd, None).unwrap();
@@ -2729,19 +2724,21 @@ mod tests {
     }
 
     #[test]
-    fn model_background_flag_maps_to_background_models() {
-        let cli = parse(&["model", "--background"]);
-        let (name, _) = to_swp_command(&cli.command, None).unwrap();
-        assert_eq!(name, "background_models");
+    fn the_background_model_is_reported_by_the_list_not_a_subcommand() {
+        assert!(Cli::try_parse_from(["shore", "model", "--background"]).is_err());
+        let (name, _) = to_swp_command(&parse(&["model"]).command, None).unwrap();
+        assert_eq!(name, "list_models");
     }
 
     #[test]
-    fn model_background_flag_conflicts_with_selectors() {
-        assert!(Cli::try_parse_from(["shore", "model", "--background", "somemodel"]).is_err());
-        assert!(Cli::try_parse_from(["shore", "model", "--background", "--info"]).is_err());
-        assert!(Cli::try_parse_from(["shore", "model", "--background", "--reset"]).is_err());
-        assert!(Cli::try_parse_from(["shore", "model", "--background", "--all"]).is_err());
-        assert!(Cli::try_parse_from(["shore", "model", "--background"]).is_ok());
+    fn the_retired_background_subcommand_says_where_it_went() {
+        assert_eq!(
+            misplaced(&["model", "background"]),
+            Some(FlagProblem::Retired(
+                "model background",
+                "every model role is listed by: shore model",
+            )),
+        );
     }
 
     #[test]
@@ -2808,7 +2805,6 @@ mod tests {
             info: false,
             reset: false,
             all: false,
-            background: false,
             json: false,
         };
         let (_, args) = to_swp_command(&cmd, None).unwrap();
@@ -2830,7 +2826,6 @@ mod tests {
                 info: false,
                 reset: false,
                 all: false,
-                background: false,
                 json: false,
             };
             let (_, args) = to_swp_command(&cmd, None).unwrap();
@@ -3238,7 +3233,6 @@ mod tests {
                 info: false,
                 reset: false,
                 all: false,
-                background: false,
                 json: false,
             },
             CliCommand::Model {
@@ -3246,7 +3240,6 @@ mod tests {
                 info: false,
                 reset: false,
                 all: false,
-                background: false,
                 json: false,
             },
             CliCommand::Model {
@@ -3256,7 +3249,6 @@ mod tests {
                 info: false,
                 reset: false,
                 all: false,
-                background: false,
                 json: false,
             },
             CliCommand::Model {
@@ -3264,7 +3256,6 @@ mod tests {
                 info: false,
                 reset: true,
                 all: false,
-                background: false,
                 json: false,
             },
             CliCommand::Model {
@@ -3279,7 +3270,6 @@ mod tests {
                 info: false,
                 reset: false,
                 all: false,
-                background: false,
                 json: false,
             },
         ]

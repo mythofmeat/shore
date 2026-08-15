@@ -270,13 +270,15 @@
           "active",
           "hidden_count",
           "include_hidden",
-          "models"
+          "models",
+          "roles"
         ],
         "data_shape": {
           "models": "array[fixture]",
           "active": "string",
           "include_hidden": "bool",
-          "hidden_count": "number:0"
+          "hidden_count": "number:0",
+          "roles": "array[6]"
         }
       },
       "active_model_after": null
@@ -441,21 +443,6 @@
           "applicability": "object",
           "reasoning_effort_domain": "array[6]",
           "scopes": "object"
-        }
-      },
-      "active_model_after": null
-    },
-    {
-      "name": "background_models",
-      "args": {},
-      "output": {
-        "kind": "command_output",
-        "name": "background_models",
-        "data_keys": [
-          "background"
-        ],
-        "data_shape": {
-          "background": "array[2]"
         }
       },
       "active_model_after": null
@@ -859,25 +846,15 @@
           "active",
           "hidden_count",
           "include_hidden",
-          "models"
+          "models",
+          "roles"
         ],
         "data_shape": {
           "models": "array[fixture]",
           "active": "string",
           "include_hidden": "bool",
-          "hidden_count": "number:0"
-        }
-      }
-    },
-    {
-      "name": "background_models",
-      "output": {
-        "kind": "ok",
-        "data_keys": [
-          "background"
-        ],
-        "data_shape": {
-          "background": "array[2]"
+          "hidden_count": "number:0",
+          "roles": "array[6]"
         }
       }
     },

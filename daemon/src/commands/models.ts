@@ -145,41 +145,88 @@ function settingTarget(ctx: ModelsContext, args: Args): ResolvedModel {
   return resolveActiveModel(ctx);
 }
 
-export function backgroundModels(ctx: ModelsContext): unknown {
-  const bg = ctx.config.app.defaults.background;
-  const background = BACKGROUND_TASKS.map((task) => {
-    const perTask = bg[task];
-    const pinned = perTask ?? bg.model;
-    if (pinned !== undefined) {
-      let qualified = pinned;
-      try {
-        qualified = findEffectiveModel(
-          configView(ctx.config),
-          ctx.config.dirs.cache,
-          pinned,
-          true,
-        ).qualifiedName;
-      } catch {
-      }
-      return {
-        task,
-        model: qualified,
-        source: perTask !== undefined ? `config: background.${task}` : "config: background.model",
-      };
-    }
+function qualify(ctx: ModelsContext, name: string): string {
+  try {
+    return findEffectiveModel(configView(ctx.config), ctx.config.dirs.cache, name, true)
+      .qualifiedName;
+  } catch {
+    return name;
+  }
+}
 
-    const inherited =
-      ctx.characterName === undefined
-        ? undefined
-        : resolveChatModelForCharacter(configView(ctx.config), ctx.characterName, findEffective);
-    const chatModel = inherited?.qualifiedName ?? ctx.config.app.defaults.model;
+interface ModelRole {
+  role: string;
+  model: string | null;
+  source: string | null;
+}
+
+function chatRole(ctx: ModelsContext): ModelRole {
+  const resolved = effectiveChatModel(ctx.config, ctx.characterName);
+  if (resolved !== undefined) {
+    return { role: "chat", model: resolved.qualifiedName, source: "character" };
+  }
+  const fallback = ctx.config.app.defaults.model;
+  if (fallback !== undefined && fallback !== "") {
+    return { role: "chat", model: qualify(ctx, fallback), source: "defaults.model" };
+  }
+  const first = firstChatModel(ctx.config.models);
+  if (first !== undefined) {
+    return { role: "chat", model: first.qualifiedName, source: "first in catalog" };
+  }
+  return { role: "chat", model: null, source: null };
+}
+
+function backgroundRole(ctx: ModelsContext, task: BackgroundTask, chat: ModelRole): ModelRole {
+  const bg = ctx.config.app.defaults.background;
+  const perTask = bg[task];
+  if (perTask !== undefined) {
+    return { role: task, model: qualify(ctx, perTask), source: `defaults.background.${task}` };
+  }
+  if (bg.model !== undefined) {
+    return { role: task, model: qualify(ctx, bg.model), source: "defaults.background.model" };
+  }
+  return { role: task, model: chat.model, source: chat.model === null ? null : "inherits chat" };
+}
+
+function subagentRole(ctx: ModelsContext): ModelRole {
+  const defaults = ctx.config.app.defaults;
+  const overrides = [...ctx.config.app.subagents.values()].filter(
+    (sub) => sub.model !== undefined,
+  ).length;
+  const suffix = overrides === 0 ? "" : ` · ${overrides} override`;
+
+  if (defaults.subagent_model !== undefined) {
     return {
-      task,
-      model: chatModel ?? "(unresolved)",
-      source: "inherited: active chat model",
+      role: "sub-agents",
+      model: qualify(ctx, defaults.subagent_model),
+      source: `defaults.subagent_model${suffix}`,
     };
-  });
-  return { background };
+  }
+  if (defaults.model !== undefined && defaults.model !== "") {
+    return {
+      role: "sub-agents",
+      model: qualify(ctx, defaults.model),
+      source: `defaults.model${suffix}`,
+    };
+  }
+  return { role: "sub-agents", model: null, source: overrides === 0 ? null : suffix.trim() };
+}
+
+function configuredRole(ctx: ModelsContext, role: string, key: string): ModelRole {
+  const name = ctx.config.app.defaults[key as "embedding" | "image_generation"];
+  if (name === undefined || name === "") return { role, model: null, source: null };
+  return { role, model: qualify(ctx, name), source: `defaults.${key}` };
+}
+
+export function modelRoles(ctx: ModelsContext): ModelRole[] {
+  const chat = chatRole(ctx);
+  return [
+    chat,
+    ...BACKGROUND_TASKS.map((task) => backgroundRole(ctx, task, chat)),
+    subagentRole(ctx),
+    configuredRole(ctx, "embedding", "embedding"),
+    configuredRole(ctx, "images", "image_generation"),
+  ];
 }
 
 function effectiveModelToJson(entry: EffectiveModel): unknown {
@@ -225,6 +272,7 @@ export function listModels(ctx: ModelsContext, args: Args): unknown {
   return {
     models: entries.map(effectiveModelToJson),
     active: activeName(ctx, entries) ?? null,
+    roles: modelRoles(ctx),
     include_hidden: includeHidden,
     hidden_count: hiddenCount,
   };
