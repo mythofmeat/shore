@@ -41,7 +41,7 @@ insta = { version = "1", features = ["json"] }
 proptest = "1"
 rusqlite = { version = "0.37", features = ["bundled"] }
 zstd = "0.13"
-rmcp = { version = "1.7", features = [
+rmcp = { version = "1.8", features = [
     "client",
     "transport-child-process",
     "transport-streamable-http-client-reqwest",
