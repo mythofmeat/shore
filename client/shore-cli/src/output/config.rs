@@ -182,6 +182,38 @@ fn any_secret(map: &Map<String, Value>, path: &mut Vec<String>) -> bool {
     false
 }
 
+fn write_leaf<W: Write>(out: &mut W, scoped: Option<&str>, value: &Value) {
+    let Some(mut segments) = scoped.map(|key| {
+        key.split('.').map(str::to_owned).collect::<Vec<String>>()
+    }) else {
+        empty(out, "nothing configured");
+        return;
+    };
+    let Some(leaf) = segments.pop() else {
+        empty(out, "nothing configured");
+        return;
+    };
+    let secret = is_secret(&segments, &leaf);
+    let display = if secret {
+        redacted(value)
+    } else if let Some(summary) = is_long_text(value) {
+        summary
+    } else {
+        scalar(value)
+    };
+    let mut rows = Rows::new();
+    rows.add_toned(
+        &leaf,
+        &display,
+        if secret { Tone::Muted } else { Tone::Plain },
+    );
+    rows.write(out);
+    if secret {
+        blank(out);
+        note(out, "secrets hidden \u{00b7} --json to read them");
+    }
+}
+
 pub(crate) fn write_config<W: Write>(out: &mut W, data: &Value, show_all: bool) {
     if let Some(key) = data.get("set").and_then(Value::as_str) {
         section(out, "config set", None);
@@ -194,8 +226,9 @@ pub(crate) fn write_config<W: Write>(out: &mut W, data: &Value, show_all: bool) 
 
     let scoped = data.get("key").and_then(Value::as_str);
     section(out, "config", scoped);
-    let Some(config) = data.get("config").and_then(Value::as_object) else {
-        empty(out, "nothing configured");
+    let value = data.get("config").unwrap_or(&Value::Null);
+    let Some(config) = value.as_object() else {
+        write_leaf(out, scoped, value);
         return;
     };
     let mut path: Vec<String> = Vec::new();
@@ -370,6 +403,63 @@ mod tests {
             out.contains("-a for everything"),
             "a filtered view must say it is filtered: {out}"
         );
+    }
+
+    #[test]
+    fn reading_one_key_prints_its_value_not_an_empty_notice() {
+        let data = json!({
+            "key": "tools.enabled_tools",
+            "config": ["read", "edit", "git"],
+            "defaults": []
+        });
+        let out = render(&data, false);
+        assert!(
+            out.contains("read, edit, git"),
+            "a leaf read must show the value it was asked for: {out}"
+        );
+        assert!(
+            !out.contains("nothing configured"),
+            "a key that has a value must not read as unset: {out}"
+        );
+    }
+
+    #[test]
+    fn a_leaf_value_is_labelled_the_way_the_tree_labels_it() {
+        let data = json!({"key": "memory.compaction.min_turns", "config": 10});
+        let out = render(&data, false);
+        let row = out
+            .lines()
+            .find(|l| l.contains("min_turns") && !l.contains("config \u{00b7}"))
+            .unwrap_or_default();
+        assert!(
+            row.contains("min_turns") && row.contains("10"),
+            "the row must carry the leaf name and its value: {out}"
+        );
+        assert!(
+            !row.contains("memory.compaction.min_turns"),
+            "the dotted path belongs in the header, not the row: {out}"
+        );
+    }
+
+    #[test]
+    fn a_leaf_read_of_a_credential_is_still_redacted() {
+        let data = json!({
+            "key": "mcp.whoop.headers.Authorization",
+            "config": "Bearer c78911b4d4502e957cbee6546"
+        });
+        let out = render(&data, false);
+        assert!(
+            !out.contains("c78911b4"),
+            "reading a header directly must not be a way around redaction: {out}"
+        );
+        assert!(out.contains("(set, hidden)"), "{out}");
+    }
+
+    #[test]
+    fn a_key_that_is_set_to_nothing_reads_as_none() {
+        let data = json!({"key": "defaults.model", "config": Value::Null});
+        let out = render(&data, false);
+        assert!(out.contains("(none)"), "{out}");
     }
 
     #[test]

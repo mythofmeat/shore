@@ -434,15 +434,6 @@ pub(crate) enum CliCommand {
         all: bool,
     },
 
-    /// Show the tool surface: which tools are enabled, sub-agent ownership,
-    /// the exec allowlist, and any dangling config references
-    #[command(display_order = 10)]
-    Tools {
-        /// Output raw JSON
-        #[arg(long)]
-        json: bool,
-    },
-
     /// Show token usage statistics and costs
     #[command(display_order = 12)]
     Usage {
@@ -805,6 +796,15 @@ pub(crate) enum ConfigCommand {
         #[arg(long)]
         json: bool,
     },
+
+    /// Show the resolved tool surface: which tools are enabled, sub-agent
+    /// ownership, and any dangling config references. Read the raw values
+    /// with `config tools.enabled_tools`.
+    Tools {
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -1022,7 +1022,7 @@ pub(crate) fn to_swp_command(
             ..
         }
         | CliCommand::Config {
-            subcommand: Some(_),
+            subcommand: Some(ConfigCommand::Reload { .. }),
             ..
         } => None,
 
@@ -1102,12 +1102,14 @@ pub(crate) fn to_swp_command(
 
         CliCommand::Compact { .. } => compact_to_swp(cmd),
 
+        CliCommand::Config {
+            subcommand: Some(ConfigCommand::Tools { .. }),
+            ..
+        } => Some(("tools", json!({}))),
         CliCommand::Config { check: true, .. } => Some(("config_check", json!({}))),
         CliCommand::Config { key, value, .. } => {
             Some(("config", json!({ "key": key, "value": value })))
         }
-
-        CliCommand::Tools { .. } => Some(("tools", json!({}))),
 
         CliCommand::Usage { .. } => usage_to_swp(cmd, character),
     }
@@ -2135,6 +2137,45 @@ mod tests {
             all: false,
         };
         assert!(to_swp_command(&cmd, None).is_none());
+    }
+
+    #[test]
+    fn config_tools_asks_the_daemon_for_the_tool_surface() {
+        let cli = parse(&["config", "tools"]);
+        assert_variant!(
+            &cli.command,
+            CliCommand::Config {
+                subcommand: Some(ConfigCommand::Tools { json }),
+                ..
+            } => assert!(!json)
+        );
+        let (name, _args) = to_swp_command(&cli.command, None).expect("must map to a command");
+        assert_eq!(name, "tools");
+    }
+
+    #[test]
+    fn a_dotted_key_under_tools_is_still_a_key_read() {
+        let cli = parse(&["config", "tools.enabled_tools"]);
+        assert_variant!(
+            &cli.command,
+            CliCommand::Config { subcommand, key, .. } => {
+                assert!(
+                    subcommand.is_none(),
+                    "only the bare word 'tools' is the subcommand"
+                );
+                assert_eq!(key.as_deref(), Some("tools.enabled_tools"));
+            }
+        );
+        let (name, _args) = to_swp_command(&cli.command, None).expect("must map to a command");
+        assert_eq!(name, "config");
+    }
+
+    #[test]
+    fn the_tool_surface_is_no_longer_a_top_level_command() {
+        assert!(
+            Cli::try_parse_from(["shore", "tools"]).is_err(),
+            "`shore tools` moved under `shore config`"
+        );
     }
 
     #[test]

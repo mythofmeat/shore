@@ -160,7 +160,6 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
         | CliCommand::Provider { .. }
         | CliCommand::Compact { .. }
         | CliCommand::Config { .. }
-        | CliCommand::Tools { .. }
         | CliCommand::Usage { .. }
         | CliCommand::Completions { .. }
         | CliCommand::Complete { .. }) => {
@@ -171,20 +170,8 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
     Ok(())
 }
 
-async fn handle_generic_swp_command(
-    conn: &mut SWPConnection,
-    other: &CliCommand,
-    character: Option<&str>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    if let CliCommand::Config {
-        subcommand: Some(_),
-        ..
-    } = other
-    {
-        return handle_config_reload(conn, other).await;
-    }
-
-    let json_mode = match other {
+fn wants_json(other: &CliCommand) -> bool {
+    match other {
         CliCommand::Model {
             json, subcommand, ..
         } => {
@@ -216,10 +203,17 @@ async fn handle_generic_swp_command(
             ) => *json,
             None => false,
         },
+        CliCommand::Config {
+            json, subcommand, ..
+        } => {
+            *json
+                || matches!(
+                    subcommand,
+                    Some(crate::cli::ConfigCommand::Tools { json: true })
+                )
+        }
         CliCommand::Character { json, .. }
         | CliCommand::Compact { json, .. }
-        | CliCommand::Config { json, .. }
-        | CliCommand::Tools { json, .. }
         | CliCommand::Usage { json, .. } => *json,
         CliCommand::Debug { subcommand } => matches!(
             subcommand,
@@ -235,7 +229,23 @@ async fn handle_generic_swp_command(
         | CliCommand::Status { .. }
         | CliCommand::Completions { .. }
         | CliCommand::Complete { .. } => false,
-    };
+    }
+}
+
+async fn handle_generic_swp_command(
+    conn: &mut SWPConnection,
+    other: &CliCommand,
+    character: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if let CliCommand::Config {
+        subcommand: Some(crate::cli::ConfigCommand::Reload { .. }),
+        ..
+    } = other
+    {
+        return handle_config_reload(conn, other).await;
+    }
+
+    let json_mode = wants_json(other);
     let toml_mode = matches!(
         other,
         CliCommand::Config {
@@ -1451,7 +1461,6 @@ mod tests {
             | CliCommand::Provider { .. }
                 | CliCommand::Compact { .. }
             | CliCommand::Config { .. }
-            | CliCommand::Tools { .. }
             | CliCommand::Usage { .. }
             | CliCommand::Completions { .. }
             | CliCommand::Complete { .. }) => {
