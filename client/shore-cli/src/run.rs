@@ -207,8 +207,7 @@ fn wants_json(other: &CliCommand) -> bool {
                 | crate::cli::TraceCommand::Heartbeat { json, .. }
                 | crate::cli::TraceCommand::Errors { json, .. }
                 | crate::cli::TraceCommand::Events { json, .. }
-                | crate::cli::TraceCommand::Subagent { json, .. }
-                | crate::cli::TraceCommand::Index { json, .. },
+                | crate::cli::TraceCommand::Subagent { json, .. },
             ) => *json,
             None => false,
         },

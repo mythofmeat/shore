@@ -560,7 +560,6 @@ function commandDeps(a: CommandAssembly): CommandDeps {
         return workspaceIndexPath(runtime.registry.effectiveConfig(character).dirs.cache, character);
       },
       progressFor: (character) => runtime.workspaceIndex.progress(character),
-      characters: () => [...runtime.registry.availableCharacters()],
     },
   };
 }

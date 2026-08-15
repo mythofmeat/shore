@@ -9,6 +9,7 @@ pub(crate) mod tools;
 pub(crate) mod transcript;
 pub(crate) mod usage;
 pub(crate) mod vocab;
+pub(crate) mod workspace;
 
 pub(crate) use commands::*;
 pub(crate) use vocab::{

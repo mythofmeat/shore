@@ -1,49 +1,33 @@
 import { workspaceIndexStats } from "../memory/workspace_index.ts";
 import type { WorkspaceIndexProgress } from "../memory/workspace_index_service.ts";
-import { invalidRequest, internalError } from "./errors.ts";
-import type { Args, Json } from "./conversation.ts";
+import type { Json } from "./conversation.ts";
 
-export interface WorkspaceIndexContext {
-  characterName: string | undefined;
+export interface WorkspaceIndexSource {
   indexPathFor: (character: string) => string | undefined;
   progressFor: (character: string) => WorkspaceIndexProgress | undefined;
-  characters: () => string[];
   now?: () => number;
 }
 
-function asStr(v: unknown): string | undefined {
-  return typeof v === "string" ? v : undefined;
-}
+export async function workspaceIndexSection(
+  source: WorkspaceIndexSource | undefined,
+  character: string,
+): Promise<Json | null> {
+  if (source === undefined) return null;
 
-export async function workspaceIndex(ctx: WorkspaceIndexContext, args: Args): Promise<Json> {
-  const requested = asStr(args["character"]) ?? ctx.characterName;
-  if (requested === undefined) throw invalidRequest("no character selected");
-
-  const known = ctx.characters();
-  if (known.length > 0 && !known.includes(requested)) {
-    throw invalidRequest(`unknown character '${requested}'`);
-  }
-
-  const indexPath = ctx.indexPathFor(requested);
-  if (indexPath === undefined) {
-    return { character: requested, enabled: false };
-  }
+  const indexPath = source.indexPathFor(character);
+  if (indexPath === undefined) return null;
 
   let stats;
   try {
     stats = await workspaceIndexStats(indexPath);
   } catch (e) {
-    throw internalError(
-      `workspace index query failed: ${e instanceof Error ? e.message : String(e)}`,
-    );
+    return { error: e instanceof Error ? e.message : String(e) };
   }
 
-  const progress = ctx.progressFor(requested);
-  const now = (ctx.now ?? (() => Date.now()))();
+  const progress = source.progressFor(character);
+  const now = (source.now ?? (() => Date.now()))();
 
   return {
-    character: requested,
-    enabled: true,
     path: indexPath,
     files: stats.files,
     embedded: stats.embedded,
@@ -58,10 +42,7 @@ export async function workspaceIndex(ctx: WorkspaceIndexContext, args: Args): Pr
   };
 }
 
-function backgroundView(
-  progress: WorkspaceIndexProgress | undefined,
-  now: number,
-): Json {
+function backgroundView(progress: WorkspaceIndexProgress | undefined, now: number): Json {
   if (progress === undefined) return { registered: false };
   return {
     registered: true,

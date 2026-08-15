@@ -10,7 +10,6 @@ import type { AutonomyService } from "../autonomy/service.ts";
 import { localWallClock } from "../autonomy/activity.ts";
 import { CommandError, internalError, invalidRequest } from "./errors.ts";
 import { callLog, transcript } from "./call_log.ts";
-import { workspaceIndex } from "./workspace_index.ts";
 import { subagentTrace } from "./subagent_trace.ts";
 import { config, configCheck, configReload, tools, type ConfigRuntime } from "./config.ts";
 import {
@@ -60,7 +59,7 @@ import {
 } from "./status.ts";
 import { usage } from "./usage.ts";
 import type { SessionTokens } from "../handler/persistence.ts";
-import type { WorkspaceIndexContext } from "./workspace_index.ts";
+import type { WorkspaceIndexSource } from "./workspace_index.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 
 export interface CommandSession {
@@ -87,10 +86,7 @@ export interface CommandDeps {
   keepalive?: Omit<KeepalivePingContext, "config" | "dataDir">;
   activate?: Pick<SessionActivateContext, "register">;
   runTool?: Pick<RunToolContext, "tools" | "mcpTools">;
-  workspaceIndex?: Pick<
-    WorkspaceIndexContext,
-    "indexPathFor" | "progressFor" | "characters"
-  >;
+  workspaceIndex?: WorkspaceIndexSource;
 }
 
 const CHARACTERLESS = new Set([
@@ -181,18 +177,6 @@ export async function runCommand(
       return callLog({ characterName: character, callStore: deps.callStore }, args);
     case "transcript":
       return transcript({ characterName: character, callStore: deps.callStore }, args);
-    case "workspace_index":
-      if (deps.workspaceIndex === undefined) throw unwired("workspace_index");
-      return await workspaceIndex(
-        {
-          characterName: character,
-          indexPathFor: deps.workspaceIndex.indexPathFor,
-          progressFor: deps.workspaceIndex.progressFor,
-          characters: deps.workspaceIndex.characters,
-          ...(deps.now === undefined ? {} : { now: deps.now }),
-        },
-        args,
-      );
     case "subagent_trace":
       return await subagentTrace({ dataDir: session.dataDir, characterName: character }, args);
     case "heartbeat_tick_now":
@@ -308,6 +292,10 @@ function statusContext(
     diagnostics: deps.diagnostics,
     now: deps.now ?? Date.now,
     localNow: deps.localNow ?? (() => localWallClock(Date.now())),
+    workspaceIndex:
+      deps.workspaceIndex === undefined
+        ? undefined
+        : { ...deps.workspaceIndex, ...(deps.now === undefined ? {} : { now: deps.now }) },
   };
 }
 

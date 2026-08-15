@@ -237,6 +237,7 @@
           "data_dir",
           "message_count",
           "pending_deferred_edit_count",
+          "index",
           "pending_deferred_edits",
           "sections",
           "tokens",
@@ -255,7 +256,8 @@
           "tokens": "object",
           "autonomy": "object",
           "activity": "object",
-          "sections": "array[3]"
+          "index": "null",
+          "sections": "array[4]"
         }
       },
       "active_model_after": null

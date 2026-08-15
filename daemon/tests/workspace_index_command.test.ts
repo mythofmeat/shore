@@ -3,10 +3,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { CommandError } from "../src/commands/errors";
 import {
-  workspaceIndex,
-  type WorkspaceIndexContext,
+  workspaceIndexSection,
+  type WorkspaceIndexSource,
 } from "../src/commands/workspace_index";
 import type { WorkspaceIndexProgress } from "../src/memory/workspace_index_service";
 import { WorkspaceIndexStore } from "../src/memory/workspace_store";
@@ -68,39 +67,38 @@ function stocked(name: string): string {
   return path;
 }
 
-function contextFor(
-  overrides: Partial<WorkspaceIndexContext> = {},
-): WorkspaceIndexContext {
+function sourceFor(overrides: Partial<WorkspaceIndexSource> = {}): WorkspaceIndexSource {
   return {
-    characterName: "qifei",
-    indexPathFor: (c) => (c === "qifei" ? stocked("qifei") : undefined),
+    indexPathFor: (c: string) => (c === "qifei" ? stocked("qifei") : undefined),
     progressFor: () => undefined,
-    characters: () => ["qifei", "yuna"],
     now: () => 1_000_000,
     ...overrides,
   };
 }
 
-describe("workspace_index", () => {
-  test("it counts what is embedded, pending and skipped, and why", async () => {
-    const out = (await workspaceIndex(contextFor(), {})) as Record<string, any>;
+const section = async (
+  source: WorkspaceIndexSource | undefined = sourceFor(),
+  character = "qifei",
+): Promise<Record<string, any> | null> =>
+  (await workspaceIndexSection(source, character)) as Record<string, any> | null;
 
-    expect(out.character).toBe("qifei");
-    expect(out.enabled).toBe(true);
-    expect(out.files).toBe(4);
-    expect(out.embedded).toBe(1);
-    expect(out.pending).toBe(1);
-    expect(out.skipped).toBe(2);
-    expect(out.skip_reasons).toEqual({ "non-utf8": 1, oversize: 1 });
-    expect(out.vectors).toBe(1);
-    expect(out.models).toEqual(["qwen3"]);
-    expect(out.last_indexed_at).toBe("2026-08-15T01:44:00.000Z");
-    expect(out.bytes).toBeGreaterThan(0);
+describe("the status index section", () => {
+  test("it counts what is embedded, pending and skipped, and why", async () => {
+    const out = await section();
+
+    expect(out?.files).toBe(4);
+    expect(out?.embedded).toBe(1);
+    expect(out?.pending).toBe(1);
+    expect(out?.skipped).toBe(2);
+    expect(out?.skip_reasons).toEqual({ "non-utf8": 1, oversize: 1 });
+    expect(out?.vectors).toBe(1);
+    expect(out?.models).toEqual(["qwen3"]);
+    expect(out?.last_indexed_at).toBe("2026-08-15T01:44:00.000Z");
+    expect(out?.bytes).toBeGreaterThan(0);
   });
 
   test("an unregistered background pass says so rather than pretending", async () => {
-    const out = (await workspaceIndex(contextFor(), {})) as Record<string, any>;
-    expect(out.background).toEqual({ registered: false });
+    expect((await section())?.background).toEqual({ registered: false });
   });
 
   test("a registered pass reports its progress and its backoff", async () => {
@@ -113,13 +111,10 @@ describe("workspace_index", () => {
       lastError: "provider is down",
       sweptAt: 999_000,
     };
-    const out = (await workspaceIndex(
-      contextFor({ progressFor: () => progress }),
-      {},
-    )) as Record<string, any>;
+    const out = await section(sourceFor({ progressFor: () => progress }));
 
-    expect(out.pending).toBe(42);
-    expect(out.background).toEqual({
+    expect(out?.pending).toBe(42);
+    expect(out?.background).toEqual({
       registered: true,
       swept: true,
       failures: 3,
@@ -129,8 +124,8 @@ describe("workspace_index", () => {
   });
 
   test("a healthy registered pass carries no error and no retry", async () => {
-    const out = (await workspaceIndex(
-      contextFor({
+    const out = await section(
+      sourceFor({
         progressFor: () => ({
           character: "qifei",
           pending: 0,
@@ -141,58 +136,25 @@ describe("workspace_index", () => {
           sweptAt: 999_000,
         }),
       }),
-      {},
-    )) as Record<string, any>;
-
-    expect(out.background).toEqual({ registered: true, swept: true, failures: 0 });
-  });
-
-  test("a character argument overrides the selected one", async () => {
-    const seen: string[] = [];
-    await workspaceIndex(
-      contextFor({
-        indexPathFor: (c) => {
-          seen.push(c);
-          return stocked(c);
-        },
-      }),
-      { character: "yuna" },
     );
-    expect(seen).toEqual(["yuna"]);
+
+    expect(out?.background).toEqual({ registered: true, swept: true, failures: 0 });
   });
 
-  test("a character nobody has heard of is a bad request", async () => {
-    await expect(workspaceIndex(contextFor(), { character: "nobody" })).rejects.toThrow(
-      CommandError,
-    );
-    await expect(workspaceIndex(contextFor(), { character: "nobody" })).rejects.toThrow(
-      "unknown character 'nobody'",
-    );
+  test("a character with no index path has no section at all", async () => {
+    expect(await section(sourceFor({ indexPathFor: () => undefined }))).toBeNull();
   });
 
-  test("no character selected at all is a bad request", async () => {
-    await expect(
-      workspaceIndex(contextFor({ characterName: undefined }), {}),
-    ).rejects.toThrow("no character selected");
-  });
-
-  test("a character with no index path reports disabled rather than failing", async () => {
-    const out = (await workspaceIndex(
-      contextFor({ indexPathFor: () => undefined }),
-      {},
-    )) as Record<string, any>;
-    expect(out).toEqual({ character: "qifei", enabled: false });
+  test("an unwired daemon has no section rather than an empty one", async () => {
+    expect(await workspaceIndexSection(undefined, "qifei")).toBeNull();
   });
 
   test("an index that has never been written reports zeroes, not an error", async () => {
-    const out = (await workspaceIndex(
-      contextFor({ indexPathFor: () => join(root, "fresh.db") }),
-      {},
-    )) as Record<string, any>;
+    const out = await section(sourceFor({ indexPathFor: () => join(root, "fresh.db") }));
 
-    expect(out.files).toBe(0);
-    expect(out.embedded).toBe(0);
-    expect(out.vectors).toBe(0);
-    expect(out.last_indexed_at).toBeNull();
+    expect(out?.files).toBe(0);
+    expect(out?.embedded).toBe(0);
+    expect(out?.vectors).toBe(0);
+    expect(out?.last_indexed_at).toBeNull();
   });
 });

@@ -153,7 +153,7 @@ fn format_threshold(secs: u64) -> String {
     }
 }
 
-fn format_local_timestamp(rfc3339: &str) -> String {
+pub(crate) fn format_local_timestamp(rfc3339: &str) -> String {
     parse_timestamp(rfc3339).map_or_else(
         || rfc3339.to_owned(),
         |dt| dt.format("%Y-%m-%d %H:%M").to_string(),
