@@ -28,8 +28,8 @@
             },
             "duration_ms": null,
             "error": null,
-            "request_bytes": 9,
-            "response_bytes": 9
+            "request_bytes": 0,
+            "response_bytes": 0
           },
           {
             "id": 3,
@@ -48,8 +48,8 @@
             },
             "duration_ms": 0,
             "error": null,
-            "request_bytes": 64,
-            "response_bytes": 33
+            "request_bytes": 23000,
+            "response_bytes": 24
           },
           {
             "id": 2,
@@ -68,7 +68,7 @@
             },
             "duration_ms": null,
             "error": "overloaded_error",
-            "request_bytes": 23,
+            "request_bytes": 14,
             "response_bytes": 0
           },
           {
@@ -88,8 +88,8 @@
             },
             "duration_ms": 9,
             "error": null,
-            "request_bytes": 29,
-            "response_bytes": 30
+            "request_bytes": 20,
+            "response_bytes": 21
           },
           {
             "id": 1,
@@ -108,8 +108,8 @@
             },
             "duration_ms": 1234,
             "error": null,
-            "request_bytes": 22,
-            "response_bytes": 23
+            "request_bytes": 13,
+            "response_bytes": 14
           }
         ]
       },
@@ -139,8 +139,8 @@
             },
             "duration_ms": 0,
             "error": null,
-            "request_bytes": 64,
-            "response_bytes": 33
+            "request_bytes": 23000,
+            "response_bytes": 24
           },
           {
             "id": 2,
@@ -159,7 +159,7 @@
             },
             "duration_ms": null,
             "error": "overloaded_error",
-            "request_bytes": 23,
+            "request_bytes": 14,
             "response_bytes": 0
           }
         ]
@@ -190,8 +190,8 @@
             },
             "duration_ms": 9,
             "error": null,
-            "request_bytes": 29,
-            "response_bytes": 30
+            "request_bytes": 20,
+            "response_bytes": 21
           },
           {
             "id": 1,
@@ -210,8 +210,8 @@
             },
             "duration_ms": 1234,
             "error": null,
-            "request_bytes": 22,
-            "response_bytes": 23
+            "request_bytes": 13,
+            "response_bytes": 14
           }
         ]
       },
@@ -251,7 +251,7 @@
             },
             "duration_ms": null,
             "error": "overloaded_error",
-            "request_bytes": 23,
+            "request_bytes": 14,
             "response_bytes": 0
           },
           {
@@ -271,8 +271,8 @@
             },
             "duration_ms": 9,
             "error": null,
-            "request_bytes": 29,
-            "response_bytes": 30
+            "request_bytes": 20,
+            "response_bytes": 21
           },
           {
             "id": 1,
@@ -291,8 +291,8 @@
             },
             "duration_ms": 1234,
             "error": null,
-            "request_bytes": 22,
-            "response_bytes": 23
+            "request_bytes": 13,
+            "response_bytes": 14
           }
         ]
       },
@@ -322,8 +322,8 @@
             },
             "duration_ms": 0,
             "error": null,
-            "request_bytes": 64,
-            "response_bytes": 33
+            "request_bytes": 23000,
+            "response_bytes": 24
           }
         ]
       },
@@ -363,7 +363,7 @@
             },
             "duration_ms": null,
             "error": "overloaded_error",
-            "request_bytes": 23,
+            "request_bytes": 14,
             "response_bytes": 0
           }
         ]
@@ -394,8 +394,8 @@
             },
             "duration_ms": null,
             "error": null,
-            "request_bytes": 9,
-            "response_bytes": 9
+            "request_bytes": 0,
+            "response_bytes": 0
           }
         ]
       },
@@ -425,8 +425,8 @@
             },
             "duration_ms": null,
             "error": null,
-            "request_bytes": 9,
-            "response_bytes": 9
+            "request_bytes": 0,
+            "response_bytes": 0
           },
           {
             "id": 3,
@@ -445,8 +445,8 @@
             },
             "duration_ms": 0,
             "error": null,
-            "request_bytes": 64,
-            "response_bytes": 33
+            "request_bytes": 23000,
+            "response_bytes": 24
           }
         ]
       },
@@ -476,8 +476,8 @@
             },
             "duration_ms": null,
             "error": null,
-            "request_bytes": 9,
-            "response_bytes": 9
+            "request_bytes": 0,
+            "response_bytes": 0
           },
           {
             "id": 3,
@@ -496,8 +496,8 @@
             },
             "duration_ms": 0,
             "error": null,
-            "request_bytes": 64,
-            "response_bytes": 33
+            "request_bytes": 23000,
+            "response_bytes": 24
           },
           {
             "id": 2,
@@ -516,7 +516,7 @@
             },
             "duration_ms": null,
             "error": "overloaded_error",
-            "request_bytes": 23,
+            "request_bytes": 14,
             "response_bytes": 0
           },
           {
@@ -536,8 +536,8 @@
             },
             "duration_ms": 9,
             "error": null,
-            "request_bytes": 29,
-            "response_bytes": 30
+            "request_bytes": 20,
+            "response_bytes": 21
           },
           {
             "id": 1,
@@ -556,8 +556,8 @@
             },
             "duration_ms": 1234,
             "error": null,
-            "request_bytes": 22,
-            "response_bytes": 23
+            "request_bytes": 13,
+            "response_bytes": 14
           }
         ]
       },
@@ -584,8 +584,8 @@
           },
           "duration_ms": 1234,
           "error": null,
-          "request_bytes": 22,
-          "response_bytes": 23,
+          "request_bytes": 13,
+          "response_bytes": 14,
           "request": "first request",
           "response": "first response"
         }
@@ -613,7 +613,7 @@
           },
           "duration_ms": null,
           "error": "overloaded_error",
-          "request_bytes": 23,
+          "request_bytes": 14,
           "response_bytes": 0,
           "request": "second request",
           "response": null
@@ -642,8 +642,8 @@
           },
           "duration_ms": 0,
           "error": null,
-          "request_bytes": 64,
-          "response_bytes": 33,
+          "request_bytes": 23000,
+          "response_bytes": 24,
           "request": "context line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\n",
           "response": "réponse ✅ 你好 😀"
         }
@@ -671,8 +671,8 @@
           },
           "duration_ms": null,
           "error": null,
-          "request_bytes": 9,
-          "response_bytes": 9,
+          "request_bytes": 0,
+          "response_bytes": 0,
           "request": "",
           "response": ""
         }
@@ -700,8 +700,8 @@
           },
           "duration_ms": 9,
           "error": null,
-          "request_bytes": 29,
-          "response_bytes": 30,
+          "request_bytes": 20,
+          "response_bytes": 21,
           "request": "out of order request",
           "response": "out of order response"
         }
@@ -1309,8 +1309,8 @@
         },
         "duration_ms": 1234,
         "error": null,
-        "request_bytes": 22,
-        "response_bytes": 23,
+        "request_bytes": 13,
+        "response_bytes": 14,
         "request": "first request",
         "response": "first response"
       },
@@ -1331,7 +1331,7 @@
         },
         "duration_ms": null,
         "error": "overloaded_error",
-        "request_bytes": 23,
+        "request_bytes": 14,
         "response_bytes": 0,
         "request": "second request",
         "response": null
@@ -1353,8 +1353,8 @@
         },
         "duration_ms": 0,
         "error": null,
-        "request_bytes": 64,
-        "response_bytes": 33,
+        "request_bytes": 23000,
+        "response_bytes": 24,
         "request": "context line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\ncontext line that repeats and compresses away\n",
         "response": "réponse ✅ 你好 😀"
       },
@@ -1375,8 +1375,8 @@
         },
         "duration_ms": null,
         "error": null,
-        "request_bytes": 9,
-        "response_bytes": 9,
+        "request_bytes": 0,
+        "response_bytes": 0,
         "request": "",
         "response": ""
       },
@@ -1397,8 +1397,8 @@
         },
         "duration_ms": 9,
         "error": null,
-        "request_bytes": 29,
-        "response_bytes": 30,
+        "request_bytes": 20,
+        "response_bytes": 21,
         "request": "out of order request",
         "response": "out of order response"
       }
@@ -1421,8 +1421,8 @@
         },
         "duration_ms": null,
         "error": null,
-        "request_bytes": 9,
-        "response_bytes": 9
+        "request_bytes": 0,
+        "response_bytes": 0
       },
       {
         "id": 3,
@@ -1441,8 +1441,8 @@
         },
         "duration_ms": 0,
         "error": null,
-        "request_bytes": 64,
-        "response_bytes": 33
+        "request_bytes": 23000,
+        "response_bytes": 24
       },
       {
         "id": 2,
@@ -1461,7 +1461,7 @@
         },
         "duration_ms": null,
         "error": "overloaded_error",
-        "request_bytes": 23,
+        "request_bytes": 14,
         "response_bytes": 0
       },
       {
@@ -1481,8 +1481,8 @@
         },
         "duration_ms": 9,
         "error": null,
-        "request_bytes": 29,
-        "response_bytes": 30
+        "request_bytes": 20,
+        "response_bytes": 21
       },
       {
         "id": 1,
@@ -1501,8 +1501,8 @@
         },
         "duration_ms": 1234,
         "error": null,
-        "request_bytes": 22,
-        "response_bytes": 23
+        "request_bytes": 13,
+        "response_bytes": 14
       }
     ],
     "transcripts": [

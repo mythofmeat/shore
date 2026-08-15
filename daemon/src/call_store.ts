@@ -541,12 +541,8 @@ export class CallStore {
                 status, status_text, duration_ms, error,
                 request_headers_zstd, request_body_zstd, request_payload_id,
                 response_headers_zstd, response_body_zstd, response_payload_id,
-                COALESCE(
-                    (SELECT stored FROM payloads WHERE id = request_payload_id),
-                    LENGTH(request_body_zstd), 0) AS request_bytes,
-                COALESCE(
-                    (SELECT stored FROM payloads WHERE id = response_payload_id),
-                    LENGTH(response_body_zstd), 0) AS response_bytes
+                (SELECT size FROM payloads WHERE id = request_payload_id) AS request_size,
+                (SELECT size FROM payloads WHERE id = response_payload_id) AS response_size
          FROM http_calls WHERE call_id = ?1 ORDER BY seq`,
       )
       .all(call_id) as Row[];
@@ -568,8 +564,8 @@ export class CallStore {
       request_body: this.#bodyText(row["request_payload_id"], row["request_body_zstd"]),
       response_headers: headersFrom(row["response_headers_zstd"]),
       response_body: this.#bodyText(row["response_payload_id"], row["response_body_zstd"]),
-      request_bytes: count(row["request_bytes"]),
-      response_bytes: count(row["response_bytes"]),
+      request_bytes: uncompressedBytes(row["request_size"], row["request_body_zstd"]),
+      response_bytes: uncompressedBytes(row["response_size"], row["response_body_zstd"]),
     }));
   }
 
@@ -606,12 +602,9 @@ export class CallStore {
         `SELECT id, call_id, ts, call_type, character, model, provider,
                 finish_reason, input_tokens, output_tokens, cache_read_tokens,
                 cache_write_tokens, duration_ms, error,
-                COALESCE(
-                    (SELECT stored FROM payloads WHERE id = request_payload_id),
-                    LENGTH(request_zstd), 0) AS request_bytes,
-                COALESCE(
-                    (SELECT stored FROM payloads WHERE id = response_payload_id),
-                    LENGTH(response_zstd), 0) AS response_bytes
+                (SELECT size FROM payloads WHERE id = request_payload_id) AS request_size,
+                (SELECT size FROM payloads WHERE id = response_payload_id) AS response_size,
+                request_zstd, response_zstd
          FROM calls
          WHERE (?1 IS NULL OR call_type = ?1)
            AND (?2 IS NULL OR character = ?2)
@@ -628,12 +621,8 @@ export class CallStore {
         `SELECT id, call_id, ts, call_type, character, model, provider,
                 finish_reason, input_tokens, output_tokens, cache_read_tokens,
                 cache_write_tokens, duration_ms, error,
-                COALESCE(
-                    (SELECT stored FROM payloads WHERE id = request_payload_id),
-                    LENGTH(request_zstd), 0) AS request_bytes,
-                COALESCE(
-                    (SELECT stored FROM payloads WHERE id = response_payload_id),
-                    LENGTH(response_zstd), 0) AS response_bytes,
+                (SELECT size FROM payloads WHERE id = request_payload_id) AS request_size,
+                (SELECT size FROM payloads WHERE id = response_payload_id) AS response_size,
                 request_zstd, response_zstd,
                 request_payload_id, response_payload_id
          FROM calls WHERE id = ?1`,
@@ -804,9 +793,15 @@ function rowToSummary(row: Row): CallSummary {
     usage: usageFrom(row),
     duration_ms: optCount(row["duration_ms"]),
     error: optText(row["error"]),
-    request_bytes: count(row["request_bytes"]),
-    response_bytes: count(row["response_bytes"]),
+    request_bytes: uncompressedBytes(row["request_size"], row["request_zstd"]),
+    response_bytes: uncompressedBytes(row["response_size"], row["response_zstd"]),
   };
+}
+
+function uncompressedBytes(size: unknown, legacy: unknown): number {
+  if (typeof size === "number") return size;
+  if (!(legacy instanceof Uint8Array)) return 0;
+  return zstdDecompressSync(legacy).byteLength;
 }
 
 function usageFrom(row: Row): Usage {
