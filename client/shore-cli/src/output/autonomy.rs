@@ -188,14 +188,7 @@ fn write_autonomy_schedule(
     max_ticks: u64,
 ) {
     if let Some(eff) = autonomy["effective_interval_secs"].as_u64() {
-        let mins = checked_div_u64(eff, SECONDS_PER_MINUTE);
-        let secs = checked_rem_u64(eff, SECONDS_PER_MINUTE);
-        let label = if secs == 0 {
-            format!("{mins}m")
-        } else {
-            format!("{mins}m{secs}s")
-        };
-        write_row(out, "interval", &label);
+        write_row(out, "interval", &format_threshold(eff));
     }
 
     if let Some(secs) = autonomy["seconds_until_wake"].as_i64() {
