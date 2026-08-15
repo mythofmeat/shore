@@ -9,7 +9,7 @@ use super::{
     SIGIL_SUBAGENT, SIGIL_THINKING, SIGIL_TOOL, abbreviate_model, format_tool_input,
     format_tool_output, parse_timestamp, primary_tool_arg, print_dim_line, term_width, use_color,
     write_dim, write_fg, write_process_body, write_row, write_row_colored, write_section_header,
-    write_sigil_header,
+    write_sigil_header, write_tool_body_plain,
 };
 
 const SECONDS_PER_MINUTE: u64 = 60;
@@ -774,19 +774,21 @@ fn print_run_tool(data: &serde_json::Value) {
     }
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    let width = term_width();
+    write_run_tool(&mut out, data, term_width());
+}
 
+fn write_run_tool<W: Write>(out: &mut W, data: &serde_json::Value, width: usize) {
     let tool = data["tool"].as_str().unwrap_or("?");
     let ok = data["ok"].as_bool().unwrap_or(false);
-    write_section_header(&mut out, tool, run_tool_subtitle(data), width);
+    write_section_header(out, tool, run_tool_subtitle(data), width);
 
     write_fg(
-        &mut out,
+        out,
         if ok { Tone::Good } else { COLOR_ERROR },
         if ok { "  ok" } else { "  failed" },
     );
     write_dim(
-        &mut out,
+        out,
         &format!(
             "  in {}  \u{2022}  {} chars",
             format_duration_ms(data["duration_ms"].as_u64().unwrap_or(0)),
@@ -796,10 +798,10 @@ fn print_run_tool(data: &serde_json::Value) {
     _ = writeln!(out);
 
     for note in run_tool_notes(data) {
-        print_dim_line(&mut out, &note);
+        print_dim_line(out, &note);
     }
 
-    print_run_tool_calls(&mut out, data, width);
+    print_run_tool_calls(out, data, width);
 
     _ = writeln!(out);
     let body = data["raw"]
@@ -807,9 +809,9 @@ fn print_run_tool(data: &serde_json::Value) {
         .or_else(|| data["output"].as_str())
         .unwrap_or("");
     if body.is_empty() {
-        print_dim_line(&mut out, "(the tool returned nothing)");
+        print_dim_line(out, "(the tool returned nothing)");
     } else {
-        _ = writeln!(out, "{body}");
+        write_tool_body_plain(out, &format_tool_output(body));
     }
 }
 
@@ -1586,6 +1588,72 @@ mod tests {
             _ = obj.insert("error".to_owned(), serde_json::json!(message));
         }
         entry
+    }
+
+    fn rendered_run_tool(body: &str) -> String {
+        set_color_enabled(false);
+        let data = serde_json::json!({
+            "tool": "search",
+            "kind": "builtin",
+            "enabled": true,
+            "ok": true,
+            "rejected": false,
+            "duration_ms": 2,
+            "result_chars": body.len(),
+            "output": body,
+            "raw": null,
+        });
+        let mut buf = Vec::new();
+        write_run_tool(&mut buf, &data, 100);
+        String::from_utf8(buf).expect("utf8")
+    }
+
+    #[test]
+    fn a_tool_result_reaches_the_terminal_through_the_shared_formatter() {
+        let json_body = r##"{"query":"test","results":[{"path":"memory/notes/rhia.md","line":1,"excerpt":"# rhia","lexical_score":146}],"count":1}"##;
+        let rendered = rendered_run_tool(json_body);
+
+        assert!(
+            !rendered.contains(json_body),
+            "`debug tool` must not dump the result verbatim: {rendered}"
+        );
+        assert!(rendered.contains("query: test"), "{rendered}");
+        assert!(rendered.contains("path: memory/notes/rhia.md"), "{rendered}");
+        assert_eq!(
+            rendered.matches("lexical_score: 146").count(),
+            1,
+            "every field survives the reformat: {rendered}"
+        );
+    }
+
+    #[test]
+    fn a_tool_result_that_is_not_json_reaches_the_terminal_unchanged() {
+        let rendered = rendered_run_tool("the tide came in\nand went out again");
+        assert!(rendered.contains("the tide came in"), "{rendered}");
+        assert!(rendered.contains("and went out again"), "{rendered}");
+    }
+
+    #[test]
+    fn a_tool_result_is_laid_out_the_way_the_transcript_lays_it_out() {
+        let json_body = r##"{"query":"test","results":[{"path":"memory/notes/rhia.md","line":1,"excerpt":"# rhia","lexical_score":146}],"count":1}"##;
+        let formatted = format_tool_output(json_body);
+
+        assert!(
+            formatted.lines().count() > 1,
+            "a JSON result must not print as one line: {formatted}"
+        );
+        assert!(formatted.contains("query: test"), "{formatted}");
+        assert!(formatted.contains("path: memory/notes/rhia.md"), "{formatted}");
+        assert!(
+            !formatted.contains(r#""excerpt":"#),
+            "the quoting and braces are what makes it unreadable: {formatted}"
+        );
+    }
+
+    #[test]
+    fn a_tool_result_that_is_not_json_is_left_exactly_as_it_came() {
+        let plain = "the tide came in\nand went out again";
+        assert_eq!(format_tool_output(plain), plain);
     }
 
     #[test]
