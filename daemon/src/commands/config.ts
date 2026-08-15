@@ -1,3 +1,4 @@
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { ConfigDuration } from "../config/duration.ts";
@@ -13,6 +14,10 @@ import { findModel, NO_CHAT_MODELS_MESSAGE } from "../config/models.ts";
 import type { ResolvedModel } from "../config/models.ts";
 import { serializeConfigValue } from "../config/serialize.ts";
 import { CATALOG_SECTIONS, defaultAppConfig } from "../config/app.ts";
+import { configSchema, findSchemaEntry, type LiveInstances, type SchemaEntry } from "../config/schema.ts";
+import { schemaValueLiteral, SchemaValueError } from "../config/schema_value.ts";
+import { setTomlValue, tomlKeyDefined, TomlEditError } from "../config/toml_edit.ts";
+import { restartRequiredChanges } from "../config/restart.ts";
 import { applyDeferredEdits, changedPromptFiles } from "../memory/deferred_edits.ts";
 import { ALL_TOOLS, toolEnabled } from "../tools/registry.ts";
 import { internalError, invalidRequest, notFound } from "./errors.ts";
@@ -188,19 +193,20 @@ export function reportedSections(ctx: ConfigContext): string[] {
   return Object.keys(reportedConfig(ctx));
 }
 
-const SETTABLE_KEY_PATHS: ReadonlyMap<string, string> = new Map([
+const KEY_ALIASES: ReadonlyMap<string, string> = new Map([
   ["model", "defaults.model"],
-  ["defaults.model", "defaults.model"],
   ["stream", "defaults.stream"],
-  ["defaults.stream", "defaults.stream"],
   ["autonomy.enabled", "behavior.autonomy.enabled"],
-  ["behavior.autonomy.enabled", "behavior.autonomy.enabled"],
 ]);
 
-export const settableKeySpellings = (): string[] => [...SETTABLE_KEY_PATHS.keys()];
+export const settableKeySpellings = (): string[] => [...KEY_ALIASES.keys()];
+
+export function canonicalKey(key: string): string {
+  return KEY_ALIASES.get(key) ?? key;
+}
 
 function notFoundMessage(key: string): string {
-  const readable = SETTABLE_KEY_PATHS.get(key);
+  const readable = KEY_ALIASES.get(key);
   if (readable === undefined || readable === key) return `Config section not found: ${key}`;
   return `Config section not found: ${key} — settable under that name; read it as ${readable}`;
 }
@@ -216,47 +222,148 @@ function walkConfigKey(root: Record<string, unknown>, key: string): { value: unk
   return { value: current };
 }
 
-function configSet(ctx: ConfigContext, key: string, value: string): unknown {
-  switch (key) {
-    case "defaults.model":
-    case "model": {
-      try {
-        findModel(ctx.config.models, value);
-      } catch (e) {
-        throw notFound(message(e));
-      }
-      ctx.activeModel = value;
-      ctx.activeResolvedModel = undefined;
-      return { set: key, value };
+function liveInstances(ctx: ConfigContext): LiveInstances {
+  const app = reportedConfig(ctx);
+  return {
+    instancesAt(key: string): readonly string[] {
+      const found = walkConfigKey(app, key);
+      const table = found?.value;
+      if (table === null || typeof table !== "object" || Array.isArray(table)) return [];
+      return Object.keys(table as Record<string, unknown>);
+    },
+  };
+}
+
+export function schemaOf(ctx: ConfigContext): SchemaEntry[] {
+  return configSchema(liveInstances(ctx));
+}
+
+function valueSources(ctx: ConfigContext): Record<string, string[]> {
+  const sorted = (names: Iterable<string>): string[] => [...names].sort();
+  return {
+    chat_models: sorted(ctx.config.models.chat.keys()),
+    embedding_models: sorted(ctx.config.models.embedding.keys()),
+    image_models: sorted(ctx.config.models.imageGeneration.keys()),
+    tools: sorted(ALL_TOOLS.map((t) => t.name)),
+    subagents: sorted(ctx.config.app.subagents.keys()),
+    characters: sorted(discoverCharacters(ctx.config.dirs.config, ctx.config.dirs.workspace)),
+    providers: sorted(ctx.config.providers.entries().map(([name]) => name)),
+  };
+}
+
+export function configSchemaCommand(ctx: ConfigContext): unknown {
+  return { schema: schemaOf(ctx), sources: valueSources(ctx) };
+}
+
+function checkAgainstSource(ctx: ConfigContext, entry: SchemaEntry, value: string): void {
+  if (entry.source === undefined || entry.kind === "list") return;
+  const trimmed = value.trim();
+  if (trimmed === "") return;
+
+  if (entry.source === "chat_models") {
+    try {
+      findModel(ctx.config.models, trimmed);
+    } catch (e) {
+      throw notFound(message(e));
     }
-    case "defaults.stream":
-    case "stream": {
-      const v = parseBool(value);
-      ctx.config.app.defaults.stream = v;
-      return { set: key, value: v };
-    }
-    case "autonomy.enabled":
-    case "behavior.autonomy.enabled": {
-      const v = parseBool(value);
-      ctx.config.app.behavior.autonomy.enabled = v;
-      return { set: "autonomy.enabled", value: v };
-    }
-    default:
-      throw invalidRequest(
-        `Config key not settable at runtime: ${key}. ` +
-          "Supported: defaults.model, defaults.stream, autonomy.enabled",
-      );
+    return;
   }
+
+  const known = valueSources(ctx)[entry.source] ?? [];
+  if (known.length === 0 || known.includes(trimmed)) return;
+  throw notFound(`${entry.key}: no ${entry.source} named "${trimmed}". Known: ${known.join(", ")}`);
+}
+
+function targetFile(ctx: ConfigContext, path: readonly string[]): string {
+  const files = ctx.config.files ?? [];
+  for (const file of [...files].reverse()) {
+    let text: string;
+    try {
+      text = readFileSync(file, "utf8");
+    } catch {
+      continue;
+    }
+    if (tomlKeyDefined(text, path)) return file;
+  }
+  return ctx.configPath;
+}
+
+function readOrEmpty(file: string): string {
+  try {
+    return readFileSync(file, "utf8");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return "";
+    throw internalError(`failed to read ${file}: ${(e as Error).message}`);
+  }
+}
+
+function configSet(ctx: ConfigContext, rawKey: string, value: string): unknown {
+  const key = canonicalKey(rawKey);
+  const entry = findSchemaEntry(schemaOf(ctx), key);
+  if (entry === undefined) throw notFound(notFoundMessage(rawKey));
+
+  let literal: string;
+  try {
+    literal = schemaValueLiteral(entry, value);
+  } catch (e) {
+    if (e instanceof SchemaValueError) throw invalidRequest(`${key}: ${e.message}`);
+    throw e;
+  }
+
+  checkAgainstSource(ctx, entry, value);
+
+  const path = key.split(".");
+  const file = targetFile(ctx, path);
+  const before = readOrEmpty(file);
+
+  let written: string;
+  let action: string;
+  try {
+    const edit = setTomlValue(before, path, literal);
+    written = edit.text;
+    action = edit.action;
+  } catch (e) {
+    if (e instanceof TomlEditError) throw invalidRequest(e.message);
+    throw e;
+  }
+
+  try {
+    writeFileSync(file, written);
+  } catch (e) {
+    throw internalError(`failed to write ${file}: ${(e as Error).message}`);
+  }
+
+  let fresh: LoadedConfig;
+  try {
+    fresh = loadConfig(ctx.configPath, loaderOptions(ctx));
+  } catch (e) {
+    writeFileSync(file, before);
+    throw invalidRequest(`${key} = ${literal} was rejected: ${message(e)}`);
+  }
+
+  const restart = restartRequiredChanges(ctx.config, fresh);
+  const previous = walkConfigKey(reportedConfig(ctx), key)?.value ?? null;
+  adopt(ctx, fresh);
+
+  return {
+    set: key,
+    value: walkConfigKey(reportedConfig(ctx), key)?.value ?? null,
+    previous,
+    file,
+    action,
+    restart_required: restart,
+    masked_by_session: sessionMask(ctx, key),
+  };
+}
+
+function sessionMask(ctx: ConfigContext, key: string): string | null {
+  if (key !== "defaults.model") return null;
+  const active = ctx.activeModel;
+  return active === undefined || active === ctx.config.app.defaults.model ? null : active;
 }
 
 const loaderOptions = (ctx: ConfigContext): { env?: Env } =>
   ctx.env === undefined ? {} : { env: ctx.env };
-
-function parseBool(value: string): boolean {
-  if (value === "true") return true;
-  if (value === "false") return false;
-  throw invalidRequest("expected true or false");
-}
 
 export async function configReload(ctx: ConfigContext, args: Args): Promise<unknown> {
   const apply = asBool(args["apply"]);

@@ -115,7 +115,7 @@
         "defaults_model": null,
         "chat_models": 0
       },
-      "note": "The roster is the registry's, not the config's — only `main` changes.",
+      "note": "The roster is the registry's, not the config's \u2014 only `main` changes.",
       "ok": {
         "tools": [
           {
@@ -223,7 +223,7 @@
         "defaults_model": null,
         "chat_models": 0
       },
-      "note": "The no-models warning fires and the no-default-model warning does not — it is gated on the catalog being non-empty.",
+      "note": "The no-models warning fires and the no-default-model warning does not \u2014 it is gated on the catalog being non-empty.",
       "ok": {
         "valid": false,
         "warnings": [
@@ -1242,51 +1242,66 @@
   ],
   "config_set": [
     {
-      "name": "defaults.model sets the session's active model",
+      "name": "defaults.model is written to the config file",
       "state_after": {
-        "active_model": "secondary",
+        "active_model": null,
         "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
-        "defaults_model": "primary",
+        "defaults_model": "secondary",
         "chat_models": 2
       },
-      "note": "`active_resolved_model` is dropped so the next command re-resolves against the new name.",
+      "note": "The session's active model is untouched; `set` moves the persistent default.",
       "ok": {
         "set": "defaults.model",
-        "value": "secondary"
+        "value": "secondary",
+        "previous": "primary",
+        "file": "<root>/config/config.toml",
+        "action": "replaced",
+        "restart_required": [],
+        "masked_by_session": null
       }
     },
     {
-      "name": "a model change drops the pre-resolved selection",
+      "name": "a session model override still masks the new default",
       "state_after": {
-        "active_model": "secondary",
-        "active_resolved_model": null,
+        "active_model": "primary",
+        "active_resolved_model": "chat.anthropic.primary",
         "defaults_stream": false,
         "autonomy_enabled": true,
-        "defaults_model": "primary",
+        "defaults_model": "secondary",
         "chat_models": 2
       },
-      "note": "`active_resolved_model` was populated and is null afterwards: the pre-resolved value no longer matches the name beside it.",
+      "note": "`shore model use` wins over the file until it is reset; `masked_by_session` says so.",
       "ok": {
         "set": "defaults.model",
-        "value": "secondary"
+        "value": "secondary",
+        "previous": "primary",
+        "file": "<root>/config/config.toml",
+        "action": "replaced",
+        "restart_required": [],
+        "masked_by_session": "primary"
       }
     },
     {
       "name": "model is an alias for defaults.model",
       "state_after": {
-        "active_model": "secondary",
+        "active_model": null,
         "active_resolved_model": null,
         "defaults_stream": false,
         "autonomy_enabled": true,
-        "defaults_model": "primary",
+        "defaults_model": "secondary",
         "chat_models": 2
       },
-      "note": "`set` echoes the key as spelled, not the canonical one.",
+      "note": "`set` echoes the canonical key, not the alias that was sent.",
       "ok": {
-        "set": "model",
-        "value": "secondary"
+        "set": "defaults.model",
+        "value": "secondary",
+        "previous": "primary",
+        "file": "<root>/config/config.toml",
+        "action": "replaced",
+        "restart_required": [],
+        "masked_by_session": null
       }
     },
     {
@@ -1299,7 +1314,7 @@
         "defaults_model": "primary",
         "chat_models": 2
       },
-      "note": "The active model is left alone.",
+      "note": "The file is left alone.",
       "err": {
         "code": "not_found",
         "message": "model \"ghost\" not found"
@@ -1315,10 +1330,36 @@
         "defaults_model": "primary",
         "chat_models": 2
       },
-      "note": "`value` comes back as a JSON boolean, not the string that was sent.",
+      "note": "`value` comes back from the reloaded file as a JSON boolean, not the string that was sent.",
       "ok": {
         "set": "defaults.stream",
-        "value": true
+        "value": true,
+        "previous": false,
+        "file": "<root>/config/config.toml",
+        "action": "replaced",
+        "restart_required": [],
+        "masked_by_session": null
+      }
+    },
+    {
+      "name": "yes is accepted as a bool",
+      "state_after": {
+        "active_model": null,
+        "active_resolved_model": null,
+        "defaults_stream": true,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "note": "true/false/yes/no/on/off/1/0 all reach the file as a TOML boolean.",
+      "ok": {
+        "set": "defaults.stream",
+        "value": true,
+        "previous": false,
+        "file": "<root>/config/config.toml",
+        "action": "replaced",
+        "restart_required": [],
+        "masked_by_session": null
       }
     },
     {
@@ -1331,10 +1372,9 @@
         "defaults_model": "primary",
         "chat_models": 2
       },
-      "note": "Rust's `bool::from_str` takes only `true` and `false`.",
       "err": {
         "code": "invalid_request",
-        "message": "expected true or false"
+        "message": "defaults.stream: expected true or false, got \"maybe\""
       }
     },
     {
@@ -1347,10 +1387,15 @@
         "defaults_model": "primary",
         "chat_models": 2
       },
-      "note": "Unlike the model arm, this one reports `autonomy.enabled` whichever alias was sent.",
+      "note": "The alias resolves to behavior.autonomy.enabled, which is what lands in the file.",
       "ok": {
-        "set": "autonomy.enabled",
-        "value": false
+        "set": "behavior.autonomy.enabled",
+        "value": false,
+        "previous": true,
+        "file": "<root>/config/config.toml",
+        "action": "replaced",
+        "restart_required": [],
+        "masked_by_session": null
       }
     },
     {
@@ -1364,12 +1409,17 @@
         "chat_models": 2
       },
       "ok": {
-        "set": "autonomy.enabled",
-        "value": false
+        "set": "behavior.autonomy.enabled",
+        "value": false,
+        "previous": true,
+        "file": "<root>/config/config.toml",
+        "action": "replaced",
+        "restart_required": [],
+        "masked_by_session": null
       }
     },
     {
-      "name": "a key that is not settable at runtime",
+      "name": "a key that is not in the schema",
       "state_after": {
         "active_model": null,
         "active_resolved_model": null,
@@ -1378,10 +1428,106 @@
         "defaults_model": "primary",
         "chat_models": 2
       },
-      "note": "The message lists the three that are.",
+      "err": {
+        "code": "not_found",
+        "message": "Config section not found: memory.mode"
+      }
+    },
+    {
+      "name": "a table is not settable as a whole",
+      "state_after": {
+        "active_model": null,
+        "active_resolved_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "note": "Tables and maps route you to their leaves rather than accepting a blob.",
       "err": {
         "code": "invalid_request",
-        "message": "Config key not settable at runtime: memory.mode. Supported: defaults.model, defaults.stream, autonomy.enabled"
+        "message": "memory.compaction: `memory.compaction` is a table; set its individual fields instead"
+      }
+    },
+    {
+      "name": "an enum rejects a value outside its variants",
+      "state_after": {
+        "active_model": null,
+        "active_resolved_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "err": {
+        "code": "invalid_request",
+        "message": "behavior.user_message_timestamps: \"sometimes\" is not one of: auto, always, never"
+      }
+    },
+    {
+      "name": "a duration is normalised before it is written",
+      "state_after": {
+        "active_model": null,
+        "active_resolved_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "note": "`90m` lands in the file as `1h30m`-equivalent milliseconds rendered by ConfigDuration.",
+      "ok": {
+        "set": "cache.keepalive_max",
+        "value": "90m",
+        "previous": "12h",
+        "file": "<root>/config/config.toml",
+        "action": "added-section",
+        "restart_required": [],
+        "masked_by_session": null
+      }
+    },
+    {
+      "name": "a new key is added to an existing section",
+      "state_after": {
+        "active_model": null,
+        "active_resolved_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "ok": {
+        "set": "defaults.display_name",
+        "value": "Ellie",
+        "previous": null,
+        "file": "<root>/config/config.toml",
+        "action": "added-to-section",
+        "restart_required": [],
+        "masked_by_session": null
+      }
+    },
+    {
+      "name": "a list is set from a comma separated value",
+      "state_after": {
+        "active_model": null,
+        "active_resolved_model": null,
+        "defaults_stream": false,
+        "autonomy_enabled": true,
+        "defaults_model": "primary",
+        "chat_models": 2
+      },
+      "ok": {
+        "set": "tools.enabled_subagents",
+        "value": [
+          "researcher"
+        ],
+        "previous": [
+          "researcher",
+          "ghost"
+        ],
+        "file": "<root>/config/config.toml",
+        "action": "replaced",
+        "restart_required": [],
+        "masked_by_session": null
       }
     }
   ],
@@ -1396,7 +1542,7 @@
         "defaults_model": "primary",
         "chat_models": 2
       },
-      "note": "No `prompts_refreshed` field at all in check mode — not `false`.",
+      "note": "No `prompts_refreshed` field at all in check mode \u2014 not `false`.",
       "ok": {
         "applied": false,
         "config_path": "<root>/config/config.toml",
@@ -1451,7 +1597,7 @@
         "defaults_model": "primary",
         "chat_models": 2
       },
-      "note": "`state_after` still shows the original config — the failure is before any mutation.",
+      "note": "`state_after` still shows the original config \u2014 the failure is before any mutation.",
       "err": {
         "code": "invalid_request",
         "message": "Config error: failed to parse config.toml: TOML parse error at line 1, column 6\n  |\n1 | this is not toml [[[\n  |      ^\nexpected `.`, `=`\n"

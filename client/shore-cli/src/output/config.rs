@@ -216,11 +216,7 @@ fn write_leaf<W: Write>(out: &mut W, scoped: Option<&str>, value: &Value) {
 
 pub(crate) fn write_config<W: Write>(out: &mut W, data: &Value, show_all: bool) {
     if let Some(key) = data.get("set").and_then(Value::as_str) {
-        section(out, "config set", None);
-        let mut rows = Rows::new();
-        let value = data.get("value").unwrap_or(&Value::Null);
-        rows.add(key, &scalar(value));
-        rows.write(out);
+        write_set(out, key, data);
         return;
     }
 
@@ -242,6 +238,110 @@ pub(crate) fn write_config<W: Write>(out: &mut W, data: &Value, show_all: bool) 
     if !show_all && scoped.is_none() {
         note(out, "showing what differs from defaults \u{00b7} -a for everything");
     }
+}
+
+fn strings(data: &Value, key: &str) -> Vec<String> {
+    data.get(key)
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn write_set<W: Write>(out: &mut W, key: &str, data: &Value) {
+    section(out, "config set", Some(key));
+
+    let value = data.get("value").unwrap_or(&Value::Null);
+    let previous = data.get("previous").unwrap_or(&Value::Null);
+    let shown = if is_secret(&[], key.rsplit('.').next().unwrap_or(key)) {
+        redacted(value)
+    } else {
+        scalar(value)
+    };
+
+    let mut rows = Rows::new();
+    if previous == value {
+        rows.add_toned("unchanged", &shown, Tone::Muted);
+    } else {
+        rows.add_toned("was", &scalar(previous), Tone::Muted);
+        rows.add_toned("now", &shown, Tone::Good);
+    }
+    if let Some(file) = data.get("file").and_then(Value::as_str) {
+        rows.add_toned("written to", file, Tone::Muted);
+    }
+    rows.write(out);
+
+    let restart = strings(data, "restart_required");
+    if !restart.is_empty() {
+        blank(out);
+        warning(
+            out,
+            &format!(
+                "{} {} only after a daemon restart",
+                restart.join(", "),
+                if restart.len() == 1 { "takes effect" } else { "take effect" }
+            ),
+        );
+    }
+
+    if let Some(session) = data.get("masked_by_session").and_then(Value::as_str) {
+        blank(out);
+        note(
+            out,
+            &format!(
+                "this session still uses {session} \u{00b7} `shore model reset` to fall back to the default"
+            ),
+        );
+    }
+}
+
+pub(crate) fn write_schema<W: Write>(out: &mut W, data: &Value, filter: Option<&str>) {
+    section(out, "config keys", filter);
+
+    let Some(entries) = data.get("schema").and_then(Value::as_array) else {
+        empty(out, "keys");
+        return;
+    };
+
+    let settable = entries.iter().filter(|entry| {
+        entry
+            .get("settable")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    });
+
+    let mut rows = Rows::new();
+    for entry in settable {
+        let Some(key) = entry.get("key").and_then(Value::as_str) else {
+            continue;
+        };
+        if filter.is_some_and(|needle| !key.contains(needle)) {
+            continue;
+        }
+        let described = entry.get("type").and_then(Value::as_str).unwrap_or("value");
+        if entry
+            .get("restart_required")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            rows.add_noted(key, described, "needs restart", Tone::Warn);
+        } else {
+            rows.add_toned(key, described, Tone::Muted);
+        }
+    }
+
+    if rows.is_empty() {
+        empty(out, "matching keys");
+        return;
+    }
+    rows.write(out);
+    blank(out);
+    note(out, "read one with `shore config get <key>` \u{00b7} write it with `shore config set <key> <value>`");
 }
 
 pub(crate) fn write_check<W: Write>(out: &mut W, data: &Value) {
@@ -292,6 +392,12 @@ pub(crate) fn print_check(data: &Value) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
     write_check(&mut out, data);
+}
+
+pub(crate) fn print_schema(data: &Value, filter: Option<&str>) {
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    write_schema(&mut out, data, filter);
 }
 
 #[cfg(test)]
@@ -530,5 +636,181 @@ mod tests {
         for line in render(&payload(), true).lines() {
             assert!(!line.ends_with(' '), "trailing whitespace: {line:?}");
         }
+    }
+
+    fn set_payload() -> Value {
+        json!({
+            "set": "cache.keepalive_max",
+            "value": "6h",
+            "previous": "12h",
+            "file": "/home/ren/.config/shore/config.toml",
+            "action": "replaced",
+            "restart_required": [],
+            "masked_by_session": null
+        })
+    }
+
+    fn with(base: Value, overrides: &[(&str, Value)]) -> Value {
+        let mut data = base;
+        if let Some(map) = data.as_object_mut() {
+            for (key, value) in overrides {
+                let _replaced = map.insert((*key).to_owned(), value.clone());
+            }
+        }
+        data
+    }
+
+    fn render_schema(data: &Value, filter: Option<&str>) -> String {
+        set_color_enabled(false);
+        let mut buf = Vec::new();
+        write_schema(&mut buf, data, filter);
+        String::from_utf8(buf).unwrap_or_default()
+    }
+
+    #[test]
+    fn a_set_shows_the_old_value_beside_the_new_one() {
+        let out = render(&set_payload(), false);
+        assert!(out.contains("12h"), "the previous value orients the reader: {out}");
+        assert!(out.contains("6h"), "{out}");
+        assert!(out.contains("config.toml"), "say which file moved: {out}");
+    }
+
+    #[test]
+    fn a_set_that_changed_nothing_says_so_instead_of_faking_a_move() {
+        let data = with(set_payload(), &[("previous", json!("6h"))]);
+        let out = render(&data, false);
+        assert!(out.contains("unchanged"), "{out}");
+        assert!(!out.contains("was"), "{out}");
+    }
+
+    #[test]
+    fn a_restart_only_key_warns_that_the_running_daemon_has_not_moved() {
+        let data = with(
+            set_payload(),
+            &[
+                ("set", json!("daemon.addr")),
+                ("restart_required", json!(["[daemon]"])),
+            ],
+        );
+        let out = render(&data, false);
+        assert!(out.contains("[daemon]"), "{out}");
+        assert!(out.contains("restart"), "{out}");
+    }
+
+    #[test]
+    fn a_session_override_is_called_out_after_setting_the_default_model() {
+        let data = with(
+            set_payload(),
+            &[
+                ("set", json!("defaults.model")),
+                ("masked_by_session", json!("anthropic:claude-opus-4-5")),
+            ],
+        );
+        let out = render(&data, false);
+        assert!(out.contains("shore model reset"), "point at the way out: {out}");
+    }
+
+    #[test]
+    fn setting_a_secret_never_echoes_it_back() {
+        let data = with(
+            set_payload(),
+            &[
+                ("set", json!("notifications.ntfy.token")),
+                ("value", json!("tk_9f3c1d55aa")),
+                ("previous", json!("")),
+            ],
+        );
+        let out = render(&data, false);
+        assert!(!out.contains("tk_9f3c1d55aa"), "a token must not be echoed: {out}");
+        assert!(out.contains("(set, hidden)"), "{out}");
+    }
+
+    fn schema_payload() -> Value {
+        json!({"schema": [
+            {"key": "cache.keepalive_max", "type": "duration", "settable": true, "restart_required": false},
+            {"key": "daemon.addr", "type": "string", "settable": true, "restart_required": true},
+            {"key": "defaults.stream", "type": "boolean", "settable": true, "restart_required": false},
+            {"key": "memory.compaction", "type": "table", "settable": false, "restart_required": false}
+        ]})
+    }
+
+    #[test]
+    fn the_key_listing_shows_types_and_hides_what_cannot_be_set() {
+        let out = render_schema(&schema_payload(), None);
+        assert!(out.contains("cache.keepalive_max"), "{out}");
+        assert!(out.contains("duration"), "the type is the point: {out}");
+        assert!(
+            !out.contains("memory.compaction"),
+            "a table is not settable, so it is not offered: {out}"
+        );
+    }
+
+    #[test]
+    fn the_key_listing_flags_restart_only_keys() {
+        let out = render_schema(&schema_payload(), None);
+        let line = out
+            .lines()
+            .find(|l| l.contains("daemon.addr"))
+            .unwrap_or_default();
+        assert!(line.contains("needs restart"), "{out}");
+    }
+
+    #[test]
+    fn the_key_listing_filters_by_substring() {
+        let out = render_schema(&schema_payload(), Some("cache"));
+        assert!(out.contains("cache.keepalive_max"), "{out}");
+        assert!(!out.contains("daemon.addr"), "{out}");
+    }
+
+    #[test]
+    fn an_empty_filter_result_says_so_rather_than_printing_a_bare_header() {
+        let out = render_schema(&schema_payload(), Some("nothing-matches"));
+        assert!(out.contains("matching keys"), "{out}");
+    }
+
+    #[test]
+    fn no_set_or_schema_line_ships_trailing_whitespace() {
+        let data = with(set_payload(), &[("restart_required", json!(["[daemon]"]))]);
+        for line in render(&data, false).lines().chain(render_schema(&schema_payload(), None).lines()) {
+            assert!(!line.ends_with(' '), "trailing whitespace: {line:?}");
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn render_preview_config_set() {
+        set_color_enabled(true);
+        let mut buf = Vec::new();
+
+        let moved = with(
+            set_payload(),
+            &[
+                ("set", json!("defaults.model")),
+                ("value", json!("anthropic:claude-opus-4-5")),
+                ("previous", json!("zai:glm-4.6")),
+                ("masked_by_session", json!("zai:glm-4.6")),
+            ],
+        );
+        write_set(&mut buf, "defaults.model", &moved);
+
+        let restart = with(
+            set_payload(),
+            &[
+                ("set", json!("daemon.addr")),
+                ("value", json!("127.0.0.1:7321")),
+                ("previous", json!("127.0.0.1:7320")),
+                ("restart_required", json!(["[daemon]"])),
+            ],
+        );
+        write_set(&mut buf, "daemon.addr", &restart);
+
+        write_schema(&mut buf, &schema_payload(), None);
+
+        set_color_enabled(false);
+        let stdout = io::stdout();
+        let mut lock = stdout.lock();
+        let _header = lock.write_all(b"----- config set / keys -----\n");
+        let _body = lock.write_all(&buf);
+        let _footer = lock.write_all(b"----- end -----\n");
     }
 }
