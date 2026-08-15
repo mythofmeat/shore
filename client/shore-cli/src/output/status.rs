@@ -53,10 +53,6 @@ pub(crate) fn write_status<W: Write>(out: &mut W, data: &Value, character: &str)
     );
     rows.add("session", &session_line(data));
 
-    let memory = text(data, "memory_mode");
-    if !memory.is_empty() {
-        rows.add("memory", memory);
-    }
     let config_dir = text(data, "config_dir");
     if !config_dir.is_empty() {
         rows.add("config", config_dir);
@@ -88,12 +84,44 @@ pub(crate) fn write_status<W: Write>(out: &mut W, data: &Value, character: &str)
             ),
         );
     }
+
+    for section_name in sections_of(data) {
+        blank(out);
+        let _shown = write_section(out, data, &section_name);
+    }
+}
+
+pub(crate) fn sections_of(data: &Value) -> Vec<String> {
+    data.get("sections")
+        .and_then(Value::as_array)
+        .map(|names| {
+            names
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn not_started(name: &str) -> &'static str {
+    match name {
+        "autonomy" => "not started \u{00b7} the heartbeat is scheduled on your first message",
+        "activity" => "nothing recorded yet \u{00b7} activity is learned from your messages",
+        _ => "not started",
+    }
 }
 
 pub(crate) fn write_section<W: Write>(out: &mut W, data: &Value, name: &str) -> bool {
-    let Some(value) = data.get(name).filter(|v| !v.is_null()) else {
+    let Some(raw) = data.get(name) else {
         return false;
     };
+    if raw.is_null() {
+        section(out, name, None);
+        empty(out, not_started(name));
+        return true;
+    }
+    let value = raw;
     if name == "activity" {
         super::autonomy::write_activity_section(out, value, super::term_width());
         return true;
@@ -158,14 +186,38 @@ mod tests {
             "active_model": "deepseek:deepseek-v4-pro",
             "turn_count": 0,
             "message_count": 0,
-            "memory_mode": "markdown",
             "config_dir": "/config",
             "tokens": {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0},
             "pending_deferred_edit_count": 0,
             "keepalive_halted": null,
             "autonomy": null,
-            "activity": null
+            "activity": null,
+            "sections": ["tokens", "autonomy", "activity"]
         })
+    }
+
+    #[test]
+    #[ignore = "preview: .claude/skills/run-shore-cli/preview.sh status"]
+    fn render_preview_status() {
+        set_color_enabled(true);
+        let fresh = json!({
+            "character": "qifei",
+            "active_model": "opencode-go:glm-5.3",
+            "turn_count": 0, "message_count": 0,
+            "config_dir": "/config",
+            "tokens": {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0},
+            "pending_deferred_edit_count": 0,
+            "keepalive_halted": null, "autonomy": null, "activity": null,
+            "sections": ["tokens", "autonomy", "activity"]
+        });
+        let mut buf = Vec::new();
+        write_status(&mut buf, &fresh, "");
+        set_color_enabled(false);
+        let mut stdout = io::stdout();
+        let _ignored = stdout.write_all(b"\n----- STATUS, FRESH DAEMON (shore status) -----\n");
+        _ = stdout.write_all(&buf);
+        _ = stdout.write_all(b"----- end -----\n");
+        _ = stdout.flush();
     }
 
     #[test]
@@ -251,12 +303,48 @@ mod tests {
     }
 
     #[test]
-    fn an_absent_section_reports_that_it_is_absent() {
+    fn a_section_that_has_not_started_says_so_rather_than_vanishing() {
         set_color_enabled(false);
         let mut buf = Vec::new();
         assert!(
-            !write_section(&mut buf, &payload(), "autonomy"),
-            "a null section must not claim to have rendered"
+            write_section(&mut buf, &payload(), "autonomy"),
+            "a section shore knows about must render even when it is empty"
+        );
+        let out = String::from_utf8(buf).unwrap_or_default();
+        assert!(out.contains("autonomy"), "{out}");
+        assert!(
+            out.contains("not started"),
+            "an empty section must say why it is empty: {out}"
+        );
+    }
+
+    #[test]
+    fn a_name_that_is_not_a_section_renders_nothing() {
+        set_color_enabled(false);
+        let mut buf = Vec::new();
+        assert!(
+            !write_section(&mut buf, &payload(), "not_a_section"),
+            "only names the payload carries are sections"
+        );
+    }
+
+    #[test]
+    fn the_default_view_shows_every_section_the_daemon_named() {
+        let out = render(&payload());
+        for name in ["tokens", "autonomy", "activity"] {
+            assert!(
+                out.contains(name),
+                "{name} is in `sections` but missing from the default view: {out}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_hardcoded_memory_mode_is_gone() {
+        let out = render(&payload());
+        assert!(
+            !out.contains("markdown"),
+            "memory mode was a constant, not status: {out}"
         );
     }
 

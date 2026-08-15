@@ -11,7 +11,6 @@
         "config_dir": "<tmp>/config",
         "data_dir": "<tmp>/data",
         "cache_dir": "<tmp>/cache",
-        "memory_mode": "markdown",
         "pending_deferred_edit_count": 0,
         "pending_deferred_edits": [],
         "tokens": {
@@ -22,7 +21,12 @@
         },
         "autonomy": null,
         "activity": null,
-        "keepalive_halted": null
+        "keepalive_halted": null,
+        "sections": [
+          "tokens",
+          "autonomy",
+          "activity"
+        ]
       },
       "volatile": {
         "wake_at_secs": null,
@@ -41,7 +45,6 @@
         "config_dir": "<tmp>/config",
         "data_dir": "<tmp>/data",
         "cache_dir": "<tmp>/cache",
-        "memory_mode": "markdown",
         "pending_deferred_edit_count": 0,
         "pending_deferred_edits": [],
         "tokens": {
@@ -119,7 +122,12 @@
           "message_count": 0,
           "turn_count": 0
         },
-        "keepalive_halted": null
+        "keepalive_halted": null,
+        "sections": [
+          "tokens",
+          "autonomy",
+          "activity"
+        ]
       },
       "volatile": {
         "wake_at_secs": null,
@@ -138,7 +146,6 @@
         "config_dir": "<tmp>/config",
         "data_dir": "<tmp>/data",
         "cache_dir": "<tmp>/cache",
-        "memory_mode": "markdown",
         "pending_deferred_edit_count": 0,
         "pending_deferred_edits": [],
         "tokens": {
@@ -246,7 +253,12 @@
           "message_count": 0,
           "turn_count": 0
         },
-        "keepalive_halted": null
+        "keepalive_halted": null,
+        "sections": [
+          "tokens",
+          "autonomy",
+          "activity"
+        ]
       },
       "volatile": {
         "wake_at_secs": 3600,
@@ -265,7 +277,6 @@
         "config_dir": "<tmp>/config",
         "data_dir": "<tmp>/data",
         "cache_dir": "<tmp>/cache",
-        "memory_mode": "markdown",
         "pending_deferred_edit_count": 0,
         "pending_deferred_edits": [],
         "tokens": {
@@ -347,7 +358,12 @@
           "message_count": 0,
           "turn_count": 0
         },
-        "keepalive_halted": null
+        "keepalive_halted": null,
+        "sections": [
+          "tokens",
+          "autonomy",
+          "activity"
+        ]
       },
       "volatile": {
         "wake_at_secs": -45,
@@ -366,7 +382,6 @@
         "config_dir": "<tmp>/config",
         "data_dir": "<tmp>/data",
         "cache_dir": "<tmp>/cache",
-        "memory_mode": "markdown",
         "pending_deferred_edit_count": 0,
         "pending_deferred_edits": [],
         "tokens": {
@@ -444,7 +459,12 @@
           "message_count": 0,
           "turn_count": 0
         },
-        "keepalive_halted": null
+        "keepalive_halted": null,
+        "sections": [
+          "tokens",
+          "autonomy",
+          "activity"
+        ]
       },
       "volatile": {
         "wake_at_secs": null,
@@ -463,7 +483,6 @@
         "config_dir": "<tmp>/config",
         "data_dir": "<tmp>/data",
         "cache_dir": "<tmp>/cache",
-        "memory_mode": "markdown",
         "pending_deferred_edit_count": 0,
         "pending_deferred_edits": [],
         "tokens": {
@@ -543,7 +562,12 @@
           "message_count": 0,
           "turn_count": 0
         },
-        "keepalive_halted": null
+        "keepalive_halted": null,
+        "sections": [
+          "tokens",
+          "autonomy",
+          "activity"
+        ]
       },
       "volatile": {
         "wake_at_secs": null,
@@ -562,7 +586,6 @@
         "config_dir": "<tmp>/config",
         "data_dir": "<tmp>/data",
         "cache_dir": "<tmp>/cache",
-        "memory_mode": "markdown",
         "pending_deferred_edit_count": 0,
         "pending_deferred_edits": [],
         "tokens": {
@@ -640,7 +663,12 @@
           "message_count": 0,
           "turn_count": 0
         },
-        "keepalive_halted": null
+        "keepalive_halted": null,
+        "sections": [
+          "tokens",
+          "autonomy",
+          "activity"
+        ]
       },
       "volatile": {
         "wake_at_secs": null,
@@ -659,7 +687,6 @@
         "config_dir": "<tmp>/config",
         "data_dir": "<tmp>/data",
         "cache_dir": "<tmp>/cache",
-        "memory_mode": "markdown",
         "pending_deferred_edit_count": 0,
         "pending_deferred_edits": [],
         "tokens": {
@@ -737,7 +764,12 @@
           "message_count": 0,
           "turn_count": 0
         },
-        "keepalive_halted": null
+        "keepalive_halted": null,
+        "sections": [
+          "tokens",
+          "autonomy",
+          "activity"
+        ]
       },
       "volatile": {
         "wake_at_secs": null,
@@ -756,7 +788,6 @@
         "config_dir": "<tmp>/config",
         "data_dir": "<tmp>/data",
         "cache_dir": "<tmp>/cache",
-        "memory_mode": "markdown",
         "pending_deferred_edit_count": 0,
         "pending_deferred_edits": [],
         "tokens": {
@@ -834,7 +865,12 @@
           "message_count": 0,
           "turn_count": 0
         },
-        "keepalive_halted": null
+        "keepalive_halted": null,
+        "sections": [
+          "tokens",
+          "autonomy",
+          "activity"
+        ]
       },
       "volatile": {
         "wake_at_secs": null,
@@ -853,7 +889,6 @@
         "config_dir": "<tmp>/config",
         "data_dir": "<tmp>/data",
         "cache_dir": "<tmp>/cache",
-        "memory_mode": "markdown",
         "pending_deferred_edit_count": 0,
         "pending_deferred_edits": [],
         "tokens": {
@@ -931,7 +966,12 @@
           "message_count": 0,
           "turn_count": 0
         },
-        "keepalive_halted": null
+        "keepalive_halted": null,
+        "sections": [
+          "tokens",
+          "autonomy",
+          "activity"
+        ]
       },
       "volatile": {
         "wake_at_secs": null,
@@ -950,7 +990,6 @@
         "config_dir": "<tmp>/config",
         "data_dir": "<tmp>/data",
         "cache_dir": "<tmp>/cache",
-        "memory_mode": "markdown",
         "pending_deferred_edit_count": 0,
         "pending_deferred_edits": [],
         "tokens": {
@@ -1028,7 +1067,12 @@
           "message_count": 0,
           "turn_count": 0
         },
-        "keepalive_halted": null
+        "keepalive_halted": null,
+        "sections": [
+          "tokens",
+          "autonomy",
+          "activity"
+        ]
       },
       "volatile": {
         "wake_at_secs": null,
@@ -1047,7 +1091,6 @@
         "config_dir": "<tmp>/config",
         "data_dir": "<tmp>/data",
         "cache_dir": "<tmp>/cache",
-        "memory_mode": "markdown",
         "pending_deferred_edit_count": 0,
         "pending_deferred_edits": [],
         "tokens": {
@@ -1127,7 +1170,12 @@
           "message_count": 0,
           "turn_count": 0
         },
-        "keepalive_halted": null
+        "keepalive_halted": null,
+        "sections": [
+          "tokens",
+          "autonomy",
+          "activity"
+        ]
       },
       "volatile": {
         "wake_at_secs": null,
@@ -1146,7 +1194,6 @@
         "config_dir": "<tmp>/config",
         "data_dir": "<tmp>/data",
         "cache_dir": "<tmp>/cache",
-        "memory_mode": "markdown",
         "pending_deferred_edit_count": 0,
         "pending_deferred_edits": [],
         "tokens": {
@@ -1224,7 +1271,12 @@
           "message_count": 0,
           "turn_count": 0
         },
-        "keepalive_halted": null
+        "keepalive_halted": null,
+        "sections": [
+          "tokens",
+          "autonomy",
+          "activity"
+        ]
       },
       "volatile": {
         "wake_at_secs": null,
@@ -1243,7 +1295,6 @@
         "config_dir": "<tmp>/config",
         "data_dir": "<tmp>/data",
         "cache_dir": "<tmp>/cache",
-        "memory_mode": "markdown",
         "pending_deferred_edit_count": 3,
         "pending_deferred_edits": [
           "AGENTS.md",
@@ -1325,7 +1376,12 @@
           "message_count": 0,
           "turn_count": 0
         },
-        "keepalive_halted": null
+        "keepalive_halted": null,
+        "sections": [
+          "tokens",
+          "autonomy",
+          "activity"
+        ]
       },
       "volatile": {
         "wake_at_secs": null,
@@ -1344,7 +1400,6 @@
         "config_dir": "<tmp>/config",
         "data_dir": "<tmp>/data",
         "cache_dir": "<tmp>/cache",
-        "memory_mode": "markdown",
         "pending_deferred_edit_count": 0,
         "pending_deferred_edits": [],
         "tokens": {
@@ -1424,7 +1479,12 @@
           "message_count": 140,
           "turn_count": 140
         },
-        "keepalive_halted": null
+        "keepalive_halted": null,
+        "sections": [
+          "tokens",
+          "autonomy",
+          "activity"
+        ]
       },
       "volatile": {
         "wake_at_secs": null,
@@ -1443,7 +1503,6 @@
         "config_dir": "<tmp>/config",
         "data_dir": "<tmp>/data",
         "cache_dir": "<tmp>/cache",
-        "memory_mode": "markdown",
         "pending_deferred_edit_count": 0,
         "pending_deferred_edits": [],
         "tokens": {
@@ -1523,7 +1582,12 @@
           "message_count": 4,
           "turn_count": 4
         },
-        "keepalive_halted": null
+        "keepalive_halted": null,
+        "sections": [
+          "tokens",
+          "autonomy",
+          "activity"
+        ]
       },
       "volatile": {
         "wake_at_secs": null,
@@ -1542,7 +1606,6 @@
         "config_dir": "<tmp>/config",
         "data_dir": "<tmp>/data",
         "cache_dir": "<tmp>/cache",
-        "memory_mode": "markdown",
         "pending_deferred_edit_count": 0,
         "pending_deferred_edits": [],
         "tokens": {
@@ -1646,7 +1709,12 @@
           "message_count": 0,
           "turn_count": 0
         },
-        "keepalive_halted": null
+        "keepalive_halted": null,
+        "sections": [
+          "tokens",
+          "autonomy",
+          "activity"
+        ]
       },
       "volatile": {
         "wake_at_secs": null,

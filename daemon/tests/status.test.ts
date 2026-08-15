@@ -553,4 +553,30 @@ describe("a halted keepalive reaches the status envelope", () => {
     const second = (await status(ctx)) as Record<string, unknown>;
     expect(second["keepalive_halted"]).toEqual(first["keepalive_halted"]);
   });
+
+  test("every name in `sections` is a block the payload actually carries", async () => {
+    const ctx = await build("restored");
+    const result = (await status(ctx)) as Record<string, unknown>;
+    const names = result["sections"] as string[];
+
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) {
+      expect(Object.keys(result), `\`${name}\` is declared but not present`).toContain(name);
+    }
+  });
+
+  test("a section that has not started is declared and null, never omitted", async () => {
+    const ctx = await build("unregistered");
+    const result = (await status(ctx)) as Record<string, unknown>;
+    const names = result["sections"] as string[];
+
+    expect(names).toContain("autonomy");
+    expect(result["autonomy"]).toBeNull();
+  });
+
+  test("memory mode was a constant, so it is not reported as status", async () => {
+    const ctx = await build("restored");
+    const result = (await status(ctx)) as Record<string, unknown>;
+    expect(Object.keys(result)).not.toContain("memory_mode");
+  });
 });

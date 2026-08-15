@@ -144,7 +144,6 @@ export function configCheck(ctx: ConfigContext, env: NodeJS.ProcessEnv = process
     cache_dir: ctx.config.dirs.cache,
     chat_models: ctx.config.models.chat.size,
     providers: providerCount,
-    memory_mode: "markdown",
   };
 }
 

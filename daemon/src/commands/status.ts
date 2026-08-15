@@ -93,6 +93,16 @@ export async function status(ctx: StatusContext): Promise<Json> {
 
   const tokens = ctx.sessionTokens;
   const halt = ctx.autonomy.keepaliveHalt();
+  const sections = {
+    tokens: {
+      input: tokens.input,
+      output: tokens.output,
+      cache_read: tokens.cache_read,
+      cache_write: tokens.cache_write,
+    },
+    autonomy: state === undefined ? null : autonomyWire(state, now),
+    activity: report === undefined ? null : activityWire(report.stats, report.messageCount),
+  };
   return {
     character: ctx.characterName,
     keepalive_halted:
@@ -105,17 +115,10 @@ export async function status(ctx: StatusContext): Promise<Json> {
     config_dir: ctx.config.dirs.config,
     data_dir: ctx.config.dirs.data,
     cache_dir: ctx.config.dirs.cache,
-    memory_mode: "markdown",
     pending_deferred_edit_count: pending.length,
     pending_deferred_edits: pending,
-    tokens: {
-      input: tokens.input,
-      output: tokens.output,
-      cache_read: tokens.cache_read,
-      cache_write: tokens.cache_write,
-    },
-    autonomy: state === undefined ? null : autonomyWire(state, now),
-    activity: report === undefined ? null : activityWire(report.stats, report.messageCount),
+    ...sections,
+    sections: Object.keys(sections),
   };
 }
 

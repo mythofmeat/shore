@@ -235,10 +235,10 @@
           "character",
           "config_dir",
           "data_dir",
-          "memory_mode",
           "message_count",
           "pending_deferred_edit_count",
           "pending_deferred_edits",
+          "sections",
           "tokens",
           "turn_count"
         ],
@@ -250,12 +250,12 @@
           "config_dir": "string",
           "data_dir": "string",
           "cache_dir": "string",
-          "memory_mode": "string",
           "pending_deferred_edit_count": "number:0",
           "pending_deferred_edits": "array[0]",
           "tokens": "object",
           "autonomy": "object",
-          "activity": "object"
+          "activity": "object",
+          "sections": "array[3]"
         }
       },
       "active_model_after": null
@@ -523,7 +523,6 @@
           "config_dir",
           "data_dir",
           "info",
-          "memory_mode",
           "valid",
           "warnings"
         ],
@@ -534,8 +533,7 @@
           "config_dir": "string",
           "data_dir": "string",
           "cache_dir": "string",
-          "chat_models": "number:1",
-          "memory_mode": "string"
+          "chat_models": "number:1"
         }
       },
       "active_model_after": null

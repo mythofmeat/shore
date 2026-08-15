@@ -697,9 +697,21 @@ async fn handle_status_command(
     let data = recv_command_data(conn).await?;
     match section {
         Some(s) => {
-            let Some(val) = data.get(s.as_str()) else {
-                return Err(format!("Unknown status section: {s}").into());
-            };
+            let known = output::status::sections_of(&data);
+            if known.is_empty() {
+                return Err(
+                    "this daemon does not report status sections; it is older than the client"
+                        .into(),
+                );
+            }
+            if !known.iter().any(|k| k == s) {
+                return Err(format!(
+                    "no status section named {s:?}; shore has {}",
+                    known.join(", ")
+                )
+                .into());
+            }
+            let val = data.get(s.as_str()).unwrap_or(&serde_json::Value::Null);
             if *json {
                 cli_out!("{}", serde_json::to_string_pretty(val)?);
             } else {
@@ -895,13 +907,14 @@ async fn handle_complete_query(
         CompleteKind::Models => ("list_models", "models"),
         CompleteKind::Characters => ("list_characters", "characters"),
         CompleteKind::Providers => ("list_providers", "providers"),
+        CompleteKind::Sections => ("status", "sections"),
     };
 
     let _ignored = conn.send_command(cmd, serde_json::json!({})).await?;
     let data = recv_command_data(&mut conn).await?;
     if let Some(items) = data.get(array_key).and_then(serde_json::Value::as_array) {
         for item in items {
-            if let Some(name) = item["name"].as_str() {
+            if let Some(name) = item.as_str().or_else(|| item["name"].as_str()) {
                 cli_out!("{name}");
             }
         }

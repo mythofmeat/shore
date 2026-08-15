@@ -337,7 +337,8 @@ pub(crate) enum CliCommand {
     /// Show daemon and session status
     #[command(display_order = 11)]
     Status {
-        /// Show only a specific section (e.g. autonomy, tokens)
+        /// Show only one section; every section is shown by default.
+        /// `shore complete sections` lists them
         #[arg(long)]
         section: Option<String>,
 
@@ -502,6 +503,8 @@ pub(crate) enum CompleteKind {
     Characters,
     /// Configured provider keys
     Providers,
+    /// Section names `shore status --section` accepts
+    Sections,
 }
 
 /// Background task to retarget `shore model setting` at. `all` targets every
@@ -957,7 +960,8 @@ pub(crate) fn fish_dynamic_completions_footer() -> &'static str {
 # ── Dynamic completions (populated by the daemon) ────────────────────\n\
 complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from use info\" -f -a \"(shore complete models 2>/dev/null)\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand character; and __fish_seen_subcommand_from use\" -f -a \"(shore complete characters 2>/dev/null)\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand provider; and __fish_seen_subcommand_from models refresh\" -f -a \"(shore complete providers 2>/dev/null)\"\n"
+complete -c shore -n \"__fish_shore_using_subcommand provider; and __fish_seen_subcommand_from models refresh\" -f -a \"(shore complete providers 2>/dev/null)\"\n\
+complete -c shore -n \"__fish_shore_using_subcommand status\" -l section -f -a \"(shore complete sections 2>/dev/null)\"\n"
 }
 
 fn parse_setting_value(key: &str, raw: &str) -> serde_json::Value {
