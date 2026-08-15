@@ -23,7 +23,7 @@ const usable = (): MatrixConfig => ({
 
 const loaded = (matrix: MatrixConfig | undefined): LoadedConfig =>
   ({
-    app: { ...defaultAppConfig(), connections: { telegram: undefined, discord: undefined, matrix } },
+    app: { ...defaultAppConfig(), connections: { matrix } },
     dirs: {
       config: mkdtempSync(testTmp("shore-sup-config-")),
       data: mkdtempSync(testTmp("shore-sup-data-")),

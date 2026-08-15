@@ -92,12 +92,6 @@ function readStructFromSeq<T extends object>(
   return { ok: out };
 }
 
-function readFlattenOnly(name: string, value: TomlValue): ParseResult<Map<string, TomlValue>> {
-  if (!isTable(value)) return { err: invalidType(value, `struct ${name}`) };
-  for (const key of sortedKeys(value)) return { err: unknownField(key, []) };
-  return { ok: new Map() };
-}
-
 const readBool: Reader<boolean> = (v) =>
   typeof v === "boolean" ? { ok: v } : { err: invalidType(v, "a boolean") };
 
@@ -631,8 +625,6 @@ const MEMORY: StructSpec<MemoryConfig> = {
   },
 };
 
-export type ReservedConnectionConfig = Map<string, TomlValue>;
-
 export interface MatrixConfig {
   enabled: boolean;
   homeserver: string;
@@ -662,14 +654,10 @@ const MATRIX: StructSpec<MatrixConfig> = {
 };
 
 export interface ConnectionsConfig {
-  telegram: ReservedConnectionConfig | undefined;
-  discord: ReservedConnectionConfig | undefined;
   matrix: MatrixConfig | undefined;
 }
 
 const defaultConnectionsConfig = (): ConnectionsConfig => ({
-  telegram: undefined,
-  discord: undefined,
   matrix: undefined,
 });
 
@@ -677,8 +665,6 @@ const CONNECTIONS: StructSpec<ConnectionsConfig> = {
   name: "ConnectionsConfig",
   make: defaultConnectionsConfig,
   fields: {
-    telegram: (v) => readFlattenOnly("TelegramConfig", v),
-    discord: (v) => readFlattenOnly("DiscordConfig", v),
     matrix: (v) => readStruct(MATRIX, v),
   },
 };

@@ -540,9 +540,10 @@ function parseCategory(
   if (models.length > 0) {
     console.warn(
       `shore: \`[${category}.*]\` is deprecated and will be removed: define models via ` +
-        `\`[providers.<provider>]\` and select them as \`provider:model_id\`; move ` +
-        `behavioral overrides to \`[models."<provider>:<model_id>"]\`. The static ` +
-        `entries are still honored this release.`,
+        `\`[providers.<provider>]\` and select them as \`provider:model_id\`; set ` +
+        `per-provider overrides under \`[providers.<provider>.defaults]\` and per-model ` +
+        `ones with \`shore model setting\`. The static entries are still honored this ` +
+        `release.`,
     );
   }
 

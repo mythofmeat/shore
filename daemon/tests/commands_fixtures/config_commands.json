@@ -114,7 +114,7 @@
         "defaults_model": null,
         "chat_models": 0
       },
-      "note": "The roster is the registry's, not the config's — only `main` changes.",
+      "note": "The roster is the registry's, not the config's \u2014 only `main` changes.",
       "ok": {
         "tools": [
           {
@@ -222,7 +222,7 @@
         "defaults_model": null,
         "chat_models": 0
       },
-      "note": "The no-models warning fires and the no-default-model warning does not — it is gated on the catalog being non-empty.",
+      "note": "The no-models warning fires and the no-default-model warning does not \u2014 it is gated on the catalog being non-empty.",
       "ok": {
         "valid": false,
         "warnings": [
@@ -425,9 +425,7 @@
             "git_push": false
           },
           "connections": {
-            "matrix": null,
-            "telegram": null,
-            "discord": null
+            "matrix": null
           },
           "notifications": {
             "enabled": false,
@@ -583,9 +581,7 @@
             "git_push": false
           },
           "connections": {
-            "matrix": null,
-            "telegram": null,
-            "discord": null
+            "matrix": null
           },
           "notifications": {
             "enabled": false,
@@ -848,9 +844,7 @@
             "git_push": false
           },
           "connections": {
-            "matrix": null,
-            "telegram": null,
-            "discord": null
+            "matrix": null
           },
           "notifications": {
             "enabled": false,
@@ -1006,9 +1000,7 @@
             "git_push": false
           },
           "connections": {
-            "matrix": null,
-            "telegram": null,
-            "discord": null
+            "matrix": null
           },
           "notifications": {
             "enabled": false,
@@ -1162,9 +1154,7 @@
             "git_push": false
           },
           "connections": {
-            "matrix": null,
-            "telegram": null,
-            "discord": null
+            "matrix": null
           },
           "notifications": {
             "enabled": false,
@@ -1320,9 +1310,7 @@
             "git_push": false
           },
           "connections": {
-            "matrix": null,
-            "telegram": null,
-            "discord": null
+            "matrix": null
           },
           "notifications": {
             "enabled": false,
@@ -1530,7 +1518,7 @@
         "defaults_model": "primary",
         "chat_models": 2
       },
-      "note": "No `prompts_refreshed` field at all in check mode — not `false`.",
+      "note": "No `prompts_refreshed` field at all in check mode \u2014 not `false`.",
       "ok": {
         "applied": false,
         "config_path": "<root>/config/config.toml",
@@ -1585,7 +1573,7 @@
         "defaults_model": "primary",
         "chat_models": 2
       },
-      "note": "`state_after` still shows the original config — the failure is before any mutation.",
+      "note": "`state_after` still shows the original config \u2014 the failure is before any mutation.",
       "err": {
         "code": "invalid_request",
         "message": "Config error: failed to parse config.toml: TOML parse error at line 1, column 6\n  |\n1 | this is not toml [[[\n  |      ^\nexpected `.`, `=`\n"

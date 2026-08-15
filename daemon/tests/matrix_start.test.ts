@@ -80,7 +80,7 @@ describe("starting", () => {
     configDir = mkdtempSync(testTmp("shore-matrix-config-")),
   ): LoadedConfig =>
     ({
-      app: { ...defaultAppConfig(), connections: { telegram: undefined, discord: undefined, matrix } },
+      app: { ...defaultAppConfig(), connections: { matrix } },
       dirs: { config: configDir, data: dataDir },
     }) as LoadedConfig;
 
@@ -193,7 +193,7 @@ describe("starting", () => {
 describe("reloading the section", () => {
   const configWith = (matrix: MatrixConfig | undefined): LoadedConfig =>
     ({
-      app: { ...defaultAppConfig(), connections: { telegram: undefined, discord: undefined, matrix } },
+      app: { ...defaultAppConfig(), connections: { matrix } },
     }) as LoadedConfig;
 
   test("a changed [connections] needs a restart, because the daemon owns the bridge", () => {

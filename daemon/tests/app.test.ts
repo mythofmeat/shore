@@ -458,15 +458,10 @@ describe("parsing config.toml", () => {
     );
   });
 
-  test("[connections].telegram and .discord are reservations: an empty table, nothing inside", () => {
-    const empty = parseAppConfig(parseToml(`[connections.telegram]\n[connections.discord]\n`));
-    if ("err" in empty) throw new Error(empty.err);
-    expect(empty.ok.connections.telegram).toBeDefined();
-    expect(empty.ok.connections.discord).toBeDefined();
-
+  test("a connection shore cannot open is not offered as config", () => {
     for (const name of ["telegram", "discord"]) {
-      const withKey = parseAppConfig(parseToml(`[connections.${name}]\nenabled = true\n`));
-      expect("err" in withKey, `[connections.${name}] accepted a key`).toBe(true);
+      const reserved = parseAppConfig(parseToml(`[connections.${name}]\n`));
+      expect("err" in reserved, `[connections.${name}] still parses`).toBe(true);
     }
   });
 
