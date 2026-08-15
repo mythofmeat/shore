@@ -969,7 +969,7 @@ pub(crate) fn fish_dynamic_completions_footer() -> &'static str {
 complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from use info\" -f -a \"(shore complete models 2>/dev/null)\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand character; and __fish_seen_subcommand_from use\" -f -a \"(shore complete characters 2>/dev/null)\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand provider; and __fish_seen_subcommand_from models refresh\" -f -a \"(shore complete providers 2>/dev/null)\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand status\" -l section -f -a \"(shore complete sections 2>/dev/null)\"\n"
+complete -c shore -n \"__fish_shore_using_subcommand status\" -l section -r -f -a \"(shore complete sections 2>/dev/null)\"\n"
 }
 
 fn parse_setting_value(key: &str, raw: &str) -> serde_json::Value {
@@ -2903,6 +2903,33 @@ mod tests {
         let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "refresh_all_provider_models");
         assert!(args.as_object().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_footer_line_completing_an_option_requires_its_parameter() {
+        for line in fish_dynamic_completions_footer()
+            .lines()
+            .filter(|l| l.starts_with("complete ") && l.contains(" -l "))
+        {
+            assert!(
+                line.contains(" -r "),
+                "without -r fish reads the option as taking no argument, so \
+                 `--opt <TAB>` falls through to file completion: {line}"
+            );
+        }
+    }
+
+    #[test]
+    fn fish_footer_completes_the_status_sections() {
+        let footer = fish_dynamic_completions_footer();
+        assert!(
+            footer.contains("shore complete sections"),
+            "footer must shell out to `shore complete sections`: {footer}"
+        );
+        assert!(
+            footer.contains("-l section -r -f -a"),
+            "the section line needs -r (space form) and -f (no file fallback): {footer}"
+        );
     }
 
     #[test]
