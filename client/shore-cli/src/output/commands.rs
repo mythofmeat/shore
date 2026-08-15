@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use crossterm::style::{Attribute, SetAttribute};
 
 use super::transcript::{character_color, format_time};
-use super::vocab::{COLOR_ERROR, Tone, indent_to, paint};
+use super::vocab::{COLOR_ERROR, Tone, indent_to, paint, wrap_line};
 use super::{
     COLOR_RESULT, COLOR_SUBAGENT, COLOR_THINKING, COLOR_TOOL, SIGIL_ERROR, SIGIL_OK,
     SIGIL_SUBAGENT, SIGIL_THINKING, SIGIL_TOOL, abbreviate_model, format_tool_input,
@@ -725,7 +725,53 @@ fn print_keepalive_ping(data: &serde_json::Value) {
     }
 }
 
+fn print_tool_definition(data: &serde_json::Value) {
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    let width = term_width();
+
+    let tool = data["tool"].as_str().unwrap_or("?");
+    let kind = data["kind"].as_str().unwrap_or("?");
+    write_section_header(&mut out, tool, kind, width);
+
+    if data["enabled"].as_bool() == Some(false) {
+        print_dim_line(
+            &mut out,
+            "(not enabled for this character — it is not on the wire)",
+        );
+        _ = writeln!(out);
+    }
+
+    let description = data["description"].as_str().unwrap_or("");
+    if description.is_empty() {
+        print_dim_line(&mut out, "(no description)");
+    } else {
+        for line in description.lines() {
+            if line.trim().is_empty() {
+                _ = writeln!(out);
+                continue;
+            }
+            for wrapped in wrap_line(line, width.saturating_sub(4)) {
+                indent_to(&mut out, 0);
+                _ = writeln!(out, "{wrapped}");
+            }
+        }
+    }
+    _ = writeln!(out);
+
+    write_section_header(&mut out, "input schema", "", width);
+    let rendered = display_payload_body(&data["input_schema"]);
+    for line in rendered.lines() {
+        indent_to(&mut out, 0);
+        _ = writeln!(out, "{line}");
+    }
+}
+
 fn print_run_tool(data: &serde_json::Value) {
+    if data["mode"].as_str() == Some("tool_definition") {
+        print_tool_definition(data);
+        return;
+    }
     let stdout = io::stdout();
     let mut out = stdout.lock();
     let width = term_width();

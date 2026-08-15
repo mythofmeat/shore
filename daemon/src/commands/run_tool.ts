@@ -1,4 +1,4 @@
-import { subagentEnabled, toolEnabled } from "../config/app.ts";
+import { resolveDisplayName, subagentEnabled, toolEnabled } from "../config/app.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import type { Message } from "../engine/types.ts";
 import type { SubagentTurn } from "../handler/generation.ts";
@@ -7,8 +7,9 @@ import { truncateSummary } from "../notifications.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import { toolLimitsFrom } from "../tools/dispatch.ts";
 import { runToolUse, type ToolExecution } from "../tools/execute.ts";
-import { ALL_TOOLS, SUBAGENT_INPUT_SCHEMA } from "../tools/registry.ts";
+import { ALL_TOOLS, SUBAGENT_INPUT_SCHEMA, templateVars } from "../tools/registry.ts";
 import { schemasFrom } from "../tools/validate.ts";
+import { renderTemplate } from "../engine/prompt.ts";
 import { invalidRequest } from "./errors.ts";
 import type { Args } from "./navigation.ts";
 
@@ -16,6 +17,7 @@ const NESTED_OUTPUT_CHARS = 600;
 
 export interface McpSchemaView {
   full_name: string;
+  description?: string;
   input_schema: Record<string, unknown>;
 }
 
@@ -163,6 +165,48 @@ function coerceValue(key: string, value: string, type: string | undefined): unkn
     default:
       return value;
   }
+}
+
+export function describeTool(character: string, ctx: RunToolContext, args: Args): unknown {
+  const { tool } = parseRunToolArgs(args);
+  const cfg = ctx.config.app.tools;
+  const vars = templateVars(character, resolveDisplayName(ctx.config.app.defaults));
+  const seen = (kind: string, enabled: boolean, description: string, schema: unknown) => ({
+    mode: "tool_definition",
+    tool,
+    kind,
+    enabled,
+    description,
+    input_schema: schema,
+  });
+
+  if (tool.startsWith("ask_")) {
+    const agent = tool.slice("ask_".length);
+    const sub = ctx.config.app.subagents.get(agent);
+    if (sub === undefined) throw invalidRequest(unknownSubagent(agent, ctx.config));
+    return seen(
+      "subagent",
+      subagentEnabled(cfg, agent),
+      renderTemplate(sub.description, vars),
+      SUBAGENT_INPUT_SCHEMA,
+    );
+  }
+
+  if (tool.startsWith("mcp__")) {
+    const mcpTools = ctx.mcpTools();
+    const def = mcpTools.find((t) => t.full_name === tool);
+    if (def === undefined) throw invalidRequest(unknownMcpTool(tool, mcpTools));
+    return seen("mcp", toolEnabled(cfg, tool), def.description ?? "", def.input_schema);
+  }
+
+  const def = ALL_TOOLS.find((t) => t.name === tool);
+  if (def === undefined) throw invalidRequest(unknownBuiltin(tool));
+  return seen(
+    "builtin",
+    toolEnabled(cfg, tool),
+    renderTemplate(def.description, vars),
+    def.parameters,
+  );
 }
 
 export async function runTool(

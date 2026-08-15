@@ -522,6 +522,11 @@ pub(crate) enum CompleteKind {
     Providers,
     /// Section names `shore status --section` accepts
     Sections,
+    /// Every name `shore debug tool` accepts: built-ins, `ask_<subagent>`,
+    /// and connected `mcp__<server>__<tool>`
+    Tools,
+    /// Configured sub-agent names, without the `ask_` prefix
+    Subagents,
 }
 
 /// Background task to retarget `shore model setting` at. `all` targets every
@@ -879,6 +884,11 @@ pub(crate) enum DebugCommand {
         #[arg(long, value_parser = parse_json_object)]
         input: Option<serde_json::Value>,
 
+        /// Print the tool's definition as the character receives it, instead
+        /// of running it. Any arguments given are ignored
+        #[arg(long)]
+        describe: bool,
+
         /// Also print the untruncated result and full nested tool output
         #[arg(long)]
         raw: bool,
@@ -1047,7 +1057,9 @@ pub(crate) fn fish_dynamic_completions_footer() -> &'static str {
 complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from use info\" -f -a \"(shore complete models 2>/dev/null)\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand character; and __fish_seen_subcommand_from use\" -f -a \"(shore complete characters 2>/dev/null)\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand provider; and __fish_seen_subcommand_from models refresh\" -f -a \"(shore complete providers 2>/dev/null)\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand status\" -l section -r -f -a \"(shore complete sections 2>/dev/null)\"\n"
+complete -c shore -n \"__fish_shore_using_subcommand status\" -l section -r -f -a \"(shore complete sections 2>/dev/null)\"\n\
+complete -c shore -n \"__fish_shore_using_subcommand debug; and __fish_seen_subcommand_from tool\" -f -a \"(shore complete tools 2>/dev/null)\"\n\
+complete -c shore -n \"__fish_shore_using_subcommand debug; and __fish_seen_subcommand_from subagent\" -f -a \"(shore complete subagents 2>/dev/null)\"\n"
 }
 
 fn parse_setting_value(key: &str, raw: &str) -> serde_json::Value {
@@ -1175,6 +1187,7 @@ pub(crate) fn to_swp_command(
                 args,
                 input,
                 raw,
+                describe,
                 ..
             } => Some((
                 "run_tool",
@@ -1183,6 +1196,7 @@ pub(crate) fn to_swp_command(
                     "input": input.clone().unwrap_or_else(|| json!({})),
                     "pairs": pairs_object(args),
                     "raw": raw,
+                    "describe": describe,
                 }),
             )),
             DebugCommand::Subagent {
@@ -3075,6 +3089,62 @@ mod tests {
             footer.contains("-l section -r -f -a"),
             "the section line needs -r (space form) and -f (no file fallback): {footer}"
         );
+    }
+
+    #[test]
+    fn debug_tool_describes_instead_of_running_only_when_asked() {
+        let (cmd, plain) = to_swp_command(&parse(&["debug", "tool", "read"]).command, None).unwrap();
+        assert_eq!(cmd, "run_tool");
+        assert_eq!(
+            arg(&plain, "describe"),
+            false,
+            "a bare `debug tool` still runs the tool",
+        );
+
+        let (_, described) = to_swp_command(
+            &parse(&["debug", "tool", "read", "--describe"]).command,
+            None,
+        )
+        .unwrap();
+        assert_eq!(arg(&described, "describe"), true);
+        assert_eq!(arg(&described, "tool"), "read");
+    }
+
+    #[test]
+    fn fish_footer_completes_the_debug_tool_and_subagent_names() {
+        let footer = fish_dynamic_completions_footer();
+        for (kind, sub) in [("tools", "tool"), ("subagents", "subagent")] {
+            let line = footer
+                .lines()
+                .find(|l| l.contains(&format!("shore complete {kind}")))
+                .unwrap_or_else(|| panic!("footer must shell out to `shore complete {kind}`: {footer}"));
+            assert!(
+                line.contains("__fish_shore_using_subcommand debug"),
+                "`{kind}` must only complete under `shore debug`: {line}"
+            );
+            assert!(
+                line.contains(&format!("__fish_seen_subcommand_from {sub}")),
+                "`{kind}` must complete after `debug {sub}`: {line}"
+            );
+            assert!(line.contains(" -f "), "`{kind}` must not fall back to files: {line}");
+        }
+    }
+
+    #[test]
+    fn every_completion_kind_is_offered_by_the_fish_footer() {
+        use clap::ValueEnum as _;
+        let footer = fish_dynamic_completions_footer();
+        for kind in CompleteKind::value_variants() {
+            let name = kind
+                .to_possible_value()
+                .expect("every kind is selectable")
+                .get_name()
+                .to_owned();
+            assert!(
+                footer.contains(&format!("shore complete {name}")),
+                "`shore complete {name}` exists but nothing in the footer calls it: {footer}"
+            );
+        }
     }
 
     #[test]

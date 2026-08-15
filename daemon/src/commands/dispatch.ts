@@ -26,7 +26,7 @@ import { compact, type CompactContext } from "./compact.ts";
 import { sessionActivateCommand, type SessionActivateContext } from "./activate.ts";
 import { keepalivePingNowCommand, type KeepalivePingContext } from "./keepalive.ts";
 import { memory } from "./memory.ts";
-import { runTool, type RunToolContext } from "./run_tool.ts";
+import { describeTool, runTool, type RunToolContext } from "./run_tool.ts";
 import {
   effectiveChatModel,
   listModels,
@@ -164,7 +164,7 @@ export async function runCommand(
     case "config":
       return config(session, args);
     case "tools":
-      return tools(session);
+      return tools(session, (deps.runTool?.mcpTools() ?? []).map((t) => t.full_name));
     case "config_check":
       return configCheck(session, session.env ?? process.env);
     case "config_reload":
@@ -195,6 +195,18 @@ export async function runCommand(
       });
     case "run_tool":
       if (deps.runTool === undefined) throw unwired("run_tool");
+      if (args["describe"] === true) {
+        return describeTool(
+          character,
+          {
+            ...deps.runTool,
+            config: session.config,
+            dataDir: session.dataDir,
+            conversation: engine.messages(),
+          },
+          args,
+        );
+      }
       return await runTool(
         character,
         {

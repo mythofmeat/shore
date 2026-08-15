@@ -10,6 +10,7 @@ import { CommandError } from "../src/commands/errors.ts";
 import {
   coercePairs,
   nestedCalls,
+  describeTool,
   parseRunToolArgs,
   resolveTool,
   runTool,
@@ -175,6 +176,55 @@ describe("resolveTool", () => {
       "no MCP tool named 'mcp__beets__nope'",
     );
     expect(() => resolveTool("mcp__beets__query", config, [])).toThrow("No MCP tools");
+  });
+});
+
+describe("describeTool", () => {
+  test("a built-in comes back with the description the character is sent", async () => {
+    const { ctx } = await world({ enabledTools: ["roll_dice"] });
+    const out = describeTool("ada", ctx, { tool: "roll_dice" }) as Record<string, any>;
+
+    expect(out["mode"]).toBe("tool_definition");
+    expect(out["tool"]).toBe("roll_dice");
+    expect(out["kind"]).toBe("builtin");
+    expect(out["enabled"]).toBe(true);
+    expect(typeof out["description"]).toBe("string");
+    expect(String(out["description"]).length).toBeGreaterThan(0);
+    expect(out["input_schema"]?.properties?.notation).toBeDefined();
+  });
+
+  test("template variables are rendered, so it is what the model reads", async () => {
+    const { ctx } = await world({ enabledTools: ["activity_heatmap"] });
+    const out = describeTool("ada", ctx, { tool: "activity_heatmap" }) as Record<string, any>;
+
+    expect(String(out["description"])).not.toContain("{user}");
+    expect(String(out["description"])).not.toContain("{char}");
+  });
+
+  test("a tool off the surface is described and flagged, not hidden", async () => {
+    const { ctx } = await world({ enabledTools: [] });
+    const out = describeTool("ada", ctx, { tool: "roll_dice" }) as Record<string, any>;
+
+    expect(out["enabled"]).toBe(false);
+    expect(String(out["description"]).length).toBeGreaterThan(0);
+  });
+
+  test("a sub-agent is described under its ask_ name", async () => {
+    const { ctx } = await world({
+      enabledSubagents: ["librarian"],
+      subagent: () => Promise.resolve("read the shelves"),
+    });
+    const out = describeTool("ada", ctx, { tool: "ask_librarian" }) as Record<string, any>;
+
+    expect(out["kind"]).toBe("subagent");
+    expect(out["description"]).toBe("reads the shelves");
+    expect(out["input_schema"]?.required).toEqual(["query"]);
+  });
+
+  test("a name nothing answers to is refused the same way running it is", async () => {
+    const { ctx } = await world();
+    expect(() => describeTool("ada", ctx, { tool: "reed" })).toThrow("no tool named 'reed'");
+    expect(() => describeTool("ada", ctx, { tool: "ask_ghost" })).toThrow("ask_ghost does not exist");
   });
 });
 

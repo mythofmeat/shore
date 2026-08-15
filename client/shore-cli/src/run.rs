@@ -882,18 +882,32 @@ async fn handle_complete_query(
     let (mut conn, _hello, _history) =
         SWPConnection::connect(&addr, "cli", "shore-cli", None).await?;
 
-    let (cmd, array_key) = match kind {
-        CompleteKind::Models => ("list_models", "models"),
-        CompleteKind::Characters => ("list_characters", "characters"),
-        CompleteKind::Providers => ("list_providers", "providers"),
-        CompleteKind::Sections => ("status", "sections"),
+    let (cmd, array_keys) = match kind {
+        CompleteKind::Models => ("list_models", &["models"][..]),
+        CompleteKind::Characters => ("list_characters", &["characters"][..]),
+        CompleteKind::Providers => ("list_providers", &["providers"][..]),
+        CompleteKind::Sections => ("status", &["sections"][..]),
+        CompleteKind::Tools => ("tools", &["tools", "subagents", "mcp"][..]),
+        CompleteKind::Subagents => ("tools", &["subagents"][..]),
     };
 
     let _ignored = conn.send_command(cmd, serde_json::json!({})).await?;
     let data = recv_command_data(&mut conn).await?;
-    if let Some(items) = data.get(array_key).and_then(serde_json::Value::as_array) {
+    for array_key in array_keys {
+        let Some(items) = data.get(array_key).and_then(serde_json::Value::as_array) else {
+            continue;
+        };
         for item in items {
-            if let Some(name) = item.as_str().or_else(|| item["name"].as_str()) {
+            let Some(name) = item
+                .as_str()
+                .or_else(|| item["name"].as_str())
+                .or_else(|| item["tool"].as_str())
+            else {
+                continue;
+            };
+            if kind == CompleteKind::Tools && *array_key == "subagents" {
+                cli_out!("ask_{name}");
+            } else {
                 cli_out!("{name}");
             }
         }

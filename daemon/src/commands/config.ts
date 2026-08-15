@@ -57,7 +57,7 @@ function toolResolver(ctx: ConfigContext): (tool: string) => boolean {
   };
 }
 
-export function tools(ctx: ConfigContext): unknown {
+export function tools(ctx: ConfigContext, mcpTools: readonly string[] = []): unknown {
   const cfg = ctx.config.app.tools;
   const subagents = ctx.config.app.subagents;
   const known = { has: toolResolver(ctx) };
@@ -95,7 +95,7 @@ export function tools(ctx: ConfigContext): unknown {
     }
   }
 
-  return { tools: toolRows, subagents: subagentRows, warnings };
+  return { tools: toolRows, subagents: subagentRows, mcp: [...mcpTools].sort(), warnings };
 }
 
 export function configCheck(ctx: ConfigContext, env: NodeJS.ProcessEnv = process.env): unknown {
