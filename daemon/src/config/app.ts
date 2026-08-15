@@ -35,6 +35,7 @@ interface StructSpec<T> {
   required?: readonly (keyof T & string)[];
   noDefault?: readonly (keyof T & string)[];
   removed?: Readonly<Record<string, string>>;
+  alsoAccepted?: readonly string[];
   make: () => T;
 }
 
@@ -42,13 +43,15 @@ function readStruct<T extends object>(spec: StructSpec<T>, value: TomlValue): Pa
   if (Array.isArray(value)) return readStructFromSeq(spec, value);
   if (!isTable(value)) return { err: invalidType(value, `struct ${spec.name}`) };
 
-  const known = Object.keys(spec.fields);
+  const elsewhere = new Set<string>(spec.alsoAccepted ?? []);
+  const known = [...Object.keys(spec.fields), ...elsewhere];
   const out = spec.make();
   const seen = new Set<string>();
 
   for (const key of sortedKeys(value)) {
     const read = (spec.fields as Record<string, Reader<unknown> | undefined>)[key];
     if (read === undefined) {
+      if (elsewhere.has(key)) continue;
       const moved = spec.removed?.[key];
       if (moved !== undefined) return { err: `\`${key}\` was removed — ${moved}` };
       return { err: unknownField(key, known) };
@@ -1015,8 +1018,11 @@ export const defaultAppConfig = (): AppConfig => ({
   mcp: new Map(),
 });
 
+export const CATALOG_SECTIONS = ["chat", "embedding", "image_generation", "providers"] as const;
+
 const APP: StructSpec<AppConfig> = {
   name: "AppConfig",
+  alsoAccepted: CATALOG_SECTIONS,
   make: defaultAppConfig,
   fields: {
     daemon: (v) => readStruct(DAEMON, v),
@@ -1036,6 +1042,10 @@ const APP: StructSpec<AppConfig> = {
 
 export function parseAppConfig(table: TomlValue): ParseResult<AppConfig> {
   return readStruct(APP, table);
+}
+
+export function acceptedTopLevelSections(): string[] {
+  return [...Object.keys(APP.fields), ...CATALOG_SECTIONS];
 }
 
 export function mapKeysInOrder(map: ReadonlyMap<string, unknown>): string[] {

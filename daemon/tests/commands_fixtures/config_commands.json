@@ -114,7 +114,7 @@
         "defaults_model": null,
         "chat_models": 0
       },
-      "note": "The roster is the registry's, not the config's \u2014 only `main` changes.",
+      "note": "The roster is the registry's, not the config's — only `main` changes.",
       "ok": {
         "tools": [
           {
@@ -208,8 +208,8 @@
         "data_dir": "<root>/data-home/shore",
         "cache_dir": "<root>/cache-home/shore",
         "chat_models": 2,
-        "memory_mode": "markdown",
-        "providers": 0
+        "providers": 0,
+        "memory_mode": "markdown"
       }
     },
     {
@@ -222,7 +222,7 @@
         "defaults_model": null,
         "chat_models": 0
       },
-      "note": "The no-models warning fires and the no-default-model warning does not \u2014 it is gated on the catalog being non-empty.",
+      "note": "The no-models warning fires and the no-default-model warning does not — it is gated on the catalog being non-empty.",
       "ok": {
         "valid": false,
         "warnings": [
@@ -233,8 +233,8 @@
         "data_dir": "<root>/data-home/shore",
         "cache_dir": "<root>/cache-home/shore",
         "chat_models": 0,
-        "memory_mode": "markdown",
-        "providers": 0
+        "providers": 0,
+        "memory_mode": "markdown"
       }
     },
     {
@@ -260,8 +260,8 @@
         "data_dir": "<root>/data-home/shore",
         "cache_dir": "<root>/cache-home/shore",
         "chat_models": 1,
-        "memory_mode": "markdown",
-        "providers": 0
+        "providers": 0,
+        "memory_mode": "markdown"
       }
     },
     {
@@ -287,8 +287,8 @@
         "data_dir": "<root>/data-home/shore",
         "cache_dir": "<root>/cache-home/shore",
         "chat_models": 1,
-        "memory_mode": "markdown",
-        "providers": 0
+        "providers": 0,
+        "memory_mode": "markdown"
       }
     },
     {
@@ -315,8 +315,8 @@
         "data_dir": "<root>/data-home/shore",
         "cache_dir": "<root>/cache-home/shore",
         "chat_models": 1,
-        "memory_mode": "markdown",
-        "providers": 0
+        "providers": 0,
+        "memory_mode": "markdown"
       }
     }
   ],
@@ -335,20 +335,15 @@
       "ok": {
         "config": {
           "daemon": {
-            "addr": "127.0.0.1:7320",
-            "unsafe_allow_remote_access": false,
-            "allowed_hosts": []
+            "addr": "127.0.0.1:7320"
           },
           "defaults": {
             "model": "primary",
             "background": {
               "model": null,
               "heartbeat": null,
-              "compaction": null,
-              "dreaming": null
+              "compaction": null
             },
-            "heartbeat": null,
-            "dreaming": null,
             "embedding": null,
             "image_generation": null,
             "subagent_model": null,
@@ -365,8 +360,7 @@
                 "dormant_after_idle_time": "2d",
                 "minimum_heartbeat_latency": "1h",
                 "wrap_up_grace_rounds": 3
-              },
-              "cache_keepalive_max": "12h"
+              }
             },
             "user_message_timestamps": "auto"
           },
@@ -379,37 +373,25 @@
               "researcher",
               "ghost"
             ],
-            "max_result_chars": 20000,
+            "max_result_chars": 50000,
             "timeout": "5m",
             "web_search": {
               "api_key_env": "TAVILY_API_KEY",
-              "result_limit": 5,
-              "search_depth": "basic",
+              "result_limit": 10,
+              "search_depth": "advanced",
               "include_answer": true
-            },
-            "sandbox": {
-              "mode": "auto",
-              "allow_network": false
             },
             "config": {}
           },
           "memory": {
             "compaction": {
               "enabled": true,
-              "idle_trigger": "30m",
+              "idle_trigger": "2h",
               "archive_after": "0s",
-              "min_turns": 8,
-              "max_turns": 16,
+              "min_turns": 12,
+              "max_turns": 30,
               "max_context_tokens": 200000,
               "keep_recent_turns": 2
-            },
-            "dreaming": {
-              "enabled": false,
-              "frequency": "0 3 * * *",
-              "minimum_inactive_time": "45m",
-              "max_lateness": "2h",
-              "compact_before": true,
-              "compact_to_zero": false
             },
             "thinking": {
               "replay_prior_thinking": "all"
@@ -423,6 +405,10 @@
               "binary": "skip"
             },
             "git_push": false
+          },
+          "cache": {
+            "keepalive_max": "12h",
+            "forensics": false
           },
           "connections": {
             "matrix": null
@@ -441,35 +427,21 @@
             "generation_threshold": "0s",
             "events": {
               "autonomous_message": true,
-              "cache_warning": true,
-              "compaction_complete": true,
-              "error": true,
-              "message_complete": false,
-              "usage_warning": true
+              "cache_warning": false,
+              "compaction_complete": false,
+              "error": false,
+              "message_complete": true,
+              "usage_warning": false
             }
           },
           "usage": {
             "timezone": "local",
-            "allow_compaction_over_budget": true,
-            "budgets": [],
-            "spike_warnings": {
-              "enabled": false,
-              "period": "hour",
-              "multiplier": 3.0,
-              "min_cost_usd": 1.0
-            }
+            "allow_compaction_over_budget": false,
+            "budgets": []
           },
           "advanced": {
-            "api_payload_logging": false,
-            "cache_forensics": false,
-            "editor": null,
             "max_retries": null,
-            "retry_backoff": null,
-            "max_image_size": 2000000,
-            "llm_sidecar": {
-              "enabled": true,
-              "socket_path": null
-            }
+            "retry_backoff": null
           },
           "subagents": {
             "idle": {
@@ -493,24 +465,34 @@
               "max_iterations": null
             }
           },
-          "mcp": {}
+          "mcp": {},
+          "chat": {
+            "anthropic": {
+              "primary": {
+                "model_id": "claude-primary",
+                "api_key_env": "SHORE_FIXTURE_KEY_SET"
+              },
+              "secondary": {
+                "model_id": "claude-secondary",
+                "api_key_env": "SHORE_FIXTURE_KEY_MISSING"
+              }
+            }
+          },
+          "embedding": null,
+          "image_generation": null,
+          "providers": null
         },
         "defaults": {
           "daemon": {
-            "addr": "127.0.0.1:7320",
-            "unsafe_allow_remote_access": false,
-            "allowed_hosts": []
+            "addr": "127.0.0.1:7320"
           },
           "defaults": {
             "model": null,
             "background": {
               "model": null,
               "heartbeat": null,
-              "compaction": null,
-              "dreaming": null
+              "compaction": null
             },
-            "heartbeat": null,
-            "dreaming": null,
             "embedding": null,
             "image_generation": null,
             "subagent_model": null,
@@ -527,45 +509,32 @@
                 "dormant_after_idle_time": "2d",
                 "minimum_heartbeat_latency": "1h",
                 "wrap_up_grace_rounds": 3
-              },
-              "cache_keepalive_max": "12h"
+              }
             },
             "user_message_timestamps": "auto"
           },
           "tools": {
             "enabled_tools": [],
             "enabled_subagents": [],
-            "max_result_chars": 20000,
+            "max_result_chars": 50000,
             "timeout": "5m",
             "web_search": {
               "api_key_env": "TAVILY_API_KEY",
-              "result_limit": 5,
-              "search_depth": "basic",
+              "result_limit": 10,
+              "search_depth": "advanced",
               "include_answer": true
-            },
-            "sandbox": {
-              "mode": "auto",
-              "allow_network": false
             },
             "config": {}
           },
           "memory": {
             "compaction": {
               "enabled": true,
-              "idle_trigger": "30m",
+              "idle_trigger": "2h",
               "archive_after": "0s",
-              "min_turns": 8,
-              "max_turns": 16,
+              "min_turns": 12,
+              "max_turns": 30,
               "max_context_tokens": 200000,
               "keep_recent_turns": 2
-            },
-            "dreaming": {
-              "enabled": false,
-              "frequency": "0 3 * * *",
-              "minimum_inactive_time": "45m",
-              "max_lateness": "2h",
-              "compact_before": true,
-              "compact_to_zero": false
             },
             "thinking": {
               "replay_prior_thinking": "all"
@@ -579,6 +548,10 @@
               "binary": "skip"
             },
             "git_push": false
+          },
+          "cache": {
+            "keepalive_max": "12h",
+            "forensics": false
           },
           "connections": {
             "matrix": null
@@ -597,38 +570,28 @@
             "generation_threshold": "0s",
             "events": {
               "autonomous_message": true,
-              "cache_warning": true,
-              "compaction_complete": true,
-              "error": true,
-              "message_complete": false,
-              "usage_warning": true
+              "cache_warning": false,
+              "compaction_complete": false,
+              "error": false,
+              "message_complete": true,
+              "usage_warning": false
             }
           },
           "usage": {
             "timezone": "local",
-            "allow_compaction_over_budget": true,
-            "budgets": [],
-            "spike_warnings": {
-              "enabled": false,
-              "period": "hour",
-              "multiplier": 3.0,
-              "min_cost_usd": 1.0
-            }
+            "allow_compaction_over_budget": false,
+            "budgets": []
           },
           "advanced": {
-            "api_payload_logging": false,
-            "cache_forensics": false,
-            "editor": null,
             "max_retries": null,
-            "retry_backoff": null,
-            "max_image_size": 2000000,
-            "llm_sidecar": {
-              "enabled": true,
-              "socket_path": null
-            }
+            "retry_backoff": null
           },
           "subagents": {},
-          "mcp": {}
+          "mcp": {},
+          "chat": null,
+          "embedding": null,
+          "image_generation": null,
+          "providers": null
         }
       }
     },
@@ -654,34 +617,26 @@
             "researcher",
             "ghost"
           ],
-          "max_result_chars": 20000,
+          "max_result_chars": 50000,
           "timeout": "5m",
           "web_search": {
             "api_key_env": "TAVILY_API_KEY",
-            "result_limit": 5,
-            "search_depth": "basic",
+            "result_limit": 10,
+            "search_depth": "advanced",
             "include_answer": true
-          },
-          "sandbox": {
-            "mode": "auto",
-            "allow_network": false
           },
           "config": {}
         },
         "defaults": {
           "enabled_tools": [],
           "enabled_subagents": [],
-          "max_result_chars": 20000,
+          "max_result_chars": 50000,
           "timeout": "5m",
           "web_search": {
             "api_key_env": "TAVILY_API_KEY",
-            "result_limit": 5,
-            "search_depth": "basic",
+            "result_limit": 10,
+            "search_depth": "advanced",
             "include_answer": true
-          },
-          "sandbox": {
-            "mode": "auto",
-            "allow_network": false
           },
           "config": {}
         }
@@ -754,20 +709,15 @@
       "ok": {
         "config": {
           "daemon": {
-            "addr": "127.0.0.1:7320",
-            "unsafe_allow_remote_access": false,
-            "allowed_hosts": []
+            "addr": "127.0.0.1:7320"
           },
           "defaults": {
             "model": "primary",
             "background": {
               "model": null,
               "heartbeat": null,
-              "compaction": null,
-              "dreaming": null
+              "compaction": null
             },
-            "heartbeat": null,
-            "dreaming": null,
             "embedding": null,
             "image_generation": null,
             "subagent_model": null,
@@ -784,8 +734,7 @@
                 "dormant_after_idle_time": "2d",
                 "minimum_heartbeat_latency": "1h",
                 "wrap_up_grace_rounds": 3
-              },
-              "cache_keepalive_max": "12h"
+              }
             },
             "user_message_timestamps": "auto"
           },
@@ -798,37 +747,25 @@
               "researcher",
               "ghost"
             ],
-            "max_result_chars": 20000,
+            "max_result_chars": 50000,
             "timeout": "5m",
             "web_search": {
               "api_key_env": "TAVILY_API_KEY",
-              "result_limit": 5,
-              "search_depth": "basic",
+              "result_limit": 10,
+              "search_depth": "advanced",
               "include_answer": true
-            },
-            "sandbox": {
-              "mode": "auto",
-              "allow_network": false
             },
             "config": {}
           },
           "memory": {
             "compaction": {
               "enabled": true,
-              "idle_trigger": "30m",
+              "idle_trigger": "2h",
               "archive_after": "0s",
-              "min_turns": 8,
-              "max_turns": 16,
+              "min_turns": 12,
+              "max_turns": 30,
               "max_context_tokens": 200000,
               "keep_recent_turns": 2
-            },
-            "dreaming": {
-              "enabled": false,
-              "frequency": "0 3 * * *",
-              "minimum_inactive_time": "45m",
-              "max_lateness": "2h",
-              "compact_before": true,
-              "compact_to_zero": false
             },
             "thinking": {
               "replay_prior_thinking": "all"
@@ -842,6 +779,10 @@
               "binary": "skip"
             },
             "git_push": false
+          },
+          "cache": {
+            "keepalive_max": "12h",
+            "forensics": false
           },
           "connections": {
             "matrix": null
@@ -860,35 +801,21 @@
             "generation_threshold": "0s",
             "events": {
               "autonomous_message": true,
-              "cache_warning": true,
-              "compaction_complete": true,
-              "error": true,
-              "message_complete": false,
-              "usage_warning": true
+              "cache_warning": false,
+              "compaction_complete": false,
+              "error": false,
+              "message_complete": true,
+              "usage_warning": false
             }
           },
           "usage": {
             "timezone": "local",
-            "allow_compaction_over_budget": true,
-            "budgets": [],
-            "spike_warnings": {
-              "enabled": false,
-              "period": "hour",
-              "multiplier": 3.0,
-              "min_cost_usd": 1.0
-            }
+            "allow_compaction_over_budget": false,
+            "budgets": []
           },
           "advanced": {
-            "api_payload_logging": false,
-            "cache_forensics": false,
-            "editor": null,
             "max_retries": null,
-            "retry_backoff": null,
-            "max_image_size": 2000000,
-            "llm_sidecar": {
-              "enabled": true,
-              "socket_path": null
-            }
+            "retry_backoff": null
           },
           "subagents": {
             "idle": {
@@ -912,24 +839,34 @@
               "max_iterations": null
             }
           },
-          "mcp": {}
+          "mcp": {},
+          "chat": {
+            "anthropic": {
+              "primary": {
+                "model_id": "claude-primary",
+                "api_key_env": "SHORE_FIXTURE_KEY_SET"
+              },
+              "secondary": {
+                "model_id": "claude-secondary",
+                "api_key_env": "SHORE_FIXTURE_KEY_MISSING"
+              }
+            }
+          },
+          "embedding": null,
+          "image_generation": null,
+          "providers": null
         },
         "defaults": {
           "daemon": {
-            "addr": "127.0.0.1:7320",
-            "unsafe_allow_remote_access": false,
-            "allowed_hosts": []
+            "addr": "127.0.0.1:7320"
           },
           "defaults": {
             "model": null,
             "background": {
               "model": null,
               "heartbeat": null,
-              "compaction": null,
-              "dreaming": null
+              "compaction": null
             },
-            "heartbeat": null,
-            "dreaming": null,
             "embedding": null,
             "image_generation": null,
             "subagent_model": null,
@@ -946,45 +883,32 @@
                 "dormant_after_idle_time": "2d",
                 "minimum_heartbeat_latency": "1h",
                 "wrap_up_grace_rounds": 3
-              },
-              "cache_keepalive_max": "12h"
+              }
             },
             "user_message_timestamps": "auto"
           },
           "tools": {
             "enabled_tools": [],
             "enabled_subagents": [],
-            "max_result_chars": 20000,
+            "max_result_chars": 50000,
             "timeout": "5m",
             "web_search": {
               "api_key_env": "TAVILY_API_KEY",
-              "result_limit": 5,
-              "search_depth": "basic",
+              "result_limit": 10,
+              "search_depth": "advanced",
               "include_answer": true
-            },
-            "sandbox": {
-              "mode": "auto",
-              "allow_network": false
             },
             "config": {}
           },
           "memory": {
             "compaction": {
               "enabled": true,
-              "idle_trigger": "30m",
+              "idle_trigger": "2h",
               "archive_after": "0s",
-              "min_turns": 8,
-              "max_turns": 16,
+              "min_turns": 12,
+              "max_turns": 30,
               "max_context_tokens": 200000,
               "keep_recent_turns": 2
-            },
-            "dreaming": {
-              "enabled": false,
-              "frequency": "0 3 * * *",
-              "minimum_inactive_time": "45m",
-              "max_lateness": "2h",
-              "compact_before": true,
-              "compact_to_zero": false
             },
             "thinking": {
               "replay_prior_thinking": "all"
@@ -998,6 +922,10 @@
               "binary": "skip"
             },
             "git_push": false
+          },
+          "cache": {
+            "keepalive_max": "12h",
+            "forensics": false
           },
           "connections": {
             "matrix": null
@@ -1016,38 +944,28 @@
             "generation_threshold": "0s",
             "events": {
               "autonomous_message": true,
-              "cache_warning": true,
-              "compaction_complete": true,
-              "error": true,
-              "message_complete": false,
-              "usage_warning": true
+              "cache_warning": false,
+              "compaction_complete": false,
+              "error": false,
+              "message_complete": true,
+              "usage_warning": false
             }
           },
           "usage": {
             "timezone": "local",
-            "allow_compaction_over_budget": true,
-            "budgets": [],
-            "spike_warnings": {
-              "enabled": false,
-              "period": "hour",
-              "multiplier": 3.0,
-              "min_cost_usd": 1.0
-            }
+            "allow_compaction_over_budget": false,
+            "budgets": []
           },
           "advanced": {
-            "api_payload_logging": false,
-            "cache_forensics": false,
-            "editor": null,
             "max_retries": null,
-            "retry_backoff": null,
-            "max_image_size": 2000000,
-            "llm_sidecar": {
-              "enabled": true,
-              "socket_path": null
-            }
+            "retry_backoff": null
           },
           "subagents": {},
-          "mcp": {}
+          "mcp": {},
+          "chat": null,
+          "embedding": null,
+          "image_generation": null,
+          "providers": null
         }
       }
     },
@@ -1064,20 +982,15 @@
       "ok": {
         "config": {
           "daemon": {
-            "addr": "127.0.0.1:7320",
-            "unsafe_allow_remote_access": false,
-            "allowed_hosts": []
+            "addr": "127.0.0.1:7320"
           },
           "defaults": {
             "model": "primary",
             "background": {
               "model": null,
               "heartbeat": null,
-              "compaction": null,
-              "dreaming": null
+              "compaction": null
             },
-            "heartbeat": null,
-            "dreaming": null,
             "embedding": null,
             "image_generation": null,
             "subagent_model": null,
@@ -1094,8 +1007,7 @@
                 "dormant_after_idle_time": "2d",
                 "minimum_heartbeat_latency": "1h",
                 "wrap_up_grace_rounds": 3
-              },
-              "cache_keepalive_max": "12h"
+              }
             },
             "user_message_timestamps": "auto"
           },
@@ -1108,37 +1020,25 @@
               "researcher",
               "ghost"
             ],
-            "max_result_chars": 20000,
+            "max_result_chars": 50000,
             "timeout": "5m",
             "web_search": {
               "api_key_env": "TAVILY_API_KEY",
-              "result_limit": 5,
-              "search_depth": "basic",
+              "result_limit": 10,
+              "search_depth": "advanced",
               "include_answer": true
-            },
-            "sandbox": {
-              "mode": "auto",
-              "allow_network": false
             },
             "config": {}
           },
           "memory": {
             "compaction": {
               "enabled": true,
-              "idle_trigger": "30m",
+              "idle_trigger": "2h",
               "archive_after": "0s",
-              "min_turns": 8,
-              "max_turns": 16,
+              "min_turns": 12,
+              "max_turns": 30,
               "max_context_tokens": 200000,
               "keep_recent_turns": 2
-            },
-            "dreaming": {
-              "enabled": false,
-              "frequency": "0 3 * * *",
-              "minimum_inactive_time": "45m",
-              "max_lateness": "2h",
-              "compact_before": true,
-              "compact_to_zero": false
             },
             "thinking": {
               "replay_prior_thinking": "all"
@@ -1152,6 +1052,10 @@
               "binary": "skip"
             },
             "git_push": false
+          },
+          "cache": {
+            "keepalive_max": "12h",
+            "forensics": false
           },
           "connections": {
             "matrix": null
@@ -1170,35 +1074,21 @@
             "generation_threshold": "0s",
             "events": {
               "autonomous_message": true,
-              "cache_warning": true,
-              "compaction_complete": true,
-              "error": true,
-              "message_complete": false,
-              "usage_warning": true
+              "cache_warning": false,
+              "compaction_complete": false,
+              "error": false,
+              "message_complete": true,
+              "usage_warning": false
             }
           },
           "usage": {
             "timezone": "local",
-            "allow_compaction_over_budget": true,
-            "budgets": [],
-            "spike_warnings": {
-              "enabled": false,
-              "period": "hour",
-              "multiplier": 3.0,
-              "min_cost_usd": 1.0
-            }
+            "allow_compaction_over_budget": false,
+            "budgets": []
           },
           "advanced": {
-            "api_payload_logging": false,
-            "cache_forensics": false,
-            "editor": null,
             "max_retries": null,
-            "retry_backoff": null,
-            "max_image_size": 2000000,
-            "llm_sidecar": {
-              "enabled": true,
-              "socket_path": null
-            }
+            "retry_backoff": null
           },
           "subagents": {
             "idle": {
@@ -1222,24 +1112,34 @@
               "max_iterations": null
             }
           },
-          "mcp": {}
+          "mcp": {},
+          "chat": {
+            "anthropic": {
+              "primary": {
+                "model_id": "claude-primary",
+                "api_key_env": "SHORE_FIXTURE_KEY_SET"
+              },
+              "secondary": {
+                "model_id": "claude-secondary",
+                "api_key_env": "SHORE_FIXTURE_KEY_MISSING"
+              }
+            }
+          },
+          "embedding": null,
+          "image_generation": null,
+          "providers": null
         },
         "defaults": {
           "daemon": {
-            "addr": "127.0.0.1:7320",
-            "unsafe_allow_remote_access": false,
-            "allowed_hosts": []
+            "addr": "127.0.0.1:7320"
           },
           "defaults": {
             "model": null,
             "background": {
               "model": null,
               "heartbeat": null,
-              "compaction": null,
-              "dreaming": null
+              "compaction": null
             },
-            "heartbeat": null,
-            "dreaming": null,
             "embedding": null,
             "image_generation": null,
             "subagent_model": null,
@@ -1256,45 +1156,32 @@
                 "dormant_after_idle_time": "2d",
                 "minimum_heartbeat_latency": "1h",
                 "wrap_up_grace_rounds": 3
-              },
-              "cache_keepalive_max": "12h"
+              }
             },
             "user_message_timestamps": "auto"
           },
           "tools": {
             "enabled_tools": [],
             "enabled_subagents": [],
-            "max_result_chars": 20000,
+            "max_result_chars": 50000,
             "timeout": "5m",
             "web_search": {
               "api_key_env": "TAVILY_API_KEY",
-              "result_limit": 5,
-              "search_depth": "basic",
+              "result_limit": 10,
+              "search_depth": "advanced",
               "include_answer": true
-            },
-            "sandbox": {
-              "mode": "auto",
-              "allow_network": false
             },
             "config": {}
           },
           "memory": {
             "compaction": {
               "enabled": true,
-              "idle_trigger": "30m",
+              "idle_trigger": "2h",
               "archive_after": "0s",
-              "min_turns": 8,
-              "max_turns": 16,
+              "min_turns": 12,
+              "max_turns": 30,
               "max_context_tokens": 200000,
               "keep_recent_turns": 2
-            },
-            "dreaming": {
-              "enabled": false,
-              "frequency": "0 3 * * *",
-              "minimum_inactive_time": "45m",
-              "max_lateness": "2h",
-              "compact_before": true,
-              "compact_to_zero": false
             },
             "thinking": {
               "replay_prior_thinking": "all"
@@ -1308,6 +1195,10 @@
               "binary": "skip"
             },
             "git_push": false
+          },
+          "cache": {
+            "keepalive_max": "12h",
+            "forensics": false
           },
           "connections": {
             "matrix": null
@@ -1326,38 +1217,28 @@
             "generation_threshold": "0s",
             "events": {
               "autonomous_message": true,
-              "cache_warning": true,
-              "compaction_complete": true,
-              "error": true,
-              "message_complete": false,
-              "usage_warning": true
+              "cache_warning": false,
+              "compaction_complete": false,
+              "error": false,
+              "message_complete": true,
+              "usage_warning": false
             }
           },
           "usage": {
             "timezone": "local",
-            "allow_compaction_over_budget": true,
-            "budgets": [],
-            "spike_warnings": {
-              "enabled": false,
-              "period": "hour",
-              "multiplier": 3.0,
-              "min_cost_usd": 1.0
-            }
+            "allow_compaction_over_budget": false,
+            "budgets": []
           },
           "advanced": {
-            "api_payload_logging": false,
-            "cache_forensics": false,
-            "editor": null,
             "max_retries": null,
-            "retry_backoff": null,
-            "max_image_size": 2000000,
-            "llm_sidecar": {
-              "enabled": true,
-              "socket_path": null
-            }
+            "retry_backoff": null
           },
           "subagents": {},
-          "mcp": {}
+          "mcp": {},
+          "chat": null,
+          "embedding": null,
+          "image_generation": null,
+          "providers": null
         }
       }
     }
@@ -1518,7 +1399,7 @@
         "defaults_model": "primary",
         "chat_models": 2
       },
-      "note": "No `prompts_refreshed` field at all in check mode \u2014 not `false`.",
+      "note": "No `prompts_refreshed` field at all in check mode — not `false`.",
       "ok": {
         "applied": false,
         "config_path": "<root>/config/config.toml",
@@ -1573,7 +1454,7 @@
         "defaults_model": "primary",
         "chat_models": 2
       },
-      "note": "`state_after` still shows the original config \u2014 the failure is before any mutation.",
+      "note": "`state_after` still shows the original config — the failure is before any mutation.",
       "err": {
         "code": "invalid_request",
         "message": "Config error: failed to parse config.toml: TOML parse error at line 1, column 6\n  |\n1 | this is not toml [[[\n  |      ^\nexpected `.`, `=`\n"

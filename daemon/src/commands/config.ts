@@ -12,7 +12,7 @@ import {
 import { findModel, NO_CHAT_MODELS_MESSAGE } from "../config/models.ts";
 import type { ResolvedModel } from "../config/models.ts";
 import { serializeConfigValue } from "../config/serialize.ts";
-import { defaultAppConfig } from "../config/app.ts";
+import { CATALOG_SECTIONS, defaultAppConfig } from "../config/app.ts";
 import { applyDeferredEdits, changedPromptFiles } from "../memory/deferred_edits.ts";
 import { ALL_TOOLS, toolEnabled } from "../tools/registry.ts";
 import { internalError, invalidRequest, notFound } from "./errors.ts";
@@ -153,14 +153,40 @@ export function config(ctx: ConfigContext, args: Args): unknown {
   const value = asStr(args["value"]);
   if (key !== undefined && value !== undefined) return configSet(ctx, key, value);
 
-  const app = serializeConfigValue(ctx.config.app) as Record<string, unknown>;
-  const defaults = serializeConfigValue(defaultAppConfig()) as Record<string, unknown>;
+  const app = reportedConfig(ctx);
+  const defaults = reportedDefaults();
 
   if (key === undefined) return { config: app, defaults };
 
   const found = walkConfigKey(app, key);
   if (found === undefined) throw notFound(notFoundMessage(key));
   return { key, config: found.value, defaults: walkConfigKey(defaults, key)?.value ?? null };
+}
+
+function catalogSections(ctx: ConfigContext): Record<string, unknown> {
+  const raw = ctx.config.rawTable as Record<string, unknown> | undefined;
+  const out: Record<string, unknown> = {};
+  for (const section of CATALOG_SECTIONS) {
+    out[section] = serializeConfigValue(raw?.[section] ?? null);
+  }
+  return out;
+}
+
+function reportedConfig(ctx: ConfigContext): Record<string, unknown> {
+  return {
+    ...(serializeConfigValue(ctx.config.app) as Record<string, unknown>),
+    ...catalogSections(ctx),
+  };
+}
+
+export function reportedDefaults(): Record<string, unknown> {
+  const out = serializeConfigValue(defaultAppConfig()) as Record<string, unknown>;
+  for (const section of CATALOG_SECTIONS) out[section] = null;
+  return out;
+}
+
+export function reportedSections(ctx: ConfigContext): string[] {
+  return Object.keys(reportedConfig(ctx));
 }
 
 const SETTABLE_KEY_PATHS: ReadonlyMap<string, string> = new Map([

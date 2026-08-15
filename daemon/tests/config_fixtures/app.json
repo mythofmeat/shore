@@ -4526,8 +4526,8 @@
     {
       "name": "an unknown top-level section is rejected",
       "toml": "[bogus_section]\nkey = \"value\"\n",
-      "doc_err": "unknown field `bogus_section`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`",
-      "table_err": "unknown field `bogus_section`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`"
+      "doc_err": "unknown field `bogus_section`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`, `chat`, `embedding`, `image_generation`, `providers`",
+      "table_err": "unknown field `bogus_section`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`, `chat`, `embedding`, `image_generation`, `providers`"
     },
     {
       "name": "an unknown notifications key is rejected",
@@ -4800,8 +4800,8 @@
     {
       "name": "two unknown top-level keys: the document reports the first written, the table reports the code-point-smallest",
       "toml": "[zzz_unknown]\nk = 1\n\n[aaa_unknown]\nk = 2\n",
-      "doc_err": "unknown field `zzz_unknown`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`",
-      "table_err": "unknown field `aaa_unknown`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`"
+      "doc_err": "unknown field `zzz_unknown`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`, `chat`, `embedding`, `image_generation`, `providers`",
+      "table_err": "unknown field `aaa_unknown`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`, `chat`, `embedding`, `image_generation`, `providers`"
     },
     {
       "name": "an unknown key and a bad type: which is reported depends on the path",
@@ -4812,8 +4812,8 @@
     {
       "name": "two unknown non-ASCII keys sort by code point, not UTF-16 order",
       "toml": "[\"\ud83c\udfb5\"]\nk = 1\n\n[\"\ufb00\"]\nk = 2\n",
-      "doc_err": "unknown field `\ud83c\udfb5`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`",
-      "table_err": "unknown field `\ufb00`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`"
+      "doc_err": "unknown field `\ud83c\udfb5`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`, `chat`, `embedding`, `image_generation`, `providers`",
+      "table_err": "unknown field `\ufb00`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`, `chat`, `embedding`, `image_generation`, `providers`"
     },
     {
       "name": "an empty sequence fills a struct with its defaults",
@@ -6563,8 +6563,8 @@
     {
       "name": "an unknown key sorting before a bad type is reported on both paths",
       "toml": "[aaa_unknown]\nk = 1\n\n[behavior.autonomy]\nenabled = \"yes\"\n",
-      "doc_err": "unknown field `aaa_unknown`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`",
-      "table_err": "unknown field `aaa_unknown`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`"
+      "doc_err": "unknown field `aaa_unknown`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`, `chat`, `embedding`, `image_generation`, `providers`",
+      "table_err": "unknown field `aaa_unknown`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`, `chat`, `embedding`, `image_generation`, `providers`"
     },
     {
       "name": "an empty per-tool table is not an error",

@@ -213,7 +213,7 @@
       "warnings": [],
       "err": {
         "kind": "parse_app",
-        "message": "unknown field `completely_unknown`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`"
+        "message": "unknown field `completely_unknown`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`, `chat`, `embedding`, `image_generation`, `providers`"
       }
     },
     {
@@ -318,7 +318,7 @@
       "warnings": [],
       "err": {
         "kind": "parse_app",
-        "message": "unknown field `models`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`"
+        "message": "unknown field `models`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`, `chat`, `embedding`, `image_generation`, `providers`"
       }
     },
     {
@@ -327,7 +327,7 @@
       "warnings": [],
       "err": {
         "kind": "parse_app",
-        "message": "unknown field `completely_unknown`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`"
+        "message": "unknown field `completely_unknown`, expected one of `daemon`, `defaults`, `behavior`, `tools`, `memory`, `connections`, `notifications`, `usage`, `advanced`, `subagents`, `mcp`, `chat`, `embedding`, `image_generation`, `providers`"
       }
     },
     {

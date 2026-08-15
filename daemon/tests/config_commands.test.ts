@@ -8,16 +8,15 @@ import {
   config,
   configCheck,
   configReload,
+  reportedDefaults,
   settableKeySpellings,
   tools,
   type ConfigContext,
   type ConfigRuntime,
 } from "../src/commands/config.ts";
 import { CommandError } from "../src/commands/errors.ts";
-import { defaultAppConfig } from "../src/config/app.ts";
 import { loadConfig } from "../src/config/loader.ts";
 import { findModel } from "../src/config/models.ts";
-import { serializeConfigValue } from "../src/config/serialize.ts";
 import { pathsSetBy, replayOntoCurrentDefaults } from "./config_delta.ts";
 import { testTmp } from "./support/tmp.ts";
 
@@ -339,9 +338,9 @@ describe("configCheck", () => {
 });
 
 describe("config read", () => {
-  const liveDefaults = () => stripRemoved(serializeConfigValue(defaultAppConfig()));
+  const liveDefaults = () => stripRemoved(reportedDefaults());
   const liveSectionDefaults = (section: string) =>
-    stripSection(section, (serializeConfigValue(defaultAppConfig()) as Record<string, unknown>)[section]);
+    stripSection(section, reportedDefaults()[section]);
 
   const actualWhole = (ok: any) => ({
     config: stripRemoved(ok.config),

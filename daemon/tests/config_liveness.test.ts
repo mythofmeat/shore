@@ -2,7 +2,21 @@ import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { defaultAppConfig } from "../src/config/app.ts";
+import {
+  acceptedTopLevelSections,
+  defaultAppConfig,
+  parseAppConfig,
+} from "../src/config/app.ts";
+import { config, reportedSections, type ConfigContext } from "../src/commands/config.ts";
+import type { LoadedConfig } from "../src/config/loader.ts";
+
+function contextWithRawTable(rawTable: Record<string, unknown>): ConfigContext {
+  return {
+    config: { app: defaultAppConfig(), rawTable } as unknown as LoadedConfig,
+  } as ConfigContext;
+}
+
+const emptyConfigContext = (): ConfigContext => contextWithRawTable({});
 
 const PARSER = "src/config/app.ts";
 
@@ -81,6 +95,36 @@ describe("every config option shore reports is one shore reads", () => {
   test("the allowlist only names options that still exist", () => {
     for (const leaf of Object.keys(READ_ELSEWHERE)) {
       expect(leaves, `${leaf} is allowlisted but is no longer a config option`).toContain(leaf);
+    }
+  });
+});
+
+describe("every section the daemon accepts is one shore config reports", () => {
+  const accepted = [...acceptedTopLevelSections()].sort();
+
+  test("the two sets are the same set", () => {
+    expect([...reportedSections(emptyConfigContext())].sort()).toEqual(accepted);
+  });
+
+  test("a section the loader extracts is still readable", () => {
+    const ctx = contextWithRawTable({
+      providers: { anthropic: { api_key_env: "ANTHROPIC_API_KEY" } },
+    });
+    const read = config(ctx, { key: "providers.anthropic.api_key_env" }) as { config: unknown };
+    expect(read.config).toBe("ANTHROPIC_API_KEY");
+  });
+
+  test("an unset extracted section reads as unset, not as absent", () => {
+    const read = config(emptyConfigContext(), { key: "providers" }) as { config: unknown };
+    expect(read.config).toBeNull();
+  });
+
+  test("the parser names every accepted section when it rejects one", () => {
+    const parsed = parseAppConfig({ definitely_not_a_section: {} });
+    expect("err" in parsed).toBe(true);
+    const err = (parsed as { err: string }).err;
+    for (const section of accepted) {
+      expect(err, `the rejection does not mention \`${section}\``).toContain(`\`${section}\``);
     }
   });
 });
