@@ -21,10 +21,11 @@ CREATE TABLE IF NOT EXISTS calls (
     sdk               TEXT,
     rid               TEXT,
     finish_reason     TEXT,
-    input_tokens      INTEGER,
-    output_tokens     INTEGER,
-    cache_read_tokens INTEGER,
-    duration_ms       INTEGER,
+    input_tokens       INTEGER,
+    output_tokens      INTEGER,
+    cache_read_tokens  INTEGER,
+    cache_write_tokens INTEGER,
+    duration_ms        INTEGER,
     error             TEXT,
     request_zstd      BLOB,
     response_zstd     BLOB
@@ -43,10 +44,11 @@ CREATE TABLE IF NOT EXISTS transcripts (
     model             TEXT,
     provider          TEXT,
     finish_reason     TEXT,
-    input_tokens      INTEGER,
-    output_tokens     INTEGER,
-    cache_read_tokens INTEGER,
-    entry_zstd        BLOB NOT NULL
+    input_tokens       INTEGER,
+    output_tokens      INTEGER,
+    cache_read_tokens  INTEGER,
+    cache_write_tokens INTEGER,
+    entry_zstd         BLOB NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_transcripts_ts ON transcripts (ts_unix);
 CREATE INDEX IF NOT EXISTS idx_transcripts_source ON transcripts (source, character, ts_unix);
@@ -98,9 +100,15 @@ export interface Usage {
   input_tokens: number;
   output_tokens: number;
   cache_read_tokens: number;
+  cache_write_tokens: number;
 }
 
-export const ZERO_USAGE: Usage = { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0 };
+export const ZERO_USAGE: Usage = {
+  input_tokens: 0,
+  output_tokens: 0,
+  cache_read_tokens: 0,
+  cache_write_tokens: 0,
+};
 
 export interface CallRecord {
   call_id: string;
@@ -438,8 +446,8 @@ export class CallStore {
         `INSERT INTO calls (
             call_id, ts, ts_unix, call_type, character, model, provider, sdk,
             rid, finish_reason, input_tokens, output_tokens, cache_read_tokens,
-            duration_ms, error, request_payload_id, response_payload_id
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)`,
+            cache_write_tokens, duration_ms, error, request_payload_id, response_payload_id
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)`,
       )
       .run(
         call.call_id,
@@ -455,6 +463,7 @@ export class CallStore {
         call.usage.input_tokens,
         call.usage.output_tokens,
         call.usage.cache_read_tokens,
+        call.usage.cache_write_tokens,
         call.duration_ms ?? null,
         opt(call.error),
         requestPayload,
@@ -468,8 +477,9 @@ export class CallStore {
       .query(
         `INSERT INTO transcripts (
             ts, ts_unix, source, character, call_type, iteration, model, provider,
-            finish_reason, input_tokens, output_tokens, cache_read_tokens, entry_zstd
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`,
+            finish_reason, input_tokens, output_tokens, cache_read_tokens,
+            cache_write_tokens, entry_zstd
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`,
       )
       .run(
         rfc3339(entry.ts),
@@ -484,6 +494,7 @@ export class CallStore {
         entry.usage.input_tokens,
         entry.usage.output_tokens,
         entry.usage.cache_read_tokens,
+        entry.usage.cache_write_tokens,
         zstdCompress(entry.entry_json),
       );
     return this.#lastInsertRowid();
@@ -594,7 +605,7 @@ export class CallStore {
       .query(
         `SELECT id, call_id, ts, call_type, character, model, provider,
                 finish_reason, input_tokens, output_tokens, cache_read_tokens,
-                duration_ms, error,
+                cache_write_tokens, duration_ms, error,
                 COALESCE(
                     (SELECT stored FROM payloads WHERE id = request_payload_id),
                     LENGTH(request_zstd), 0) AS request_bytes,
@@ -616,7 +627,7 @@ export class CallStore {
       .query(
         `SELECT id, call_id, ts, call_type, character, model, provider,
                 finish_reason, input_tokens, output_tokens, cache_read_tokens,
-                duration_ms, error,
+                cache_write_tokens, duration_ms, error,
                 COALESCE(
                     (SELECT stored FROM payloads WHERE id = request_payload_id),
                     LENGTH(request_zstd), 0) AS request_bytes,
@@ -648,7 +659,8 @@ export class CallStore {
     const rows = this.#db
       .query(
         `SELECT id, ts, source, character, call_type, iteration, model, provider,
-                finish_reason, input_tokens, output_tokens, cache_read_tokens, entry_zstd
+                finish_reason, input_tokens, output_tokens, cache_read_tokens,
+                cache_write_tokens, entry_zstd
          FROM transcripts
          WHERE source = ?1 AND (?2 IS NULL OR character = ?2)
          ORDER BY ts_unix DESC, id DESC
@@ -802,6 +814,7 @@ function usageFrom(row: Row): Usage {
     input_tokens: count(row["input_tokens"]),
     output_tokens: count(row["output_tokens"]),
     cache_read_tokens: count(row["cache_read_tokens"]),
+    cache_write_tokens: count(row["cache_write_tokens"]),
   };
 }
 
@@ -995,16 +1008,12 @@ function optCount(v: unknown): number | null {
 }
 
 function migrate(db: Database): void {
-  for (const [table, column] of [
+  addIntegerColumns(db, [
     ["calls", "request_payload_id"],
     ["calls", "response_payload_id"],
     ["http_calls", "request_payload_id"],
     ["http_calls", "response_payload_id"],
-  ] as const) {
-    if (!columnExists(db, table, column)) {
-      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} INTEGER`);
-    }
-  }
+  ]);
 
   if (!columnExists(db, "transcripts", "character")) {
     db.exec(
@@ -1013,6 +1022,19 @@ function migrate(db: Database): void {
        CREATE INDEX idx_transcripts_source
            ON transcripts (source, character, ts_unix);`,
     );
+  }
+
+  addIntegerColumns(db, [
+    ["calls", "cache_write_tokens"],
+    ["transcripts", "cache_write_tokens"],
+  ]);
+}
+
+function addIntegerColumns(db: Database, columns: readonly (readonly [string, string])[]): void {
+  for (const [table, column] of columns) {
+    if (!columnExists(db, table, column)) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} INTEGER`);
+    }
   }
 }
 

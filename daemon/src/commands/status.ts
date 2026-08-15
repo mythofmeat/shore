@@ -122,8 +122,8 @@ export async function status(ctx: StatusContext): Promise<Json> {
   };
 }
 
-export function diagnostics(ctx: StatusContext, args: Args): Json {
-  return ctx.diagnostics.toJson(countArg(args, 10));
+export function errorLog(ctx: StatusContext, args: Args): Json {
+  return ctx.diagnostics.toJson(countArg(args, 20));
 }
 
 export function heartbeatLog(ctx: StatusContext, args: Args): Json {

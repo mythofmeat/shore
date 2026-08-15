@@ -71,21 +71,19 @@ describe("argumentRejection", () => {
 describe("executeToolUse", () => {
   function harness() {
     const frames: ServerMessage[] = [];
-    const diagnostics: unknown[] = [];
     const exec: ToolExecution = {
       sendDirect: (m) => frames.push(m),
       ctx: { characterName: "Rhia" } as unknown as ToolContext,
       limits: { timeouts: {}, result_chars: {} } as never,
-      diagnostics: { push: (e) => diagnostics.push(e) },
       now: () => "2026-08-13T00:00:00Z",
       newMessageId: () => "m_1",
       schemas: schemasFrom([{ name: "read", input_schema: READ_SCHEMA }]),
     };
-    return { frames, diagnostics, exec };
+    return { frames, exec };
   }
 
   test("a garbled read never reaches the tool and never lists the workspace root", async () => {
-    const { frames, diagnostics, exec } = harness();
+    const { frames, exec } = harness();
     const block = await executeToolUse(
       { id: "t1", name: "read", input: {}, input_error: "the arguments were not valid JSON" },
       exec,
@@ -94,8 +92,6 @@ describe("executeToolUse", () => {
 
     expect(block).toMatchObject({ type: "tool_result", tool_use_id: "t1", is_error: true });
     expect((block as { content: string }).content).toContain("was not run");
-    expect(diagnostics).toHaveLength(1);
-    expect(diagnostics[0]).toMatchObject({ tool_name: "read", success: false });
     expect(frames.some((f) => f.type === "tool_result" && f.is_error === true)).toBe(true);
   });
 

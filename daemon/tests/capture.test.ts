@@ -115,7 +115,12 @@ describe("call capture", () => {
     expect(row.rid).toBe("r_1");
     expect(row.finish_reason).toBe("end_turn");
     expect(row.error).toBeNull();
-    expect(row.usage).toEqual({ input_tokens: 11, output_tokens: 22, cache_read_tokens: 33 });
+    expect(row.usage).toEqual({
+      input_tokens: 11,
+      output_tokens: 22,
+      cache_read_tokens: 33,
+      cache_write_tokens: 44,
+    });
   });
 
   test("the response body is NDJSON, one event per line", async () => {

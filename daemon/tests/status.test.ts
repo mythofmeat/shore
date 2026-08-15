@@ -13,7 +13,7 @@ import { CommandError } from "../src/commands/errors.ts";
 import type { ErrorCode } from "../src/protocol/ErrorCode.ts";
 import {
   autonomyWire,
-  diagnostics,
+  errorLog,
   heartbeatLog,
   heartbeatSetActive,
   heartbeatSetDormant,
@@ -134,19 +134,11 @@ const THIN = [
 
 function diagEntries(d: Diagnostics): void {
   for (let i = 0; i < 12; i += 1) {
-    d.api_calls.push({
+    d.errors.push({
       timestamp: `2026-01-15T12:00:${String(i).padStart(2, "0")}+00:00`,
-      model: `m${i}`,
-      provider: "anthropic",
-      input_tokens: i,
-      output_tokens: 1,
-      cache_read_tokens: 0,
-      cache_write_tokens: 0,
-      ttft_ms: 5,
-      total_ms: 10,
-      finish_reason: "end_turn",
-      total_cost_usd: undefined,
-      error: undefined,
+      error_type: "llm",
+      message: `failure ${i}`,
+      context: `character=${CHARACTER}`,
     });
   }
 }
@@ -360,11 +352,11 @@ interface ArgCase {
   ok: unknown;
 }
 
-describe("diagnostics", () => {
-  for (const row of fixture.diagnostics as ArgCase[]) {
+describe("error_log", () => {
+  for (const row of fixture.error_log as ArgCase[]) {
     test(row.case, async () => {
       const ctx = await build(row.setup);
-      expect<unknown>(diagnostics(ctx, row.args)).toEqual(row.ok);
+      expect<unknown>(errorLog(ctx, row.args)).toEqual(row.ok);
     });
   }
 });

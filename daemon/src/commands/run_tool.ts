@@ -1,6 +1,5 @@
 import { subagentEnabled, toolEnabled } from "../config/app.ts";
 import type { LoadedConfig } from "../config/loader.ts";
-import type { ToolCallEntry } from "../diagnostics.ts";
 import type { Message } from "../engine/types.ts";
 import type { SubagentTurn } from "../handler/generation.ts";
 import { buildToolContext, type ToolContextDeps } from "../handler/tool_context.ts";
@@ -26,7 +25,6 @@ export interface RunToolContext {
   conversation: readonly Message[];
   tools: (charName: string, turn: SubagentTurn) => ToolContextDeps;
   mcpTools: () => readonly McpSchemaView[];
-  diagnostics: { push: (entry: ToolCallEntry) => void };
   now?: () => string;
   newMessageId?: () => string;
   toolUseId?: () => string;
@@ -203,7 +201,6 @@ export async function runTool(
     sendDirect: send,
     ctx: toolContext,
     limits: toolLimitsFrom(ctx.config.app.tools),
-    diagnostics: ctx.diagnostics,
     now,
     newMessageId,
     schemas: schemasFrom(

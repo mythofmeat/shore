@@ -1724,1040 +1724,6 @@
       }
     }
   ],
-  "diagnostics": [
-    {
-      "case": "default",
-      "setup": "diagnostics_seeded",
-      "args": {},
-      "ok": {
-        "api_calls": {
-          "count": 12,
-          "recent": [
-            {
-              "timestamp": "2026-01-15T12:00:02+00:00",
-              "model": "m2",
-              "provider": "anthropic",
-              "input_tokens": 2,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:03+00:00",
-              "model": "m3",
-              "provider": "anthropic",
-              "input_tokens": 3,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:04+00:00",
-              "model": "m4",
-              "provider": "anthropic",
-              "input_tokens": 4,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:05+00:00",
-              "model": "m5",
-              "provider": "anthropic",
-              "input_tokens": 5,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:06+00:00",
-              "model": "m6",
-              "provider": "anthropic",
-              "input_tokens": 6,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:07+00:00",
-              "model": "m7",
-              "provider": "anthropic",
-              "input_tokens": 7,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:08+00:00",
-              "model": "m8",
-              "provider": "anthropic",
-              "input_tokens": 8,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:09+00:00",
-              "model": "m9",
-              "provider": "anthropic",
-              "input_tokens": 9,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:10+00:00",
-              "model": "m10",
-              "provider": "anthropic",
-              "input_tokens": 10,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:11+00:00",
-              "model": "m11",
-              "provider": "anthropic",
-              "input_tokens": 11,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            }
-          ]
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
-        "errors": {
-          "count": 0,
-          "recent": []
-        },
-        "key_fallbacks": {
-          "count": 0,
-          "recent": []
-        }
-      }
-    },
-    {
-      "case": "count_3",
-      "setup": "diagnostics_seeded",
-      "args": {
-        "count": 3
-      },
-      "ok": {
-        "api_calls": {
-          "count": 12,
-          "recent": [
-            {
-              "timestamp": "2026-01-15T12:00:09+00:00",
-              "model": "m9",
-              "provider": "anthropic",
-              "input_tokens": 9,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:10+00:00",
-              "model": "m10",
-              "provider": "anthropic",
-              "input_tokens": 10,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:11+00:00",
-              "model": "m11",
-              "provider": "anthropic",
-              "input_tokens": 11,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            }
-          ]
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
-        "errors": {
-          "count": 0,
-          "recent": []
-        },
-        "key_fallbacks": {
-          "count": 0,
-          "recent": []
-        }
-      }
-    },
-    {
-      "case": "count_12",
-      "setup": "diagnostics_seeded",
-      "args": {
-        "count": 12
-      },
-      "ok": {
-        "api_calls": {
-          "count": 12,
-          "recent": [
-            {
-              "timestamp": "2026-01-15T12:00:00+00:00",
-              "model": "m0",
-              "provider": "anthropic",
-              "input_tokens": 0,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:01+00:00",
-              "model": "m1",
-              "provider": "anthropic",
-              "input_tokens": 1,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:02+00:00",
-              "model": "m2",
-              "provider": "anthropic",
-              "input_tokens": 2,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:03+00:00",
-              "model": "m3",
-              "provider": "anthropic",
-              "input_tokens": 3,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:04+00:00",
-              "model": "m4",
-              "provider": "anthropic",
-              "input_tokens": 4,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:05+00:00",
-              "model": "m5",
-              "provider": "anthropic",
-              "input_tokens": 5,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:06+00:00",
-              "model": "m6",
-              "provider": "anthropic",
-              "input_tokens": 6,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:07+00:00",
-              "model": "m7",
-              "provider": "anthropic",
-              "input_tokens": 7,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:08+00:00",
-              "model": "m8",
-              "provider": "anthropic",
-              "input_tokens": 8,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:09+00:00",
-              "model": "m9",
-              "provider": "anthropic",
-              "input_tokens": 9,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:10+00:00",
-              "model": "m10",
-              "provider": "anthropic",
-              "input_tokens": 10,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:11+00:00",
-              "model": "m11",
-              "provider": "anthropic",
-              "input_tokens": 11,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            }
-          ]
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
-        "errors": {
-          "count": 0,
-          "recent": []
-        },
-        "key_fallbacks": {
-          "count": 0,
-          "recent": []
-        }
-      }
-    },
-    {
-      "case": "count_50",
-      "setup": "diagnostics_seeded",
-      "args": {
-        "count": 50
-      },
-      "ok": {
-        "api_calls": {
-          "count": 12,
-          "recent": [
-            {
-              "timestamp": "2026-01-15T12:00:00+00:00",
-              "model": "m0",
-              "provider": "anthropic",
-              "input_tokens": 0,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:01+00:00",
-              "model": "m1",
-              "provider": "anthropic",
-              "input_tokens": 1,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:02+00:00",
-              "model": "m2",
-              "provider": "anthropic",
-              "input_tokens": 2,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:03+00:00",
-              "model": "m3",
-              "provider": "anthropic",
-              "input_tokens": 3,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:04+00:00",
-              "model": "m4",
-              "provider": "anthropic",
-              "input_tokens": 4,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:05+00:00",
-              "model": "m5",
-              "provider": "anthropic",
-              "input_tokens": 5,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:06+00:00",
-              "model": "m6",
-              "provider": "anthropic",
-              "input_tokens": 6,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:07+00:00",
-              "model": "m7",
-              "provider": "anthropic",
-              "input_tokens": 7,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:08+00:00",
-              "model": "m8",
-              "provider": "anthropic",
-              "input_tokens": 8,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:09+00:00",
-              "model": "m9",
-              "provider": "anthropic",
-              "input_tokens": 9,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:10+00:00",
-              "model": "m10",
-              "provider": "anthropic",
-              "input_tokens": 10,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:11+00:00",
-              "model": "m11",
-              "provider": "anthropic",
-              "input_tokens": 11,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            }
-          ]
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
-        "errors": {
-          "count": 0,
-          "recent": []
-        },
-        "key_fallbacks": {
-          "count": 0,
-          "recent": []
-        }
-      }
-    },
-    {
-      "case": "count_0",
-      "setup": "diagnostics_seeded",
-      "args": {
-        "count": 0
-      },
-      "ok": {
-        "api_calls": {
-          "count": 12,
-          "recent": []
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
-        "errors": {
-          "count": 0,
-          "recent": []
-        },
-        "key_fallbacks": {
-          "count": 0,
-          "recent": []
-        }
-      }
-    },
-    {
-      "case": "count_negative",
-      "setup": "diagnostics_seeded",
-      "args": {
-        "count": -1
-      },
-      "ok": {
-        "api_calls": {
-          "count": 12,
-          "recent": [
-            {
-              "timestamp": "2026-01-15T12:00:02+00:00",
-              "model": "m2",
-              "provider": "anthropic",
-              "input_tokens": 2,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:03+00:00",
-              "model": "m3",
-              "provider": "anthropic",
-              "input_tokens": 3,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:04+00:00",
-              "model": "m4",
-              "provider": "anthropic",
-              "input_tokens": 4,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:05+00:00",
-              "model": "m5",
-              "provider": "anthropic",
-              "input_tokens": 5,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:06+00:00",
-              "model": "m6",
-              "provider": "anthropic",
-              "input_tokens": 6,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:07+00:00",
-              "model": "m7",
-              "provider": "anthropic",
-              "input_tokens": 7,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:08+00:00",
-              "model": "m8",
-              "provider": "anthropic",
-              "input_tokens": 8,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:09+00:00",
-              "model": "m9",
-              "provider": "anthropic",
-              "input_tokens": 9,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:10+00:00",
-              "model": "m10",
-              "provider": "anthropic",
-              "input_tokens": 10,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:11+00:00",
-              "model": "m11",
-              "provider": "anthropic",
-              "input_tokens": 11,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            }
-          ]
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
-        "errors": {
-          "count": 0,
-          "recent": []
-        },
-        "key_fallbacks": {
-          "count": 0,
-          "recent": []
-        }
-      }
-    },
-    {
-      "case": "count_string",
-      "setup": "diagnostics_seeded",
-      "args": {
-        "count": "3"
-      },
-      "ok": {
-        "api_calls": {
-          "count": 12,
-          "recent": [
-            {
-              "timestamp": "2026-01-15T12:00:02+00:00",
-              "model": "m2",
-              "provider": "anthropic",
-              "input_tokens": 2,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:03+00:00",
-              "model": "m3",
-              "provider": "anthropic",
-              "input_tokens": 3,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:04+00:00",
-              "model": "m4",
-              "provider": "anthropic",
-              "input_tokens": 4,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:05+00:00",
-              "model": "m5",
-              "provider": "anthropic",
-              "input_tokens": 5,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:06+00:00",
-              "model": "m6",
-              "provider": "anthropic",
-              "input_tokens": 6,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:07+00:00",
-              "model": "m7",
-              "provider": "anthropic",
-              "input_tokens": 7,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:08+00:00",
-              "model": "m8",
-              "provider": "anthropic",
-              "input_tokens": 8,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:09+00:00",
-              "model": "m9",
-              "provider": "anthropic",
-              "input_tokens": 9,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:10+00:00",
-              "model": "m10",
-              "provider": "anthropic",
-              "input_tokens": 10,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:11+00:00",
-              "model": "m11",
-              "provider": "anthropic",
-              "input_tokens": 11,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            }
-          ]
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
-        "errors": {
-          "count": 0,
-          "recent": []
-        },
-        "key_fallbacks": {
-          "count": 0,
-          "recent": []
-        }
-      }
-    },
-    {
-      "case": "count_float",
-      "setup": "diagnostics_seeded",
-      "args": {
-        "count": 1.5
-      },
-      "ok": {
-        "api_calls": {
-          "count": 12,
-          "recent": [
-            {
-              "timestamp": "2026-01-15T12:00:02+00:00",
-              "model": "m2",
-              "provider": "anthropic",
-              "input_tokens": 2,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:03+00:00",
-              "model": "m3",
-              "provider": "anthropic",
-              "input_tokens": 3,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:04+00:00",
-              "model": "m4",
-              "provider": "anthropic",
-              "input_tokens": 4,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:05+00:00",
-              "model": "m5",
-              "provider": "anthropic",
-              "input_tokens": 5,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:06+00:00",
-              "model": "m6",
-              "provider": "anthropic",
-              "input_tokens": 6,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:07+00:00",
-              "model": "m7",
-              "provider": "anthropic",
-              "input_tokens": 7,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:08+00:00",
-              "model": "m8",
-              "provider": "anthropic",
-              "input_tokens": 8,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:09+00:00",
-              "model": "m9",
-              "provider": "anthropic",
-              "input_tokens": 9,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:10+00:00",
-              "model": "m10",
-              "provider": "anthropic",
-              "input_tokens": 10,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            },
-            {
-              "timestamp": "2026-01-15T12:00:11+00:00",
-              "model": "m11",
-              "provider": "anthropic",
-              "input_tokens": 11,
-              "output_tokens": 1,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 5,
-              "total_ms": 10,
-              "finish_reason": "end_turn"
-            }
-          ]
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
-        "errors": {
-          "count": 0,
-          "recent": []
-        },
-        "key_fallbacks": {
-          "count": 0,
-          "recent": []
-        }
-      }
-    },
-    {
-      "case": "empty",
-      "setup": "fresh",
-      "args": {},
-      "ok": {
-        "api_calls": {
-          "count": 0,
-          "recent": []
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
-        "errors": {
-          "count": 0,
-          "recent": []
-        },
-        "key_fallbacks": {
-          "count": 0,
-          "recent": []
-        }
-      }
-    }
-  ],
   "heartbeat_log": [
     {
       "case": "default",
@@ -3304,6 +2270,614 @@
         "message": "No autonomy state for character 'poppy'"
       },
       "after": null
+    }
+  ],
+  "error_log": [
+    {
+      "case": "default",
+      "setup": "diagnostics_seeded",
+      "args": {},
+      "ok": {
+        "errors": {
+          "count": 12,
+          "recent": [
+            {
+              "timestamp": "2026-01-15T12:00:00+00:00",
+              "error_type": "llm",
+              "message": "failure 0",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:01+00:00",
+              "error_type": "llm",
+              "message": "failure 1",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:02+00:00",
+              "error_type": "llm",
+              "message": "failure 2",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:03+00:00",
+              "error_type": "llm",
+              "message": "failure 3",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:04+00:00",
+              "error_type": "llm",
+              "message": "failure 4",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:05+00:00",
+              "error_type": "llm",
+              "message": "failure 5",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:06+00:00",
+              "error_type": "llm",
+              "message": "failure 6",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:07+00:00",
+              "error_type": "llm",
+              "message": "failure 7",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:08+00:00",
+              "error_type": "llm",
+              "message": "failure 8",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:09+00:00",
+              "error_type": "llm",
+              "message": "failure 9",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:10+00:00",
+              "error_type": "llm",
+              "message": "failure 10",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:11+00:00",
+              "error_type": "llm",
+              "message": "failure 11",
+              "context": "character=poppy"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "count_3",
+      "setup": "diagnostics_seeded",
+      "args": {
+        "count": 3
+      },
+      "ok": {
+        "errors": {
+          "count": 12,
+          "recent": [
+            {
+              "timestamp": "2026-01-15T12:00:09+00:00",
+              "error_type": "llm",
+              "message": "failure 9",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:10+00:00",
+              "error_type": "llm",
+              "message": "failure 10",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:11+00:00",
+              "error_type": "llm",
+              "message": "failure 11",
+              "context": "character=poppy"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "count_12",
+      "setup": "diagnostics_seeded",
+      "args": {
+        "count": 12
+      },
+      "ok": {
+        "errors": {
+          "count": 12,
+          "recent": [
+            {
+              "timestamp": "2026-01-15T12:00:00+00:00",
+              "error_type": "llm",
+              "message": "failure 0",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:01+00:00",
+              "error_type": "llm",
+              "message": "failure 1",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:02+00:00",
+              "error_type": "llm",
+              "message": "failure 2",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:03+00:00",
+              "error_type": "llm",
+              "message": "failure 3",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:04+00:00",
+              "error_type": "llm",
+              "message": "failure 4",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:05+00:00",
+              "error_type": "llm",
+              "message": "failure 5",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:06+00:00",
+              "error_type": "llm",
+              "message": "failure 6",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:07+00:00",
+              "error_type": "llm",
+              "message": "failure 7",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:08+00:00",
+              "error_type": "llm",
+              "message": "failure 8",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:09+00:00",
+              "error_type": "llm",
+              "message": "failure 9",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:10+00:00",
+              "error_type": "llm",
+              "message": "failure 10",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:11+00:00",
+              "error_type": "llm",
+              "message": "failure 11",
+              "context": "character=poppy"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "count_50",
+      "setup": "diagnostics_seeded",
+      "args": {
+        "count": 50
+      },
+      "ok": {
+        "errors": {
+          "count": 12,
+          "recent": [
+            {
+              "timestamp": "2026-01-15T12:00:00+00:00",
+              "error_type": "llm",
+              "message": "failure 0",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:01+00:00",
+              "error_type": "llm",
+              "message": "failure 1",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:02+00:00",
+              "error_type": "llm",
+              "message": "failure 2",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:03+00:00",
+              "error_type": "llm",
+              "message": "failure 3",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:04+00:00",
+              "error_type": "llm",
+              "message": "failure 4",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:05+00:00",
+              "error_type": "llm",
+              "message": "failure 5",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:06+00:00",
+              "error_type": "llm",
+              "message": "failure 6",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:07+00:00",
+              "error_type": "llm",
+              "message": "failure 7",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:08+00:00",
+              "error_type": "llm",
+              "message": "failure 8",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:09+00:00",
+              "error_type": "llm",
+              "message": "failure 9",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:10+00:00",
+              "error_type": "llm",
+              "message": "failure 10",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:11+00:00",
+              "error_type": "llm",
+              "message": "failure 11",
+              "context": "character=poppy"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "count_0",
+      "setup": "diagnostics_seeded",
+      "args": {
+        "count": 0
+      },
+      "ok": {
+        "errors": {
+          "count": 12,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "count_negative",
+      "setup": "diagnostics_seeded",
+      "args": {
+        "count": -1
+      },
+      "ok": {
+        "errors": {
+          "count": 12,
+          "recent": [
+            {
+              "timestamp": "2026-01-15T12:00:00+00:00",
+              "error_type": "llm",
+              "message": "failure 0",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:01+00:00",
+              "error_type": "llm",
+              "message": "failure 1",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:02+00:00",
+              "error_type": "llm",
+              "message": "failure 2",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:03+00:00",
+              "error_type": "llm",
+              "message": "failure 3",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:04+00:00",
+              "error_type": "llm",
+              "message": "failure 4",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:05+00:00",
+              "error_type": "llm",
+              "message": "failure 5",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:06+00:00",
+              "error_type": "llm",
+              "message": "failure 6",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:07+00:00",
+              "error_type": "llm",
+              "message": "failure 7",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:08+00:00",
+              "error_type": "llm",
+              "message": "failure 8",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:09+00:00",
+              "error_type": "llm",
+              "message": "failure 9",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:10+00:00",
+              "error_type": "llm",
+              "message": "failure 10",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:11+00:00",
+              "error_type": "llm",
+              "message": "failure 11",
+              "context": "character=poppy"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "count_string",
+      "setup": "diagnostics_seeded",
+      "args": {
+        "count": "3"
+      },
+      "ok": {
+        "errors": {
+          "count": 12,
+          "recent": [
+            {
+              "timestamp": "2026-01-15T12:00:00+00:00",
+              "error_type": "llm",
+              "message": "failure 0",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:01+00:00",
+              "error_type": "llm",
+              "message": "failure 1",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:02+00:00",
+              "error_type": "llm",
+              "message": "failure 2",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:03+00:00",
+              "error_type": "llm",
+              "message": "failure 3",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:04+00:00",
+              "error_type": "llm",
+              "message": "failure 4",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:05+00:00",
+              "error_type": "llm",
+              "message": "failure 5",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:06+00:00",
+              "error_type": "llm",
+              "message": "failure 6",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:07+00:00",
+              "error_type": "llm",
+              "message": "failure 7",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:08+00:00",
+              "error_type": "llm",
+              "message": "failure 8",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:09+00:00",
+              "error_type": "llm",
+              "message": "failure 9",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:10+00:00",
+              "error_type": "llm",
+              "message": "failure 10",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:11+00:00",
+              "error_type": "llm",
+              "message": "failure 11",
+              "context": "character=poppy"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "count_float",
+      "setup": "diagnostics_seeded",
+      "args": {
+        "count": 1.5
+      },
+      "ok": {
+        "errors": {
+          "count": 12,
+          "recent": [
+            {
+              "timestamp": "2026-01-15T12:00:00+00:00",
+              "error_type": "llm",
+              "message": "failure 0",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:01+00:00",
+              "error_type": "llm",
+              "message": "failure 1",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:02+00:00",
+              "error_type": "llm",
+              "message": "failure 2",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:03+00:00",
+              "error_type": "llm",
+              "message": "failure 3",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:04+00:00",
+              "error_type": "llm",
+              "message": "failure 4",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:05+00:00",
+              "error_type": "llm",
+              "message": "failure 5",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:06+00:00",
+              "error_type": "llm",
+              "message": "failure 6",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:07+00:00",
+              "error_type": "llm",
+              "message": "failure 7",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:08+00:00",
+              "error_type": "llm",
+              "message": "failure 8",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:09+00:00",
+              "error_type": "llm",
+              "message": "failure 9",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:10+00:00",
+              "error_type": "llm",
+              "message": "failure 10",
+              "context": "character=poppy"
+            },
+            {
+              "timestamp": "2026-01-15T12:00:11+00:00",
+              "error_type": "llm",
+              "message": "failure 11",
+              "context": "character=poppy"
+            }
+          ]
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
+    },
+    {
+      "case": "empty",
+      "setup": "fresh",
+      "args": {},
+      "ok": {
+        "errors": {
+          "count": 0,
+          "recent": []
+        },
+        "key_fallbacks": {
+          "count": 0,
+          "recent": []
+        }
+      }
     }
   ]
 }

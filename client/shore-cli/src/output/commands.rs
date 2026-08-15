@@ -28,13 +28,6 @@ fn checked_rem_u64(value: u64, divisor: u64) -> u64 {
     value.checked_rem(divisor).unwrap_or_default()
 }
 
-fn format_millis_as_seconds_one_decimal(millis: u64) -> String {
-    let rounded_deciseconds = checked_div_u64(millis.saturating_add(50), 100);
-    let whole_seconds = checked_div_u64(rounded_deciseconds, 10);
-    let decimal_seconds = checked_rem_u64(rounded_deciseconds, 10);
-    format!("{whole_seconds}.{decimal_seconds}")
-}
-
 #[expect(
     clippy::float_arithmetic,
     reason = "CLI usage summaries add daemon-provided f64 display costs for rounded totals only"
@@ -60,7 +53,7 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "alt" => print_alt_confirmation(data),
         "list_alternatives" => print_alt_list(data),
         "inject_system" => cli_out!("System instruction injected."),
-        "diagnostics" => print_diagnostics(data),
+        "error_log" => print_error_log(data),
         "heartbeat_log" => super::transcript::print_heartbeat_log(data),
         "call_log" => print_call_log(data),
         "transcript" => print_transcript(data),
@@ -133,10 +126,11 @@ fn print_call_log(data: &serde_json::Value) {
         write_dim(
             &mut out,
             &format!(
-                "          in={} out={} cache={}  {}ms  {}B{}",
+                "          in={} out={} cache={}/{}  {}ms  {}B{}",
                 usage["input_tokens"].as_u64().unwrap_or(0),
                 usage["output_tokens"].as_u64().unwrap_or(0),
                 usage["cache_read_tokens"].as_u64().unwrap_or(0),
+                usage["cache_write_tokens"].as_u64().unwrap_or(0),
                 entry["duration_ms"].as_u64().unwrap_or(0),
                 entry["request_bytes"]
                     .as_u64()
@@ -164,7 +158,7 @@ fn print_one_call(out: &mut impl Write, call: &serde_json::Value, width: usize) 
     write_dim(
         out,
         &format!(
-            "  {}  {}/{}  {}  in={} out={} cache_read={}  {}ms",
+            "  {}  {}/{}  {}  in={} out={} cache_read={} cache_write={}  {}ms",
             call["ts"].as_str().unwrap_or("?"),
             call["provider"].as_str().unwrap_or("?"),
             abbreviate_model(call["model"].as_str().unwrap_or("?")),
@@ -172,6 +166,7 @@ fn print_one_call(out: &mut impl Write, call: &serde_json::Value, width: usize) 
             usage["input_tokens"].as_u64().unwrap_or(0),
             usage["output_tokens"].as_u64().unwrap_or(0),
             usage["cache_read_tokens"].as_u64().unwrap_or(0),
+            usage["cache_write_tokens"].as_u64().unwrap_or(0),
             call["duration_ms"].as_u64().unwrap_or(0),
         ),
     );
@@ -464,11 +459,12 @@ fn print_transcript_entry(
     write_dim(
         out,
         &format!(
-            "                {}  in={} out={} cache_read={}",
+            "                {}  in={} out={} cache_read={} cache_write={}",
             entry["finish_reason"].as_str().unwrap_or(""),
             usage["input_tokens"].as_u64().unwrap_or(0),
             usage["output_tokens"].as_u64().unwrap_or(0),
             usage["cache_read_tokens"].as_u64().unwrap_or(0),
+            usage["cache_write_tokens"].as_u64().unwrap_or(0),
         ),
     );
     _ = writeln!(out);
@@ -1393,80 +1389,56 @@ fn print_config_reload(data: &serde_json::Value) {
     }
 }
 
-pub(crate) fn print_diagnostics(data: &serde_json::Value) {
+pub(crate) fn print_error_log(data: &serde_json::Value) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    let width = term_width();
-
-    print_diagnostics_section(
-        &mut out,
-        "API Calls",
-        &data["api_calls"],
-        width,
-        |w, call| {
-            let model = abbreviate_model(call["model"].as_str().unwrap_or("?"));
-            let input = call["input_tokens"].as_u64().unwrap_or(0);
-            let output_t = call["output_tokens"].as_u64().unwrap_or(0);
-            let cr = call["cache_read_tokens"].as_u64().unwrap_or(0);
-            let cw = call["cache_write_tokens"].as_u64().unwrap_or(0);
-            let total = call["total_ms"].as_u64().unwrap_or(0);
-            let secs = format_millis_as_seconds_one_decimal(total);
-
-            _ = write!(w, "{model:<24}");
-            write_dim(
-                w,
-                &format!("in:{input:<5} out:{output_t:<5} cache:{cr}/{cw}  {secs}s"),
-            );
-            if let Some(sub) = call["subagent"].as_str() {
-                write_dim(w, &format!("  via {sub}"));
-            }
-
-            if let Some(err) = call.get("error").filter(|v| !v.is_null()) {
-                write_fg(
-                    w,
-                    COLOR_ERROR,
-                    &format!("  ERR: {}", err.as_str().unwrap_or("?")),
-                );
-            }
-            _ = writeln!(w);
-        },
-    );
-
-    print_diagnostics_section(
-        &mut out,
-        "Tool Calls",
-        &data["tool_calls"],
-        width,
-        |w, call| {
-            let name = call["tool_name"].as_str().unwrap_or("?");
-            let dur = call["duration_ms"].as_u64().unwrap_or(0);
-            let ok = call["success"].as_bool().unwrap_or(true);
-
-            _ = write!(w, "{name:<24}");
-            write_dim(w, &format!("{dur}ms  "));
-            if let Some(sub) = call["subagent"].as_str() {
-                write_dim(w, &format!("via {sub}  "));
-            }
-            let (marker_color, marker_text) = if ok {
-                (Tone::Good, "ok")
-            } else {
-                (COLOR_ERROR, "FAIL")
-            };
-            write_fg(w, marker_color, marker_text);
-            _ = writeln!(w);
-        },
-    );
-
-    print_diagnostics_section(&mut out, "Errors", &data["errors"], width, |w, err| {
-        let etype = err["error_type"].as_str().unwrap_or("?");
-        let msg = err["message"].as_str().unwrap_or("?");
-
-        write_fg(w, COLOR_ERROR, &format!("{etype:<12}"));
-        _ = writeln!(w, "{msg}");
-    });
+    write_error_log(&mut out, data);
 }
 
-fn print_diagnostics_section<W: Write>(
+pub(crate) fn write_error_log<W: Write>(out: &mut W, data: &serde_json::Value) {
+    let width = term_width();
+
+    print_error_log_section(out, "Errors", &data["errors"], width, |w, err| {
+        let etype = err["error_type"].as_str().unwrap_or("?");
+        let msg = err["message"].as_str().unwrap_or("?");
+        let context = err["context"].as_str().unwrap_or("");
+
+        write_fg(w, COLOR_ERROR, &format!("{etype:<12}"));
+        _ = write!(w, "{msg}");
+        if !context.is_empty() {
+            write_dim(w, &format!("  {context}"));
+        }
+        _ = writeln!(w);
+    });
+
+    print_error_log_section(
+        out,
+        "Key fallbacks",
+        &data["key_fallbacks"],
+        width,
+        |w, event| {
+            let from = event["from_key"].as_str().unwrap_or("?");
+            let kind = event["kind"].as_str().unwrap_or("?");
+            let reason = event["reason"].as_str().unwrap_or("?");
+
+            match event["to_key"].as_str() {
+                Some(to) => _ = write!(w, "{from} -> {to}"),
+                None => {
+                    _ = write!(w, "{from} -> ");
+                    write_fg(w, COLOR_ERROR, "nothing");
+                }
+            }
+            write_dim(w, &format!("  {kind}"));
+            if let Some(status) = event["status"].as_u64() {
+                write_dim(w, &format!(" {status}"));
+            }
+            write_dim(w, &format!("  {reason}"));
+            _ = writeln!(w);
+        },
+    );
+}
+
+fn print_error_log_section<W: Write>(
     out: &mut W,
     title: &str,
     section: &serde_json::Value,
@@ -1494,7 +1466,6 @@ fn print_diagnostics_section<W: Write>(
     }
     _ = writeln!(out);
 }
-
 fn format_duration_compact(secs: i64) -> String {
     let neg = secs < 0;
     let mut remaining_seconds = secs.unsigned_abs();
@@ -1521,6 +1492,64 @@ fn format_duration_compact(secs: i64) -> String {
 mod tests {
     use super::*;
     use crate::output::set_color_enabled;
+
+    #[test]
+    #[ignore = "preview: .claude/skills/run-shore-cli/preview.sh errors"]
+    fn render_preview_errors() {
+        set_color_enabled(true);
+        let data = serde_json::json!({
+            "errors": {
+                "count": 2,
+                "recent": [
+                    {
+                        "timestamp": "2026-08-15T04:26:05+00:00",
+                        "error_type": "llm",
+                        "message": "connection reset by peer",
+                        "context": "character=qifei"
+                    },
+                    {
+                        "timestamp": "2026-08-15T04:31:44+00:00",
+                        "error_type": "tool",
+                        "message": "beets database is unreachable",
+                        "context": "tool=ask_librarian"
+                    }
+                ]
+            },
+            "key_fallbacks": {
+                "count": 2,
+                "recent": [
+                    {
+                        "timestamp": "2026-08-15T04:28:16+00:00",
+                        "provider": "opencode-go",
+                        "model": "glm-5.3",
+                        "character": "qifei",
+                        "from_key": "primary",
+                        "to_key": "backup",
+                        "kind": "quota",
+                        "status": 429,
+                        "reason": "rate limited"
+                    },
+                    {
+                        "timestamp": "2026-08-15T04:44:02+00:00",
+                        "provider": "anthropic",
+                        "model": "claude-opus-5",
+                        "character": "qifei",
+                        "from_key": "only",
+                        "kind": "missing",
+                        "reason": "no key configured"
+                    }
+                ]
+            }
+        });
+        let mut buf = Vec::new();
+        write_error_log(&mut buf, &data);
+        set_color_enabled(false);
+        let mut stdout = io::stdout();
+        let _ignored = stdout.write_all(b"\n----- ERROR LOG (shore trace errors) -----\n");
+        _ = stdout.write_all(&buf);
+        _ = stdout.write_all(b"----- end -----\n");
+        _ = stdout.flush();
+    }
 
     #[test]
     fn call_request_payload_is_pretty_printed() {

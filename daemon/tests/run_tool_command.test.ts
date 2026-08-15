@@ -34,7 +34,6 @@ interface World {
   config: LoadedConfig;
   ctx: RunToolContext;
   workspace: string;
-  diagnostics: unknown[];
 }
 
 async function world(
@@ -83,19 +82,16 @@ async function world(
     rawTable: undefined,
   };
 
-  const diagnostics: unknown[] = [];
   const runSubagentImpl = options.subagent;
 
   return {
     config,
     workspace,
-    diagnostics,
     ctx: {
       config,
       dataDir: dirs.data,
       conversation: [],
       mcpTools: () => [],
-      diagnostics: { push: (entry) => diagnostics.push(entry) },
       now: () => "2026-08-14T00:00:00Z",
       newMessageId: () => "m_1",
       toolUseId: () => "debug_root",
@@ -211,7 +207,7 @@ describe("coercePairs", () => {
 
 describe("runTool", () => {
   test("a read returns what the model would have seen, and records a diagnostic", async () => {
-    const { ctx, diagnostics } = await world({ enabledTools: ["read"] });
+    const { ctx } = await world({ enabledTools: ["read"] });
     const result = (await runTool("ada", ctx, {
       tool: "read",
       pairs: { path: "notes.md" },
@@ -223,8 +219,6 @@ describe("runTool", () => {
     expect(result["truncated"]).toBe(false);
     expect(String(result["output"])).toContain("the tide came in");
     expect(result["raw"]).toBeNull();
-    expect(diagnostics).toHaveLength(1);
-    expect(diagnostics[0]).toMatchObject({ tool_name: "read", success: true });
   });
 
   test("a tool the model cannot reach still runs, and says it is off the surface", async () => {

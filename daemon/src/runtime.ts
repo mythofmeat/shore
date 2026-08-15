@@ -316,7 +316,6 @@ export function sharedToolDeps(
     providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
     callStore?: CallStore | undefined;
     env?: NodeJS.ProcessEnv | undefined;
-    diagnostics?: Diagnostics | undefined;
   },
 ): ToolContextDeps {
   return {
@@ -325,15 +324,12 @@ export function sharedToolDeps(
       ? {}
       : {
           runSubagent: (parent: ToolContext) => {
-            const recorded = subagent.diagnostics ?? new Diagnostics();
             return subagentRunner({
               config,
               ctx: parent,
               providers: subagent.providers,
               ...(subagent.callStore === undefined ? {} : { callStore: subagent.callStore }),
               mcpRegistry: mcp.current,
-              diagnostics: recorded.tool_calls,
-              apiDiagnostics: recorded.api_calls,
               ...(subagent.env === undefined ? {} : { env: subagent.env }),
             });
           },

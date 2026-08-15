@@ -51,7 +51,7 @@ import {
   refreshProviderModels,
 } from "./providers.ts";
 import {
-  diagnostics as diagnosticsCommand,
+  errorLog,
   heartbeatLog,
   heartbeatSetActive,
   heartbeatSetDormant,
@@ -173,8 +173,8 @@ export async function runCommand(
       return configCheck(session, session.env ?? process.env);
     case "config_reload":
       return await configReload(session, args);
-    case "diagnostics":
-      return diagnosticsCommand(statusContext(engine, session, deps), args);
+    case "error_log":
+      return errorLog(statusContext(engine, session, deps), args);
     case "heartbeat_log":
       return heartbeatLog(statusContext(engine, session, deps), args);
     case "call_log":
@@ -218,7 +218,6 @@ export async function runCommand(
           config: session.config,
           dataDir: session.dataDir,
           conversation: engine.messages(),
-          diagnostics: deps.diagnostics.tool_calls,
         },
         args,
       );

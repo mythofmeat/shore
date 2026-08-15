@@ -56,17 +56,6 @@
             "is_error": false
           }
         ],
-        "diagnostics": [
-          {
-            "timestamp": "<minted_timestamp>",
-            "tool_name": "ask_research",
-            "tool_id": "tu_1",
-            "success": true,
-            "duration_ms": "<duration_ms>",
-            "input_summary": "{\"query\":\"who\"}",
-            "output_summary": "plain \"quoted\" text"
-          }
-        ],
         "intermediate_messages": []
       }
     },
@@ -125,17 +114,6 @@
             "is_error": false
           }
         ],
-        "diagnostics": [
-          {
-            "timestamp": "<minted_timestamp>",
-            "tool_name": "ask_research",
-            "tool_id": "tu_2",
-            "success": true,
-            "duration_ms": "<duration_ms>",
-            "input_summary": "{\"query\":\"who\"}",
-            "output_summary": "{\"b\":2,\"a\":[1,null,true]}"
-          }
-        ],
         "intermediate_messages": []
       }
     },
@@ -183,17 +161,6 @@
             "tool_name": "ask_research",
             "output": "42.5",
             "is_error": false
-          }
-        ],
-        "diagnostics": [
-          {
-            "timestamp": "<minted_timestamp>",
-            "tool_name": "ask_research",
-            "tool_id": "tu_3",
-            "success": true,
-            "duration_ms": "<duration_ms>",
-            "input_summary": "{\"query\":\"who\"}",
-            "output_summary": "42.5"
           }
         ],
         "intermediate_messages": []
@@ -245,17 +212,6 @@
             "is_error": false
           }
         ],
-        "diagnostics": [
-          {
-            "timestamp": "<minted_timestamp>",
-            "tool_name": "ask_research",
-            "tool_id": "tu_4",
-            "success": true,
-            "duration_ms": "<duration_ms>",
-            "input_summary": "{\"query\":\"who\"}",
-            "output_summary": "null"
-          }
-        ],
         "intermediate_messages": []
       }
     },
@@ -305,17 +261,6 @@
             "is_error": false
           }
         ],
-        "diagnostics": [
-          {
-            "timestamp": "<minted_timestamp>",
-            "tool_name": "ask_research",
-            "tool_id": "tu_5",
-            "success": true,
-            "duration_ms": "<duration_ms>",
-            "input_summary": "{\"query\":\"who\"}",
-            "output_summary": "ok"
-          }
-        ],
         "intermediate_messages": []
       }
     },
@@ -363,17 +308,6 @@
             "is_error": true
           }
         ],
-        "diagnostics": [
-          {
-            "timestamp": "<minted_timestamp>",
-            "tool_name": "frobnicate",
-            "tool_id": "tu_6",
-            "success": false,
-            "duration_ms": "<duration_ms>",
-            "input_summary": "{}",
-            "output_summary": "frobnicate: not yet implemented"
-          }
-        ],
         "intermediate_messages": []
       }
     },
@@ -419,17 +353,6 @@
             "tool_name": "ask_research",
             "output": "invalid args: ask_research requires a string `query`",
             "is_error": true
-          }
-        ],
-        "diagnostics": [
-          {
-            "timestamp": "<minted_timestamp>",
-            "tool_name": "ask_research",
-            "tool_id": "tu_7",
-            "success": false,
-            "duration_ms": "<duration_ms>",
-            "input_summary": "{}",
-            "output_summary": "invalid args: ask_research requires a string `query`"
           }
         ],
         "intermediate_messages": []
@@ -483,17 +406,6 @@
             "is_error": true
           }
         ],
-        "diagnostics": [
-          {
-            "timestamp": "<minted_timestamp>",
-            "tool_name": "ask_research",
-            "tool_id": "tu_8",
-            "success": false,
-            "duration_ms": "<duration_ms>",
-            "input_summary": "{\"query\":\"who\"}",
-            "output_summary": "io: disk went away"
-          }
-        ],
         "intermediate_messages": []
       }
     },
@@ -543,17 +455,6 @@
             "is_error": false
           }
         ],
-        "diagnostics": [
-          {
-            "timestamp": "<minted_timestamp>",
-            "tool_name": "ask_research",
-            "tool_id": "tu_9",
-            "success": true,
-            "duration_ms": "<duration_ms>",
-            "input_summary": "{\"query\":\"who\"}",
-            "output_summary": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\n[tool_result truncated: showing first 40 of 120 characters]"
-          }
-        ],
         "intermediate_messages": []
       }
     },
@@ -601,17 +502,6 @@
             "tool_name": "ask_research",
             "output": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
             "is_error": false
-          }
-        ],
-        "diagnostics": [
-          {
-            "timestamp": "<minted_timestamp>",
-            "tool_name": "ask_research",
-            "tool_id": "tu_10",
-            "success": true,
-            "duration_ms": "<duration_ms>",
-            "input_summary": "{\"query\":\"who\"}",
-            "output_summary": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
           }
         ],
         "intermediate_messages": []
@@ -668,17 +558,6 @@
             "is_error": false
           }
         ],
-        "diagnostics": [
-          {
-            "timestamp": "<minted_timestamp>",
-            "tool_name": "ask_research",
-            "tool_id": "tu_11",
-            "success": true,
-            "duration_ms": "<duration_ms>",
-            "input_summary": "{\"query\":\"who\"}",
-            "output_summary": "xxxxxxxxxxxxxxxxxxxx\n\n[tool_result truncated: showing first 20 of 120 characters]"
-          }
-        ],
         "intermediate_messages": []
       }
     },
@@ -726,17 +605,6 @@
             "tool_name": "ask_research",
             "output": "io: xxxxxxxxxxxxxxxxxxxxxxxxxx\n\n[tool_result truncated: showing first 30 of 124 characters]",
             "is_error": true
-          }
-        ],
-        "diagnostics": [
-          {
-            "timestamp": "<minted_timestamp>",
-            "tool_name": "ask_research",
-            "tool_id": "tu_12",
-            "success": false,
-            "duration_ms": "<duration_ms>",
-            "input_summary": "{\"query\":\"who\"}",
-            "output_summary": "io: xxxxxxxxxxxxxxxxxxxxxxxxxx\n\n[tool_result truncated: showing first 30 of 124 characters]"
           }
         ],
         "intermediate_messages": []
@@ -790,17 +658,6 @@
             "is_error": false
           }
         ],
-        "diagnostics": [
-          {
-            "timestamp": "<minted_timestamp>",
-            "tool_name": "ask_research",
-            "tool_id": "tu_13",
-            "success": true,
-            "duration_ms": "<duration_ms>",
-            "input_summary": "{\"query\":\"q\",\"pad\":\"pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp…",
-            "output_summary": "ok"
-          }
-        ],
         "intermediate_messages": []
       }
     },
@@ -850,17 +707,6 @@
             "tool_name": "ask_research",
             "output": "timed out after 0s and was cancelled",
             "is_error": true
-          }
-        ],
-        "diagnostics": [
-          {
-            "timestamp": "<minted_timestamp>",
-            "tool_name": "ask_research",
-            "tool_id": "tu_14",
-            "success": false,
-            "duration_ms": "<duration_ms>",
-            "input_summary": "{\"query\":\"who\"}",
-            "output_summary": "timed out after 0s and was cancelled"
           }
         ],
         "intermediate_messages": []
@@ -926,17 +772,6 @@
             "tool_name": "generate_image",
             "output": "io: image generation not available: no LLM client",
             "is_error": true
-          }
-        ],
-        "diagnostics": [
-          {
-            "timestamp": "<minted_timestamp>",
-            "tool_name": "generate_image",
-            "tool_id": "tu_15",
-            "success": false,
-            "duration_ms": "<duration_ms>",
-            "input_summary": "{\"prompt\":\"a cat\"}",
-            "output_summary": "io: image generation not available: no LLM client"
           }
         ],
         "intermediate_messages": [
@@ -1018,17 +853,6 @@
             "tool_name": "ask_research",
             "output": "{\"path\":\"/tmp/not-an-image.png\"}",
             "is_error": false
-          }
-        ],
-        "diagnostics": [
-          {
-            "timestamp": "<minted_timestamp>",
-            "tool_name": "ask_research",
-            "tool_id": "tu_16",
-            "success": true,
-            "duration_ms": "<duration_ms>",
-            "input_summary": "{\"query\":\"who\"}",
-            "output_summary": "{\"path\":\"/tmp/not-an-image.png\"}"
           }
         ],
         "intermediate_messages": [

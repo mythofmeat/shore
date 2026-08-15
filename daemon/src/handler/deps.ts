@@ -152,8 +152,6 @@ export function chatToolDeps(
       ...(runtime.callStore === undefined ? {} : { callStore: runtime.callStore }),
       mcpRegistry: runtime.mcp.current,
       sendDirect: turn.send,
-      diagnostics: a.diagnostics.tool_calls,
-      apiDiagnostics: a.diagnostics.api_calls,
       conversation: turn.conversation,
       ...(a.env === undefined ? {} : { env: a.env }),
       ...(turn.rid === undefined ? {} : { rid: turn.rid }),

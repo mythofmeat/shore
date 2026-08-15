@@ -47,7 +47,12 @@ function fillCalls(store: CallStore): void {
       sdk: "anthropic",
       rid: null,
       finish_reason: "end_turn",
-      usage: { input_tokens: 10, output_tokens: 2, cache_read_tokens: 5 },
+      usage: {
+        input_tokens: 10,
+        output_tokens: 2,
+        cache_read_tokens: 5,
+        cache_write_tokens: 0,
+      },
       duration_ms: 42,
       error: null,
       request_body: request,

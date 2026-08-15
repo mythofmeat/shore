@@ -8,6 +8,7 @@ import {
   attachGeneratedImage,
   executeToolUse,
   recordReportedMessage,
+  runToolUse,
   type ToolExecution,
 } from "../src/tools/execute.ts";
 import type { ToolContext, ToolLimitsView } from "../src/tools/dispatch.ts";
@@ -117,18 +118,16 @@ function durationMs(raw: string): number {
 
 function harness(rid: string | null, limits: ToolLimitsView, ctx: ToolContext) {
   const frames: ServerMessage[] = [];
-  const diagnostics: unknown[] = [];
   const exec: ToolExecution = {
     sendDirect: (m) => frames.push(m),
     ctx,
     limits,
-    diagnostics: { push: (e) => diagnostics.push(e) },
     ...(rid !== null ? { rid } : {}),
     now: () => MINTED_TS,
     newMessageId: () => MINTED_ID,
     monotonicMs: () => 0,
   };
-  return { exec, frames, diagnostics };
+  return { exec, frames };
 }
 
 type Scripted = { ok: unknown } | { err: string } | { hang: true };
@@ -183,8 +182,8 @@ describe("execute_tool_use", () => {
     if (TRUNCATION_FORMAT_DIVERGES.has(c.name)) {
       test(`${c.name} (diverges: #92)`, async () => {
         const ctx = scriptedContext(c.input.tool.name, c.input.scripted);
-        const { exec, diagnostics } = harness(c.input.rid, limitsFrom(c.input.limits), ctx);
-        const block = await executeToolUse(
+        const { exec } = harness(c.input.rid, limitsFrom(c.input.limits), ctx);
+        const run = await runToolUse(
           c.input.tool,
           exec,
           structuredClone(c.input.intermediate_messages),
@@ -193,12 +192,12 @@ describe("execute_tool_use", () => {
         const cap = limitsFrom(c.input.limits);
         const kept =
           cap.config?.[c.input.tool.name]?.max_result_chars ?? cap.max_result_chars;
-        const content = (block as { content: string }).content;
-        const entry = diagnostics[0] as { truncated: boolean; result_chars: number };
+        const content = (run.block as { content: string }).content;
+        const window = run.window;
 
-        expect(entry.truncated).toBe(true);
-        expect(entry.result_chars).toBeGreaterThan(kept);
-        expect(content).toContain(`${String(entry.result_chars)} characters`);
+        expect(window?.truncated).toBe(true);
+        expect(window?.originalChars ?? 0).toBeGreaterThan(kept);
+        expect(content).toContain(`${String(window?.originalChars ?? 0)} characters`);
         expect(content).toContain("Narrow the call");
         const [head, tail] = content.split("\n\n[tool_result truncated:");
         expect(head?.length ?? 0).toBeGreaterThan(0);
@@ -208,11 +207,7 @@ describe("execute_tool_use", () => {
     }
     test(c.name, async () => {
       const ctx = scriptedContext(c.input.tool.name, c.input.scripted);
-      const { exec, frames, diagnostics } = harness(
-        c.input.rid,
-        limitsFrom(c.input.limits),
-        ctx,
-      );
+      const { exec, frames } = harness(c.input.rid, limitsFrom(c.input.limits), ctx);
       const messages = structuredClone(c.input.intermediate_messages);
 
       const block = await executeToolUse(c.input.tool, exec, messages);
@@ -222,7 +217,6 @@ describe("execute_tool_use", () => {
           stripAbsent({
             block: withoutTruncationFields(block),
             frames,
-            diagnostics: diagnostics.map(withoutTruncationFields),
             intermediate_messages: messages,
           }),
         ),

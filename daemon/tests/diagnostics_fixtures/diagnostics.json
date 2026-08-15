@@ -258,14 +258,6 @@
       "seed": "empty",
       "last_n": 0,
       "ok": {
-        "api_calls": {
-          "count": 0,
-          "recent": []
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
         "errors": {
           "count": 0,
           "recent": []
@@ -281,14 +273,6 @@
       "seed": "empty",
       "last_n": 1,
       "ok": {
-        "api_calls": {
-          "count": 0,
-          "recent": []
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
         "errors": {
           "count": 0,
           "recent": []
@@ -304,14 +288,6 @@
       "seed": "empty",
       "last_n": 2,
       "ok": {
-        "api_calls": {
-          "count": 0,
-          "recent": []
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
         "errors": {
           "count": 0,
           "recent": []
@@ -327,14 +303,6 @@
       "seed": "empty",
       "last_n": 10,
       "ok": {
-        "api_calls": {
-          "count": 0,
-          "recent": []
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
         "errors": {
           "count": 0,
           "recent": []
@@ -350,14 +318,6 @@
       "seed": "empty",
       "last_n": 1000,
       "ok": {
-        "api_calls": {
-          "count": 0,
-          "recent": []
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
         "errors": {
           "count": 0,
           "recent": []
@@ -373,14 +333,6 @@
       "seed": "full",
       "last_n": 0,
       "ok": {
-        "api_calls": {
-          "count": 1,
-          "recent": []
-        },
-        "tool_calls": {
-          "count": 1,
-          "recent": []
-        },
         "errors": {
           "count": 1,
           "recent": []
@@ -396,39 +348,6 @@
       "seed": "full",
       "last_n": 1,
       "ok": {
-        "api_calls": {
-          "count": 1,
-          "recent": [
-            {
-              "timestamp": "2026-01-01T00:00:00Z",
-              "model": "test-model",
-              "provider": "anthropic",
-              "input_tokens": 100,
-              "output_tokens": 50,
-              "cache_read_tokens": 80,
-              "cache_write_tokens": 10,
-              "ttft_ms": 200,
-              "total_ms": 1000,
-              "finish_reason": "end_turn",
-              "total_cost_usd": 0.0123,
-              "error": "retried once"
-            }
-          ]
-        },
-        "tool_calls": {
-          "count": 1,
-          "recent": [
-            {
-              "timestamp": "2026-01-01T00:00:01Z",
-              "tool_name": "check_time",
-              "tool_id": "t1",
-              "success": true,
-              "duration_ms": 5,
-              "input_summary": "{}",
-              "output_summary": "2026-01-01T00:00:01Z"
-            }
-          ]
-        },
         "errors": {
           "count": 1,
           "recent": [
@@ -464,39 +383,6 @@
       "seed": "full",
       "last_n": 2,
       "ok": {
-        "api_calls": {
-          "count": 1,
-          "recent": [
-            {
-              "timestamp": "2026-01-01T00:00:00Z",
-              "model": "test-model",
-              "provider": "anthropic",
-              "input_tokens": 100,
-              "output_tokens": 50,
-              "cache_read_tokens": 80,
-              "cache_write_tokens": 10,
-              "ttft_ms": 200,
-              "total_ms": 1000,
-              "finish_reason": "end_turn",
-              "total_cost_usd": 0.0123,
-              "error": "retried once"
-            }
-          ]
-        },
-        "tool_calls": {
-          "count": 1,
-          "recent": [
-            {
-              "timestamp": "2026-01-01T00:00:01Z",
-              "tool_name": "check_time",
-              "tool_id": "t1",
-              "success": true,
-              "duration_ms": 5,
-              "input_summary": "{}",
-              "output_summary": "2026-01-01T00:00:01Z"
-            }
-          ]
-        },
         "errors": {
           "count": 1,
           "recent": [
@@ -532,39 +418,6 @@
       "seed": "full",
       "last_n": 10,
       "ok": {
-        "api_calls": {
-          "count": 1,
-          "recent": [
-            {
-              "timestamp": "2026-01-01T00:00:00Z",
-              "model": "test-model",
-              "provider": "anthropic",
-              "input_tokens": 100,
-              "output_tokens": 50,
-              "cache_read_tokens": 80,
-              "cache_write_tokens": 10,
-              "ttft_ms": 200,
-              "total_ms": 1000,
-              "finish_reason": "end_turn",
-              "total_cost_usd": 0.0123,
-              "error": "retried once"
-            }
-          ]
-        },
-        "tool_calls": {
-          "count": 1,
-          "recent": [
-            {
-              "timestamp": "2026-01-01T00:00:01Z",
-              "tool_name": "check_time",
-              "tool_id": "t1",
-              "success": true,
-              "duration_ms": 5,
-              "input_summary": "{}",
-              "output_summary": "2026-01-01T00:00:01Z"
-            }
-          ]
-        },
         "errors": {
           "count": 1,
           "recent": [
@@ -600,39 +453,6 @@
       "seed": "full",
       "last_n": 1000,
       "ok": {
-        "api_calls": {
-          "count": 1,
-          "recent": [
-            {
-              "timestamp": "2026-01-01T00:00:00Z",
-              "model": "test-model",
-              "provider": "anthropic",
-              "input_tokens": 100,
-              "output_tokens": 50,
-              "cache_read_tokens": 80,
-              "cache_write_tokens": 10,
-              "ttft_ms": 200,
-              "total_ms": 1000,
-              "finish_reason": "end_turn",
-              "total_cost_usd": 0.0123,
-              "error": "retried once"
-            }
-          ]
-        },
-        "tool_calls": {
-          "count": 1,
-          "recent": [
-            {
-              "timestamp": "2026-01-01T00:00:01Z",
-              "tool_name": "check_time",
-              "tool_id": "t1",
-              "success": true,
-              "duration_ms": 5,
-              "input_summary": "{}",
-              "output_summary": "2026-01-01T00:00:01Z"
-            }
-          ]
-        },
         "errors": {
           "count": 1,
           "recent": [
@@ -668,14 +488,6 @@
       "seed": "sparse",
       "last_n": 0,
       "ok": {
-        "api_calls": {
-          "count": 1,
-          "recent": []
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
         "errors": {
           "count": 0,
           "recent": []
@@ -691,27 +503,6 @@
       "seed": "sparse",
       "last_n": 1,
       "ok": {
-        "api_calls": {
-          "count": 1,
-          "recent": [
-            {
-              "timestamp": "2026-01-01T00:01:00Z",
-              "model": "sparse-model",
-              "provider": "openai",
-              "input_tokens": 0,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": ""
-            }
-          ]
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
         "errors": {
           "count": 0,
           "recent": []
@@ -737,27 +528,6 @@
       "seed": "sparse",
       "last_n": 2,
       "ok": {
-        "api_calls": {
-          "count": 1,
-          "recent": [
-            {
-              "timestamp": "2026-01-01T00:01:00Z",
-              "model": "sparse-model",
-              "provider": "openai",
-              "input_tokens": 0,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": ""
-            }
-          ]
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
         "errors": {
           "count": 0,
           "recent": []
@@ -783,27 +553,6 @@
       "seed": "sparse",
       "last_n": 10,
       "ok": {
-        "api_calls": {
-          "count": 1,
-          "recent": [
-            {
-              "timestamp": "2026-01-01T00:01:00Z",
-              "model": "sparse-model",
-              "provider": "openai",
-              "input_tokens": 0,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": ""
-            }
-          ]
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
         "errors": {
           "count": 0,
           "recent": []
@@ -829,27 +578,6 @@
       "seed": "sparse",
       "last_n": 1000,
       "ok": {
-        "api_calls": {
-          "count": 1,
-          "recent": [
-            {
-              "timestamp": "2026-01-01T00:01:00Z",
-              "model": "sparse-model",
-              "provider": "openai",
-              "input_tokens": 0,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": ""
-            }
-          ]
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
         "errors": {
           "count": 0,
           "recent": []
@@ -875,14 +603,6 @@
       "seed": "mixed",
       "last_n": 0,
       "ok": {
-        "api_calls": {
-          "count": 2,
-          "recent": []
-        },
-        "tool_calls": {
-          "count": 1,
-          "recent": []
-        },
         "errors": {
           "count": 1,
           "recent": []
@@ -898,37 +618,6 @@
       "seed": "mixed",
       "last_n": 1,
       "ok": {
-        "api_calls": {
-          "count": 2,
-          "recent": [
-            {
-              "timestamp": "2026-01-01T00:01:00Z",
-              "model": "sparse-model",
-              "provider": "openai",
-              "input_tokens": 0,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": ""
-            }
-          ]
-        },
-        "tool_calls": {
-          "count": 1,
-          "recent": [
-            {
-              "timestamp": "2026-01-01T00:00:01Z",
-              "tool_name": "check_time",
-              "tool_id": "t1",
-              "success": true,
-              "duration_ms": 5,
-              "input_summary": "{}",
-              "output_summary": "2026-01-01T00:00:01Z"
-            }
-          ]
-        },
         "errors": {
           "count": 1,
           "recent": [
@@ -961,51 +650,6 @@
       "seed": "mixed",
       "last_n": 2,
       "ok": {
-        "api_calls": {
-          "count": 2,
-          "recent": [
-            {
-              "timestamp": "2026-01-01T00:00:00Z",
-              "model": "test-model",
-              "provider": "anthropic",
-              "input_tokens": 100,
-              "output_tokens": 50,
-              "cache_read_tokens": 80,
-              "cache_write_tokens": 10,
-              "ttft_ms": 200,
-              "total_ms": 1000,
-              "finish_reason": "end_turn",
-              "total_cost_usd": 0.0123,
-              "error": "retried once"
-            },
-            {
-              "timestamp": "2026-01-01T00:01:00Z",
-              "model": "sparse-model",
-              "provider": "openai",
-              "input_tokens": 0,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": ""
-            }
-          ]
-        },
-        "tool_calls": {
-          "count": 1,
-          "recent": [
-            {
-              "timestamp": "2026-01-01T00:00:01Z",
-              "tool_name": "check_time",
-              "tool_id": "t1",
-              "success": true,
-              "duration_ms": 5,
-              "input_summary": "{}",
-              "output_summary": "2026-01-01T00:00:01Z"
-            }
-          ]
-        },
         "errors": {
           "count": 1,
           "recent": [
@@ -1050,51 +694,6 @@
       "seed": "mixed",
       "last_n": 10,
       "ok": {
-        "api_calls": {
-          "count": 2,
-          "recent": [
-            {
-              "timestamp": "2026-01-01T00:00:00Z",
-              "model": "test-model",
-              "provider": "anthropic",
-              "input_tokens": 100,
-              "output_tokens": 50,
-              "cache_read_tokens": 80,
-              "cache_write_tokens": 10,
-              "ttft_ms": 200,
-              "total_ms": 1000,
-              "finish_reason": "end_turn",
-              "total_cost_usd": 0.0123,
-              "error": "retried once"
-            },
-            {
-              "timestamp": "2026-01-01T00:01:00Z",
-              "model": "sparse-model",
-              "provider": "openai",
-              "input_tokens": 0,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": ""
-            }
-          ]
-        },
-        "tool_calls": {
-          "count": 1,
-          "recent": [
-            {
-              "timestamp": "2026-01-01T00:00:01Z",
-              "tool_name": "check_time",
-              "tool_id": "t1",
-              "success": true,
-              "duration_ms": 5,
-              "input_summary": "{}",
-              "output_summary": "2026-01-01T00:00:01Z"
-            }
-          ]
-        },
         "errors": {
           "count": 1,
           "recent": [
@@ -1139,51 +738,6 @@
       "seed": "mixed",
       "last_n": 1000,
       "ok": {
-        "api_calls": {
-          "count": 2,
-          "recent": [
-            {
-              "timestamp": "2026-01-01T00:00:00Z",
-              "model": "test-model",
-              "provider": "anthropic",
-              "input_tokens": 100,
-              "output_tokens": 50,
-              "cache_read_tokens": 80,
-              "cache_write_tokens": 10,
-              "ttft_ms": 200,
-              "total_ms": 1000,
-              "finish_reason": "end_turn",
-              "total_cost_usd": 0.0123,
-              "error": "retried once"
-            },
-            {
-              "timestamp": "2026-01-01T00:01:00Z",
-              "model": "sparse-model",
-              "provider": "openai",
-              "input_tokens": 0,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": ""
-            }
-          ]
-        },
-        "tool_calls": {
-          "count": 1,
-          "recent": [
-            {
-              "timestamp": "2026-01-01T00:00:01Z",
-              "tool_name": "check_time",
-              "tool_id": "t1",
-              "success": true,
-              "duration_ms": 5,
-              "input_summary": "{}",
-              "output_summary": "2026-01-01T00:00:01Z"
-            }
-          ]
-        },
         "errors": {
           "count": 1,
           "recent": [
@@ -1228,16 +782,8 @@
       "seed": "overflowing",
       "last_n": 0,
       "ok": {
-        "api_calls": {
-          "count": 100,
-          "recent": []
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
         "errors": {
-          "count": 0,
+          "count": 100,
           "recent": []
         },
         "key_fallbacks": {
@@ -1251,30 +797,16 @@
       "seed": "overflowing",
       "last_n": 1,
       "ok": {
-        "api_calls": {
+        "errors": {
           "count": 100,
           "recent": [
             {
               "timestamp": "2026-01-01T00:00:104Z",
-              "model": "m104",
-              "provider": "anthropic",
-              "input_tokens": 104,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 104",
+              "context": "character=test"
             }
           ]
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
-        "errors": {
-          "count": 0,
-          "recent": []
         },
         "key_fallbacks": {
           "count": 0,
@@ -1287,42 +819,22 @@
       "seed": "overflowing",
       "last_n": 2,
       "ok": {
-        "api_calls": {
+        "errors": {
           "count": 100,
           "recent": [
             {
               "timestamp": "2026-01-01T00:00:103Z",
-              "model": "m103",
-              "provider": "anthropic",
-              "input_tokens": 103,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 103",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:104Z",
-              "model": "m104",
-              "provider": "anthropic",
-              "input_tokens": 104,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 104",
+              "context": "character=test"
             }
           ]
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
-        "errors": {
-          "count": 0,
-          "recent": []
         },
         "key_fallbacks": {
           "count": 0,
@@ -1335,138 +847,70 @@
       "seed": "overflowing",
       "last_n": 10,
       "ok": {
-        "api_calls": {
+        "errors": {
           "count": 100,
           "recent": [
             {
               "timestamp": "2026-01-01T00:00:95Z",
-              "model": "m95",
-              "provider": "anthropic",
-              "input_tokens": 95,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 95",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:96Z",
-              "model": "m96",
-              "provider": "anthropic",
-              "input_tokens": 96,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 96",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:97Z",
-              "model": "m97",
-              "provider": "anthropic",
-              "input_tokens": 97,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 97",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:98Z",
-              "model": "m98",
-              "provider": "anthropic",
-              "input_tokens": 98,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 98",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:99Z",
-              "model": "m99",
-              "provider": "anthropic",
-              "input_tokens": 99,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 99",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:100Z",
-              "model": "m100",
-              "provider": "anthropic",
-              "input_tokens": 100,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 100",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:101Z",
-              "model": "m101",
-              "provider": "anthropic",
-              "input_tokens": 101,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 101",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:102Z",
-              "model": "m102",
-              "provider": "anthropic",
-              "input_tokens": 102,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 102",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:103Z",
-              "model": "m103",
-              "provider": "anthropic",
-              "input_tokens": 103,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 103",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:104Z",
-              "model": "m104",
-              "provider": "anthropic",
-              "input_tokens": 104,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 104",
+              "context": "character=test"
             }
           ]
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
-        "errors": {
-          "count": 0,
-          "recent": []
         },
         "key_fallbacks": {
           "count": 0,
@@ -1479,1218 +923,610 @@
       "seed": "overflowing",
       "last_n": 1000,
       "ok": {
-        "api_calls": {
+        "errors": {
           "count": 100,
           "recent": [
             {
               "timestamp": "2026-01-01T00:00:05Z",
-              "model": "m5",
-              "provider": "anthropic",
-              "input_tokens": 5,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 5",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:06Z",
-              "model": "m6",
-              "provider": "anthropic",
-              "input_tokens": 6,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 6",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:07Z",
-              "model": "m7",
-              "provider": "anthropic",
-              "input_tokens": 7,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 7",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:08Z",
-              "model": "m8",
-              "provider": "anthropic",
-              "input_tokens": 8,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 8",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:09Z",
-              "model": "m9",
-              "provider": "anthropic",
-              "input_tokens": 9,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 9",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:10Z",
-              "model": "m10",
-              "provider": "anthropic",
-              "input_tokens": 10,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 10",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:11Z",
-              "model": "m11",
-              "provider": "anthropic",
-              "input_tokens": 11,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 11",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:12Z",
-              "model": "m12",
-              "provider": "anthropic",
-              "input_tokens": 12,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 12",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:13Z",
-              "model": "m13",
-              "provider": "anthropic",
-              "input_tokens": 13,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 13",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:14Z",
-              "model": "m14",
-              "provider": "anthropic",
-              "input_tokens": 14,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 14",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:15Z",
-              "model": "m15",
-              "provider": "anthropic",
-              "input_tokens": 15,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 15",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:16Z",
-              "model": "m16",
-              "provider": "anthropic",
-              "input_tokens": 16,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 16",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:17Z",
-              "model": "m17",
-              "provider": "anthropic",
-              "input_tokens": 17,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 17",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:18Z",
-              "model": "m18",
-              "provider": "anthropic",
-              "input_tokens": 18,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 18",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:19Z",
-              "model": "m19",
-              "provider": "anthropic",
-              "input_tokens": 19,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 19",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:20Z",
-              "model": "m20",
-              "provider": "anthropic",
-              "input_tokens": 20,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 20",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:21Z",
-              "model": "m21",
-              "provider": "anthropic",
-              "input_tokens": 21,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 21",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:22Z",
-              "model": "m22",
-              "provider": "anthropic",
-              "input_tokens": 22,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 22",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:23Z",
-              "model": "m23",
-              "provider": "anthropic",
-              "input_tokens": 23,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 23",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:24Z",
-              "model": "m24",
-              "provider": "anthropic",
-              "input_tokens": 24,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 24",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:25Z",
-              "model": "m25",
-              "provider": "anthropic",
-              "input_tokens": 25,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 25",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:26Z",
-              "model": "m26",
-              "provider": "anthropic",
-              "input_tokens": 26,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 26",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:27Z",
-              "model": "m27",
-              "provider": "anthropic",
-              "input_tokens": 27,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 27",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:28Z",
-              "model": "m28",
-              "provider": "anthropic",
-              "input_tokens": 28,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 28",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:29Z",
-              "model": "m29",
-              "provider": "anthropic",
-              "input_tokens": 29,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 29",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:30Z",
-              "model": "m30",
-              "provider": "anthropic",
-              "input_tokens": 30,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 30",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:31Z",
-              "model": "m31",
-              "provider": "anthropic",
-              "input_tokens": 31,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 31",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:32Z",
-              "model": "m32",
-              "provider": "anthropic",
-              "input_tokens": 32,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 32",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:33Z",
-              "model": "m33",
-              "provider": "anthropic",
-              "input_tokens": 33,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 33",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:34Z",
-              "model": "m34",
-              "provider": "anthropic",
-              "input_tokens": 34,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 34",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:35Z",
-              "model": "m35",
-              "provider": "anthropic",
-              "input_tokens": 35,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 35",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:36Z",
-              "model": "m36",
-              "provider": "anthropic",
-              "input_tokens": 36,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 36",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:37Z",
-              "model": "m37",
-              "provider": "anthropic",
-              "input_tokens": 37,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 37",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:38Z",
-              "model": "m38",
-              "provider": "anthropic",
-              "input_tokens": 38,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 38",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:39Z",
-              "model": "m39",
-              "provider": "anthropic",
-              "input_tokens": 39,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 39",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:40Z",
-              "model": "m40",
-              "provider": "anthropic",
-              "input_tokens": 40,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 40",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:41Z",
-              "model": "m41",
-              "provider": "anthropic",
-              "input_tokens": 41,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 41",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:42Z",
-              "model": "m42",
-              "provider": "anthropic",
-              "input_tokens": 42,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 42",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:43Z",
-              "model": "m43",
-              "provider": "anthropic",
-              "input_tokens": 43,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 43",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:44Z",
-              "model": "m44",
-              "provider": "anthropic",
-              "input_tokens": 44,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 44",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:45Z",
-              "model": "m45",
-              "provider": "anthropic",
-              "input_tokens": 45,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 45",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:46Z",
-              "model": "m46",
-              "provider": "anthropic",
-              "input_tokens": 46,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 46",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:47Z",
-              "model": "m47",
-              "provider": "anthropic",
-              "input_tokens": 47,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 47",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:48Z",
-              "model": "m48",
-              "provider": "anthropic",
-              "input_tokens": 48,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 48",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:49Z",
-              "model": "m49",
-              "provider": "anthropic",
-              "input_tokens": 49,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 49",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:50Z",
-              "model": "m50",
-              "provider": "anthropic",
-              "input_tokens": 50,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 50",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:51Z",
-              "model": "m51",
-              "provider": "anthropic",
-              "input_tokens": 51,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 51",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:52Z",
-              "model": "m52",
-              "provider": "anthropic",
-              "input_tokens": 52,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 52",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:53Z",
-              "model": "m53",
-              "provider": "anthropic",
-              "input_tokens": 53,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 53",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:54Z",
-              "model": "m54",
-              "provider": "anthropic",
-              "input_tokens": 54,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 54",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:55Z",
-              "model": "m55",
-              "provider": "anthropic",
-              "input_tokens": 55,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 55",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:56Z",
-              "model": "m56",
-              "provider": "anthropic",
-              "input_tokens": 56,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 56",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:57Z",
-              "model": "m57",
-              "provider": "anthropic",
-              "input_tokens": 57,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 57",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:58Z",
-              "model": "m58",
-              "provider": "anthropic",
-              "input_tokens": 58,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 58",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:59Z",
-              "model": "m59",
-              "provider": "anthropic",
-              "input_tokens": 59,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 59",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:60Z",
-              "model": "m60",
-              "provider": "anthropic",
-              "input_tokens": 60,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 60",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:61Z",
-              "model": "m61",
-              "provider": "anthropic",
-              "input_tokens": 61,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 61",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:62Z",
-              "model": "m62",
-              "provider": "anthropic",
-              "input_tokens": 62,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 62",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:63Z",
-              "model": "m63",
-              "provider": "anthropic",
-              "input_tokens": 63,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 63",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:64Z",
-              "model": "m64",
-              "provider": "anthropic",
-              "input_tokens": 64,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 64",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:65Z",
-              "model": "m65",
-              "provider": "anthropic",
-              "input_tokens": 65,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 65",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:66Z",
-              "model": "m66",
-              "provider": "anthropic",
-              "input_tokens": 66,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 66",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:67Z",
-              "model": "m67",
-              "provider": "anthropic",
-              "input_tokens": 67,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 67",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:68Z",
-              "model": "m68",
-              "provider": "anthropic",
-              "input_tokens": 68,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 68",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:69Z",
-              "model": "m69",
-              "provider": "anthropic",
-              "input_tokens": 69,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 69",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:70Z",
-              "model": "m70",
-              "provider": "anthropic",
-              "input_tokens": 70,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 70",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:71Z",
-              "model": "m71",
-              "provider": "anthropic",
-              "input_tokens": 71,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 71",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:72Z",
-              "model": "m72",
-              "provider": "anthropic",
-              "input_tokens": 72,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 72",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:73Z",
-              "model": "m73",
-              "provider": "anthropic",
-              "input_tokens": 73,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 73",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:74Z",
-              "model": "m74",
-              "provider": "anthropic",
-              "input_tokens": 74,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 74",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:75Z",
-              "model": "m75",
-              "provider": "anthropic",
-              "input_tokens": 75,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 75",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:76Z",
-              "model": "m76",
-              "provider": "anthropic",
-              "input_tokens": 76,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 76",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:77Z",
-              "model": "m77",
-              "provider": "anthropic",
-              "input_tokens": 77,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 77",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:78Z",
-              "model": "m78",
-              "provider": "anthropic",
-              "input_tokens": 78,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 78",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:79Z",
-              "model": "m79",
-              "provider": "anthropic",
-              "input_tokens": 79,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 79",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:80Z",
-              "model": "m80",
-              "provider": "anthropic",
-              "input_tokens": 80,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 80",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:81Z",
-              "model": "m81",
-              "provider": "anthropic",
-              "input_tokens": 81,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 81",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:82Z",
-              "model": "m82",
-              "provider": "anthropic",
-              "input_tokens": 82,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 82",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:83Z",
-              "model": "m83",
-              "provider": "anthropic",
-              "input_tokens": 83,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 83",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:84Z",
-              "model": "m84",
-              "provider": "anthropic",
-              "input_tokens": 84,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 84",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:85Z",
-              "model": "m85",
-              "provider": "anthropic",
-              "input_tokens": 85,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 85",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:86Z",
-              "model": "m86",
-              "provider": "anthropic",
-              "input_tokens": 86,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 86",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:87Z",
-              "model": "m87",
-              "provider": "anthropic",
-              "input_tokens": 87,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 87",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:88Z",
-              "model": "m88",
-              "provider": "anthropic",
-              "input_tokens": 88,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 88",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:89Z",
-              "model": "m89",
-              "provider": "anthropic",
-              "input_tokens": 89,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 89",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:90Z",
-              "model": "m90",
-              "provider": "anthropic",
-              "input_tokens": 90,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 90",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:91Z",
-              "model": "m91",
-              "provider": "anthropic",
-              "input_tokens": 91,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 91",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:92Z",
-              "model": "m92",
-              "provider": "anthropic",
-              "input_tokens": 92,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 92",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:93Z",
-              "model": "m93",
-              "provider": "anthropic",
-              "input_tokens": 93,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 93",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:94Z",
-              "model": "m94",
-              "provider": "anthropic",
-              "input_tokens": 94,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 94",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:95Z",
-              "model": "m95",
-              "provider": "anthropic",
-              "input_tokens": 95,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 95",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:96Z",
-              "model": "m96",
-              "provider": "anthropic",
-              "input_tokens": 96,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 96",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:97Z",
-              "model": "m97",
-              "provider": "anthropic",
-              "input_tokens": 97,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 97",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:98Z",
-              "model": "m98",
-              "provider": "anthropic",
-              "input_tokens": 98,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 98",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:99Z",
-              "model": "m99",
-              "provider": "anthropic",
-              "input_tokens": 99,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 99",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:100Z",
-              "model": "m100",
-              "provider": "anthropic",
-              "input_tokens": 100,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 100",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:101Z",
-              "model": "m101",
-              "provider": "anthropic",
-              "input_tokens": 101,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 101",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:102Z",
-              "model": "m102",
-              "provider": "anthropic",
-              "input_tokens": 102,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 102",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:103Z",
-              "model": "m103",
-              "provider": "anthropic",
-              "input_tokens": 103,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 103",
+              "context": "character=test"
             },
             {
               "timestamp": "2026-01-01T00:00:104Z",
-              "model": "m104",
-              "provider": "anthropic",
-              "input_tokens": 104,
-              "output_tokens": 0,
-              "cache_read_tokens": 0,
-              "cache_write_tokens": 0,
-              "ttft_ms": 0,
-              "total_ms": 0,
-              "finish_reason": "end_turn"
+              "error_type": "llm",
+              "message": "failure 104",
+              "context": "character=test"
             }
           ]
-        },
-        "tool_calls": {
-          "count": 0,
-          "recent": []
-        },
-        "errors": {
-          "count": 0,
-          "recent": []
         },
         "key_fallbacks": {
           "count": 0,

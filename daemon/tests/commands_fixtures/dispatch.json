@@ -560,22 +560,18 @@
       "active_model_after": null
     },
     {
-      "name": "diagnostics",
+      "name": "error_log",
       "args": {
         "count": 2
       },
       "output": {
         "kind": "command_output",
-        "name": "diagnostics",
+        "name": "error_log",
         "data_keys": [
-          "api_calls",
           "errors",
-          "key_fallbacks",
-          "tool_calls"
+          "key_fallbacks"
         ],
         "data_shape": {
-          "api_calls": "object",
-          "tool_calls": "object",
           "errors": "object",
           "key_fallbacks": "object"
         }

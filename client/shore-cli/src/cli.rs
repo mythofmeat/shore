@@ -336,7 +336,7 @@ pub(crate) enum CliCommand {
     },
 
     /// Inspect what the daemon did behind the conversation: raw model calls,
-    /// heartbeat activity, and stored sub-agent runs.
+    /// heartbeat activity, stored sub-agent runs, and errors it hit.
     #[command(display_order = 14)]
     Trace {
         #[command(subcommand)]
@@ -365,14 +365,6 @@ pub(crate) enum CliCommand {
         /// `shore complete sections` lists them
         #[arg(long)]
         section: Option<String>,
-
-        /// Show recent API calls, tool invocations, and errors
-        #[arg(long)]
-        diagnostics: bool,
-
-        /// Number of diagnostic entries to show (used with --diagnostics)
-        #[arg(short = 'n', long, default_value = "10")]
-        count: u32,
 
         /// Output raw JSON
         #[arg(long)]
@@ -663,6 +655,18 @@ pub(crate) enum TraceCommand {
     /// The heartbeat operational timeline: tick fired, dormant, woke, timeout
     Events {
         /// Number of events to show
+        #[arg(short = 'n', long = "count", default_value = "20")]
+        count: u32,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Errors the daemon has hit since it started, and every time a provider
+    /// key was abandoned for another. Held in memory, so a restart clears them
+    Errors {
+        /// Number of entries to show
         #[arg(short = 'n', long = "count", default_value = "20")]
         count: u32,
 
@@ -1077,11 +1081,6 @@ pub(crate) fn to_swp_command(
         CliCommand::Trace { subcommand: None } => None,
         CliCommand::Trace { .. } => trace_to_swp(cmd),
 
-        CliCommand::Status {
-            diagnostics: true,
-            count,
-            ..
-        } => Some(("diagnostics", json!({ "count": count }))),
         CliCommand::Status { .. } => Some(("status", json!({}))),
 
         CliCommand::Debug { subcommand: None } => None,
@@ -1180,6 +1179,7 @@ fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
             "transcript",
             json!({ "source": "heartbeat", "count": count }),
         )),
+        TraceCommand::Errors { count, .. } => Some(("error_log", json!({ "count": count }))),
         TraceCommand::Events { count, .. } => Some(("heartbeat_log", json!({ "count": count }))),
         TraceCommand::Index { .. } => Some(("workspace_index", Value::Object(Map::new()))),
         TraceCommand::Subagent { id, count, .. } => {
@@ -1766,41 +1766,32 @@ mod tests {
         let cli = parse(&["status"]);
         assert_variant!(
             &cli.command,
-            CliCommand::Status {
-                section,
-                diagnostics,
-                ..
-            } => {
+            CliCommand::Status { section, .. } => {
                 assert!(section.is_none());
-                assert!(!diagnostics);
             }
         );
     }
 
     #[test]
-    fn parse_status_diagnostics() {
-        let cli = parse(&["status", "--diagnostics"]);
-        assert_variant!(
-            &cli.command,
-            CliCommand::Status {
-                diagnostics, count, ..
-            } => {
-                assert!(diagnostics);
-                assert_eq!(*count, 10);
-            }
-        );
+    fn status_no_longer_carries_diagnostics() {
+        for args in [&["status", "--diagnostics"][..], &["status", "-n", "25"][..]] {
+            assert!(
+                Cli::try_parse_from(std::iter::once("shore").chain(args.iter().copied())).is_err(),
+                "{args:?} must not parse"
+            );
+        }
     }
 
     #[test]
-    fn parse_status_diagnostics_with_count() {
-        let cli = parse(&["status", "--diagnostics", "-n", "25"]);
+    fn parse_trace_errors() {
+        let cli = parse(&["trace", "errors", "-n", "5"]);
         assert_variant!(
             &cli.command,
-            CliCommand::Status {
-                diagnostics, count, ..
+            CliCommand::Trace {
+                subcommand: Some(TraceCommand::Errors { count, json }),
             } => {
-                assert!(diagnostics);
-                assert_eq!(*count, 25);
+                assert_eq!(*count, 5);
+                assert!(!json);
             }
         );
     }
@@ -2433,8 +2424,6 @@ mod tests {
     fn status_maps_to_command() {
         let cmd = CliCommand::Status {
             section: None,
-            diagnostics: false,
-            count: 10,
             json: false,
         };
         let (name, args) = to_swp_command(&cmd, None).unwrap();
@@ -2443,15 +2432,15 @@ mod tests {
     }
 
     #[test]
-    fn status_diagnostics_maps_to_command() {
-        let cmd = CliCommand::Status {
-            section: None,
-            diagnostics: true,
-            count: 15,
-            json: false,
+    fn trace_errors_maps_to_error_log_command() {
+        let cmd = CliCommand::Trace {
+            subcommand: Some(TraceCommand::Errors {
+                count: 15,
+                json: false,
+            }),
         };
         let (name, args) = to_swp_command(&cmd, None).unwrap();
-        assert_eq!(name, "diagnostics");
+        assert_eq!(name, "error_log");
         assert_eq!(arg(&args, "count"), 15);
     }
 
@@ -3181,15 +3170,13 @@ mod tests {
             },
             CliCommand::Status {
                 section: None,
-                diagnostics: false,
-                count: 10,
                 json: false,
             },
-            CliCommand::Status {
-                section: None,
-                diagnostics: true,
-                count: 10,
-                json: false,
+            CliCommand::Trace {
+                subcommand: Some(TraceCommand::Errors {
+                    count: 10,
+                    json: false,
+                }),
             },
             CliCommand::Debug {
                 subcommand: Some(DebugCommand::TickNow),

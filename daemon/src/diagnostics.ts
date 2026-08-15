@@ -28,35 +28,6 @@ export class RingBuffer<T> {
   }
 }
 
-export interface ApiCallEntry {
-  timestamp: string;
-  model: string;
-  provider: string;
-  input_tokens: number;
-  output_tokens: number;
-  cache_read_tokens: number;
-  cache_write_tokens: number;
-  ttft_ms: number;
-  total_ms: number;
-  finish_reason: string;
-  total_cost_usd?: number | undefined;
-  error?: string | null | undefined;
-  subagent?: string | undefined;
-}
-
-export interface ToolCallEntry {
-  timestamp: string;
-  tool_name: string;
-  tool_id: string;
-  success: boolean;
-  duration_ms: number;
-  input_summary: string;
-  output_summary: string;
-  subagent?: string | undefined;
-  truncated?: boolean;
-  result_chars?: number;
-}
-
 export interface ErrorEntry {
   timestamp: string;
   error_type: string;
@@ -85,22 +56,16 @@ interface Ring {
 }
 
 export interface DiagnosticsJson {
-  api_calls: Ring;
-  tool_calls: Ring;
   errors: Ring;
   key_fallbacks: Ring;
 }
 
 export class Diagnostics {
-  readonly api_calls = new RingBuffer<ApiCallEntry>(DEFAULT_CAPACITY);
-  readonly tool_calls = new RingBuffer<ToolCallEntry>(DEFAULT_CAPACITY);
   readonly errors = new RingBuffer<ErrorEntry>(DEFAULT_CAPACITY);
   readonly key_fallbacks = new RingBuffer<KeyFallbackEntry>(DEFAULT_CAPACITY);
 
   toJson(lastN: number): DiagnosticsJson {
     return {
-      api_calls: ring(this.api_calls, lastN),
-      tool_calls: ring(this.tool_calls, lastN),
       errors: ring(this.errors, lastN),
       key_fallbacks: ring(this.key_fallbacks, lastN),
     };

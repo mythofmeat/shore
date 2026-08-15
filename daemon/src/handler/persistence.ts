@@ -4,7 +4,6 @@ import { deriveContentFromBlocks, MessageStore } from "../engine/message_store.t
 import type { PendingAlt } from "../engine/message_store.ts";
 import { embedImageData } from "../engine/wire_images.ts";
 import { rustTrim } from "../memory/lines.ts";
-import type { ApiCallEntry } from "../diagnostics.ts";
 import type { UsageBudgetWarningEvent } from "../ledger/budget.ts";
 import type { StreamResult } from "../llm/stream.ts";
 import type { WireMessage } from "../llm/types.ts";
@@ -21,8 +20,6 @@ export interface SessionTokens {
   cache_read: number;
   cache_write: number;
 }
-
-export type { ApiCallEntry };
 
 export interface PersistEngine {
   appendMessage(msg: Message): Promise<void>;
@@ -53,7 +50,6 @@ export interface PersistContext {
   autonomy: PersistAutonomy;
   notifier: NotificationService;
   sessionTokens: SessionTokens;
-  diagnostics: { api_calls: { push: (entry: ApiCallEntry) => void } };
   newlyCrossedUsageBudgetWarnings: (character: string) => Promise<UsageBudgetWarningEvent[]>;
   now: () => string;
   newMessageId: () => string;
@@ -77,7 +73,7 @@ export async function persistAndNotify(
 ): Promise<void> {
   const { charName, result, request, resolvedProviderKey } = params;
 
-  recordCompletionDiagnostics(ctx, result, request, resolvedProviderKey);
+  accumulateSessionTokens(ctx, result);
 
   const completedMessages = completedResponseMessages(result);
 
@@ -159,33 +155,12 @@ export async function applyGeneratedMessagesToEngine(
   }
 }
 
-function recordCompletionDiagnostics(
-  ctx: PersistContext,
-  result: StreamResult,
-  request: WireRequest,
-  resolvedProviderKey: string,
-): void {
+function accumulateSessionTokens(ctx: PersistContext, result: StreamResult): void {
   const tokens = ctx.sessionTokens;
   tokens.input = saturatingAdd(tokens.input, result.usage.input_tokens);
   tokens.output = saturatingAdd(tokens.output, result.usage.output_tokens);
   tokens.cache_read = saturatingAdd(tokens.cache_read, result.usage.cache_read_tokens);
   tokens.cache_write = saturatingAdd(tokens.cache_write, result.usage.cache_creation_tokens);
-
-  const entry: ApiCallEntry = {
-    timestamp: ctx.now(),
-    model: result.model,
-    provider: request.provider_key ?? resolvedProviderKey,
-    input_tokens: result.usage.input_tokens,
-    output_tokens: result.usage.output_tokens,
-    cache_read_tokens: result.usage.cache_read_tokens,
-    cache_write_tokens: result.usage.cache_creation_tokens,
-    ttft_ms: result.timing.time_to_first_token_ms,
-    total_ms: result.timing.total_ms,
-    finish_reason: result.finish_reason,
-    error: null,
-  };
-  if (result.usage.total_cost_usd !== undefined) entry.total_cost_usd = result.usage.total_cost_usd;
-  ctx.diagnostics.api_calls.push(entry);
 }
 
 function saturatingAdd(a: number, b: number): number {

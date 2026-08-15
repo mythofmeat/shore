@@ -36,6 +36,7 @@ function storeUsage(usage: Usage | undefined): StoreUsage {
     input_tokens: usage.input_tokens,
     output_tokens: usage.output_tokens,
     cache_read_tokens: usage.cache_read_tokens,
+    cache_write_tokens: usage.cache_creation_tokens,
   };
 }
 

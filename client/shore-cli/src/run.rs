@@ -122,6 +122,7 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
                     ("trace calls", "raw model call payloads"),
                     ("trace heartbeat", "what each heartbeat tick thought and did"),
                     ("trace events", "the heartbeat timeline: fired, dormant, woke"),
+                    ("trace errors", "errors hit since start, and key fallbacks"),
                     ("trace subagent", "stored sub-agent runs and their tools"),
                 ],
             );
@@ -204,6 +205,7 @@ fn wants_json(other: &CliCommand) -> bool {
             Some(
                 crate::cli::TraceCommand::Calls { json, .. }
                 | crate::cli::TraceCommand::Heartbeat { json, .. }
+                | crate::cli::TraceCommand::Errors { json, .. }
                 | crate::cli::TraceCommand::Events { json, .. }
                 | crate::cli::TraceCommand::Subagent { json, .. }
                 | crate::cli::TraceCommand::Index { json, .. },
@@ -674,28 +676,9 @@ async fn handle_status_command(
     cmd: &CliCommand,
     display_character: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let CliCommand::Status {
-        section,
-        diagnostics,
-        count,
-        json,
-        ..
-    } = cmd
-    else {
+    let CliCommand::Status { section, json, .. } = cmd else {
         return Ok(());
     };
-    if *diagnostics {
-        _ = conn
-            .send_command("diagnostics", serde_json::json!({ "count": count }))
-            .await?;
-        let data = recv_command_data(conn).await?;
-        if *json {
-            cli_out!("{}", serde_json::to_string_pretty(&data)?);
-        } else {
-            output::print_diagnostics(&data);
-        }
-        return Ok(());
-    }
     _ = conn.send_command("status", serde_json::json!({})).await?;
     let data = recv_command_data(conn).await?;
     match section {
@@ -1550,8 +1533,6 @@ mod tests {
     async fn status_sends_swp_command() {
         let cli = test_cli(CliCommand::Status {
             section: None,
-            diagnostics: false,
-            count: 10,
             json: false,
         });
         let received = execute_with_mock(cli, command_response("status")).await;

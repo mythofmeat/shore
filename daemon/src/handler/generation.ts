@@ -35,12 +35,10 @@ import { usageConfigView } from "../ledger/budget.ts";
 import { anyEnabled } from "../tools/registry.ts";
 import { toolPhase, type ToolPhase } from "../tools/execute.ts";
 import { toolLimitsFrom, type ToolLimitsView } from "../tools/dispatch.ts";
-import type { ToolCallEntry } from "../diagnostics.ts";
 import { buildToolContext, credentialEntry, type ToolContextDeps } from "./tool_context.ts";
 import { buildGenerationRequest, resolveGenerationModel, type SetupEngine } from "./setup.ts";
 import {
   persistAndNotify,
-  type ApiCallEntry,
   type PersistContext,
   type PersistEngine,
   type SessionTokens,
@@ -85,8 +83,6 @@ export interface GenerationRegistry {
 }
 
 export interface GenerationDiagnostics {
-  api_calls: { push: (entry: ApiCallEntry) => void };
-  tool_calls: { push: (entry: ToolCallEntry) => void };
   key_fallbacks: { push: (entry: KeyFallbackEntry) => void };
 }
 
@@ -233,7 +229,6 @@ export async function runGeneration(
     autonomy: deps.autonomy,
     notifier: deps.notifier,
     sessionTokens: deps.sessionTokens,
-    diagnostics: deps.diagnostics,
     newlyCrossedUsageBudgetWarnings: deps.newlyCrossedUsageBudgetWarnings,
     now,
     newMessageId,
@@ -370,7 +365,6 @@ async function streamTurn(
               sendDirect: params.send,
               ctx: toolCtx,
               limits: toolLimits(config),
-              diagnostics: deps.diagnostics.tool_calls,
               ...(params.rid === undefined ? {} : { rid: params.rid }),
               now: params.now,
               newMessageId: params.newMessageId,

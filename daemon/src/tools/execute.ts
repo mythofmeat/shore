@@ -2,8 +2,6 @@ import { deriveContentFromBlocks } from "../engine/message_store.ts";
 import type { ContentBlock, ImageRef, Message, Role } from "../engine/types.ts";
 import { imageDataForPath } from "../engine/wire_images.ts";
 import type { ToolUseEvent } from "../engine/tool_loop.ts";
-import type { ToolCallEntry } from "../diagnostics.ts";
-import { truncateSummary } from "../notifications.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import {
   dispatchWithinDeadline,
@@ -16,13 +14,10 @@ import {
 } from "./dispatch.ts";
 import { schemaViolation, type ToolSchemas } from "./validate.ts";
 
-const SUMMARY_CHARS = 200;
-
 export interface ToolExecution {
   sendDirect: (message: ServerMessage) => void;
   ctx: ToolContext;
   limits: ToolLimitsView;
-  diagnostics: { push: (entry: ToolCallEntry) => void };
   rid?: string;
   subagent?: string;
   now: () => string;
@@ -68,7 +63,6 @@ export async function runToolUse(
   if (rejection !== undefined) {
     console.warn(`shore: rejected a ${toolUse.name} call — ${rejection}`);
     const rejectedMs = clock() - startedAt;
-    recordToolDiagnostics(exec, toolUse, rejectedMs, rejection, true);
     emitToolResult(exec, toolUse, rejection, true);
     return {
       block: { type: "tool_result", tool_use_id: toolUse.id, content: rejection, is_error: true },
@@ -105,7 +99,6 @@ export async function runToolUse(
     attachGeneratedImage(okValue, intermediateMessages, exec);
   }
 
-  recordToolDiagnostics(exec, toolUse, dispatchMs, output, isError, windowed);
   emitToolResult(exec, toolUse, output, isError);
 
   return {
@@ -159,29 +152,6 @@ export function attachGeneratedImage(
     path,
     ...(caption !== undefined ? { caption } : {}),
     ...(data !== undefined ? { data } : {}),
-  });
-}
-
-function recordToolDiagnostics(
-  exec: ToolExecution,
-  toolUse: ToolUseEvent,
-  durationMs: number,
-  output: string,
-  isError: boolean,
-  window?: ToolResultWindow,
-): void {
-  exec.diagnostics.push({
-    timestamp: exec.now(),
-    tool_name: toolUse.name,
-    tool_id: toolUse.id,
-    success: !isError,
-    duration_ms: durationMs,
-    input_summary: truncateSummary(JSON.stringify(toolUse.input) ?? "", SUMMARY_CHARS),
-    output_summary: truncateSummary(output, SUMMARY_CHARS),
-    ...(exec.subagent === undefined ? {} : { subagent: exec.subagent }),
-    ...(window === undefined
-      ? {}
-      : { truncated: window.truncated, result_chars: window.originalChars }),
   });
 }
 

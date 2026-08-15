@@ -3,10 +3,8 @@ import { describe, expect, test } from "bun:test";
 import {
   Diagnostics,
   RingBuffer,
-  type ApiCallEntry,
   type ErrorEntry,
   type KeyFallbackEntry,
-  type ToolCallEntry,
 } from "../src/diagnostics.ts";
 
 import fixture from "./diagnostics_fixtures/diagnostics.json" with { type: "json" };
@@ -37,29 +35,6 @@ describe("ring buffer", () => {
 });
 
 function full(d: Diagnostics): void {
-  const api: ApiCallEntry = {
-    timestamp: "2026-01-01T00:00:00Z",
-    model: "test-model",
-    provider: "anthropic",
-    input_tokens: 100,
-    output_tokens: 50,
-    cache_read_tokens: 80,
-    cache_write_tokens: 10,
-    ttft_ms: 200,
-    total_ms: 1000,
-    finish_reason: "end_turn",
-    total_cost_usd: 0.0123,
-    error: "retried once",
-  };
-  const tool: ToolCallEntry = {
-    timestamp: "2026-01-01T00:00:01Z",
-    tool_name: "check_time",
-    tool_id: "t1",
-    success: true,
-    duration_ms: 5,
-    input_summary: "{}",
-    output_summary: "2026-01-01T00:00:01Z",
-  };
   const err: ErrorEntry = {
     timestamp: "2026-01-01T00:00:02Z",
     error_type: "llm",
@@ -78,27 +53,11 @@ function full(d: Diagnostics): void {
     status: 429,
     reason: "rate limited",
   };
-  d.api_calls.push(api);
-  d.tool_calls.push(tool);
   d.errors.push(err);
   d.key_fallbacks.push(fallback);
 }
 
 function sparse(d: Diagnostics): void {
-  d.api_calls.push({
-    timestamp: "2026-01-01T00:01:00Z",
-    model: "sparse-model",
-    provider: "openai",
-    input_tokens: 0,
-    output_tokens: 0,
-    cache_read_tokens: 0,
-    cache_write_tokens: 0,
-    ttft_ms: 0,
-    total_ms: 0,
-    finish_reason: "",
-    total_cost_usd: undefined,
-    error: undefined,
-  });
   d.key_fallbacks.push({
     timestamp: "2026-01-01T00:01:01Z",
     rid: undefined,
@@ -115,19 +74,11 @@ function sparse(d: Diagnostics): void {
 
 function overflowing(d: Diagnostics): void {
   for (let i = 0; i < 105; i += 1) {
-    d.api_calls.push({
+    d.errors.push({
       timestamp: `2026-01-01T00:00:${String(i).padStart(2, "0")}Z`,
-      model: `m${i}`,
-      provider: "anthropic",
-      input_tokens: i,
-      output_tokens: 0,
-      cache_read_tokens: 0,
-      cache_write_tokens: 0,
-      ttft_ms: 0,
-      total_ms: 0,
-      finish_reason: "end_turn",
-      total_cost_usd: undefined,
-      error: undefined,
+      error_type: "llm",
+      message: `failure ${i}`,
+      context: "character=test",
     });
   }
 }
@@ -165,9 +116,6 @@ describe("toJson", () => {
 test("an absent optional field is omitted, not written as null", () => {
   const d = new Diagnostics();
   sparse(d);
-  const api = d.toJson(10).api_calls.recent[0] as Record<string, unknown>;
-  expect(Object.keys(api)).not.toContain("total_cost_usd");
-  expect(Object.keys(api)).not.toContain("error");
   const fallback = d.toJson(10).key_fallbacks.recent[0] as Record<string, unknown>;
   expect(Object.keys(fallback)).not.toContain("rid");
   expect(Object.keys(fallback)).not.toContain("to_key");
@@ -175,7 +123,8 @@ test("an absent optional field is omitted, not written as null", () => {
 
   const withValues = new Diagnostics();
   full(withValues);
-  expect(Object.keys(withValues.toJson(10).api_calls.recent[0] as object)).toContain(
-    "total_cost_usd",
-  );
+  const present = withValues.toJson(10).key_fallbacks.recent[0] as Record<string, unknown>;
+  expect(Object.keys(present)).toContain("rid");
+  expect(Object.keys(present)).toContain("to_key");
+  expect(Object.keys(present)).toContain("status");
 });

@@ -73,6 +73,7 @@ export function recordTranscript(
       input_tokens: params.response.usage.input_tokens,
       output_tokens: params.response.usage.output_tokens,
       cache_read_tokens: params.response.usage.cache_read_tokens,
+      cache_write_tokens: params.response.usage.cache_creation_tokens,
     },
     entry_json: JSON.stringify(buildEntry(params.response, params.tools)),
   };
