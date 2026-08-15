@@ -9,7 +9,7 @@ import type {
 } from "openai/resources/chat/completions";
 
 import type { ContentBlock, ImageRef } from "../../engine/types.ts";
-import { foldEffort } from "../capabilities.ts";
+import { REASONING_OFF } from "../capabilities.ts";
 import { type ResolvedImage, resolveImage, resolveImageBlock, imageLabel, omissionNotice } from "../images.ts";
 import type {
   GenerateResponse,
@@ -197,12 +197,11 @@ function buildOpenAICall(
   if (req.temperature !== undefined) params.temperature = req.temperature;
   if (req.top_p !== undefined) params.top_p = req.top_p;
 
-  const effortRaw = req.provider_options?.reasoning_effort;
-  if (typeof effortRaw === "string") {
-    const effort = foldEffort("openai", effortRaw, req.model);
-    if (effort) {
-      params.reasoning_effort = effort as NonNullable<ChatCompletionCreateParams["reasoning_effort"]>;
-    }
+  const effort = req.provider_options?.reasoning_effort;
+  if (typeof effort === "string" && effort.length > 0) {
+    params.reasoning_effort = (effort === REASONING_OFF
+      ? "none"
+      : effort) as NonNullable<ChatCompletionCreateParams["reasoning_effort"]>;
   }
 
   return { client, params };

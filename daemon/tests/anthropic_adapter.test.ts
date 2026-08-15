@@ -420,15 +420,31 @@ describe("thinking params per model", () => {
     expect(r.outputConfig).toBeUndefined();
   });
 
-  test("sonnet-4.5 (adaptive-incapable) + effort → enabled+budget, no output_config", () => {
-    const r = buildThinkingParams({ reasoning_effort: "high" }, "anthropic/claude-sonnet-4.5", 32000);
-    expect(r.thinking).toEqual({ type: "enabled", budget_tokens: 12288 });
+  test("effort is sent as adaptive + output_config on every model, not a derived budget", () => {
+    for (const model of [
+      "anthropic/claude-sonnet-4.5",
+      "anthropic/claude-haiku-4.5",
+      "anthropic/claude-3-opus",
+    ]) {
+      const r = buildThinkingParams({ reasoning_effort: "high" }, model, 32000);
+      expect(r.thinking, model).toEqual({ type: "adaptive", display: "summarized" });
+      expect(r.outputConfig, model).toEqual({ effort: "high" });
+    }
+  });
+
+  test("an explicit budget is the only way to get enabled thinking", () => {
+    const r = buildThinkingParams({ budget_tokens: 8192 }, "anthropic/claude-haiku-4.5", 32000);
+    expect(r.thinking).toEqual({ type: "enabled", budget_tokens: 8192 });
     expect(r.outputConfig).toBeUndefined();
   });
 
-  test("haiku + effort → enabled+budget (medium=8192)", () => {
-    const r = buildThinkingParams({ reasoning_effort: "medium" }, "anthropic/claude-haiku-4.5", 32000);
-    expect(r.thinking).toEqual({ type: "enabled", budget_tokens: 8192 });
+  test("an explicit budget wins over an effort", () => {
+    const r = buildThinkingParams(
+      { reasoning_effort: "high", budget_tokens: 4096 },
+      "anthropic/claude-opus-4.8",
+      32000,
+    );
+    expect(r.thinking).toEqual({ type: "enabled", budget_tokens: 4096 });
   });
 
   test("opus-4.6 (permissive) + effort → prefers adaptive", () => {
@@ -441,8 +457,8 @@ describe("thinking params per model", () => {
     expect(buildThinkingParams({}, "anthropic/claude-opus-4.8", 8192)).toEqual({});
   });
 
-  test("adaptive-incapable + max_tokens too small → thinking disabled (no 400)", () => {
-    const r = buildThinkingParams({ reasoning_effort: "high" }, "anthropic/claude-sonnet-4.5", 512);
+  test("a budget with max_tokens too small drops thinking rather than sending a 400", () => {
+    const r = buildThinkingParams({ budget_tokens: 8192 }, "anthropic/claude-sonnet-4.5", 512);
     expect(r.thinking).toBeUndefined();
   });
 });

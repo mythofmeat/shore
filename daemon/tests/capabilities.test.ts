@@ -1,72 +1,81 @@
 import { expect, test } from "bun:test";
 
+import { ThinkingLevel } from "@google/genai";
+import { ChatRequestEffort } from "@openrouter/sdk/models";
+
 import {
-  effortBudget,
-  foldEffort,
+  applicability,
   geminiLevelName,
-  modelOverrideRejectsSampling,
   reasoningDomain,
   rejectsSampling,
+  supportsReasoningOff,
+  validate,
 } from "../src/llm/capabilities.ts";
 
-test("openai/openrouter accept xhigh and max (both passthrough)", () => {
-  for (const sdk of ["openai", "openrouter"] as const) {
-    expect(reasoningDomain(sdk)).toEqual(["minimal", "low", "medium", "high", "xhigh", "max"]);
-    expect(foldEffort(sdk, "xhigh")).toBe("xhigh");
-    expect(foldEffort(sdk, "high")).toBe("high");
-    expect(foldEffort(sdk, "max")).toBe("max");
-  }
+test("the openrouter domain is the sdk enum minus the disable sentinel", () => {
+  const fromSdk = Object.values(ChatRequestEffort).filter((v) => v !== "none");
+  expect([...reasoningDomain("openrouter")].sort()).toEqual([...fromSdk].sort());
+  expect(reasoningDomain("openrouter")).toContain("max");
+  expect(reasoningDomain("openrouter")).not.toContain("none");
 });
 
-test("anthropic keeps max/xhigh; effort→budget table intact", () => {
-  expect(reasoningDomain("anthropic")).toContain("max");
-  expect(reasoningDomain("anthropic")).toContain("xhigh");
-  expect(effortBudget("max")).toBe(24576);
-  expect(effortBudget("xhigh")).toBe(16384);
-  expect(effortBudget("medium")).toBe(8192);
-});
-
-test("gemini thinking levels stop at high", () => {
-  expect(geminiLevelName("high")).toBe("high");
-  expect(geminiLevelName("max")).toBeUndefined();
+test("the gemini domain is the sdk enum, lowercased, without the unspecified member", () => {
+  expect([...reasoningDomain("gemini")].sort()).toEqual(["high", "low", "medium", "minimal"]);
+  expect(geminiLevelName("high")).toBe(ThinkingLevel.HIGH);
+  expect(geminiLevelName("minimal")).toBe(ThinkingLevel.MINIMAL);
   expect(geminiLevelName("xhigh")).toBeUndefined();
 });
 
-test("gemini-3.1 Pro drops `minimal` via model_override (Flash keeps it)", () => {
-  const pro = "google/gemini-3.1-pro-preview";
-  expect(reasoningDomain("gemini", pro)).toEqual(["low", "medium", "high"]);
-  expect(foldEffort("gemini", "minimal", pro)).toBeUndefined();
-  expect(foldEffort("gemini", "low", pro)).toBe("low");
-  for (const flash of [
-    "google/gemini-3.1-flash-image-preview",
-    "google/gemini-3.1-flash-lite",
-    "gemini-3.5-flash",
-  ]) {
-    expect(reasoningDomain("gemini", flash)).toContain("minimal");
-  }
+test("zai is a graded domain, not an on/off toggle", () => {
+  expect(reasoningDomain("zai")).toContain("minimal");
+  expect(reasoningDomain("zai")).toContain("max");
 });
 
-test("OpenRouter per-vendor reasoning domains (issue #164)", () => {
-  expect(reasoningDomain("openrouter", "google/gemini-2.5-flash")).toEqual([
-    "minimal",
-    "low",
-    "medium",
-    "high",
-  ]);
-  expect(reasoningDomain("openrouter", "google/gemini-3.1-pro")).toEqual(["low", "medium", "high"]);
-  expect(reasoningDomain("openrouter", "x-ai/grok-4.3")).toEqual(["low", "medium", "high"]);
-  const generic = ["minimal", "low", "medium", "high", "xhigh", "max"];
-  expect(reasoningDomain("openrouter", "moonshotai/kimi-k2.6")).toEqual(generic);
-  expect(reasoningDomain("openrouter", "z-ai/glm-5.1")).toEqual(generic);
-  expect(reasoningDomain("openrouter", "some-vendor/mystery")).toEqual(generic);
+test("moonshot exposes the levels its provider accepts", () => {
+  expect([...reasoningDomain("moonshot")].sort()).toEqual(["high", "low", "max"]);
 });
 
-test("OpenRouter o-series reject samplers; GPT-5 does not (issue #164)", () => {
-  for (const id of ["openai/o1-mini", "openai/o3", "openai/o4-mini"]) {
-    expect(modelOverrideRejectsSampling(id), id).toBe(true);
-    expect(rejectsSampling(id), id).toBe(true);
+test("a model with no discovered capabilities is permissive", () => {
+  expect(rejectsSampling(undefined)).toBe(false);
+  expect(applicability("openai", "mystery-model", "temperature")).toBe("honored");
+  expect(applicability("openai", "mystery-model", "top_p")).toBe("honored");
+  expect(validate("openai", "mystery-model", "reasoning_effort", "xhigh")).toBeUndefined();
+});
+
+test("discovered supported_parameters decide sampler applicability", () => {
+  const reasoningOnly = { supported_parameters: ["reasoning", "max_tokens"] };
+  expect(rejectsSampling(reasoningOnly)).toBe(true);
+  expect(applicability("openrouter", "openai/o3", "temperature", reasoningOnly)).toBe("rejected");
+  expect(applicability("openrouter", "openai/o3", "top_p", reasoningOnly)).toBe("rejected");
+
+  const sampled = { supported_parameters: ["temperature", "top_p", "reasoning"] };
+  expect(rejectsSampling(sampled)).toBe(false);
+  expect(applicability("openrouter", "openai/gpt-5", "temperature", sampled)).toBe("honored");
+});
+
+test("discovered effort levels narrow the sdk domain", () => {
+  const caps = { effort_levels: ["low", "medium", "high"] };
+  expect(reasoningDomain("anthropic", caps)).toEqual(["low", "medium", "high"]);
+  expect(validate("anthropic", "claude-opus-4-8", "reasoning_effort", "xhigh", caps)).toBeDefined();
+  expect(validate("anthropic", "claude-opus-4-8", "reasoning_effort", "high", caps)).toBeUndefined();
+});
+
+test("an effort set the provider does not name at all falls back to the sdk domain", () => {
+  const caps = { effort_levels: ["turbo"] };
+  expect(reasoningDomain("openai", caps)).toEqual([...reasoningDomain("openai")]);
+});
+
+test("budget_tokens follows the discovered thinking capability", () => {
+  expect(applicability("anthropic", "claude-opus-4-8", "budget_tokens")).toBe("honored");
+  expect(
+    applicability("anthropic", "claude-opus-4-8", "budget_tokens", { thinking_enabled: false }),
+  ).toBe("rejected");
+  expect(applicability("openai", "gpt-5.6", "budget_tokens")).toBe("ignored");
+});
+
+test("every sdk but gemini can turn reasoning off", () => {
+  for (const sdk of ["anthropic", "openai", "openrouter", "zai", "deepseek", "moonshot"] as const) {
+    expect(supportsReasoningOff(sdk), sdk).toBe(true);
   }
-  expect(modelOverrideRejectsSampling("openai/gpt-5")).toBe(false);
-  expect(rejectsSampling("openai/gpt-5")).toBe(false);
-  expect(rejectsSampling("claude-opus-4-8")).toBe(true);
+  expect(supportsReasoningOff("gemini")).toBe(false);
 });

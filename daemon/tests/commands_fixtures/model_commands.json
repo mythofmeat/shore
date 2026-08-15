@@ -2424,10 +2424,10 @@
             "saved_global": null,
             "saved_character": null,
             "applicability": {
-              "temperature": "rejected",
-              "top_p": "rejected",
+              "temperature": "honored",
+              "top_p": "honored",
               "reasoning_effort": "honored",
-              "budget_tokens": "rejected",
+              "budget_tokens": "honored",
               "max_output_tokens": "honored",
               "cache_ttl": "honored",
               "cache_keepalive": "honored",
@@ -2533,7 +2533,7 @@
             "provider": "gemini",
             "model_id": "gemini-3.1-pro",
             "effective_sampler": {
-              "temperature": 1,
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -2567,12 +2567,13 @@
               "zai_subscription": "ignored"
             },
             "reasoning_effort_domain": [
+              "minimal",
               "low",
               "medium",
               "high"
             ],
             "scopes": {
-              "temperature": "static_default",
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -2650,13 +2651,13 @@
         {
           "op": "set_model_setting",
           "args": {
-            "key": "temperature",
-            "value": 0.5,
+            "key": "zai_clear_thinking",
+            "value": true,
             "name": "delta"
           },
           "err": {
             "code": "invalid_request",
-            "message": "`temperature` is not applicable to the `anthropic` sdk for this model"
+            "message": "`zai_clear_thinking` is not applicable to the `anthropic` sdk for this model"
           },
           "session": {
             "active_model": null,
@@ -2818,7 +2819,7 @@
           },
           "err": {
             "code": "invalid_request",
-            "message": "`reasoning_effort` value \"max\" is out of domain; allowed: low, medium, high"
+            "message": "`reasoning_effort` value \"max\" is out of domain; allowed: minimal, low, medium, high"
           },
           "session": {
             "active_model": null,
@@ -3211,7 +3212,7 @@
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 250000,
             "max_output_tokens": 32000,
-            "temperature": 1,
+            "temperature": null,
             "top_p": null,
             "reasoning_effort": null,
             "budget_tokens": null,
@@ -3224,7 +3225,7 @@
             "replay_prior_thinking": null,
             "max_tool_iterations": null,
             "effective_sampler": {
-              "temperature": 1,
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -3240,7 +3241,7 @@
               "zai_subscription": null
             },
             "scopes": {
-              "temperature": "static_default",
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -3629,7 +3630,7 @@
             "provider": "anthropic",
             "model_id": "same-id",
             "effective_sampler": {
-              "temperature": 1,
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -3671,7 +3672,7 @@
               "max"
             ],
             "scopes": {
-              "temperature": "static_default",
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -6204,7 +6205,7 @@
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 250000,
             "max_output_tokens": 32000,
-            "temperature": 1,
+            "temperature": null,
             "top_p": null,
             "reasoning_effort": null,
             "budget_tokens": null,
@@ -6217,7 +6218,7 @@
             "replay_prior_thinking": null,
             "max_tool_iterations": null,
             "effective_sampler": {
-              "temperature": 1,
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -6233,7 +6234,7 @@
               "zai_subscription": null
             },
             "scopes": {
-              "temperature": "static_default",
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -6320,7 +6321,7 @@
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 250000,
             "max_output_tokens": 32000,
-            "temperature": 1,
+            "temperature": null,
             "top_p": null,
             "reasoning_effort": null,
             "budget_tokens": null,
@@ -6333,7 +6334,7 @@
             "replay_prior_thinking": null,
             "max_tool_iterations": null,
             "effective_sampler": {
-              "temperature": 1,
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -6349,7 +6350,7 @@
               "zai_subscription": null
             },
             "scopes": {
-              "temperature": "static_default",
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -6514,7 +6515,7 @@
               "base_url": "https://openrouter.ai/api/v1",
               "max_context_tokens": 250000,
               "max_output_tokens": 32000,
-              "temperature": 1,
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -6647,7 +6648,7 @@
               "base_url": "https://openrouter.ai/api/v1",
               "max_context_tokens": 250000,
               "max_output_tokens": 32000,
-              "temperature": 1,
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -6730,7 +6731,7 @@
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 250000,
             "max_output_tokens": 32000,
-            "temperature": 1,
+            "temperature": null,
             "top_p": null,
             "reasoning_effort": null,
             "budget_tokens": null,
@@ -6743,7 +6744,7 @@
             "replay_prior_thinking": null,
             "max_tool_iterations": null,
             "effective_sampler": {
-              "temperature": 1,
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -6759,7 +6760,7 @@
               "zai_subscription": null
             },
             "scopes": {
-              "temperature": "static_default",
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -6784,7 +6785,7 @@
               "base_url": "https://openrouter.ai/api/v1",
               "max_context_tokens": 250000,
               "max_output_tokens": 32000,
-              "temperature": 1,
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -6861,7 +6862,7 @@
             "provider": "openrouter",
             "model_id": "vendor/hidden",
             "effective_sampler": {
-              "temperature": 1,
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -6903,7 +6904,7 @@
               "max"
             ],
             "scopes": {
-              "temperature": "static_default",
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -6932,7 +6933,7 @@
               "base_url": "https://openrouter.ai/api/v1",
               "max_context_tokens": 250000,
               "max_output_tokens": 32000,
-              "temperature": 1,
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -7029,7 +7030,7 @@
               "base_url": "https://openrouter.ai/api/v1",
               "max_context_tokens": 250000,
               "max_output_tokens": 32000,
-              "temperature": 1,
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -7123,7 +7124,7 @@
             "provider": "openrouter",
             "model_id": "vendor/hidden",
             "effective_sampler": {
-              "temperature": 1,
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": "high",
               "budget_tokens": null,
@@ -7180,7 +7181,7 @@
               "max"
             ],
             "scopes": {
-              "temperature": "static_default",
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": "character_model",
               "budget_tokens": null,
@@ -7209,7 +7210,7 @@
               "base_url": "https://openrouter.ai/api/v1",
               "max_context_tokens": 250000,
               "max_output_tokens": 32000,
-              "temperature": 1,
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -7334,7 +7335,7 @@
             "base_url": "https://openrouter.ai/api/v1",
             "max_context_tokens": 250000,
             "max_output_tokens": 32000,
-            "temperature": 1,
+            "temperature": null,
             "top_p": null,
             "reasoning_effort": null,
             "budget_tokens": null,
@@ -7468,7 +7469,7 @@
               "base_url": "https://openrouter.ai/api/v1",
               "max_context_tokens": 250000,
               "max_output_tokens": 32000,
-              "temperature": 1,
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -7553,7 +7554,7 @@
               "base_url": "https://openrouter.ai/api/v1",
               "max_context_tokens": 250000,
               "max_output_tokens": 32000,
-              "temperature": 1,
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -7642,7 +7643,7 @@
               "base_url": "https://openrouter.ai/api/v1",
               "max_context_tokens": 250000,
               "max_output_tokens": 32000,
-              "temperature": 1,
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -7763,7 +7764,7 @@
               "base_url": "https://openrouter.ai/api/v1",
               "max_context_tokens": 250000,
               "max_output_tokens": 32000,
-              "temperature": 1,
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,
@@ -7851,7 +7852,7 @@
               "base_url": "https://openrouter.ai/api/v1",
               "max_context_tokens": 250000,
               "max_output_tokens": 32000,
-              "temperature": 1,
+              "temperature": null,
               "top_p": null,
               "reasoning_effort": null,
               "budget_tokens": null,

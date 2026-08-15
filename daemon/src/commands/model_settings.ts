@@ -12,6 +12,7 @@ import {
   supportsReasoningOff,
   validate,
   type Applicability,
+  type ModelCapabilities,
 } from "../llm/capabilities.ts";
 import { invalidRequest, type CommandError } from "./errors.ts";
 
@@ -133,6 +134,7 @@ export function capabilityCheck(
   modelId: string,
   key: string,
   value: unknown,
+  capabilities?: ModelCapabilities,
 ): CommandError | undefined {
   if (value === null || value === undefined) return undefined;
   const field = fieldFromKey(key);
@@ -142,15 +144,19 @@ export function capabilityCheck(
     field === "reasoning_effort" && value === "off" && supportsReasoningOff(sdk);
 
   const probe: string | true = typeof value === "string" && !reasoningOff ? value : true;
-  const failure = validate(sdk, modelId, field, probe);
+  const failure = validate(sdk, modelId, field, probe, capabilities);
   return failure === undefined ? undefined : invalidRequest(failure.message);
 }
 
-export function keyApplicability(sdk: Sdk, modelId: string): Record<string, Applicability | "always"> {
+export function keyApplicability(
+  sdk: Sdk,
+  modelId: string,
+  capabilities?: ModelCapabilities,
+): Record<string, Applicability | "always"> {
   const out: Record<string, Applicability | "always"> = {};
   for (const key of SAMPLER_KEYS) {
     const field = fieldFromKey(key);
-    out[key] = field === undefined ? "always" : applicability(sdk, modelId, field);
+    out[key] = field === undefined ? "always" : applicability(sdk, modelId, field, capabilities);
   }
   return out;
 }

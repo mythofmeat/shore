@@ -7,11 +7,13 @@ export const CACHE_VERSION = 1;
 
 export const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
+import type { ModelCapabilities } from "./capabilities.ts";
+
 const ANTHROPIC_VERSION = "2023-06-01";
 
 const MAX_LOG_BODY_BYTES = 512;
 
-export interface DiscoveredModel {
+export interface DiscoveredModel extends ModelCapabilities {
   provider_key: string;
   model_id: string;
   display_name?: string;
@@ -136,6 +138,10 @@ function asModel(value: unknown): DiscoveredModel | undefined {
     ...optionalBoolean("supports_images", v),
     ...optionalBoolean("supports_reasoning", v),
     ...optionalBoolean("supports_prompt_cache", v),
+    ...maybe("supported_parameters", stringList(v.supported_parameters)),
+    ...maybe("effort_levels", stringList(v.effort_levels)),
+    ...optionalBoolean("thinking_adaptive", v),
+    ...optionalBoolean("thinking_enabled", v),
     ...(v.raw_provider_metadata !== undefined && v.raw_provider_metadata !== null
       ? { raw_provider_metadata: v.raw_provider_metadata }
       : {}),
@@ -405,6 +411,10 @@ export function mapEntry(
     ...maybe("supports_images", modalityIncludes(r, "input", "image")),
     ...maybe("supports_reasoning", supportedParam(r, ["reasoning", "include_reasoning"])),
     ...maybe("supports_prompt_cache", supportedParam(r, ["prompt_cache", "cache_control"])),
+    ...maybe("supported_parameters", stringList(r.supported_parameters)),
+    ...maybe("effort_levels", effortLevels(r)),
+    ...maybe("thinking_adaptive", thinkingType(r, "adaptive")),
+    ...maybe("thinking_enabled", thinkingType(r, "enabled")),
     raw_provider_metadata: raw,
     discovered_at: now,
   };
@@ -435,6 +445,46 @@ function maxOutputTokens(r: Record<string, unknown>): number | undefined {
     if (nested !== undefined) return nested;
   }
   return unsignedInt(r.max_completion_tokens);
+}
+
+function stringList(v: unknown): string[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out = v.filter((x): x is string => typeof x === "string");
+  return out.length === 0 ? undefined : out;
+}
+
+function capabilityBlock(r: Record<string, unknown>): Record<string, unknown> | undefined {
+  const caps = r.capabilities;
+  if (typeof caps !== "object" || caps === null || Array.isArray(caps)) return undefined;
+  return caps as Record<string, unknown>;
+}
+
+function isSupported(v: unknown): boolean | undefined {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return undefined;
+  const flag = (v as Record<string, unknown>).supported;
+  return typeof flag === "boolean" ? flag : undefined;
+}
+
+function effortLevels(r: Record<string, unknown>): string[] | undefined {
+  const effort = capabilityBlock(r)?.effort;
+  if (typeof effort !== "object" || effort === null || Array.isArray(effort)) return undefined;
+  const block = effort as Record<string, unknown>;
+  if (block.supported === false) return undefined;
+  const out = Object.entries(block)
+    .filter(([key]) => key !== "supported")
+    .filter(([, value]) => isSupported(value) === true)
+    .map(([key]) => key);
+  return out.length === 0 ? undefined : out;
+}
+
+function thinkingType(r: Record<string, unknown>, name: string): boolean | undefined {
+  const thinking = capabilityBlock(r)?.thinking;
+  if (typeof thinking !== "object" || thinking === null || Array.isArray(thinking)) return undefined;
+  const block = thinking as Record<string, unknown>;
+  if (block.supported === false) return false;
+  const types = block.types;
+  if (typeof types !== "object" || types === null || Array.isArray(types)) return undefined;
+  return isSupported((types as Record<string, unknown>)[name]);
 }
 
 function supportedParam(r: Record<string, unknown>, names: string[]): boolean | undefined {

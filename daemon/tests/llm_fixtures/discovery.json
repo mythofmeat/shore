@@ -910,7 +910,11 @@
               "tools"
             ]
           },
-          "discovered_at": "2026-04-28T10:00:00+00:00"
+          "discovered_at": "2026-04-28T10:00:00+00:00",
+          "supported_parameters": [
+            "temperature",
+            "tools"
+          ]
         }
       },
       {
@@ -938,7 +942,10 @@
               "tool_use"
             ]
           },
-          "discovered_at": "2026-04-28T10:00:00+00:00"
+          "discovered_at": "2026-04-28T10:00:00+00:00",
+          "supported_parameters": [
+            "tool_use"
+          ]
         }
       },
       {
@@ -966,7 +973,10 @@
               "function_calling"
             ]
           },
-          "discovered_at": "2026-04-28T10:00:00+00:00"
+          "discovered_at": "2026-04-28T10:00:00+00:00",
+          "supported_parameters": [
+            "function_calling"
+          ]
         }
       },
       {
@@ -994,7 +1004,10 @@
               "reasoning"
             ]
           },
-          "discovered_at": "2026-04-28T10:00:00+00:00"
+          "discovered_at": "2026-04-28T10:00:00+00:00",
+          "supported_parameters": [
+            "reasoning"
+          ]
         }
       },
       {
@@ -1022,7 +1035,10 @@
               "include_reasoning"
             ]
           },
-          "discovered_at": "2026-04-28T10:00:00+00:00"
+          "discovered_at": "2026-04-28T10:00:00+00:00",
+          "supported_parameters": [
+            "include_reasoning"
+          ]
         }
       },
       {
@@ -1050,7 +1066,10 @@
               "prompt_cache"
             ]
           },
-          "discovered_at": "2026-04-28T10:00:00+00:00"
+          "discovered_at": "2026-04-28T10:00:00+00:00",
+          "supported_parameters": [
+            "prompt_cache"
+          ]
         }
       },
       {
@@ -1078,7 +1097,10 @@
               "cache_control"
             ]
           },
-          "discovered_at": "2026-04-28T10:00:00+00:00"
+          "discovered_at": "2026-04-28T10:00:00+00:00",
+          "supported_parameters": [
+            "cache_control"
+          ]
         }
       },
       {
@@ -1114,7 +1136,10 @@
               "tools"
             ]
           },
-          "discovered_at": "2026-04-28T10:00:00+00:00"
+          "discovered_at": "2026-04-28T10:00:00+00:00",
+          "supported_parameters": [
+            "tools"
+          ]
         }
       },
       {
@@ -1449,7 +1474,12 @@
               "prompt": "0.000003"
             }
           },
-          "discovered_at": "2026-04-28T10:00:00+00:00"
+          "discovered_at": "2026-04-28T10:00:00+00:00",
+          "supported_parameters": [
+            "temperature",
+            "tools",
+            "reasoning"
+          ]
         }
       },
       {

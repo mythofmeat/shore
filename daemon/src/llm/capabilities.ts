@@ -1,4 +1,10 @@
-import rawCaps from "./capabilities.toml";
+import type { DeepSeekLanguageModelOptions } from "@ai-sdk/deepseek";
+import type { MoonshotAIProviderOptions } from "@ai-sdk/moonshotai";
+import { ThinkingLevel } from "@google/genai";
+import type { OutputConfig } from "@anthropic-ai/sdk/resources/messages";
+import { ChatRequestEffort } from "@openrouter/sdk/models";
+import type { ReasoningEffort as OpenAiReasoningEffort } from "openai/resources/shared";
+import type { ZhipuReasoningEffort } from "zhipu-ai-provider";
 
 import { parseCacheKeepalive } from "../config/models.ts";
 
@@ -10,198 +16,120 @@ export type Sdk =
   | "zai"
   | "deepseek"
   | "moonshot";
-type ClaudeFamily = "opus" | "sonnet" | "haiku";
 
-interface SdkEffort {
-  domain: readonly string[];
-  fold?: Record<string, string>;
-  budget?: Record<string, number>;
+export const REASONING_OFF = "off";
+
+const WIRE_DISABLE_VALUE = "none";
+
+export interface ModelCapabilities {
+  effort_levels?: readonly string[];
+  thinking_adaptive?: boolean;
+  thinking_enabled?: boolean;
+  supported_parameters?: readonly string[];
 }
 
-interface ModelOverride {
-  match: string;
-  reasoning_effort?: readonly string[];
-  rejects_sampling?: boolean;
-}
+type MustBeExhaustive<T extends never> = T;
 
-interface ClaudeRule {
-  contains?: string;
-  family?: string;
-  min_major?: number;
-  min_minor?: number;
-  max_major?: number;
-  max_minor?: number;
-  adaptive?: boolean;
-  enabled?: boolean;
-  rejects_sampling?: boolean;
-}
+type UnlistedBy<Declared extends string, FromSdk extends string> = Exclude<
+  FromSdk,
+  Declared | typeof WIRE_DISABLE_VALUE
+>;
 
-interface CapabilitiesDoc {
-  reasoning_effort: {
-    anthropic: SdkEffort;
-    openai: SdkEffort;
-    openrouter: SdkEffort;
-    gemini: SdkEffort;
-    zai: SdkEffort;
-    deepseek: SdkEffort;
-    moonshot: SdkEffort;
-  };
-  claude: {
-    default_adaptive: boolean;
-    default_enabled: boolean;
-    default_rejects_sampling: boolean;
-    thinking_rule?: ClaudeRule[];
-    sampler_rule?: ClaudeRule[];
-  };
-  model_override?: ModelOverride[];
-}
+type AnthropicEffort = NonNullable<OutputConfig["effort"]>;
+type OpenAiEffort = NonNullable<OpenAiReasoningEffort>;
+type DeepSeekEffort = NonNullable<DeepSeekLanguageModelOptions["reasoningEffort"]>;
+type MoonshotEffort = NonNullable<MoonshotAIProviderOptions["reasoningEffort"]>;
 
-const caps = rawCaps as CapabilitiesDoc;
+const ANTHROPIC_EFFORT = [
+  "adaptive",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
 
-function sdkEffort(sdk: Sdk): SdkEffort {
+const OPENAI_EFFORT = [
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const satisfies readonly OpenAiEffort[];
+
+const ZAI_EFFORT = [
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const satisfies readonly ZhipuReasoningEffort[];
+
+const DEEPSEEK_EFFORT = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const satisfies readonly DeepSeekEffort[];
+
+const MOONSHOT_EFFORT = ["low", "high", "max"] as const satisfies readonly MoonshotEffort[];
+
+export type EffortDomainsMatchTheSdks = [
+  MustBeExhaustive<UnlistedBy<(typeof ANTHROPIC_EFFORT)[number], AnthropicEffort>>,
+  MustBeExhaustive<UnlistedBy<(typeof OPENAI_EFFORT)[number], OpenAiEffort>>,
+  MustBeExhaustive<UnlistedBy<(typeof ZAI_EFFORT)[number], ZhipuReasoningEffort>>,
+  MustBeExhaustive<UnlistedBy<(typeof DEEPSEEK_EFFORT)[number], DeepSeekEffort>>,
+  MustBeExhaustive<UnlistedBy<(typeof MOONSHOT_EFFORT)[number], MoonshotEffort>>,
+];
+
+const OPENROUTER_EFFORT: readonly string[] = Object.values(ChatRequestEffort).filter(
+  (v) => v !== WIRE_DISABLE_VALUE,
+);
+
+const GEMINI_EFFORT: readonly string[] = Object.values(ThinkingLevel)
+  .map((v) => v.toLowerCase())
+  .filter((v) => !v.startsWith("thinking_level_"));
+
+function sdkEffort(sdk: Sdk): readonly string[] {
   switch (sdk) {
     case "anthropic":
-      return caps.reasoning_effort.anthropic;
+      return ANTHROPIC_EFFORT;
     case "openai":
-      return caps.reasoning_effort.openai;
+      return OPENAI_EFFORT;
     case "openrouter":
-      return caps.reasoning_effort.openrouter;
+      return OPENROUTER_EFFORT;
     case "gemini":
-      return caps.reasoning_effort.gemini;
+      return GEMINI_EFFORT;
     case "zai":
-      return caps.reasoning_effort.zai;
+      return ZAI_EFFORT;
     case "deepseek":
-      return caps.reasoning_effort.deepseek;
+      return DEEPSEEK_EFFORT;
     case "moonshot":
-      return caps.reasoning_effort.moonshot;
+      return MOONSHOT_EFFORT;
   }
 }
 
-export function reasoningDomain(sdk: Sdk, modelId?: string): readonly string[] {
-  if (modelId !== undefined) {
-    const lower = modelId.toLowerCase();
-    for (const ov of caps.model_override ?? []) {
-      if (ov.reasoning_effort && lower.includes(ov.match.toLowerCase())) return ov.reasoning_effort;
-    }
-  }
-  return sdkEffort(sdk).domain;
+export function reasoningDomain(sdk: Sdk, caps?: ModelCapabilities): readonly string[] {
+  const levels = caps?.effort_levels;
+  if (levels === undefined || levels.length === 0) return sdkEffort(sdk);
+  const wire = sdkEffort(sdk);
+  const narrowed = wire.filter((v) => levels.includes(v));
+  return narrowed.length === 0 ? wire : narrowed;
 }
 
-export function foldEffort(sdk: Sdk, effort: string, modelId?: string): string | undefined {
-  if (!reasoningDomain(sdk, modelId).includes(effort)) return undefined;
-  return sdkEffort(sdk).fold?.[effort] ?? effort;
+export function geminiLevelName(effort: string): ThinkingLevel | undefined {
+  const wanted = effort.toLowerCase();
+  return Object.values(ThinkingLevel).find((level) => level.toLowerCase() === wanted);
 }
 
-export function effortBudget(effort: string): number {
-  return caps.reasoning_effort.anthropic.budget?.[effort] ?? 8192;
+export function supportsReasoningOff(sdk: Sdk): boolean {
+  return sdk !== "gemini";
 }
 
-export function geminiLevelName(effort: string): string | undefined {
-  const e = effort.toLowerCase();
-  return reasoningDomain("gemini").includes(e) ? e : undefined;
-}
-
-interface ClaudeVersion {
-  family: ClaudeFamily;
-  major: number;
-  minor: number;
-}
-
-export function parseClaudeModel(modelId: string): ClaudeVersion | undefined {
-  const slash = modelId.lastIndexOf("/");
-  const lower = (slash >= 0 ? modelId.slice(slash + 1) : modelId).toLowerCase();
-
-  const tokens = lower.split(/[^a-z0-9]+/).filter(Boolean);
-  if (!tokens.includes("claude")) return undefined;
-
-  let family: ClaudeFamily | undefined;
-  if (tokens.includes("opus")) family = "opus";
-  else if (tokens.includes("sonnet")) family = "sonnet";
-  else if (tokens.includes("haiku")) family = "haiku";
-  else return undefined;
-
-  let major: number | undefined;
-  let minor = 0;
-  for (const tok of tokens) {
-    if (tok.length > 2 || !/^[0-9]+$/.test(tok)) continue;
-    const n = Number.parseInt(tok, 10);
-    if (Number.isNaN(n)) continue;
-    if (major === undefined) major = n;
-    else {
-      minor = n;
-      break;
-    }
-  }
-  if (major === undefined) return undefined;
-  return { family, major, minor };
-}
-
-function familyInSet(set: string, family: ClaudeFamily): boolean {
-  return set.split("|").includes(family);
-}
-
-function ruleMatches(rule: ClaudeRule, idLower: string, v: ClaudeVersion | undefined): boolean {
-  if (rule.contains !== undefined && !idLower.includes(rule.contains)) return false;
-  const needsVersion =
-    rule.family !== undefined || rule.min_major !== undefined || rule.max_major !== undefined;
-  if (needsVersion) {
-    if (v === undefined) return false;
-    if (rule.family !== undefined && !familyInSet(rule.family, v.family)) return false;
-    if (rule.min_major !== undefined) {
-      const minMinor = rule.min_minor ?? 0;
-      if (v.major < rule.min_major || (v.major === rule.min_major && v.minor < minMinor)) return false;
-    }
-    if (rule.max_major !== undefined) {
-      const maxMinor = rule.max_minor ?? Number.MAX_SAFE_INTEGER;
-      if (v.major > rule.max_major || (v.major === rule.max_major && v.minor > maxMinor)) return false;
-    }
-  }
-  return rule.contains !== undefined || needsVersion;
-}
-
-export function claudeThinkingCaps(model: string): { adaptive: boolean; enabled: boolean } {
-  const lower = model.toLowerCase();
-  const v = parseClaudeModel(model);
-  for (const rule of caps.claude.thinking_rule ?? []) {
-    if (ruleMatches(rule, lower, v)) {
-      return {
-        adaptive: rule.adaptive ?? caps.claude.default_adaptive,
-        enabled: rule.enabled ?? caps.claude.default_enabled,
-      };
-    }
-  }
-  return { adaptive: caps.claude.default_adaptive, enabled: caps.claude.default_enabled };
-}
-
-function claudeRejectsSampling(model: string): boolean {
-  const lower = model.toLowerCase();
-  const v = parseClaudeModel(model);
-  for (const rule of caps.claude.sampler_rule ?? []) {
-    if (ruleMatches(rule, lower, v)) {
-      return rule.rejects_sampling ?? caps.claude.default_rejects_sampling;
-    }
-  }
-  return caps.claude.default_rejects_sampling;
-}
-
-export function modelOverrideRejectsSampling(model: string): boolean {
-  const lower = model.toLowerCase();
-  for (const ov of caps.model_override ?? []) {
-    if (ov.rejects_sampling !== undefined && lower.includes(ov.match.toLowerCase())) {
-      return ov.rejects_sampling;
-    }
-  }
-  return false;
-}
-
-export function rejectsSampling(model: string): boolean {
-  return claudeRejectsSampling(model) || modelOverrideRejectsSampling(model);
-}
-
-export type Applicability =
-  | "honored"
-  | "ignored"
-  | "rejected";
+export type Applicability = "honored" | "ignored" | "rejected";
 
 export type Field =
   | "max_context_tokens"
@@ -242,22 +170,37 @@ function vendorField(sdk: Sdk, owner: Sdk): Applicability {
   return sdk === owner ? "honored" : "ignored";
 }
 
-export function applicability(sdk: Sdk, modelId: string, field: Field): Applicability {
+function wireParameter(caps: ModelCapabilities | undefined, name: string): Applicability {
+  const params = caps?.supported_parameters;
+  if (params === undefined || params.length === 0) return "honored";
+  return params.includes(name) ? "honored" : "rejected";
+}
+
+export function rejectsSampling(caps?: ModelCapabilities): boolean {
+  return wireParameter(caps, "temperature") === "rejected";
+}
+
+export function applicability(
+  sdk: Sdk,
+  modelId: string,
+  field: Field,
+  caps?: ModelCapabilities,
+): Applicability {
   switch (field) {
     case "max_context_tokens":
     case "max_output_tokens":
     case "cache_keepalive":
-      return "honored";
-
     case "reasoning_effort":
       return "honored";
 
     case "temperature":
+      return wireParameter(caps, "temperature");
+
     case "top_p":
-      return rejectsSampling(modelId) ? "rejected" : "honored";
+      return wireParameter(caps, "top_p");
 
     case "budget_tokens":
-      return budgetTokensApplicability(sdk, modelId);
+      return budgetTokensApplicability(sdk, caps);
 
     case "cache_ttl":
       return vendorField(sdk, "anthropic");
@@ -277,10 +220,10 @@ export function applicability(sdk: Sdk, modelId: string, field: Field): Applicab
   }
 }
 
-function budgetTokensApplicability(sdk: Sdk, modelId: string): Applicability {
+function budgetTokensApplicability(sdk: Sdk, caps?: ModelCapabilities): Applicability {
   switch (sdk) {
     case "anthropic":
-      return claudeRejectsSampling(modelId) ? "rejected" : "honored";
+      return caps?.thinking_enabled === false ? "rejected" : "honored";
     case "gemini":
     case "moonshot":
       return "honored";
@@ -312,10 +255,6 @@ export function defaultValue(sdk: Sdk, field: Field): string | undefined {
   return undefined;
 }
 
-export function supportsReasoningOff(sdk: Sdk): boolean {
-  return sdk === "anthropic" || sdk === "deepseek" || sdk === "moonshot" || sdk === "openrouter" || sdk === "zai";
-}
-
 class CapabilityError extends Error {
   constructor(message: string) {
     super(message);
@@ -328,8 +267,9 @@ export function validate(
   modelId: string,
   field: Field,
   probe: string | true,
+  caps?: ModelCapabilities,
 ): CapabilityError | undefined {
-  if (applicability(sdk, modelId, field) !== "honored") {
+  if (applicability(sdk, modelId, field, caps) !== "honored") {
     return new CapabilityError(`\`${field}\` is not applicable to the \`${sdk}\` sdk for this model`);
   }
 
@@ -337,7 +277,7 @@ export function validate(
     new CapabilityError(`\`${field}\` value ${JSON.stringify(value)} is out of domain; allowed: ${allowed}`);
 
   if (field === "reasoning_effort" && probe !== true) {
-    const domain = reasoningDomain(sdk, modelId);
+    const domain = reasoningDomain(sdk, caps);
     if (!domain.includes(probe)) return outOfDomain(probe, domain.join(", "));
   }
 

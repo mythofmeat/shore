@@ -23,6 +23,12 @@ const MODELS = [
 
 const VERDICTS = ["honored", "ignored", "rejected"];
 
+const CAPABILITY_SHAPES = [
+  undefined,
+  { supported_parameters: ["temperature", "top_p", "reasoning"] },
+  { supported_parameters: ["reasoning", "max_tokens"] },
+] as const;
+
 describe("applicability answers for every sdk, model and field", () => {
   test("it always answers, and always with one of the three verdicts", () => {
     for (const sdk of SDK_VARIANTS) {
@@ -62,12 +68,14 @@ describe("applicability answers for every sdk, model and field", () => {
     }
   });
 
-  test("sampling is decided by the model, not the sdk", () => {
+  test("sampling is decided by the discovered model, not the sdk", () => {
     for (const field of ["temperature", "top_p"] as Field[]) {
-      for (const model of MODELS) {
-        const want = rejectsSampling(model) ? "rejected" : "honored";
+      for (const caps of CAPABILITY_SHAPES) {
+        const want = rejectsSampling(caps) ? "rejected" : "honored";
         for (const sdk of SDK_VARIANTS) {
-          expect(applicability(sdk, model, field), `${field} on ${sdk}/${model}`).toBe(want);
+          for (const model of MODELS) {
+            expect(applicability(sdk, model, field, caps), `${field} on ${sdk}/${model}`).toBe(want);
+          }
         }
       }
     }
@@ -76,9 +84,11 @@ describe("applicability answers for every sdk, model and field", () => {
   test("temperature and top_p are never split", () => {
     for (const sdk of SDK_VARIANTS) {
       for (const model of MODELS) {
-        expect(applicability(sdk, model, "temperature"), `${sdk}/${model}`).toBe(
-          applicability(sdk, model, "top_p"),
-        );
+        for (const caps of CAPABILITY_SHAPES) {
+          expect(applicability(sdk, model, "temperature", caps), `${sdk}/${model}`).toBe(
+            applicability(sdk, model, "top_p", caps),
+          );
+        }
       }
     }
   });
@@ -91,7 +101,9 @@ describe("applicability answers for every sdk, model and field", () => {
         expect(applicability(sdk, model, "budget_tokens"), `${sdk}/${model}`).toBe("ignored");
       }
     }
-    expect(applicability("anthropic", "claude-opus-4-7", "budget_tokens")).toBe("rejected");
+    expect(
+      applicability("anthropic", "claude-opus-4-7", "budget_tokens", { thinking_enabled: false }),
+    ).toBe("rejected");
     expect(applicability("anthropic", "claude-haiku-4-5", "budget_tokens")).toBe("honored");
   });
 
