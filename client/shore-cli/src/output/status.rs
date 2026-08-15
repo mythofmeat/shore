@@ -2,7 +2,7 @@ use std::io::{self, Write};
 
 use serde_json::Value;
 
-use super::vocab::{Rows, Tone, blank, count, empty, section, warning};
+use super::vocab::{Rows, Tone, blank, count, empty, note, section, warning};
 
 fn text<'value>(data: &'value Value, key: &str) -> &'value str {
     data.get(key).and_then(Value::as_str).unwrap_or("")
@@ -104,6 +104,13 @@ pub(crate) fn sections_of(data: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
+fn all_zero(map: &serde_json::Map<String, Value>) -> bool {
+    !map.is_empty()
+        && map
+            .values()
+            .all(|v| v.as_u64().is_some_and(|n| n == 0) || v.as_i64().is_some_and(|n| n == 0))
+}
+
 fn not_started(name: &str) -> &'static str {
     match name {
         "autonomy" => "not started \u{00b7} the heartbeat is scheduled on your first message",
@@ -135,6 +142,10 @@ pub(crate) fn write_section<W: Write>(out: &mut W, data: &Value, name: &str) -> 
         empty(out, "nothing recorded");
         return true;
     };
+    if all_zero(map) {
+        note(out, "0");
+        return true;
+    }
     let mut rows = Rows::new();
     for (key, entry) in map {
         let display = match entry {
@@ -315,6 +326,35 @@ mod tests {
         assert!(
             out.contains("not started"),
             "an empty section must say why it is empty: {out}"
+        );
+    }
+
+    #[test]
+    fn a_table_of_counters_that_are_all_zero_says_zero_once() {
+        set_color_enabled(false);
+        let mut buf = Vec::new();
+        assert!(write_section(&mut buf, &payload(), "tokens"));
+        let out = String::from_utf8(buf).unwrap_or_default();
+        let zeros = out.matches('0').count();
+        assert_eq!(zeros, 1, "four zeros say no more than one does: {out}");
+        assert!(!out.contains("cache read"), "{out}");
+    }
+
+    #[test]
+    fn a_counter_that_moved_still_shows_the_breakdown() {
+        set_color_enabled(false);
+        let mut data = payload();
+        if let Some(slot) = data.pointer_mut("/tokens/input") {
+            *slot = json!(1024);
+        }
+        let mut buf = Vec::new();
+        assert!(write_section(&mut buf, &data, "tokens"));
+        let out = String::from_utf8(buf).unwrap_or_default();
+        assert!(out.contains("input"), "{out}");
+        assert!(out.contains("1024"), "{out}");
+        assert!(
+            out.contains("cache read"),
+            "the breakdown must survive one non-zero counter: {out}"
         );
     }
 
