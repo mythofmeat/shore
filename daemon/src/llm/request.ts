@@ -36,6 +36,7 @@ export interface ResolvedModel {
   zai_clear_thinking?: boolean;
   zai_subscription?: boolean;
   max_tool_iterations?: number;
+  supports_images?: boolean;
 }
 
 export interface BuiltRequest {

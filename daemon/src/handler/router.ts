@@ -4,7 +4,7 @@ import type { ClientMessage } from "../protocol/ClientMessage.ts";
 import type { Command } from "../protocol/Command.ts";
 import type { ErrorCode } from "../protocol/ErrorCode.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
-import { NoModelError } from "./setup.ts";
+import { ImagesUnsupportedError, NoModelError } from "./setup.ts";
 import type {
   DirectSender,
   RequestMeta,
@@ -29,7 +29,11 @@ const RID_BEARING: ReadonlySet<string> = new Set([
 ]);
 
 function generationErrorCode(error: unknown): ErrorCode {
-  if (error instanceof NoModelError || error instanceof CharacterConfigError) {
+  if (
+    error instanceof NoModelError ||
+    error instanceof CharacterConfigError ||
+    error instanceof ImagesUnsupportedError
+  ) {
     return error.code;
   }
   return "internal_error";

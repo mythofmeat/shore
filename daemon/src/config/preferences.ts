@@ -65,6 +65,7 @@ export interface SamplerSettings {
   geminiGeneration?: number;
   zaiClearThinking?: boolean;
   zaiSubscription?: boolean;
+  supportsImages?: boolean;
 }
 
 const SAMPLER_FIELDS = [
@@ -82,6 +83,7 @@ const SAMPLER_FIELDS = [
   ["geminiGeneration", "gemini_generation"],
   ["zaiClearThinking", "zai_clear_thinking"],
   ["zaiSubscription", "zai_subscription"],
+  ["supportsImages", "supports_images"],
 ] as const satisfies readonly (readonly [keyof SamplerSettings, string])[];
 
 export const SAMPLER_KEYS: readonly string[] = SAMPLER_FIELDS.map(([, key]) => key);
@@ -123,6 +125,7 @@ function samplerFromResolvedModel(model: ResolvedModel): SamplerSettings {
     ["geminiGeneration", "geminiGeneration"],
     ["zaiClearThinking", "zaiClearThinking"],
     ["zaiSubscription", "zaiSubscription"],
+    ["supportsImages", "supportsImages"],
   ] as const satisfies readonly (readonly [keyof SamplerSettings, keyof ResolvedModel])[];
   for (const [field, source] of copy) {
     const value = model[source];
@@ -519,6 +522,7 @@ export function applySamplerOverlay(
     ["geminiGeneration", "geminiGeneration"],
     ["zaiClearThinking", "zaiClearThinking"],
     ["zaiSubscription", "zaiSubscription"],
+    ["supportsImages", "supportsImages"],
   ] as const satisfies readonly (readonly [keyof SamplerSettings, keyof ResolvedModel])[];
 
   for (const [field, target] of direct) {
@@ -731,6 +735,7 @@ function readSampler(table: Record<string, unknown>): ReadResult<SamplerSettings
   const booleans = [
     ["zaiClearThinking", "zai_clear_thinking"],
     ["zaiSubscription", "zai_subscription"],
+    ["supportsImages", "supports_images"],
   ] as const;
   for (const [field, key] of booleans) {
     const raw = table[key];

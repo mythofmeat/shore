@@ -46,6 +46,7 @@ const PARSERS: Record<string, (v: unknown) => Parsed> = {
   gemini_generation: u32("gemini_generation"),
   zai_clear_thinking: boolean("zai_clear_thinking"),
   zai_subscription: boolean("zai_subscription"),
+  supports_images: boolean("supports_images"),
 
   cache_keepalive: (v) => {
     const raw = string("cache_keepalive")(v);

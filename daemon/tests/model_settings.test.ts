@@ -63,6 +63,7 @@ const KEY_CASES: readonly KeyCase[] = [
   { key: "gemini_generation", accepts: 3, rejects: [-1, "3"] },
   { key: "zai_clear_thinking", accepts: true, rejects: ["true", 1] },
   { key: "zai_subscription", accepts: false, rejects: ["false", 0] },
+  { key: "supports_images", accepts: false, rejects: ["false", 0] },
 ];
 
 describe("applySamplerValue", () => {

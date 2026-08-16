@@ -394,6 +394,7 @@
             "zai_subscription": null,
             "replay_prior_thinking": null,
             "max_tool_iterations": null,
+            "supports_images": null,
             "effective_sampler": {
               "temperature": 0.2,
               "top_p": null,
@@ -405,6 +406,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -510,6 +512,7 @@
             "zai_subscription": null,
             "replay_prior_thinking": null,
             "max_tool_iterations": null,
+            "supports_images": null,
             "effective_sampler": {
               "temperature": 0.2,
               "top_p": null,
@@ -521,6 +524,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -694,6 +698,7 @@
             "zai_subscription": null,
             "replay_prior_thinking": null,
             "max_tool_iterations": null,
+            "supports_images": null,
             "effective_sampler": {
               "temperature": 0.2,
               "top_p": null,
@@ -705,6 +710,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -802,6 +808,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -820,6 +827,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -927,6 +935,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -945,6 +954,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -1135,7 +1145,8 @@
               "zai_clear_thinking": null,
               "zai_subscription": null,
               "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "max_tool_iterations": null,
+              "supports_images": null
             }
           },
           "prefs": {
@@ -1304,7 +1315,8 @@
               "zai_clear_thinking": null,
               "zai_subscription": null,
               "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "max_tool_iterations": null,
+              "supports_images": null
             }
           },
           "prefs": {
@@ -1388,6 +1400,7 @@
             "zai_subscription": null,
             "replay_prior_thinking": null,
             "max_tool_iterations": null,
+            "supports_images": null,
             "effective_sampler": {
               "temperature": 0.2,
               "top_p": null,
@@ -1399,6 +1412,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -1441,7 +1455,8 @@
               "zai_clear_thinking": null,
               "zai_subscription": null,
               "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "max_tool_iterations": null,
+              "supports_images": null
             }
           },
           "prefs": {
@@ -1517,6 +1532,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -1535,6 +1551,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -1589,7 +1606,8 @@
               "zai_clear_thinking": null,
               "zai_subscription": null,
               "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "max_tool_iterations": null,
+              "supports_images": null
             }
           },
           "prefs": {
@@ -1680,7 +1698,8 @@
               "zai_clear_thinking": null,
               "zai_subscription": null,
               "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "max_tool_iterations": null,
+              "supports_images": null
             }
           },
           "prefs": {
@@ -1771,7 +1790,8 @@
               "zai_clear_thinking": null,
               "zai_subscription": null,
               "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "max_tool_iterations": null,
+              "supports_images": null
             }
           },
           "prefs": {
@@ -1940,7 +1960,8 @@
               "zai_clear_thinking": null,
               "zai_subscription": null,
               "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "max_tool_iterations": null,
+              "supports_images": null
             }
           },
           "prefs": {
@@ -2239,6 +2260,7 @@
             "zai_subscription": null,
             "replay_prior_thinking": null,
             "max_tool_iterations": null,
+            "supports_images": null,
             "effective_sampler": {
               "temperature": 0.2,
               "top_p": null,
@@ -2250,6 +2272,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -2416,6 +2439,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -2434,6 +2458,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -2543,6 +2568,7 @@
               "sdk": "gemini",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -2561,6 +2587,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "honored",
               "zai_clear_thinking": "ignored",
@@ -3224,6 +3251,7 @@
             "zai_subscription": null,
             "replay_prior_thinking": null,
             "max_tool_iterations": null,
+            "supports_images": null,
             "effective_sampler": {
               "temperature": null,
               "top_p": null,
@@ -3235,6 +3263,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -3640,6 +3669,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -3658,6 +3688,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -3859,6 +3890,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -3876,6 +3908,7 @@
               "sdk": null,
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -3892,6 +3925,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -4610,6 +4644,7 @@
             "zai_subscription": null,
             "replay_prior_thinking": null,
             "max_tool_iterations": null,
+            "supports_images": null,
             "effective_sampler": {
               "temperature": 0.5,
               "top_p": null,
@@ -4621,6 +4656,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -4716,6 +4752,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -4734,6 +4771,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -6217,6 +6255,7 @@
             "zai_subscription": null,
             "replay_prior_thinking": null,
             "max_tool_iterations": null,
+            "supports_images": null,
             "effective_sampler": {
               "temperature": null,
               "top_p": null,
@@ -6228,6 +6267,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -6333,6 +6373,7 @@
             "zai_subscription": null,
             "replay_prior_thinking": null,
             "max_tool_iterations": null,
+            "supports_images": null,
             "effective_sampler": {
               "temperature": null,
               "top_p": null,
@@ -6344,6 +6385,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -6526,7 +6568,8 @@
               "zai_clear_thinking": null,
               "zai_subscription": null,
               "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "max_tool_iterations": null,
+              "supports_images": null
             }
           },
           "prefs": {
@@ -6659,7 +6702,8 @@
               "zai_clear_thinking": null,
               "zai_subscription": null,
               "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "max_tool_iterations": null,
+              "supports_images": null
             }
           },
           "prefs": {
@@ -6743,6 +6787,7 @@
             "zai_subscription": null,
             "replay_prior_thinking": null,
             "max_tool_iterations": null,
+            "supports_images": null,
             "effective_sampler": {
               "temperature": null,
               "top_p": null,
@@ -6754,6 +6799,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -6796,7 +6842,8 @@
               "zai_clear_thinking": null,
               "zai_subscription": null,
               "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "max_tool_iterations": null,
+              "supports_images": null
             }
           },
           "prefs": {
@@ -6872,6 +6919,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -6890,6 +6938,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -6944,7 +6993,8 @@
               "zai_clear_thinking": null,
               "zai_subscription": null,
               "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "max_tool_iterations": null,
+              "supports_images": null
             }
           },
           "prefs": {
@@ -7041,7 +7091,8 @@
               "zai_clear_thinking": null,
               "zai_subscription": null,
               "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "max_tool_iterations": null,
+              "supports_images": null
             }
           },
           "prefs": {
@@ -7134,6 +7185,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -7151,6 +7203,7 @@
               "sdk": null,
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -7167,6 +7220,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -7221,7 +7275,8 @@
               "zai_clear_thinking": null,
               "zai_subscription": null,
               "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "max_tool_iterations": null,
+              "supports_images": null
             }
           },
           "prefs": {
@@ -7346,7 +7401,8 @@
             "zai_clear_thinking": null,
             "zai_subscription": null,
             "replay_prior_thinking": null,
-            "max_tool_iterations": null
+            "max_tool_iterations": null,
+            "supports_images": null
           }
         },
         "prefs": {
@@ -7480,7 +7536,8 @@
               "zai_clear_thinking": null,
               "zai_subscription": null,
               "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "max_tool_iterations": null,
+              "supports_images": null
             }
           },
           "prefs": {
@@ -7565,7 +7622,8 @@
               "zai_clear_thinking": null,
               "zai_subscription": null,
               "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "max_tool_iterations": null,
+              "supports_images": null
             }
           },
           "prefs": {
@@ -7654,7 +7712,8 @@
               "zai_clear_thinking": null,
               "zai_subscription": null,
               "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "max_tool_iterations": null,
+              "supports_images": null
             }
           },
           "prefs": {
@@ -7775,7 +7834,8 @@
               "zai_clear_thinking": null,
               "zai_subscription": null,
               "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "max_tool_iterations": null,
+              "supports_images": null
             }
           },
           "prefs": {
@@ -7863,7 +7923,8 @@
               "zai_clear_thinking": null,
               "zai_subscription": null,
               "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "max_tool_iterations": null,
+              "supports_images": null
             }
           },
           "prefs": {
@@ -8115,6 +8176,7 @@
               "sdk": "openai",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -8133,6 +8195,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -8242,6 +8305,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -8260,6 +8324,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -8752,6 +8817,7 @@
               "sdk": "openai",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -8769,6 +8835,7 @@
               "sdk": null,
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -8785,6 +8852,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -9020,6 +9088,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -9037,6 +9106,7 @@
               "sdk": null,
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -9053,6 +9123,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -9365,6 +9436,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -9383,6 +9455,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -9584,6 +9657,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -9601,6 +9675,7 @@
               "sdk": null,
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -9617,6 +9692,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -9913,6 +9989,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -9931,6 +10008,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -10056,7 +10134,8 @@
               "zai_clear_thinking": null,
               "zai_subscription": null,
               "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "max_tool_iterations": null,
+              "supports_images": null
             }
           },
           "prefs": {
@@ -10173,7 +10252,8 @@
               "zai_clear_thinking": null,
               "zai_subscription": null,
               "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "max_tool_iterations": null,
+              "supports_images": null
             }
           },
           "prefs": {
@@ -10251,6 +10331,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -10269,6 +10350,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -10323,7 +10405,8 @@
               "zai_clear_thinking": null,
               "zai_subscription": null,
               "replay_prior_thinking": null,
-              "max_tool_iterations": null
+              "max_tool_iterations": null,
+              "supports_images": null
             }
           },
           "prefs": {
@@ -10475,6 +10558,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -10493,6 +10577,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -10799,6 +10884,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -10816,6 +10902,7 @@
               "sdk": null,
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -10832,6 +10919,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -11097,6 +11185,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -11113,6 +11202,7 @@
               "sdk": null,
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -11129,6 +11219,7 @@
               "sdk": null,
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -11145,6 +11236,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -11410,6 +11502,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -11426,6 +11519,7 @@
               "sdk": null,
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -11443,6 +11537,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -11676,6 +11771,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -11694,6 +11790,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -11912,6 +12009,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -11929,6 +12027,7 @@
               "sdk": null,
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -11945,6 +12044,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -12069,6 +12169,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -12087,6 +12188,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -12376,7 +12478,7 @@
           },
           "err": {
             "code": "invalid_request",
-            "message": "unknown setting key: frobnicate; supported: temperature, top_p, reasoning_effort, budget_tokens, max_output_tokens, cache_ttl, cache_keepalive, sdk, replay_prior_thinking, max_tool_iterations, openrouter_provider, gemini_generation, zai_clear_thinking, zai_subscription"
+            "message": "unknown setting key: frobnicate; supported: temperature, top_p, reasoning_effort, budget_tokens, max_output_tokens, cache_ttl, cache_keepalive, sdk, replay_prior_thinking, max_tool_iterations, openrouter_provider, gemini_generation, zai_clear_thinking, zai_subscription, supports_images"
           },
           "session": {
             "active_model": null,
@@ -13091,6 +13193,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -13108,6 +13211,7 @@
               "sdk": null,
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -13124,6 +13228,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -13374,6 +13479,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -13390,6 +13496,7 @@
               "sdk": null,
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -13406,6 +13513,7 @@
               "sdk": null,
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -13422,6 +13530,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -13663,6 +13772,7 @@
             "zai_subscription": null,
             "replay_prior_thinking": null,
             "max_tool_iterations": null,
+            "supports_images": null,
             "effective_sampler": {
               "temperature": 0.33,
               "top_p": 0.22,
@@ -13674,6 +13784,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -13713,6 +13824,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -13731,6 +13843,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -13882,6 +13995,7 @@
             "zai_subscription": null,
             "replay_prior_thinking": null,
             "max_tool_iterations": null,
+            "supports_images": null,
             "effective_sampler": {
               "temperature": 0.44,
               "top_p": 0.22,
@@ -13893,6 +14007,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -14130,6 +14245,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -14146,6 +14262,7 @@
               "sdk": null,
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -14162,6 +14279,7 @@
               "sdk": null,
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -14178,6 +14296,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -14615,7 +14734,8 @@
             "zai_clear_thinking": null,
             "zai_subscription": null,
             "replay_prior_thinking": null,
-            "max_tool_iterations": null
+            "max_tool_iterations": null,
+            "supports_images": null
           },
           "session": {
             "active_model": null,
@@ -14685,6 +14805,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -14703,6 +14824,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -15217,6 +15339,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -15235,6 +15358,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",
@@ -15621,6 +15745,7 @@
             "zai_subscription": null,
             "replay_prior_thinking": null,
             "max_tool_iterations": null,
+            "supports_images": null,
             "effective_sampler": {
               "temperature": 0.5,
               "top_p": null,
@@ -15632,6 +15757,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -15727,6 +15853,7 @@
               "sdk": "anthropic",
               "replay_prior_thinking": null,
               "max_tool_iterations": null,
+              "supports_images": null,
               "openrouter_provider": null,
               "gemini_generation": null,
               "zai_clear_thinking": null,
@@ -15745,6 +15872,7 @@
               "sdk": "always",
               "replay_prior_thinking": "honored",
               "max_tool_iterations": "always",
+              "supports_images": "always",
               "openrouter_provider": "ignored",
               "gemini_generation": "ignored",
               "zai_clear_thinking": "ignored",

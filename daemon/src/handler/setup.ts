@@ -41,6 +41,19 @@ export class NoModelError extends Error {
   }
 }
 
+export class ImagesUnsupportedError extends Error {
+  readonly code: ErrorCode = "invalid_request";
+
+  constructor(qualifiedName: string, count: number) {
+    super(
+      `${qualifiedName} does not accept images, so the ${
+        count === 1 ? "attachment was" : `${String(count)} attachments were`
+      } not sent. Switch to a vision-capable model and send again.`,
+    );
+    this.name = "ImagesUnsupportedError";
+  }
+}
+
 export function resolveGenerationModel(
   activeModel: ResolvedModel | undefined,
   config: LoadedConfig,

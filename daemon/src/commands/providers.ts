@@ -10,6 +10,7 @@ import {
   type ProviderModelsCache,
 } from "../llm/discovery.ts";
 import { defaultBaseUrl } from "../llm/request.ts";
+import { readLearnedImageSupport } from "../llm/image_support.ts";
 import { toRfc3339 } from "../ledger/zoned.ts";
 import { defaultSdk } from "../config/models.ts";
 import type { LoadedConfig } from "../config/loader.ts";
@@ -180,7 +181,7 @@ export async function refreshAllProviderModels(ctx: ProvidersContext): Promise<u
   return { results, skipped };
 }
 
-function discoveredToJson(m: DiscoveredModel): unknown {
+function discoveredToJson(m: DiscoveredModel, learned: Record<string, boolean>): unknown {
   return {
     source: "discovered",
     model_id: m.model_id,
@@ -190,7 +191,7 @@ function discoveredToJson(m: DiscoveredModel): unknown {
     context_length: m.context_length ?? null,
     max_output_tokens: m.max_output_tokens ?? null,
     supports_tools: m.supports_tools ?? null,
-    supports_images: m.supports_images ?? null,
+    supports_images: m.supports_images ?? learned[m.model_id] ?? null,
     supports_reasoning: m.supports_reasoning ?? null,
     supports_prompt_cache: m.supports_prompt_cache ?? null,
     discovered_at: m.discovered_at,
@@ -210,12 +211,13 @@ export function listProviderModels(ctx: ProvidersContext, args: Args): unknown {
   }
 
   const cache = readCacheSync(cachePath(ctx.config.dirs.cache, provider));
+  const learned = readLearnedImageSupport(ctx.config.dirs.cache, provider);
   const discovered: unknown[] = [];
   const hidden: unknown[] = [];
   for (const m of cache?.models ?? []) {
     const visible = entry === undefined || isVisible(entry.discovery, m.model_id);
-    if (visible || includeHidden) discovered.push(discoveredToJson(m));
-    else hidden.push(discoveredToJson(m));
+    if (visible || includeHidden) discovered.push(discoveredToJson(m, learned));
+    else hidden.push(discoveredToJson(m, learned));
   }
 
   const staticModels = [...ctx.config.models.chat.values()]

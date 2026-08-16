@@ -26,6 +26,7 @@ export interface ModelCapabilities {
   thinking_adaptive?: boolean;
   thinking_enabled?: boolean;
   supported_parameters?: readonly string[];
+  supports_images?: boolean;
 }
 
 type MustBeExhaustive<T extends never> = T;

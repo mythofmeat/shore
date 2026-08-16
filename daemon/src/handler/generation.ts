@@ -1,7 +1,15 @@
 import type { LoadedConfig } from "../config/loader.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
 import { configView, resolveActiveModelAndOverlay } from "../config/preferences.ts";
-import type { ResolvedModel } from "../config/models.ts";
+import { effectiveSupportsImages, type ResolvedModel } from "../config/models.ts";
+import {
+  countImageBlocks,
+  imageSupportFor,
+  isImageRejection,
+  recordImageRejection,
+  stripImageBlocks,
+  textOnlyReason,
+} from "../llm/image_support.ts";
 import type { ConversationEngine } from "../engine/conversation.ts";
 import type { ContentBlock, Message } from "../engine/types.ts";
 import {
@@ -36,7 +44,12 @@ import { anyEnabled } from "../tools/registry.ts";
 import { toolPhase, type ToolPhase } from "../tools/execute.ts";
 import { toolLimitsFrom, type ToolLimitsView } from "../tools/dispatch.ts";
 import { buildToolContext, credentialEntry, type ToolContextDeps } from "./tool_context.ts";
-import { buildGenerationRequest, resolveGenerationModel, type SetupEngine } from "./setup.ts";
+import {
+  buildGenerationRequest,
+  ImagesUnsupportedError,
+  resolveGenerationModel,
+  type SetupEngine,
+} from "./setup.ts";
 import {
   persistAndNotify,
   type PersistContext,
@@ -141,6 +154,22 @@ export function makeRunGeneration(deps: GenerationDeps): RunGeneration {
   return (params: GenerationParams) => runGeneration(deps, params);
 }
 
+function droppedHistoryImages(
+  messages: WireMessage[],
+  support: boolean | undefined,
+  resolved: ResolvedModel,
+): WireMessage[] {
+  if (support !== false || countImageBlocks(messages) === 0) return messages;
+
+  const reason = textOnlyReason(resolved.providerKey, resolved.modelId);
+  const { messages: stripped, stripped: count } = stripImageBlocks(messages, reason);
+  console.warn(
+    `shore: dropped ${String(count)} image(s) from history because ${reason}; ` +
+      `the turn goes over the wire without them`,
+  );
+  return stripped;
+}
+
 export async function runGeneration(
   deps: GenerationDeps,
   params: GenerationParams,
@@ -176,6 +205,21 @@ export async function runGeneration(
   );
   const resolved = resolveGenerationModel(activeModel, config, overlay);
 
+  const declaredImageSupport = effectiveSupportsImages(resolved);
+  const imageSupport = imageSupportFor(
+    {
+      ...(declaredImageSupport === undefined ? {} : { declared: declaredImageSupport }),
+      providerKey: resolved.providerKey,
+      modelId: resolved.modelId,
+    },
+    config.dirs.cache,
+  );
+
+  const incomingImages = body.images.length + body.image_data.length;
+  if (imageSupport === false && incomingImages > 0 && !regen) {
+    throw new ImagesUnsupportedError(resolved.qualifiedName, incomingImages);
+  }
+
   const regenAlt = await appendUserTurn(turnCtx, engine, deps.dataDir, charName, body, regen);
 
   await ensureAndBackfillAutonomy(turnCtx, engine, charName, config);
@@ -195,6 +239,7 @@ export async function runGeneration(
   });
   const request: SidecarRequest = {
     ...built.request,
+    messages: droppedHistoryImages(built.request.messages, imageSupport, resolved),
     context: callContext(deps, config, charName, params.rid, {
       ...(built.request.provider_options === undefined
         ? {}
@@ -219,6 +264,12 @@ export async function runGeneration(
     signal: params.signal,
     now,
     newMessageId,
+  }).catch((e: unknown) => {
+    if (imageSupport !== false && isImageRejection(e)) {
+      recordImageRejection(config.dirs.cache, resolved.providerKey, resolved.modelId);
+      throw new ImagesUnsupportedError(resolved.qualifiedName, countImageBlocks(request.messages));
+    }
+    throw e;
   });
 
   applyIntermediateMessages(request, intermediate, result.model);

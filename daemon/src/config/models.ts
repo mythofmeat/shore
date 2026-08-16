@@ -93,6 +93,7 @@ export interface ModelConfigFields {
   geminiGeneration?: number;
   zaiClearThinking?: boolean;
   zaiSubscription?: boolean;
+  supportsImages?: boolean;
 }
 
 const FIELD_KEYS = [
@@ -111,6 +112,7 @@ const FIELD_KEYS = [
   "geminiGeneration",
   "zaiClearThinking",
   "zaiSubscription",
+  "supportsImages",
 ] as const satisfies readonly (keyof ModelConfigFields)[];
 
 export function mergeFrom(target: ModelConfigFields, overlay: ModelConfigFields): void {
@@ -167,6 +169,7 @@ export interface ResolvedModel {
   replayPriorThinking?: ThinkingReplay;
   maxToolIterations?: number;
   capabilities?: ModelCapabilities;
+  supportsImages?: boolean;
 }
 
 export function resolvedReplayPriorThinking(
@@ -199,7 +202,12 @@ export function toRequestModel(model: ResolvedModel): RequestResolvedModel {
     ...opt("zai_clear_thinking", model.zaiClearThinking),
     ...opt("zai_subscription", model.zaiSubscription),
     ...opt("max_tool_iterations", model.maxToolIterations),
+    ...opt("supports_images", effectiveSupportsImages(model)),
   };
+}
+
+export function effectiveSupportsImages(model: ResolvedModel): boolean | undefined {
+  return model.supportsImages ?? model.capabilities?.supports_images;
 }
 
 function opt<K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } {
@@ -268,6 +276,7 @@ export function resolvedModelFromParts(
   assignIfPresent(resolved, "geminiGeneration", merged.geminiGeneration);
   assignIfPresent(resolved, "zaiClearThinking", merged.zaiClearThinking);
   assignIfPresent(resolved, "zaiSubscription", merged.zaiSubscription);
+  assignIfPresent(resolved, "supportsImages", merged.supportsImages);
   return resolved;
 }
 
@@ -817,6 +826,7 @@ export function readModelConfigFields(table: Record<string, unknown>): ParseResu
   const bools: [keyof ModelConfigFields, string][] = [
     ["zaiClearThinking", "zai_clear_thinking"],
     ["zaiSubscription", "zai_subscription"],
+    ["supportsImages", "supports_images"],
   ];
   for (const [field, key] of bools) {
     const read = readBool(table, key);
@@ -922,5 +932,6 @@ export function resolvedModelToWire(model: ResolvedModel): Record<string, unknow
     zai_subscription: or(model.zaiSubscription),
     replay_prior_thinking: or(model.replayPriorThinking),
     max_tool_iterations: or(model.maxToolIterations),
+    supports_images: or(effectiveSupportsImages(model)),
   };
 }
