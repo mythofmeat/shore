@@ -254,13 +254,19 @@ describe("preparing a heartbeat body", () => {
     expect(last?.role).toBe("system");
     const text = (last?.content[0] as { text: string }).text;
     expect(text).toStartWith("[Current time: Thursday 2026-07-30 · 1:00 PM]");
-    expect(text).toContain("your next moment will arrive in 1 hour");
+    expect(text).toContain("This is a private heartbeat turn");
+    expect(text).not.toContain("{{");
   });
 
   test("says the configured fallback interval, not the default one", async () => {
     const config = await baseConfig();
     config.app.behavior.autonomy.heartbeat.fallback_heartbeat_interval =
       ConfigDuration.fromSecs(10_800);
+    await mkdir(join(config.dirs.config, "prompts"), { recursive: true });
+    await writeFile(
+      join(config.dirs.config, "prompts", "heartbeat.md"),
+      "[{{now}}]\n\nnext wake in {{default_interval}}\n",
+    );
     await withConversation(config);
     const cache = new LastRequestCache();
     cache.set("alice", minimalRequest("claude-sonnet-chat"), undefined);
@@ -268,7 +274,7 @@ describe("preparing a heartbeat body", () => {
     const prepared = await prepareHeartbeatRequest("alice", config, { cache, env: ENV, ...PINNED });
 
     const text = (prepared?.request.messages.at(-1)?.content[0] as { text: string }).text;
-    expect(text).toContain("your next moment will arrive in 3 hours");
+    expect(text).toContain("next wake in 3 hours");
   });
 
   test("uses a heartbeat.md override from the config prompts dir", async () => {

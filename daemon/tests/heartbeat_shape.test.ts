@@ -186,14 +186,19 @@ describe("the message it ends up sending", () => {
 });
 
 describe("the prompt", () => {
-  test("renders time, user, and interval into the built-in template", () => {
+  test("renders time and user into the built-in template", () => {
     const prompt = buildHeartbeatPrompt("Thursday 2026-07-30 · 9:00 AM", "Sam", "1 hour");
     expect(prompt).toStartWith("[Current time: Thursday 2026-07-30 · 9:00 AM]");
-    expect(prompt).toContain("send Sam an autonomous message");
-    expect(prompt).toContain("arrive in 1 hour");
-    expect(prompt).toContain("delivered to Sam.");
+    expect(prompt).toContain("send a message to Sam");
+    expect(prompt).toContain("delivered to Sam");
     expect(prompt).not.toContain("{{");
     expect(prompt).not.toContain("${");
+  });
+
+  test("the built-in template no longer spends the interval variable", () => {
+    const withOneHour = buildHeartbeatPrompt("Thursday 2026-07-30 · 9:00 AM", "Sam", "1 hour");
+    const withThree = buildHeartbeatPrompt("Thursday 2026-07-30 · 9:00 AM", "Sam", "3 hours");
+    expect(withThree).toBe(withOneHour);
   });
 
   test("renders a caller-supplied template through the same variables", () => {
