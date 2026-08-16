@@ -868,13 +868,20 @@ fn print_run_tool_calls(out: &mut impl Write, data: &serde_json::Value, width: u
     write_section_header(out, "nested calls", &format!("{}", calls.len()), width);
     for call in calls {
         let ok = call["ok"].as_bool().unwrap_or(false);
-        write_fg(out, if ok { Tone::Good } else { COLOR_ERROR }, "  \u{2022} ");
+        write_fg(
+            out,
+            if ok { Tone::Good } else { COLOR_ERROR },
+            "  \u{2022} ",
+        );
         write_fg(out, Tone::Active, call["tool"].as_str().unwrap_or("?"));
         if let Some(agent) = call["subagent"].as_str() {
             write_dim(out, &format!("  (ask_{agent})"));
         }
         _ = writeln!(out);
-        write_dim(out, &format!("      {}", call["input"].as_str().unwrap_or("")));
+        write_dim(
+            out,
+            &format!("      {}", call["input"].as_str().unwrap_or("")),
+        );
         _ = writeln!(out);
         for line in call["output"].as_str().unwrap_or("").lines() {
             write_dim(out, &format!("      \u{2192} {line}"));
@@ -1209,8 +1216,7 @@ fn print_character_info(data: &serde_json::Value) {
                 paint(&mut out, Tone::Muted, &format!("  {line}"));
                 _ = writeln!(out);
             }
-            if false {
-            }
+            if false {}
         }
     }
     _ = writeln!(out);
@@ -1594,7 +1600,10 @@ mod tests {
             "`debug tool` must not dump the result verbatim: {rendered}"
         );
         assert!(rendered.contains("query: test"), "{rendered}");
-        assert!(rendered.contains("path: memory/notes/rhia.md"), "{rendered}");
+        assert!(
+            rendered.contains("path: memory/notes/rhia.md"),
+            "{rendered}"
+        );
         assert_eq!(
             rendered.matches("lexical_score: 146").count(),
             1,
@@ -1619,7 +1628,10 @@ mod tests {
             "a JSON result must not print as one line: {formatted}"
         );
         assert!(formatted.contains("query: test"), "{formatted}");
-        assert!(formatted.contains("path: memory/notes/rhia.md"), "{formatted}");
+        assert!(
+            formatted.contains("path: memory/notes/rhia.md"),
+            "{formatted}"
+        );
         assert!(
             !formatted.contains(r#""excerpt":"#),
             "the quoting and braces are what makes it unreadable: {formatted}"
@@ -1823,7 +1835,10 @@ mod tests {
         print_wire_exchanges(&mut buf, Some(&wire), 80);
         let rendered = String::from_utf8(buf).expect("utf8");
 
-        assert!(rendered.contains("POST https://example.test/v1"), "{rendered}");
+        assert!(
+            rendered.contains("POST https://example.test/v1"),
+            "{rendered}"
+        );
         assert!(rendered.contains("45768B up / 37208B down"), "{rendered}");
         assert!(!rendered.contains("wire request"), "{rendered}");
         assert!(rendered.contains("--wire"), "{rendered}");
@@ -1975,5 +1990,4 @@ mod tests {
         set_color_enabled(false);
         print_model_switched(&serde_json::json!({"active": "claude-sonnet-4-20250514"}));
     }
-
 }

@@ -9,8 +9,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use shore_common::protocol::client_msg::{
-    Cancel, ClientHello, ClientMessage, ClientMessageBody, Command, ImageUpload,
-    Regen,
+    Cancel, ClientHello, ClientMessage, ClientMessageBody, Command, ImageUpload, Regen,
 };
 use shore_common::protocol::error::ErrorCode;
 use shore_common::protocol::server_msg::{

@@ -591,12 +591,10 @@ fn pick_image(
             }
         }
         Some(false) => Ok(vec![]),
-        None => {
-            Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                "no file picker found (install yazi or fzf)",
-            ))
-        }
+        None => Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "no file picker found (install yazi or fzf)",
+        )),
     }
 }
 
@@ -884,8 +882,7 @@ async fn handle_action(
         }
         Action::PickImage(start_dir) => {
             match pick_image(terminal, start_dir.as_deref()) {
-                Ok(paths) if paths.is_empty() => {
-                }
+                Ok(paths) if paths.is_empty() => {}
                 Ok(paths) => {
                     let count = paths.len();
                     app.pending_images.extend(paths);
@@ -1403,8 +1400,7 @@ fn blocks_from_content(
                     blocks.push(Block::Thinking(thinking.clone()));
                 }
             }
-            ContentBlock::RedactedThinking { .. } => {
-            }
+            ContentBlock::RedactedThinking { .. } => {}
             ContentBlock::ToolUse { id, name, input } => {
                 blocks.push(Block::ToolUse {
                     tool_id: id.clone(),

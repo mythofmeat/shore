@@ -50,7 +50,11 @@ impl Tone {
             Self::Bad => Some(Color::Red),
             Self::Thinking => Some(Color::Magenta),
             Self::Speaker(slot) => SPEAKER_PALETTE
-                .get(usize::from(slot).checked_rem(SPEAKER_PALETTE.len()).unwrap_or(0))
+                .get(
+                    usize::from(slot)
+                        .checked_rem(SPEAKER_PALETTE.len())
+                        .unwrap_or(0),
+                )
                 .copied(),
         }
     }
@@ -896,12 +900,15 @@ mod tests {
     #[test]
     fn table_right_aligns_numeric_columns_and_trims_the_line() {
         let out = render(|buf| {
-            let mut table = Table::new(&["model", "calls", "cost"], &[
-                Align::Left,
-                Align::Right,
-                Align::Right,
+            let mut table = Table::new(
+                &["model", "calls", "cost"],
+                &[Align::Left, Align::Right, Align::Right],
+            );
+            table.row(&[
+                "claude-opus-5".to_owned(),
+                "35".to_owned(),
+                "$2.75".to_owned(),
             ]);
-            table.row(&["claude-opus-5".to_owned(), "35".to_owned(), "$2.75".to_owned()]);
             table.row(&["glm-5.2".to_owned(), "7".to_owned(), "$0.00".to_owned()]);
             table.write(buf);
         });
@@ -919,7 +926,10 @@ mod tests {
     #[test]
     fn a_meter_under_the_limit_leaves_the_overflow_zone_blank() {
         let out = render(|buf| Meter::new(5.16, 15.00).write(buf));
-        assert_eq!(out, "\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}    ");
+        assert_eq!(
+            out,
+            "\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}\u{2591}    "
+        );
     }
 
     #[test]
@@ -1070,7 +1080,10 @@ mod tests {
                 "one runaway name must not widen every row: {line:?}"
             );
         }
-        assert!(out.contains('\u{2026}'), "truncation must be visible: {out}");
+        assert!(
+            out.contains('\u{2026}'),
+            "truncation must be visible: {out}"
+        );
     }
 
     #[test]
@@ -1119,7 +1132,10 @@ mod tests {
                 "{tone:?} must resolve to a colour or it is a silent no-op"
             );
         }
-        assert!(Tone::Plain.color().is_none(), "Plain is deliberately uncoloured");
+        assert!(
+            Tone::Plain.color().is_none(),
+            "Plain is deliberately uncoloured"
+        );
     }
 
     #[test]

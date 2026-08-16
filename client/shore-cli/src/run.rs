@@ -120,8 +120,14 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
                 "what the daemon did behind the conversation",
                 &[
                     ("trace calls", "raw model call payloads"),
-                    ("trace heartbeat", "what each heartbeat tick thought and did"),
-                    ("trace events", "the heartbeat timeline: fired, dormant, woke"),
+                    (
+                        "trace heartbeat",
+                        "what each heartbeat tick thought and did",
+                    ),
+                    (
+                        "trace events",
+                        "the heartbeat timeline: fired, dormant, woke",
+                    ),
                     ("trace errors", "errors hit since start, and key fallbacks"),
                     ("trace subagent", "stored sub-agent runs and their tools"),
                 ],
@@ -133,7 +139,10 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
                 "make the daemon do something now, out of band",
                 &[
                     ("debug tick-now", "run a heartbeat tick immediately"),
-                    ("debug keepalive-ping-now", "send a cache keepalive ping now"),
+                    (
+                        "debug keepalive-ping-now",
+                        "send a cache keepalive ping now",
+                    ),
                     ("debug session-activate", "mark the session active"),
                     ("debug status-dormant", "force the heartbeat dormant"),
                     ("debug status-active", "force the heartbeat active"),
@@ -182,13 +191,7 @@ fn wants_json(other: &CliCommand) -> bool {
     match other {
         CliCommand::Model {
             json, subcommand, ..
-        } => {
-            *json
-                || matches!(
-                    subcommand,
-                    Some(ModelCommand::Setting { json: true, .. })
-                )
-        }
+        } => *json || matches!(subcommand, Some(ModelCommand::Setting { json: true, .. })),
         CliCommand::Provider {
             json, subcommand, ..
         } => {
@@ -914,7 +917,9 @@ async fn handle_complete_query(
         kind,
         CompleteKind::ConfigKeys | CompleteKind::ConfigSections | CompleteKind::ConfigValues
     ) {
-        let _ignored = conn.send_command("config_schema", serde_json::json!({})).await?;
+        let _ignored = conn
+            .send_command("config_schema", serde_json::json!({}))
+            .await?;
         let data = recv_command_data(&mut conn).await?;
         print_config_completions(kind, arg, &data);
         return Ok(());
@@ -1189,10 +1194,7 @@ fn resolve_editor(visual: Option<String>, editor: Option<String>) -> String {
 }
 
 fn edit_message_in_editor() -> Result<String, Box<dyn std::error::Error>> {
-    let editor = resolve_editor(
-        std::env::var("VISUAL").ok(),
-        std::env::var("EDITOR").ok(),
-    );
+    let editor = resolve_editor(std::env::var("VISUAL").ok(), std::env::var("EDITOR").ok());
 
     let tmp = tempfile::Builder::new()
         .prefix("shore-")

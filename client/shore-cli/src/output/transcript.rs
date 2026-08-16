@@ -302,8 +302,7 @@ fn write_log_with_boundary(
 
         render_message_content(out, content_blocks, content, is_tool_result_msg, filter);
 
-        if role_str == "system" && use_color() {
-        }
+        if role_str == "system" && use_color() {}
 
         if let Some(imgs) = images {
             for img in imgs {

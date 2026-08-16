@@ -47,9 +47,7 @@ fn warnings_for<'text>(warnings: &'text [String], subject: &str) -> Vec<&'text s
 fn unattached<'text>(warnings: &'text [String], subjects: &[String]) -> Vec<&'text str> {
     warnings
         .iter()
-        .filter(|w| {
-            quoted_subject(w).is_none_or(|subject| !subjects.iter().any(|s| s == subject))
-        })
+        .filter(|w| quoted_subject(w).is_none_or(|subject| !subjects.iter().any(|s| s == subject)))
         .map(String::as_str)
         .collect()
 }
@@ -196,7 +194,8 @@ mod tests {
             .filter_map(|l| {
                 let name = l.split_whitespace().nth(1)?;
                 if name == "internet" || name == "lights" {
-                    l.find(name).map(|byte| l.get(..byte).unwrap_or("").chars().count())
+                    l.find(name)
+                        .map(|byte| l.get(..byte).unwrap_or("").chars().count())
                 } else {
                     None
                 }

@@ -22,7 +22,9 @@ fn is_secret(path: &[String], key: &str) -> bool {
         return true;
     }
     let lowered = key.to_ascii_lowercase();
-    SECRET_KEYS.iter().any(|s| lowered == *s || lowered.ends_with(&format!("_{s}")))
+    SECRET_KEYS
+        .iter()
+        .any(|s| lowered == *s || lowered.ends_with(&format!("_{s}")))
 }
 
 fn redacted(value: &Value) -> String {
@@ -49,11 +51,7 @@ fn scalar(value: &Value) -> String {
             if items.is_empty() {
                 "(none)".to_owned()
             } else {
-                items
-                    .iter()
-                    .map(scalar)
-                    .collect::<Vec<String>>()
-                    .join(", ")
+                items.iter().map(scalar).collect::<Vec<String>>().join(", ")
             }
         }
         Value::Object(_) => "(table)".to_owned(),
@@ -90,9 +88,9 @@ fn has_interesting(value: &Value, default: Option<&Value>, show_all: bool) -> bo
         return true;
     }
     match value {
-        Value::Object(map) => map.iter().any(|(k, v)| {
-            has_interesting(v, default.and_then(|d| d.get(k)), show_all)
-        }),
+        Value::Object(map) => map
+            .iter()
+            .any(|(k, v)| has_interesting(v, default.and_then(|d| d.get(k)), show_all)),
         Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) | Value::Array(_) => {
             differs(value, default)
         }
@@ -183,9 +181,9 @@ fn any_secret(map: &Map<String, Value>, path: &mut Vec<String>) -> bool {
 }
 
 fn write_leaf<W: Write>(out: &mut W, scoped: Option<&str>, value: &Value) {
-    let Some(mut segments) = scoped.map(|key| {
-        key.split('.').map(str::to_owned).collect::<Vec<String>>()
-    }) else {
+    let Some(mut segments) =
+        scoped.map(|key| key.split('.').map(str::to_owned).collect::<Vec<String>>())
+    else {
         empty(out, "nothing configured");
         return;
     };
@@ -236,7 +234,10 @@ pub(crate) fn write_config<W: Write>(out: &mut W, data: &Value, show_all: bool) 
         note(out, "secrets hidden \u{00b7} --json to read them");
     }
     if !show_all && scoped.is_none() {
-        note(out, "showing what differs from defaults \u{00b7} -a for everything");
+        note(
+            out,
+            "showing what differs from defaults \u{00b7} -a for everything",
+        );
     }
 }
 
@@ -284,7 +285,11 @@ fn write_set<W: Write>(out: &mut W, key: &str, data: &Value) {
             &format!(
                 "{} {} only after a daemon restart",
                 restart.join(", "),
-                if restart.len() == 1 { "takes effect" } else { "take effect" }
+                if restart.len() == 1 {
+                    "takes effect"
+                } else {
+                    "take effect"
+                }
             ),
         );
     }
@@ -341,7 +346,10 @@ pub(crate) fn write_schema<W: Write>(out: &mut W, data: &Value, filter: Option<&
     }
     rows.write(out);
     blank(out);
-    note(out, "read one with `shore config get <key>` \u{00b7} write it with `shore config set <key> <value>`");
+    note(
+        out,
+        "read one with `shore config get <key>` \u{00b7} write it with `shore config set <key> <value>`",
+    );
 }
 
 pub(crate) fn write_check<W: Write>(out: &mut W, data: &Value) {
@@ -491,10 +499,7 @@ mod tests {
             .lines()
             .find(|l| l.contains("mcp-whoop"))
             .unwrap_or_default();
-        let mcp_line = out
-            .lines()
-            .find(|l| l.trim() == "mcp:")
-            .unwrap_or_default();
+        let mcp_line = out.lines().find(|l| l.trim() == "mcp:").unwrap_or_default();
         let depth_of = |l: &str| l.len().saturating_sub(l.trim_start().len());
         assert!(
             depth_of(url_line) > depth_of(mcp_line),
@@ -580,7 +585,10 @@ mod tests {
     fn check_reports_problems_as_warnings_and_silence_as_healthy() {
         set_color_enabled(false);
         let mut healthy = Vec::new();
-        write_check(&mut healthy, &json!({"config_dir": "/config", "warnings": []}));
+        write_check(
+            &mut healthy,
+            &json!({"config_dir": "/config", "warnings": []}),
+        );
         let clean = String::from_utf8(healthy).unwrap_or_default();
         assert!(clean.contains("no problems found"), "{clean}");
 
@@ -591,14 +599,20 @@ mod tests {
         );
         let dirty = String::from_utf8(broken).unwrap_or_default();
         assert!(dirty.contains("No chat models configured."), "{dirty}");
-        assert!(dirty.trim_end().lines().last().unwrap_or("").contains('!'), "{dirty}");
+        assert!(
+            dirty.trim_end().lines().last().unwrap_or("").contains('!'),
+            "{dirty}"
+        );
     }
 
     #[test]
     fn a_missing_value_reads_as_unset_not_as_the_word_null() {
         let data = json!({"config": {"defaults": {"model": null}}, "defaults": {}});
         let out = render(&data, true);
-        assert!(!out.contains("null"), "a null must not print as the word null: {out}");
+        assert!(
+            !out.contains("null"),
+            "a null must not print as the word null: {out}"
+        );
         assert!(out.contains("(none)"), "{out}");
     }
 
@@ -609,7 +623,10 @@ mod tests {
             "defaults": {"notifications": {"enabled": true}}
         });
         let out = render(&data, false);
-        assert!(out.contains("keepalive_max"), "a changed key must survive: {out}");
+        assert!(
+            out.contains("keepalive_max"),
+            "a changed key must survive: {out}"
+        );
         assert!(
             !out.contains("notifications"),
             "a subtable matching defaults is noise: {out}"
@@ -626,7 +643,10 @@ mod tests {
             "defaults": {}
         });
         let out = render(&data, true);
-        assert!(!out.contains('{'), "a table array must not fall back to json: {out}");
+        assert!(
+            !out.contains('{'),
+            "a table array must not fall back to json: {out}"
+        );
         assert!(out.contains("brainwife"), "{out}");
         assert!(out.contains("spare"), "{out}");
     }
@@ -670,7 +690,10 @@ mod tests {
     #[test]
     fn a_set_shows_the_old_value_beside_the_new_one() {
         let out = render(&set_payload(), false);
-        assert!(out.contains("12h"), "the previous value orients the reader: {out}");
+        assert!(
+            out.contains("12h"),
+            "the previous value orients the reader: {out}"
+        );
         assert!(out.contains("6h"), "{out}");
         assert!(out.contains("config.toml"), "say which file moved: {out}");
     }
@@ -707,7 +730,10 @@ mod tests {
             ],
         );
         let out = render(&data, false);
-        assert!(out.contains("shore model reset"), "point at the way out: {out}");
+        assert!(
+            out.contains("shore model reset"),
+            "point at the way out: {out}"
+        );
     }
 
     #[test]
@@ -721,7 +747,10 @@ mod tests {
             ],
         );
         let out = render(&data, false);
-        assert!(!out.contains("tk_9f3c1d55aa"), "a token must not be echoed: {out}");
+        assert!(
+            !out.contains("tk_9f3c1d55aa"),
+            "a token must not be echoed: {out}"
+        );
         assert!(out.contains("(set, hidden)"), "{out}");
     }
 
@@ -771,7 +800,10 @@ mod tests {
     #[test]
     fn no_set_or_schema_line_ships_trailing_whitespace() {
         let data = with(set_payload(), &[("restart_required", json!(["[daemon]"]))]);
-        for line in render(&data, false).lines().chain(render_schema(&schema_payload(), None).lines()) {
+        for line in render(&data, false)
+            .lines()
+            .chain(render_schema(&schema_payload(), None).lines())
+        {
             assert!(!line.ends_with(' '), "trailing whitespace: {line:?}");
         }
     }

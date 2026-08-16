@@ -2,9 +2,7 @@ use std::io::{self, Write};
 
 use serde_json::Value;
 
-use super::vocab::{
-    Align, Mark, Rows, Table, Tone, blank, count, empty, hidden, note, section,
-};
+use super::vocab::{Align, Mark, Rows, Table, Tone, blank, count, empty, hidden, note, section};
 
 fn text<'value>(row: &'value Value, key: &str) -> &'value str {
     row.get(key).and_then(Value::as_str).unwrap_or("")
@@ -31,11 +29,7 @@ fn scalar(value: &Value) -> String {
         Value::String(s) => s.clone(),
         Value::Bool(b) => b.to_string(),
         Value::Number(n) => n.to_string(),
-        Value::Array(items) => items
-            .iter()
-            .map(scalar)
-            .collect::<Vec<String>>()
-            .join(", "),
+        Value::Array(items) => items.iter().map(scalar).collect::<Vec<String>>().join(", "),
         Value::Object(_) => "(table)".to_owned(),
     }
 }
@@ -136,11 +130,10 @@ pub(crate) fn write_model_settings<W: Write>(out: &mut W, data: &Value) {
             .and_then(Value::as_str)
             .is_none_or(|state| state != "ignored")
     };
-    let mut table = Table::new(&["setting", "value", "from"], &[
-        Align::Left,
-        Align::Left,
-        Align::Left,
-    ]);
+    let mut table = Table::new(
+        &["setting", "value", "from"],
+        &[Align::Left, Align::Left, Align::Left],
+    );
     let mut ignored = 0_usize;
     for (key, value) in effective {
         let (source, _tone) = source_of(key, data);
@@ -392,14 +385,18 @@ mod tests {
     #[test]
     fn the_source_column_lines_up_across_roles() {
         let out = render(|b| write_model_list(b, &models()));
-        let columns: Vec<usize> = ["character", "inherits chat", "defaults.background.compaction"]
-            .iter()
-            .filter_map(|source| {
-                let line = out.lines().find(|l| l.contains(*source))?;
-                line.find(source)
-                    .map(|byte| line.get(..byte).unwrap_or("").chars().count())
-            })
-            .collect();
+        let columns: Vec<usize> = [
+            "character",
+            "inherits chat",
+            "defaults.background.compaction",
+        ]
+        .iter()
+        .filter_map(|source| {
+            let line = out.lines().find(|l| l.contains(*source))?;
+            line.find(source)
+                .map(|byte| line.get(..byte).unwrap_or("").chars().count())
+        })
+        .collect();
         assert_eq!(columns.len(), 3, "all three sources must render: {out}");
         assert!(
             columns.windows(2).all(|w| w.first() == w.get(1)),
@@ -415,7 +412,10 @@ mod tests {
         }
         let out = render(|b| write_model_list(b, &data));
         assert!(out.contains("deepseek-v4-pro"), "{out}");
-        assert!(!out.contains("in use"), "an empty roles block must not print: {out}");
+        assert!(
+            !out.contains("in use"),
+            "an empty roles block must not print: {out}"
+        );
     }
 
     #[test]
@@ -462,7 +462,10 @@ mod tests {
     #[test]
     fn the_active_model_is_marked_once_not_twice() {
         let out = render(|b| write_model_list(b, &models()));
-        let catalog = out.split("\u{2500}\u{2500} models").nth(1).unwrap_or_default();
+        let catalog = out
+            .split("\u{2500}\u{2500} models")
+            .nth(1)
+            .unwrap_or_default();
         let row = catalog
             .lines()
             .find(|l| l.contains("deepseek-v4-pro"))
@@ -477,7 +480,10 @@ mod tests {
     #[test]
     fn hidden_models_use_the_one_agreed_phrasing() {
         let out = render(|b| write_model_list(b, &models()));
-        assert!(out.contains("440 hidden \u{00b7} --all to include"), "{out}");
+        assert!(
+            out.contains("440 hidden \u{00b7} --all to include"),
+            "{out}"
+        );
     }
 
     #[test]

@@ -47,10 +47,7 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
         0
     };
 
-    let mut constraints = vec![
-        Constraint::Min(3),
-        Constraint::Length(input_height),
-    ];
+    let mut constraints = vec![Constraint::Min(3), Constraint::Length(input_height)];
     if show_value_editor || show_completions {
         constraints.push(Constraint::Length(completion_height));
     } else if show_alt_picker {
@@ -853,10 +850,7 @@ fn draw_fullscreen_image(frame: &mut Frame, app: &App, area: Rect) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(1),
-            Constraint::Length(1),
-        ])
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(area);
 
     let img_area = chunks[0];
