@@ -746,8 +746,9 @@ pub(crate) enum ModelCommand {
     /// max_output_tokens, cache_ttl, cache_keepalive, sdk,
     /// replay_prior_thinking and max_tool_iterations.
     ///
-    /// sdk takes anthropic, openai, gemini or zai, which forces a wire shape
-    /// on a discovered model whose provider catalog labelled it wrong.
+    /// sdk takes anthropic, openai, openrouter, gemini, zai, deepseek or
+    /// moonshot, which forces a wire shape on a discovered model whose
+    /// provider catalog labelled it wrong.
     ///
     /// The vendor knobs openrouter_provider, gemini_generation,
     /// zai_clear_thinking and zai_subscription are settable per model too. A

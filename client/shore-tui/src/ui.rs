@@ -2874,6 +2874,52 @@ mod scenario_tests {
     }
 
     #[test]
+    fn setting_sdk_picker_offers_every_daemon_sdk() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.mode = InputMode::Normal;
+
+        open_setting_menu_with_snapshot(&mut h);
+        h.type_str("sdk");
+        h.press(KeyCode::Enter);
+
+        for sdk in [
+            "anthropic",
+            "openai",
+            "openrouter",
+            "gemini",
+            "zai",
+            "deepseek",
+            "moonshot",
+        ] {
+            assert!(
+                h.app
+                    .completion
+                    .candidates
+                    .iter()
+                    .any(|candidate| candidate == sdk),
+                "sdk picker is missing {sdk}; it must list every variant in SDK_VARIANTS \
+                 in daemon/src/config/models.ts"
+            );
+        }
+    }
+
+    #[test]
+    fn setting_sdk_picker_dispatches_moonshot() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.input.mode = InputMode::Normal;
+
+        open_setting_menu_with_snapshot(&mut h);
+        h.type_str("sdk");
+        h.press(KeyCode::Enter);
+        h.type_str("moonshot");
+        let action = h.press_action(KeyCode::Enter);
+
+        assert_set_model_setting(action, "sdk", serde_json::json!("moonshot"));
+    }
+
+    #[test]
     fn setting_reset_picker_dispatches_reset_command() {
         let mut h = Harness::new();
         h.app.connection_status = ConnectionStatus::Connected;

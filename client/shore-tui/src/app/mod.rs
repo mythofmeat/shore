@@ -930,6 +930,17 @@ impl App {
         "zai_subscription",
     ];
 
+    const SDK_VARIANTS: &'static [&'static str] = &[
+        "anthropic",
+        "openai",
+        "openrouter",
+        "gemini",
+        "zai",
+        "deepseek",
+        "moonshot",
+        "reset",
+    ];
+
     fn is_setting_key(key: &str) -> bool {
         Self::SETTING_KEYS.contains(&key)
     }
@@ -1551,10 +1562,7 @@ impl App {
                 self.completion.candidates = candidates;
             }
             "setting:sdk" => {
-                self.completion.candidates = Self::filtered_presets(
-                    &["anthropic", "openai", "gemini", "zai", "reset"],
-                    &filter,
-                );
+                self.completion.candidates = Self::filtered_presets(Self::SDK_VARIANTS, &filter);
             }
             "setting:reset" => {
                 self.completion.candidates = Self::SETTING_KEYS

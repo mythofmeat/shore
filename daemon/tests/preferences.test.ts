@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import fixture from "./config_fixtures/preferences.json" with { type: "json" };
 
-import { catalogFromSections, type ResolvedModel } from "../src/config/models.ts";
+import { catalogFromSections, defaultSdk, type ResolvedModel } from "../src/config/models.ts";
 import {
   ProviderRegistry,
   ProviderRegistryError,
@@ -512,6 +512,26 @@ describe("resolveSamplerSettings", () => {
     const model = findStaticModel(catalog, "anthropic", "claude-opus-4-6") as ResolvedModel;
     expect(applySamplerOverlay(model, { sdk: "nope" }).sdk).toBe("anthropic");
     expect(applySamplerOverlay(model, { sdk: "gemini" }).sdk).toBe("gemini");
+  });
+
+  test("a saved sdk beats the one discovery guessed for a gateway model", () => {
+    const catalog = catalogFromSections(
+      Bun.TOML.parse(STATIC_CHAT) as Record<string, unknown>,
+      undefined,
+      undefined,
+    );
+    const model = findStaticModel(catalog, "anthropic", "claude-opus-4-6") as ResolvedModel;
+    const gateway: ResolvedModel = {
+      ...model,
+      name: "kimi-k3",
+      qualifiedName: "opencode-go:kimi-k3",
+      providerKey: "opencode-go",
+      sdk: defaultSdk("opencode-go"),
+    };
+
+    expect(gateway.sdk).toBe("openai");
+    expect(applySamplerOverlay(gateway, { sdk: "moonshot" }).sdk).toBe("moonshot");
+    expect(applySamplerOverlay(gateway, { sdk: "moonshotai" }).sdk).toBe("moonshot");
   });
 
   test('reasoning_effort "off" survives the overlay', () => {

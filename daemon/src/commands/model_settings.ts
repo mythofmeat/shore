@@ -3,7 +3,7 @@ import {
   SAMPLER_KEYS,
   type SamplerSettings,
 } from "../config/preferences.ts";
-import { parseCacheKeepalive, sdkFromWire, type Sdk } from "../config/models.ts";
+import { parseCacheKeepalive, sdkFromWire, SDK_VARIANTS, type Sdk } from "../config/models.ts";
 import { parseThinkingReplay } from "../config/app.ts";
 import {
   applicability,
@@ -60,7 +60,7 @@ const PARSERS: Record<string, (v: unknown) => Parsed> = {
     if ("error" in raw) return raw;
     const s = raw.value as string;
     return sdkFromWire(s) === undefined
-      ? { error: `sdk must be one of "anthropic", "openai", "gemini", "zai"; got ${show(s)}` }
+      ? { error: `sdk must be one of ${SDK_VARIANTS.map(show).join(", ")}; got ${show(s)}` }
       : { value: s };
   },
 
