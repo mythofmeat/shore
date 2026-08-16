@@ -422,6 +422,13 @@ pub(crate) enum CliCommand {
         /// only the prompt files and the memory index.
         keep_turns: Option<u32>,
 
+        /// Throw away a paused checkpoint and summarize from scratch. Use this
+        /// when a pass stopped partway — out of quota, provider down, memory
+        /// files edited since — and `shore compact` keeps reporting paused. The
+        /// memory it already wrote stays; those turns get summarized again.
+        #[arg(long)]
+        restart: bool,
+
         /// Output raw JSON
         #[arg(long)]
         json: bool,
@@ -1556,12 +1563,20 @@ fn provider_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)
 
 fn compact_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     use serde_json::{Map, Value, json};
-    let CliCommand::Compact { keep_turns, .. } = cmd else {
+    let CliCommand::Compact {
+        keep_turns,
+        restart,
+        ..
+    } = cmd
+    else {
         return None;
     };
     let mut args = Map::new();
     if let Some(n) = keep_turns {
         let _ignored = args.insert("keep_turns".into(), json!(n));
+    }
+    if *restart {
+        let _ignored = args.insert("restart".into(), json!(true));
     }
     Some(("compact", Value::Object(args)))
 }
@@ -2338,16 +2353,19 @@ mod tests {
 
     #[test]
     fn parse_compact() {
-        for (args, expected) in [
-            (&["compact"][..], None),
-            (&["compact", "0"][..], Some(0)),
-            (&["compact", "8"][..], Some(8)),
+        for (args, expected, expected_restart) in [
+            (&["compact"][..], None, false),
+            (&["compact", "0"][..], Some(0), false),
+            (&["compact", "8"][..], Some(8), false),
+            (&["compact", "--restart"][..], None, true),
+            (&["compact", "0", "--restart"][..], Some(0), true),
         ] {
             let cli = parse(args);
             assert_variant!(
                 &cli.command,
-                CliCommand::Compact { keep_turns, .. } => {
+                CliCommand::Compact { keep_turns, restart, .. } => {
                     assert_eq!(*keep_turns, expected, "{args:?}");
+                    assert_eq!(*restart, expected_restart, "{args:?}");
                 }
             );
         }
@@ -3788,22 +3806,38 @@ mod tests {
     fn compact_maps_to_compact_command() {
         let cmd = CliCommand::Compact {
             keep_turns: None,
+            restart: false,
             json: false,
         };
         let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "compact");
         assert!(args.get("keep_turns").is_none());
+        assert!(args.get("restart").is_none());
     }
 
     #[test]
     fn compact_with_keep_turns_includes_field() {
         let cmd = CliCommand::Compact {
             keep_turns: Some(0),
+            restart: false,
             json: false,
         };
         let (name, args) = to_swp_command(&cmd, None).unwrap();
         assert_eq!(name, "compact");
         assert_eq!(arg(&args, "keep_turns"), 0);
+    }
+
+    #[test]
+    fn compact_restart_asks_the_daemon_to_start_over() {
+        let cmd = CliCommand::Compact {
+            keep_turns: Some(0),
+            restart: true,
+            json: false,
+        };
+        let (name, args) = to_swp_command(&cmd, None).unwrap();
+        assert_eq!(name, "compact");
+        assert_eq!(arg(&args, "keep_turns"), 0);
+        assert_eq!(arg(&args, "restart"), true);
     }
 
     #[test]
@@ -3953,6 +3987,7 @@ mod tests {
             },
             CliCommand::Compact {
                 keep_turns: None,
+                restart: false,
                 json: false,
             },
             CliCommand::Config {

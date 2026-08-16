@@ -48,6 +48,7 @@ export interface CompactionRunDeps {
 export interface CompactionRunOptions {
   dryRun?: boolean;
   keepTurnsOverride?: number;
+  restart?: boolean;
   retainTrailingAutonomous?: boolean;
 }
 
@@ -103,6 +104,7 @@ export async function runCompactionPass(
         ),
         ...(resolved.markdownStore === undefined ? {} : { markdownStore: resolved.markdownStore }),
         dryRun: options.dryRun ?? false,
+        restart: options.restart ?? false,
         ...(options.keepTurnsOverride === undefined
           ? {}
           : { keepTurnsOverride: options.keepTurnsOverride }),

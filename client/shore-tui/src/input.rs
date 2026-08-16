@@ -851,11 +851,13 @@ fn parse_command(app: &mut App, input: &str) -> Action {
 
         "compact" => {
             let mut args = serde_json::json!({});
-            if !arg.is_empty() {
-                if let Ok(n) = arg.parse::<u32>() {
+            for word in arg.split_whitespace() {
+                if word == "restart" {
+                    args["restart"] = serde_json::json!(true);
+                } else if let Ok(n) = word.parse::<u32>() {
                     args["keep_turns"] = serde_json::json!(n)
                 } else {
-                    app.set_status("usage: :compact [keep_turns]");
+                    app.set_status("usage: :compact [keep_turns] [restart]");
                     return Action::Redraw;
                 }
             }

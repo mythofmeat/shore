@@ -220,6 +220,76 @@ test("a durable archive that lost its checkpoint to a crash is recognised instea
   await expect(readFile(checkpointFile, "utf8")).rejects.toThrow();
 });
 
+test("a checkpoint the workspace has moved past stays wedged until a restart throws it away", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shore-compact-wedged-"));
+  cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const dataDir = join(root, "data");
+  const characterDir = join(dataDir, "ada");
+  const workspace = join(root, "workspace");
+  await mkdir(join(workspace, "memory"), { recursive: true });
+  await mkdir(characterDir, { recursive: true });
+  const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
+
+  const messages = conversation();
+  const activeContent = messages.map(activeLine).join("\n") + "\n";
+  await writeFile(join(characterDir, "active.jsonl"), activeContent, "utf8");
+
+  const tools: CompactionTools = {
+    workspaceDir: workspace,
+    configDir: "",
+    dispatch: async (_name, input) => {
+      const edit = input as { path: string; content: string };
+      const path = join(workspace, edit.path);
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, edit.content, "utf8");
+      return { output: "written", isError: false };
+    },
+    ensureWorkspaceGitRepo: async () => {},
+    gitCommitAll: async () => false,
+  };
+  const editTurn = response("tool_use", [
+    {
+      type: "tool_use",
+      id: "write-1",
+      name: "edit",
+      input: { path: "memory/fact.md", content: "remembered\n" },
+    },
+  ]);
+  const run = (llm: CompactionLlm, restart = false) =>
+    compact(
+      {
+        ...options(dataDir, workspace, memoryStore, messages, activeContent, tools, llm),
+        restart,
+      },
+      { keepRecentTurns: 1 },
+    );
+
+  const paused = await run(
+    scripted([editTurn, new Error("429 Monthly usage limit reached. Resets in 10 days.")]),
+  );
+  expect(paused.kind).toBe("paused");
+
+  await writeFile(join(workspace, "memory/fact.md"), "remembered, then reworded\n", "utf8");
+
+  const wedgedLlm = scripted([]);
+  const wedged = await run(wedgedLlm);
+  expect(wedged).toMatchObject({
+    kind: "paused",
+    reason: "workspace_conflict",
+    detail: "memory/fact.md",
+  });
+  expect(wedgedLlm.calls).toBe(0);
+  expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).toBe(activeContent);
+
+  const restartedLlm = scripted([editTurn, response("end_turn", [{ type: "text", text: "done" }])]);
+  const restarted = await run(restartedLlm, true);
+
+  expect(restarted.kind).toBe("compacted");
+  expect(restartedLlm.calls).toBe(2);
+  expect(await readFile(join(characterDir, "active.jsonl"), "utf8")).not.toBe(activeContent);
+  await expect(readFile(join(characterDir, "compaction-checkpoint.json"), "utf8")).rejects.toThrow();
+});
+
 function options(
   dataDir: string,
   workspace: string,

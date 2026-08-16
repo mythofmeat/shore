@@ -31,12 +31,15 @@ export interface CompactContext {
 
 export function parseCompactArgs(args: Args): {
   dryRun: boolean;
+  restart: boolean;
   keepTurnsOverride: number | undefined;
 } {
   const dry = args["dry_run"];
+  const restart = args["restart"];
   const keep = args["keep_turns"];
   return {
     dryRun: typeof dry === "boolean" ? dry : false,
+    restart: typeof restart === "boolean" ? restart : false,
     keepTurnsOverride:
       typeof keep === "number" && Number.isSafeInteger(keep) && keep >= 0 ? keep : undefined,
   };
@@ -47,7 +50,7 @@ export async function compact(
   ctx: CompactContext,
   args: Args,
 ): Promise<unknown> {
-  const { dryRun, keepTurnsOverride } = parseCompactArgs(args);
+  const { dryRun, restart, keepTurnsOverride } = parseCompactArgs(args);
   const character = engine.characterName;
 
   let outcome: CompactionOutcome | undefined;
@@ -60,6 +63,7 @@ export async function compact(
       },
       {
         dryRun,
+        restart,
         ...(keepTurnsOverride === undefined ? {} : { keepTurnsOverride }),
       },
     );
@@ -148,6 +152,11 @@ export async function buildCompactionResponse(
   }
 
   if (outcome.kind === "paused") {
+    console.warn(
+      `shore: compaction paused for ${character} — conversation NOT archived ` +
+        `(checkpoint=${outcome.checkpointId}, reason=${outcome.reason}, ` +
+        `detail=${outcome.detail ?? "none"}, tool_rounds=${outcome.toolRounds})`,
+    );
     return {
       status: "paused",
       character,
@@ -157,6 +166,7 @@ export async function buildCompactionResponse(
       tool_rounds: outcome.toolRounds,
       tools_called: outcome.toolsCalled,
       reason: outcome.reason,
+      detail: outcome.detail ?? null,
       resume_at: outcome.resumeAt ?? null,
     };
   }

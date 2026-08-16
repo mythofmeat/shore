@@ -119,6 +119,43 @@
       },
       "dry_run": false,
       "keep_turns": null
+    },
+    {
+      "note": "restart true",
+      "args": {
+        "restart": true
+      },
+      "dry_run": false,
+      "restart": true,
+      "keep_turns": null
+    },
+    {
+      "note": "restart alongside keep_turns 0",
+      "args": {
+        "keep_turns": 0,
+        "restart": true
+      },
+      "dry_run": false,
+      "restart": true,
+      "keep_turns": 0
+    },
+    {
+      "note": "restart as the string \"true\"",
+      "args": {
+        "restart": "true"
+      },
+      "dry_run": false,
+      "restart": false,
+      "keep_turns": null
+    },
+    {
+      "note": "restart as null",
+      "args": {
+        "restart": null
+      },
+      "dry_run": false,
+      "restart": false,
+      "keep_turns": null
     }
   ],
   "guards": [

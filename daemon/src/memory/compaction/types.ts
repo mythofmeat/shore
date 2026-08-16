@@ -56,6 +56,7 @@ export interface PausedCompactionResult {
   toolRounds: number;
   toolsCalled: string[];
   reason: string;
+  detail?: string;
   resumeAt?: string;
 }
 

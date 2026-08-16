@@ -1727,6 +1727,7 @@ mod tests {
     async fn compact_sends_command() {
         let cli = test_cli(CliCommand::Compact {
             keep_turns: None,
+            restart: false,
             json: false,
         });
         let received = execute_with_mock(cli, command_response("compact")).await;

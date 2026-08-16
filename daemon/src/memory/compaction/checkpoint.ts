@@ -36,6 +36,7 @@ export interface CompactionCheckpoint {
   updatedAt: string;
   state: "running" | "paused";
   pauseReason?: CompactionPauseReason;
+  pauseDetail?: string;
   resumeAt?: string;
   sourceContent: string;
   sourceHash: string;

@@ -15,6 +15,7 @@
 #   .claude/skills/run-shore-cli/preview.sh models     # just shore model
 #   .claude/skills/run-shore-cli/preview.sh status     # just shore status
 #   .claude/skills/run-shore-cli/preview.sh errors     # just shore trace errors
+#   .claude/skills/run-shore-cli/preview.sh compact    # just shore compact
 #
 # Add a new preview by writing another `#[ignore]`-d `render_preview_*` test in
 # client/shore-cli/src/output/{transcript.rs,styling.rs,catalog.rs,status.rs,commands.rs}; it is picked up here
@@ -27,8 +28,9 @@ case "${1:-all}" in
   models) filter=render_preview_models ;;
   status) filter=render_preview_status ;;
   errors) filter=render_preview_errors ;;
+  compact) filter=render_preview_compaction ;;
   all|"") filter=render_preview ;;
-  *) echo "usage: preview.sh [log|stream|models|status|errors|all]" >&2; exit 2 ;;
+  *) echo "usage: preview.sh [log|stream|models|status|errors|compact|all]" >&2; exit 2 ;;
 esac
 
 # --test-threads=1 is REQUIRED: COLOR_ENABLED and the streaming chunk state are

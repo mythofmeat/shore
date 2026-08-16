@@ -1210,41 +1210,151 @@ fn print_character_info(data: &serde_json::Value) {
 fn print_compact_result(data: &serde_json::Value) {
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    let width = term_width();
+    write_compact_result(&mut out, data, term_width());
+}
 
+fn planned_turns(data: &serde_json::Value) -> u64 {
+    data["compacted_turns"]
+        .as_u64()
+        .or_else(|| data["turn_count"].as_u64())
+        .unwrap_or(0)
+}
+
+fn string_list(data: &serde_json::Value, key: &str) -> Vec<String> {
+    data[key]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn pause_reason_text(data: &serde_json::Value) -> String {
+    let reason = data["reason"].as_str().unwrap_or("unknown");
+    let detail = data["detail"].as_str().filter(|d| !d.is_empty());
+    if reason == "workspace_conflict" {
+        return match detail {
+            Some(path) => format!("{path} changed since the pass wrote it"),
+            None => "memory files changed since the pass wrote them".to_owned(),
+        };
+    }
+    let named = match reason {
+        "source_conflict" => "the conversation changed since the pass started",
+        "iteration_limit" => "hit its tool-round ceiling",
+        "budget" => "blocked by a usage budget",
+        "provider" => "the model provider failed",
+        other => other,
+    };
+    match detail {
+        Some(extra) => format!("{named} ({extra})"),
+        None => named.to_owned(),
+    }
+}
+
+fn kept_row(out: &mut impl Write, data: &serde_json::Value) {
+    let turns = planned_turns(data);
+    write_row(
+        out,
+        "Turns",
+        &format!("{turns} planned, all still in the conversation"),
+    );
+}
+
+pub(crate) fn write_compact_result<W: Write>(out: &mut W, data: &serde_json::Value, width: usize) {
     let status = data["status"].as_str().unwrap_or("?");
-    let suffix = if status == "dry_run" { "dry run" } else { "" };
-    write_section_header(&mut out, "Compaction", suffix, width);
+    let suffix = match status {
+        "dry_run" => "dry run",
+        "compacted" => "",
+        "paused" => "paused",
+        "no_memory_writes" => "nothing written",
+        "truncated" => "cut off",
+        other => other,
+    };
+    write_section_header(out, "Compaction", suffix, width);
 
     let char_name = data["character"].as_str().unwrap_or("?");
-    write_row(&mut out, "Character", char_name);
+    write_row(out, "Character", char_name);
 
-    if status == "dry_run" {
-        let would = data["would_write_files"].as_u64().unwrap_or(0);
-        write_row(&mut out, "Would write", &format!("{would} files"));
-        let turns = data["compacted_turns"]
-            .as_u64()
-            .or_else(|| data["turn_count"].as_u64())
-            .unwrap_or(0);
-        let retained_turns = data["retained_turns"].as_u64().unwrap_or(0);
-        write_row(
-            &mut out,
-            "Turns",
-            &format!("{turns} compacted, {retained_turns} retained"),
-        );
-    } else {
-        let files = data["memory_files_written"].as_array().map_or(0, Vec::len);
-        write_row(&mut out, "Memory files", &format!("{files} written"));
-        let turns = data["compacted_turns"]
-            .as_u64()
-            .or_else(|| data["turn_count"].as_u64())
-            .unwrap_or(0);
-        let retained_turns = data["retained_turns"].as_u64().unwrap_or(0);
-        write_row(
-            &mut out,
-            "Turns",
-            &format!("{turns} compacted, {retained_turns} retained"),
-        );
+    match status {
+        "dry_run" => {
+            let would = data["would_write_files"].as_u64().unwrap_or(0);
+            write_row(out, "Would write", &format!("{would} files"));
+            let retained_turns = data["retained_turns"].as_u64().unwrap_or(0);
+            write_row(
+                out,
+                "Turns",
+                &format!(
+                    "{} compacted, {retained_turns} retained",
+                    planned_turns(data)
+                ),
+            );
+        }
+        "compacted" => {
+            let files = data["memory_files_written"].as_array().map_or(0, Vec::len);
+            write_row(out, "Memory files", &format!("{files} written"));
+            let retained_turns = data["retained_turns"].as_u64().unwrap_or(0);
+            write_row(
+                out,
+                "Turns",
+                &format!(
+                    "{} compacted, {retained_turns} retained",
+                    planned_turns(data)
+                ),
+            );
+        }
+        "paused" => {
+            write_row_colored(out, "Outcome", "nothing archived", Tone::Warn);
+            write_row(out, "Reason", &pause_reason_text(data));
+            let rounds = data["tool_rounds"].as_u64().unwrap_or(0);
+            let id = data["checkpoint_id"].as_str().unwrap_or("?");
+            write_row(out, "Checkpoint", &format!("{id} ({rounds} tool rounds)"));
+            if let Some(resume_at) = data["resume_at"].as_str() {
+                write_row(out, "Retry after", resume_at);
+            }
+            kept_row(out, data);
+            write_row(out, "Start over", "shore compact --restart");
+        }
+        "no_memory_writes" => {
+            write_row_colored(
+                out,
+                "Outcome",
+                "the pass wrote no memory, so nothing was archived",
+                Tone::Warn,
+            );
+            let rounds = data["tool_rounds"].as_u64().unwrap_or(0);
+            write_row(out, "Tool rounds", &rounds.to_string());
+            let rejected = string_list(data, "rejected_paths");
+            if !rejected.is_empty() {
+                write_row(out, "Rejected", &rejected.join(", "));
+            }
+            if data["max_rounds_hit"].as_bool().unwrap_or(false) {
+                write_row_colored(out, "Note", "hit the tool-round ceiling", Tone::Warn);
+            }
+            kept_row(out, data);
+        }
+        "truncated" => {
+            write_row_colored(
+                out,
+                "Outcome",
+                "cut off at the token ceiling, so nothing was archived",
+                Tone::Warn,
+            );
+            let truncated = data["truncated_turns"].as_u64().unwrap_or(0);
+            let plural = if truncated == 1 { "" } else { "s" };
+            write_row(out, "Truncated", &format!("{truncated} model turn{plural}"));
+            let partial = string_list(data, "partial_writes");
+            if !partial.is_empty() {
+                write_row(out, "Partial", &partial.join(", "));
+            }
+            kept_row(out, data);
+        }
+        _ => {
+            write_row_colored(out, "Outcome", status, Tone::Warn);
+            kept_row(out, data);
+        }
     }
 
     _ = writeln!(out);
@@ -1974,5 +2084,240 @@ mod tests {
     fn print_model_switched_shows_abbreviated_name() {
         set_color_enabled(false);
         print_model_switched(&serde_json::json!({"active": "claude-sonnet-4-20250514"}));
+    }
+
+    #[test]
+    #[ignore = "preview: .claude/skills/run-shore-cli/preview.sh compact"]
+    fn render_preview_compaction() {
+        let cases = [
+            (
+                "COMPACTED (shore compact)",
+                serde_json::json!({
+                    "status": "compacted",
+                    "character": "qifei",
+                    "memory_files_written": ["MEMORY.md", "USER.md", "memory/keepsakes.md"],
+                    "compacted_turns": 13,
+                    "retained_count": 8,
+                    "retained_turns": 4,
+                    "tool_rounds": 3,
+                }),
+            ),
+            (
+                "PAUSED ON A WEDGED CHECKPOINT (shore compact 0)",
+                serde_json::json!({
+                    "status": "paused",
+                    "character": "qifei",
+                    "checkpoint_id": "29e55e7b-155b-49cc-ac03-ab3a3a130f07",
+                    "compacted_turns": 13,
+                    "tool_rounds": 2,
+                    "reason": "workspace_conflict",
+                    "detail": "memory/core/the_wipe.md",
+                    "resume_at": null,
+                }),
+            ),
+            (
+                "PAUSED BY THE PROVIDER (shore compact)",
+                serde_json::json!({
+                    "status": "paused",
+                    "character": "qifei",
+                    "checkpoint_id": "29e55e7b-155b-49cc-ac03-ab3a3a130f07",
+                    "compacted_turns": 13,
+                    "tool_rounds": 2,
+                    "reason": "429 Monthly usage limit reached. Resets in 10 days.",
+                    "detail": null,
+                    "resume_at": "2026-08-26T00:00:00Z",
+                }),
+            ),
+            (
+                "NOTHING WRITTEN (shore compact)",
+                serde_json::json!({
+                    "status": "no_memory_writes",
+                    "character": "qifei",
+                    "compacted_turns": 13,
+                    "tool_rounds": 4,
+                    "rejected_paths": ["../escape.md"],
+                    "max_rounds_hit": true,
+                }),
+            ),
+            (
+                "CUT OFF (shore compact)",
+                serde_json::json!({
+                    "status": "truncated",
+                    "character": "qifei",
+                    "compacted_turns": 13,
+                    "tool_rounds": 2,
+                    "truncated_turns": 1,
+                    "partial_writes": ["MEMORY.md"],
+                }),
+            ),
+            (
+                "DRY RUN",
+                serde_json::json!({
+                    "status": "dry_run",
+                    "character": "qifei",
+                    "would_write_files": 3,
+                    "compacted_turns": 13,
+                    "retained_count": 8,
+                    "retained_turns": 4,
+                    "tool_rounds": 2,
+                }),
+            ),
+        ];
+
+        let mut stdout = io::stdout();
+        for (label, data) in cases {
+            set_color_enabled(true);
+            let mut buf = Vec::new();
+            write_compact_result(&mut buf, &data, 78);
+            set_color_enabled(false);
+            let _ignored = stdout.write_all(format!("\n----- {label} -----\n").as_bytes());
+            _ = stdout.write_all(&buf);
+            _ = stdout.write_all(b"----- end -----\n");
+        }
+        _ = stdout.flush();
+    }
+
+    fn rendered_compaction(data: &serde_json::Value) -> String {
+        set_color_enabled(false);
+        let mut buf = Vec::new();
+        write_compact_result(&mut buf, data, 80);
+        String::from_utf8(buf).expect("utf8")
+    }
+
+    #[test]
+    fn a_completed_compaction_reports_what_it_wrote_and_kept() {
+        let rendered = rendered_compaction(&serde_json::json!({
+            "status": "compacted",
+            "character": "qifei",
+            "memory_files_written": ["MEMORY.md", "memory/keepsakes.md"],
+            "compacted_turns": 13,
+            "retained_count": 8,
+            "retained_turns": 4,
+            "tool_rounds": 3,
+        }));
+
+        assert!(rendered.contains("2 written"), "{rendered}");
+        assert!(rendered.contains("13 compacted, 4 retained"), "{rendered}");
+        assert!(
+            !rendered.contains("still in the conversation"),
+            "a real compaction must not claim its turns were kept: {rendered}"
+        );
+    }
+
+    #[test]
+    fn a_paused_compaction_says_nothing_was_archived_and_how_to_recover() {
+        let rendered = rendered_compaction(&serde_json::json!({
+            "status": "paused",
+            "character": "qifei",
+            "checkpoint_id": "29e55e7b-155b-49cc-ac03-ab3a3a130f07",
+            "message_count": 34,
+            "compacted_turns": 13,
+            "tool_rounds": 2,
+            "tools_called": ["read", "edit"],
+            "reason": "workspace_conflict",
+            "detail": "memory/core/the_wipe.md",
+            "resume_at": null,
+        }));
+
+        assert!(rendered.contains("paused"), "{rendered}");
+        assert!(rendered.contains("nothing archived"), "{rendered}");
+        assert!(
+            rendered.contains("memory/core/the_wipe.md changed since the pass wrote it"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("13 planned, all still in the conversation"),
+            "a paused pass reports its plan as a plan: {rendered}"
+        );
+        assert!(rendered.contains("shore compact --restart"), "{rendered}");
+        assert!(
+            !rendered.contains("compacted, "),
+            "a paused pass must never read as a completed one: {rendered}"
+        );
+        assert!(
+            !rendered.contains("Memory files"),
+            "a paused pass has no written-file count to report: {rendered}"
+        );
+    }
+
+    #[test]
+    fn a_pass_that_wrote_no_memory_says_so() {
+        let rendered = rendered_compaction(&serde_json::json!({
+            "status": "no_memory_writes",
+            "character": "qifei",
+            "message_count": 34,
+            "compacted_turns": 13,
+            "tool_rounds": 4,
+            "tools_called": ["read"],
+            "rejected_paths": ["../escape.md"],
+            "max_rounds_hit": true,
+        }));
+
+        assert!(rendered.contains("wrote no memory"), "{rendered}");
+        assert!(rendered.contains("../escape.md"), "{rendered}");
+        assert!(rendered.contains("tool-round ceiling"), "{rendered}");
+        assert!(
+            rendered.contains("13 planned, all still in the conversation"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn a_truncated_pass_names_the_token_ceiling() {
+        let rendered = rendered_compaction(&serde_json::json!({
+            "status": "truncated",
+            "character": "qifei",
+            "message_count": 34,
+            "compacted_turns": 13,
+            "tool_rounds": 2,
+            "tools_called": ["edit"],
+            "truncated_turns": 1,
+            "partial_writes": ["MEMORY.md"],
+        }));
+
+        assert!(rendered.contains("token ceiling"), "{rendered}");
+        assert!(rendered.contains("1 model turn"), "{rendered}");
+        assert!(rendered.contains("MEMORY.md"), "{rendered}");
+        assert!(
+            rendered.contains("13 planned, all still in the conversation"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn a_provider_failure_keeps_the_provider_message() {
+        let rendered = rendered_compaction(&serde_json::json!({
+            "status": "paused",
+            "character": "qifei",
+            "checkpoint_id": "29e55e7b",
+            "compacted_turns": 13,
+            "tool_rounds": 2,
+            "reason": "429 Monthly usage limit reached. Resets in 10 days.",
+            "detail": null,
+            "resume_at": "2026-08-26T00:00:00Z",
+        }));
+
+        assert!(
+            rendered.contains("Monthly usage limit reached"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("2026-08-26T00:00:00Z"), "{rendered}");
+    }
+
+    #[test]
+    fn a_dry_run_still_reads_as_a_preview() {
+        let rendered = rendered_compaction(&serde_json::json!({
+            "status": "dry_run",
+            "character": "qifei",
+            "would_write_files": 3,
+            "compacted_turns": 13,
+            "retained_count": 8,
+            "retained_turns": 4,
+            "tool_rounds": 2,
+        }));
+
+        assert!(rendered.contains("dry run"), "{rendered}");
+        assert!(rendered.contains("3 files"), "{rendered}");
+        assert!(rendered.contains("13 compacted, 4 retained"), "{rendered}");
     }
 }

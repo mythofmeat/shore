@@ -89,7 +89,8 @@ export function handleCompactionOutcome(
   if (outcome.kind === "paused") {
     console.warn(
       `shore: background compaction paused for ${character} ` +
-        `(checkpoint=${outcome.checkpointId}, rounds=${outcome.toolRounds}, reason=${outcome.reason})`,
+        `(checkpoint=${outcome.checkpointId}, rounds=${outcome.toolRounds}, ` +
+        `reason=${outcome.reason}, detail=${outcome.detail ?? "none"})`,
     );
     return 0;
   }

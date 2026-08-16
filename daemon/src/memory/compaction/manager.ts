@@ -469,6 +469,7 @@ export interface CompactOptions {
   markdownStore?: MarkdownMemoryStore;
   dryRun: boolean;
   keepTurnsOverride?: number;
+  restart?: boolean;
   retainTrailingAutonomous: boolean;
   chatRequest: SidecarRequest;
   dataDir?: string;
@@ -581,12 +582,15 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   const conflict = await checkpointConflict(checkpoint, opts.activeContent);
   if (conflict !== undefined) {
     checkpoint.state = "paused";
-    checkpoint.pauseReason = conflict;
+    checkpoint.pauseReason = conflict.reason;
+    if (conflict.detail === undefined) delete checkpoint.pauseDetail;
+    else checkpoint.pauseDetail = conflict.detail;
     await persistCheckpoint(opts, checkpoint);
     return pausedOutcome(opts, checkpoint);
   }
   checkpoint.state = "running";
   delete checkpoint.pauseReason;
+  delete checkpoint.pauseDetail;
   delete checkpoint.resumeAt;
   await persistCheckpoint(opts, checkpoint);
 
@@ -783,8 +787,11 @@ async function resolveCheckpoint(
   request: SidecarRequest,
 ): Promise<CompactionCheckpoint> {
   if (opts.resumable === true && opts.dataDir !== undefined) {
-    const existing = await loadCompactionCheckpoint(opts.dataDir, opts.charName);
-    if (existing !== undefined) return existing;
+    if (opts.restart === true) await discardCheckpoint(opts);
+    else {
+      const existing = await loadCompactionCheckpoint(opts.dataDir, opts.charName);
+      if (existing !== undefined) return existing;
+    }
   }
   return newCompactionCheckpoint(
     opts.charName,
@@ -808,21 +815,45 @@ async function clearCheckpoint(opts: CompactOptions): Promise<void> {
   }
 }
 
+async function discardCheckpoint(opts: CompactOptions): Promise<void> {
+  if (opts.dataDir === undefined) return;
+  const abandoned = await loadCompactionCheckpoint(opts.dataDir, opts.charName).catch(
+    () => undefined,
+  );
+  if (abandoned !== undefined) {
+    console.warn(
+      `shore: discarding compaction checkpoint ${abandoned.id} for ${opts.charName} at the ` +
+        `caller's request (state=${abandoned.state}, reason=${abandoned.pauseReason ?? "none"}, ` +
+        `rounds=${abandoned.loop.toolRounds}, ` +
+        `writes=${JSON.stringify(abandoned.loop.writesApplied.map((w) => w.displayPath))}); ` +
+        `those memory writes stay on disk, and its turns were never archived`,
+    );
+  }
+  await removeCompactionCheckpoint(opts.dataDir, opts.charName);
+}
+
+interface CheckpointConflict {
+  reason: CompactionPauseReason;
+  detail?: string;
+}
+
 async function checkpointConflict(
   checkpoint: CompactionCheckpoint,
   activeContent: string,
-): Promise<CompactionPauseReason | undefined> {
-  if (!checkpointSourceIsCompatible(checkpoint, activeContent)) return "source_conflict";
+): Promise<CheckpointConflict | undefined> {
+  if (!checkpointSourceIsCompatible(checkpoint, activeContent)) {
+    return { reason: "source_conflict" };
+  }
   const latest = new Map<string, AppliedCompactionWrite>();
   for (const write of checkpoint.loop.writesApplied) latest.set(write.resolvedPath, write);
   for (const write of latest.values()) {
     if (write.resultingContent === undefined) continue;
     try {
       if ((await readFile(write.resolvedPath, "utf8")) !== write.resultingContent) {
-        return "workspace_conflict";
+        return { reason: "workspace_conflict", detail: write.displayPath };
       }
     } catch {
-      return "workspace_conflict";
+      return { reason: "workspace_conflict", detail: write.displayPath };
     }
   }
   return undefined;
@@ -831,7 +862,7 @@ async function checkpointConflict(
 function pausedOutcome(
   opts: CompactOptions,
   checkpoint: CompactionCheckpoint,
-  detail?: string,
+  reasonOverride?: string,
 ): CompactionOutcome {
   return {
     kind: "paused",
@@ -841,7 +872,8 @@ function pausedOutcome(
     compactedTurns: checkpoint.compactedTurns,
     toolRounds: checkpoint.loop.toolRounds,
     toolsCalled: checkpoint.loop.toolsCalled,
-    reason: detail ?? checkpoint.pauseReason ?? "provider",
+    reason: reasonOverride ?? checkpoint.pauseReason ?? "provider",
+    ...(checkpoint.pauseDetail === undefined ? {} : { detail: checkpoint.pauseDetail }),
     ...(checkpoint.resumeAt === undefined ? {} : { resumeAt: checkpoint.resumeAt }),
   };
 }
