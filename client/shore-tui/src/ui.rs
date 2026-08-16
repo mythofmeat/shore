@@ -572,11 +572,21 @@ fn draw_conversation(frame: &mut Frame, app: &mut App, area: Rect) {
 
     let fingerprint = app.conversation_fingerprint(content_width);
     if app.conv_cache.fingerprint != fingerprint {
+        let same_width = app.conv_cache.fingerprint.width == content_width;
+        let previous_content_visual = app.conv_cache.content_visual;
         let (lines, image_index, content_visual) = build_conversation_lines(app, content_width);
         app.image_index = image_index;
         app.conv_cache.fingerprint = fingerprint;
         app.conv_cache.lines = lines;
         app.conv_cache.content_visual = content_visual;
+
+        let grew_above = std::mem::take(&mut app.grew_above_viewport);
+        if !app.auto_scroll && same_width && !grew_above {
+            let added_below_viewport =
+                i32::from(content_visual) - i32::from(previous_content_visual);
+            app.scroll_offset = (i32::from(app.scroll_offset) + added_below_viewport)
+                .clamp(0, i32::from(u16::MAX)) as u16;
+        }
     }
 
     let visible_height = area.height;
@@ -2939,6 +2949,131 @@ mod scenario_tests {
         assert!(
             f.contains("More text arrives"),
             "latest content visible after re-scroll"
+        );
+    }
+
+    fn top_rows(frame: &str, count: usize) -> Vec<&str> {
+        frame.lines().take(count).collect()
+    }
+
+    #[test]
+    fn scenario_scrolled_up_viewport_holds_while_stream_appends() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+
+        for i in 0..20 {
+            h.app.entries.push(ConversationEntry::user(
+                format!("Message {i}"),
+                vec![],
+                format!("t{i}"),
+            ));
+            h.app.entries.push(ConversationEntry::assistant(
+                None,
+                format!("Reply {i}"),
+                vec![],
+                format!("r{i}"),
+                None,
+            ));
+        }
+
+        h.stream_start();
+        h.stream_chunk("First chunk of the answer.");
+        let _ = h.render("streaming pinned to bottom");
+
+        h.app.scroll_up(10);
+        let before = h.render_with_blank_rows("scrolled up mid-stream");
+        let reach_before = h.app.conversation_max_scroll;
+
+        h.stream_chunk("\nsecond line\nthird line\nfourth line\nfifth line");
+        let after = h.render_with_blank_rows("stream appended while scrolled up");
+
+        assert!(
+            h.app.conversation_max_scroll > reach_before,
+            "the appended chunk should have made the conversation taller"
+        );
+        assert_eq!(
+            top_rows(&before, 20),
+            top_rows(&after, 20),
+            "text under a scrolled-up viewport should not move when the stream appends\nbefore:\n{before}\nafter:\n{after}"
+        );
+
+        let reach_after_text = h.app.conversation_max_scroll;
+        h.app.stream_push_tool_call(
+            "call-1".into(),
+            "read_file".into(),
+            serde_json::json!({"path": "/tmp/notes.txt"}),
+        );
+        h.app.stream_push_tool_result(
+            "call-1".into(),
+            "read_file".into(),
+            "line one\nline two\nline three".into(),
+            false,
+        );
+        let after_tools = h.render_with_blank_rows("tool loop advanced while scrolled up");
+
+        assert!(
+            h.app.conversation_max_scroll > reach_after_text,
+            "the tool call and result should have made the conversation taller"
+        );
+        assert_eq!(
+            top_rows(&before, 20),
+            top_rows(&after_tools, 20),
+            "a tool call and its result should not move a scrolled-up viewport either\nbefore:\n{before}\nafter:\n{after_tools}"
+        );
+    }
+
+    #[test]
+    fn scenario_scrolled_up_viewport_holds_when_older_history_is_prepended() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+
+        for i in 0..20 {
+            h.app.entries.push(ConversationEntry::user(
+                format!("Message {i}"),
+                vec![],
+                format!("t{i}"),
+            ));
+            h.app.entries.push(ConversationEntry::assistant(
+                None,
+                format!("Reply {i}"),
+                vec![],
+                format!("r{i}"),
+                None,
+            ));
+        }
+
+        let _ = h.render("bottom anchored");
+        h.app.scroll_up(500);
+        let before = h.render_with_blank_rows("scrolled to the top");
+
+        let page: Vec<serde_json::Value> = (0..6)
+            .map(|i| {
+                serde_json::json!({
+                    "msg_id": format!("old{i}"),
+                    "role": if i % 2 == 0 { "user" } else { "assistant" },
+                    "content": format!("Older {i}"),
+                    "timestamp": format!("o{i}"),
+                })
+            })
+            .collect();
+        crate::prepend_history_page(
+            &mut h.app,
+            &serde_json::json!({
+                "messages": page,
+                "has_more_before": false,
+            }),
+        );
+
+        let after = h.render_with_blank_rows("older page prepended");
+
+        assert_eq!(
+            top_rows(&before, 20),
+            top_rows(&after, 20),
+            "loading older history should push content in above the viewport, not move it\nbefore:\n{before}\nafter:\n{after}"
+        );
+        assert!(
+            !h.app.grew_above_viewport,
+            "the prepend marker should be consumed by the redraw that follows it"
         );
     }
 

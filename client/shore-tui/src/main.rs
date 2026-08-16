@@ -1330,6 +1330,7 @@ fn prepend_history_page(app: &mut App, data: &serde_json::Value) {
     }
 
     splice_subagent_sections(&mut app.entries, &app.subagent_traces);
+    app.grew_above_viewport = true;
     app.history_version = app.history_version.wrapping_add(1);
 }
 
