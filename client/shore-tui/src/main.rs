@@ -39,13 +39,12 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use clap::Parser;
-use crossterm::event::{DisableBracketedPaste, EnableBracketedPaste, EventStream};
+use crossterm::event::{DisableBracketedPaste, EnableBracketedPaste, poll, read};
 use crossterm::execute;
 use crossterm::terminal::{
     DisableLineWrap, EnableLineWrap, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode,
     enable_raw_mode,
 };
-use futures_util::StreamExt;
 use ratatui::Terminal;
 use ratatui::backend::{CrosstermBackend, TestBackend};
 use ratatui::buffer::Buffer;
@@ -65,6 +64,7 @@ use connection::{ConnCommand, ConnEvent};
 use input::Action;
 
 const STREAM_FRAME_INTERVAL: Duration = Duration::from_millis(200);
+const INPUT_POLL_INTERVAL: Duration = Duration::from_millis(10);
 const ENV_TUI_FIXTURE: &str = "SHORE_TUI_FIXTURE";
 const ENV_TUI_FIXTURE_ROLE: &str = "SHORE_TUI_FIXTURE_ROLE";
 const ENV_TUI_FIXTURE_REPEAT: &str = "SHORE_TUI_FIXTURE_REPEAT";
@@ -974,7 +974,8 @@ async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
         connection::spawn_connection(cli.addr, cli.config, character)
     };
 
-    let mut terminal_events = EventStream::new();
+    let mut input_poll = tokio::time::interval(INPUT_POLL_INTERVAL);
+    input_poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut stream_frame = tokio::time::interval(STREAM_FRAME_INTERVAL);
     stream_frame.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut notif_tick = tokio::time::interval(Duration::from_millis(250));
@@ -1042,24 +1043,27 @@ async fn run_tui(cli: Cli, debug: TuiDebugConfig) -> io::Result<()> {
                     needs_redraw = true;
                 }
             }
-            terminal_event = terminal_events.next() => {
-                match terminal_event {
-                    Some(Ok(ev)) => {
-                        let action = input::handle_event(&mut app, ev);
-                        needs_redraw |= handle_action(
-                            &mut terminal,
-                            &mut app,
-                            &cmd_tx,
-                            action,
-                            !fixture_mode,
-                        ).await?;
+            _ = input_poll.tick() => {
+                loop {
+                    if app.should_quit {
+                        break;
                     }
-                    Some(Err(e)) => return Err(e),
-                    None => {
-                        return Err(io::Error::new(
-                            io::ErrorKind::UnexpectedEof,
-                            "terminal event stream ended",
-                        ));
+                    match poll(Duration::ZERO) {
+                        Ok(true) => match read() {
+                            Ok(ev) => {
+                                let action = input::handle_event(&mut app, ev);
+                                needs_redraw |= handle_action(
+                                    &mut terminal,
+                                    &mut app,
+                                    &cmd_tx,
+                                    action,
+                                    !fixture_mode,
+                                ).await?;
+                            }
+                            Err(e) => return Err(e),
+                        },
+                        Ok(false) => break,
+                        Err(e) => return Err(e),
                     }
                 }
             }
