@@ -44,7 +44,11 @@ pub(crate) fn write_status<W: Write>(out: &mut W, data: &Value, character: &str)
     let model = text(data, "active_model");
     rows.add_toned(
         "model",
-        if model.is_empty() { "(none set)" } else { model },
+        if model.is_empty() {
+            "(none set)"
+        } else {
+            model
+        },
         if model.is_empty() {
             Tone::Warn
         } else {
@@ -60,11 +64,7 @@ pub(crate) fn write_status<W: Write>(out: &mut W, data: &Value, character: &str)
 
     let pending = number(data, "pending_deferred_edit_count");
     if pending > 0 {
-        rows.add_toned(
-            "pending edits",
-            &pending.to_string(),
-            Tone::Warn,
-        );
+        rows.add_toned("pending edits", &pending.to_string(), Tone::Warn);
     }
     rows.write(out);
 
@@ -306,7 +306,10 @@ mod tests {
         let mut buf = Vec::new();
         assert!(write_section(&mut buf, &data, "autonomy"));
         let out = String::from_utf8(buf).unwrap_or_default();
-        assert!(!out.contains('{'), "a section must not print raw json: {out}");
+        assert!(
+            !out.contains('{'),
+            "a section must not print raw json: {out}"
+        );
         assert!(out.contains("heartbeat"), "{out}");
         assert!(out.contains("dormant"), "{out}");
 
@@ -314,7 +317,10 @@ mod tests {
         let mut plain = Vec::new();
         assert!(write_section(&mut plain, &generic, "tokens"));
         let rows = String::from_utf8(plain).unwrap_or_default();
-        assert!(!rows.contains('{'), "a section must not print raw json: {rows}");
+        assert!(
+            !rows.contains('{'),
+            "a section must not print raw json: {rows}"
+        );
         assert!(rows.contains("8042"), "{rows}");
     }
 

@@ -24,8 +24,7 @@ impl std::error::Error for ClipboardError {}
 fn fresh_temp_path() -> PathBuf {
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
+        .map_or(0, |d| d.as_millis());
     let mut path = std::env::temp_dir();
     path.push(format!("shore_paste_{ts}.png"));
     if path.exists() {

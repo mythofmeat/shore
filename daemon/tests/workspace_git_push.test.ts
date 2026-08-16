@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import {
   ensureWorkspaceGitRepo,
+  envWithoutInheritedGitRepo,
   gitCommitAll,
   gitPushWorkspace,
   gitPushWorkspaceBestEffort,
@@ -32,10 +33,35 @@ async function gitAvailable(): Promise<boolean> {
 }
 
 async function git(cwd: string, ...args: string[]): Promise<void> {
-  const proc = Bun.spawn(["git", ...args], { cwd, stdout: "ignore", stderr: "pipe" });
+  const proc = Bun.spawn(["git", ...args], {
+    cwd,
+    env: envWithoutInheritedGitRepo(),
+    stdout: "ignore",
+    stderr: "pipe",
+  });
   if ((await proc.exited) !== 0) {
     throw new Error(`git ${args.join(" ")} failed: ${await new Response(proc.stderr).text()}`);
   }
+}
+
+async function gitOutput(cwd: string, ...args: string[]): Promise<string> {
+  const proc = Bun.spawn(["git", ...args], {
+    cwd,
+    env: envWithoutInheritedGitRepo(),
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  const text = await new Response(proc.stdout).text();
+  if ((await proc.exited) !== 0) throw new Error(`git ${args.join(" ")} failed`);
+  return text.trim();
+}
+
+async function gitRevParse(cwd: string, rev: string): Promise<string> {
+  return await gitOutput(cwd, "rev-parse", rev);
+}
+
+async function gitLogSubjects(cwd: string): Promise<string> {
+  return await gitOutput(cwd, "log", "--format=%s");
 }
 
 async function workspaceWithRemote(): Promise<{ workspace: string; remote: string }> {
@@ -74,6 +100,40 @@ describe.if(await gitAvailable())("gitPushWorkspace", () => {
 
   test("a directory that is not a repo is skipped", async () => {
     expect(await gitPushWorkspace(tempDir())).toBe(false);
+  });
+
+  test("an inherited GIT_DIR does not retarget the commit at the surrounding repo", async () => {
+    const surrounding = join(tempDir(), "surrounding");
+    await git(tempDir(), "init", "--quiet", surrounding);
+    await git(
+      surrounding,
+      "-c",
+      "user.name=Surrounding",
+      "-c",
+      "user.email=surrounding@example.invalid",
+      "commit",
+      "--quiet",
+      "--allow-empty",
+      "-m",
+      "base",
+    );
+    const before = await gitRevParse(surrounding, "HEAD");
+
+    const workspace = join(tempDir(), "workspace");
+    await ensureWorkspaceGitRepo(workspace);
+    writeFileSync(join(workspace, "MEMORY.md"), "# memory\n\n- likes tea\n");
+
+    const restore = process.env["GIT_DIR"];
+    process.env["GIT_DIR"] = join(surrounding, ".git");
+    try {
+      expect(await gitCommitAll(workspace, "Ada", "memory: compaction")).toBe(true);
+    } finally {
+      if (restore === undefined) delete process.env["GIT_DIR"];
+      else process.env["GIT_DIR"] = restore;
+    }
+
+    expect(await gitRevParse(surrounding, "HEAD")).toBe(before);
+    expect(await gitLogSubjects(workspace)).toContain("memory: compaction");
   });
 
   test("the best-effort wrapper swallows a push that fails", async () => {

@@ -77,19 +77,17 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
     );
     let _ignored = SESSION_DISPLAY_CHARACTER.set(display_character.clone());
 
-    if let Some(requested) = cli.character.as_deref().filter(|r| !r.is_empty()) {
-        if let Some(serving) = history
+    if let Some(requested) = cli.character.as_deref().filter(|r| !r.is_empty())
+        && let Some(serving) = history
             .selected_character
             .as_deref()
             .filter(|s| !s.is_empty())
-        {
-            if serving != requested {
-                return Err(format!(
+        && serving != requested
+    {
+        return Err(format!(
                     "no character named {requested:?}; the daemon is serving {serving:?}. Run `shore character` to list them."
                 )
                 .into());
-            }
-        }
     }
 
     pre_apply_active_model(&mut conn).await;
@@ -120,8 +118,14 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
                 "what the daemon did behind the conversation",
                 &[
                     ("trace calls", "raw model call payloads"),
-                    ("trace heartbeat", "what each heartbeat tick thought and did"),
-                    ("trace events", "the heartbeat timeline: fired, dormant, woke"),
+                    (
+                        "trace heartbeat",
+                        "what each heartbeat tick thought and did",
+                    ),
+                    (
+                        "trace events",
+                        "the heartbeat timeline: fired, dormant, woke",
+                    ),
                     ("trace errors", "errors hit since start, and key fallbacks"),
                     ("trace subagent", "stored sub-agent runs and their tools"),
                 ],
@@ -133,7 +137,10 @@ pub(crate) async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> 
                 "make the daemon do something now, out of band",
                 &[
                     ("debug tick-now", "run a heartbeat tick immediately"),
-                    ("debug keepalive-ping-now", "send a cache keepalive ping now"),
+                    (
+                        "debug keepalive-ping-now",
+                        "send a cache keepalive ping now",
+                    ),
                     ("debug session-activate", "mark the session active"),
                     ("debug status-dormant", "force the heartbeat dormant"),
                     ("debug status-active", "force the heartbeat active"),
@@ -182,13 +189,7 @@ fn wants_json(other: &CliCommand) -> bool {
     match other {
         CliCommand::Model {
             json, subcommand, ..
-        } => {
-            *json
-                || matches!(
-                    subcommand,
-                    Some(ModelCommand::Setting { json: true, .. })
-                )
-        }
+        } => *json || matches!(subcommand, Some(ModelCommand::Setting { json: true, .. })),
         CliCommand::Provider {
             json, subcommand, ..
         } => {
@@ -237,7 +238,7 @@ fn wants_json(other: &CliCommand) -> bool {
         ),
         CliCommand::Edit { json, .. } | CliCommand::Delete { json, .. } => *json,
         CliCommand::Send { .. }
-        | CliCommand::Regen { .. }
+        | CliCommand::Regen
         | CliCommand::Alt { .. }
         | CliCommand::Log { .. }
         | CliCommand::Status { .. }
@@ -914,14 +915,18 @@ async fn handle_complete_query(
         kind,
         CompleteKind::ConfigKeys | CompleteKind::ConfigSections | CompleteKind::ConfigValues
     ) {
-        let _ignored = conn.send_command("config_schema", serde_json::json!({})).await?;
+        let _ignored = conn
+            .send_command("config_schema", serde_json::json!({}))
+            .await?;
         let data = recv_command_data(&mut conn).await?;
         print_config_completions(kind, arg, &data);
         return Ok(());
     }
 
     if kind == CompleteKind::SettingKeys {
-        let _ignored = conn.send_command("model_settings", serde_json::json!({})).await?;
+        let _ignored = conn
+            .send_command("model_settings", serde_json::json!({}))
+            .await?;
         let data = recv_command_data(&mut conn).await?;
         print_setting_key_completions(&data);
         return Ok(());
@@ -979,11 +984,15 @@ fn json_strings(value: Option<&serde_json::Value>) -> Vec<String> {
 }
 
 pub(crate) fn setting_key_completions(data: &serde_json::Value) -> Vec<String> {
-    let Some(applicability) = data.get("applicability").and_then(serde_json::Value::as_object)
+    let Some(applicability) = data
+        .get("applicability")
+        .and_then(serde_json::Value::as_object)
     else {
         return Vec::new();
     };
-    let effective = data.get("effective_sampler").and_then(serde_json::Value::as_object);
+    let effective = data
+        .get("effective_sampler")
+        .and_then(serde_json::Value::as_object);
 
     let mut out = Vec::new();
     for (key, raw) in applicability {
@@ -1239,10 +1248,7 @@ fn resolve_editor(visual: Option<String>, editor: Option<String>) -> String {
 }
 
 fn edit_message_in_editor() -> Result<String, Box<dyn std::error::Error>> {
-    let editor = resolve_editor(
-        std::env::var("VISUAL").ok(),
-        std::env::var("EDITOR").ok(),
-    );
+    let editor = resolve_editor(std::env::var("VISUAL").ok(), std::env::var("EDITOR").ok());
 
     let tmp = tempfile::Builder::new()
         .prefix("shore-")

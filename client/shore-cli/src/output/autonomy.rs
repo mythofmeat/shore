@@ -43,7 +43,11 @@ pub(crate) fn classification_color(class: &str) -> Tone {
     clippy::float_arithmetic,
     reason = "activity heatmap uses visual-only logarithmic scaling of normalized f64 densities"
 )]
-pub(crate) fn write_activity_section(out: &mut impl Write, activity: &serde_json::Value, width: usize) {
+pub(crate) fn write_activity_section(
+    out: &mut impl Write,
+    activity: &serde_json::Value,
+    width: usize,
+) {
     let histogram: Vec<f64> = match activity["hour_histogram"].as_array() {
         Some(arr) => arr.iter().filter_map(serde_json::Value::as_f64).collect(),
         None => return,
@@ -94,7 +98,11 @@ pub(crate) fn write_activity_section(out: &mut impl Write, activity: &serde_json
     }
     _ = writeln!(out);
 
-    paint(out, Tone::Muted, &format!("  {:<13}0  3  6  9  12 15 18 21", ""));
+    paint(
+        out,
+        Tone::Muted,
+        &format!("  {:<13}0  3  6  9  12 15 18 21", ""),
+    );
     _ = writeln!(out);
 
     let engagement = activity["engagement_score"].as_f64().unwrap_or(0.0);
@@ -170,7 +178,11 @@ pub(crate) fn format_local_timestamp(rfc3339: &str) -> String {
     )
 }
 
-pub(crate) fn write_autonomy_section(out: &mut impl Write, autonomy: &serde_json::Value, width: usize) {
+pub(crate) fn write_autonomy_section(
+    out: &mut impl Write,
+    autonomy: &serde_json::Value,
+    width: usize,
+) {
     let paused = autonomy["paused"].as_bool().unwrap_or(false);
     let suffix = if paused { "paused" } else { "" };
     write_section_header(out, "autonomy", suffix, width);

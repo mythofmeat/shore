@@ -827,6 +827,24 @@ export const GIT_SAFETY_FLAGS: readonly string[] = [
   "core.attributesFile=/dev/null",
 ];
 
+const INHERITED_GIT_LOCATION_VARS: readonly string[] = [
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_COMMON_DIR",
+  "GIT_INDEX_FILE",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_NAMESPACE",
+  "GIT_PREFIX",
+  "GIT_CEILING_DIRECTORIES",
+];
+
+export function envWithoutInheritedGitRepo(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const name of INHERITED_GIT_LOCATION_VARS) delete env[name];
+  return env;
+}
+
 export function isPathLikeArg(arg: string): boolean {
   if (arg === "" || arg === "-" || arg === "--") return false;
 
@@ -1080,7 +1098,7 @@ export async function handleGit(
     output = await runProcess("git", spawnArgs, {
       cwd,
       env: {
-        ...process.env,
+        ...envWithoutInheritedGitRepo(),
         GIT_AUTHOR_NAME: name,
         GIT_AUTHOR_EMAIL: email,
         GIT_COMMITTER_NAME: name,
@@ -1168,7 +1186,10 @@ export async function gitPushWorkspaceBestEffort(workspaceDir: string): Promise<
 }
 
 async function runGit(workspaceDir: string, args: string[]): Promise<ProcessOutput> {
-  return await runProcess("git", [...GIT_SAFETY_FLAGS, ...args], { cwd: workspaceDir });
+  return await runProcess("git", [...GIT_SAFETY_FLAGS, ...args], {
+    cwd: workspaceDir,
+    env: envWithoutInheritedGitRepo(),
+  });
 }
 
 function gitOutputError(context: string, output: ProcessOutput): Error {

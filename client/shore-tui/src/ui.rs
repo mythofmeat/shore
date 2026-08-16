@@ -27,11 +27,7 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
     let completion_height = if show_value_editor {
         4
     } else if show_completions {
-        let header_lines = if app.completion.header.is_some() {
-            1
-        } else {
-            0
-        };
+        let header_lines = u16::from(app.completion.header.is_some());
         let n = app.completion.candidates.len() as u16;
         (header_lines + n).min(15)
     } else {
@@ -47,10 +43,7 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
         0
     };
 
-    let mut constraints = vec![
-        Constraint::Min(3),
-        Constraint::Length(input_height),
-    ];
+    let mut constraints = vec![Constraint::Min(3), Constraint::Length(input_height)];
     if show_value_editor || show_completions {
         constraints.push(Constraint::Length(completion_height));
     } else if show_alt_picker {
@@ -556,13 +549,11 @@ fn push_entry_header(
         label,
         Style::default().fg(color).add_modifier(Modifier::BOLD),
     )];
-    if show_timestamp {
-        if let Some(display) = format_timestamp(timestamp) {
-            spans.push(Span::styled(
-                format!("  {display}"),
-                Style::default().fg(Color::DarkGray),
-            ));
-        }
+    if show_timestamp && let Some(display) = format_timestamp(timestamp) {
+        spans.push(Span::styled(
+            format!("  {display}"),
+            Style::default().fg(Color::DarkGray),
+        ));
     }
     lines.push(Line::from(spans));
 }
@@ -699,20 +690,20 @@ fn render_turn(
             if turn.is_streaming() {
                 render_streaming_content(lines, app, content_width);
             } else {
-                if app.show_metadata {
-                    if let Some(meta) = &turn.metadata {
-                        lines.push(Line::from(Span::styled(
-                            format!(
-                                "  [{} | in:{} out:{} cache:{} | {}ms]",
-                                meta.model,
-                                meta.tokens.input,
-                                meta.tokens.output,
-                                meta.tokens.cache_read,
-                                meta.timing.total_ms,
-                            ),
-                            Style::default().fg(Color::DarkGray),
-                        )));
-                    }
+                if app.show_metadata
+                    && let Some(meta) = &turn.metadata
+                {
+                    lines.push(Line::from(Span::styled(
+                        format!(
+                            "  [{} | in:{} out:{} cache:{} | {}ms]",
+                            meta.model,
+                            meta.tokens.input,
+                            meta.tokens.output,
+                            meta.tokens.cache_read,
+                            meta.timing.total_ms,
+                        ),
+                        Style::default().fg(Color::DarkGray),
+                    )));
                 }
                 lines.push(Line::from(""));
             }
@@ -737,7 +728,7 @@ fn build_conversation_lines(
     let mut lines: Vec<Line<'static>> = Vec::new();
     let mut image_index: Vec<crate::app::ImageEntry> = Vec::new();
 
-    for entry in app.entries.iter() {
+    for entry in &app.entries {
         match entry {
             ConversationEntry::Turn(turn) => {
                 render_turn(&mut lines, app, turn, content_width, &mut image_index);
@@ -853,10 +844,7 @@ fn draw_fullscreen_image(frame: &mut Frame, app: &App, area: Rect) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(1),
-            Constraint::Length(1),
-        ])
+        .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(area);
 
     let img_area = chunks[0];
@@ -915,21 +903,19 @@ fn render_images(
                 .unwrap_or(&img.path)
         });
 
-        if show_inline {
-            if let Some(transmitted) = cache.get(&img.path) {
-                lines.push(Line::from(Span::styled(
-                    format!("  [{display}]"),
-                    Style::default().fg(Color::Magenta),
-                )));
-                let img_start_line = lines.len();
-                lines.extend(images::placeholder_lines(transmitted));
-                index.push(crate::app::ImageEntry {
-                    path: img.path.clone(),
-                    display_name: display.to_string(),
-                    line: img_start_line,
-                });
-                continue;
-            }
+        if show_inline && let Some(transmitted) = cache.get(&img.path) {
+            lines.push(Line::from(Span::styled(
+                format!("  [{display}]"),
+                Style::default().fg(Color::Magenta),
+            )));
+            let img_start_line = lines.len();
+            lines.extend(images::placeholder_lines(transmitted));
+            index.push(crate::app::ImageEntry {
+                path: img.path.clone(),
+                display_name: display.to_string(),
+                line: img_start_line,
+            });
+            continue;
         }
 
         lines.push(Line::from(Span::styled(
@@ -1252,8 +1238,7 @@ fn completion_window_start(
         return 0;
     }
     selected
-        .map(|idx| idx.saturating_add(1).saturating_sub(visible_rows))
-        .unwrap_or(0)
+        .map_or(0, |idx| idx.saturating_add(1).saturating_sub(visible_rows))
         .min(total_rows - visible_rows)
 }
 
@@ -1485,8 +1470,10 @@ fn draw_alt_picker_inline(frame: &mut Frame, app: &App, area: Rect) {
         .msg_id
         .as_deref()
         .or(picker.target_ref.as_deref())
-        .map(|msg_id| format!("  alternates for {msg_id}"))
-        .unwrap_or_else(|| "  alternates".to_string());
+        .map_or_else(
+            || "  alternates".to_string(),
+            |msg_id| format!("  alternates for {msg_id}"),
+        );
     lines.push(Line::from(Span::styled(
         title,
         Style::default()
@@ -2570,7 +2557,7 @@ mod scenario_tests {
             .completion
             .candidates
             .iter()
-            .map(|s| s.as_str())
+            .map(std::string::String::as_str)
             .collect();
         assert!(
             names
@@ -4433,7 +4420,7 @@ mod scenario_tests {
             frame
                 .lines()
                 .filter_map(|line| line.trim().strip_prefix("unique row "))
-                .map(|suffix| suffix.to_string())
+                .map(std::string::ToString::to_string)
                 .collect()
         }
 

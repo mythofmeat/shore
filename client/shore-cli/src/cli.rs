@@ -35,10 +35,7 @@ const LEADING_FLAGS: [(&str, &str); 3] = [
 ];
 
 const RETIRED_FLAGS: [(&str, &str); 8] = [
-    (
-        "--config",
-        "name the daemon with --addr, or set SHORE_ADDR",
-    ),
+    ("--config", "name the daemon with --addr, or set SHORE_ADDR"),
     ("--no-color", "set NO_COLOR=1 in the environment"),
     (
         "--plain",
@@ -60,7 +57,8 @@ const RETIRED_FLAGS: [(&str, &str); 8] = [
     ("-g", GUIDANCE_WAS_NEVER_READ),
 ];
 
-const GUIDANCE_WAS_NEVER_READ: &str = "it never reached the model, so `shore regen` is the same call";
+const GUIDANCE_WAS_NEVER_READ: &str =
+    "it never reached the model, so `shore regen` is the same call";
 
 const NAMED_BY_USE: [&str; 2] = ["model", "character"];
 
@@ -402,7 +400,6 @@ pub(crate) enum CliCommand {
         /// Superseded by `shore model reset`
         #[arg(long, hide = true)]
         reset: bool,
-
     },
 
     /// List configured providers with key and cache status, or refresh a catalog
@@ -574,7 +571,6 @@ impl LogRole {
     }
 }
 
-
 /// Dimension `shore usage by` groups spend along
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 #[value(rename_all = "kebab-case")]
@@ -625,7 +621,6 @@ pub(crate) enum UsageCommand {
         #[arg(long)]
         tsv: bool,
     },
-
 }
 
 #[derive(Subcommand, Debug)]
@@ -1038,7 +1033,10 @@ const COMMAND_GROUPS: [(&str, &[&str]); 5] = [
         "Conversation",
         &["send", "log", "regen", "alt", "edit", "delete", "compact"],
     ),
-    ("Configuration", &["character", "model", "provider", "config"]),
+    (
+        "Configuration",
+        &["character", "model", "provider", "config"],
+    ),
     ("Inspection", &["status", "usage", "trace"]),
     ("Shell", &["completions"]),
     ("Advanced", &["debug"]),
@@ -1253,7 +1251,7 @@ pub(crate) fn to_swp_command(
     use serde_json::json;
     match cmd {
         CliCommand::Send { system: false, .. }
-        | CliCommand::Regen { .. }
+        | CliCommand::Regen
         | CliCommand::Completions { .. }
         | CliCommand::Complete { .. }
         | CliCommand::Config {
@@ -2091,7 +2089,10 @@ mod tests {
 
     #[test]
     fn status_no_longer_carries_diagnostics() {
-        for args in [&["status", "--diagnostics"][..], &["status", "-n", "25"][..]] {
+        for args in [
+            &["status", "--diagnostics"][..],
+            &["status", "-n", "25"][..],
+        ] {
             assert!(
                 Cli::try_parse_from(std::iter::once("shore").chain(args.iter().copied())).is_err(),
                 "{args:?} must not parse"
@@ -2398,7 +2399,12 @@ mod tests {
 
     #[test]
     fn parse_config_set() {
-        let cli = parse(&["config", "set", "defaults.model", "claude-haiku-4-5-20251001"]);
+        let cli = parse(&[
+            "config",
+            "set",
+            "defaults.model",
+            "claude-haiku-4-5-20251001",
+        ]);
         assert_variant!(
             &cli.command,
             CliCommand::Config {
@@ -2504,7 +2510,10 @@ mod tests {
         );
         let (name, args) = to_swp_command(&cli.command, None).expect("must map to a command");
         assert_eq!(name, "config");
-        assert_eq!(args.get("key").and_then(|v| v.as_str()), Some("tools.enabled_tools"));
+        assert_eq!(
+            args.get("key").and_then(|v| v.as_str()),
+            Some("tools.enabled_tools")
+        );
     }
 
     #[test]
@@ -2542,7 +2551,9 @@ mod tests {
     }
 
     fn with_program_name<'arg>(rest: &[&'arg str]) -> Vec<&'arg str> {
-        std::iter::once("shore").chain(rest.iter().copied()).collect()
+        std::iter::once("shore")
+            .chain(rest.iter().copied())
+            .collect()
     }
 
     fn parse_error(rest: &[&str]) -> clap::Error {
@@ -2839,8 +2850,14 @@ mod tests {
             "--raw",
         ]);
         let (_name, args) = to_swp_command(&cli.command, None).unwrap();
-        assert_eq!(arg(&args, "input"), &serde_json::json!({ "globs": ["*.md"] }));
-        assert_eq!(arg(&args, "pairs"), &serde_json::json!({ "path": "notes.md" }));
+        assert_eq!(
+            arg(&args, "input"),
+            &serde_json::json!({ "globs": ["*.md"] })
+        );
+        assert_eq!(
+            arg(&args, "pairs"),
+            &serde_json::json!({ "path": "notes.md" })
+        );
         assert_eq!(arg(&args, "raw"), true);
     }
 
@@ -2852,14 +2869,22 @@ mod tests {
 
     #[test]
     fn debug_tool_rejects_input_that_is_not_a_json_object() {
-        let err =
-            Cli::try_parse_from(["shore", "debug", "tool", "read", "--input", "[1,2]"]).unwrap_err();
+        let err = Cli::try_parse_from(["shore", "debug", "tool", "read", "--input", "[1,2]"])
+            .unwrap_err();
         assert!(err.to_string().contains("must be a JSON object"));
     }
 
     #[test]
     fn debug_subagent_is_shorthand_for_ask_with_a_joined_query() {
-        let cli = parse(&["debug", "subagent", "librarian", "what", "did", "we", "decide"]);
+        let cli = parse(&[
+            "debug",
+            "subagent",
+            "librarian",
+            "what",
+            "did",
+            "we",
+            "decide",
+        ]);
         let (name, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(name, "run_tool");
         assert_eq!(arg(&args, "tool"), "ask_librarian");
@@ -3355,7 +3380,8 @@ mod tests {
 
     #[test]
     fn debug_tool_describes_instead_of_running_only_when_asked() {
-        let (cmd, plain) = to_swp_command(&parse(&["debug", "tool", "read"]).command, None).unwrap();
+        let (cmd, plain) =
+            to_swp_command(&parse(&["debug", "tool", "read"]).command, None).unwrap();
         assert_eq!(cmd, "run_tool");
         assert_eq!(
             arg(&plain, "describe"),
@@ -3385,7 +3411,10 @@ mod tests {
             line.contains("not __shore_setting_key"),
             "keys must stop completing once one is typed: {line}"
         );
-        assert!(line.contains(" -f "), "keys must not fall back to files: {line}");
+        assert!(
+            line.contains(" -f "),
+            "keys must not fall back to files: {line}"
+        );
     }
 
     #[test]
@@ -3422,7 +3451,14 @@ mod tests {
 
     #[test]
     fn model_setting_subagent_all_threads_through_like_any_name() {
-        let cli = parse(&["model", "setting", "--subagent", "all", "temperature", "0.3"]);
+        let cli = parse(&[
+            "model",
+            "setting",
+            "--subagent",
+            "all",
+            "temperature",
+            "0.3",
+        ]);
         let (name, args) = to_swp_command(&cli.command, None).unwrap();
         assert_eq!(name, "set_model_setting");
         assert_eq!(arg(&args, "subagent"), "all");
@@ -3449,7 +3485,9 @@ mod tests {
             let line = footer
                 .lines()
                 .find(|l| l.contains(&format!("shore complete {kind}")))
-                .unwrap_or_else(|| panic!("footer must shell out to `shore complete {kind}`: {footer}"));
+                .unwrap_or_else(|| {
+                    panic!("footer must shell out to `shore complete {kind}`: {footer}")
+                });
             assert!(
                 line.contains("__fish_shore_using_subcommand debug"),
                 "`{kind}` must only complete under `shore debug`: {line}"
@@ -3458,7 +3496,10 @@ mod tests {
                 line.contains(&format!("__fish_seen_subcommand_from {sub}")),
                 "`{kind}` must complete after `debug {sub}`: {line}"
             );
-            assert!(line.contains(" -f "), "`{kind}` must not fall back to files: {line}");
+            assert!(
+                line.contains(" -f "),
+                "`{kind}` must not fall back to files: {line}"
+            );
         }
     }
 
@@ -3497,7 +3538,8 @@ mod tests {
 
         let keys = line_for("shore complete config-keys");
         assert!(
-            keys.contains("__fish_seen_subcommand_from set") && keys.contains("not __shore_config_key"),
+            keys.contains("__fish_seen_subcommand_from set")
+                && keys.contains("not __shore_config_key"),
             "settable keys belong in `config set`'s first slot only: {keys}"
         );
 
@@ -3974,7 +4016,8 @@ mod tests {
             vec!["usage", "refresh-pricing"],
         ] {
             assert!(
-                Cli::try_parse_from(std::iter::once("shore").chain(action.iter().copied())).is_err(),
+                Cli::try_parse_from(std::iter::once("shore").chain(action.iter().copied()))
+                    .is_err(),
                 "{action:?} must not be a command"
             );
         }
@@ -4045,7 +4088,8 @@ mod tests {
             ("kind", "kind"),
             ("api-key", "api_key"),
         ] {
-            let (cmd, args) = to_swp_command(&parse(&["usage", "by", typed]).command, None).unwrap();
+            let (cmd, args) =
+                to_swp_command(&parse(&["usage", "by", typed]).command, None).unwrap();
             assert_eq!(cmd, "usage");
             assert_eq!(arg(&args, "group_by"), wire, "`usage by {typed}`");
         }
@@ -4053,7 +4097,8 @@ mod tests {
 
     #[test]
     fn grouping_by_a_dimension_does_not_filter_by_it() {
-        let (_, args) = to_swp_command(&parse(&["usage", "by", "call-type"]).command, None).unwrap();
+        let (_, args) =
+            to_swp_command(&parse(&["usage", "by", "call-type"]).command, None).unwrap();
         assert!(
             arg(&args, "call_type").is_null(),
             "`usage by call-type` groups, it does not filter",

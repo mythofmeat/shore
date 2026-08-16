@@ -84,10 +84,10 @@ fn redraw_or_load_older_history(app: &mut App) -> Action {
     }
 
     app.history_page_loading = true;
-    let before = app
-        .history_next_before
-        .map(serde_json::Value::from)
-        .unwrap_or_else(|| serde_json::Value::String("active".into()));
+    let before = app.history_next_before.map_or_else(
+        || serde_json::Value::String("active".into()),
+        serde_json::Value::from,
+    );
     Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
         rid: None,
         name: "history_page".into(),
@@ -205,9 +205,9 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
             if app.image_index.is_empty() {
                 return Action::None;
             }
-            let term_height = crossterm::terminal::size().map(|(_, h)| h).unwrap_or(24);
+            let term_height = crossterm::terminal::size().map_or(24, |(_, h)| h);
             let visible_h = (term_height * 80 / 100).max(1) as usize;
-            let last_line = app.image_index.last().map(|e| e.line).unwrap_or(0);
+            let last_line = app.image_index.last().map_or(0, |e| e.line);
             let total_approx = last_line + visible_h;
             let center = if app.auto_scroll {
                 total_approx.saturating_sub(visible_h / 2)
@@ -221,13 +221,12 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
                 .iter()
                 .enumerate()
                 .min_by_key(|(_, e)| (e.line as isize - center as isize).unsigned_abs())
-                .map(|(i, _)| i)
-                .unwrap_or(0);
+                .map_or(0, |(i, _)| i);
             app.fullscreen = Some(best);
             Action::Redraw
         }
 
-        (KeyModifiers::SHIFT, KeyCode::Char(':')) | (KeyModifiers::NONE, KeyCode::Char(':')) => {
+        (KeyModifiers::SHIFT | KeyModifiers::NONE, KeyCode::Char(':')) => {
             debug!("Input: Normal → Command");
             app.input.enter_command_mode();
             app.update_completions();
@@ -240,7 +239,7 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
 
 fn handle_fullscreen(app: &mut App, key: KeyEvent) -> Action {
     match (key.modifiers, key.code) {
-        (KeyModifiers::NONE, KeyCode::Esc) | (KeyModifiers::NONE, KeyCode::Char('o')) => {
+        (KeyModifiers::NONE, KeyCode::Esc | KeyCode::Char('o')) => {
             app.fullscreen = None;
             Action::Redraw
         }
@@ -312,10 +311,10 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
                     Ok(bytes) => {
                         use base64::Engine;
                         let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-                        let filename = std::path::Path::new(p)
-                            .file_name()
-                            .map(|f| f.to_string_lossy().to_string())
-                            .unwrap_or_else(|| "image".to_string());
+                        let filename = std::path::Path::new(p).file_name().map_or_else(
+                            || "image".to_string(),
+                            |f| f.to_string_lossy().to_string(),
+                        );
                         image_refs.push(shore_common::protocol::types::ImageRef {
                             path: p.clone(),
                             caption: None,
@@ -352,7 +351,7 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::Send(ConnCommand::Send(msg))
         }
 
-        (KeyModifiers::SHIFT, KeyCode::Enter) | (KeyModifiers::ALT, KeyCode::Enter) => {
+        (KeyModifiers::SHIFT | KeyModifiers::ALT, KeyCode::Enter) => {
             app.input.insert_newline();
             Action::Redraw
         }
@@ -439,7 +438,7 @@ fn handle_command_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::Redraw
         }
 
-        (KeyModifiers::SHIFT, KeyCode::BackTab) | (KeyModifiers::NONE, KeyCode::BackTab) => {
+        (KeyModifiers::SHIFT | KeyModifiers::NONE, KeyCode::BackTab) => {
             app.prev_completion();
             enter_completed_submenu(app).unwrap_or(Action::Redraw)
         }
@@ -510,15 +509,13 @@ fn handle_submenu_mode(app: &mut App, key: KeyEvent) -> Action {
             Action::Redraw
         }
 
-        (KeyModifiers::NONE, KeyCode::Tab)
-        | (KeyModifiers::CONTROL, KeyCode::Char('j'))
-        | (KeyModifiers::NONE, KeyCode::Down) => {
+        (KeyModifiers::NONE, KeyCode::Tab | KeyCode::Down)
+        | (KeyModifiers::CONTROL, KeyCode::Char('j')) => {
             app.next_completion();
             Action::Redraw
         }
 
-        (KeyModifiers::SHIFT, KeyCode::BackTab)
-        | (KeyModifiers::NONE, KeyCode::BackTab)
+        (KeyModifiers::SHIFT | KeyModifiers::NONE, KeyCode::BackTab)
         | (KeyModifiers::CONTROL, KeyCode::Char('k'))
         | (KeyModifiers::NONE, KeyCode::Up) => {
             app.prev_completion();
@@ -855,12 +852,11 @@ fn parse_command(app: &mut App, input: &str) -> Action {
         "compact" => {
             let mut args = serde_json::json!({});
             if !arg.is_empty() {
-                match arg.parse::<u32>() {
-                    Ok(n) => args["keep_turns"] = serde_json::json!(n),
-                    Err(_) => {
-                        app.set_status("usage: :compact [keep_turns]");
-                        return Action::Redraw;
-                    }
+                if let Ok(n) = arg.parse::<u32>() {
+                    args["keep_turns"] = serde_json::json!(n)
+                } else {
+                    app.set_status("usage: :compact [keep_turns]");
+                    return Action::Redraw;
                 }
             }
             Action::Send(ConnCommand::Send(ClientMessage::Command(Command {
@@ -903,17 +899,14 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                 }
                 Action::Redraw
             } else {
-                match app.resolve_ref_content(arg) {
-                    Some(content) => {
-                        app.editing_ref = Some(arg.to_string());
-                        app.input.set_text(content);
-                        app.input.mode = InputMode::Insert;
-                        Action::Redraw
-                    }
-                    None => {
-                        app.set_error(format!("message not found: {arg}"));
-                        Action::Redraw
-                    }
+                if let Some(content) = app.resolve_ref_content(arg) {
+                    app.editing_ref = Some(arg.to_string());
+                    app.input.set_text(content);
+                    app.input.mode = InputMode::Insert;
+                    Action::Redraw
+                } else {
+                    app.set_error(format!("message not found: {arg}"));
+                    Action::Redraw
                 }
             }
         }
@@ -977,15 +970,15 @@ fn parse_command(app: &mut App, input: &str) -> Action {
                         .map(|d| d.join(&expanded).to_string_lossy().to_string())
                         .unwrap_or(expanded)
                 };
-                if !std::path::Path::new(&path).exists() {
-                    app.set_error(format!("file not found: {path}"));
-                    Action::Redraw
-                } else {
+                if std::path::Path::new(&path).exists() {
                     app.pending_images.push(path.clone());
                     app.set_status(format!(
                         "attached image ({} pending)",
                         app.pending_images.len()
                     ));
+                    Action::Redraw
+                } else {
+                    app.set_error(format!("file not found: {path}"));
                     Action::Redraw
                 }
             }
@@ -1058,13 +1051,12 @@ fn parse_setting_value_str(key: &str, raw: &str) -> serde_json::Value {
             .parse::<f64>()
             .ok()
             .and_then(serde_json::Number::from_f64)
-            .map(Value::Number)
-            .unwrap_or_else(|| Value::String(trimmed.to_string())),
+            .map_or_else(|| Value::String(trimmed.to_string()), Value::Number),
         "budget_tokens" | "max_output_tokens" | "gemini_generation" | "max_tool_iterations" => {
-            trimmed
-                .parse::<u64>()
-                .map(|n| Value::Number(n.into()))
-                .unwrap_or_else(|_| Value::String(trimmed.to_string()))
+            trimmed.parse::<u64>().map_or_else(
+                |_| Value::String(trimmed.to_string()),
+                |n| Value::Number(n.into()),
+            )
         }
         "reasoning_effort" => match trimmed.to_ascii_lowercase().as_str() {
             "off" | "none" | "disable" | "disabled" | "unset" | "" => Value::String("off".into()),

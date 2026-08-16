@@ -12,15 +12,15 @@ pub(crate) mod vocab;
 pub(crate) mod workspace;
 
 pub(crate) use commands::*;
+pub(crate) use spinner::*;
+pub(crate) use styling::*;
+pub(crate) use transcript::*;
 pub(crate) use vocab::{
     COLOR_RESULT, COLOR_SUBAGENT, COLOR_THINKING, COLOR_TOOL, SIGIL_ERROR, SIGIL_OK,
     SIGIL_SUBAGENT, SIGIL_THINKING, SIGIL_TOOL, primary_tool_arg, print_dim_line,
     process_wrap_width, write_channel_rule, write_dim, write_fg, write_process_body, write_row,
     write_row_colored, write_section_header, write_sigil_header, write_thinking_content_line,
 };
-pub(crate) use spinner::*;
-pub(crate) use styling::*;
-pub(crate) use transcript::*;
 
 use std::fmt;
 use std::io::{self, IsTerminal, Write};
@@ -126,8 +126,8 @@ pub(crate) fn parse_timestamp(ts: &str) -> Option<DateTime<Local>> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::vocab::wrap_line;
+    use super::*;
 
     #[test]
     fn a_terminal_gets_colour_and_a_pipe_does_not() {

@@ -54,6 +54,7 @@ missing_panics_doc = "allow"
 must_use_candidate = "allow"
 module_name_repetitions = "allow"
 doc_markdown = "allow"
+needless_else = "allow"
 
 unwrap_used = "deny"
 expect_used = "deny"

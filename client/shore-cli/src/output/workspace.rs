@@ -7,7 +7,10 @@ pub(crate) fn write_index_section(out: &mut impl Write, index: &serde_json::Valu
     section(out, "index", None);
 
     if let Some(error) = index["error"].as_str() {
-        warning(out, &format!("the workspace index could not be read: {error}"));
+        warning(
+            out,
+            &format!("the workspace index could not be read: {error}"),
+        );
         return;
     }
 
@@ -37,20 +40,39 @@ pub(crate) fn write_index_section(out: &mut impl Write, index: &serde_json::Valu
         out,
         "embedded",
         &format!("{embedded} of {files}"),
-        if pending == 0 { Tone::Good } else { Tone::Active },
+        if pending == 0 {
+            Tone::Good
+        } else {
+            Tone::Active
+        },
     );
     if pending > 0 {
         write_row_colored(out, "pending", &pending.to_string(), Tone::Active);
     }
     if skipped > 0 {
-        write_row(out, "skipped", &format!("{skipped} ({})", skip_reasons(index)));
+        write_row(
+            out,
+            "skipped",
+            &format!("{skipped} ({})", skip_reasons(index)),
+        );
     }
-    write_row(out, "vectors", &index["vectors"].as_u64().unwrap_or(0).to_string());
+    write_row(
+        out,
+        "vectors",
+        &index["vectors"].as_u64().unwrap_or(0).to_string(),
+    );
     if let Some(models) = index["models"].as_array().filter(|m| !m.is_empty()) {
-        let names: Vec<&str> = models.iter().filter_map(serde_json::Value::as_str).collect();
+        let names: Vec<&str> = models
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .collect();
         write_row(out, "model", &names.join(", "));
     }
-    write_row(out, "size", &human_bytes(index["bytes"].as_u64().unwrap_or(0)));
+    write_row(
+        out,
+        "size",
+        &human_bytes(index["bytes"].as_u64().unwrap_or(0)),
+    );
     write_row(
         out,
         "last indexed",
@@ -75,11 +97,7 @@ fn skip_reasons(data: &serde_json::Value) -> String {
 }
 
 fn human_bytes(bytes: u64) -> String {
-    const UNITS: [(u64, &str); 3] = [
-        (1_073_741_824, "GB"),
-        (1_048_576, "MB"),
-        (1_024, "KB"),
-    ];
+    const UNITS: [(u64, &str); 3] = [(1_073_741_824, "GB"), (1_048_576, "MB"), (1_024, "KB")];
     for (scale, name) in UNITS {
         if bytes < scale {
             continue;
@@ -112,7 +130,11 @@ fn write_background_pass(out: &mut impl Write, background: &serde_json::Value, p
     if let Some(error) = background["last_error"].as_str() {
         write_row_colored(out, "background", "failing", Tone::Bad);
         write_row(out, "last error", error);
-        write_row(out, "failures", &background["failures"].as_u64().unwrap_or(0).to_string());
+        write_row(
+            out,
+            "failures",
+            &background["failures"].as_u64().unwrap_or(0).to_string(),
+        );
         if let Some(secs) = background["retry_in_secs"].as_u64() {
             write_row(out, "retrying in", &format!("{secs}s"));
         }
@@ -121,7 +143,10 @@ fn write_background_pass(out: &mut impl Write, background: &serde_json::Value, p
 
     if pending > 0 {
         write_row_colored(out, "background", "working", Tone::Active);
-        note(out, "(it embeds a batch at a time once the daemon has been idle)");
+        note(
+            out,
+            "(it embeds a batch at a time once the daemon has been idle)",
+        );
         return;
     }
 
@@ -144,22 +169,28 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "writes rendered output to stdout for visual inspection; run with --ignored"]
     fn render_preview_index_unusable() {
         crate::output::set_color_enabled(true);
         let mut buf = Vec::new();
-        write_index_section(&mut buf, &serde_json::json!({
-            "path": "/home/eshen/.cache/shore/characters/poppy/workspace_index.db",
-            "unusable": "it already holds something that is not a SQLite database, and shore will not overwrite it",
-            "files": 0, "embedded": 0, "pending": 0, "skipped": 0, "skip_reasons": {},
-            "vectors": 0, "models": [], "bytes": 0, "last_indexed_at": null,
-            "background": {"registered": true, "swept": true, "failures": 0},
-        }));
-        write_index_section(&mut buf, &serde_json::json!({
-            "files": 0, "embedded": 0, "pending": 0, "skipped": 0, "skip_reasons": {},
-            "vectors": 0, "models": [], "bytes": 0, "last_indexed_at": null,
-            "background": {"registered": true, "swept": true, "failures": 0},
-        }));
+        write_index_section(
+            &mut buf,
+            &serde_json::json!({
+                "path": "/home/eshen/.cache/shore/characters/poppy/workspace_index.db",
+                "unusable": "it already holds something that is not a SQLite database, and shore will not overwrite it",
+                "files": 0, "embedded": 0, "pending": 0, "skipped": 0, "skip_reasons": {},
+                "vectors": 0, "models": [], "bytes": 0, "last_indexed_at": null,
+                "background": {"registered": true, "swept": true, "failures": 0},
+            }),
+        );
+        write_index_section(
+            &mut buf,
+            &serde_json::json!({
+                "files": 0, "embedded": 0, "pending": 0, "skipped": 0, "skip_reasons": {},
+                "vectors": 0, "models": [], "bytes": 0, "last_indexed_at": null,
+                "background": {"registered": true, "swept": true, "failures": 0},
+            }),
+        );
         crate::output::set_color_enabled(false);
         use std::io::Write as _;
         std::io::stdout().write_all(&buf).unwrap();

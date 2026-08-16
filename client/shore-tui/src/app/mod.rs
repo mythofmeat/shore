@@ -365,18 +365,18 @@ impl App {
                             }
                         }
                     };
-                    let role_bit = matches!(turn.role, Role::Assistant) as u64;
-                    let last_len = turn.blocks.last().map(block_len).unwrap_or(0);
+                    let role_bit = u64::from(matches!(turn.role, Role::Assistant));
+                    let last_len = turn.blocks.last().map_or(0, block_len);
                     (1u64 << 56)
                         | (role_bit << 55)
-                        | ((turn.is_streaming() as u64) << 54)
-                        | ((turn.metadata.is_some() as u64) << 53)
+                        | (u64::from(turn.is_streaming()) << 54)
+                        | (u64::from(turn.metadata.is_some()) << 53)
                         | (((turn.images.len() as u64) & 0x1FF) << 44)
                         | (((turn.blocks.len() as u64) & 0xFFF) << 32)
                         | (last_len & 0xFFFF_FFFF)
                 }
                 ConversationEntry::System { content, count, .. } => {
-                    (3u64 << 56) | ((content.len() as u64) << 24) | (*count as u64)
+                    (3u64 << 56) | ((content.len() as u64) << 24) | u64::from(*count)
                 }
                 ConversationEntry::ArchiveBoundary { archived_count } => {
                     (7u64 << 56) | (*archived_count as u64)
@@ -384,7 +384,7 @@ impl App {
             }
         };
 
-        let last_entry = self.entries.last().map(entry_summary).unwrap_or(0);
+        let last_entry = self.entries.last().map_or(0, entry_summary);
         let second_last_entry = if self.entries.len() >= 2 {
             entry_summary(&self.entries[self.entries.len() - 2])
         } else {
@@ -404,8 +404,7 @@ impl App {
                 .stream
                 .tool_name
                 .as_ref()
-                .map(|s| s.len() as i32)
-                .unwrap_or(-1),
+                .map_or(-1, |s| s.len() as i32),
             show_thinking: self.show_thinking,
             show_tools: self.show_tools,
             show_subagent: self.show_subagent,
@@ -581,12 +580,13 @@ impl App {
 
     pub(crate) fn notify(&mut self, level: NotificationLevel, msg: impl Into<String>) {
         let msg = msg.into();
-        if let Some(last) = self.notifications.last_mut() {
-            if last.content == msg && last.level == level {
-                last.count = last.count.saturating_add(1);
-                last.created = std::time::Instant::now();
-                return;
-            }
+        if let Some(last) = self.notifications.last_mut()
+            && last.content == msg
+            && last.level == level
+        {
+            last.count = last.count.saturating_add(1);
+            last.created = std::time::Instant::now();
+            return;
         }
         self.notifications.push(Notification {
             content: msg,
@@ -785,10 +785,10 @@ impl App {
         };
 
         if equivalent {
-            if let Some(next) = next {
-                if !self.active_model_names.iter().any(|n| n == next) {
-                    self.active_model_names.push(next.to_string());
-                }
+            if let Some(next) = next
+                && !self.active_model_names.iter().any(|n| n == next)
+            {
+                self.active_model_names.push(next.to_string());
             }
             return;
         }
@@ -797,15 +797,12 @@ impl App {
         self.sampler_settings_loading = false;
         self.pending_sampler_settings_rid = None;
 
-        match next {
-            Some(model) => {
-                self.model = model.to_string();
-                self.active_model_names = vec![model.to_string()];
-            }
-            None => {
-                self.model.clear();
-                self.active_model_names.clear();
-            }
+        if let Some(model) = next {
+            self.model = model.to_string();
+            self.active_model_names = vec![model.to_string()];
+        } else {
+            self.model.clear();
+            self.active_model_names.clear();
         }
     }
 
@@ -1061,9 +1058,10 @@ impl App {
     }
 
     pub(crate) fn apply_usage_warning(&mut self, name: &str, scope: UsageScope, level: UsageLevel) {
-        let existing = match self.usage_budgets.iter_mut().find(|b| b.name == name) {
-            Some(existing) => existing,
-            None => {
+        let existing =
+            if let Some(existing) = self.usage_budgets.iter_mut().find(|b| b.name == name) {
+                existing
+            } else {
                 self.usage_budgets.push(UsageBudget {
                     name: name.to_string(),
                     ..UsageBudget::default()
@@ -1072,8 +1070,7 @@ impl App {
                     return;
                 };
                 pushed
-            }
-        };
+            };
 
         match scope {
             UsageScope::Cap => {
@@ -1133,7 +1130,7 @@ impl App {
     }
 
     pub(crate) fn view_key_from_row(row: &str) -> &str {
-        row.split_once(" = ").map(|(key, _)| key).unwrap_or(row)
+        row.split_once(" = ").map_or(row, |(key, _)| key)
     }
 
     fn setting_row_label(&self, key: &str) -> String {
@@ -1148,7 +1145,7 @@ impl App {
     }
 
     fn setting_key_from_row(row: &str) -> &str {
-        row.split_once(" = ").map(|(key, _)| key).unwrap_or(row)
+        row.split_once(" = ").map_or(row, |(key, _)| key)
     }
 
     fn setting_scope_is_override(&self, key: &str) -> bool {
@@ -1241,10 +1238,10 @@ impl App {
             return;
         }
 
-        if let Some(kind) = self.slider_kind_for_setting(&key) {
-            if let PaletteMode::ValueEditor(state) = &mut self.completion.mode {
-                state.kind = kind;
-            }
+        if let Some(kind) = self.slider_kind_for_setting(&key)
+            && let PaletteMode::ValueEditor(state) = &mut self.completion.mode
+        {
+            state.kind = kind;
         }
     }
 
@@ -1294,14 +1291,8 @@ impl App {
         let cmd = parts.next().unwrap_or("");
         let has_space = parts.next().is_some();
 
-        if !has_space {
-            self.completion.candidates = Self::COMMANDS
-                .iter()
-                .filter(|(n, _)| n.starts_with(cmd))
-                .map(|(n, _)| n.to_string())
-                .collect();
-        } else {
-            let arg = input.split_once(' ').map(|x| x.1).unwrap_or("").trim();
+        if has_space {
+            let arg = input.split_once(' ').map_or("", |x| x.1).trim();
             match cmd {
                 "character" => {
                     self.completion.header = Some("character".into());
@@ -1346,7 +1337,7 @@ impl App {
                     if has_second {
                         if head == "reset" {
                             self.completion.header = Some("setting key".into());
-                            let key_arg = arg.split_once(' ').map(|x| x.1).unwrap_or("").trim();
+                            let key_arg = arg.split_once(' ').map_or("", |x| x.1).trim();
                             self.completion.candidates = Self::SETTING_KEYS
                                 .iter()
                                 .filter(|k| {
@@ -1382,7 +1373,7 @@ impl App {
                         None => (arg, false),
                     };
                     if has_second {
-                        let value_arg = arg.split_once(' ').map(|x| x.1).unwrap_or("").trim();
+                        let value_arg = arg.split_once(' ').map_or("", |x| x.1).trim();
                         self.completion.candidates = self
                             .view_value_presets(head, value_arg)
                             .into_iter()
@@ -1403,6 +1394,12 @@ impl App {
                     self.completion.candidates.clear();
                 }
             }
+        } else {
+            self.completion.candidates = Self::COMMANDS
+                .iter()
+                .filter(|(n, _)| n.starts_with(cmd))
+                .map(|(n, _)| n.to_string())
+                .collect();
         }
     }
 
@@ -1410,14 +1407,14 @@ impl App {
         if !matches!(self.completion.mode, PaletteMode::Top) {
             return;
         }
-        if let Some(idx) = self.completion.selected {
-            if let Some(text) = self.completion.candidates.get(idx) {
-                self.input.cmd_text = text.clone();
-                self.input.cmd_cursor = text.len();
-                if !text.contains(' ') {
-                    self.input.cmd_text.push(' ');
-                    self.input.cmd_cursor += 1;
-                }
+        if let Some(idx) = self.completion.selected
+            && let Some(text) = self.completion.candidates.get(idx)
+        {
+            self.input.cmd_text = text.clone();
+            self.input.cmd_cursor = text.len();
+            if !text.contains(' ') {
+                self.input.cmd_text.push(' ');
+                self.input.cmd_cursor += 1;
             }
         }
     }
@@ -1436,12 +1433,12 @@ impl App {
             _ => None,
         };
 
-        if parent == "setting" || parent.starts_with("setting:") {
-            if let Some(row) = self.setting_editor_blocked_row() {
-                self.completion.candidates = vec![row.to_string()];
-                self.completion.selected = None;
-                return;
-            }
+        if (parent == "setting" || parent.starts_with("setting:"))
+            && let Some(row) = self.setting_editor_blocked_row()
+        {
+            self.completion.candidates = vec![row.to_string()];
+            self.completion.selected = None;
+            return;
         }
 
         match parent.as_str() {
@@ -1482,13 +1479,15 @@ impl App {
                     .effective_sampler
                     .as_ref()
                     .filter(|s| !s.reasoning_effort_domain.is_empty())
-                    .map(|s| {
-                        s.reasoning_effort_domain
-                            .iter()
-                            .map(String::as_str)
-                            .collect()
-                    })
-                    .unwrap_or_else(|| vec!["low", "medium", "high", "xhigh", "max"]);
+                    .map_or_else(
+                        || vec!["low", "medium", "high", "xhigh", "max"],
+                        |s| {
+                            s.reasoning_effort_domain
+                                .iter()
+                                .map(String::as_str)
+                                .collect()
+                        },
+                    );
                 let mut presets = domain;
                 presets.push("off");
                 presets.push("reset");
@@ -2089,7 +2088,11 @@ mod tests {
         app.set_status("hi");
         let now = app.notifications[0].created;
         assert!(
-            !app.expire_notifications(now + NOTIFICATION_TTL - std::time::Duration::from_millis(1))
+            !app.expire_notifications(
+                (now + NOTIFICATION_TTL)
+                    .checked_sub(std::time::Duration::from_millis(1))
+                    .unwrap()
+            )
         );
         assert_eq!(app.notifications.len(), 1);
         assert!(app.expire_notifications(now + NOTIFICATION_TTL));

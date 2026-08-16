@@ -2,9 +2,7 @@ use std::io::{self, Write};
 
 use serde_json::Value;
 
-use super::vocab::{
-    Align, Meter, Rows, Table, Tone, blank, count, empty, money, note, section,
-};
+use super::vocab::{Align, Meter, Rows, Table, Tone, blank, count, empty, money, note, section};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum View {
@@ -80,15 +78,7 @@ fn write_spend_table<W: Write>(out: &mut W, data: &Value, view: View, label: &st
         return false;
     }
     let mut table = Table::new(
-        &[
-            label,
-            "calls",
-            "in",
-            "out",
-            "cache r",
-            "cache w",
-            "cost",
-        ],
+        &[label, "calls", "in", "out", "cache r", "cache w", "cost"],
         &[
             Align::Left,
             Align::Right,
@@ -217,7 +207,14 @@ fn write_budget_meters<W: Write>(out: &mut W, budget: &Value) {
 
     let current = decimal(budget, "current_cost");
     let limit = decimal(budget, "cost_limit");
-    write_meter_row(out, period, width, Meter::new(current, limit), current, limit);
+    write_meter_row(
+        out,
+        period,
+        width,
+        Meter::new(current, limit),
+        current,
+        limit,
+    );
 
     if let Some(pace) = budget.get("pace") {
         let spent = decimal(pace, "current_cost");
@@ -233,10 +230,6 @@ fn write_budget_meters<W: Write>(out: &mut W, budget: &Value) {
     }
 }
 
-#[expect(
-    clippy::float_arithmetic,
-    reason = "the pace allowance is stated as a base plus rollover minus debt"
-)]
 pub(crate) fn write_budgets<W: Write>(out: &mut W, data: &Value) {
     let budgets = rows_of(data, "budgets");
     section(out, View::Budgets.title(), period_of(data).as_deref());
@@ -286,13 +279,16 @@ pub(crate) fn write_cache<W: Write>(out: &mut W, data: &Value) {
     if coverage.is_empty() {
         empty(out, "no calls in this period");
     } else {
-        let mut table = Table::new(&["served", "why", "calls", "read", "write"], &[
-            Align::Left,
-            Align::Left,
-            Align::Right,
-            Align::Right,
-            Align::Right,
-        ]);
+        let mut table = Table::new(
+            &["served", "why", "calls", "read", "write"],
+            &[
+                Align::Left,
+                Align::Left,
+                Align::Right,
+                Align::Right,
+                Align::Right,
+            ],
+        );
         for row in coverage {
             table.row(&[
                 text(row, "state").to_owned(),
@@ -312,7 +308,11 @@ pub(crate) fn write_cache<W: Write>(out: &mut W, data: &Value) {
         let mut rows = Rows::new();
         for row in health {
             let state = text(row, "state");
-            let tone = if state == "cold" { Tone::Warn } else { Tone::Good };
+            let tone = if state == "cold" {
+                Tone::Warn
+            } else {
+                Tone::Good
+            };
             let streak = number(row, "streak");
             let value = if streak > 0 {
                 format!("{state} \u{00b7} {streak} in a row")
@@ -332,10 +332,8 @@ pub(crate) fn write_cache<W: Write>(out: &mut W, data: &Value) {
 }
 
 fn short_when(ts: &str) -> String {
-    super::parse_timestamp(ts).map_or_else(
-        || ts.to_owned(),
-        |dt| dt.format("%a %-I:%M %p").to_string(),
-    )
+    super::parse_timestamp(ts)
+        .map_or_else(|| ts.to_owned(), |dt| dt.format("%a %-I:%M %p").to_string())
 }
 
 pub(crate) fn write_anomalies<W: Write>(out: &mut W, data: &Value) {
@@ -398,10 +396,10 @@ pub(crate) fn write_limits<W: Write>(out: &mut W, data: &Value) {
     }
     for row in limits {
         let mut header = Rows::new();
-        header.add(text(row, "host"), &format!(
-            "resets {}",
-            short_when(text(row, "resets_at"))
-        ));
+        header.add(
+            text(row, "host"),
+            &format!("resets {}", short_when(text(row, "resets_at"))),
+        );
         header.write(out);
         let mut rows = Rows::new();
         quota::<W>(
@@ -429,7 +427,6 @@ pub(crate) fn write_limits<W: Write>(out: &mut W, data: &Value) {
         blank(out);
     }
 }
-
 
 pub(crate) fn print(data: &Value, view: View) {
     let stdout = io::stdout();
@@ -490,7 +487,10 @@ mod tests {
     #[test]
     fn the_summary_leads_with_spend() {
         let out = render(|buf| write_summary(buf, &summary_payload()));
-        assert!(out.starts_with("\u{2500}\u{2500} usage \u{00b7} today "), "{out}");
+        assert!(
+            out.starts_with("\u{2500}\u{2500} usage \u{00b7} today "),
+            "{out}"
+        );
         assert!(out.contains("$2.75"), "spend must be visible: {out}");
     }
 
@@ -574,8 +574,14 @@ mod tests {
                          "total_cache_write": 0, "total_cost": 0.0}]
         });
         let out = render(|buf| write_summary(buf, &payload));
-        assert!(out.contains("since"), "the heading must name the window: {out}");
-        assert!(!out.contains("budget \u{2500}"), "`budget` is not a period name: {out}");
+        assert!(
+            out.contains("since"),
+            "the heading must name the window: {out}"
+        );
+        assert!(
+            !out.contains("budget \u{2500}"),
+            "`budget` is not a period name: {out}"
+        );
     }
 
     #[test]
@@ -597,7 +603,10 @@ mod tests {
                          "cost_limit": 15.0, "effective_action": "block"}]
         });
         let full = render(|buf| write_budgets(buf, &exact));
-        assert!(over.contains('\u{25b8}'), "133% must spill past the bar: {over}");
+        assert!(
+            over.contains('\u{25b8}'),
+            "133% must spill past the bar: {over}"
+        );
         assert!(!full.contains('\u{25b8}'), "100% must not spill: {full}");
     }
 
