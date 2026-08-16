@@ -11,7 +11,14 @@ import { localWallClock } from "../autonomy/activity.ts";
 import { CommandError, internalError, invalidRequest } from "./errors.ts";
 import { callLog, transcript } from "./call_log.ts";
 import { subagentTrace } from "./subagent_trace.ts";
-import { config, configCheck, configReload, tools, type ConfigRuntime } from "./config.ts";
+import {
+  config,
+  configCheck,
+  configReload,
+  configSchemaCommand,
+  tools,
+  type ConfigRuntime,
+} from "./config.ts";
 import {
   alt,
   edit,
@@ -167,6 +174,8 @@ export async function runCommand(
       return tools(session, (deps.runTool?.mcpTools() ?? []).map((t) => t.full_name));
     case "config_check":
       return configCheck(session, session.env ?? process.env);
+    case "config_schema":
+      return configSchemaCommand(session);
     case "config_reload":
       return await configReload(session, args);
     case "error_log":

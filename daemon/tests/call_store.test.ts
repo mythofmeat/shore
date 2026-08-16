@@ -301,6 +301,17 @@ function withoutBytes(value: unknown): unknown {
   return value;
 }
 
+function storedRequestBytes(store: CallStore, callId: string): number {
+  const row = store.database
+    .query(
+      `SELECT COALESCE((SELECT stored FROM payloads WHERE id = request_payload_id),
+                       LENGTH(request_zstd), 0) AS stored
+         FROM calls WHERE call_id = ?1`,
+    )
+    .get(callId) as { stored: number };
+  return row.stored;
+}
+
 describe("round trip through the API", () => {
   const store = CallStore.openInMemory();
   fillCanonical(store);
@@ -323,15 +334,19 @@ describe("round trip through the API", () => {
     expect(store.callCount()).toBe(r.call_count);
   });
 
-  test("a repetitive body lands smaller than it arrived", () => {
+  test("a repetitive body reports what arrived, and lands smaller than that", () => {
     const c3 = store.queryCalls({ limit: 0 }).find((s) => s.call_id === "c3");
-    expect(c3?.request_bytes).toBeGreaterThan(0);
-    expect(c3!.request_bytes < r.big_body_bytes).toBe(r.big_body_compressed_is_smaller);
+    expect(c3?.request_bytes).toBe(r.big_body_bytes);
+    expect(storedRequestBytes(store, "c3") < r.big_body_bytes).toBe(
+      r.big_body_compressed_is_smaller,
+    );
   });
 
   test("an empty body is stored, not treated as absent", () => {
     expect(store.getCall(4)?.response === "").toBe(r.empty_body_response_is_empty_string);
-    expect(store.getCall(4)?.request_bytes).toBeGreaterThan(0);
+    expect(store.getCall(4)?.request).toBe("");
+    expect(store.getCall(4)?.request_bytes).toBe(0);
+    expect(storedRequestBytes(store, "c4")).toBeGreaterThan(0);
   });
 
   test("a missing response body reads back as null", () => {

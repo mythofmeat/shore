@@ -298,11 +298,17 @@ fn print_wire_exchanges(out: &mut impl Write, wire: Option<&serde_json::Value>, 
                 continue;
             }
             write_fg(out, Tone::Active, &format!("  {label}:\n"));
-            _ = writeln!(out, "{}", truncate_payload(&body, CALL_BODY_PREVIEW));
+            _ = writeln!(out, "{body}");
         }
         _ = writeln!(out);
     }
-    print_dim_line(out, "(--json for the untruncated bodies and headers)");
+    if !exchanges.iter().any(has_wire_body) {
+        print_dim_line(out, "(--wire for the request and response bodies)");
+    }
+}
+
+fn has_wire_body(exchange: &serde_json::Value) -> bool {
+    !exchange["request_body"].is_null() || !exchange["response_body"].is_null()
 }
 
 fn display_payload_body(body: &serde_json::Value) -> String {
@@ -1744,15 +1750,62 @@ mod tests {
             }
         }]);
 
-        set_color_enabled(true);
-        let mut buf = Vec::new();
-        print_wire_exchanges(&mut buf, Some(&wire), 80);
-        set_color_enabled(false);
+        let mut bare = wire.clone();
+        for exchange in bare.as_array_mut().expect("array") {
+            let fields = exchange.as_object_mut().expect("object");
+            _ = fields.remove("request_headers");
+            _ = fields.remove("request_body");
+            _ = fields.remove("response_headers");
+            _ = fields.remove("response_body");
+        }
 
+        let call = serde_json::json!({
+            "id": 9012,
+            "call_id": "20260815T042808877-0004",
+            "ts": "2026-08-15T04:28:08.877+00:00",
+            "call_type": "message",
+            "character": "qifei",
+            "model": "glm-5.3",
+            "provider": "opencode-go",
+            "finish_reason": "end_turn",
+            "usage": {
+                "input_tokens": 1388,
+                "output_tokens": 196,
+                "cache_read_tokens": 9344,
+                "cache_write_tokens": 0
+            },
+            "duration_ms": 7799,
+            "error": null,
+            "request_bytes": 45843,
+            "response_bytes": 6842,
+            "request": {
+                "sdk": "openai",
+                "model": "glm-5.3",
+                "api_key": "[redacted]",
+                "messages": [{"role": "user", "content": "how long can this go on"}],
+                "replay_prior_thinking": "all"
+            },
+            "response": {
+                "stream": "events",
+                "model": "glm-5.3",
+                "content": "Not much longer.",
+                "finish_reason": "end_turn",
+                "chunk_count": 214
+            },
+        });
+
+        set_color_enabled(true);
         let mut stdout = io::stdout();
-        let _ignored = stdout.write_all(b"\n----- WIRE (shore trace calls --id N) -----\n");
-        _ = stdout.write_all(&buf);
-        _ = stdout.write_all(b"----- end -----\n");
+        let _ignored = stdout.write_all(b"\n----- shore trace calls 9012 -----\n");
+        print_call_log(&serde_json::json!({
+            "enabled": true, "call": call, "wire": bare,
+        }));
+        let _ignored = stdout.write_all(b"----- shore trace calls 9012 --wire -----\n");
+        print_call_log(&serde_json::json!({
+            "enabled": true, "call": call, "wire": wire,
+        }));
+        set_color_enabled(false);
+        let _ignored = stdout.write_all(b"----- end -----\n");
         _ = stdout.flush();
     }
 
@@ -1781,6 +1834,50 @@ mod tests {
         assert!(rendered.contains("{\n  \"model\": \"glm-5.3\"\n}"));
         assert!(rendered.contains("\"finish_reason\": \"stop\""));
         assert!(!rendered.contains("{   \"model\""));
+    }
+
+    #[test]
+    fn an_exchange_without_bodies_keeps_its_status_line_and_points_at_the_flag() {
+        set_color_enabled(false);
+        let wire = serde_json::json!([{
+            "seq": 0,
+            "method": "POST",
+            "url": "https://example.test/v1",
+            "status": 200,
+            "status_text": "OK",
+            "duration_ms": 8412,
+            "request_bytes": 45768,
+            "response_bytes": 37208,
+        }]);
+        let mut buf = Vec::new();
+        print_wire_exchanges(&mut buf, Some(&wire), 80);
+        let rendered = String::from_utf8(buf).expect("utf8");
+
+        assert!(rendered.contains("POST https://example.test/v1"), "{rendered}");
+        assert!(rendered.contains("45768B up / 37208B down"), "{rendered}");
+        assert!(!rendered.contains("wire request"), "{rendered}");
+        assert!(rendered.contains("--wire"), "{rendered}");
+    }
+
+    #[test]
+    fn a_body_that_arrived_prints_in_full_and_stops_advertising_the_flag() {
+        set_color_enabled(false);
+        let long = "x".repeat(CALL_BODY_PREVIEW * 2);
+        let wire = serde_json::json!([{
+            "seq": 0,
+            "method": "POST",
+            "url": "https://example.test/v1",
+            "status": 200,
+            "request_body": {"prompt": long},
+            "response_body": null,
+        }]);
+        let mut buf = Vec::new();
+        print_wire_exchanges(&mut buf, Some(&wire), 80);
+        let rendered = String::from_utf8(buf).expect("utf8");
+
+        assert!(rendered.contains(&long), "the body must not be truncated");
+        assert!(!rendered.contains("chars)"), "{rendered}");
+        assert!(!rendered.contains("--wire"), "{rendered}");
     }
 
     #[test]

@@ -29,6 +29,66 @@ function unknownField(key: string, known: readonly string[]): string {
 
 type Reader<T> = (value: TomlValue) => ParseResult<T>;
 
+export type ConfigTypeKind =
+  | "boolean"
+  | "string"
+  | "integer"
+  | "float"
+  | "duration"
+  | "enum"
+  | "list"
+  | "map"
+  | "table"
+  | "unknown";
+
+export type ConfigValueSource =
+  | "chat_models"
+  | "embedding_models"
+  | "image_models"
+  | "tools"
+  | "subagents"
+  | "characters"
+  | "providers";
+
+export interface ConfigTypeInfo {
+  kind: ConfigTypeKind;
+  optional?: boolean;
+  variants?: readonly string[];
+  width?: "usize" | "u32" | "u64";
+  item?: ConfigTypeInfo;
+  table?: () => TableShape;
+  source?: ConfigValueSource;
+  keySource?: ConfigValueSource;
+}
+
+export interface TableShape {
+  name: string;
+  fields: Record<string, ConfigTypeInfo>;
+}
+
+const READER_TYPES = new WeakMap<Reader<never>, ConfigTypeInfo>();
+
+function typed<T>(read: Reader<T>, info: ConfigTypeInfo): Reader<T> {
+  READER_TYPES.set(read as unknown as Reader<never>, info);
+  return read;
+}
+
+function typeOf(read: Reader<unknown>): ConfigTypeInfo {
+  return READER_TYPES.get(read as unknown as Reader<never>) ?? { kind: "unknown" };
+}
+
+function shapeOf<T extends object>(spec: StructSpec<T>): TableShape {
+  const fields: Record<string, ConfigTypeInfo> = {};
+  for (const [key, read] of Object.entries(spec.fields)) {
+    fields[key] = typeOf(read as Reader<unknown>);
+  }
+  return { name: spec.name, fields };
+}
+
+function struct<T extends object>(spec: StructSpec<T>): Reader<T> {
+  return typed((v) => readStruct(spec, v), { kind: "table", table: () => shapeOf(spec) });
+}
+
 interface StructSpec<T> {
   name: string;
   fields: { [K in keyof T]?: Reader<T[K]> };
@@ -95,73 +155,107 @@ function readStructFromSeq<T extends object>(
   return { ok: out };
 }
 
-const readBool: Reader<boolean> = (v) =>
-  typeof v === "boolean" ? { ok: v } : { err: invalidType(v, "a boolean") };
+const readBool: Reader<boolean> = typed(
+  (v) => (typeof v === "boolean" ? { ok: v } : { err: invalidType(v, "a boolean") }),
+  { kind: "boolean" },
+);
 
-const readString: Reader<string> = (v) =>
-  typeof v === "string" ? { ok: v } : { err: invalidType(v, "a string") };
+const readString: Reader<string> = typed(
+  (v) => (typeof v === "string" ? { ok: v } : { err: invalidType(v, "a string") }),
+  { kind: "string" },
+);
 
 function readUint(name: "usize" | "u32" | "u64"): Reader<number> {
   const max = name === "u32" ? 0xffff_ffff : Number.POSITIVE_INFINITY;
-  return (v) => {
-    if (typeof v !== "number" || !Number.isInteger(v)) return { err: invalidType(v, name) };
-    if (v < 0 || v > max) return { err: `invalid value: integer \`${v}\`, expected ${name}` };
-    return { ok: v };
-  };
+  return typed(
+    (v) => {
+      if (typeof v !== "number" || !Number.isInteger(v)) return { err: invalidType(v, name) };
+      if (v < 0 || v > max) return { err: `invalid value: integer \`${v}\`, expected ${name}` };
+      return { ok: v };
+    },
+    { kind: "integer", width: name },
+  );
 }
 
 const readUsize = readUint("usize");
 const readU32 = readUint("u32");
 const readU64 = readUint("u64");
 
-const readF64: Reader<number> = (v) =>
-  typeof v === "number" ? { ok: v } : { err: invalidType(v, "f64") };
+const readF64: Reader<number> = typed(
+  (v) => (typeof v === "number" ? { ok: v } : { err: invalidType(v, "f64") }),
+  { kind: "float" },
+);
 
-const readDuration: Reader<ConfigDuration> = (v) => ConfigDuration.deserialize(v);
+const readDuration: Reader<ConfigDuration> = typed((v) => ConfigDuration.deserialize(v), {
+  kind: "duration",
+});
 
 function readSeq<T>(inner: Reader<T>): Reader<T[]> {
-  return (v) => {
-    if (!Array.isArray(v)) return { err: invalidType(v, "a sequence") };
-    const out: T[] = [];
-    for (const item of v) {
-      const parsed = inner(item);
-      if ("err" in parsed) return parsed;
-      out.push(parsed.ok);
-    }
-    return { ok: out };
-  };
+  return typed(
+    (v) => {
+      if (!Array.isArray(v)) return { err: invalidType(v, "a sequence") };
+      const out: T[] = [];
+      for (const item of v) {
+        const parsed = inner(item);
+        if ("err" in parsed) return parsed;
+        out.push(parsed.ok);
+      }
+      return { ok: out };
+    },
+    { kind: "list", item: typeOf(inner as Reader<unknown>) },
+  );
 }
 
 const readStringSeq = readSeq(readString);
 const readF64Seq = readSeq(readF64);
 
-function readMap<V>(inner: Reader<V>): Reader<Map<string, V>> {
-  return (v) => {
-    if (!isTable(v)) return { err: invalidType(v, "a map") };
-    const out = new Map<string, V>();
-    for (const key of sortedKeys(v)) {
-      const parsed = inner(v[key]);
-      if ("err" in parsed) return parsed;
-      out.set(key, parsed.ok);
-    }
-    return { ok: out };
-  };
+function readMap<V>(inner: Reader<V>, keySource?: ConfigValueSource): Reader<Map<string, V>> {
+  return typed(
+    (v) => {
+      if (!isTable(v)) return { err: invalidType(v, "a map") };
+      const out = new Map<string, V>();
+      for (const key of sortedKeys(v)) {
+        const parsed = inner(v[key]);
+        if ("err" in parsed) return parsed;
+        out.set(key, parsed.ok);
+      }
+      return { ok: out };
+    },
+    {
+      kind: "map",
+      item: typeOf(inner as Reader<unknown>),
+      ...(keySource === undefined ? {} : { keySource }),
+    },
+  );
 }
 
+function suggests<T>(inner: Reader<T>, source: ConfigValueSource): Reader<T> {
+  return typed((v) => inner(v), { ...typeOf(inner as Reader<unknown>), source });
+}
+
+const readChatModelName = suggests(readString, "chat_models");
+const readEmbeddingModelName = suggests(readString, "embedding_models");
+const readImageModelName = suggests(readString, "image_models");
+const readToolNameSeq = readSeq(suggests(readString, "tools"));
+const readSubagentNameSeq = readSeq(suggests(readString, "subagents"));
+
 function readEnum<T extends string>(variants: readonly T[]): Reader<T> {
-  return (v) => {
-    if (typeof v !== "string") {
-      return { err: "invalid type: unit variant, expected string only" };
-    }
-    if (!(variants as readonly string[]).includes(v)) {
-      return { err: `unknown variant \`${v}\`, expected ${expectedList(variants) ?? ""}` };
-    }
-    return { ok: v as T };
-  };
+  return typed(
+    (v) => {
+      if (typeof v !== "string") {
+        return { err: "invalid type: unit variant, expected string only" };
+      }
+      if (!(variants as readonly string[]).includes(v)) {
+        return { err: `unknown variant \`${v}\`, expected ${expectedList(variants) ?? ""}` };
+      }
+      return { ok: v as T };
+    },
+    { kind: "enum", variants },
+  );
 }
 
 function optional<T>(inner: Reader<T>): Reader<T | undefined> {
-  return inner as Reader<T | undefined>;
+  return typed((v) => inner(v), { ...typeOf(inner as Reader<unknown>), optional: true });
 }
 
 export interface DaemonConfig {
@@ -197,9 +291,9 @@ const BACKGROUND: StructSpec<BackgroundDefaultsConfig> = {
   noDefault: ["model", "heartbeat", "compaction"],
   make: defaultBackgroundDefaults,
   fields: {
-    model: optional(readString),
-    heartbeat: optional(readString),
-    compaction: optional(readString),
+    model: optional(readChatModelName),
+    heartbeat: optional(readChatModelName),
+    compaction: optional(readChatModelName),
   },
 };
 
@@ -229,11 +323,11 @@ const DEFAULTS: StructSpec<DefaultsConfig> = {
   removed: { heartbeat: "set it under `[defaults.background]` as `heartbeat`" },
   make: defaultDefaultsConfig,
   fields: {
-    model: optional(readString),
-    background: (v) => readStruct(BACKGROUND, v),
-    embedding: optional(readString),
-    image_generation: optional(readString),
-    subagent_model: optional(readString),
+    model: optional(readChatModelName),
+    background: struct(BACKGROUND),
+    embedding: optional(readEmbeddingModelName),
+    image_generation: optional(readImageModelName),
+    subagent_model: optional(readChatModelName),
     display_name: optional(readString),
     stream: readBool,
   },
@@ -305,7 +399,7 @@ const AUTONOMY: StructSpec<AutonomyConfig> = {
   make: defaultAutonomyConfig,
   fields: {
     enabled: readBool,
-    heartbeat: (v) => readStruct(HEARTBEAT, v),
+    heartbeat: struct(HEARTBEAT),
   },
 };
 
@@ -342,7 +436,7 @@ const BEHAVIOR: StructSpec<BehaviorConfig> = {
   name: "BehaviorConfig",
   make: defaultBehaviorConfig,
   fields: {
-    autonomy: (v) => readStruct(AUTONOMY, v),
+    autonomy: struct(AUTONOMY),
     user_message_timestamps: readEnum(USER_TIMESTAMP_MODES),
   },
 };
@@ -408,12 +502,12 @@ const TOOLS: StructSpec<ToolsConfig> = {
   name: "ToolsConfig",
   make: defaultToolsConfig,
   fields: {
-    enabled_tools: readStringSeq,
-    enabled_subagents: readStringSeq,
+    enabled_tools: readToolNameSeq,
+    enabled_subagents: readSubagentNameSeq,
     max_result_chars: readUsize,
     timeout: readDuration,
-    web_search: (v) => readStruct(SEARCH, v),
-    config: readMap((v) => readStruct(TOOL_OVERRIDE, v)),
+    web_search: struct(SEARCH),
+    config: readMap(struct(TOOL_OVERRIDE), "tools"),
   },
 };
 
@@ -544,21 +638,26 @@ const defaultThinkingConfig = (): ThinkingConfig => ({
   replay_prior_thinking: "all",
 });
 
-const readThinkingReplay: Reader<ThinkingReplay> = (v) => {
-  if (typeof v === "boolean") return { ok: v ? "all" : "none" };
-  if (typeof v !== "string") {
-    return { err: "data did not match any variant of untagged enum BoolOrStr" };
-  }
-  const parsed = parseThinkingReplay(v);
-  if (parsed === undefined) {
-    return {
-      err:
-        `invalid replay_prior_thinking ${JSON.stringify(v)}; ` +
-        'expected "all", "none" (or legacy true/false)',
-    };
-  }
-  return { ok: parsed };
-};
+const THINKING_REPLAY_MODES: readonly ThinkingReplay[] = ["all", "none"];
+
+const readThinkingReplay: Reader<ThinkingReplay> = typed(
+  (v) => {
+    if (typeof v === "boolean") return { ok: v ? "all" : "none" };
+    if (typeof v !== "string") {
+      return { err: "data did not match any variant of untagged enum BoolOrStr" };
+    }
+    const parsed = parseThinkingReplay(v);
+    if (parsed === undefined) {
+      return {
+        err:
+          `invalid replay_prior_thinking ${JSON.stringify(v)}; ` +
+          'expected "all", "none" (or legacy true/false)',
+      };
+    }
+    return { ok: parsed };
+  },
+  { kind: "enum", variants: THINKING_REPLAY_MODES },
+);
 
 const THINKING: StructSpec<ThinkingConfig> = {
   name: "ThinkingConfig",
@@ -621,9 +720,9 @@ const MEMORY: StructSpec<MemoryConfig> = {
   name: "MemoryConfig",
   make: defaultMemoryConfig,
   fields: {
-    compaction: (v) => readStruct(COMPACTION, v),
-    thinking: (v) => readStruct(THINKING, v),
-    retrieval: (v) => readStruct(RETRIEVAL, v),
+    compaction: struct(COMPACTION),
+    thinking: struct(THINKING),
+    retrieval: struct(RETRIEVAL),
     git_push: readBool,
   },
 };
@@ -668,7 +767,7 @@ const CONNECTIONS: StructSpec<ConnectionsConfig> = {
   name: "ConnectionsConfig",
   make: defaultConnectionsConfig,
   fields: {
-    matrix: (v) => readStruct(MATRIX, v),
+    matrix: struct(MATRIX),
   },
 };
 
@@ -763,10 +862,10 @@ const NOTIFICATIONS: StructSpec<NotificationsConfig> = {
   fields: {
     enabled: readBool,
     backend: readEnum(NOTIFICATION_BACKENDS),
-    ntfy: (v) => readStruct(NTFY, v),
-    command: (v) => readStruct(COMMAND_NOTIFY, v),
+    ntfy: struct(NTFY),
+    command: struct(COMMAND_NOTIFY),
     generation_threshold: readDuration,
-    events: (v) => readStruct(NOTIFICATION_EVENTS, v),
+    events: struct(NOTIFICATION_EVENTS),
   },
 };
 
@@ -861,10 +960,10 @@ const BUDGET: StructSpec<UsageBudgetConfig> = {
     cost_usd: readF64,
     warn_at: readF64Seq,
     limit: readEnum(BUDGET_ACTIONS),
-    character: optional(readString),
-    provider: optional(readString),
+    character: optional(suggests(readString, "characters")),
+    provider: optional(suggests(readString, "providers")),
     api_key: optional(readString),
-    model: optional(readString),
+    model: optional(readChatModelName),
     call_type: optional(readString),
     usage_kind: readStringSeq,
     allow_compaction_over_budget: optional(readBool),
@@ -905,7 +1004,7 @@ const USAGE: StructSpec<UsageConfig> = {
   fields: {
     timezone: readString,
     allow_compaction_over_budget: readBool,
-    budgets: readSeq((v) => readStruct(BUDGET, v)),
+    budgets: readSeq(struct(BUDGET)),
   },
 };
 
@@ -952,8 +1051,8 @@ const SUBAGENT: StructSpec<SubagentConfig> = {
   fields: {
     description: readString,
     prompt: readString,
-    tools: readStringSeq,
-    model: optional(readString),
+    tools: readToolNameSeq,
+    model: optional(readChatModelName),
     max_iterations: optional(readU32),
   },
 };
@@ -1025,23 +1124,27 @@ const APP: StructSpec<AppConfig> = {
   alsoAccepted: CATALOG_SECTIONS,
   make: defaultAppConfig,
   fields: {
-    daemon: (v) => readStruct(DAEMON, v),
-    defaults: (v) => readStruct(DEFAULTS, v),
-    behavior: (v) => readStruct(BEHAVIOR, v),
-    tools: (v) => readStruct(TOOLS, v),
-    memory: (v) => readStruct(MEMORY, v),
-    cache: (v) => readStruct(CACHE, v),
-    connections: (v) => readStruct(CONNECTIONS, v),
-    notifications: (v) => readStruct(NOTIFICATIONS, v),
-    usage: (v) => readStruct(USAGE, v),
-    advanced: (v) => readStruct(ADVANCED, v),
-    subagents: readMap((v) => readStruct(SUBAGENT, v)),
-    mcp: readMap((v) => readStruct(MCP_SERVER, v)),
+    daemon: struct(DAEMON),
+    defaults: struct(DEFAULTS),
+    behavior: struct(BEHAVIOR),
+    tools: struct(TOOLS),
+    memory: struct(MEMORY),
+    cache: struct(CACHE),
+    connections: struct(CONNECTIONS),
+    notifications: struct(NOTIFICATIONS),
+    usage: struct(USAGE),
+    advanced: struct(ADVANCED),
+    subagents: readMap(struct(SUBAGENT)),
+    mcp: readMap(struct(MCP_SERVER)),
   },
 };
 
 export function parseAppConfig(table: TomlValue): ParseResult<AppConfig> {
   return readStruct(APP, table);
+}
+
+export function appConfigShape(): TableShape {
+  return shapeOf(APP);
 }
 
 export function acceptedTopLevelSections(): string[] {

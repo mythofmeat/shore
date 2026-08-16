@@ -196,7 +196,7 @@ test("dumping one call coalesces the streamed HTTP exchange recorded under it", 
     response_body: Buffer.from(SSE, "utf8"),
   });
 
-  const out = callLog({ characterName: "poppy", callStore: store }, { id }) as {
+  const out = callLog({ characterName: "poppy", callStore: store }, { id, wire: true }) as {
     call: { request: unknown };
     wire: { seq: number; url: string; status: number; request_body: unknown; response_body: unknown }[];
   };
@@ -214,6 +214,49 @@ test("dumping one call coalesces the streamed HTTP exchange recorded under it", 
     usage: { input_tokens: 10, output_tokens: 42 },
     chunk_count: 5,
   });
+});
+
+test("without --wire the exchange keeps its metadata and drops the bodies", () => {
+  const store = CallStore.openInMemory();
+  const id = store.recordCall({
+    call_id: "wire-2",
+    ts: at(0),
+    call_type: "message",
+    character: "poppy",
+    model: "claude-x",
+    provider: "anthropic",
+    usage: ZERO_USAGE,
+    request_body: JSON.stringify({ normalized: true }),
+    response_body: null,
+  });
+  store.recordHttpCall({
+    call_id: "wire-2",
+    seq: 0,
+    ts: at(0),
+    character: "poppy",
+    call_type: "message",
+    method: "POST",
+    url: "https://api.anthropic.com/v1/messages",
+    status: 200,
+    status_text: "OK",
+    request_headers: [["content-type", "application/json"]],
+    request_body: Buffer.from(`{"thinking":{"type":"enabled"}}`, "utf8"),
+    response_headers: [["content-type", "text/event-stream"]],
+    response_body: Buffer.from(SSE, "utf8"),
+  });
+
+  const out = callLog({ characterName: "poppy", callStore: store }, { id }) as {
+    wire: Record<string, unknown>[];
+  };
+
+  const exchange = out.wire[0] as Record<string, unknown>;
+  expect(exchange["url"]).toBe("https://api.anthropic.com/v1/messages");
+  expect(exchange["status"]).toBe(200);
+  expect(exchange["request_bytes"]).toBe(31);
+  expect(exchange["response_bytes"]).toBe(SSE.length);
+  expect(Object.keys(exchange)).not.toContain("request_body");
+  expect(Object.keys(exchange)).not.toContain("response_body");
+  expect(Object.keys(exchange)).not.toContain("request_headers");
 });
 
 test("a call with no recorded exchange dumps an empty wire list", () => {
