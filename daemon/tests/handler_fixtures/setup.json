@@ -3,7 +3,7 @@
   "resolve_generation_model": [
     {
       "name": "the pre-resolved model passes straight through",
-      "note": "an empty overlay must not rebuild the model \u2014 the handler already resolved it, and re-resolving would reject a discovered-only qualified_name",
+      "note": "an empty overlay must not rebuild the model — the handler already resolved it, and re-resolving would reject a discovered-only qualified_name",
       "input": {
         "active_model": {
           "name": "opus",
@@ -257,7 +257,7 @@
     },
     {
       "name": "a misspelled default surfaces as an error",
-      "note": "not silently swapped for the first model \u2014 a typo in user config should say so",
+      "note": "not silently swapped for the first model — a typo in user config should say so",
       "input": {
         "active_model": null,
         "default_model": "nope",
@@ -286,7 +286,7 @@
     },
     {
       "name": "no default falls back to the first static chat model",
-      "note": "first, not any \u2014 catalog order is the tiebreak",
+      "note": "first, not any — catalog order is the tiebreak",
       "input": {
         "active_model": null,
         "default_model": null,
@@ -557,7 +557,6 @@
         "regen": false,
         "enabled_tools": [],
         "mcp_tools": [],
-        "overrides": null,
         "sdk": "anthropic",
         "timestamps": "never",
         "rich_model": false,
@@ -689,7 +688,6 @@
         "regen": true,
         "enabled_tools": [],
         "mcp_tools": [],
-        "overrides": null,
         "sdk": "anthropic",
         "timestamps": "never",
         "rich_model": false,
@@ -812,7 +810,6 @@
         "regen": false,
         "enabled_tools": [],
         "mcp_tools": [],
-        "overrides": null,
         "sdk": "anthropic",
         "timestamps": "auto",
         "rich_model": false,
@@ -830,7 +827,7 @@
             "content": [
               {
                 "type": "text",
-                "text": "[Tuesday 2026-06-30 \u00b7 8:00 PM]\n\nfirst"
+                "text": "[Tuesday 2026-06-30 · 8:00 PM]\n\nfirst"
               }
             ]
           },
@@ -944,7 +941,6 @@
         "regen": false,
         "enabled_tools": [],
         "mcp_tools": [],
-        "overrides": null,
         "sdk": "anthropic",
         "timestamps": "auto",
         "rich_model": false,
@@ -1016,7 +1012,7 @@
     },
     {
       "name": "the mcp surface is filtered by enabled_tools",
-      "note": "one server, two tools, one allowlisted \u2014 and the static tools come first, which is the cache prefix",
+      "note": "one server, two tools, one allowlisted — and the static tools come first, which is the cache prefix",
       "input": {
         "history": [
           {
@@ -1088,7 +1084,6 @@
             "tool": "stat"
           }
         ],
-        "overrides": null,
         "sdk": "anthropic",
         "timestamps": "never",
         "rich_model": false,
@@ -1155,7 +1150,7 @@
         "tools": [
           {
             "name": "read",
-            "description": "Read a file, or see what's in a directory. Point it at a file and it returns the content as text; point it at a directory and it lists what's there, with each entry's name, type, and size. Omit the path entirely to list your workspace root. Use offset and limit to page through a large file. Reach for this when you're looking for something by name, date, or where it sits in your folders \u2014 `search` is for fuzzy content matching, this is for exact lookups and for reading what you found.",
+            "description": "Read a file, or see what's in a directory. Point it at a file and it returns the content as text; point it at a directory and it lists what's there, with each entry's name, type, and size. Omit the path entirely to list your workspace root. Use offset and limit to page through a large file. Reach for this when you're looking for something by name, date, or where it sits in your folders — `search` is for fuzzy content matching, this is for exact lookups and for reading what you found.",
             "input_schema": {
               "type": "object",
               "properties": {
@@ -1262,7 +1257,6 @@
             "tool": "stat"
           }
         ],
-        "overrides": null,
         "sdk": "anthropic",
         "timestamps": "never",
         "rich_model": false,
@@ -1349,444 +1343,6 @@
       }
     },
     {
-      "name": "client overrides win over the model's own settings",
-      "note": "all three, applied last",
-      "input": {
-        "history": [
-          {
-            "msg_id": "m-first",
-            "role": "user",
-            "content": "first",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "first"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:00Z"
-          },
-          {
-            "msg_id": "m-answer",
-            "role": "assistant",
-            "content": "answer",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "answer"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:10Z"
-          },
-          {
-            "msg_id": "m-second",
-            "role": "user",
-            "content": "second",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "second"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:00Z"
-          },
-          {
-            "msg_id": "m-later",
-            "role": "assistant",
-            "content": "later",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "later"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:10Z"
-          }
-        ],
-        "with_segments": false,
-        "regen": false,
-        "enabled_tools": [],
-        "mcp_tools": [],
-        "overrides": {
-          "temperature": 0.95,
-          "top_p": 0.4,
-          "thinking_budget": 2048
-        },
-        "sdk": "anthropic",
-        "timestamps": "never",
-        "rich_model": false,
-        "max_context_tokens": 100000,
-        "max_output_tokens": 1024,
-        "temperature": 0.5
-      },
-      "request": {
-        "sdk": "anthropic",
-        "model": "opus-id",
-        "api_key": "",
-        "messages": [
-          {
-            "role": "user",
-            "content": [
-              {
-                "type": "text",
-                "text": "first"
-              }
-            ]
-          },
-          {
-            "role": "assistant",
-            "content": [
-              {
-                "type": "text",
-                "text": "answer"
-              }
-            ]
-          },
-          {
-            "role": "user",
-            "content": [
-              {
-                "type": "text",
-                "text": "second"
-              }
-            ]
-          },
-          {
-            "role": "assistant",
-            "content": [
-              {
-                "type": "text",
-                "text": "later"
-              }
-            ]
-          }
-        ],
-        "system": [
-          {
-            "text": "Answer as qifei, tersely.\n",
-            "label": "system"
-          },
-          {
-            "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-            "label": "tools_guidance"
-          },
-          {
-            "text": "<qifei>\nI am qifei.\n\n</qifei>",
-            "label": "character"
-          }
-        ],
-        "max_tokens": 1024,
-        "temperature": 0.95,
-        "top_p": 0.4,
-        "provider_options": {
-          "budget_tokens": 2048
-        },
-        "provider_key": "anthropic",
-        "replay_prior_thinking": "all"
-      }
-    },
-    {
-      "name": "a partial override leaves the rest alone",
-      "note": "only the fields the client actually set",
-      "input": {
-        "history": [
-          {
-            "msg_id": "m-first",
-            "role": "user",
-            "content": "first",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "first"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:00Z"
-          },
-          {
-            "msg_id": "m-answer",
-            "role": "assistant",
-            "content": "answer",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "answer"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:10Z"
-          },
-          {
-            "msg_id": "m-second",
-            "role": "user",
-            "content": "second",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "second"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:00Z"
-          },
-          {
-            "msg_id": "m-later",
-            "role": "assistant",
-            "content": "later",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "later"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:10Z"
-          }
-        ],
-        "with_segments": false,
-        "regen": false,
-        "enabled_tools": [],
-        "mcp_tools": [],
-        "overrides": {
-          "top_p": 0.4
-        },
-        "sdk": "anthropic",
-        "timestamps": "never",
-        "rich_model": false,
-        "max_context_tokens": 100000,
-        "max_output_tokens": 1024,
-        "temperature": 0.5
-      },
-      "request": {
-        "sdk": "anthropic",
-        "model": "opus-id",
-        "api_key": "",
-        "messages": [
-          {
-            "role": "user",
-            "content": [
-              {
-                "type": "text",
-                "text": "first"
-              }
-            ]
-          },
-          {
-            "role": "assistant",
-            "content": [
-              {
-                "type": "text",
-                "text": "answer"
-              }
-            ]
-          },
-          {
-            "role": "user",
-            "content": [
-              {
-                "type": "text",
-                "text": "second"
-              }
-            ]
-          },
-          {
-            "role": "assistant",
-            "content": [
-              {
-                "type": "text",
-                "text": "later"
-              }
-            ]
-          }
-        ],
-        "system": [
-          {
-            "text": "Answer as qifei, tersely.\n",
-            "label": "system"
-          },
-          {
-            "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-            "label": "tools_guidance"
-          },
-          {
-            "text": "<qifei>\nI am qifei.\n\n</qifei>",
-            "label": "character"
-          }
-        ],
-        "max_tokens": 1024,
-        "temperature": 0.5,
-        "top_p": 0.4,
-        "provider_key": "anthropic",
-        "replay_prior_thinking": "all"
-      }
-    },
-    {
-      "name": "an override adds a thinking budget to a model without one",
-      "note": "provider_options is created rather than patched",
-      "input": {
-        "history": [
-          {
-            "msg_id": "m-first",
-            "role": "user",
-            "content": "first",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "first"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:00Z"
-          },
-          {
-            "msg_id": "m-answer",
-            "role": "assistant",
-            "content": "answer",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "answer"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:10Z"
-          },
-          {
-            "msg_id": "m-second",
-            "role": "user",
-            "content": "second",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "second"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:00Z"
-          },
-          {
-            "msg_id": "m-later",
-            "role": "assistant",
-            "content": "later",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "later"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:10Z"
-          }
-        ],
-        "with_segments": false,
-        "regen": false,
-        "enabled_tools": [
-          "read"
-        ],
-        "mcp_tools": [],
-        "overrides": {
-          "thinking_budget": 512
-        },
-        "sdk": "anthropic",
-        "timestamps": "never",
-        "rich_model": false,
-        "max_context_tokens": 100000,
-        "max_output_tokens": 1024,
-        "temperature": 0.5
-      },
-      "request": {
-        "sdk": "anthropic",
-        "model": "opus-id",
-        "api_key": "",
-        "messages": [
-          {
-            "role": "user",
-            "content": [
-              {
-                "type": "text",
-                "text": "first"
-              }
-            ]
-          },
-          {
-            "role": "assistant",
-            "content": [
-              {
-                "type": "text",
-                "text": "answer"
-              }
-            ]
-          },
-          {
-            "role": "user",
-            "content": [
-              {
-                "type": "text",
-                "text": "second"
-              }
-            ]
-          },
-          {
-            "role": "assistant",
-            "content": [
-              {
-                "type": "text",
-                "text": "later"
-              }
-            ]
-          }
-        ],
-        "system": [
-          {
-            "text": "Answer as qifei, tersely.\n",
-            "label": "system"
-          },
-          {
-            "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-            "label": "tools_guidance"
-          },
-          {
-            "text": "<qifei>\nI am qifei.\n\n</qifei>",
-            "label": "character"
-          }
-        ],
-        "tools": [
-          {
-            "name": "read",
-            "description": "Read a file, or see what's in a directory. Point it at a file and it returns the content as text; point it at a directory and it lists what's there, with each entry's name, type, and size. Omit the path entirely to list your workspace root. Use offset and limit to page through a large file. Reach for this when you're looking for something by name, date, or where it sits in your folders \u2014 `search` is for fuzzy content matching, this is for exact lookups and for reading what you found.",
-            "input_schema": {
-              "type": "object",
-              "properties": {
-                "path": {
-                  "type": "string",
-                  "description": "Relative path within your workspace. A file path returns its contents; a directory path lists its entries. Omit for a listing of the workspace root."
-                },
-                "offset": {
-                  "type": "number",
-                  "description": "Line number to start reading from (1-based). Files only; ignored for directories. Optional."
-                },
-                "limit": {
-                  "type": "number",
-                  "description": "Maximum number of lines to read. Files only; ignored for directories. Optional."
-                }
-              },
-              "required": []
-            }
-          }
-        ],
-        "max_tokens": 1024,
-        "temperature": 0.5,
-        "provider_options": {
-          "budget_tokens": 512
-        },
-        "provider_key": "anthropic",
-        "replay_prior_thinking": "all"
-      }
-    },
-    {
       "name": "an empty history still builds a request",
       "note": "a first turn with nothing appended yet",
       "input": {
@@ -1795,7 +1351,6 @@
         "regen": false,
         "enabled_tools": [],
         "mcp_tools": [],
-        "overrides": null,
         "sdk": "anthropic",
         "timestamps": "never",
         "rich_model": false,
@@ -1851,7 +1406,6 @@
         "regen": true,
         "enabled_tools": [],
         "mcp_tools": [],
-        "overrides": null,
         "sdk": "anthropic",
         "timestamps": "never",
         "rich_model": false,
@@ -1895,287 +1449,7 @@
       }
     },
     {
-      "name": "an override that sets neither leaves the model's own alone",
-      "note": "a model with its own top_p and reasoning effort, and an override that touches only the thinking budget \u2014 the other two must survive",
-      "input": {
-        "history": [
-          {
-            "msg_id": "m-first",
-            "role": "user",
-            "content": "first",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "first"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:00Z"
-          },
-          {
-            "msg_id": "m-answer",
-            "role": "assistant",
-            "content": "answer",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "answer"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:10Z"
-          },
-          {
-            "msg_id": "m-second",
-            "role": "user",
-            "content": "second",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "second"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:00Z"
-          },
-          {
-            "msg_id": "m-later",
-            "role": "assistant",
-            "content": "later",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "later"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:10Z"
-          }
-        ],
-        "with_segments": false,
-        "regen": false,
-        "enabled_tools": [],
-        "mcp_tools": [],
-        "overrides": {
-          "thinking_budget": 4096
-        },
-        "sdk": "anthropic",
-        "timestamps": "never",
-        "rich_model": true,
-        "max_context_tokens": 100000,
-        "max_output_tokens": 1024,
-        "temperature": 0.5
-      },
-      "request": {
-        "sdk": "anthropic",
-        "model": "opus-id",
-        "api_key": "",
-        "messages": [
-          {
-            "role": "user",
-            "content": [
-              {
-                "type": "text",
-                "text": "first"
-              }
-            ]
-          },
-          {
-            "role": "assistant",
-            "content": [
-              {
-                "type": "text",
-                "text": "answer"
-              }
-            ]
-          },
-          {
-            "role": "user",
-            "content": [
-              {
-                "type": "text",
-                "text": "second"
-              }
-            ]
-          },
-          {
-            "role": "assistant",
-            "content": [
-              {
-                "type": "text",
-                "text": "later"
-              }
-            ]
-          }
-        ],
-        "system": [
-          {
-            "text": "Answer as qifei, tersely.\n",
-            "label": "system"
-          },
-          {
-            "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-            "label": "tools_guidance"
-          },
-          {
-            "text": "<qifei>\nI am qifei.\n\n</qifei>",
-            "label": "character"
-          }
-        ],
-        "max_tokens": 1024,
-        "temperature": 0.5,
-        "top_p": 0.77,
-        "provider_options": {
-          "reasoning_effort": "high",
-          "budget_tokens": 4096
-        },
-        "provider_key": "anthropic",
-        "replay_prior_thinking": "all"
-      }
-    },
-    {
-      "name": "a thinking budget extends existing provider options",
-      "note": "the reasoning effort already put something in provider_options; the budget joins it rather than replacing it",
-      "input": {
-        "history": [
-          {
-            "msg_id": "m-first",
-            "role": "user",
-            "content": "first",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "first"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:00Z"
-          },
-          {
-            "msg_id": "m-answer",
-            "role": "assistant",
-            "content": "answer",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "answer"
-              }
-            ],
-            "timestamp": "2026-07-01T00:00:10Z"
-          },
-          {
-            "msg_id": "m-second",
-            "role": "user",
-            "content": "second",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "second"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:00Z"
-          },
-          {
-            "msg_id": "m-later",
-            "role": "assistant",
-            "content": "later",
-            "images": [],
-            "content_blocks": [
-              {
-                "type": "text",
-                "text": "later"
-              }
-            ],
-            "timestamp": "2026-07-01T00:01:10Z"
-          }
-        ],
-        "with_segments": false,
-        "regen": false,
-        "enabled_tools": [],
-        "mcp_tools": [],
-        "overrides": {
-          "temperature": 0.1,
-          "top_p": 0.2,
-          "thinking_budget": 1024
-        },
-        "sdk": "anthropic",
-        "timestamps": "never",
-        "rich_model": true,
-        "max_context_tokens": 100000,
-        "max_output_tokens": 1024,
-        "temperature": 0.5
-      },
-      "request": {
-        "sdk": "anthropic",
-        "model": "opus-id",
-        "api_key": "",
-        "messages": [
-          {
-            "role": "user",
-            "content": [
-              {
-                "type": "text",
-                "text": "first"
-              }
-            ]
-          },
-          {
-            "role": "assistant",
-            "content": [
-              {
-                "type": "text",
-                "text": "answer"
-              }
-            ]
-          },
-          {
-            "role": "user",
-            "content": [
-              {
-                "type": "text",
-                "text": "second"
-              }
-            ]
-          },
-          {
-            "role": "assistant",
-            "content": [
-              {
-                "type": "text",
-                "text": "later"
-              }
-            ]
-          }
-        ],
-        "system": [
-          {
-            "text": "Answer as qifei, tersely.\n",
-            "label": "system"
-          },
-          {
-            "text": "# TOOLS\n\nUse tools when they materially help.\n\n- Read files before editing them.\n- Search memory files before guessing facts about the user or past events.\n- Prefer concise, direct tool use over busywork.\n",
-            "label": "tools_guidance"
-          },
-          {
-            "text": "<qifei>\nI am qifei.\n\n</qifei>",
-            "label": "character"
-          }
-        ],
-        "max_tokens": 1024,
-        "temperature": 0.1,
-        "top_p": 0.2,
-        "provider_options": {
-          "reasoning_effort": "high",
-          "budget_tokens": 1024
-        },
-        "provider_key": "anthropic",
-        "replay_prior_thinking": "all"
-      }
-    },
-    {
-      "name": "no override at all leaves the rich model untouched",
+      "name": "a rich model's own settings travel to the request",
       "note": "the control for both cases above",
       "input": {
         "history": [
@@ -2236,7 +1510,6 @@
         "regen": false,
         "enabled_tools": [],
         "mcp_tools": [],
-        "overrides": null,
         "sdk": "anthropic",
         "timestamps": "never",
         "rich_model": true,

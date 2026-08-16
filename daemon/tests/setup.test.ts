@@ -23,7 +23,6 @@ import { McpRegistry } from "../src/tools/mcp_registry.ts";
 import {
   buildGenerationRequest,
   resolveGenerationModel,
-  type MessageOverrides,
   type SetupEngine,
 } from "../src/handler/setup.ts";
 import { testTmp } from "./support/tmp.ts";
@@ -80,7 +79,6 @@ interface BuildCase {
     regen: boolean;
     enabled_tools: string[];
     mcp_tools: { server: string; tool: string }[];
-    overrides: MessageOverrides | null;
     sdk: string;
     timestamps: "never" | "always" | "auto";
     rich_model: boolean;
@@ -328,7 +326,6 @@ describe("buildGenerationRequest", () => {
         resolved,
         regen: c.input.regen,
         mcpRegistry: registry,
-        ...(c.input.overrides === null ? {} : { overrides: c.input.overrides }),
         timeZone: ZONE,
       });
 

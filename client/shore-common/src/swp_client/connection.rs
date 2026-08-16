@@ -234,16 +234,6 @@ impl SWPConnection {
         stream: bool,
         images: Vec<String>,
     ) -> Result<Option<String>> {
-        self.send_message_full(text, stream, images, None).await
-    }
-
-    pub async fn send_message_full<T: Into<String>>(
-        &mut self,
-        text: T,
-        stream: bool,
-        images: Vec<String>,
-        overrides: Option<crate::protocol::client_msg::MessageOverrides>,
-    ) -> Result<Option<String>> {
         use crate::protocol::client_msg::{ClientMessageBody, ImageUpload};
         use base64::Engine;
 
@@ -271,7 +261,6 @@ impl SWPConnection {
             images,
             image_data,
             absence_seconds: None,
-            overrides,
         });
         self.send(&msg).await?;
         Ok(rid)

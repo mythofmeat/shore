@@ -348,7 +348,6 @@ fn handle_insert_mode(app: &mut App, key: KeyEvent) -> Action {
                 images,
                 image_data: image_uploads,
                 absence_seconds: None,
-                overrides: None,
             });
             Action::Send(ConnCommand::Send(msg))
         }

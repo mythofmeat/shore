@@ -13,17 +13,6 @@ pub struct ClientHello {
     pub token: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default, ts_rs::TS)]
-#[ts(export, export_to = "../../../daemon/src/protocol/")]
-pub struct MessageOverrides {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub temperature: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub top_p: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub thinking_budget: Option<u32>,
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct ImageUpload {
@@ -48,8 +37,6 @@ pub struct ClientMessageBody {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(type = "number")]
     pub absence_seconds: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub overrides: Option<MessageOverrides>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, ts_rs::TS)]
@@ -106,85 +93,19 @@ mod tests {
     }
 
     #[test]
-    fn message_overrides_with_values() {
-        let overrides = MessageOverrides {
-            temperature: Some(0.8),
-            top_p: Some(0.95),
-            thinking_budget: Some(4096),
-        };
-        let json = serde_json::to_value(&overrides).unwrap();
-        assert_eq!(field(&json, "temperature"), 0.8);
-        assert_eq!(field(&json, "top_p"), 0.95);
-        assert_eq!(field(&json, "thinking_budget"), 4096);
-    }
-
-    #[test]
-    fn message_overrides_none_fields_omitted() {
-        let overrides = MessageOverrides::default();
-        let json = serde_json::to_value(&overrides).unwrap();
-        assert!(json.get("temperature").is_none());
-        assert!(json.get("top_p").is_none());
-        assert!(json.get("thinking_budget").is_none());
-    }
-
-    #[test]
-    fn message_overrides_partial_fields() {
-        let overrides = MessageOverrides {
-            temperature: Some(0.5),
-            top_p: None,
-            thinking_budget: None,
-        };
-        let json = serde_json::to_value(&overrides).unwrap();
-        assert_eq!(field(&json, "temperature"), 0.5);
-        assert!(json.get("top_p").is_none());
-    }
-
-    #[test]
-    fn client_message_body_with_overrides_roundtrip() {
-        let body = ClientMessageBody {
-            rid: Some("r1".into()),
-            text: "hello".into(),
-            stream: true,
-            images: vec![],
-            image_data: vec![],
-            absence_seconds: None,
-            overrides: Some(MessageOverrides {
-                temperature: Some(0.7),
-                top_p: None,
-                thinking_budget: Some(2048),
-            }),
-        };
-        let msg = ClientMessage::Message(body);
-        let json = serde_json::to_value(&msg).unwrap();
-        assert_eq!(field(&json, "type"), "message");
-        let overrides = field(&json, "overrides");
-        assert_eq!(field(overrides, "temperature"), 0.7);
-        assert_eq!(field(overrides, "thinking_budget"), 2048);
-        assert!(overrides.get("top_p").is_none());
-
-        let roundtrip: ClientMessage = serde_json::from_value(json).unwrap();
-        let ClientMessage::Message(b) = roundtrip else {
-            panic!("wrong variant");
-        };
-        let o = b.overrides.unwrap();
-        assert_eq!(o.temperature, Some(0.7));
-        assert_eq!(o.thinking_budget, Some(2048));
-        assert_eq!(o.top_p, None);
-    }
-
-    #[test]
-    fn client_message_body_without_overrides() {
+    fn a_sent_message_carries_no_per_message_sampling_overrides() {
         let body = ClientMessageBody {
             rid: None,
-
             text: "hi".into(),
             stream: false,
             images: vec![],
             image_data: vec![],
             absence_seconds: None,
-            overrides: None,
         };
         let json = serde_json::to_value(&body).unwrap();
         assert!(json.get("overrides").is_none());
+        assert!(json.get("temperature").is_none());
+        assert!(json.get("top_p").is_none());
+        assert!(json.get("thinking_budget").is_none());
     }
 }

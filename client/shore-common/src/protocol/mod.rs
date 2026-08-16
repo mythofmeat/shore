@@ -85,7 +85,6 @@ mod tests {
             images: vec![],
             image_data: vec![],
             absence_seconds: None,
-            overrides: None,
         });
         let (json, _back) = round_trip(&msg);
         assert_eq!(field(&json, "type"), "message");
