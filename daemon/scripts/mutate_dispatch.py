@@ -95,9 +95,6 @@ MUTANTS = [
     ("wire: `character_info` is given the data dir as its config dir",
      "        { configDir, dataDir: session.dataDir, active: character },",
      "        { configDir: session.dataDir, dataDir: session.dataDir, active: character },"),
-    ("wire: `memory` is given the data dir as its config dir",
-     '    case "memory":\n      return await memory(configDir, character, args);',
-     '    case "memory":\n      return await memory(session.dataDir, character, args);'),
 
     # --- arms going missing ---------------------------------------------------
     ("missing: `inject_system` is not in the table",

@@ -29,6 +29,7 @@ export async function workspaceIndexSection(
 
   return {
     path: indexPath,
+    ...(stats.unusableReason === undefined ? {} : { unusable: stats.unusableReason }),
     files: stats.files,
     embedded: stats.embedded,
     pending: progress?.pending ?? stats.pending,

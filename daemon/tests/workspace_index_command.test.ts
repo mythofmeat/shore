@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -156,5 +156,72 @@ describe("the status index section", () => {
     expect(out?.embedded).toBe(0);
     expect(out?.vectors).toBe(0);
     expect(out?.last_indexed_at).toBeNull();
+  });
+});
+
+describe("an index path that cannot hold a database", () => {
+  test("a foreign file at the path is reported, not overwritten", async () => {
+    const path = join(root, "notadb.db");
+    await writeFile(path, "IMPORTANT USER DATA, NOT A DATABASE");
+
+    const out = await section(sourceFor({ indexPathFor: () => path }));
+
+    expect(out?.unusable).toContain("not a SQLite database");
+    expect(await readFile(path, "utf8")).toBe("IMPORTANT USER DATA, NOT A DATABASE");
+  });
+
+  test("a directory at the path is reported, not removed", async () => {
+    const path = join(root, "adir.db");
+    await mkdir(path);
+
+    const out = await section(sourceFor({ indexPathFor: () => path }));
+
+    expect(out?.unusable).toContain("not a SQLite database");
+  });
+
+  test("a path that cannot be created is reported", async () => {
+    const locked = join(root, "locked");
+    await mkdir(locked);
+    await chmod(locked, 0o500);
+    try {
+      const out = await section(sourceFor({ indexPathFor: () => join(locked, "idx.db") }));
+
+      expect(out?.unusable).toContain("cannot hold a database");
+      expect(out?.bytes).toBe(0);
+    } finally {
+      await chmod(locked, 0o700);
+    }
+  });
+
+  test("writes to a fallback store do not survive a reopen", async () => {
+    const path = join(root, "writes.db");
+    await writeFile(path, "ALSO NOT A DATABASE");
+
+    const first = WorkspaceIndexStore.open(path);
+    first.putFiles([
+      {
+        display_path: "a.md",
+        size: 1,
+        modified_at_secs: 1,
+        document_hash: "h",
+        embed_chars: 1,
+        embedded: false,
+        reason: undefined,
+      },
+    ]);
+    expect(first.stats().files).toBe(1);
+    first.close();
+
+    const second = WorkspaceIndexStore.open(path);
+    expect(second.stats().files).toBe(0);
+    expect(second.unusableReason).toBeDefined();
+    second.close();
+  });
+
+  test("a healthy empty index is not reported as unusable", async () => {
+    const out = await section(sourceFor({ indexPathFor: () => join(root, "fresh.db") }));
+
+    expect(out?.unusable).toBeUndefined();
+    expect(out?.files).toBe(0);
   });
 });

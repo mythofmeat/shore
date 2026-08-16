@@ -45,7 +45,6 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "set_model_setting" => print_set_model_setting(data),
         "refresh_provider_models" => print_provider_refresh(data),
         "refresh_all_provider_models" => print_provider_refresh_all(data),
-        "memory" => print_memory(data),
         "compact" => print_compact_result(data),
         "config_reload" => print_config_reload(data),
         "edit" => print_edit_confirmation(data),
@@ -1213,35 +1212,6 @@ fn print_character_info(data: &serde_json::Value) {
             if false {
             }
         }
-    }
-    _ = writeln!(out);
-}
-
-fn print_memory(data: &serde_json::Value) {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
-    let width = term_width();
-
-    if let Some(result) = data["result"].as_str() {
-        _ = writeln!(out, "{result}");
-        return;
-    }
-
-    let char_name = data["character"].as_str().unwrap_or("?");
-    write_section_header(&mut out, "Memory", char_name, width);
-
-    let files = data["entries"].as_u64().unwrap_or(0);
-    let curated = data["curated_files"].as_u64().unwrap_or(0);
-    let daily = data["daily_files"].as_u64().unwrap_or(0);
-    let images = data["image_files"].as_u64().unwrap_or(0);
-
-    write_row(&mut out, "Files", &files.to_string());
-    if files > 0 {
-        write_row(
-            &mut out,
-            "Breakdown",
-            &format!("{curated} curated, {daily} daily, {images} images"),
-        );
     }
     _ = writeln!(out);
 }

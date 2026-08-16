@@ -325,8 +325,10 @@ pub(crate) enum CliCommand {
     /// Remove one or more messages from the conversation
     #[command(display_order = 6)]
     Delete {
-        /// Message references (last, -1, -2, 3, etc.). Every reference resolves
-        /// against the conversation as it stands before any of them are removed
+        /// Message references (last, -1, -2, 3, or a raw m_… id). Every reference
+        /// resolves against the conversation as it stands before any of them are
+        /// removed. A reference that lands inside a tool loop removes the whole
+        /// turn, since a tool result cannot outlive the call it answers
         #[arg(required = true, allow_hyphen_values = true, value_parser = message_ref)]
         msg_refs: Vec<String>,
 
@@ -2636,7 +2638,6 @@ mod tests {
             &["character", "use", "qifei"][..],
             &["character", "new", "ada"][..],
             &["provider", "models", "openrouter"][..],
-            &["memory", "what did we decide"][..],
             &["log", "last"][..],
             &["model", "--info", "opus"][..],
         ] {

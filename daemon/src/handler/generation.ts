@@ -233,9 +233,6 @@ export async function runGeneration(
     resolved,
     regen,
     mcpRegistry: deps.mcpRegistry,
-    ...(params.body.overrides === undefined
-      ? {}
-      : { overrides: params.body.overrides as never }),
   });
   const request: SidecarRequest = {
     ...built.request,

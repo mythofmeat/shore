@@ -11,6 +11,18 @@ pub(crate) fn write_index_section(out: &mut impl Write, index: &serde_json::Valu
         return;
     }
 
+    if let Some(reason) = index["unusable"].as_str() {
+        warning(out, &format!("index unavailable — {reason}"));
+        if let Some(path) = index["path"].as_str() {
+            write_row(out, "path", path);
+        }
+        note(
+            out,
+            "search still runs, but nothing it embeds survives a daemon restart",
+        );
+        return;
+    }
+
     let files = index["files"].as_u64().unwrap_or(0);
     let embedded = index["embedded"].as_u64().unwrap_or(0);
     let pending = index["pending"].as_u64().unwrap_or(0);
@@ -129,6 +141,54 @@ mod tests {
         let mut buf = Vec::new();
         write_index_section(&mut buf, data);
         String::from_utf8(buf).expect("utf8")
+    }
+
+    #[test]
+    #[ignore]
+    fn render_preview_index_unusable() {
+        crate::output::set_color_enabled(true);
+        let mut buf = Vec::new();
+        write_index_section(&mut buf, &serde_json::json!({
+            "path": "/home/eshen/.cache/shore/characters/poppy/workspace_index.db",
+            "unusable": "it already holds something that is not a SQLite database, and shore will not overwrite it",
+            "files": 0, "embedded": 0, "pending": 0, "skipped": 0, "skip_reasons": {},
+            "vectors": 0, "models": [], "bytes": 0, "last_indexed_at": null,
+            "background": {"registered": true, "swept": true, "failures": 0},
+        }));
+        write_index_section(&mut buf, &serde_json::json!({
+            "files": 0, "embedded": 0, "pending": 0, "skipped": 0, "skip_reasons": {},
+            "vectors": 0, "models": [], "bytes": 0, "last_indexed_at": null,
+            "background": {"registered": true, "swept": true, "failures": 0},
+        }));
+        crate::output::set_color_enabled(false);
+        use std::io::Write as _;
+        std::io::stdout().write_all(&buf).unwrap();
+    }
+
+    #[test]
+    fn an_unusable_index_says_so_instead_of_reporting_zeroes() {
+        let out = render(&serde_json::json!({
+            "path": "/cache/idx.db",
+            "unusable": "it already holds something that is not a SQLite database, and shore will not overwrite it",
+            "files": 0, "embedded": 0, "pending": 0, "skipped": 0, "skip_reasons": {},
+            "vectors": 0, "models": [], "bytes": 0, "last_indexed_at": null,
+            "background": {"registered": true, "swept": true, "failures": 0},
+        }));
+        assert!(out.contains("index unavailable"));
+        assert!(out.contains("not a SQLite database"));
+        assert!(!out.contains("nothing indexed yet"));
+        assert!(!out.contains("files seen"));
+    }
+
+    #[test]
+    fn a_healthy_empty_index_still_says_nothing_indexed_yet() {
+        let out = render(&serde_json::json!({
+            "files": 0, "embedded": 0, "pending": 0, "skipped": 0, "skip_reasons": {},
+            "vectors": 0, "models": [], "bytes": 0, "last_indexed_at": null,
+            "background": {"registered": true, "swept": true, "failures": 0},
+        }));
+        assert!(out.contains("nothing indexed yet"));
+        assert!(!out.contains("index unavailable"));
     }
 
     #[test]

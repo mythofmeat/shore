@@ -156,6 +156,53 @@ describe("framing", () => {
   }
 });
 
+describe("a message from an older client", () => {
+  async function decode(line: string) {
+    const bytes = new TextEncoder().encode(line);
+    return await driveFraming(once(bytes));
+  }
+
+  test("a per-message overrides field is ignored, not rejected", async () => {
+    const [first] = await decode(
+      JSON.stringify({
+        type: "message",
+        rid: "r1",
+        text: "hello",
+        stream: true,
+        images: [],
+        overrides: { temperature: 0.9, top_p: 0.4, thinking_budget: 2048 },
+      }) + "\n",
+    );
+
+    expect(first).toEqual({
+      ok: {
+        type: "message",
+        rid: "r1",
+        text: "hello",
+        stream: true,
+        images: [],
+        image_data: [],
+      },
+    });
+  });
+
+  test("any other unknown field is ignored too", async () => {
+    const [first] = await decode(
+      JSON.stringify({
+        type: "message",
+        text: "hello",
+        stream: false,
+        images: [],
+        invented_by_a_newer_client: { anything: true },
+      }) + "\n",
+    );
+
+    expect(first).toEqual({
+      ok: { type: "message", text: "hello", stream: false, images: [], image_data: [] },
+    });
+  });
+});
+
 const FLOAT_NOTATION_DIVERGES = new Set(["usage_warning"]);
 
 describe("write_message", () => {

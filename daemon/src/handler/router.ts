@@ -84,7 +84,6 @@ export interface EngineBody {
   readonly images: readonly string[];
   readonly image_data: readonly unknown[];
   readonly absence_seconds?: number | null;
-  readonly overrides?: unknown;
 }
 
 export interface HandlerNotifier {
@@ -190,7 +189,6 @@ export class MessageHandler {
           ...(msg.absence_seconds !== undefined
             ? { absence_seconds: msg.absence_seconds }
             : {}),
-          ...(msg.overrides !== undefined ? { overrides: msg.overrides } : {}),
         };
 
     this.#deps.leases.observe(resolved.name, meta.session.sessionId, meta.kind);

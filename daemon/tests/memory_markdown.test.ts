@@ -18,12 +18,7 @@ import {
   formatModifiedAt,
   type MarkdownEntry,
 } from "../src/memory/markdown_store";
-import {
-  excerptForQuery,
-  formatDirectResponse,
-  memoryStatus,
-  truncateChars,
-} from "../src/memory/markdown_query";
+import { truncateChars } from "../src/memory/markdown_query";
 
 type Node =
   | { kind: "dir" }
@@ -183,25 +178,6 @@ describe("markdown store parity", () => {
             case "delete":
               await store.delete(c.op.path!);
               break;
-            case "search_text":
-              returned = entriesJson(await store.searchText(c.op.query!));
-              break;
-            case "memory_status": {
-              const s = await memoryStatus(store);
-              returned = {
-                total_files: s.totalFiles,
-                topic_files: s.topicFiles,
-                daily_files: s.dailyFiles,
-                image_files: s.imageFiles,
-              };
-              break;
-            }
-            case "search_and_format":
-              returned = formatDirectResponse(
-                c.op.query!,
-                await store.searchText(c.op.query!),
-              );
-              break;
             default:
               throw new Error(`unhandled op ${c.op.fn}`);
           }
@@ -229,24 +205,9 @@ describe("markdown query parity", () => {
   for (const c of fixture.pure_cases) {
     test(c.name, () => {
       switch (c.op.fn) {
-        case "excerpt_for_query":
-          expect(excerptForQuery(b64(c.op.text!), c.op.query!, c.op.limit!)).toBe(
-            c.returns,
-          );
-          break;
         case "truncate_chars":
           expect(truncateChars(b64(c.op.text!), c.op.limit!)).toBe(c.returns);
           break;
-        case "format_direct_response": {
-          const hits: MarkdownEntry[] = c.op.hits!.map((h) => ({
-            path: h.path,
-            content: b64(h.content),
-            size: Buffer.byteLength(b64(h.content), "utf8"),
-            modifiedAt: "",
-          }));
-          expect(formatDirectResponse(c.op.query!, hits)).toBe(c.returns);
-          break;
-        }
         default:
           throw new Error(`unhandled pure op ${c.op.fn}`);
       }

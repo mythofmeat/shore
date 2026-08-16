@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync, statSync, unlinkSync } from "node:fs";
+import { chmodSync, closeSync, mkdirSync, openSync, readSync, statSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 export const WORKSPACE_INDEX_DB_FILE = "workspace_index.db";
@@ -50,6 +50,7 @@ export interface WorkspaceIndexStats {
   models: string[];
   bytes: number;
   lastIndexedAt: string | undefined;
+  unusableReason: string | undefined;
 }
 
 export function workspaceIndexDbPath(cacheDir: string, character: string): string {
@@ -81,6 +82,37 @@ function removeCacheFiles(path: string): void {
   }
 }
 
+const SQLITE_MAGIC = "SQLite format 3\0";
+
+export function occupiedByForeignFile(path: string): boolean {
+  let size: number;
+  try {
+    const info = statSync(path);
+    if (!info.isFile()) return true;
+    size = info.size;
+  } catch {
+    return false;
+  }
+  if (size === 0) return false;
+
+  const head = Buffer.alloc(SQLITE_MAGIC.length);
+  let read = 0;
+  let fd: number | undefined;
+  try {
+    fd = openSync(path, "r");
+    read = readSync(fd, head, 0, head.length, 0);
+  } catch {
+    return true;
+  } finally {
+    if (fd !== undefined) {
+      try {
+        closeSync(fd);
+      } catch {}
+    }
+  }
+  return read < head.length || head.toString("latin1") !== SQLITE_MAGIC;
+}
+
 const storeLocks = new Map<string, Promise<void>>();
 
 export async function withWorkspaceIndexLock<T>(path: string, run: () => Promise<T>): Promise<T> {
@@ -100,14 +132,22 @@ export async function withWorkspaceIndexLock<T>(path: string, run: () => Promise
 
 export class WorkspaceIndexStore {
   readonly path: string;
+  readonly unusableReason: string | undefined;
   #db: Database;
 
-  private constructor(path: string, db: Database) {
+  private constructor(path: string, db: Database, unusableReason?: string) {
     this.path = path;
+    this.unusableReason = unusableReason;
     this.#db = db;
   }
 
   static open(path: string): WorkspaceIndexStore {
+    if (occupiedByForeignFile(path)) {
+      return WorkspaceIndexStore.#inMemory(
+        path,
+        "it already holds something that is not a SQLite database, and shore will not overwrite it",
+      );
+    }
     try {
       mkdirSync(dirname(path), { recursive: true });
     } catch {}
@@ -141,21 +181,30 @@ export class WorkspaceIndexStore {
   }
 
   static #rebuild(path: string): WorkspaceIndexStore {
-    for (const target of [path, ":memory:"]) {
+    try {
+      const db = new Database(path, { create: true, readwrite: true });
+      db.exec(SCHEMA);
+      db.exec(`PRAGMA user_version = ${WORKSPACE_INDEX_SCHEMA_VERSION}`);
+      db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
       try {
-        const db = new Database(target, { create: true, readwrite: true });
-        db.exec(SCHEMA);
-        db.exec(`PRAGMA user_version = ${WORKSPACE_INDEX_SCHEMA_VERSION}`);
-        if (target !== ":memory:") {
-          db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
-          try {
-            chmodSync(path, 0o600);
-          } catch {}
-        }
-        return new WorkspaceIndexStore(path, db);
+        chmodSync(path, 0o600);
       } catch {}
+      return new WorkspaceIndexStore(path, db);
+    } catch (e) {
+      const cause = e instanceof Error ? e.message : String(e);
+      return WorkspaceIndexStore.#inMemory(path, `it cannot hold a database: ${cause}`);
     }
-    throw new Error(`cannot open a workspace index at ${path}`);
+  }
+
+  static #inMemory(path: string, reason: string): WorkspaceIndexStore {
+    console.warn(
+      `shore: the workspace index at ${path} is unusable, so search is running on a ` +
+        `throwaway in-memory index that is discarded when the daemon stops: ${reason}`,
+    );
+    const db = new Database(":memory:", { create: true, readwrite: true });
+    db.exec(SCHEMA);
+    db.exec(`PRAGMA user_version = ${WORKSPACE_INDEX_SCHEMA_VERSION}`);
+    return new WorkspaceIndexStore(path, db, reason);
   }
 
   close(): void {
@@ -324,10 +373,12 @@ export class WorkspaceIndexStore {
     }
 
     let bytes = 0;
-    for (const candidate of [this.path, `${this.path}-wal`, `${this.path}-shm`]) {
-      try {
-        bytes += statSync(candidate).size;
-      } catch {}
+    if (this.unusableReason === undefined) {
+      for (const candidate of [this.path, `${this.path}-wal`, `${this.path}-shm`]) {
+        try {
+          bytes += statSync(candidate).size;
+        } catch {}
+      }
     }
 
     return {
@@ -340,6 +391,7 @@ export class WorkspaceIndexStore {
       models: models.map((m) => m.model),
       bytes,
       lastIndexedAt: this.metadata("last_indexed_at"),
+      unusableReason: this.unusableReason,
     };
   }
 }

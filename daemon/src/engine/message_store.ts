@@ -153,6 +153,33 @@ export function isToolResultOnly(m: Message): boolean {
 
 const isRealUserTurn = (m: Message): boolean => m.role === "user" && !isToolResultOnly(m);
 
+function toolUseIdsOffered(msg: Message | undefined): Set<string> {
+  if (msg === undefined || msg.role !== "assistant") return new Set();
+  const ids = msg.content_blocks.filter((b) => b.type === "tool_use").map((b) => b.id);
+  return new Set(ids);
+}
+
+export function withoutOrphanToolResults(messages: readonly Message[]): Message[] {
+  const kept: Message[] = [];
+  for (const msg of messages) {
+    if (!msg.content_blocks.some((b) => b.type === "tool_result")) {
+      kept.push(msg);
+      continue;
+    }
+    const offered = toolUseIdsOffered(kept[kept.length - 1]);
+    const blocks = msg.content_blocks.filter(
+      (b) => b.type !== "tool_result" || offered.has(b.tool_use_id),
+    );
+    if (blocks.length === 0) continue;
+    if (blocks.length === msg.content_blocks.length) {
+      kept.push(msg);
+      continue;
+    }
+    kept.push({ ...msg, content_blocks: blocks, content: deriveContentFromBlocks(blocks, true) });
+  }
+  return kept;
+}
+
 export function cannotTravelInAlternative(b: ContentBlock): boolean {
   if (b.type === "tool_use" || b.type === "tool_result") return true;
   return b.type === "text" && b.text.trim() === "";
@@ -348,9 +375,17 @@ export class MessageStore {
   }
 
   async delete(msgId: string): Promise<void> {
-    const idx = this.#messages.findIndex((m) => m.msg_id === msgId);
-    if (idx === -1) throw new MessageNotFound(msgId);
-    this.#messages.splice(idx, 1);
+    await this.deleteAll([msgId]);
+  }
+
+  async deleteAll(msgIds: readonly string[]): Promise<void> {
+    const doomed = new Set(msgIds);
+    for (const msgId of doomed) {
+      if (!this.#messages.some((m) => m.msg_id === msgId)) throw new MessageNotFound(msgId);
+    }
+    const kept = withoutOrphanToolResults(this.#messages.filter((m) => !doomed.has(m.msg_id)));
+    this.#messages.length = 0;
+    this.#messages.push(...kept);
     await this.#persist();
   }
 

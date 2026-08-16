@@ -9,7 +9,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use shore_common::protocol::client_msg::{
-    Cancel, ClientHello, ClientMessage, ClientMessageBody, Command, ImageUpload, MessageOverrides,
+    Cancel, ClientHello, ClientMessage, ClientMessageBody, Command, ImageUpload,
     Regen,
 };
 use shore_common::protocol::error::ErrorCode;
@@ -240,31 +240,17 @@ fn arb_client_message() -> BoxedStrategy<ClientMessage> {
         prop::collection::vec(arb_small_string(), 0..2),
         prop::collection::vec(image_upload, 0..2),
         prop::option::of(0_u64..100_000),
-        prop::option::of((
-            prop::option::of(arb_decimal(20)),
-            prop::option::of(arb_decimal(10)),
-            prop::option::of(0_u32..20_000),
-        )),
     )
-        .prop_map(
-            |(rid, text, stream, images, image_data, absence_seconds, overrides)| {
-                ClientMessage::Message(ClientMessageBody {
-                    rid,
-                    text,
-                    stream,
-                    images,
-                    image_data,
-                    absence_seconds,
-                    overrides: overrides.map(|(temperature, top_p, thinking_budget)| {
-                        MessageOverrides {
-                            temperature,
-                            top_p,
-                            thinking_budget,
-                        }
-                    }),
-                })
-            },
-        );
+        .prop_map(|(rid, text, stream, images, image_data, absence_seconds)| {
+            ClientMessage::Message(ClientMessageBody {
+                rid,
+                text,
+                stream,
+                images,
+                image_data,
+                absence_seconds,
+            })
+        });
 
     prop_oneof![
         hello,

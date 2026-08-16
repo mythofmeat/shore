@@ -26,12 +26,6 @@ export interface SetupEngine {
   segmentCount(): number;
 }
 
-export interface MessageOverrides {
-  temperature?: number;
-  top_p?: number;
-  thinking_budget?: number;
-}
-
 export class NoModelError extends Error {
   readonly code: ErrorCode = "invalid_request";
 
@@ -84,7 +78,6 @@ export interface BuildGenerationRequestParams {
   resolved: ResolvedModel;
   regen: boolean;
   mcpRegistry: Pick<McpRegistry, "toolDefsFiltered">;
-  overrides?: MessageOverrides;
   timeZone?: string;
 }
 
@@ -111,27 +104,10 @@ export async function buildGenerationRequest(
     ...(params.timeZone === undefined ? {} : { timeZone: params.timeZone }),
   });
 
-  const built = buildRequestWithResolvedKey(toRequestModel(resolved), "", {
+  return buildRequestWithResolvedKey(toRequestModel(resolved), "", {
     messages: prepared.llmMessages,
     system: prepared.system,
     ...(prepared.toolDefs === undefined ? {} : { tools: prepared.toolDefs }),
     replay: resolvedReplayPriorThinking(resolved, config.app.memory.thinking.replay_prior_thinking),
   });
-
-  return params.overrides === undefined
-    ? built
-    : { ...built, request: withOverrides(built.request, params.overrides) };
-}
-
-function withOverrides<T extends { temperature?: number; top_p?: number; provider_options?: object }>(
-  request: T,
-  overrides: MessageOverrides,
-): T {
-  const out = { ...request };
-  if (overrides.temperature !== undefined) out.temperature = overrides.temperature;
-  if (overrides.top_p !== undefined) out.top_p = overrides.top_p;
-  if (overrides.thinking_budget !== undefined) {
-    out.provider_options = { ...out.provider_options, budget_tokens: overrides.thinking_budget };
-  }
-  return out;
 }

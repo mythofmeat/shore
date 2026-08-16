@@ -134,7 +134,6 @@ function decodeClientMessage(value: unknown): ClientMessage {
         images: arr<string>("images"),
         image_data: arr("image_data"),
         ...opt("absence_seconds", numberOrUndefined(raw.absence_seconds, "absence_seconds")),
-        ...opt("overrides", raw.overrides === undefined ? undefined : raw.overrides),
       } as ClientMessage;
     case "regen":
       return {
