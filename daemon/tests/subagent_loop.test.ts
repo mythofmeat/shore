@@ -491,3 +491,127 @@ describe("the prompt macros", () => {
     expect(systemText).not.toContain("SHOULD NOT APPEAR");
   });
 });
+
+describe("a sub-agent's saved settings reach the wire", () => {
+  async function writePrefs(root: string, toml: string): Promise<void> {
+    const dir = join(root, "data", "ada", "preferences");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "models.toml"), toml);
+  }
+
+  test("its own temperature is sent", async () => {
+    const { config, root } = await configWith({ researcher: spec() });
+    await writePrefs(root, "[subagents.researcher]\ntemperature = 0.25\n");
+
+    const seen: SidecarRequest[] = [];
+    await run(config, root, "researcher", scriptedProvider("done", seen));
+    expect(seen[0]?.temperature).toBe(0.25);
+  });
+
+  test("the chat model's temperature is not, even on the same model", async () => {
+    const { config, root } = await configWith({ researcher: spec() });
+    await writePrefs(root, '[models."openrouter:cheap"]\ntemperature = 0.9\n');
+
+    const seen: SidecarRequest[] = [];
+    await run(config, root, "researcher", scriptedProvider("done", seen));
+    expect(seen[0]?.temperature).toBeUndefined();
+  });
+
+  test("the global default sampler is not inherited either", async () => {
+    const { config, root } = await configWith({ researcher: spec() });
+    await writePrefs(root, "[defaults.sampler]\ntemperature = 0.9\n");
+
+    const seen: SidecarRequest[] = [];
+    await run(config, root, "researcher", scriptedProvider("done", seen));
+    expect(seen[0]?.temperature).toBeUndefined();
+  });
+
+  test("one sub-agent's settings do not reach another", async () => {
+    const { config, root } = await configWith({
+      researcher: spec(),
+      librarian: spec(),
+    });
+    await writePrefs(root, "[subagents.librarian]\ntemperature = 0.25\n");
+
+    const seen: SidecarRequest[] = [];
+    await run(config, root, "researcher", scriptedProvider("done", seen));
+    expect(seen[0]?.temperature).toBeUndefined();
+  });
+
+  test("max_output_tokens from its own slot reaches max_tokens", async () => {
+    const { config, root } = await configWith({ researcher: spec() });
+    await writePrefs(root, "[subagents.researcher]\nmax_output_tokens = 4096\n");
+
+    const seen: SidecarRequest[] = [];
+    await run(config, root, "researcher", scriptedProvider("done", seen));
+    expect(seen[0]?.max_tokens).toBe(4096);
+  });
+
+  test("a run with no saved settings still works", async () => {
+    const { config, root } = await configWith({ researcher: spec() });
+    const seen: SidecarRequest[] = [];
+    const out = await run(config, root, "researcher", scriptedProvider("done", seen));
+    expect(out).toBe("done");
+    expect(seen[0]?.temperature).toBeUndefined();
+  });
+});
+
+describe("settings shared across sub-agents reach the wire", () => {
+  async function writePrefs(root: string, toml: string): Promise<void> {
+    const dir = join(root, "data", "ada", "preferences");
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "models.toml"), toml);
+  }
+
+  test("one entry covers several sub-agents on the same model", async () => {
+    const { config, root } = await configWith({
+      researcher: spec(),
+      librarian: spec(),
+    });
+    await writePrefs(root, '[subagent_models."openrouter:cheap"]\ntemperature = 0.3\n');
+
+    for (const name of ["researcher", "librarian"]) {
+      const seen: SidecarRequest[] = [];
+      await run(config, root, name, scriptedProvider("done", seen));
+      expect(seen[0]?.temperature).toBe(0.3);
+    }
+  });
+
+  test("a per-name entry overrides it for just that sub-agent", async () => {
+    const { config, root } = await configWith({
+      researcher: spec(),
+      librarian: spec(),
+    });
+    await writePrefs(
+      root,
+      '[subagent_models."openrouter:cheap"]\ntemperature = 0.3\n\n' +
+        "[subagents.librarian]\ntemperature = 0.9\n",
+    );
+
+    const researcher: SidecarRequest[] = [];
+    await run(config, root, "researcher", scriptedProvider("done", researcher));
+    const librarian: SidecarRequest[] = [];
+    await run(config, root, "librarian", scriptedProvider("done", librarian));
+
+    expect(researcher[0]?.temperature).toBe(0.3);
+    expect(librarian[0]?.temperature).toBe(0.9);
+  });
+
+  test("it is keyed to the model, so it does not follow a model swap", async () => {
+    const { config, root } = await configWith({ researcher: spec() });
+    await writePrefs(root, '[subagent_models."openrouter:other"]\ntemperature = 0.3\n');
+
+    const seen: SidecarRequest[] = [];
+    await run(config, root, "researcher", scriptedProvider("done", seen));
+    expect(seen[0]?.temperature).toBeUndefined();
+  });
+
+  test("the chat model's slot on the same model still does not leak in", async () => {
+    const { config, root } = await configWith({ researcher: spec() });
+    await writePrefs(root, '[models."openrouter:cheap"]\ntemperature = 0.9\n');
+
+    const seen: SidecarRequest[] = [];
+    await run(config, root, "researcher", scriptedProvider("done", seen));
+    expect(seen[0]?.temperature).toBeUndefined();
+  });
+});

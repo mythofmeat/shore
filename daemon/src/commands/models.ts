@@ -18,9 +18,13 @@ import {
   resolveChatModelForCharacter,
   resolveSamplerSettings,
   resolveSamplerScopes,
+  resolveSubagentSampler,
+  resolveSubagentScopes,
   samplerIsEmpty,
   saveCharacterPreferences,
   saveGlobalPreferences,
+  subagentModelPreference,
+  subagentPreference,
   SAMPLER_KEYS,
   type BackgroundTask,
   type ModelPreferences,
@@ -28,6 +32,7 @@ import {
   type SamplerSettings,
 } from "../config/preferences.ts";
 import { reasoningDomain } from "../llm/capabilities.ts";
+import { missingModelMessage, resolveSubagentModel } from "../tools/subagent.ts";
 import { applySamplerValue, capabilityCheck, keyApplicability } from "./model_settings.ts";
 import { internalError, invalidRequest, notFound, type CommandError } from "./errors.ts";
 
@@ -135,14 +140,82 @@ function backgroundSettingTarget(ctx: ModelsContext, selector: string): Resolved
   );
 }
 
-function settingTarget(ctx: ModelsContext, args: Args): ResolvedModel {
+export type SettingTarget =
+  | { kind: "model"; model: ResolvedModel }
+  | { kind: "subagent"; subagent: string; model: ResolvedModel }
+  | { kind: "subagent_model"; model: ResolvedModel };
+
+const ALL_SUBAGENTS = "all";
+
+function subagentModelName(ctx: ModelsContext, subagent: string): string {
+  const spec = ctx.config.app.subagents.get(subagent);
+  if (spec === undefined) {
+    const known = [...ctx.config.app.subagents.keys()].sort();
+    const suffix = known.length === 0 ? "none are configured" : `known: ${known.join(", ")}`;
+    throw notFound(`unknown sub-agent: ${subagent}; ${suffix}`);
+  }
+
+  const modelName = resolveSubagentModel(spec.model, {
+    ...(ctx.config.app.defaults.subagent_model === undefined
+      ? {}
+      : { subagent_model: ctx.config.app.defaults.subagent_model }),
+    ...(ctx.config.app.defaults.model === undefined
+      ? {}
+      : { model: ctx.config.app.defaults.model }),
+  });
+  if (modelName === undefined) throw invalidRequest(missingModelMessage(subagent));
+  return modelName;
+}
+
+function targetableSubagents(ctx: ModelsContext): string[] {
+  const configured = [...ctx.config.app.subagents.keys()].sort();
+  const enabled = configured.filter((name) =>
+    ctx.config.app.tools.enabled_subagents.includes(name),
+  );
+  return enabled.length === 0 ? configured : enabled;
+}
+
+function sharedSubagentModel(ctx: ModelsContext): ResolvedModel {
+  const names = targetableSubagents(ctx);
+  if (names.length === 0) throw notFound("no sub-agents are configured");
+
+  const resolved = names.map((name) => [name, resolve(ctx, subagentModelName(ctx, name), true)] as const);
+  const first = resolved[0]![1];
+  const same = resolved.every(
+    ([, m]) => m.providerKey === first.providerKey && m.modelId === first.modelId,
+  );
+  if (same) return first;
+
+  const mapping = resolved.map(([name, m]) => `${name} → ${m.qualifiedName}`).join(", ");
+  throw invalidRequest(
+    `sub-agents use different models (${mapping}); target one by name instead of \`all\``,
+  );
+}
+
+function subagentSettingTarget(ctx: ModelsContext, subagent: string): SettingTarget {
+  if (subagent === ALL_SUBAGENTS) {
+    return { kind: "subagent_model", model: sharedSubagentModel(ctx) };
+  }
+  return {
+    kind: "subagent",
+    subagent,
+    model: resolve(ctx, subagentModelName(ctx, subagent), true),
+  };
+}
+
+function settingTarget(ctx: ModelsContext, args: Args): SettingTarget {
+  const subagent = asName(args["subagent"]);
+  if (subagent !== undefined) return subagentSettingTarget(ctx, subagent);
+
   const selector = asStr(args["background_task"]);
-  if (selector !== undefined) return backgroundSettingTarget(ctx, selector);
+  if (selector !== undefined) {
+    return { kind: "model", model: backgroundSettingTarget(ctx, selector) };
+  }
 
   const name = asName(args["name"]);
-  if (name !== undefined) return resolve(ctx, name, true);
+  if (name !== undefined) return { kind: "model", model: resolve(ctx, name, true) };
 
-  return resolveActiveModel(ctx);
+  return { kind: "model", model: resolveActiveModel(ctx) };
 }
 
 function qualify(ctx: ModelsContext, name: string): string {
@@ -438,19 +511,27 @@ export function setModelSetting(ctx: ModelsContext, args: Args): unknown {
   }
 
   const target = settingTarget(ctx, args);
-  const failure = capabilityCheck(target.sdk, target.modelId, key, value, target.capabilities);
+  const model = target.model;
+  const failure = capabilityCheck(model.sdk, model.modelId, key, value, model.capabilities);
   if (failure !== undefined) throw failure;
 
   const character = scope === "character" ? requireCharacter(ctx) : undefined;
   const prefs =
     character === undefined ? loadGlobalPreferences(ctx) : loadCharacterPreferences(ctx, character);
 
-  const entryKey = preferenceKey(target.providerKey, target.modelId);
-  const entry = prefs.models.get(entryKey) ?? { sampler: {} };
+  const slot =
+    target.kind === "subagent"
+      ? prefs.subagents
+      : target.kind === "subagent_model"
+        ? prefs.subagentModels
+        : prefs.models;
+  const entryKey =
+    target.kind === "subagent" ? target.subagent : preferenceKey(model.providerKey, model.modelId);
+  const entry = slot.get(entryKey) ?? { sampler: {} };
   applySamplerValue(entry.sampler, key, value);
 
-  if (samplerIsEmpty(entry.sampler)) prefs.models.delete(entryKey);
-  else prefs.models.set(entryKey, entry);
+  if (samplerIsEmpty(entry.sampler)) slot.delete(entryKey);
+  else slot.set(entryKey, entry);
 
   if (character === undefined) saveGlobal(ctx, prefs);
   else saveCharacter(ctx, character, prefs);
@@ -458,12 +539,24 @@ export function setModelSetting(ctx: ModelsContext, args: Args): unknown {
   return {
     changed: true,
     scope,
-    model: target.qualifiedName,
-    provider: target.providerKey,
-    model_id: target.modelId,
+    model: model.qualifiedName,
+    provider: model.providerKey,
+    model_id: model.modelId,
+    ...targetJson(target),
     key,
     value,
   };
+}
+
+function targetJson(target: SettingTarget): Record<string, unknown> {
+  switch (target.kind) {
+    case "subagent":
+      return { subagent: target.subagent };
+    case "subagent_model":
+      return { subagent: ALL_SUBAGENTS, applies_to: "every sub-agent on this model" };
+    case "model":
+      return {};
+  }
 }
 
 function loadGlobalPreferences(ctx: ModelsContext): ModelPreferences {
@@ -492,40 +585,57 @@ const SETTINGS_SCOPE_FIELDS = [
 
 export function modelSettings(ctx: ModelsContext, args: Args): unknown {
   const target = settingTarget(ctx, args);
+  const model = target.model;
   const character = ctx.characterName;
   const [global, charPrefs] =
     character === undefined
       ? [emptyPreferences(), undefined]
       : loadPreferencesFor(ctx.dataDir, character);
 
-  const sampler = resolveSamplerSettings(
-    global,
-    charPrefs,
-    target.providerKey,
-    target.modelId,
-    target,
-  );
-  const scopes = resolveSamplerScopes(
-    global,
-    charPrefs,
-    target.providerKey,
-    target.modelId,
-    target,
-  );
+  const subagentName = target.kind === "subagent" ? target.subagent : undefined;
+  const sampler =
+    target.kind === "model"
+      ? resolveSamplerSettings(global, charPrefs, model.providerKey, model.modelId, model)
+      : resolveSubagentSampler(
+          global,
+          charPrefs,
+          subagentName,
+          model.providerKey,
+          model.modelId,
+          model,
+        );
+  const scopes =
+    target.kind === "model"
+      ? resolveSamplerScopes(global, charPrefs, model.providerKey, model.modelId, model)
+      : resolveSubagentScopes(
+          global,
+          charPrefs,
+          subagentName,
+          model.providerKey,
+          model.modelId,
+          model,
+        );
   const saved = (prefs: ModelPreferences | undefined): unknown => {
-    const entry = prefs === undefined ? undefined : modelPreference(prefs, target.providerKey, target.modelId);
+    if (prefs === undefined) return null;
+    const entry =
+      target.kind === "subagent"
+        ? subagentPreference(prefs, target.subagent)
+        : target.kind === "subagent_model"
+          ? subagentModelPreference(prefs, model.providerKey, model.modelId)
+          : modelPreference(prefs, model.providerKey, model.modelId);
     return entry === undefined ? null : samplerJson(entry.sampler);
   };
 
   return {
-    model: target.qualifiedName,
-    provider: target.providerKey,
-    model_id: target.modelId,
+    model: model.qualifiedName,
+    provider: model.providerKey,
+    model_id: model.modelId,
+    ...targetJson(target),
     effective_sampler: samplerJson(sampler),
     saved_global: saved(global),
     saved_character: saved(charPrefs),
-    applicability: keyApplicability(target.sdk, target.modelId, target.capabilities),
-    reasoning_effort_domain: reasoningDomain(target.sdk, target.capabilities),
+    applicability: keyApplicability(model.sdk, model.modelId, model.capabilities),
+    reasoning_effort_domain: reasoningDomain(model.sdk, model.capabilities),
     scopes: scopesJson(scopes, SETTINGS_SCOPE_FIELDS),
   };
 }

@@ -378,3 +378,216 @@ test("sub-agents that pin their own model are counted, not hidden", async () => 
   );
   expect(roles.get("sub-agents")?.source).toBe("defaults.subagent_model · 1 override");
 });
+
+describe("targeting a sub-agent's own settings", () => {
+  const CATALOG =
+    '[chat.anthropic.alpha]\nmodel_id = "alpha-id"\nsdk = "anthropic"\ntemperature = 0.5\n\n' +
+    '[chat.anthropic.beta]\nmodel_id = "beta-id"\nsdk = "anthropic"\ntemperature = 0.2\n';
+
+  const DEFAULTS =
+    '[defaults]\nmodel = "alpha"\n\n' +
+    '[subagents.librarian]\ndescription = "looks things up"\nprompt = "you look things up"\n' +
+    'model = "beta"\n\n' +
+    '[subagents.sharer]\ndescription = "shares the chat model"\nprompt = "you share"\n';
+
+  const setup = (overrides: Partial<Setup> = {}): Setup => ({
+    catalog: CATALOG,
+    defaults: DEFAULTS,
+    discovery: [],
+    character: "Tester",
+    global_prefs: null,
+    character_prefs: null,
+    active_model: null,
+    pre_resolved: null,
+    ...overrides,
+  });
+
+  const character = (ctx: ModelsContext): ModelPreferences =>
+    loadPreferences(characterPreferencesPath(ctx.dataDir, ctx.characterName as string));
+
+  test("a value lands in the sub-agent's slot, not the model's", async () => {
+    const ctx = await buildContext(setup());
+    setModelSetting(ctx, { subagent: "librarian", key: "temperature", value: 0.25 });
+
+    const prefs = character(ctx);
+    expect(prefs.subagents.get("librarian")?.sampler.temperature).toBe(0.25);
+    expect(prefs.models.size).toBe(0);
+  });
+
+  test("tuning the chat model leaves the sub-agent alone", async () => {
+    const ctx = await buildContext(setup());
+    setModelSetting(ctx, { key: "temperature", value: 0.9 });
+
+    const shown = modelSettings(ctx, { subagent: "sharer" }) as Record<string, unknown>;
+    const sampler = shown["effective_sampler"] as Record<string, unknown>;
+    expect(sampler["temperature"]).toBe(0.5);
+  });
+
+  test("tuning the sub-agent leaves the chat model alone", async () => {
+    const ctx = await buildContext(setup());
+    setModelSetting(ctx, { subagent: "sharer", key: "temperature", value: 0.1 });
+
+    const shown = modelSettings(ctx, {}) as Record<string, unknown>;
+    const sampler = shown["effective_sampler"] as Record<string, unknown>;
+    expect(sampler["temperature"]).toBe(0.5);
+  });
+
+  test("the shown target is the sub-agent's own model", async () => {
+    const ctx = await buildContext(setup());
+    const shown = modelSettings(ctx, { subagent: "librarian" }) as Record<string, unknown>;
+    expect(shown["subagent"]).toBe("librarian");
+    expect(shown["model_id"]).toBe("beta-id");
+  });
+
+  test("a sub-agent with no model of its own falls back to the default", async () => {
+    const ctx = await buildContext(setup());
+    const shown = modelSettings(ctx, { subagent: "sharer" }) as Record<string, unknown>;
+    expect(shown["model_id"]).toBe("alpha-id");
+  });
+
+  test("clearing the last value drops the sub-agent's slot", async () => {
+    const ctx = await buildContext(setup());
+    setModelSetting(ctx, { subagent: "librarian", key: "temperature", value: 0.25 });
+    setModelSetting(ctx, { subagent: "librarian", key: "temperature", value: null });
+    expect(character(ctx).subagents.size).toBe(0);
+  });
+
+  test("an unknown sub-agent is a not-found, and says which exist", async () => {
+    const ctx = await buildContext(setup());
+    let caught: CommandError | undefined;
+    try {
+      setModelSetting(ctx, { subagent: "ghost", key: "temperature", value: 0.25 });
+    } catch (e) {
+      caught = e as CommandError;
+    }
+    expect(caught).toBeInstanceOf(CommandError);
+    expect(caught?.message).toContain("ghost");
+    expect(caught?.message).toContain("librarian");
+  });
+
+  test("--global writes the sub-agent slot in the global file", async () => {
+    const ctx = await buildContext(setup());
+    setModelSetting(ctx, {
+      subagent: "librarian",
+      key: "temperature",
+      value: 0.25,
+      scope: "global",
+    });
+
+    const global = loadPreferences(globalPreferencesPath(ctx.dataDir));
+    expect(global.subagents.get("librarian")?.sampler.temperature).toBe(0.25);
+    expect(character(ctx).subagents.size).toBe(0);
+  });
+
+  test("naming a model targets it without switching the active one", async () => {
+    const ctx = await buildContext(setup());
+    setModelSetting(ctx, { name: "beta", key: "temperature", value: 0.15 });
+
+    const prefs = character(ctx);
+    expect(prefs.models.get("anthropic:beta-id")?.sampler.temperature).toBe(0.15);
+    expect(ctx.activeModel).toBeUndefined();
+    expect(prefs.selected.modelId).toBeUndefined();
+  });
+});
+
+describe("targeting every sub-agent at once", () => {
+  const CATALOG =
+    '[chat.anthropic.alpha]\nmodel_id = "alpha-id"\nsdk = "anthropic"\ntemperature = 0.5\n\n' +
+    '[chat.anthropic.beta]\nmodel_id = "beta-id"\nsdk = "anthropic"\ntemperature = 0.2\n';
+
+  const sharedSetup = (): Setup => ({
+    catalog: CATALOG,
+    defaults:
+      '[defaults]\nmodel = "alpha"\nsubagent_model = "beta"\n\n' +
+      '[subagents.internet]\ndescription = "d"\nprompt = "p"\n\n' +
+      '[subagents.memory]\ndescription = "d"\nprompt = "p"\n\n' +
+      '[subagents.music]\ndescription = "d"\nprompt = "p"\n',
+    discovery: [],
+    character: "Tester",
+    global_prefs: null,
+    character_prefs: null,
+    active_model: null,
+    pre_resolved: null,
+  });
+
+  const character = (ctx: ModelsContext): ModelPreferences =>
+    loadPreferences(characterPreferencesPath(ctx.dataDir, ctx.characterName as string));
+
+  test("one write covers every sub-agent sharing the model", async () => {
+    const ctx = await buildContext(sharedSetup());
+    setModelSetting(ctx, { subagent: "all", key: "temperature", value: 0.3 });
+
+    expect(character(ctx).subagentModels.get("anthropic:beta-id")?.sampler.temperature).toBe(0.3);
+    for (const name of ["internet", "memory", "music"]) {
+      const shown = modelSettings(ctx, { subagent: name }) as Record<string, unknown>;
+      const sampler = shown["effective_sampler"] as Record<string, unknown>;
+      expect(sampler["temperature"]).toBe(0.3);
+    }
+  });
+
+  test("it targets the sub-agent model, not the chat model", async () => {
+    const ctx = await buildContext(sharedSetup());
+    setModelSetting(ctx, { subagent: "all", key: "temperature", value: 0.3 });
+
+    const chat = modelSettings(ctx, {}) as Record<string, unknown>;
+    expect((chat["effective_sampler"] as Record<string, unknown>)["temperature"]).toBe(0.5);
+    expect(character(ctx).models.size).toBe(0);
+  });
+
+  test("a per-name setting still wins over it", async () => {
+    const ctx = await buildContext(sharedSetup());
+    setModelSetting(ctx, { subagent: "all", key: "temperature", value: 0.3 });
+    setModelSetting(ctx, { subagent: "music", key: "temperature", value: 0.9 });
+
+    const music = modelSettings(ctx, { subagent: "music" }) as Record<string, unknown>;
+    const memory = modelSettings(ctx, { subagent: "memory" }) as Record<string, unknown>;
+    expect((music["effective_sampler"] as Record<string, unknown>)["temperature"]).toBe(0.9);
+    expect((memory["effective_sampler"] as Record<string, unknown>)["temperature"]).toBe(0.3);
+  });
+
+  test("sub-agents on different models refuse `all` and name the split", async () => {
+    const setup = sharedSetup();
+    setup.defaults = setup.defaults.replace(
+      '[subagents.music]\ndescription = "d"\nprompt = "p"\n',
+      '[subagents.music]\ndescription = "d"\nprompt = "p"\nmodel = "alpha"\n',
+    );
+    const ctx = await buildContext(setup);
+
+    let caught: CommandError | undefined;
+    try {
+      setModelSetting(ctx, { subagent: "all", key: "temperature", value: 0.3 });
+    } catch (e) {
+      caught = e as CommandError;
+    }
+    expect(caught).toBeInstanceOf(CommandError);
+    expect(caught?.message).toContain("music");
+    expect(caught?.message).toContain("target one by name");
+  });
+
+  test("only the sub-agents enabled for the character are considered", async () => {
+    const setup = sharedSetup();
+    setup.defaults =
+      setup.defaults.replace(
+        '[subagents.music]\ndescription = "d"\nprompt = "p"\n',
+        '[subagents.music]\ndescription = "d"\nprompt = "p"\nmodel = "alpha"\n',
+      ) + '\n[tools]\nenabled_subagents = ["internet", "memory"]\n';
+    const ctx = await buildContext(setup);
+
+    setModelSetting(ctx, { subagent: "all", key: "temperature", value: 0.3 });
+    expect(character(ctx).subagentModels.get("anthropic:beta-id")?.sampler.temperature).toBe(0.3);
+  });
+
+  test("clearing the last value drops the shared slot", async () => {
+    const ctx = await buildContext(sharedSetup());
+    setModelSetting(ctx, { subagent: "all", key: "temperature", value: 0.3 });
+    setModelSetting(ctx, { subagent: "all", key: "temperature", value: null });
+    expect(character(ctx).subagentModels.size).toBe(0);
+  });
+
+  test("showing `all` reports the shared model it resolved to", async () => {
+    const ctx = await buildContext(sharedSetup());
+    const shown = modelSettings(ctx, { subagent: "all" }) as Record<string, unknown>;
+    expect(shown["model_id"]).toBe("beta-id");
+    expect(shown["subagent"]).toBe("all");
+  });
+});

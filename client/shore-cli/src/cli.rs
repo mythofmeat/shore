@@ -524,6 +524,9 @@ pub(crate) enum CompleteKind {
     Tools,
     /// Configured sub-agent names, without the `ask_` prefix
     Subagents,
+    /// Sampler keys `shore model setting` accepts, with how the target model
+    /// treats each one
+    SettingKeys,
     /// Dotted config keys that `shore config set` accepts, with their types
     ConfigKeys,
     /// Every dotted config key, settable or not, for `shore config get`
@@ -733,6 +736,17 @@ pub(crate) enum ModelCommand {
     /// with a key and a value, saves it; with --reset and a key, clears it.
     /// Clearing everything at once is not supported — name the key.
     ///
+    /// Targets the active chat model unless you pass --background, --subagent
+    /// or --model. A sub-agent's settings are its own: they start from its
+    /// model's catalog entry and take nothing from the chat model's settings,
+    /// so tuning chat never moves a sub-agent.
+    ///
+    /// `--subagent all` writes once against the model your sub-agents share,
+    /// covering all of them; it errors if they are not all on one model. A
+    /// named sub-agent overrides that shared value. Because the shared value
+    /// belongs to the model, changing subagent_model picks up that model's
+    /// settings rather than carrying the old ones over.
+    ///
     /// The keys are temperature, top_p, reasoning_effort, budget_tokens,
     /// max_output_tokens, cache_ttl, cache_keepalive, sdk,
     /// replay_prior_thinking and max_tool_iterations.
@@ -759,8 +773,16 @@ pub(crate) enum ModelCommand {
         reset: bool,
 
         /// Tune a background task's model instead of the chat model
-        #[arg(long, value_enum)]
+        #[arg(long, value_enum, conflicts_with_all = ["subagent", "model"])]
         background: Option<BackgroundTarget>,
+
+        /// Tune one sub-agent by name, or `all` for the model they share
+        #[arg(long, conflicts_with = "model")]
+        subagent: Option<String>,
+
+        /// Tune a named model without switching to it
+        #[arg(long)]
+        model: Option<String>,
 
         /// Output raw JSON
         #[arg(long)]
@@ -1124,6 +1146,32 @@ complete -c shore -n \"__fish_shore_using_subcommand status\" -l section -r -f -
 complete -c shore -n \"__fish_shore_using_subcommand debug; and __fish_seen_subcommand_from tool\" -f -a \"(shore complete tools 2>/dev/null)\"\n\
 complete -c shore -n \"__fish_shore_using_subcommand debug; and __fish_seen_subcommand_from subagent\" -f -a \"(shore complete subagents 2>/dev/null)\"\n\
 \n\
+function __shore_setting_key\n\
+    set -l seen 0\n\
+    set -l skip 0\n\
+    for token in (commandline -opc)\n\
+        if test $skip -eq 1\n\
+            set skip 0\n\
+            continue\n\
+        end\n\
+        if contains -- $token --subagent --model --background\n\
+            set skip 1\n\
+            continue\n\
+        end\n\
+        if test $seen -eq 1; and not string match -q -- '-*' $token\n\
+            echo $token\n\
+            return 0\n\
+        end\n\
+        if test $token = setting\n\
+            set seen 1\n\
+        end\n\
+    end\n\
+    return 1\n\
+end\n\
+complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from setting; and not __shore_setting_key\" -f -a \"(shore complete setting-keys 2>/dev/null)\"\n\
+complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from setting\" -l subagent -r -f -a \"all (shore complete subagents 2>/dev/null)\"\n\
+complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from setting\" -l model -r -f -a \"(shore complete models 2>/dev/null)\"\n\
+\n\
 function __shore_config_key\n\
     set -l seen 0\n\
     for token in (commandline -opc)\n\
@@ -1434,14 +1482,22 @@ fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         global,
         reset: setting_reset,
         background: setting_background,
+        subagent: setting_subagent,
+        model: setting_model,
         ..
     }) = subcommand
     {
         let scope = if *global { "global" } else { "character" };
         let bg = setting_background.map(BackgroundTarget::as_str);
-        let with_bg = |mut obj: Map<String, Value>| -> Value {
+        let with_target = |mut obj: Map<String, Value>| -> Value {
             if let Some(task) = bg {
                 let _ignored = obj.insert("background_task".into(), json!(task));
+            }
+            if let Some(name) = setting_subagent {
+                let _ignored = obj.insert("subagent".into(), json!(name));
+            }
+            if let Some(name) = setting_model {
+                let _ignored = obj.insert("name".into(), json!(name));
             }
             Value::Object(obj)
         };
@@ -1451,15 +1507,17 @@ fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
                 let _ignored = obj.insert("key".into(), json!(k));
                 _ = obj.insert("value".into(), Value::Null);
                 _ = obj.insert("scope".into(), json!(scope));
-                Some(("set_model_setting", with_bg(obj)))
+                Some(("set_model_setting", with_target(obj)))
             }
-            (None, _, _) | (Some(_), None, false) => Some(("model_settings", with_bg(Map::new()))),
+            (None, _, _) | (Some(_), None, false) => {
+                Some(("model_settings", with_target(Map::new())))
+            }
             (Some(k), Some(v), false) => {
                 let mut obj = Map::new();
                 let _ignored = obj.insert("key".into(), json!(k));
                 _ = obj.insert("value".into(), parse_setting_value(k, v));
                 _ = obj.insert("scope".into(), json!(scope));
-                Some(("set_model_setting", with_bg(obj)))
+                Some(("set_model_setting", with_target(obj)))
             }
         };
     }
@@ -2930,6 +2988,8 @@ mod tests {
                 global: false,
                 reset: false,
                 background: None,
+                subagent: None,
+                model: None,
                 json: false,
             }),
             info: false,
@@ -2950,6 +3010,8 @@ mod tests {
                 global: false,
                 reset: false,
                 background: None,
+                subagent: None,
+                model: None,
                 json: false,
             }),
             info: false,
@@ -2973,6 +3035,8 @@ mod tests {
                 global: false,
                 reset: true,
                 background: None,
+                subagent: None,
+                model: None,
                 json: false,
             }),
             info: false,
@@ -2994,6 +3058,8 @@ mod tests {
                 global: true,
                 reset: false,
                 background: None,
+                subagent: None,
+                model: None,
                 json: false,
             }),
             info: false,
@@ -3066,6 +3132,74 @@ mod tests {
     }
 
     #[test]
+    fn model_setting_subagent_show_threads_the_name() {
+        let cli = parse(&["model", "setting", "--subagent", "librarian"]);
+        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        assert_eq!(name, "model_settings");
+        assert_eq!(arg(&args, "subagent"), "librarian");
+        assert!(args.get("background_task").is_none());
+        assert!(args.get("name").is_none());
+    }
+
+    #[test]
+    fn model_setting_subagent_set_threads_the_name() {
+        let cli = parse(&[
+            "model",
+            "setting",
+            "--subagent",
+            "librarian",
+            "temperature",
+            "0.25",
+        ]);
+        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        assert_eq!(name, "set_model_setting");
+        assert_eq!(arg(&args, "subagent"), "librarian");
+        assert_eq!(arg(&args, "key"), "temperature");
+        assert_eq!(arg(&args, "value"), 0.25);
+    }
+
+    #[test]
+    fn model_setting_subagent_reset_threads_the_name() {
+        let cli = parse(&[
+            "model",
+            "setting",
+            "--subagent",
+            "librarian",
+            "--reset",
+            "temperature",
+        ]);
+        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        assert_eq!(name, "set_model_setting");
+        assert_eq!(arg(&args, "subagent"), "librarian");
+        assert!(arg(&args, "value").is_null());
+    }
+
+    #[test]
+    fn model_setting_model_targets_a_catalog_name_without_switching() {
+        let cli = parse(&["model", "setting", "--model", "opus", "top_p", "0.9"]);
+        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        assert_eq!(name, "set_model_setting");
+        assert_eq!(arg(&args, "name"), "opus");
+        assert!(args.get("subagent").is_none());
+    }
+
+    #[test]
+    fn model_setting_targets_are_mutually_exclusive() {
+        for pair in [
+            ["--subagent", "librarian", "--background", "compaction"],
+            ["--model", "opus", "--background", "compaction"],
+            ["--subagent", "librarian", "--model", "opus"],
+        ] {
+            let mut argv = vec!["shore", "model", "setting"];
+            argv.extend_from_slice(&pair);
+            assert!(
+                Cli::try_parse_from(&argv).is_err(),
+                "{pair:?} must not combine"
+            );
+        }
+    }
+
+    #[test]
     fn model_setting_without_background_omits_task() {
         let cli = parse(&["model", "setting", "temperature", "0.7"]);
         let (name, args) = to_swp_command(&cli.command, None).unwrap();
@@ -3082,6 +3216,8 @@ mod tests {
                 global: false,
                 reset: false,
                 background: None,
+                subagent: None,
+                model: None,
                 json: false,
             }),
             info: false,
@@ -3103,6 +3239,8 @@ mod tests {
                     global: false,
                     reset: false,
                     background: None,
+                    subagent: None,
+                    model: None,
                     json: false,
                 }),
                 info: false,
@@ -3232,6 +3370,76 @@ mod tests {
         .unwrap();
         assert_eq!(arg(&described, "describe"), true);
         assert_eq!(arg(&described, "tool"), "read");
+    }
+
+    #[test]
+    fn fish_footer_completes_sampler_keys_under_model_setting() {
+        let footer = fish_dynamic_completions_footer();
+        let line = footer
+            .lines()
+            .find(|l| l.contains("shore complete setting-keys"))
+            .expect("footer must shell out to `shore complete setting-keys`");
+        assert!(line.contains("__fish_shore_using_subcommand model"));
+        assert!(line.contains("__fish_seen_subcommand_from setting"));
+        assert!(
+            line.contains("not __shore_setting_key"),
+            "keys must stop completing once one is typed: {line}"
+        );
+        assert!(line.contains(" -f "), "keys must not fall back to files: {line}");
+    }
+
+    #[test]
+    fn fish_footer_completes_the_setting_target_flags() {
+        let footer = fish_dynamic_completions_footer();
+        for (flag, kind) in [("subagent", "subagents"), ("model", "models")] {
+            let line = footer
+                .lines()
+                .find(|l| {
+                    l.contains("__fish_seen_subcommand_from setting")
+                        && l.contains(&format!(" -l {flag} "))
+                })
+                .unwrap_or_else(|| panic!("footer must complete `--{flag}` under `model setting`"));
+            assert!(
+                line.contains(&format!("shore complete {kind}")),
+                "`--{flag}` must complete from `{kind}`: {line}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_subagent_flag_offers_all_alongside_the_names() {
+        let line = fish_dynamic_completions_footer()
+            .lines()
+            .find(|l| {
+                l.contains("__fish_seen_subcommand_from setting") && l.contains(" -l subagent ")
+            })
+            .expect("footer must complete `--subagent` under `model setting`");
+        assert!(
+            line.contains("-a \"all ("),
+            "`all` must be offered before the configured names: {line}"
+        );
+    }
+
+    #[test]
+    fn model_setting_subagent_all_threads_through_like_any_name() {
+        let cli = parse(&["model", "setting", "--subagent", "all", "temperature", "0.3"]);
+        let (name, args) = to_swp_command(&cli.command, None).unwrap();
+        assert_eq!(name, "set_model_setting");
+        assert_eq!(arg(&args, "subagent"), "all");
+        assert_eq!(arg(&args, "value"), 0.3);
+    }
+
+    #[test]
+    fn the_setting_key_guard_skips_target_flag_values() {
+        let footer = fish_dynamic_completions_footer();
+        let body = footer
+            .split("function __shore_setting_key")
+            .nth(1)
+            .expect("footer must define __shore_setting_key");
+        assert!(
+            body.contains("contains -- $token --subagent --model --background"),
+            "the guard must not mistake a target flag's value for the key: {body}"
+        );
     }
 
     #[test]
@@ -3662,6 +3870,8 @@ mod tests {
                     global: false,
                     reset: false,
                     background: None,
+                    subagent: None,
+                    model: None,
                     json: false,
                 }),
                 info: false,

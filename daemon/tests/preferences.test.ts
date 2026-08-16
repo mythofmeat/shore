@@ -29,7 +29,12 @@ import {
   resolveSamplerScopes,
   resolveSamplerSettings,
   resolveSelectedModel,
+  resolveSubagentModelSettings,
+  resolveSubagentSampler,
+  resolveSubagentScopes,
   setModelPreference,
+  setSubagentModelPreference,
+  setSubagentPreference,
   savePreferences,
   selectionIsSet,
   selectionKey,
@@ -778,5 +783,294 @@ describe("resolveBackgroundModel", () => {
     const config = buildConfig(STATIC_CHAT, "", root, () => "sonnet");
     const model = resolveBackgroundModel(config, "heartbeat", "ashe", findEffectiveModel);
     expect(model?.maxOutputTokens).toBe(32000);
+  });
+});
+
+describe("sub-agent settings stand on their own", () => {
+  const catalogModel = (): ResolvedModel =>
+    ({
+      name: "opus",
+      qualifiedName: "chat.anthropic.opus",
+      category: "chat",
+      providerKey: "anthropic",
+      modelId: "claude-opus-4-6",
+      sdk: "anthropic",
+      temperature: 0.55,
+    }) as unknown as ResolvedModel;
+
+  test("chat model settings do not reach a sub-agent", () => {
+    const global = emptyPreferences();
+    const character = emptyPreferences();
+    global.defaults.sampler.temperature = 0.11;
+    character.defaults.sampler.temperature = 0.22;
+    setModelPreference(global, "anthropic", "claude-opus-4-6", {
+      sampler: { temperature: 0.33 },
+    });
+    setModelPreference(character, "anthropic", "claude-opus-4-6", {
+      sampler: { temperature: 0.44 },
+    });
+
+    const sampler = resolveSubagentSampler(global, character, "librarian", "anthropic", "claude-opus-4-6", catalogModel());
+    expect(sampler.temperature).toBe(0.55);
+  });
+
+  test("the same layers still reach the chat model that shares the id", () => {
+    const global = emptyPreferences();
+    const character = emptyPreferences();
+    setModelPreference(character, "anthropic", "claude-opus-4-6", {
+      sampler: { temperature: 0.44 },
+    });
+
+    const sampler = resolveSamplerSettings(
+      global,
+      character,
+      "anthropic",
+      "claude-opus-4-6",
+      catalogModel(),
+    );
+    expect(sampler.temperature).toBe(0.44);
+  });
+
+  test("a sub-agent's own entry wins, character over global", () => {
+    const global = emptyPreferences();
+    const character = emptyPreferences();
+    setSubagentPreference(global, "librarian", { sampler: { temperature: 0.1, topP: 0.9 } });
+    setSubagentPreference(character, "librarian", { sampler: { temperature: 0.2 } });
+
+    const sampler = resolveSubagentSampler(global, character, "librarian", "anthropic", "claude-opus-4-6", catalogModel());
+    expect(sampler.temperature).toBe(0.2);
+    expect(sampler.topP).toBe(0.9);
+  });
+
+  test("one sub-agent's entry does not reach another", () => {
+    const global = emptyPreferences();
+    setSubagentPreference(global, "librarian", { sampler: { temperature: 0.1 } });
+
+    expect(resolveSubagentSampler(global, undefined, "archivist", "anthropic", "claude-opus-4-6", catalogModel()).temperature).toBe(
+      0.55,
+    );
+  });
+
+  test("scopes attribute a sub-agent value to the sub-agent layer", () => {
+    const global = emptyPreferences();
+    const character = emptyPreferences();
+    setSubagentPreference(global, "librarian", { sampler: { topP: 0.9 } });
+    setSubagentPreference(character, "librarian", { sampler: { temperature: 0.2 } });
+
+    const scopes = resolveSubagentScopes(global, character, "librarian", "anthropic", "claude-opus-4-6", catalogModel());
+    expect(scopes.temperature).toBe("character_subagent");
+    expect(scopes.topP).toBe("global_subagent");
+  });
+
+  test("the section round-trips through the preferences file", () => {
+    const prefs = emptyPreferences();
+    setSubagentPreference(prefs, "librarian", { sampler: { temperature: 0.25 } });
+    setSubagentPreference(prefs, "archivist", { sampler: { maxOutputTokens: 4096 } });
+
+    const path = join(tempRoot(), "models.toml");
+    savePreferences(path, prefs);
+    const reloaded = loadPreferences(path);
+
+    expect([...reloaded.subagents.keys()]).toEqual(["archivist", "librarian"]);
+    expect(reloaded.subagents.get("librarian")?.sampler.temperature).toBe(0.25);
+    expect(reloaded.subagents.get("archivist")?.sampler.maxOutputTokens).toBe(4096);
+    expect(reloaded.models.size).toBe(0);
+  });
+
+  test("a file with no sub-agent settings stays empty rather than absent", () => {
+    const path = join(tempRoot(), "models.toml");
+    writeFileSync(path, "[selected]\n\n[defaults.sampler]\n\n[models]\n");
+    expect(loadPreferences(path).subagents.size).toBe(0);
+    expect(preferencesAreEmpty(loadPreferences(path))).toBe(true);
+  });
+
+  test("a saved sub-agent entry makes the file non-empty", () => {
+    const prefs = emptyPreferences();
+    setSubagentPreference(prefs, "librarian", { sampler: { temperature: 0.25 } });
+    expect(preferencesAreEmpty(prefs)).toBe(false);
+  });
+
+  test("resolveSubagentModelSettings overlays the character's saved entry", () => {
+    const root = tempRoot();
+    mkdirSync(join(root, "ashe", "preferences"), { recursive: true });
+    writeFileSync(
+      join(root, "ashe", "preferences", "models.toml"),
+      '[subagents.librarian]\ntemperature = 0.25\nreasoning_effort = "low"\n',
+    );
+
+    const model = resolveSubagentModelSettings(root, "ashe", "librarian", catalogModel());
+    expect(model.temperature).toBe(0.25);
+    expect(model.reasoningEffort).toBe("low");
+  });
+
+  test("resolveSubagentModelSettings leaves the catalog alone when nothing is saved", () => {
+    const root = tempRoot();
+    mkdirSync(join(root, "ashe", "preferences"), { recursive: true });
+    const model = resolveSubagentModelSettings(root, "ashe", "librarian", catalogModel());
+    expect(model.temperature).toBe(0.55);
+  });
+});
+
+describe("a pinned background model keeps its own settings slot", () => {
+  test("the chat model's saved entry does not reach a differently pinned background model", () => {
+    const root = tempRoot();
+    mkdirSync(join(root, "cache"), { recursive: true });
+    mkdirSync(join(root, "data", "ashe", "preferences"), { recursive: true });
+    writeFileSync(
+      join(root, "data", "ashe", "preferences", "models.toml"),
+      '[models."anthropic:claude-opus-4-6"]\nmax_output_tokens = 32000\n\n' +
+        '[models."anthropic:claude-sonnet-4-6"]\nmax_output_tokens = 4096\n',
+    );
+    const config = buildConfig(STATIC_CHAT, "", root, () => "sonnet", "opus");
+
+    const background = resolveBackgroundModel(config, "heartbeat", "ashe", findEffectiveModel);
+    const chat = resolveChatModelForCharacter(config, "ashe", findEffectiveModel);
+
+    expect(chat?.maxOutputTokens).toBe(32000);
+    expect(background?.maxOutputTokens).toBe(4096);
+  });
+
+  test("an unpinned background model shares the chat model's slot", () => {
+    const root = tempRoot();
+    mkdirSync(join(root, "cache"), { recursive: true });
+    mkdirSync(join(root, "data", "ashe", "preferences"), { recursive: true });
+    writeFileSync(
+      join(root, "data", "ashe", "preferences", "models.toml"),
+      '[models."anthropic:claude-opus-4-6"]\nmax_output_tokens = 32000\n',
+    );
+    const config = buildConfig(STATIC_CHAT, "", root, () => undefined, "opus");
+
+    const background = resolveBackgroundModel(config, "heartbeat", "ashe", findEffectiveModel);
+    expect(background?.maxOutputTokens).toBe(32000);
+  });
+});
+
+describe("settings shared by every sub-agent on a model", () => {
+  const modelNamed = (modelId: string): ResolvedModel =>
+    ({
+      name: modelId,
+      qualifiedName: `opencode-go:${modelId}`,
+      category: "chat",
+      providerKey: "opencode-go",
+      modelId,
+      sdk: "anthropic",
+    }) as unknown as ResolvedModel;
+
+  test("the model slot reaches every sub-agent on that model", () => {
+    const prefs = emptyPreferences();
+    setSubagentModelPreference(prefs, "opencode-go", "glm-5.3", {
+      sampler: { temperature: 0.3 },
+    });
+
+    for (const name of ["internet", "memory", "music"]) {
+      const sampler = resolveSubagentSampler(
+        prefs,
+        undefined,
+        name,
+        "opencode-go",
+        "glm-5.3",
+        modelNamed("glm-5.3"),
+      );
+      expect(sampler.temperature).toBe(0.3);
+    }
+  });
+
+  test("swapping the sub-agent model leaves the old model's settings behind", () => {
+    const prefs = emptyPreferences();
+    setSubagentModelPreference(prefs, "opencode-go", "glm-5.3", {
+      sampler: { temperature: 0.3 },
+    });
+
+    const swapped = resolveSubagentSampler(
+      prefs,
+      undefined,
+      "internet",
+      "openrouter",
+      "google/gemini-3.7-flash",
+      modelNamed("gemini"),
+    );
+    expect(swapped.temperature).toBeUndefined();
+  });
+
+  test("a per-name setting still overrides the shared model slot", () => {
+    const prefs = emptyPreferences();
+    setSubagentModelPreference(prefs, "opencode-go", "glm-5.3", {
+      sampler: { temperature: 0.3, topP: 0.8 },
+    });
+    setSubagentPreference(prefs, "music", { sampler: { temperature: 0.9 } });
+
+    const shared = resolveSubagentSampler(
+      prefs,
+      undefined,
+      "internet",
+      "opencode-go",
+      "glm-5.3",
+      modelNamed("glm-5.3"),
+    );
+    const overridden = resolveSubagentSampler(
+      prefs,
+      undefined,
+      "music",
+      "opencode-go",
+      "glm-5.3",
+      modelNamed("glm-5.3"),
+    );
+
+    expect(shared.temperature).toBe(0.3);
+    expect(overridden.temperature).toBe(0.9);
+    expect(overridden.topP).toBe(0.8);
+  });
+
+  test("the chat model's slot on the same model still does not leak in", () => {
+    const prefs = emptyPreferences();
+    setModelPreference(prefs, "opencode-go", "glm-5.3", { sampler: { temperature: 0.9 } });
+
+    const sampler = resolveSubagentSampler(
+      prefs,
+      undefined,
+      "internet",
+      "opencode-go",
+      "glm-5.3",
+      modelNamed("glm-5.3"),
+    );
+    expect(sampler.temperature).toBeUndefined();
+  });
+
+  test("scopes name the shared model layer and the per-name layer apart", () => {
+    const global = emptyPreferences();
+    const character = emptyPreferences();
+    setSubagentModelPreference(global, "opencode-go", "glm-5.3", { sampler: { topP: 0.8 } });
+    setSubagentModelPreference(character, "opencode-go", "glm-5.3", {
+      sampler: { maxOutputTokens: 8192 },
+    });
+    setSubagentPreference(character, "music", { sampler: { temperature: 0.9 } });
+
+    const scopes = resolveSubagentScopes(
+      global,
+      character,
+      "music",
+      "opencode-go",
+      "glm-5.3",
+      modelNamed("glm-5.3"),
+    );
+    expect(scopes.topP).toBe("global_subagent_model");
+    expect(scopes.maxOutputTokens).toBe("character_subagent_model");
+    expect(scopes.temperature).toBe("character_subagent");
+  });
+
+  test("the section round-trips through the preferences file", () => {
+    const prefs = emptyPreferences();
+    setSubagentModelPreference(prefs, "opencode-go", "glm-5.3", {
+      sampler: { temperature: 0.3 },
+    });
+    setSubagentPreference(prefs, "music", { sampler: { temperature: 0.9 } });
+
+    const path = join(tempRoot(), "models.toml");
+    savePreferences(path, prefs);
+    const reloaded = loadPreferences(path);
+
+    expect(reloaded.subagentModels.get("opencode-go:glm-5.3")?.sampler.temperature).toBe(0.3);
+    expect(reloaded.subagents.get("music")?.sampler.temperature).toBe(0.9);
+    expect(reloaded.models.size).toBe(0);
   });
 });

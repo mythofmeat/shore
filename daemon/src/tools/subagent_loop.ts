@@ -1,7 +1,7 @@
 import { findEffectiveModel } from "../config/effective_catalog.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { resolveDisplayName } from "../config/app.ts";
-import { configView } from "../config/preferences.ts";
+import { configView, resolveSubagentModelSettings } from "../config/preferences.ts";
 import { resolvedReplayPriorThinking, toRequestModel } from "../config/models.ts";
 import { renderTemplate } from "../engine/prompt.ts";
 import type { Message } from "../engine/types.ts";
@@ -93,12 +93,18 @@ export async function runSubagent(
   });
   if (modelName === undefined) throw new InvalidArgs(missingModelMessage(name));
 
-  let resolved;
+  let catalogModel;
   try {
-    resolved = findEffectiveModel(configView(config), config.dirs.cache, modelName, true);
+    catalogModel = findEffectiveModel(configView(config), config.dirs.cache, modelName, true);
   } catch (e) {
     throw new InvalidArgs(`subagent '${name}' model '${modelName}': ${String(e)}`);
   }
+  const resolved = resolveSubagentModelSettings(
+    config.dirs.data,
+    deps.ctx.characterName,
+    name,
+    catalogModel,
+  );
 
   const provider = deps.providers[resolved.sdk];
   if (provider === undefined && resolved.sdk !== "anthropic") {

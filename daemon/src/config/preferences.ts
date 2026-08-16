@@ -165,18 +165,64 @@ export interface ModelPreferences {
   selected: SelectedModel;
   defaults: PreferenceDefaults;
   models: Map<string, ModelPreference>;
+  subagents: Map<string, ModelPreference>;
+  subagentModels: Map<string, ModelPreference>;
 }
 
 export function emptyPreferences(): ModelPreferences {
-  return { selected: {}, defaults: { sampler: {} }, models: new Map() };
+  return {
+    selected: {},
+    defaults: { sampler: {} },
+    models: new Map(),
+    subagents: new Map(),
+    subagentModels: new Map(),
+  };
 }
 
 export function preferencesAreEmpty(prefs: ModelPreferences): boolean {
   return (
     !selectionIsSet(prefs.selected) &&
     samplerIsEmpty(prefs.defaults.sampler) &&
-    prefs.models.size === 0
+    prefs.models.size === 0 &&
+    prefs.subagents.size === 0 &&
+    prefs.subagentModels.size === 0
   );
+}
+
+export function subagentModelPreference(
+  prefs: ModelPreferences,
+  provider: string,
+  modelId: string,
+): ModelPreference | undefined {
+  return prefs.subagentModels.get(preferenceKey(provider, modelId));
+}
+
+export function setSubagentModelPreference(
+  prefs: ModelPreferences,
+  provider: string,
+  modelId: string,
+  pref: ModelPreference,
+): void {
+  prefs.subagentModels.set(preferenceKey(provider, modelId), pref);
+  prefs.subagentModels = new Map(
+    [...prefs.subagentModels].sort((a, b) => compareByCodePoint(a[0], b[0])),
+  );
+}
+
+export function subagentPreference(
+  prefs: ModelPreferences,
+  name: string,
+): ModelPreference | undefined {
+  return prefs.subagents.get(name);
+}
+
+export function setSubagentPreference(
+  prefs: ModelPreferences,
+  name: string,
+  pref: ModelPreference,
+): void {
+  prefs.subagents.set(name, pref);
+  prefs.subagents = new Map([...prefs.subagents].sort((a, b) => compareByCodePoint(a[0], b[0])));
 }
 
 export function preferenceKey(provider: string, modelId: string): string {
@@ -280,6 +326,19 @@ export function resolveSelectedModel(
   return selectionPair(global.selected);
 }
 
+function settingsFromLayers(
+  staticDefault: ResolvedModel | undefined,
+  layers: readonly PreferenceLayer[],
+): SamplerSettings {
+  const effective: SamplerSettings =
+    staticDefault === undefined ? {} : samplerFromResolvedModel(staticDefault);
+
+  for (const layer of layers) {
+    applyOverlay(effective, sanitizePersistedOverlay(layer.sampler));
+  }
+  return effective;
+}
+
 export function resolveSamplerSettings(
   global: ModelPreferences,
   character: ModelPreferences | undefined,
@@ -287,13 +346,24 @@ export function resolveSamplerSettings(
   modelId: string,
   staticDefault: ResolvedModel | undefined,
 ): SamplerSettings {
-  const effective: SamplerSettings =
-    staticDefault === undefined ? {} : samplerFromResolvedModel(staticDefault);
+  return settingsFromLayers(
+    staticDefault,
+    preferenceLayers(global, character, provider, modelId),
+  );
+}
 
-  for (const layer of preferenceLayers(global, character, provider, modelId)) {
-    applyOverlay(effective, sanitizePersistedOverlay(layer.sampler));
-  }
-  return effective;
+export function resolveSubagentSampler(
+  global: ModelPreferences,
+  character: ModelPreferences | undefined,
+  subagent: string | undefined,
+  provider: string,
+  modelId: string,
+  staticDefault: ResolvedModel | undefined,
+): SamplerSettings {
+  return settingsFromLayers(
+    staticDefault,
+    subagentLayers(global, character, subagent, provider, modelId),
+  );
 }
 
 interface PreferenceLayer {
@@ -326,6 +396,34 @@ function preferenceLayers(
   return layers;
 }
 
+function subagentLayers(
+  global: ModelPreferences,
+  character: ModelPreferences | undefined,
+  subagent: string | undefined,
+  provider: string,
+  modelId: string,
+): PreferenceLayer[] {
+  const layers: PreferenceLayer[] = [];
+  const push = (
+    entry: ModelPreference | undefined,
+    scope: PreferenceScope,
+  ): void => {
+    if (entry !== undefined) layers.push({ sampler: entry.sampler, scope });
+  };
+
+  push(subagentModelPreference(global, provider, modelId), "global_subagent_model");
+  if (character !== undefined) {
+    push(subagentModelPreference(character, provider, modelId), "character_subagent_model");
+  }
+  if (subagent !== undefined) {
+    push(subagentPreference(global, subagent), "global_subagent");
+    if (character !== undefined) {
+      push(subagentPreference(character, subagent), "character_subagent");
+    }
+  }
+  return layers;
+}
+
 function sanitizePersistedOverlay(layer: SamplerSettings): SamplerSettings {
   const badSdk = layer.sdk !== undefined && sdkFromWire(layer.sdk) === undefined;
   const zeroCap = layer.maxToolIterations === 0;
@@ -347,16 +445,17 @@ export type PreferenceScope =
   | "global_default"
   | "character_default"
   | "global_model"
-  | "character_model";
+  | "character_model"
+  | "global_subagent_model"
+  | "character_subagent_model"
+  | "global_subagent"
+  | "character_subagent";
 
 export type SamplerScopes = Partial<Record<keyof SamplerSettings, PreferenceScope>>;
 
-export function resolveSamplerScopes(
-  global: ModelPreferences,
-  character: ModelPreferences | undefined,
-  provider: string,
-  modelId: string,
+function scopesFromLayers(
   staticDefault: ResolvedModel | undefined,
+  layers: readonly PreferenceLayer[],
 ): SamplerScopes {
   const scopes: SamplerScopes = {};
   const note = (layer: SamplerSettings, scope: PreferenceScope): void => {
@@ -368,10 +467,34 @@ export function resolveSamplerScopes(
   if (staticDefault !== undefined) {
     note(samplerFromResolvedModel(staticDefault), "static_default");
   }
-  for (const layer of preferenceLayers(global, character, provider, modelId)) {
+  for (const layer of layers) {
     note(sanitizePersistedOverlay(layer.sampler), layer.scope);
   }
   return scopes;
+}
+
+export function resolveSamplerScopes(
+  global: ModelPreferences,
+  character: ModelPreferences | undefined,
+  provider: string,
+  modelId: string,
+  staticDefault: ResolvedModel | undefined,
+): SamplerScopes {
+  return scopesFromLayers(staticDefault, preferenceLayers(global, character, provider, modelId));
+}
+
+export function resolveSubagentScopes(
+  global: ModelPreferences,
+  character: ModelPreferences | undefined,
+  subagent: string | undefined,
+  provider: string,
+  modelId: string,
+  staticDefault: ResolvedModel | undefined,
+): SamplerScopes {
+  return scopesFromLayers(
+    staticDefault,
+    subagentLayers(global, character, subagent, provider, modelId),
+  );
 }
 
 export function findStaticModel(
@@ -570,6 +693,36 @@ function overlayForCharacter(
     base,
   );
   return applySamplerOverlay(base, overlay);
+}
+
+export function resolveSubagentModelSettings(
+  dataDir: string,
+  character: string,
+  subagent: string,
+  base: ResolvedModel,
+): ResolvedModel {
+  let global: ModelPreferences;
+  let charPrefs: ModelPreferences;
+  try {
+    [global, charPrefs] = loadForCharacter(dataDir, character);
+  } catch (e) {
+    console.warn(
+      `shore: preferences load failed for ${character} (subagent ${subagent}); ` +
+        `using raw model settings: ${(e as Error).message}`,
+    );
+    return base;
+  }
+  return applySamplerOverlay(
+    base,
+    resolveSubagentSampler(
+      global,
+      charPrefs,
+      subagent,
+      base.providerKey,
+      base.modelId,
+      base,
+    ),
+  );
 }
 
 export function resolveBackgroundModel(
@@ -776,7 +929,13 @@ function readThinkingReplay(value: unknown): ReadResult<ThinkingReplay> {
 }
 
 function readPreferences(table: Record<string, unknown>): ReadResult<ModelPreferences> {
-  const unknown = unknownField(table, ["selected", "defaults", "models"]);
+  const unknown = unknownField(table, [
+    "selected",
+    "defaults",
+    "models",
+    "subagents",
+    "subagent_models",
+  ]);
   if (unknown !== undefined) return { err: unknown };
 
   const out = emptyPreferences();
@@ -811,18 +970,26 @@ function readPreferences(table: Record<string, unknown>): ReadResult<ModelPrefer
     }
   }
 
-  const models = table["models"];
-  if (models !== undefined) {
-    if (!isTable(models)) return { err: "invalid type: expected a table for `models`" };
+  for (const [section, slot] of [
+    ["models", "models"],
+    ["subagents", "subagents"],
+    ["subagent_models", "subagentModels"],
+  ] as const satisfies readonly (readonly [
+    string,
+    "models" | "subagents" | "subagentModels",
+  ])[]) {
+    const raw = table[section];
+    if (raw === undefined) continue;
+    if (!isTable(raw)) return { err: `invalid type: expected a table for \`${section}\`` };
     const entries: [string, ModelPreference][] = [];
-    for (const key of sortedKeys(models)) {
-      const value = models[key];
+    for (const key of sortedKeys(raw)) {
+      const value = raw[key];
       if (!isTable(value)) return { err: `invalid type: expected a table for \`${key}\`` };
       const read = readSampler(value);
       if ("err" in read) return read;
       entries.push([key, { sampler: read.ok }]);
     }
-    out.models = new Map(entries);
+    out[slot] = new Map(entries);
   }
 
   return { ok: out };
@@ -848,6 +1015,16 @@ export function serializePreferences(prefs: ModelPreferences): string {
     for (const [key, pref] of prefs.models) {
       blocks.push([`[models.${tomlString(key)}]`, ...samplerLines(pref.sampler)].join("\n"));
     }
+  }
+
+  for (const [key, pref] of prefs.subagentModels) {
+    blocks.push(
+      [`[subagent_models.${tomlString(key)}]`, ...samplerLines(pref.sampler)].join("\n"),
+    );
+  }
+
+  for (const [key, pref] of prefs.subagents) {
+    blocks.push([`[subagents.${tomlString(key)}]`, ...samplerLines(pref.sampler)].join("\n"));
   }
 
   return `${blocks.join("\n\n")}\n`;
