@@ -172,6 +172,56 @@ fn push_bar_wrapped(
     }
 }
 
+fn looks_like_token_stream(text: &str) -> bool {
+    let mut non_empty = 0usize;
+    let mut leading_ws = 0usize;
+    for line in text.replace("\r\n", "\n").replace('\r', "\n").split('\n') {
+        if line.is_empty() {
+            continue;
+        }
+        non_empty += 1;
+        if line.chars().next().is_some_and(|c| c.is_whitespace()) {
+            leading_ws += 1;
+        }
+    }
+    non_empty > 0 && leading_ws * 2 >= non_empty
+}
+
+fn push_thinking_reflowed(
+    lines: &mut Vec<Line<'static>>,
+    text: &str,
+    bar_style: Style,
+    content_style: Style,
+    text_width: usize,
+) {
+    let mut paragraphs: Vec<String> = Vec::new();
+    let mut current = String::new();
+    for line in text.replace("\r\n", "\n").replace('\r', "\n").split('\n') {
+        if line.is_empty() {
+            if !current.is_empty() {
+                paragraphs.push(std::mem::take(&mut current));
+            }
+        } else {
+            current.push_str(line);
+        }
+    }
+    if !current.is_empty() {
+        paragraphs.push(current);
+    }
+
+    for (i, paragraph) in paragraphs.iter().enumerate() {
+        if i > 0 {
+            lines.push(Line::from(Span::styled("  │ ".to_string(), bar_style)));
+        }
+        for wline in word_wrap(paragraph, text_width) {
+            lines.push(Line::from(vec![
+                Span::styled("  │ ".to_string(), bar_style),
+                Span::styled(wline, content_style),
+            ]));
+        }
+    }
+}
+
 fn render_thinking_group(lines: &mut Vec<Line<'static>>, thoughts: &[String], wrap_width: u16) {
     if thoughts.is_empty() {
         return;
@@ -186,7 +236,11 @@ fn render_thinking_group(lines: &mut Vec<Line<'static>>, thoughts: &[String], wr
     lines.push(Line::from(Span::styled("  ◆ thinking", header_style)));
     let text_width = wrap_width.saturating_sub(4) as usize;
     for thought in thoughts {
-        push_bar_wrapped(lines, thought, bar_style, content_style, text_width);
+        if looks_like_token_stream(thought) {
+            push_thinking_reflowed(lines, thought, bar_style, content_style, text_width);
+        } else {
+            push_bar_wrapped(lines, thought, bar_style, content_style, text_width);
+        }
     }
     lines.push(Line::from(""));
 }
@@ -2003,6 +2057,47 @@ mod scenario_tests {
             f3.contains("thinking"),
             "inline thinking back after re-toggle"
         );
+    }
+
+    #[test]
+    fn scenario_token_stream_thinking_reflows_to_prose() {
+        let mut h = Harness::new();
+        h.app.connection_status = ConnectionStatus::Connected;
+        h.app.character_name = "Alice".into();
+        h.app.show_thinking = true;
+
+        h.app
+            .entries
+            .push(ConversationEntry::user("hi".into(), vec![], "t1".into()));
+        h.app.entries.push(assistant_turn(vec![Block::Thinking(
+            "Ren is\n in\n a\n playful, sleepy\n, affectionate mode\n.\n\nKeep\n it\n short\n."
+                .into(),
+        )]));
+
+        let f = h.render("token-stream thinking");
+        assert!(
+            f.contains("playful, sleepy, affectionate mode."),
+            "token-stream thinking must reflow to prose:\n{f}"
+        );
+        assert!(
+            f.contains("Keep it short."),
+            "paragraph break must be preserved:\n{f}"
+        );
+        assert!(
+            !f.contains("│ ,"),
+            "token boundaries must not render as lines:\n{f}"
+        );
+    }
+
+    #[test]
+    fn looks_like_token_stream_detects_bpe_fragments() {
+        assert!(looks_like_token_stream("Ren is\n in\n a\n playful"));
+        assert!(!looks_like_token_stream(
+            "Let me consider...\nFirst, I need to...\nThen..."
+        ));
+        assert!(!looks_like_token_stream("plain prose\n\nparagraph break"));
+        assert!(!looks_like_token_stream(""));
+        assert!(!looks_like_token_stream("single line"));
     }
 
     #[test]
